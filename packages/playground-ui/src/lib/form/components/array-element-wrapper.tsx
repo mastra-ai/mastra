@@ -1,5 +1,4 @@
 import type { ArrayElementWrapperProps } from '@autoform/react';
-import { Check, Trash2 } from 'lucide-react';
 import { useContext, useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { ArrayAddButtonContext, FieldPathContext, FormReadOnlyContext } from '../field-context';
@@ -9,6 +8,8 @@ import { Button } from '@/ds/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Txt } from '@/ds/components/Txt';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
 
 const HUMAN_SUMMARY_KEYS = ['title', 'name', 'label'];
 
@@ -71,7 +72,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
               addButtonRef?.current?.focus();
             }}
           >
-            <Trash2 />
+            <IconTrashCan />
           </Button>
         )}
       </div>
@@ -87,7 +88,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
                 setExpanded(false);
                 triggerRef.current?.focus();
               }}
-              icon={<Check />}
+              icon={<IconCheckmark1 />}
             >
               Done
             </Button>

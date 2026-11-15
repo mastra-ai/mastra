@@ -13,18 +13,17 @@ export type IncidentioEventRules = Readonly<
 >;
 
 function incidentioFollowUpObserved(context: FactoryIncidentioRuleContext) {
-  if (context.item) return;
+  if (context.item || !context.intake) return;
   return {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:follow-up-triage`,
-    // A source bound to a custom board lands on that board's initial phase;
-    // otherwise the follow-up waits in Work Intake.
-    board: context.intake?.board ?? 'work',
+    // Filed on the default board's first phase; the project's intake routes place it from there.
+    board: context.intake.board,
     source: 'incidentio-follow-up',
     sourceKey: context.issue.id,
     title: context.issue.title,
     url: context.issue.url,
-    stage: context.intake?.initialPhase ?? 'intake',
+    stage: context.intake.initialPhase,
     metadata: {
       identifier: context.issue.identifier,
       issueRef: context.issue.id,

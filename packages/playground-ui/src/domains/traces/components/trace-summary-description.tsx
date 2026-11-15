@@ -1,16 +1,14 @@
-import {
-  ArrowDownToLineIcon,
-  ArrowUpFromLineIcon,
-  CalendarClockIcon,
-  CircleDollarSignIcon,
-  TimerIcon,
-} from 'lucide-react';
 import type { TraceUsageSummary } from '../trace-list-columns';
 import { getSpanDurationMs } from '../utils/span-utils';
 import { TraceStatusValue } from './trace-status-value';
 import type { TraceStatusValueStatus } from './trace-status-value';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { AgentIcon, WorkflowIcon } from '@/ds/icons';
+import { IconArrowUpWall } from '@/ds/icons/central/IconArrowUpWall';
+import { IconArrowWallDown } from '@/ds/icons/central/IconArrowWallDown';
+import { IconCalendarClock } from '@/ds/icons/central/IconCalendarClock';
+import { IconDollar } from '@/ds/icons/central/IconDollar';
+import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { formatCompactNumber, formatCost } from '@/lib/cost';
 import { formatDate, formatTimestampPrecise } from '@/utils/date-format';
@@ -115,24 +113,24 @@ export function TraceSummaryDescription({
       {showEntity && <TraceEntityMeta rootSpan={rootSpan} entityHref={entityHref} LinkComponent={LinkComponent} />}
       {showStatus && <TraceStatusMeta rootSpan={rootSpan} />}
       {startedAtTimestamp && exactStartedAtTimestamp && (
-        <DataPanel.Meta icon={<CalendarClockIcon />} tooltip={`Started at ${exactStartedAtTimestamp}`}>
+        <DataPanel.Meta icon={<IconCalendarClock />} tooltip={`Started at ${exactStartedAtTimestamp}`}>
           {startedAtTimestamp}
         </DataPanel.Meta>
       )}
       {duration && exactDuration && (
-        <DataPanel.Meta icon={<TimerIcon />} tooltip={`Duration ${exactDuration}`}>
+        <DataPanel.Meta icon={<IconStopwatch />} tooltip={`Duration ${exactDuration}`}>
           {duration}
         </DataPanel.Meta>
       )}
       {usage && (
         <>
-          <DataPanel.Meta icon={<ArrowDownToLineIcon />} tooltip="Input tokens">
+          <DataPanel.Meta icon={<IconArrowWallDown />} tooltip="Input tokens">
             {usage.inputTokens === undefined ? '—' : formatCompactNumber(usage.inputTokens)}
           </DataPanel.Meta>
-          <DataPanel.Meta icon={<ArrowUpFromLineIcon />} tooltip="Output tokens">
+          <DataPanel.Meta icon={<IconArrowUpWall />} tooltip="Output tokens">
             {usage.outputTokens === undefined ? '—' : formatCompactNumber(usage.outputTokens)}
           </DataPanel.Meta>
-          <DataPanel.Meta icon={<CircleDollarSignIcon />} tooltip="Estimated cost">
+          <DataPanel.Meta icon={<IconDollar />} tooltip="Estimated cost">
             {usage.estimatedCost === undefined ? '—' : formatCost(usage.estimatedCost, usage.costUnit)}
           </DataPanel.Meta>
         </>

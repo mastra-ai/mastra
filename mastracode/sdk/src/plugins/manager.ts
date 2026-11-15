@@ -13,7 +13,13 @@ import { ensureMastraCodePackageLink } from './package-link.js';
 import { getPluginScopePaths } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
 import { loadPluginRegistry, removePluginRecord, savePluginRegistry, setPluginRecord } from './registry.js';
-import type { LoadedPlugin, PluginContribution, PluginProcessorEntries, PluginScope } from './types.js';
+import type {
+  LoadedPlugin,
+  PluginContribution,
+  PluginErrorEvent,
+  PluginProcessorEntries,
+  PluginScope,
+} from './types.js';
 
 const GITHUB_PLUGIN_POLL_INTERVAL_MS = 60_000;
 
@@ -49,6 +55,7 @@ export class PluginManager {
   private reloadInFlight: Promise<LoadedPlugin[]> | undefined;
   private readonly reloadListeners = new Set<(plugins: LoadedPlugin[]) => void | Promise<void>>();
   private readonly githubUpdateListeners = new Set<(pluginNames: string[]) => void | Promise<void>>();
+  private readonly pluginErrorListeners = new Set<(event: PluginErrorEvent) => void>();
   private runtime: MastraCodePluginRuntime | undefined;
 
   constructor(private readonly options: PluginManagerOptions) {
@@ -81,12 +88,16 @@ export class PluginManager {
     if (this.reloadInFlight) return this.reloadInFlight;
 
     this.reloadInFlight = (async () => {
-      this.loadedPlugins = await loadPlugins({ ...this.options, runtime: this.runtime });
+      const previous = this.loadedPlugins;
+      this.loadedPlugins = await loadPlugins({ ...this.options, runtime: this.runtime, previous });
       await this.stampLoadedPlugins(this.loadedPlugins);
       this.updateLocalEntryWatchers(this.loadedPlugins);
       this.updateGithubPoller(this.loadedPlugins);
       this.updatePluginRenderConfigs(this.loadedPlugins);
       this.updatePluginTools(collectActivePluginTools(this.loadedPlugins));
+      // Before the reload listeners: one that rejects must not swallow the notice,
+      // which is reported only once per distinct error.
+      this.reportReloadFailures(previous, this.loadedPlugins);
       await this.notifyReloadListeners(this.loadedPlugins);
       return this.loadedPlugins;
     })().finally(() => {
@@ -94,6 +105,50 @@ export class PluginManager {
     });
 
     return this.reloadInFlight;
+  }
+
+  /**
+   * Notified of plugin problems the user should see. With no listener, they go to
+   * `console.warn` so a headless embedder still has a trace.
+   */
+  onPluginError(listener: (event: PluginErrorEvent) => void): () => void {
+    this.pluginErrorListeners.add(listener);
+    return () => this.pluginErrorListeners.delete(listener);
+  }
+
+  reportPluginError(event: PluginErrorEvent): void {
+    if (this.pluginErrorListeners.size === 0) {
+      console.warn(event.message);
+      return;
+    }
+    // A listener that throws must not stop the others, nor the reload or lane cleanup reporting through here.
+    for (const listener of this.pluginErrorListeners) {
+      try {
+        listener(event);
+      } catch (error) {
+        console.warn(`Plugin error listener failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }
+
+  /**
+   * Reports each reload that kept a plugin's previous load, once per distinct
+   * error: a plugin that stays broken across later reloads (another plugin's
+   * update, a config edit) must not repeat its notice on every one.
+   */
+  private reportReloadFailures(previous: LoadedPlugin[], plugins: LoadedPlugin[]): void {
+    for (const plugin of plugins) {
+      if (plugin.reloadError === undefined) continue;
+      const before = previous.find(entry => entry.id === plugin.id && entry.scope === plugin.scope);
+      if (before?.reloadError === plugin.reloadError) continue;
+      // A kept load that ends up conflicted is not running, so only an active one
+      // can say it still is.
+      const outcome = plugin.status === 'active' ? ' Still running the previous version.' : '';
+      this.reportPluginError({
+        pluginId: plugin.id,
+        message: `Plugin "${plugin.name ?? plugin.id}" failed to reload: ${plugin.reloadError}.${outcome}`,
+      });
+    }
   }
 
   async listPlugins(): Promise<LoadedPlugin[]> {
@@ -166,6 +221,9 @@ export class PluginManager {
    */
   private async stampLoadedPlugins(plugins: LoadedPlugin[]): Promise<void> {
     for (const plugin of plugins) {
+      // A kept previous load keeps its stamp too: the source moved, but the
+      // contributions are the ones already running and must not be cycled.
+      if (plugin.reloadError !== undefined) continue;
       plugin.versionStamp = [
         plugin.status,
         await this.readSourceStamp(plugin),
@@ -336,13 +394,15 @@ export class PluginManager {
 
     await this.reload();
     // Derive names from the reloaded state so a manifest display-name change reports the new name.
-    // Multiple plugins can share one checkout — report every plugin whose source changed.
+    // Multiple plugins can share one checkout — report every plugin whose source changed. A plugin
+    // whose update failed to load kept its previous version and reports that error instead.
     const updatedPluginNames = this.loadedPlugins
       .filter(
         plugin =>
           plugin.source === 'github' &&
           plugin.status !== 'inactive' &&
           plugin.status !== 'blocked' &&
+          plugin.reloadError === undefined &&
           changedCheckouts.has(this.resolvePluginSourcePath(plugin)),
       )
       .map(plugin => plugin.name ?? plugin.id);

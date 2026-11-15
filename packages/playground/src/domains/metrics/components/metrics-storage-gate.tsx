@@ -4,7 +4,7 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { createMetricsFilterBarFields } from '@mastra/playground-ui/domains/metrics/metrics-filters';
-import { ExternalLinkIcon } from 'lucide-react';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import type { ReactNode } from 'react';
 import { metricsCrumbs } from '../metrics-crumbs';
 import { MetricsCapabilityError } from './metrics-capability-error';
@@ -63,7 +63,7 @@ export function MetricsStorageGate({ children }: { children: ReactNode }) {
               />
             }
 
-            icon={<ExternalLinkIcon />}
+            icon={<IconSquareArrowTopRight />}
           >
             Metrics documentation
           </Button>

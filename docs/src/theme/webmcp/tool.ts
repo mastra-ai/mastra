@@ -1,0 +1,125 @@
+import type { ModelContext, SearchConfig } from './index'
+
+const TOOL_NAME = 'search_documentation'
+
+export const LIMITS = { query: 500, defaultLimit: 5, maxLimit: 20, excerpt: 1000 } as const
+
+export interface SearchResult {
+  title: string
+  heading: string
+  url: string
+  /** The page as Markdown. Absent for pages that have no Markdown version. */
+  markdownUrl?: string
+  excerpt: string
+}
+
+export type ErrorCode = 'invalid_input' | 'search_failed'
+
+export type SearchResponse = { results: SearchResult[] } | { error: { code: ErrorCode; message: string } }
+
+export interface SearchInput {
+  query: string
+  limit: number
+}
+
+export type RunSearch = (input: SearchInput) => Promise<SearchResult[]>
+
+type LoadSearch = () => Promise<{ createSearch(config: SearchConfig): RunSearch }>
+
+const MESSAGES: Record<ErrorCode, string> = {
+  invalid_input: `Provide a non-empty query of at most ${LIMITS.query} characters and an integer limit from 1 to ${LIMITS.maxLimit}.`,
+  search_failed: 'Documentation search failed. Retry the search; if it keeps failing, reload the page.',
+}
+
+function failure(code: ErrorCode): SearchResponse {
+  return { error: { code, message: MESSAGES[code] } }
+}
+
+export const inputSchema = {
+  type: 'object',
+  required: ['query'],
+  additionalProperties: false,
+  properties: {
+    query: {
+      type: 'string',
+      description: 'What to search for. Keywords or a natural-language question.',
+      minLength: 1,
+      maxLength: LIMITS.query,
+      pattern: '\\S',
+    },
+    limit: {
+      // null is accepted and means the default; agents often send it for optional parameters.
+      type: ['integer', 'null'],
+      description: 'Maximum number of results.',
+      minimum: 1,
+      maximum: LIMITS.maxLimit,
+      default: LIMITS.defaultLimit,
+    },
+  },
+} as const
+
+/** WebMCP hosts are not required to enforce `inputSchema`, so check the input here too. */
+export function validateInput(input: unknown): SearchInput | undefined {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined
+  const record = input as Record<string, unknown>
+  if (Object.keys(record).some(key => key !== 'query' && key !== 'limit')) return undefined
+  // Agents often send null for optional parameters.
+  const query = record.query
+  const limit = record.limit ?? LIMITS.defaultLimit
+  if (typeof query !== 'string' || !query.trim() || [...query].length > LIMITS.query) return undefined
+  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > LIMITS.maxLimit) return undefined
+  return { query: query.trim(), limit }
+}
+
+export async function registerSearchTool(
+  context: ModelContext,
+  config: SearchConfig,
+  signal: AbortSignal,
+  loadSearch: LoadSearch = () => import('./search'),
+): Promise<void> {
+  if (signal.aborted) return
+  // The Algolia client is created on the first call, never just to expose the tool.
+  let search: Promise<RunSearch> | undefined
+
+  await context.registerTool(
+    {
+      name: TOOL_NAME,
+      title: 'Search Mastra documentation',
+      description:
+        'Search the Mastra documentation (guides, reference, integrations, models). Returns matching sections with their page title, heading, absolute URL, a plain-text excerpt and, when available, markdownUrl. Excerpts are short and some results only match a heading, so fetch markdownUrl to read the full page as Markdown.',
+      inputSchema,
+      annotations: { readOnlyHint: true, untrustedContentHint: true },
+      async execute(input: unknown, options?: { signal?: AbortSignal }): Promise<SearchResponse> {
+        const parsed = validateInput(input)
+        if (!parsed) return failure('invalid_input')
+        try {
+          search ??= loadSearch().then(({ createSearch }) => createSearch(config))
+          const run = await search
+          options?.signal?.throwIfAborted()
+          const results = await run(parsed)
+          // The Algolia client can't be cancelled, so drop results that arrive after a cancel.
+          options?.signal?.throwIfAborted()
+          return { results }
+        } catch (error) {
+          // A cancelled call stays cancelled; everything else is reported to the agent.
+          if (options?.signal?.aborted) throw error
+          search = undefined
+          return failure('search_failed')
+        }
+      },
+    },
+    { signal },
+  )
+
+  // Early implementations ignore the signal, so also unregister by name. On the
+  // current API the signal already removed the tool and this is a no-op.
+  const unregister = () => {
+    try {
+      Promise.resolve(context.unregisterTool?.(TOOL_NAME)).catch(() => {})
+    } catch {
+      // Already unregistered.
+    }
+  }
+  if (signal.aborted) unregister()
+  else signal.addEventListener('abort', unregister, { once: true })
+}

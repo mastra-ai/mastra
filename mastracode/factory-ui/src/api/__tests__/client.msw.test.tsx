@@ -48,6 +48,21 @@ describe('createApiClient', () => {
 
       await expect(client.get('/web/config/providers')).rejects.toThrow('Credential storage is not available');
     });
+
+    it('shows the human message instead of the machine error code when both are sent', async () => {
+      server.use(
+        http.get(`${BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json(
+            { error: 'credentials_unavailable', message: 'Provider credentials are unavailable.' },
+            { status: 503 },
+          ),
+        ),
+      );
+
+      const client = createApiClient({ baseUrl: BASE_URL });
+
+      await expect(client.get('/web/config/providers')).rejects.toThrow(/^Provider credentials are unavailable\.$/);
+    });
   });
 
   describe('when the server returns a non-JSON error', () => {

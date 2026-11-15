@@ -4,12 +4,11 @@ import { ChartCardError } from '../../../metrics/components/chart-card-error';
 import { BUCKET_AXIS, EDGE_BUCKET_AXIS } from '../../../metrics/lib/chart-axis';
 import { bucketWindow } from '../../../metrics/lib/metrics-buckets';
 import { PendingChartCard } from '../../components/widget-chrome';
-import { DrilldownAction } from '../../components/widget-controls';
+import { DrilldownAction, ExpandAction } from '../../components/widget-controls';
 import { hasDrilldownAction, useDrilldown, viewMenu } from '../../hooks/use-widget-views';
 import { alertAction, pendingHeading, withAction } from '../../lib/alert-actions';
 import type { ViewHeading } from '../../lib/chrome';
 import { chartColor, FORMATTERS } from '../../lib/format';
-import { pinActions } from '../../lib/pin-actions';
 import type { DashboardPageContext } from '../../lib/requests';
 import { shapeTimeseries, timeseriesAlertValues } from '../../lib/timeseries';
 import type { TimeseriesOptions } from '../../lib/timeseries';
@@ -37,12 +36,19 @@ export function TimeseriesWidget(props: Props) {
     props.expand,
   );
   const { view } = menu;
-  const heading = {
-    ...menu.heading,
-    dragHandle: props.dragHandle,
-    onTitleChange: props.onTitleChange,
-    ...pinActions(props.pin),
-  };
+  const { expand } = props;
+  const expandHref = expand?.href(props.widget);
+  const heading = withAction(
+    {
+      ...menu.heading,
+      dragHandle: props.dragHandle,
+      onTitleChange: props.onTitleChange,
+      actions: props.actions,
+    },
+    expand && expandHref && (
+      <ExpandAction title={menu.heading.title} href={expandHref} LinkComponent={expand.LinkComponent} />
+    ),
+  );
   if (gate.status === 'pending')
     return (
       <PendingChartCard
@@ -54,7 +60,7 @@ export function TimeseriesWidget(props: Props) {
 }
 
 function TimeseriesView({ widget, view, heading: own, page, onDrilldown, alert, results, onRetry }: ViewProps) {
-  // Drilldown, then the alert, then the pin.
+  // Drilldown, then the alert, then the expand link and the host's actions.
   const heading = withAction(
     own,
     alertAction(alert, widget, view, { page, values: timeseriesAlertValues(view.options) }),

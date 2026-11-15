@@ -1,26 +1,14 @@
 import fs from 'node:fs/promises';
-import { realpathSync } from 'node:fs';
 import path, { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import ts from 'typescript';
-import { defineConfig, loadEnv, searchForWorkspaceRoot } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import type { Plugin } from 'vite';
 
 const here = dirname(fileURLToPath(import.meta.url));
-
-/**
- * Resolve the mona-sans font package root. In the monorepo workspace the
- * package is a pnpm symlink into the virtual store; in the standalone web
- * host (linked via `link:`) it sits in the host's node_modules. realpathSync
- * resolves the symlink so Vite can serve font files in dev without exposing
- * the entire pnpm store.
- */
-const monaSansEntry = resolve(here, '../node_modules/@fontsource-variable/mona-sans');
-const monaSansPackageRoot = realpathSync(monaSansEntry);
-const fsAllow = [searchForWorkspaceRoot(here), monaSansPackageRoot];
 
 /**
  * Dev-proxy target for the API server and the UI dev-server port. Overridable
@@ -342,11 +330,6 @@ export default defineConfig(({ mode }) => {
     server: {
       host: uiHost,
       port: uiPort,
-      fs: {
-        // Linked font files resolve outside the workspace; expose only that
-        // package instead of pnpm's entire global store.
-        allow: fsAllow,
-      },
       // OAuth callback URLs (WorkOS/GitHub/Linear) are registered against the
       // configured UI origin ahead of time. Silently hopping to a free port
       // would keep the UI working while every OAuth redirect breaks — fail

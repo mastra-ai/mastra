@@ -75,8 +75,6 @@ describe('IntakeSection gitlab', () => {
 
       await userEvent.click(await screen.findByLabelText('Factory for acme/app'));
       await userEvent.click(await screen.findByRole('option', { name: 'Acme Web' }));
-      await userEvent.click(await screen.findByLabelText('Board for acme/app'));
-      await userEvent.click(await screen.findByRole('option', { name: 'Work' }));
 
       await waitFor(() =>
         expect(savedBindings).toEqual([
@@ -84,7 +82,6 @@ describe('IntakeSection gitlab', () => {
             integrationId: 'gitlab',
             sourceId: 'gitlab-project:encoded',
             factoryProjectId: 'fp-1',
-            board: 'work',
           },
         ]),
       );

@@ -1,3 +1,5 @@
+import type { User } from '../index';
+
 export interface HonoRequestLike {
   raw?: Request;
   headers?: Headers | Record<string, string | string[] | undefined>;
@@ -80,6 +82,13 @@ export type MastraAuthConfig<TUser = unknown, TContext = unknown> = {
    * Maps the authenticated user to a resource ID for memory/thread scoping.
    */
   mapUserToResourceId?(user: TUser): string | undefined | null;
+
+  /**
+   * Normalizes the authenticated user to the `MastraUser` shape passed to
+   * dynamic configuration callbacks as `user`. Defaults to the shared
+   * normalization (`id`/`sub`/`userId`, `name`, `email`, `avatarUrl`/`picture`, `role`).
+   */
+  toMastraUser?(user: TUser): User;
 
   /**
    * Authorization function for the server.

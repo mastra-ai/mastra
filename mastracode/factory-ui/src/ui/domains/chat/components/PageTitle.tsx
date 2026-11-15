@@ -5,7 +5,7 @@ import { useParams } from 'react-router';
 import { useDocumentTitle } from '../../../../hooks/useDocumentTitle';
 import { useAgentControllerThreads } from '../../../../hooks/useAgentControllerThreads';
 import { updateCachedSessionTitle } from '../../../../hooks/useWorkspaces';
-import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useSessionWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { workItemIdentifier } from '../../factory/services/relationships';
 import type { WorkItem } from '../../factory/services/workItems';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -30,7 +30,7 @@ export function PageTitle() {
   const queryClient = useQueryClient();
   const routeSessionId = sessionId ?? threadId;
 
-  const workItems = useWorkItemsQuery(factoryId);
+  const workItems = useSessionWorkItemsQuery(factoryId, sessionId);
 
   const threadsQuery = useAgentControllerThreads({
     agentControllerId: AGENT_CONTROLLER_ID,

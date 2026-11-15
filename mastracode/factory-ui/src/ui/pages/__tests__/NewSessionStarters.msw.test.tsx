@@ -2,28 +2,44 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { queryKeys } from '../../../api/keys';
-import { workItem } from '../../__tests__/workBoardStubs';
+import { createQueryClient } from '../../../query-client';
 import { createAppRoutes } from '../../router';
-import { DRAFT_SESSION_ID, FACTORY_ID, stubDraftRoute } from './fixtures/draftRoute';
+import { DRAFT_SESSION_ID, FACTORY_ID, stubDraftRoute, stubStarters } from './fixtures/draftRoute';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
 
+/**
+ * The routed draft page under the app's own client: how long a read stays fresh decides whether a
+ * hook mounting later asks again.
+ */
 function renderDraft() {
   const router = createMemoryRouter(createAppRoutes(), {
     initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
   });
-  return { router, ...renderWithProviders(<RouterProvider router={router} />) };
+  return { router, ...renderWithProviders(<RouterProvider router={router} />, createQueryClient()) };
 }
 
-function card(id: string, stages: string[], board = 'work') {
-  return { ...workItem(id, id, '2026-08-01T00:00:00.000Z', '2026-08-02T00:00:00.000Z'), stages, board };
+const WORK_ITEMS_URL = `/web/factory/projects/${FACTORY_ID}/work-items`;
+/** A card created long before any period the activity band shows. */
+const OLD_CARD = { createdAt: '2026-08-01T00:00:00.000Z' };
+
+/** Every read of the Factory's cards the page sends, as path and query. */
+function recordCardReads() {
+  const reads: string[] = [];
+  const listener = ({ request }: { request: Request }) => {
+    const { pathname, search } = new URL(request.url);
+    if (request.method === 'GET' && pathname.startsWith(WORK_ITEMS_URL)) reads.push(`${pathname}${search}`);
+  };
+  server.events.on('request:start', listener);
+  onTestFinished(() => server.events.removeListener('request:start', listener));
+  return reads;
 }
 
 function runStarted(id: string, occurredAt: Date) {
@@ -59,10 +75,8 @@ describe('the new session page', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'What should we ship, Dustin?' })).toBeInTheDocument();
   });
 
-  it('suggests triaging the cards waiting in Intake, previews a prompt that names none of them while hovered, gives my draft back after, and sends it on click', async () => {
-    const route = stubDraftRoute({
-      workItems: [card('Login fails on Safari', ['intake']), card('Add dark mode', ['intake'])],
-    });
+  it('suggests triaging the cards waiting in Intake, previews the prompt while hovered, gives my draft back after, and sends it on click', async () => {
+    const route = stubDraftRoute({ starters: { untriaged: 2 } });
     const user = userEvent.setup();
     const { router, client } = renderDraft();
 
@@ -76,8 +90,6 @@ describe('the new session page', () => {
     await user.hover(starter);
     const previewed = message.value;
     expect(previewed).toContain('Triage');
-    expect(previewed).not.toContain('Login fails on Safari');
-    expect(previewed).not.toContain('Add dark mode');
 
     await user.unhover(starter);
     expect(message).toHaveValue('my own idea');
@@ -97,7 +109,7 @@ describe('the new session page', () => {
   });
 
   it('sends the prompt on screen, not the draft behind it, when Enter is pressed while a card is hovered', async () => {
-    const route = stubDraftRoute({ workItems: [card('Login fails on Safari', ['intake'])] });
+    const route = stubDraftRoute({ starters: { untriaged: 1 } });
     const user = userEvent.setup();
     const { client } = renderDraft();
 
@@ -119,7 +131,7 @@ describe('the new session page', () => {
   });
 
   it('offers no card when nothing on the board waits on anyone', async () => {
-    stubDraftRoute({ workItems: [card('building', ['execute']), card('done', ['done'])] });
+    stubDraftRoute({ cards: [OLD_CARD, OLD_CARD] });
     renderDraft();
 
     expect(await screen.findByRole('region', { name: 'This week' })).toBeInTheDocument();
@@ -127,7 +139,7 @@ describe('the new session page', () => {
   });
 
   it('gives the composer back empty when the prompts vanish under the pointer and later return', async () => {
-    stubDraftRoute({ workItems: [card('Login fails on Safari', ['intake'])] });
+    stubDraftRoute({ starters: { untriaged: 1 } });
     const user = userEvent.setup();
     const { client } = renderDraft();
     const answerProviders = (source: string) =>
@@ -154,10 +166,7 @@ describe('the new session page', () => {
   });
 
   it('keeps previewing the hovered card when a refresh takes another card away', async () => {
-    const intakeCard = card('Login fails on Safari', ['intake']);
-    stubDraftRoute({
-      workItems: [intakeCard, { ...card('Crash on save', ['triage']), metadata: { labels: ['bug'] } }],
-    });
+    stubDraftRoute({ starters: { untriaged: 1, unplannedBugs: 1 } });
     const user = userEvent.setup();
     const { client } = renderDraft();
 
@@ -167,15 +176,105 @@ describe('the new session page', () => {
     const previewed = message.value;
     expect(previewed).toContain('Triage');
 
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-        HttpResponse.json({ workItems: [intakeCard] }),
-      ),
-    );
-    await client.invalidateQueries({ queryKey: queryKeys.workItems(FACTORY_ID) });
+    stubStarters({ untriaged: 1 });
+    await client.invalidateQueries({ queryKey: queryKeys.boardFacts(FACTORY_ID) });
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Plan a fix' })).not.toBeInTheDocument());
 
     expect(message).toHaveValue(previewed);
+  });
+
+  it('asks the server for the counts and dates it shows and for the cards holding a session, never for the whole board', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const now = new Date(2026, 9, 27, 12, 25);
+    vi.setSystemTime(now);
+    stubDraftRoute({ starters: { untriaged: 1 }, cards: [{ createdAt: now.toISOString() }] });
+    const reads = recordCardReads();
+    renderDraft();
+
+    expect(await screen.findByRole('button', { name: 'Triage it' })).toBeInTheDocument();
+    const week = await screen.findByRole('region', { name: 'This week' });
+    await waitFor(() =>
+      expect(within(week).getByRole('button', { name: /shipped/ })).toHaveAccessibleName(
+        '1 came in, 0 agent runs, 0 shipped',
+      ),
+    );
+
+    const activityRead = `${WORK_ITEMS_URL}/activity?since=`;
+    expect(reads.map(read => (read.startsWith(activityRead) ? activityRead : read)).toSorted()).toEqual(
+      [`${WORK_ITEMS_URL}?scope=sessions`, `${WORK_ITEMS_URL}/starters`, activityRead].toSorted(),
+    );
+    // The browser can only revalidate an address it has asked before: the instant is the hour's, not the millisecond's.
+    const sent = reads.find(read => read.startsWith(activityRead)) ?? '';
+    const since = Date.parse(new URL(sent, TEST_BASE_URL).searchParams.get('since') ?? '');
+    const hourMs = 60 * 60 * 1000;
+    const weekAgo = now.getTime() - 7 * 24 * hourMs;
+    expect(since % hourMs).toBe(0);
+    expect(since).toBeLessThanOrEqual(weekAgo);
+    expect(since).toBeGreaterThan(weekAgo - hourMs);
+  });
+
+  it('keeps the activity and its period menu on screen while a newly chosen month loads, then shows the month', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const now = new Date(2026, 9, 27, 12);
+    vi.setSystemTime(now);
+    const daysAgo = (days: number) => new Date(now.getTime() - days * 24 * 60 * 60 * 1000 - 60 * 60 * 1000);
+    stubDraftRoute({
+      cards: [
+        { createdAt: daysAgo(0).toISOString() },
+        { createdAt: daysAgo(3).toISOString() },
+        { createdAt: daysAgo(20).toISOString() },
+      ],
+    });
+    let answerMonth = () => {};
+    const monthHeld = new Promise<void>(resolve => {
+      answerMonth = resolve;
+    });
+    onTestFinished(answerMonth);
+    server.use(
+      // Holds only the read reaching further back than a week, then lets the route's own handler answer it.
+      http.get(`${TEST_BASE_URL}${WORK_ITEMS_URL}/activity`, async ({ request }) => {
+        const since = Date.parse(new URL(request.url).searchParams.get('since') ?? '');
+        if (since < daysAgo(8).getTime()) await monthHeld;
+      }),
+    );
+    const user = userEvent.setup();
+    renderDraft();
+    const totals = (region: HTMLElement) => within(region).getByRole('button', { name: /shipped/ });
+
+    const week = await screen.findByRole('region', { name: 'This week' });
+    await waitFor(() => expect(totals(week)).toHaveAccessibleName('2 came in, 0 agent runs, 0 shipped'));
+
+    await user.click(totals(week));
+    await user.click(within(week).getByRole('button', { name: 'This week' }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'This month' }));
+
+    const month = await screen.findByRole('region', { name: 'This month' });
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    // The same band, not a new one: the menu just used keeps its place and the last seven days stand in.
+    expect(month).toBe(week);
+    expect(within(month).getByRole('button', { name: 'This month' })).toBeInTheDocument();
+    expect(totals(month)).toHaveAccessibleName('2 came in, 0 agent runs, 0 shipped');
+
+    answerMonth();
+    await waitFor(() => expect(totals(month)).toHaveAccessibleName('3 came in, 0 agent runs, 0 shipped'));
+  });
+
+  it('shows the composer without starters or activity when the server is too old to count them', async () => {
+    stubDraftRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}${WORK_ITEMS_URL}/:read`, () =>
+        HttpResponse.json({ error: 'not_found' }, { status: 404 }),
+      ),
+    );
+    const reads = recordCardReads();
+    const { client } = renderDraft();
+
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message).toBeEnabled());
+    await waitFor(() => expect(reads).toHaveLength(3));
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(screen.queryByRole('list', { name: 'Start from the board' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'This week' })).not.toBeInTheDocument();
   });
 
   it('totals what came in, what agents started and what shipped this week, offers a recap only when something shipped, and narrows to today without fetching again', async () => {
@@ -183,14 +282,11 @@ describe('the new session page', () => {
     vi.setSystemTime(new Date(2026, 9, 27, 12));
     const daysAgo = (days: number) => new Date(2026, 9, 27 - days, 11);
     stubDraftRoute({
-      workItems: [
-        { ...card('arrived-today', ['intake']), createdAt: daysAgo(0).toISOString() },
-        { ...card('arrived-this-week', ['intake']), createdAt: daysAgo(3).toISOString() },
-        { ...card('arrived-last-month', ['intake']), createdAt: daysAgo(40).toISOString() },
-        {
-          ...card('shipped', ['done']),
-          stageHistory: [{ stage: 'done', enteredAt: daysAgo(2).toISOString(), by: 'user-1' }],
-        },
+      cards: [
+        { createdAt: daysAgo(0).toISOString() },
+        { createdAt: daysAgo(3).toISOString() },
+        { createdAt: daysAgo(40).toISOString() },
+        { ...OLD_CARD, doneAt: daysAgo(2).toISOString() },
       ],
     });
     let runRequests = 0;
@@ -227,7 +323,7 @@ describe('the new session page', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     const now = new Date(2026, 9, 27, 12).getTime();
     vi.setSystemTime(now);
-    stubDraftRoute({ workItems: [card('Login fails on Safari', ['intake'])] });
+    stubDraftRoute({ cards: [OLD_CARD] });
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/audit`, ({ request }) => {
         const page = Number(new URL(request.url).searchParams.get('before') ?? 0);
@@ -256,9 +352,7 @@ describe('the new session page', () => {
   it('says nothing happened instead of drawing an empty chart when the period is quiet', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 9, 27, 12));
-    stubDraftRoute({
-      workItems: [{ ...card('arrived-last-month', ['intake']), createdAt: new Date(2026, 8, 1).toISOString() }],
-    });
+    stubDraftRoute({ cards: [OLD_CARD] });
     const user = userEvent.setup();
     renderDraft();
 

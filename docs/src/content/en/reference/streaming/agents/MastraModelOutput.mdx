@@ -445,22 +445,20 @@ const user = await stream.object
 console.log('Final:', user) // { name: "John", age: 30, email: "john@example.com" }
 ```
 
-````
-
 ### Tool Calls and Results
 
 ```typescript
 const stream = await agent.stream("What's the weather in NYC?", {
-  tools: { weather: weatherTool }
-});
+  tools: { weather: weatherTool },
+})
 
 // Monitor tool calls
-const toolCalls = await stream.toolCalls;
-const toolResults = await stream.toolResults;
+const toolCalls = await stream.toolCalls
+const toolResults = await stream.toolResults
 
-console.log("Tools called:", toolCalls);
-console.log("Results:", toolResults);
-````
+console.log('Tools called:', toolCalls)
+console.log('Results:', toolResults)
+```
 
 ### Complete Output Access
 

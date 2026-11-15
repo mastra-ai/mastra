@@ -2,19 +2,19 @@ import type { ListStoredAgentsParams } from '@mastra/client-js';
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useStoredAgents } from '@mastra/react/hooks/agents';
 import { useCurrentUser } from '@mastra/react/hooks/auth';
-import { PlusIcon } from 'lucide-react';
-import { useMemo, useState } from 'react';
 
+import { useMemo, useState } from 'react';
 import {
   AgentBuilderList,
   AgentBuilderListSkeleton,
@@ -85,7 +85,7 @@ export default function AgentBuilderAgentsPage() {
                 <Button
                   render={<FrameworkLink href="/agent-builder/agents/create" />}
                   variant="primary"
-                  icon={<PlusIcon />}
+                  icon={<IconPlusLarge />}
                 >
                   Create an agent
                 </Button>
@@ -117,7 +117,7 @@ export default function AgentBuilderAgentsPage() {
                 <Button
                   render={<FrameworkLink href="/agent-builder/agents/create" />}
                   variant="primary"
-                  icon={<PlusIcon />}
+                  icon={<IconPlusLarge />}
                 >
                   New agent
                 </Button>
@@ -127,7 +127,12 @@ export default function AgentBuilderAgentsPage() {
           <ActionRow>
             <ActionRow.Start>
               <div className="max-w-120 flex-1">
-                <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or description" />
+                <SearchInput
+                  {...listSearchProps}
+                  onValueChange={setSearch}
+                  label="Search agents"
+                  placeholder="Search by name or description"
+                />
               </div>
             </ActionRow.Start>
           </ActionRow>

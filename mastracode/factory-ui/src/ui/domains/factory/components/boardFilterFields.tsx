@@ -1,25 +1,23 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import type { FilterBarField, FilterBarOperator, FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
-import {
-  Activity,
-  FolderKanban,
-  Inbox,
-  Tag,
-  UserRoundCheck,
-  UserRoundPen,
-  UserRoundSearch,
-  UsersRound,
-} from 'lucide-react';
+import { UserRoundSearch } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { factoryParticipantId } from '@mastra/factory/work-items/card-people';
+import { PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
 
 import { boardFilterFieldIds } from '../boardFilters';
 import type { BoardFilterFieldId, BoardFilterState } from '../boardFilters';
-import { factoryParticipantId } from '../boardPeople';
 import type { BoardParticipant } from '../boardPeople';
-import type { BoardKind } from '../boardStages';
 import { BOARD_SOURCE_OPTIONS } from '../boardSourceFilters';
 import type { LinearProject } from '../services/linear';
 import { BoardSourceIcon } from './BoardSourceIcon';
+import { IconElectrocardiogram } from '@mastra/playground-ui/icons/central/IconElectrocardiogram';
+import { IconInboxEmpty } from '@mastra/playground-ui/icons/central/IconInboxEmpty';
+import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
+import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
+import { IconUserAdded } from '@mastra/playground-ui/icons/central/IconUserAdded';
+import { IconUserDuo } from '@mastra/playground-ui/icons/central/IconUserDuo';
+import { IconUserEdit } from '@mastra/playground-ui/icons/central/IconUserEdit';
 
 export const BOARD_FILTER_OPERATORS: FilterBarOperator[] = [{ id: 'in', label: 'is any of', arity: 'many' }];
 
@@ -28,14 +26,14 @@ export type BoardFilterOption = FilterBarOption & { alsoMatches?: string };
 export type BoardFilterField = FilterBarField & { id: BoardFilterFieldId; suggestions: BoardFilterOption[] };
 
 const FIELD_PRESENTATION: Record<BoardFilterFieldId, { label: string; icon: LucideIcon }> = {
-  source: { label: 'Intake source', icon: Inbox },
-  linearProject: { label: 'Linear project', icon: FolderKanban },
-  teammate: { label: 'Involves', icon: UsersRound },
-  author: { label: 'Author', icon: UserRoundPen },
-  assignee: { label: 'Assignee', icon: UserRoundCheck },
+  source: { label: 'Intake source', icon: IconInboxEmpty },
+  linearProject: { label: 'Linear project', icon: IconKanbanView },
+  teammate: { label: 'Involves', icon: IconUserDuo },
+  author: { label: 'Author', icon: IconUserEdit },
+  assignee: { label: 'Assignee', icon: IconUserAdded },
   reviewer: { label: 'Review requested', icon: UserRoundSearch },
-  worked: { label: 'Worked on by', icon: Activity },
-  label: { label: 'Label', icon: Tag },
+  worked: { label: 'Worked on by', icon: IconElectrocardiogram },
+  label: { label: 'Label', icon: IconTag },
 };
 
 function peopleOptions(
@@ -56,7 +54,7 @@ function peopleOptions(
 }
 
 interface BoardFilterFieldsOptions {
-  kind: BoardKind;
+  reviewsPullRequests: boolean;
   filters: BoardFilterState;
   participants: readonly BoardParticipant[];
   availableLabels: readonly string[];
@@ -66,7 +64,7 @@ interface BoardFilterFieldsOptions {
 }
 
 export function boardFilterFields({
-  kind,
+  reviewsPullRequests,
   filters,
   participants,
   availableLabels,
@@ -78,23 +76,29 @@ export function boardFilterFields({
   const suggestions: Record<BoardFilterFieldId, FilterBarOption[]> = {
     // Keep already-picked sources so saved views still label and edit them after a provider disconnects.
     source: BOARD_SOURCE_OPTIONS.filter(
-      option => option.value === 'manual' || connectedSources?.has(option.value) || filters.source.has(option.value),
+      option =>
+        option.value === 'manual' ||
+        option.value === 'detail' ||
+        connectedSources?.has(option.value) ||
+        (option.value === PULL_REQUEST_SOURCE_FILTER &&
+          (connectedSources?.has('github') === true || connectedSources?.has('gitlab') === true)) ||
+        filters.source.has(option.value),
     ).map(option => ({ ...option, start: <BoardSourceIcon source={option.value} /> })),
     linearProject: linearProjects.map(project => ({
       value: project.id,
       label: project.name,
-      start: <FolderKanban aria-hidden />,
+      start: <IconKanbanView aria-hidden />,
     })),
     teammate: people,
     author: people,
     assignee: people,
     reviewer: people,
     worked: people,
-    label: availableLabels.map(label => ({ value: label, start: <Tag aria-hidden /> })),
+    label: availableLabels.map(label => ({ value: label, start: <IconTag aria-hidden /> })),
   };
   const linearProjectOffered = filters.source.has('linear') || filters.linearProject.size > 0;
 
-  return boardFilterFieldIds(kind).map(fieldId => ({
+  return boardFilterFieldIds(reviewsPullRequests).map(fieldId => ({
     id: fieldId,
     ...FIELD_PRESENTATION[fieldId],
     operators: ['in'],

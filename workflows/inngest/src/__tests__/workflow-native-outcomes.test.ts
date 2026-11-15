@@ -6,6 +6,8 @@ import { Observability } from '../../../../observability/mastra/src/default';
 import { TestExporter } from '../../../../observability/mastra/src/exporters';
 import {
   createOutcomeStep,
+  createConcurrencyFailureFixture,
+  createInstrumentedFailureStep,
   createResumeSeed,
   createResumeOutcomeStep,
   resumeActions,
@@ -13,6 +15,7 @@ import {
   controlFlowResumeKinds,
   expectControlFlowSegments,
   expectWorkflowOutcome,
+  expectPublicWorkflowError,
   expectNestedWorkflowOutcome,
   expectParallelOutcome,
   expectConditionalOutcome,
@@ -34,6 +37,42 @@ import {
 
 const exporter = new TestExporter();
 const { createWorkflow } = init(getSharedInngest());
+const resolverFixture = createConcurrencyFailureFixture();
+const resolverWorkflow = createWorkflow({
+  id: 'native-resolver-failure',
+  inputSchema: z.array(z.object({})),
+  outputSchema: z.array(z.object({})),
+})
+  .foreach(resolverFixture.step, resolverFixture.options)
+  .commit();
+const instrumentedWorkflow = createWorkflow({
+  id: 'native-instrumented-failure',
+  inputSchema: z.object({}),
+  outputSchema: z.object({}),
+})
+  .then(createInstrumentedFailureStep())
+  .commit();
+
+const emptyWorkflow = createWorkflow({
+  id: 'native-empty-failure',
+  inputSchema: z.object({}),
+  outputSchema: z.object({}),
+}).commit();
+const unavailableChild = createWorkflow({
+  id: 'native-unavailable-child',
+  inputSchema: z.object({}),
+  outputSchema: z.object({}),
+})
+  .then(createOutcomeStep('success').step)
+  .commit();
+const unavailableParent = createWorkflow({
+  id: 'native-unavailable-parent',
+  inputSchema: z.object({}),
+  outputSchema: z.object({}),
+})
+  .then(unavailableChild)
+  .commit();
+
 const cases = workflowOutcomeModes.map(mode => {
   const fixture = createOutcomeStep(mode);
   const workflow = createWorkflow({
@@ -189,6 +228,10 @@ const resumeCases = controlFlowResumeKinds.flatMap(kind =>
 beforeAll(async () => {
   await setupSharedTestInfrastructure({
     workflows: {
+      [resolverWorkflow.id]: resolverWorkflow,
+      [emptyWorkflow.id]: emptyWorkflow,
+      [unavailableParent.id]: unavailableParent,
+      [instrumentedWorkflow.id]: instrumentedWorkflow,
       ...Object.fromEntries(
         [
           ...cases,
@@ -207,11 +250,53 @@ beforeAll(async () => {
     }),
     fastRetries: true,
   });
+  // Inject an unregistered remote function after serving the app: the real Inngest
+  // invocation fails before child execution, without mocking the transport or spans.
+  const unregistered = getSharedInngest().createFunction(
+    { id: 'not-registered-origin-test', triggers: { event: 'not-registered-origin-test' } },
+    async () => ({}),
+  );
+  unavailableChild.getFunction = () => unregistered;
 }, 60000);
 
 afterAll(() => teardownSharedTestInfrastructure({ forceClose: true }));
 
 describe('native workflow outcomes across Inngest replay', () => {
+  it.each(['resolver', 'instrumented', 'empty', 'unavailable-child'] as const)(
+    'counts %s failures once without exposing attribution',
+    async kind => {
+      const workflow =
+        kind === 'resolver'
+          ? resolverWorkflow
+          : kind === 'empty'
+            ? emptyWorkflow
+            : kind === 'unavailable-child'
+              ? unavailableParent
+              : instrumentedWorkflow;
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: kind === 'resolver' ? [{}] : {} });
+      expect(result.status).toBe('failed');
+      expectPublicWorkflowError(result);
+      expect(JSON.stringify(await workflow.getWorkflowRunById(run.runId))).not.toContain('__mastraSpanErrorOrigin');
+      const ended = () => exporter.getByEventType(TracingEventType.SPAN_ENDED).map(e => e.exportedSpan);
+      await expect
+        .poll(() => ended().some(s => s.type === SpanType.WORKFLOW_RUN && s.entityId === workflow.id))
+        .toBe(true);
+      const root = ended().find(s => s.type === SpanType.WORKFLOW_RUN && s.entityId === workflow.id)!;
+      const spans = [
+        ...new Map(
+          ended()
+            .filter(s => s.traceId === root.traceId)
+            .map(s => [s.id, s]),
+        ).values(),
+      ];
+      expect(spans.reduce((sum, span) => sum + (span.errorCount ?? NaN), 0)).toBe(1);
+      expect(root.errorCount).toBe(kind === 'resolver' || kind === 'empty' ? 1 : 0);
+      if (kind === 'unavailable-child')
+        expect(spans.filter(span => span.type === SpanType.WORKFLOW_RUN)).toHaveLength(1);
+    },
+  );
+
   it.each(nestedCases)('preserves nested $mode outcomes', async ({ mode, inner, workflow }) => {
     const run = await workflow.createRun();
     await run.start({ inputData: {} });
@@ -234,6 +319,7 @@ describe('native workflow outcomes across Inngest replay', () => {
       const run = await workflow.createRun();
       const result = await run.start({ inputData: {} });
       expect(result.status).toBe(mode === 'error' || mode === 'tripwire' ? 'failed' : 'success');
+      if (mode === 'error') expectPublicWorkflowError(result);
       const store = await getSharedMastra().getStorage()!.getStore('workflows');
       await expect
         .poll(

@@ -1,8 +1,9 @@
-import { CheckIcon, CopyIcon } from 'lucide-react';
 import { formatSignalValue } from '@/domains/chat/messages/signal-data';
 import type { SignalData } from '@/domains/chat/messages/signal-data';
 import { Badge } from '@/ds/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import { Icon } from '@/ds/icons/Icon';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { cn } from '@/lib/utils';
@@ -40,7 +41,7 @@ function SignalId({ id }: { id: string }) {
           <Badge variant="neutral" emphasis="subtle" size="sm" className="group-hover:bg-fill">
             <span className={badgeLabel}>Signal id</span>
             {id.slice(0, 6)}
-            <Icon size="xs">{isCopied ? <CheckIcon /> : <CopyIcon />}</Icon>
+            <Icon size="xs">{isCopied ? <IconCheckmark1 /> : <IconSquareBehindSquare1 />}</Icon>
           </Badge>
         </TooltipTrigger>
         <TooltipContent>{isCopied ? 'Copied to clipboard' : 'Copy to clipboard'}</TooltipContent>

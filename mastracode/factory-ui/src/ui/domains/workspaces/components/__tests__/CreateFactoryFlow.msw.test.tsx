@@ -252,6 +252,55 @@ describe('Create Factory wizard', () => {
     expect(sessionStorage.getItem(STEP_KEY)).toBeNull();
   });
 
+  it('opens the Mastra Gateway models on Claude Opus 5.5, ahead of newer models', async () => {
+    seedDraft('model-provider');
+    stubModelStepEndpoints([]);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+        HttpResponse.json({
+          providers: [
+            { provider: 'mastra', source: 'stored-user', userCredential: 'api_key', connectWithMastraAccount: true },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/providers/mastra/credits`, () =>
+        HttpResponse.json({
+          remaining: 20,
+          unlimited: false,
+          canAddCredits: true,
+          addCreditsUrl: 'https://projects.mastra.ai/add-credits/org1',
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+        HttpResponse.json({
+          models: [
+            {
+              id: 'mastra/tencent/hy4',
+              provider: 'mastra',
+              modelName: 'tencent/hy4',
+              hasApiKey: true,
+              releaseDate: '2026-11-01',
+            },
+            {
+              id: 'mastra/anthropic/claude-opus-5.5',
+              provider: 'mastra',
+              modelName: 'anthropic/claude-opus-5.5',
+              hasApiKey: true,
+              releaseDate: '2026-05-01',
+            },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+
+    renderFlow();
+    await user.click(await screen.findByRole('option', { name: /Mastra Gateway/ }));
+
+    const models = await screen.findAllByRole('option', { name: /^mastra\// });
+    expect(models[0]).toHaveAccessibleName(expect.stringContaining('mastra/anthropic/claude-opus-5.5'));
+  });
+
   it('skips the intake write when the repository already feeds issue intake', async () => {
     const calls: string[] = [];
     seedDraft('model-provider');
@@ -513,7 +562,7 @@ describe('Create Factory wizard', () => {
     await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
 
     await waitForMutationsIdle(client);
-    expect(bindings).toEqual([{ integrationId: 'linear', sourceId: 'lin-1', factoryProjectId: 'fp-1', board: 'work' }]);
+    expect(bindings).toEqual([{ integrationId: 'linear', sourceId: 'lin-1', factoryProjectId: 'fp-1' }]);
     expect(intakeConfigs).toEqual([
       { github: { enabled: true, sourceIds: ['octo/hello'] } },
       { linear: { enabled: true, sourceIds: ['lin-1'] } },
@@ -546,9 +595,7 @@ describe('Create Factory wizard', () => {
     await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
 
     await waitForMutationsIdle(client);
-    expect(bindings).toEqual([
-      { integrationId: 'jira', sourceId: 'jira-source-1', factoryProjectId: 'fp-1', board: 'work' },
-    ]);
+    expect(bindings).toEqual([{ integrationId: 'jira', sourceId: 'jira-source-1', factoryProjectId: 'fp-1' }]);
     expect(intakeConfigs).toEqual([
       { github: { enabled: true, sourceIds: ['octo/hello'] } },
       { jira: { enabled: true, sourceIds: ['jira-source-1'] } },
@@ -628,7 +675,7 @@ describe('Create Factory wizard', () => {
       await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
 
       await waitForMutationsIdle(client);
-      expect(bindings).toEqual([{ integrationId, sourceId, factoryProjectId: 'fp-1', board: null }]);
+      expect(bindings).toEqual([{ integrationId, sourceId, factoryProjectId: 'fp-1' }]);
       expect(intakeConfigs.at(-1)).toMatchObject({ [integrationId]: { enabled: true, sourceIds: [sourceId] } });
       await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1'));
     },

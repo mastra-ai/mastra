@@ -29,6 +29,7 @@ export const TracesListProvider = memo(function TracesListProvider({
   children,
 }: TracesListProviderProps) {
   const {
+    rootSource,
     withQueryTrace,
     withRootDuration,
     withTimeToFirstChunk,
@@ -39,7 +40,7 @@ export const TracesListProvider = memo(function TracesListProvider({
     withDeltaPolling,
     isCapabilitiesLoading,
   } = useTracesConfig();
-  const { filters, dateFrom, dateTo } = useTracesFilters();
+  const { filters, textSearch, dateFrom, dateTo } = useTracesFilters();
   const { displayedPreferences } = useTraceUsageColumns();
   // A TTFC/TTFT sort the store can't run, or on a column that isn't shown, lists newest first instead.
   // The host keeps its raw value, like filters the server can't query.
@@ -54,8 +55,8 @@ export const TracesListProvider = memo(function TracesListProvider({
   const sort = sortable ? hostSort : DEFAULT_TRACES_SORT;
   const list = useTracesListSource({
     rolling: !dateTo,
-    query: now =>
-      buildTracesQueryRequest({
+    query: now => ({
+      ...buildTracesQueryRequest({
         filters,
         dateFrom,
         dateTo,
@@ -65,9 +66,13 @@ export const TracesListProvider = memo(function TracesListProvider({
         withOutcomeFields,
         now,
       }),
+      ...(rootSource === 'aggregated' ? { rootSource } : {}),
+      ...(textSearch ? { textSearch } : {}),
+    }),
     orderBy: [sort],
-    withQueryTrace,
-    withDeltaPolling,
+    // An explicit projection must never fall back to the legacy list endpoint.
+    withQueryTrace: rootSource === 'aggregated' || withQueryTrace,
+    withDeltaPolling: !textSearch && rootSource !== 'aggregated' && withDeltaPolling,
     enabled: !isCapabilitiesLoading,
     legacyFilters: buildTracesLegacyFilters({ filters, dateFrom, dateTo }),
   });

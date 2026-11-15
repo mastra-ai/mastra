@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  OBSERVABILITY_WIDGET_CONFIGURABLE_CONTEXT_KEY,
+  OBSERVABILITY_WIDGET_CONFIGURE_CONTEXT_KEY,
   OBSERVABILITY_WIDGET_PIN_CONTEXT_KEY,
   OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY,
   OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY,
@@ -110,6 +112,58 @@ describe('observabilityWidgetHost', () => {
     expect(host.hostContext!(widgetApp)).toEqual({
       [OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY]: { projectId: 'project-1' },
       [OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY]: ['overview'],
+    });
+  });
+
+  describe('when the host passes onConfigure', () => {
+    function configuringHost() {
+      const heard: unknown[] = [];
+      const host = observabilityWidgetHost({
+        resourceUri: URI,
+        onConfigure: (configure, app) => heard.push({ configure, app }),
+      });
+      return { host, heard };
+    }
+
+    it('tells the widget app it can configure widgets', () => {
+      const { host } = configuringHost();
+
+      expect(host.hostContext!(widgetApp)).toEqual({
+        [OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY]: {},
+        [OBSERVABILITY_WIDGET_CONFIGURABLE_CONTEXT_KEY]: true,
+      });
+    });
+
+    it('hears the widget the user wants to configure, with the window and filters it is drawn with', () => {
+      const { host, heard } = configuringHost();
+      const widget = { id: 'agent-runs', kind: 'kpis', views: [] };
+      const customRange = { from: '2026-10-01T00:00:00.000Z' };
+      const filters = [{ fieldId: 'environment', value: 'production' }];
+
+      host.onModelContext!(widgetApp, {
+        structuredContent: {
+          [OBSERVABILITY_WIDGET_CONFIGURE_CONTEXT_KEY]: { widget, datePreset: 'custom', customRange, filters },
+        },
+      });
+
+      expect(heard).toEqual([{ configure: { widget, datePreset: 'custom', customRange, filters }, app: widgetApp }]);
+    });
+
+    it('ignores other apps, pins and malformed requests', () => {
+      const { host, heard } = configuringHost();
+      const configure = { widget: { id: 'agent-runs' }, datePreset: '7d' };
+
+      host.onModelContext!(otherApp, {
+        structuredContent: { [OBSERVABILITY_WIDGET_CONFIGURE_CONTEXT_KEY]: configure },
+      });
+      host.onModelContext!(widgetApp, {
+        structuredContent: { [OBSERVABILITY_WIDGET_PIN_CONTEXT_KEY]: { pinned: true, ...configure } },
+      });
+      for (const bad of [{ ...configure, widget: { id: 42 } }, { ...configure, datePreset: undefined }, 'agent-runs']) {
+        host.onModelContext!(widgetApp, { structuredContent: { [OBSERVABILITY_WIDGET_CONFIGURE_CONTEXT_KEY]: bad } });
+      }
+
+      expect(heard).toEqual([]);
     });
   });
 });

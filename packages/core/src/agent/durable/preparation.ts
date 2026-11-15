@@ -4,9 +4,11 @@ import type { MastraFGAPermissionInput } from '../../auth/ee';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
+import { mergeProviderOptions } from '../../llm/model/provider-options';
 import type { MastraLanguageModel, MastraModelConfig } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
 import { executionFailureTermination } from '../../loop/shared/execution-outcome';
+import { withDefaultToolCallConcurrencyLimit } from '../../loop/workflows/agentic-execution/tool-call-concurrency';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
 import { isObservationalMemoryEnabled } from '../../memory/types';
@@ -20,17 +22,9 @@ import type {
   ErrorProcessorOrWorkflow,
 } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
-import {
-  RequestContext,
-  MASTRA_AUTH_TOKEN_KEY,
-  MASTRA_INHERITED_MEMORY_KEY,
-  MASTRA_SCOPES_KEY,
-  MASTRA_VERSIONS_KEY,
-  mergeVersionOverrides,
-} from '../../request-context';
+import { RequestContext, MASTRA_SCOPES_KEY, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
 import { getRequestContextInputValues } from '../../request-context/input-source';
-import { toStandardSchema } from '../../schema';
 import { asJsonSchema } from '../../stream/base/schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
@@ -43,6 +37,7 @@ import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { modelSpanAttributes } from '../model-span-attributes';
+import { snapshotRequestContextEntries } from '../request-context-snapshot';
 import { SaveQueueManager } from '../save-queue';
 import { applyResolvedAgentScopes, incomingAgentScopes, resolveAgentScopes } from '../scopes';
 import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
@@ -61,10 +56,10 @@ import {
   applyClientToolModelOutput,
   fireClientToolOutputHooks,
 } from '../workflows/prepare-stream/client-tool-output-hooks';
-import { MASTRA_DURABLE_EXECUTIONS_KEY } from './execution-fence';
 import { authorizeDurableMemory } from './memory-fga';
 import { recordRunSavedMessages } from './run-message-refs';
 import { setRunScorerInstances } from './run-registry';
+import { needsNullToUndefined, toLiveStructuredOutputSchema } from './structured-output-null-transform';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import {
   createWorkflowInput,
@@ -74,54 +69,6 @@ import {
 } from './utils/serialize-state';
 import { generateDurableThreadTitle } from './workflows/finalize-run';
 import { isJsonSafe } from './workflows/shared/schemas';
-
-/**
- * JSON-safe snapshot of `requestContext.entries()` so durable steps (e.g.
- * is-task-complete scorers) can see the same `customContext` the non-durable
- * path passes. Best-effort: entries that fail a JSON round-trip are skipped
- * so a single non-serializable value can't break the workflow input.
- */
-function snapshotRequestContextEntries(
-  requestContext: RequestContext | undefined,
-): Record<string, unknown> | undefined {
-  if (!requestContext) return undefined;
-  const out: Record<string, unknown> = {};
-  let any = false;
-  for (const [key, value] of requestContext.entries()) {
-    // Holds a live MastraMemory instance, which stringifies into a large, method-less
-    // husk of the memory and its storage adapter. Persisting that would bloat the
-    // workflow input and hand the resumed run an object whose methods are gone; the
-    // resumed agent resolves memory from its own config instead.
-    if (key === MASTRA_INHERITED_MEMORY_KEY) continue;
-    // Framework-managed per-run memory context is rebuilt from persisted run
-    // state. A caller may carry a parent run's serializable value here.
-    if (key === 'MastraMemory') continue;
-    // Never persist the framework-managed bearer token in durable workflow
-    // input; a resumed authenticated request supplies its own fresh token.
-    if (key === MASTRA_AUTH_TOKEN_KEY) continue;
-    // The merged version overrides (Mastra defaults < requestContext <
-    // call-site) are framework state written during prep (step 3). Persisting
-    // the merged value would freeze the preparing process's defaults over the
-    // executing worker's. The caller's own versions entry is re-added at the
-    // call site.
-    if (key === MASTRA_VERSIONS_KEY) continue;
-    // Execution ids are claimed per execution. A persisted id would be restored
-    // over a later execution's id (e.g. the recovered one) and fence it out.
-    if (key === MASTRA_DURABLE_EXECUTIONS_KEY) continue;
-    // Serialize each entry exactly once with a bounded pass: a shared-reference
-    // graph would otherwise make JSON.stringify expand exponentially and wedge
-    // the event loop on every durable step, and reading the value twice (probe
-    // then clone) could disagree if a getter/toJSON is stateful. Entries that
-    // produce no JSON (non-serializable, or too large to serialize within
-    // budget) are skipped — they wouldn't survive the wire on cross-process
-    // engines anyway.
-    const json = boundedStringify(value);
-    if (json === undefined) continue;
-    out[key as string] = JSON.parse(json);
-    any = true;
-  }
-  return any ? out : undefined;
-}
 
 /**
  * Mirror of Agent#convertInstructionsToString — used for the AGENT_RUN span
@@ -381,7 +328,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   let execOptions: AgentExecutionOptions<OUTPUT> = optionsAreResolved
     ? (rawExecOptions ?? ({} as AgentExecutionOptions<OUTPUT>))
     : (deepMerge(
-        (await loadDefaultOptions()) as Record<string, unknown>,
+        withDefaultToolCallConcurrencyLimit(await loadDefaultOptions(), rawExecOptions) as Record<string, unknown>,
         (rawExecOptions ?? {}) as Record<string, unknown>,
       ) as AgentExecutionOptions<OUTPUT>);
 
@@ -837,8 +784,21 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 10. Serialize structured output if provided
   let serializedStructuredOutput: SerializableStructuredOutput | undefined;
+  // Same strict-mode null → undefined handling as Agent.#execute, enabled when the main model or
+  // any fallback model uses strict mode (the flag is persisted once per run); skipped when a separate
+  // structuring model runs (its own agent call applies the transform).
+  const nullToUndefined =
+    Boolean(execOptions?.structuredOutput?.schema) &&
+    !(execOptions?.structuredOutput as any)?.model &&
+    // The model list already contains the enabled model, so the bare model is only used without a list.
+    (modelList ?? [{ model, providerOptions: undefined }]).some(candidate =>
+      needsNullToUndefined(
+        candidate.model as any,
+        mergeProviderOptions(execOptions?.providerOptions, candidate.providerOptions),
+      ),
+    );
   const structuredOutputSchema = execOptions?.structuredOutput?.schema
-    ? toStandardSchema(execOptions.structuredOutput.schema)
+    ? toLiveStructuredOutputSchema<{}>(execOptions.structuredOutput.schema, nullToUndefined)
     : undefined;
   if (execOptions?.structuredOutput) {
     const so = execOptions.structuredOutput as any;
@@ -850,6 +810,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         instructions: so.instructions,
         useAgent: so.useAgent,
         hasStructuringModel: so.model ? true : undefined,
+        nullToUndefined: nullToUndefined ? true : undefined,
         // Workers without the live config (remote/recovered runs) resolve the structuring
         // model from this. Model instances persist as `provider/modelId`, like the main model.
         structuringModelConfig:
@@ -1006,6 +967,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     mastra,
     tools,
     requestTools: tools,
+    methodType,
     saveQueueManager,
     memory,
     memoryAuthorizationChecks,

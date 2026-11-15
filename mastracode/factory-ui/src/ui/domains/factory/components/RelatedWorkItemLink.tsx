@@ -3,7 +3,6 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
-import { MessageSquare } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { externalLinkLabel, PULL_REQUEST_STATUS_LABELS, pullRequestStatusForItem } from '../boardItems';
@@ -12,6 +11,7 @@ import type { WorkItem } from '../services/workItems';
 import { isPullRequestSource } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
+import { IconBubble2 } from '@mastra/playground-ui/icons/central/IconBubble2';
 
 const RELATED_ITEM_LINK_CLASS = `hover:text-foreground relative z-10 flex w-fit max-w-full items-center gap-1 rounded-sm hover:underline ${focusRing}`;
 
@@ -47,7 +47,7 @@ export function RelatedWorkItemLink({
         {reference ?? item.title}
       </Txt>
       {live && (
-        <MessageSquare
+        <IconBubble2
           data-live-session-indicator
           size={11}
           className="text-badge-green-indicator shrink-0"

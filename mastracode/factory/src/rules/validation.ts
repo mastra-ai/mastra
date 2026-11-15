@@ -17,6 +17,7 @@ const MAX_VERSION_LENGTH = 128;
 const MAX_IDEMPOTENCY_KEY_LENGTH = 256;
 const MAX_REASON_LENGTH = 512;
 const MAX_TITLE_LENGTH = 512;
+const MAX_DESCRIPTION_LENGTH = 8000;
 const MAX_MESSAGE_LENGTH = 8_192;
 const MAX_ARGUMENTS_LENGTH = 4_096;
 export const MAX_ROLE_LENGTH = 32;
@@ -46,6 +47,9 @@ const WORK_ITEM_SOURCES: readonly WorkItemSource[] = [
   'linear-issue',
   'jira-issue',
   'incidentio-follow-up',
+  'github-dependabot-alert',
+  'vanta-vulnerability',
+  'detail-finding',
   'manual',
 ];
 const REJECTION_CODES: readonly FactoryRuleRejectionCode[] = [
@@ -110,6 +114,16 @@ function boardEvent(value: unknown, label: string): BoardEventFacts {
   return { type, ...(reason ? { reason } : {}) };
 }
 
+function linkedItemReference(value: unknown, field: 'attachTo' | 'closesIssue'): { workItemId: string } | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new FactoryRuleValidationError(`Factory linked work item ${field} must be an object.`);
+  }
+  assertExactKeys(value as Record<string, unknown>, ['workItemId'], `Factory linked work item ${field}`);
+  const { workItemId } = value as Record<string, unknown>;
+  return { workItemId: boundedString(workItemId, `Factory linked work item ${field}.workItemId`, 128) };
+}
+
 export function assertFactoryDecisionTarget(
   decision: FactoryRuleDecision,
   boards: BoardRegistry,
@@ -124,6 +138,24 @@ export function assertFactoryDecisionTarget(
   if (decision.type === 'transition' && itemBoard !== undefined && itemBoard !== decision.board) {
     throw new FactoryRuleValidationError('Factory transition cannot change the item board.');
   }
+}
+
+const MAX_GOAL_OBJECTIVE_LENGTH = 2_000;
+const MAX_GOAL_RUNS = 50;
+
+function invokeSkillGoal(value: unknown): { objective: string; maxRuns?: number } | undefined {
+  if (value === undefined) return undefined;
+  if (!isPlainObject(value)) throw new FactoryRuleValidationError('Factory skill goal must be an object.');
+  assertExactKeys(value, ['objective', 'maxRuns'], 'Factory skill goal');
+  const objective = boundedString(value.objective, 'Factory skill goal objective', MAX_GOAL_OBJECTIVE_LENGTH);
+  const { maxRuns } = value;
+  if (
+    maxRuns !== undefined &&
+    (typeof maxRuns !== 'number' || !Number.isInteger(maxRuns) || maxRuns < 1 || maxRuns > MAX_GOAL_RUNS)
+  ) {
+    throw new FactoryRuleValidationError('Factory skill goal maxRuns is invalid.');
+  }
+  return { objective, ...(maxRuns !== undefined ? { maxRuns } : {}) };
 }
 
 function optionalBoundedString(value: unknown, label: string, max: number): string | undefined {
@@ -309,9 +341,12 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
           // Decisions saved before claims were dropped still carry it; it is ignored.
           'claimKey',
           'title',
+          'description',
           'url',
           'stage',
           'skipRules',
+          'attachTo',
+          'closesIssue',
           'metadata',
         ],
         'Factory linked work item decision',
@@ -324,6 +359,8 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         throw new FactoryRuleValidationError('Factory linked work item URL is invalid.');
       }
       const metadata = sanitizeMetadata(value.metadata);
+      const attachTo = linkedItemReference(value.attachTo, 'attachTo');
+      const closesIssue = linkedItemReference(value.closesIssue, 'closesIssue');
       return {
         type,
         ...commonCommitFields(value),
@@ -331,9 +368,20 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         source: enumValue(value.source, WORK_ITEM_SOURCES, 'Factory linked work item source'),
         sourceKey: boundedString(value.sourceKey, 'Factory linked work item sourceKey', MAX_SOURCE_KEY_LENGTH),
         title: boundedString(value.title, 'Factory linked work item title', MAX_TITLE_LENGTH),
+        ...(value.description === undefined
+          ? {}
+          : {
+              description: boundedString(
+                value.description,
+                'Factory linked work item description',
+                MAX_DESCRIPTION_LENGTH,
+              ),
+            }),
         url,
         stage: boardIdentifier(value.stage, 'Factory linked work item stage'),
         ...(value.skipRules === true ? { skipRules: true } : {}),
+        ...(attachTo ? { attachTo } : {}),
+        ...(closesIssue ? { closesIssue } : {}),
         ...(metadata ? { metadata } : {}),
       };
     }
@@ -351,6 +399,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
           'cancelInFlight',
           'startsAfterOwnMove',
           'resume',
+          'goal',
         ],
         'Factory invoke skill decision',
       );
@@ -380,6 +429,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       if (value.resume === true && value.skillName === undefined) {
         throw new FactoryRuleValidationError('Factory skill resume requires skillName.');
       }
+      const goal = invokeSkillGoal(value.goal);
       return {
         type,
         ...commonCommitFields(value),
@@ -394,6 +444,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         ...(precedingMessage ? { precedingMessage } : {}),
         ...(value.cancelInFlight === true ? { cancelInFlight: true } : {}),
         ...(value.startsAfterOwnMove === true ? { startsAfterOwnMove: true } : {}),
+        ...(goal ? { goal } : {}),
       };
     }
     case 'sendMessage': {

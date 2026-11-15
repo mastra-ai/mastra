@@ -1,15 +1,33 @@
 import { DASHBOARD_MAX_WIDGETS, dashboardDefinitionSchema } from '@mastra/core/storage/dashboards';
 import type { DashboardColumn, DashboardWidget, DashboardWidgetView } from '@mastra/core/storage/dashboards';
 import { createTool } from '@mastra/core/tools';
+import { MCPServer } from '@mastra/mcp';
 import { METRICS_DASHBOARD } from '@mastra/playground-ui/domains/dashboards/metrics-dashboard';
+import {
+  AnthropicSchemaCompatLayer,
+  GoogleSchemaCompatLayer,
+  OpenAISchemaCompatLayer,
+  applyCompatLayer,
+} from '@mastra/schema-compat';
 import { afterEach, expect, it } from 'vitest';
+import { z } from 'zod/v4';
+// Imported from the entry Node services use, so a name it's documented to export but doesn't fails here.
 import {
   OBSERVABILITY_CATALOG_MAX_METRIC_NAMES,
-  createObservabilityDashboardInputSchema,
-  observabilityDashboardOutputSchema,
+  createObservabilityDraftSchemas,
+  createObservabilityWidgetInputSchema,
+  observabilityWidgetInputSchema,
+  strictDashboardDefinitionSchema,
+  strictDashboardWidgetSchema,
   toObservabilityDashboard,
+  toObservabilityWidget,
+} from '../dashboards';
+import type { ObservabilityDashboardInput, ObservabilityWidgetDraft } from '../dashboards';
+import {
+  createObservabilityDashboardInputSchema,
+  observabilityDashboardInputSchema,
+  observabilityDashboardOutputSchema,
 } from '../observability-dashboard';
-import type { ObservabilityDashboardInput, ObservabilityWidgetDraft } from '../observability-dashboard';
 import { serveAndConnect } from './greeting-server';
 import { agentRunsChart, agentRunsKpi, draftOf, observabilityServer } from './observability-server';
 
@@ -45,6 +63,13 @@ const chartDraft = draftOf(agentRunsChart) as Extract<ObservabilityWidgetDraft, 
 const widgets = (opened: ReturnType<typeof toObservabilityDashboard>) =>
   opened.dashboard.rows.flatMap(row => row.widgets);
 
+/** Storage takes `definition` as written and as core parses it, filling in defaults; both must render. */
+const expectRenderable = (definition: unknown) => {
+  expect(strictDashboardDefinitionSchema.safeParse(definition).error?.issues).toBeUndefined();
+  const parsed = dashboardDefinitionSchema.parse(definition);
+  expect(strictDashboardDefinitionSchema.safeParse(parsed).error?.issues).toBeUndefined();
+};
+
 it("advertises each kind's options to the model, with each read's arguments listed once", async () => {
   const client = await connect();
 
@@ -55,6 +80,9 @@ it("advertises each kind's options to the model, with each read's arguments list
   expect(schema).toContain('"stackedBar"');
   expect(schema).toContain('"lowerIsBetter"');
   expect(schema.match(/"MastraMetricTimeSeriesRead":/g)).toHaveLength(1);
+  // Every metric read takes the same filters, as does every score read: each is written out once.
+  expect(schema.match(/"MastraMetricFilters":/g)).toHaveLength(1);
+  expect(schema.match(/"MastraScoreFilters":/g)).toHaveLength(1);
   // Nothing in a view points at anything else by id but `unpricedWhen`.
   expect(schema).not.toContain('"defaultSort"');
   expect(schema).not.toContain('"totals"');
@@ -63,7 +91,48 @@ it("advertises each kind's options to the model, with each read's arguments list
   expect(schema).toContain('mastra_agent_duration_ms');
   expect(schema).toContain('mastra_model_total_input_tokens');
   // Small enough to sit in a model's tool list.
-  expect(schema.length).toBeLessThan(100_000);
+  expect(schema.length).toBeLessThan(50_000);
+});
+
+/** Every value under a `filters` key in `node`, but in the dashboard's own `defaults`. */
+const readFiltersIn = (node: unknown): unknown[] =>
+  node && typeof node === 'object'
+    ? Object.entries(node).flatMap(([key, value]) =>
+        key === 'defaults' ? [] : [...(key === 'filters' ? [value] : []), ...readFiltersIn(value)],
+      )
+    : [];
+
+it.each([
+  ['OpenAI', new OpenAISchemaCompatLayer({ provider: 'openai', modelId: 'gpt-5', supportsStructuredOutputs: true })],
+  [
+    'Anthropic',
+    new AnthropicSchemaCompatLayer({
+      provider: 'anthropic',
+      modelId: 'claude-sonnet-4-5',
+      supportsStructuredOutputs: false,
+    }),
+  ],
+  [
+    'Gemini',
+    new GoogleSchemaCompatLayer({ provider: 'google', modelId: 'gemini-2.5-pro', supportsStructuredOutputs: false }),
+  ],
+])("keeps each read's filters once %s's compatibility layer rewrites the schema", (_, layer) => {
+  const schema = applyCompatLayer({
+    schema: observabilityDashboardInputSchema,
+    compatLayers: [layer],
+    mode: 'jsonSchema',
+  });
+
+  const defs = { ...schema.definitions, ...(schema as { $defs?: object }).$defs } as Record<string, unknown>;
+  const resolved = (value: unknown) =>
+    JSON.stringify(value).replace(/\{"\$ref":"#\/(?:definitions|\$defs)\/(\w+)"\}/g, (_, id) =>
+      JSON.stringify(defs[id]),
+    );
+
+  const filters = readFiltersIn(schema).map(resolved);
+  // The metric and score reads' filters, wherever each is written.
+  expect(filters.length).toBeGreaterThanOrEqual(2);
+  for (const written of filters) expect(written).toContain('"traceId"');
 });
 
 it('opens through the tool with missing ids assigned and given ids kept', async () => {
@@ -81,6 +150,7 @@ it('opens through the tool with missing ids assigned and given ids kept', async 
   const opened = result.structuredContent as ReturnType<typeof toObservabilityDashboard>;
   expect(opened.datePreset).toBe('14d');
   expect(dashboardDefinitionSchema.safeParse(opened.dashboard).success).toBe(true);
+  expectRenderable(opened.dashboard);
   const [first, second, chart] = widgets(opened);
   expect(first).toEqual({ ...agentRunsKpi, id: first!.id });
   // The same widget twice gets two ids, so each can be pinned on its own.
@@ -191,10 +261,17 @@ it.each(METRICS_DASHBOARD.rows.flatMap(row => row.widgets).map(widget => [widget
     const [opened] = widgets(toObservabilityDashboard({ dashboard: { rows: [{ widgets: [draft] }] } }));
 
     expect(dashboardDefinitionSchema.safeParse({ schemaVersion: 1, rows: [{ widgets: [opened] }] }).success).toBe(true);
+    expectRenderable({ schemaVersion: 1, rows: [{ widgets: [opened] }] });
     expect(draftOf(opened!)).toEqual(draft);
     opened!.views.forEach((view, i) =>
       expect(view.queries.length).toBeLessThanOrEqual(widget.views[i]!.queries.length),
     );
+    // Saved on its own, the widget is the one the dashboard opens, and renders as written and once core parsed it.
+    const saved = toObservabilityWidget(draft);
+    expect(saved).toEqual(opened);
+    expect(strictDashboardWidgetSchema.safeParse(saved).error?.issues).toBeUndefined();
+    const { rows } = dashboardDefinitionSchema.parse({ schemaVersion: 1, rows: [{ widgets: [saved] }] });
+    expect(strictDashboardWidgetSchema.safeParse(rows[0]!.widgets[0]).error?.issues).toBeUndefined();
   },
 );
 
@@ -225,7 +302,7 @@ it.each<[string, ObservabilityDashboardInput['dashboard'], string]>([
       ...kpiDraft,
       kpis: { items: [{ label: 'Runs', icon: 'bot', format: 'count', detail: 'in range', value: runs }] },
     }),
-    'A value takes exactly one of `metricAggregate`, `sum`, not `metricTimeSeries`',
+    'A value takes exactly one of `metricAggregate`, `scoreAggregate`, `traceAggregate`, `spanAggregate`, `const`, `sum`, `minus`, `ratio`, `max`, `coalesce`, not `metricTimeSeries`',
   ],
   [
     'a kind no renderer draws',
@@ -263,6 +340,20 @@ it.each<[string, ObservabilityDashboardInput['dashboard'], string]>([
     'a value column unpriced when a column the table lacks',
     dashboardOf(tableDraft([name, { value: { ...count.value, unpricedWhen: 'tokens' } }])),
     "unpricedWhen names column 'tokens'",
+  ],
+  [
+    'a tab with tabs of its own',
+    dashboardOf({ ...kpiDraft, kpis: { ...kpiDraft.kpis, tabs: [{ ...kpiDraft.kpis, tabs: [kpiDraft.kpis] }] } }),
+    'Unrecognized key',
+  ],
+  [
+    // Each tab is picked by its label, so a second tab with one would be unreachable.
+    'two tabs with one label',
+    dashboardOf({
+      ...kpiDraft,
+      kpis: { ...kpiDraft.kpis, label: 'Runs', tabs: [{ ...kpiDraft.kpis, label: 'Runs' }] },
+    }),
+    "another view is already labelled 'Runs'",
   ],
   [
     'two widgets with one id',
@@ -347,4 +438,171 @@ it.each([
   const { tools } = await client.listTools();
 
   expect(metricNamesIn(tools.find(t => t.name === 'showObservabilityDashboard')!.inputSchema)).toEqual([]);
+});
+
+/**
+ * Tools saving what a model writes, as a service storing dashboards builds them: both from one call,
+ * for one catalog, offering only the kinds it stores and no dashboard-wide filters.
+ */
+function saveServer() {
+  const schemas = createObservabilityDraftSchemas(
+    { metricNames: ['mastra_agent_duration_ms'] },
+    { kinds: ['kpis', 'timeseries', 'table'], dashboardFilters: false },
+  );
+  const stored = z.object({ stored: z.record(z.string(), z.unknown()) });
+  return new MCPServer({
+    id: 'dashboards',
+    name: 'Dashboards',
+    version: '1.0.0',
+    tools: {
+      addWidgetToDashboard: createTool({
+        id: 'addWidgetToDashboard',
+        description: 'Adds a widget to a dashboard',
+        inputSchema: schemas.widget,
+        outputSchema: stored,
+        execute: async widget => ({ stored: toObservabilityWidget(widget) }),
+      }),
+      createDashboard: createTool({
+        id: 'createDashboard',
+        description: 'Creates a dashboard',
+        inputSchema: schemas.dashboard,
+        outputSchema: stored,
+        execute: async dashboard => ({ stored: toObservabilityDashboard({ dashboard }).dashboard }),
+      }),
+    },
+  });
+}
+
+it('offers the model only the kinds and defaults a service stores', async () => {
+  const client = await connect(saveServer());
+
+  const { tools } = await client.listTools();
+  const schemaOf = (name: string) => tools.find(t => t.name === name)!.inputSchema as Record<string, any>;
+  const widget = schemaOf('addWidgetToDashboard');
+  const dashboard = schemaOf('createDashboard');
+
+  expect(Object.keys(widget.properties)).toEqual(['id', 'span', 'title', 'description', 'kpis', 'timeseries', 'table']);
+  expect(Object.keys(dashboard.properties.defaults.properties)).toEqual(['datePreset']);
+  // Score reads stay on offer to KPIs and charts without the `scores` kind, their filters defined once.
+  expect(JSON.stringify(widget).match(/"MastraScoreFilters":/g)).toHaveLength(1);
+  expect(JSON.stringify(widget).match(/"MastraMetricFilters":/g)).toHaveLength(1);
+});
+
+const scoresDraft = {
+  span: 12,
+  scores: { average: { scorerId: ['relevance'] }, series: { scorerId: ['relevance'] } },
+};
+const [runsSeries] = chartDraft.timeseries.series;
+const brokenChart = {
+  ...chartDraft,
+  timeseries: {
+    ...chartDraft.timeseries,
+    series: [runsSeries!, { ...runsSeries!, value: { metricTimeSeries: { name: ['x'] } } }],
+  },
+};
+
+it.each<[string, string, Record<string, unknown>, string]>([
+  ['a kind the service leaves out', 'addWidgetToDashboard', scoresDraft, 'not `scores`'],
+  [
+    'dashboard-wide filters',
+    'createDashboard',
+    { defaults: { filters: { entityName: 'agent' } }, rows: [{ widgets: [kpiDraft] }] },
+    'Unrecognized key',
+  ],
+  [
+    'a widget with a broken read, at its path in the draft',
+    'addWidgetToDashboard',
+    brokenChart,
+    '- timeseries.series.1.value',
+  ],
+  [
+    'a dashboard with a broken read, at its path in the draft',
+    'createDashboard',
+    dashboardOf(brokenChart),
+    '- rows.0.widgets.0.timeseries.series.1.value',
+  ],
+  [
+    'a widget whose tabs share a label, at the tab',
+    'createDashboard',
+    dashboardOf({
+      ...kpiDraft,
+      kpis: { ...kpiDraft.kpis, label: 'Runs', tabs: [{ ...kpiDraft.kpis, label: 'Runs' }] },
+    }),
+    "- rows.0.widgets.0.kpis.tabs.0: another view is already labelled 'Runs'",
+  ],
+])('rejects %s before saving', async (_, name, args, message) => {
+  const client = await connect(saveServer());
+
+  const result = await client.callTool({ name, arguments: args });
+
+  expect(result.isError).toBe(true);
+  expect(JSON.stringify(result.content)).toContain(message);
+});
+
+it('saves a widget with the id the model gave it, as a widget that renders', async () => {
+  const client = await connect(saveServer());
+
+  const result = await client.callTool({
+    name: 'addWidgetToDashboard',
+    arguments: { ...kpiDraft, id: 'pinned-1' },
+  });
+
+  expect(result.isError).toBeFalsy();
+  const { stored } = result.structuredContent as { stored: DashboardWidget };
+  expect(stored).toEqual({ ...agentRunsKpi, id: 'pinned-1' });
+  expect(strictDashboardWidgetSchema.safeParse(stored).error?.issues).toBeUndefined();
+});
+
+it("throws a widget draft's issues at their paths in the draft, as the error's cause", () => {
+  const draft = {
+    ...chartDraft,
+    timeseries: {
+      ...chartDraft.timeseries,
+      series: [chartDraft.timeseries.series[0]!, { ...chartDraft.timeseries.series[0]!, value: { const: 'one' } }],
+    },
+  } as never;
+
+  let error: unknown;
+  try {
+    toObservabilityWidget(draft);
+  } catch (e) {
+    error = e;
+  }
+
+  expect((error as Error).message).toMatch(/^The widget is invalid:/);
+  const cause = (error as Error).cause;
+  expect(cause).toBeInstanceOf(z.ZodError);
+  expect((cause as z.ZodError).issues.map(issue => issue.path.join('.'))).toContain('timeseries.series.1.value.const');
+});
+
+it('refuses to build schemas offering no kind', () => {
+  expect(() => createObservabilityDraftSchemas({}, { kinds: [] })).toThrow('`kinds` must name at least one');
+});
+
+it('converts one widget as a dashboard converts it, with a fresh id and the full width when left out', () => {
+  const { id: _id, span: _span, ...draft } = draftOf(agentRunsChart);
+
+  const widget = toObservabilityWidget(draft);
+  const { dashboard } = toObservabilityDashboard({ dashboard: { rows: [{ widgets: [draft] }] } });
+
+  expect(widget).toEqual({ ...dashboard.rows[0]!.widgets[0], id: expect.any(String) });
+  expect(widget.id).not.toBe(dashboard.rows[0]!.widgets[0]!.id);
+  expect(widget.span).toBe(12);
+  expect(toObservabilityWidget(draftOf(agentRunsKpi))).toEqual(agentRunsKpi);
+});
+
+it("refuses a widget that doesn't check, saying where from the widget", () => {
+  const draft = { title: 'Spend', table: { groupBy: ['model'], columns: [] } } as never;
+
+  expect(observabilityWidgetInputSchema.safeParse(draft).success).toBe(false);
+  expect(() => toObservabilityWidget(draft)).toThrow(/^The widget is invalid:[\s\S]*table/);
+  expect(() => toObservabilityWidget({ title: 'Two kinds', kpis: {}, table: {} } as never)).toThrow(/exactly one of/);
+});
+
+it("limits one widget's metric names to the catalog, as the dashboard schema does", () => {
+  const schema = createObservabilityWidgetInputSchema({ metricNames: ['mastra_agent_duration_ms'] });
+
+  expect(metricNamesIn(z.toJSONSchema(schema, { io: 'input' }))).toEqual(['"enum":["mastra_agent_duration_ms"]']);
+  expect(schema.safeParse(draftOf(agentRunsKpi)).success).toBe(true);
+  expect(metricNamesIn(z.toJSONSchema(observabilityWidgetInputSchema, { io: 'input' }))).toEqual([]);
 });

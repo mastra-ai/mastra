@@ -30,15 +30,26 @@ export interface BoardScope {
   factoryProjectId?: string;
 }
 
-/** The tables a card is stored in. */
-const CARD_TABLES = new Set([
+/** The tables a card is stored in: a write to one changes the card list, so it bumps the version. */
+export const CARD_TABLES: ReadonlySet<string> = new Set([
   FACTORY_BOARD_ITEMS_SCHEMA.name,
   FACTORY_WORK_ITEMS_SCHEMA.name,
   FACTORY_WORK_ITEM_SOURCES_SCHEMA.name,
   'work_items',
 ]);
-function isCardTable(collection: string): boolean {
-  return CARD_TABLES.has(collection);
+
+const DECISIONS = 'factory_deferred_decisions';
+
+/** What a board shows beside its cards; a write here moves no card, so the card list stays cached. */
+export const DECISION_TABLES: ReadonlySet<string> = new Set([DECISIONS]);
+
+/**
+ * A decision that stays leased shows the same everywhere: only its lease moved. Renewing that lease
+ * every few seconds therefore reports nothing; every other decision write does.
+ */
+function isLeased(collection: string, row: unknown): boolean {
+  if (collection !== DECISIONS || typeof row !== 'object' || row === null || !('status' in row)) return false;
+  return row.status === 'leased';
 }
 
 const scopeKey = (scope: BoardScope) => `${scope.orgId}\u0000${scope.factoryProjectId ?? ''}`;
@@ -58,11 +69,12 @@ function scopeOfWhere(where: CollectionWhere): BoardScope | undefined {
 }
 
 /**
- * Wrap `ops` so every write to a card table reports the board it changed, once the write has
+ * Wrap `ops` so every write to one of `tables` reports the board it changed, once the write has
  * resolved. Writes outside any tenant (`dangerouslyClearAll`) report nothing.
  */
 export function trackBoardWrites(
   ops: FactoryStorageOps,
+  tables: ReadonlySet<string>,
   changed: (scope: BoardScope) => void | Promise<void>,
 ): FactoryStorageOps {
   const report = async (scope: BoardScope | undefined) => {
@@ -76,32 +88,35 @@ export function trackBoardWrites(
         case 'updateAtomic':
           return async (collection: string, where: unknown, updater: (row: unknown) => unknown, ...args: unknown[]) => {
             let patched = false;
+            let wasLeased = false;
             const row = await value.call(
               target,
               collection,
               where,
               async (current: unknown) => {
+                wasLeased = isLeased(collection, current);
                 const patch = await updater(current);
                 patched = patch != null;
                 return patch;
               },
               ...args,
             );
-            if (isCardTable(collection) && patched) await report(scopeOfRow(row));
+            const leaseOnly = wasLeased && isLeased(collection, row);
+            if (tables.has(collection) && patched && !leaseOnly) await report(scopeOfRow(row));
             return row;
           };
         case 'insertOne':
         case 'upsertOne':
           return async (collection: string, ...args: unknown[]) => {
             const row = await value.call(target, collection, ...args);
-            if (isCardTable(collection)) await report(scopeOfRow(row));
+            if (tables.has(collection)) await report(scopeOfRow(row));
             return row;
           };
         case 'updateMany':
         case 'deleteMany':
           return async (collection: string, where: CollectionWhere, ...args: unknown[]) => {
             const count: number = await value.call(target, collection, where, ...args);
-            if (isCardTable(collection) && count > 0) await report(scopeOfWhere(where));
+            if (tables.has(collection) && count > 0) await report(scopeOfWhere(where));
             return count;
           };
         default:

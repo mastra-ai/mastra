@@ -2,24 +2,34 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 
-import { boardForWorkItem } from '../boards/index.js';
+import { boardForWorkItem, hasPullRequest, isPullRequestReviewPhase, REVIEW_CONTEXT } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
 import { hydrateFactorySession, resolveFactorySessionModel } from '../session/factory-session.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
+import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import { externallyAuthoredWorkItem } from './types.js';
-import type { FactoryRuleStage, FactoryTransitionResult } from './types.js';
+import type { FactoryRuleActor, FactoryRuleStage, FactoryTransitionResult } from './types.js';
 
 export interface FactoryStartRequest {
   orgId: string;
   userId: string;
   factoryProjectId: string;
+  /**
+   * Who started the work, where that is not the session's owner: the Factory owns the
+   * sessions it runs, and the move a start makes is still the mover's.
+   */
+  startedBy?: FactoryRuleActor;
   sessionId: string;
+  expectedBindingId?: string;
   threadTitle: string;
   kickoffKey: string;
   /** Where the arrival path lands the card; a session opened on an existing card names none. */
@@ -139,6 +149,7 @@ export class FactoryStartCoordinator {
   readonly #intake?: IntakeStorage;
   readonly #projects?: FactoryProjectsStorage;
   readonly #modelDefaults?: ModelDefaultsStorage;
+  readonly #boards?: ProjectBoardSource;
 
   constructor(
     controller: FactoryController,
@@ -151,6 +162,8 @@ export class FactoryStartCoordinator {
         ) => SourceControlStorageHandle | undefined | Promise<SourceControlStorageHandle | undefined>),
     intake?: IntakeStorage,
     sessionModel?: { projects: FactoryProjectsStorage; modelDefaults: ModelDefaultsStorage },
+    /** Tells a pull request review run from the card's other review runs; without it every review run with a pull request is untrusted. */
+    boards?: BoardRegistry | ProjectBoardSource,
   ) {
     this.#controller = controller;
     this.#storage = storage;
@@ -159,6 +172,7 @@ export class FactoryStartCoordinator {
     this.#intake = intake;
     this.#projects = sessionModel?.projects;
     this.#modelDefaults = sessionModel?.modelDefaults;
+    this.#boards = boards ? toBoardSource(boards) : undefined;
   }
 
   async prepare(request: FactoryStartRequest): Promise<FactoryStartPreparedResult> {
@@ -246,7 +260,18 @@ export class FactoryStartCoordinator {
     // any pull-request-sourced work item) get `untrustedCheckout` so the SDK
     // never ingests the checkout's AGENTS.md/CLAUDE.md into the system prompt
     // or reminders — those files are attacker-writable in a PR branch.
-    const untrustedCheckout = request.workItem.input.externalSource?.type === 'pull-request';
+    // An issue card's PR review checks out the attached pull request's head, so it counts too.
+    // The run's stage is where the card is going: a card started from its resting phase into
+    // its board's pull request review is moved only after the session is ready.
+    const runStage = request.destinationStage ?? storedItem?.stages[0];
+    const reviewsAttachedPullRequest =
+      request.workItem.role === REVIEW_CONTEXT &&
+      storedItem != null &&
+      hasPullRequest({ workItem: storedItem.workItem }) &&
+      (!this.#boards ||
+        isPullRequestReviewPhase((await this.#boards.load(request)).get(boardForWorkItem(storedItem)), runStage));
+    const untrustedCheckout =
+      request.workItem.input.externalSource?.type === 'pull-request' || reviewsAttachedPullRequest;
     // The trusted ref the SDK may serve project instruction files from on an
     // untrusted checkout (the PR's base branch). Prefer the session record's
     // base branch; fall back to the intake metadata captured from the PR.
@@ -329,6 +354,7 @@ export class FactoryStartCoordinator {
       factoryProjectId: request.factoryProjectId,
       workItem: { id: request.workItem.id, input: request.workItem.input },
       role: request.workItem.role,
+      expectedBindingId: request.expectedBindingId,
       session: { sessionId: sourceSession.sessionId, branch: sourceSession.branch, threadId },
       resourceId: memoryResourceId,
       kickoffKey: request.kickoffKey,
@@ -347,7 +373,11 @@ export class FactoryStartCoordinator {
         board: boardForWorkItem(prepared.item),
         stage: destinationStage,
         expectedRevision: prepared.item.revision,
-        actor: { type: 'human', id: request.userId },
+        actor:
+          request.startedBy ??
+          (isFactoryPrincipalId(request.userId)
+            ? { type: 'system', id: request.userId }
+            : { type: 'human', id: request.userId }),
         ingress: { type: 'human', identity: `start:${request.kickoffKey}:transition` },
         cause: 'run_start',
       });

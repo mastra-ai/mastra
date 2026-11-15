@@ -1,4 +1,3 @@
-import { Maximize2Icon } from 'lucide-react';
 import type { ElementType, ReactNode } from 'react';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import type {
@@ -6,6 +5,7 @@ import type {
   MetricsCardTitleMenuProps,
   MetricsCardTotalPart,
 } from '@/ds/components/MetricsCard';
+import { IconExpand45 } from '@/ds/icons/central/IconExpand45';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import type { LinkComponentProps } from '@/lib/framework';
 
@@ -54,10 +54,11 @@ export type ChartCardProps<V extends string = string> = {
   change?: string;
   /** A skeleton in place of `total`. */
   isLoading?: boolean;
-  /** Top-bar buttons, e.g. "View in traces": revealed on hover, except on `hero` cards. */
+  /**
+   * Top-bar buttons, e.g. "View in traces": `MetricsCard.Action`s, each deciding whether it waits
+   * for the card's hover (e.g. `onCardHover`) or stays in view, e.g. a pinned widget's unpin button.
+   */
   actions?: ReactNode;
-  /** Top-bar buttons always shown, after `actions`: ones that show a state, e.g. a pinned widget's unpin button. */
-  persistentActions?: ReactNode;
   /**
    * Legend and controls above the body; they stay in every state. Pass `false` or `null` while
    * there's nothing to show yet, and the row keeps its height.
@@ -91,7 +92,6 @@ export function ChartCard<V extends string = string>({
   change,
   isLoading = false,
   actions,
-  persistentActions,
   toolbar,
   isUpdating = false,
   bodyHeight = 'fixed',
@@ -132,26 +132,7 @@ export function ChartCard<V extends string = string>({
             onTitleChange={onTitleChange}
           />
         )}
-        {persistentActions ? (
-          // One group, so the buttons keep their spacing; only `actions` wait for hover.
-          <MetricsCard.Actions className={cn(hero && 'my-0 self-center')}>
-            {actions &&
-              (hero ? (
-                actions
-              ) : (
-                <MetricsCard.Actions reveal="hover" className="my-0">
-                  {actions}
-                </MetricsCard.Actions>
-              ))}
-            {persistentActions}
-          </MetricsCard.Actions>
-        ) : (
-          actions && (
-            <MetricsCard.Actions reveal={hero ? 'always' : 'hover'} className={cn(hero && 'my-0 self-center')}>
-              {actions}
-            </MetricsCard.Actions>
-          )
-        )}
+        {actions && <MetricsCard.Actions className={cn(hero && 'my-0 self-center')}>{actions}</MetricsCard.Actions>}
         {!hero && total !== undefined && <MetricsCard.Total value={total} isLoading={isLoading} className={fade} />}
       </MetricsCard.TopBar>
       <MetricsCard.Content className={cn('flex flex-col gap-4 overflow-visible', compact && 'min-h-0')}>
@@ -271,12 +252,12 @@ function ChartCardTitleLink({
     <Anchor
       href={href}
       className={cn(
-        '-mx-1.5 -my-0.5 inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-body font-medium text-foreground hover:bg-fill-subtle',
+        '-mx-1.5 -my-0.5 inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-subheading text-foreground hover:bg-fill-subtle',
         'focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-border-focus focus-visible:outline-solid',
       )}
     >
       {children}
-      <Maximize2Icon aria-hidden className="size-3.5 text-muted-foreground" />
+      <IconExpand45 aria-hidden className="size-3.5 text-muted-foreground" />
     </Anchor>
   );
 }

@@ -5,13 +5,14 @@
 @source '.';
 
 /* The host draws the surface around the iframe and frames it in its chat: the widget drops its card
-   surface (corners, fill and shadow) and sits directly on the host's background. */
+   surface (corners, fill and shadow) and sits directly on the host's background. Scoped to `#root`
+   because menus and other popups portal to `body` and share the card's classes; they keep theirs. */
 html,
 body {
   background-color: transparent;
 }
 
-.bg-card.rounded-xl {
+#root .bg-card.rounded-xl {
   border-radius: 0;
   background-color: transparent;
   box-shadow: none;

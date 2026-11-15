@@ -1,10 +1,11 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption } from '@mastra/playground-ui/components/Combobox';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useDatasetMutations, useDataset, useDatasets } from '@mastra/react/hooks/datasets';
-import { Check, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
 
+import { useDatasetMutations, useDataset, useDatasets } from '@mastra/react/hooks/datasets';
+import { useMemo, useState } from 'react';
 import { getAllDatasetTags } from '../datasets-list/helpers';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
@@ -33,7 +34,7 @@ export function DatasetTagsEditor({ datasetId }: DatasetTagsEditorProps) {
     const existing = allTags.map(tag => ({
       label: tag,
       value: tag,
-      end: currentTags.includes(tag) ? <Check data-testid="tag-applied" className="size-3.5" /> : undefined,
+      end: currentTags.includes(tag) ? <IconCheckmark1 data-testid="tag-applied" className="size-3.5" /> : undefined,
     }));
     const trimmed = search.trim();
     const canCreate = trimmed.length > 0 && !allTags.includes(trimmed) && !currentTags.includes(trimmed);
@@ -66,7 +67,7 @@ export function DatasetTagsEditor({ datasetId }: DatasetTagsEditorProps) {
             onClick={() => handleRemove(tag)}
             className="cursor-pointer rounded-sm hover:opacity-70 disabled:opacity-50"
           >
-            <X className="size-3" />
+            <IconCrossMedium className="size-3" />
           </button>
         </ComputedTag>
       ))}

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { AGENT_STREAM_TOPIC } from '../../agent/durable/constants';
 import {
@@ -17,6 +17,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
 import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
+import { noopLogger } from '../../logger';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { PUBSUB_SYMBOL } from '../constants';
@@ -349,6 +350,44 @@ describe('StepExecutor', () => {
     expect(serialized).not.toContain('stack');
   });
 
+  describe('falsy resume data (#29390)', () => {
+    it.each([
+      ['false', false],
+      ['0', 0],
+      ['an empty string', ''],
+      ['null', null],
+    ])('records %s as the resume payload on the step result', async (_label, value) => {
+      let seen: unknown = 'not called';
+      const step = createStep({
+        id: 'approval',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ seen: z.any() }),
+        execute: async ({ resumeData }) => {
+          seen = resumeData;
+          return { seen: resumeData };
+        },
+      });
+
+      const result = await stepExecutor.execute({
+        workflowId: 'test-workflow',
+        entry: { type: 'step', step },
+        runId: 'test-run',
+        input: {},
+        stepResults: {
+          approval: { status: 'suspended', payload: {}, suspendPayload: {}, startedAt: 1, suspendedAt: 2 } as any,
+        },
+        state: {},
+        requestContext,
+        resumeData: value,
+      });
+
+      expect(seen).toBe(value);
+      expect(result.status).toBe('success');
+      expect((result as { resumePayload?: unknown }).resumePayload).toBe(value);
+      expect((result as { resumedAt?: unknown }).resumedAt).toEqual(expect.any(Number));
+    });
+  });
+
   describe('abort signal propagation', () => {
     it('should propagate parent abortController to resolveSleep fn context', async () => {
       // Arrange: Create a parent abort controller and track what abortSignal the fn receives
@@ -561,7 +600,8 @@ describe('StepExecutor', () => {
         },
       });
 
-      const result = await new StepExecutor({ mastra: target }).execute({
+      const executor = new StepExecutor({ mastra: target });
+      const result = await executor.execute({
         workflowId: 'test-workflow',
         entry: { type: 'step', step } as Extract<StepFlowEntry, { type: 'step' }>,
         runId: 'test-run',
@@ -624,34 +664,73 @@ describe('StepExecutor', () => {
       expect(stepPubsub).toBe(target.pubsub);
     });
 
-    it('publishes step frames unnumbered when a process-local cache sits behind a cross-process transport', async () => {
-      // Stands in for a transport that reaches other processes (Redis, Unix socket).
-      class RemoteTransport extends PubSub {
-        readonly bus = new EventEmitterPubSub();
-        publish(...args: Parameters<PubSub['publish']>) {
-          return this.bus.publish(...args);
-        }
-        subscribe(...args: Parameters<PubSub['subscribe']>) {
-          return this.bus.subscribe(...args);
-        }
-        unsubscribe(...args: Parameters<PubSub['unsubscribe']>) {
-          return this.bus.unsubscribe(...args);
-        }
-        flush() {
-          return this.bus.flush();
-        }
+    // Stands in for a transport that reaches other processes (Redis, Unix socket).
+    class RemoteTransport extends PubSub {
+      readonly bus = new EventEmitterPubSub();
+      publish(...args: Parameters<PubSub['publish']>) {
+        return this.bus.publish(...args);
       }
+      subscribe(...args: Parameters<PubSub['subscribe']>) {
+        return this.bus.subscribe(...args);
+      }
+      unsubscribe(...args: Parameters<PubSub['unsubscribe']>) {
+        return this.bus.unsubscribe(...args);
+      }
+      flush() {
+        return this.bus.flush();
+      }
+    }
+
+    it('numbers step frames behind a cross-process transport in the process that started the run (#28324)', async () => {
       const cache = new InMemoryServerCache();
-      const context = await captureStepPubsub(new Mastra({ pubsub: new RemoteTransport(), cache }));
+      const target = new Mastra({ pubsub: new RemoteTransport(), cache });
+      const topic = AGENT_STREAM_TOPIC('run-caller');
+
+      // The caller appends the run's `start` frame through its own agent-side
+      // CachingPubSub on the same cache before any step runs.
+      await new CachingPubSub(target.pubsub, cache).publish(topic, {
+        type: 'start',
+        runId: 'run-caller',
+        data: {},
+      } as any);
+
+      const context = await captureStepPubsub(target);
       const stepPubsub = context[PUBSUB_SYMBOL] as PubSub;
-      const topic = AGENT_STREAM_TOPIC('run-remote');
+      await stepPubsub.publish(topic, { type: 'chunk', runId: 'run-caller', data: { n: 0 } } as any);
 
-      // Each process would number from its own in-memory counter, and the
-      // observer would drop the worker's frames as late duplicates.
-      await stepPubsub.publish(topic, { type: 'chunk', runId: 'run-remote', data: { n: 0 } } as any);
+      const cached = await cache.listFromTo(`pubsub:${topic}`, 0);
+      expect(cached.map(event => [event.type, event.index])).toEqual([
+        ['start', 0],
+        ['chunk', 1],
+      ]);
+    });
 
-      expect(stepPubsub).not.toBeInstanceOf(CachingPubSub);
+    it('publishes step frames unnumbered and warns the configured logger when the run started in another process', async () => {
+      const cache = new InMemoryServerCache();
+      const warn = vi.spyOn(noopLogger, 'warn');
+      onTestFinished(() => warn.mockRestore());
+      // Workflow event processors build executors with `new StepExecutor({ mastra })` and never
+      // register them, so the warning must reach the Mastra logger without `__registerMastra`.
+      const target = new Mastra({ pubsub: new RemoteTransport(), cache, logger: noopLogger });
+      const context = await captureStepPubsub(target);
+      const stepPubsub = context[PUBSUB_SYMBOL] as PubSub;
+      const topic = AGENT_STREAM_TOPIC('run-elsewhere');
+      const live: Event[] = [];
+      await target.pubsub.subscribe(topic, event => {
+        live.push(event);
+      });
+
+      // A dedicated worker has no log for this run: numbering from its own
+      // in-memory counter would make observers drop its frames as duplicates.
+      for (const n of [0, 1]) {
+        await stepPubsub.publish(topic, { type: 'chunk', runId: 'run-elsewhere', data: { n } } as any);
+      }
+
+      expect(live).toHaveLength(2);
+      expect(live.map(event => event.index)).toEqual([undefined, undefined]);
       expect(await cache.listLength(`pubsub:${topic}`)).toBe(0);
+      const warnings = warn.mock.calls.filter(([message]) => String(message).includes('RedisServerCache'));
+      expect(warnings).toHaveLength(1);
     });
 
     it('does not cache run-local step events even when the cache is atomic', async () => {

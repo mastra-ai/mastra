@@ -18,7 +18,7 @@
     "build": "tsc -p tsconfig.build.json && cp src/styles.css dist/styles.css"
   },
   "dependencies": {
-    "@hono/node-server": "2.1.5",
+    "@hono/node-server": "2.1.6",
     "@libsql/client": "0.17.4",
     "hono": "4.13.11"
   }

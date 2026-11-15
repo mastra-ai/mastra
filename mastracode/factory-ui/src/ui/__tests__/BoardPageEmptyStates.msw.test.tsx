@@ -21,7 +21,7 @@ function renderBoard(search = '', board = 'work') {
 }
 
 describe('Board empty-state actions', () => {
-  it('offers repository setup before rendering a Review board without repositories', async () => {
+  it('offers repository setup before rendering Work without repositories', async () => {
     stubWorkBoard();
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
@@ -37,9 +37,9 @@ describe('Board empty-state actions', () => {
         }),
       ),
     );
-    renderBoard('', 'review');
+    renderBoard();
 
-    expect(await screen.findByRole('heading', { name: 'Connect a repository to start reviewing' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Connect a repository to start intake' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Open Repository settings' })).toHaveAttribute(
       'href',
       `/factories/${FACTORY_ID}/settings/repositories`,
@@ -47,14 +47,13 @@ describe('Board empty-state actions', () => {
     expect(screen.queryByTestId('board-column-intake')).not.toBeInTheDocument();
   });
 
-  it('shows a clear Review intake when a connected repository has no change requests', async () => {
+  it('sends an old Review board link to Work, filtered to cards with a pull request', async () => {
     stubWorkBoard();
-    renderBoard('', 'review');
+    const router = renderBoard('', 'review');
 
-    const intake = await screen.findByTestId('board-column-intake');
-    expect(await within(intake).findByText(/No change requests waiting/)).toBeVisible();
-    expect(within(intake).queryByRole('link', { name: /Connect/ })).not.toBeInTheDocument();
-    expect(within(intake).queryByRole('button', { name: 'Create card' })).not.toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`));
+    expect(router.state.location.search).toBe('?source=pull-request');
+    expect(await screen.findByTestId('board-column-intake')).toBeVisible();
   });
 
   it.each(['list', 'board'])('offers manual creation and intake setup in the %s layout', async layout => {

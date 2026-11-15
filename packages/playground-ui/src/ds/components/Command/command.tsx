@@ -1,5 +1,4 @@
 import { Command as CommandPrimitive } from 'cmdk';
-import { Search } from 'lucide-react';
 import * as React from 'react';
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ds/components/Dialog';
@@ -7,6 +6,7 @@ import type { DialogSize } from '@/ds/components/Dialog';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { controlIconState } from '@/ds/primitives/control-icon';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { heightTransition, transitions } from '@/ds/primitives/transitions';
@@ -175,7 +175,7 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
       data-slot="command-input-wrapper"
       className={cn('flex items-center border-b border-border px-3', transitions.colors, wrapperClassName)}
     >
-      <Search className={cn('mr-2 size-4 shrink-0 text-muted-foreground', transitions.colors)} />
+      <IconMagnifyingGlass className={cn('mr-2 size-4 shrink-0 text-muted-foreground', transitions.colors)} />
       {/* cmdk renders autocomplete="off" itself; a command search is never a credential field. */}
       <CommandPrimitive.Input
         ref={ref}

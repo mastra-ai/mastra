@@ -63,6 +63,10 @@ export const BACKGROUND_TASK_STREAM_ROUTE = createRoute({
       // subscribe to the stream.
       return new ReadableStream({
         start(controller) {
+          if (abortSignal?.aborted) {
+            controller.close();
+            return;
+          }
           abortSignal?.addEventListener('abort', () => {
             try {
               controller.close();

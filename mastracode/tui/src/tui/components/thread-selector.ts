@@ -215,6 +215,10 @@ export class ThreadSelectorComponent extends Box implements Focusable {
     this.list = new PickerList({
       maxVisible: MAX_VISIBLE_THREADS,
       renderItem: (thread, selected) => this.renderThread(thread, selected),
+      onActivate: index => {
+        this.selectedIndex = index;
+        this.handleInput('\r');
+      },
       emptyText: () => 'No matching threads',
     });
     this.addChild(this.list);

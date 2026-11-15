@@ -2,38 +2,7 @@ import type { EntityType } from '@mastra/core/observability';
 import type { ListTracesArgs } from '@mastra/core/storage';
 import { ROOT_ENTITY_TYPES } from '@mastra/react/hooks/traces';
 import type { TraceListMode, TraceMetadataFilterField } from '@mastra/react/hooks/traces';
-import {
-  ActivityIcon,
-  BoxIcon,
-  BracesIcon,
-  BuildingIcon,
-  CloudIcon,
-  CpuIcon,
-  FingerprintIcon,
-  FlagIcon,
-  FlaskConicalIcon,
-  GaugeIcon,
-  GitBranchIcon,
-  GlobeIcon,
-  HashIcon,
-  LayersIcon,
-  MessageCircleIcon,
-  MessageSquareIcon,
-  OctagonIcon,
-  PercentIcon,
-  PlayIcon,
-  RadioIcon,
-  ServerIcon,
-  ShapesIcon,
-  StarIcon,
-  TagIcon,
-  TagsIcon,
-  ThumbsUpIcon,
-  TimerIcon,
-  TriangleAlertIcon,
-  UserIcon,
-  WaypointsIcon,
-} from 'lucide-react';
+import { FlagIcon, OctagonIcon, PercentIcon, ShapesIcon, TagsIcon, WaypointsIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
   isTraceFilterGroup,
@@ -59,6 +28,30 @@ import type {
   FilterBarSuggestionsResolver,
 } from '@/ds/components/FilterBar/types';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
+import { IconBox } from '@/ds/icons/central/IconBox';
+import { IconBranch } from '@/ds/icons/central/IconBranch';
+import { IconBubble2 } from '@/ds/icons/central/IconBubble2';
+import { IconBubble5 } from '@/ds/icons/central/IconBubble5';
+import { IconBuildings } from '@/ds/icons/central/IconBuildings';
+import { IconChip } from '@/ds/icons/central/IconChip';
+import { IconCloud } from '@/ds/icons/central/IconCloud';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
+import { IconElectrocardiogram } from '@/ds/icons/central/IconElectrocardiogram';
+import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
+import { IconFingerPrint1 } from '@/ds/icons/central/IconFingerPrint1';
+import { IconGauge } from '@/ds/icons/central/IconGauge';
+import { IconGlobe } from '@/ds/icons/central/IconGlobe';
+import { IconHashtag } from '@/ds/icons/central/IconHashtag';
+import { IconLab } from '@/ds/icons/central/IconLab';
+import { IconLayersTwo } from '@/ds/icons/central/IconLayersTwo';
+import { IconPlay } from '@/ds/icons/central/IconPlay';
+import { IconPodcast1 } from '@/ds/icons/central/IconPodcast1';
+import { IconServer } from '@/ds/icons/central/IconServer';
+import { IconStar } from '@/ds/icons/central/IconStar';
+import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
+import { IconTag } from '@/ds/icons/central/IconTag';
+import { IconThumbsUp } from '@/ds/icons/central/IconThumbsUp';
+import { IconUser } from '@/ds/icons/central/IconUser';
 
 export type {
   TraceFilterGroup,
@@ -379,40 +372,40 @@ export const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
 };
 
 const TRACE_FILTER_BAR_FIELD_ICONS: Record<string, LucideIcon> = {
-  rootEntityType: BoxIcon,
-  entityName: TagIcon,
-  entityId: FingerprintIcon,
-  status: ActivityIcon,
+  rootEntityType: IconBox,
+  entityName: IconTag,
+  entityId: IconFingerPrint1,
+  status: IconElectrocardiogram,
   outcome: FlagIcon,
   stopReason: OctagonIcon,
   tags: TagsIcon,
-  serviceName: ServerIcon,
-  environment: GlobeIcon,
+  serviceName: IconServer,
+  environment: IconGlobe,
   traceId: WaypointsIcon,
-  runId: PlayIcon,
-  threadId: MessageSquareIcon,
-  sessionId: LayersIcon,
-  requestId: RadioIcon,
-  resourceId: HashIcon,
-  userId: UserIcon,
-  organizationId: BuildingIcon,
-  experimentId: FlaskConicalIcon,
-  'spans.name': GitBranchIcon,
+  runId: IconPlay,
+  threadId: IconBubble2,
+  sessionId: IconLayersTwo,
+  requestId: IconPodcast1,
+  resourceId: IconHashtag,
+  userId: IconUser,
+  organizationId: IconBuildings,
+  experimentId: IconLab,
+  'spans.name': IconBranch,
   'spans.spanType': ShapesIcon,
-  'spans.model': CpuIcon,
-  'spans.provider': CloudIcon,
-  durationMs: TimerIcon,
-  timeToFirstChunkMs: TimerIcon,
-  timeToFirstTokenMs: TimerIcon,
-  'spans.durationMs': TimerIcon,
-  'spans.timeToFirstChunkMs': TimerIcon,
-  'spans.timeToFirstTokenMs': TimerIcon,
-  'spans.error': TriangleAlertIcon,
-  'scores.scorerId': GaugeIcon,
+  'spans.model': IconChip,
+  'spans.provider': IconCloud,
+  durationMs: IconStopwatch,
+  timeToFirstChunkMs: IconStopwatch,
+  timeToFirstTokenMs: IconStopwatch,
+  'spans.durationMs': IconStopwatch,
+  'spans.timeToFirstChunkMs': IconStopwatch,
+  'spans.timeToFirstTokenMs': IconStopwatch,
+  'spans.error': IconExclamationTriangle,
+  'scores.scorerId': IconGauge,
   'scores.score': PercentIcon,
-  'feedback.feedbackType': ThumbsUpIcon,
-  'feedback.value': StarIcon,
-  'feedback.comment': MessageCircleIcon,
+  'feedback.feedbackType': IconThumbsUp,
+  'feedback.value': IconStar,
+  'feedback.comment': IconBubble5,
 };
 
 /** Which optional trace query fields the server declares support for. */
@@ -646,7 +639,7 @@ export function createTraceFilterBarFields({
     .map(({ path, suggestions }) => ({
       id: path,
       label: path.slice(TRACE_METADATA_FILTER_FIELD_PREFIX.length),
-      icon: BracesIcon,
+      icon: IconCodeBrackets,
       color: traceFilterFieldColor(path),
       operators: TRACE_STRING_OPERATORS,
       suggestions,

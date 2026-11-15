@@ -65,6 +65,13 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     isOptional: true,
   },
   {
+    name: 'canUseProvider',
+    type: '(providerId: string, context: { requestContext?: RequestContext }) => boolean',
+    description:
+      "Tells automatic selection whether the current request can use a provider. `'auto'` prefers Gemini only when this returns `true` for `'google'`. Use it when credentials are scoped per request, such as per tenant. When omitted, automatic selection checks `GOOGLE_GENERATIVE_AI_API_KEY`.",
+    isOptional: true,
+  },
+  {
     name: 'resolveModel',
     type: '(modelId: string, context: { requestContext?: RequestContext }) => MastraModelConfig | Promise<MastraModelConfig>',
     description:
@@ -72,17 +79,10 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     isOptional: true,
   },
   {
-    name: 'canUseProvider',
-    type: '(providerId: string, context: { requestContext?: RequestContext }) => boolean',
-    description:
-      'Decides whether `"auto"` treats a provider as usable. Replaces the built-in `GOOGLE_GENERATIVE_AI_API_KEY` check that decides whether automatic selection prefers Gemini. Return `false` for any provider the current request cannot authenticate, for example a provider whose key is not available in the request context. The `context.requestContext` is the request context of the run making the OM model call, so credentials can be resolved per request instead of from the server environment. See the `model` row for the selection order.',
-    isOptional: true,
-  },
-  {
     name: 'scope',
     type: "'resource' | 'thread'",
     description:
-      "Memory scope for observations. `'thread'` keeps observations per-thread. `'resource'` is deprecated and will be removed in a future release. It shares observations across all threads for a resource and works much worse than thread scope for prompt caching and agent understanding. For cross-thread continuity, use thread scope with `retrieval` or resource-scoped working memory. See [resource scope (deprecated)](/docs/memory/observational-memory#resource-scope-deprecated).",
+      "Memory scope for observations. `'thread'` keeps observations per-thread. `'resource'` is deprecated and will be removed in a future release. It shares observations across all threads for a resource and works much worse than thread scope for prompt caching and agent understanding. For cross-thread continuity, use thread scope with `retrieval`. See [resource scope (deprecated)](/docs/memory/observational-memory#resource-scope-deprecated).",
     isOptional: true,
     defaultValue: "'thread'",
   },
@@ -121,7 +121,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     name: 'retrieval',
     type: "boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string }",
     description:
-      "Let the agent look up the raw message history behind its observations. Observation groups keep durable pointers to the original messages, and a `recall` tool is registered so the agent can browse them. `true` enables cross-thread browsing by default. `{ vector: true }` also enables semantic search using Memory's vector store and embedder. `{ scope: 'thread' }` restricts the recall tool to the current thread only. Default scope is `'resource'`. `{ instructions: '...' }` appends application-specific recall guidance after Mastra's built-in retrieval instructions.",
+      "Let the agent look up the raw message history behind its observations. Observation groups keep durable pointers to the original messages, and a `recall` tool is registered so the agent can browse them. `true` enables cross-thread browsing by default. `{ vector: true }` also enables semantic search using Memory's vector store and embedder. A vector store that generates embeddings itself needs no `embedder`. `{ scope: 'thread' }` restricts the recall tool to the current thread only. Default scope is `'resource'`. `{ instructions: '...' }` appends application-specific recall guidance after Mastra's built-in retrieval instructions.",
     isOptional: true,
     defaultValue: 'false',
   },
@@ -182,7 +182,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'manageWorkingMemory',
             type: 'boolean',
             description:
-              'Let the Observer manage working memory through OM extraction. Adds `WorkingMemoryExtractor`, defaults `workingMemory.agentManaged` to `false`, and defaults `workingMemory.useStateSignals` to `true`. See [Working memory updates](#working-memory-updates).',
+              'Let the Observer manage working memory through OM extraction. Adds `WorkingMemoryExtractor`, defaults `workingMemory.agentManaged` to `false`, and defaults `workingMemory.useStateSignals` to `true`. See [Let the Observer manage working memory](#let-the-observer-manage-working-memory).',
             isOptional: true,
             defaultValue: 'false',
           },
@@ -190,7 +190,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'observeAttachments',
             type: "'auto' | boolean | string[]",
             description:
-              "Controls which image/file attachments are forwarded to the Observer model alongside their placeholder text lines. By default only images and PDFs are forwarded. `true` forwards all attachments. `false` drops all attachments while keeping placeholders visible. `'auto'` uses the provider capabilities registry to decide: attachments are forwarded when the Observer model supports multimodal input, dropped otherwise, and forwarded when no capability data is available for the model. An array is a case-insensitive mimeType allowlist supporting exact matches (`'application/pdf'`), wildcard subtypes (`'image/*'`), and bare `'*'` for everything. Useful when the Observer model is text-only (e.g. some DeepSeek endpoints) while the main agent uses a multimodal model, or when you only want specific file types forwarded. Tool-result attachments are filtered using the same rule.",
+              "Controls which image/file attachments are forwarded to the Observer model alongside their placeholder text lines. The default allowlist is `['image/*', 'application/pdf']`. `true` forwards all attachments. `false` drops all attachments while keeping placeholders visible. `'auto'` uses the provider capabilities registry to decide: attachments are forwarded when the Observer model supports multimodal input, dropped otherwise, and forwarded when no capability data is available for the model. An array is a case-insensitive mimeType allowlist supporting exact matches (`'application/pdf'`), wildcard subtypes (`'image/*'`), and bare `'*'` for everything. Useful when the Observer model is text-only (e.g. some DeepSeek endpoints) while the main agent uses a multimodal model, or when you only want specific file types forwarded. Tool-result attachments are filtered using the same rule.",
             isOptional: true,
             defaultValue: "['image/*', 'application/pdf']",
           },
@@ -472,16 +472,6 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
 ]}
 />
 
-### Token estimate metadata cache
-
-OM persists token payload estimates so repeated counting can reuse prior token estimation work.
-
-- Part-level cache: `part.providerMetadata.mastra`.
-- String-content fallback cache: message-level metadata when no parts exist.
-- Cache entries are ignored and recomputed if cache version/tokenizer source doesn't match.
-- Per-message and per-conversation overhead are always recomputed at runtime and aren't cached.
-- `data-*` and `reasoning` parts are skipped and don't receive cache entries.
-
 ## Extractor API
 
 `Extractor` defines a value that OM should extract during observation or reflection. Built-in OM values such as `current-task`, `suggested-response`, and `thread-title` use the same extractor pipeline as custom values.
@@ -580,105 +570,36 @@ const memory = new Memory({
 
 ## Examples
 
-### Working memory updates
+### Thresholds, instructions and buffering
 
-Use `observationalMemory.observation.manageWorkingMemory` when OM should update working memory.
-
-```typescript title="src/mastra/agents/agent.ts"
-import { Memory } from '@mastra/memory'
-
-const memory = new Memory({
-  options: {
-    workingMemory: {
-      enabled: true,
-    },
-    observationalMemory: {
-      enabled: true,
-      observation: {
-        manageWorkingMemory: true,
-      },
-    },
-  },
-})
-```
-
-Set `workingMemory.agentManaged: true` if the main agent should still receive working memory tool and instruction injection.
-
-### Custom thresholds
+One config that sets the main tuning options together. Every field is optional.
 
 ```typescript title="src/mastra/agents/agent.ts"
 import { Memory } from '@mastra/memory'
 import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
-  id: 'my-agent',
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant.',
-  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
+  id: 'health-assistant',
+  name: 'health-assistant',
+  instructions: 'You are a health and wellness assistant.',
+  model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({
     options: {
       observationalMemory: {
         model: 'auto',
         observation: {
           messageTokens: 20_000,
+          bufferTokens: 5_000,
+          bufferActivation: 0.7,
+          blockAfter: 1.5,
+          instruction:
+            'Prioritize health goals, dietary restrictions and exercise preferences. Skip general chit-chat.',
         },
         reflection: {
           observationTokens: 60_000,
+          instruction:
+            'Group related health information together. Keep specific metrics and dates.',
         },
-      },
-    },
-  }),
-})
-```
-
-### Shared token budget
-
-When `shareTokenBudget` is enabled, the total budget is `observation.messageTokens + reflection.observationTokens`, which is 100k in this example. Observations that use only 30k tokens leave up to 70k for messages, while short messages give observations more room before reflection starts.
-
-```typescript title="src/mastra/agents/agent.ts"
-import { Memory } from '@mastra/memory'
-import { Agent } from '@mastra/core/agent'
-
-export const agent = new Agent({
-  id: 'my-agent',
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant.',
-  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
-  memory: new Memory({
-    options: {
-      observationalMemory: {
-        shareTokenBudget: true,
-        observation: {
-          messageTokens: 20_000,
-          bufferTokens: false, // required when using shareTokenBudget (temporary limitation)
-        },
-        reflection: {
-          observationTokens: 80_000,
-        },
-      },
-    },
-  }),
-})
-```
-
-### Custom model
-
-By passing a `model` in the config, you can use any model from Mastra's model router.
-
-```typescript title="src/mastra/agents/agent.ts"
-import { Memory } from '@mastra/memory'
-import { Agent } from '@mastra/core/agent'
-
-export const agent = new Agent({
-  id: 'my-agent',
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({
-    options: {
-      observationalMemory: {
-        // highlight-next-line
-        model: '__GATEWAY_OPENAI_MODEL_LUNA__',
       },
     },
   }),
@@ -686,6 +607,8 @@ export const agent = new Agent({
 ```
 
 ### Different models per agent
+
+Set `observation.model` and `reflection.model` and leave the top-level `model` out. Setting the top-level `model` together with either one throws.
 
 ```typescript title="src/mastra/agents/agent.ts"
 import { Memory } from '@mastra/memory'
@@ -713,54 +636,9 @@ export const agent = new Agent({
 })
 ```
 
-### Custom instructions
+### Shared token budget
 
-Customize what the Observer and Reflector focus on by providing custom instructions:
-
-```typescript title="src/mastra/agents/agent.ts"
-import { Memory } from '@mastra/memory'
-import { Agent } from '@mastra/core/agent'
-
-export const agent = new Agent({
-  id: 'health-assistant',
-  name: 'health-assistant',
-  instructions: 'You are a health and wellness assistant.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({
-    options: {
-      observationalMemory: {
-        model: 'auto',
-        observation: {
-          // Focus observations on health-related preferences and goals
-          instruction:
-            'Prioritize capturing user health goals, dietary restrictions, exercise preferences, and medical considerations. Avoid capturing general chit-chat.',
-        },
-        reflection: {
-          // Guide reflection to consolidate health patterns
-          instruction:
-            'When consolidating, group related health information together. Preserve specific metrics, dates, and medical details.',
-        },
-      },
-    },
-  }),
-})
-```
-
-### Async buffering
-
-Async buffering is **enabled by default**. It pre-computes observations in the background as the conversation grows: when the `messageTokens` threshold is reached, buffered observations activate instantly with no blocking LLM call.
-
-The lifecycle follows **buffer → activate → remove messages → repeat**. Background Observer calls run at `bufferTokens` intervals and produce chunks of observations. At the threshold, activation moves observations into the log and removes raw messages from context. Between the threshold and `blockAfter`, buffering continues in the background and the next ready chunk activates on a later step. A synchronous observation runs if pending tokens still reach `blockAfter` after all buffered chunks have been activated. Above `blockAfter`, activation may also overshoot the retention target instead of activating fewer chunks.
-
-Default settings:
-
-- `observation.bufferTokens: 0.2`: Buffer every 20% of `messageTokens` (e.g. every \~6k tokens with a 30k threshold)
-- `observation.bufferActivation: 0.8`: On activation, remove enough messages to keep only 20% of the threshold remaining
-- `reflection.bufferActivation: 0.5`: start background reflection at 50% of observation threshold
-
-Async buffered Observer calls don't generate continuation hints (`suggestedResponse`, `currentTask`), and activation clears any previously stored hints.
-
-To customize:
+When `shareTokenBudget` is enabled, the total budget is `observation.messageTokens + reflection.observationTokens`, which is 100k in this example. Observations that use only 30k tokens leave up to 70k for messages, while short messages give observations more room before reflection starts. Shared budgets need async buffering turned off.
 
 ```typescript title="src/mastra/agents/agent.ts"
 import { Memory } from '@mastra/memory'
@@ -774,22 +652,13 @@ export const agent = new Agent({
   memory: new Memory({
     options: {
       observationalMemory: {
-        model: 'auto',
+        shareTokenBudget: true,
         observation: {
-          messageTokens: 30_000,
-          // Buffer every 5k tokens (runs in background)
-          bufferTokens: 5_000,
-          // Activate to retain 30% of threshold
-          bufferActivation: 0.7,
-          // Observe synchronously at 1.5x the threshold if no buffered chunk is ready
-          blockAfter: 1.5,
+          messageTokens: 20_000,
+          bufferTokens: false,
         },
         reflection: {
-          observationTokens: 60_000,
-          // Start background reflection at 50% of threshold
-          bufferActivation: 0.5,
-          // Force synchronous reflection at 1.2x threshold
-          blockAfter: 1.2,
+          observationTokens: 80_000,
         },
       },
     },
@@ -797,24 +666,340 @@ export const agent = new Agent({
 })
 ```
 
-To disable async buffering entirely:
+### Async buffering
+
+Async buffering is on by default with these settings:
+
+- `observation.bufferTokens: 0.2` buffers every 20% of `messageTokens`.
+- `observation.bufferActivation: 0.8` keeps 20% of the threshold after activation.
+- `reflection.bufferActivation: 0.5` starts background reflection at half the reflection threshold.
+
+Buffered Observer calls don't produce continuation hints, and activation clears stored ones. See [When buffering falls behind](#when-buffering-falls-behind) for what happens between the threshold and `blockAfter`.
+
+Set `observation.bufferTokens: false` to turn off buffering for both observation and reflection. Each then runs synchronously at its threshold.
 
 ```typescript oxfmt:false
 observationalMemory: {
-  model: "auto",
   observation: {
     bufferTokens: false,
   },
 }
 ```
 
-Setting `bufferTokens: false` disables both observation and reflection async buffering. Observations and reflections will run synchronously when their thresholds are reached.
+Async buffering is off in the deprecated `scope: 'resource'`.
 
-:::note
+## Early activation
 
-Async buffering isn't supported with the deprecated `scope: 'resource'` and is automatically disabled in resource scope.
+By default, buffered observations activate when message history reaches `observation.messageTokens`. OM can activate them sooner, which helps when a prompt cache is about to expire or when the agent switches model providers. In both cases the next request can't reuse the cached prompt anyway, so sending a smaller, compressed context costs nothing extra.
+
+- `activateAfterIdle`: activate after the thread has been idle for this long. Accepts milliseconds (`300_000`), a duration string (`'5m'`, `'1hr'`), `'auto'` for a provider-aware prompt cache TTL, or a per-provider object (see [per-provider idle TTLs](#per-provider-idle-ttls)).
+- `activateOnProviderChange`: activate when the next step uses a different `provider/model` than the one that produced the latest assistant step. Default `false`.
+
+```typescript title="src/mastra/memory.ts"
+import { Memory } from '@mastra/memory'
+
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      activateAfterIdle: 'auto',
+      activateOnProviderChange: true,
+    },
+  },
+})
+```
+
+Top-level settings apply to observations only. Reflections opt in on their own, through the nested `reflection` settings:
+
+```typescript title="src/mastra/memory.ts"
+import { Memory } from '@mastra/memory'
+
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      activateAfterIdle: '5m',
+      observation: {
+        activateAfterIdle: false,
+      },
+      reflection: {
+        activateAfterIdle: '10m',
+        activateOnProviderChange: true,
+      },
+    },
+  },
+})
+```
+
+Here observations ignore the top-level idle setting, while reflections opt into idle and provider-change activation.
+
+### Automatic idle TTLs
+
+With `activateAfterIdle: 'auto'`, Mastra picks the idle TTL from the active model provider:
+
+| Provider | Auto TTL |
+| - | - |
+| Anthropic, OpenRouter, unknown providers, xAI | 5 minutes |
+| DeepSeek | 1 hour |
+| Google Gemini | 24 hours |
+| Groq | 2 hours |
+| OpenAI with `providerOptions.openai.promptCacheRetention: "24h"` | 1 hour |
+| OpenAI with `providerOptions.openai.promptCacheRetention: "in_memory"` | 5 minutes |
+| OpenAI `gpt-4*`, `gpt-5`, `gpt-5-*`, and `gpt-5.1` through `gpt-5.4` (including `-` suffixed variants) | 5 minutes |
+| Other OpenAI models | 1 hour |
+
+For a fixed TTL instead, use `'5m'` or `300_000`.
+
+### Per-provider idle TTLs
+
+`'auto'` can't see a cache TTL that you set on individual messages, such as Anthropic's `cacheControl: { type: 'ephemeral', ttl: '1h' }`. It keeps using the provider's 5-minute default, so buffered observations activate while the 1-hour cache is still warm. Pass an object to set the TTL per provider:
+
+```typescript title="src/mastra/memory.ts"
+import { Memory } from '@mastra/memory'
+
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      activateAfterIdle: { default: 'auto', anthropic: '1h' },
+    },
+  },
+})
+```
+
+Set the `anthropic` entry to the same TTL as your `cacheControl.ttl`. Mastra doesn't read the per-message cache setting, so keep the two in sync by hand.
+
+How the object resolves:
+
+- Keys are provider names. Mastra compares them case-insensitively with the part of the model's provider before the first `.`, so `anthropic` matches both `anthropic` and `anthropic.messages`. Claude served through another provider uses that provider's key, for example `amazon-bedrock`. Keys must not contain `.` or `/`.
+- Each value accepts the same forms as a single TTL: milliseconds, a duration string, `'auto'`, or `false` to turn off idle activation for that provider.
+- `default` applies to every provider without its own key. Without `default`, those providers don't idle-activate.
+- `observation.activateAfterIdle` and `reflection.activateAfterIdle` accept the same object. An `observation.activateAfterIdle` object replaces the top-level value and isn't merged with it.
+
+## Buffer on idle
+
+Set `observation.bufferOnIdle: true` to run background observation buffering when an agent turn ends and the agent becomes idle. Short turns then get observed without waiting for the next turn or the `messageTokens` threshold.
+
+```typescript title="src/mastra/memory.ts"
+import { Memory } from '@mastra/memory'
+
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      observation: {
+        bufferOnIdle: true,
+      },
+    },
+  },
+})
+```
+
+`bufferOnIdle` is off by default. It's separate from `bufferTokens`: `bufferTokens` controls buffering during steps, `bufferOnIdle` controls buffering at the end of an idle turn.
+
+## When buffering falls behind
+
+When messages arrive faster than the Observer can buffer them, history can pass `messageTokens` before a buffered chunk is ready. Between `messageTokens` and `observation.blockAfter` (default `1.2`, so 36,000 tokens with the default threshold), Mastra keeps buffering in the background and activates the chunk on a later step, so the agent doesn't wait.
+
+If pending tokens still reach `blockAfter` after buffered activation, for example when a large tool result leaves an uncovered tail, a synchronous observation runs. At `blockAfter`, activation first waits a bounded time for a buffered observation that's still being produced. If that takes longer, Mastra observes the remaining messages synchronously and drops the late observation if its messages are already observed. Activations triggered by the idle TTL or a provider change don't wait.
+
+Above `blockAfter`, activation may overshoot the retention target instead of using fewer chunks. Buffered activation usually keeps a minimum remaining context (the smaller of about 1,000 tokens or the configured retention floor), but a single chunk that covers the whole pending window still activates and can leave less.
+
+Async buffered Observer calls don't produce continuation hints, because a delayed hint can be stale by the time it activates. When buffered chunks activate, any stored suggested response and current task are cleared.
+
+Reflection buffers the same way. It starts in the background when observations reach `reflection.bufferActivation` (default `0.5`) of `reflection.observationTokens`, and runs synchronously above `reflection.blockAfter` (default `1.2`) when no buffered reflection is ready.
+
+## Retries and failure policy
+
+Observer and Reflector model calls are retried on transient provider errors. Each stage has two settings:
+
+- `maxRetries`: retries after the first model call. Default `8`. This is the only retry setting for the stage: the underlying model call runs with no provider-level retries.
+- `failurePolicy`: what happens once retries run out. `'abort'` (default) fails the turn, and `'continue'` lets it go on.
+
+```typescript title="src/mastra/memory.ts"
+import { Memory } from '@mastra/memory'
+
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      observation: {
+        maxRetries: 8,
+        failurePolicy: 'continue',
+      },
+      reflection: {
+        maxRetries: 8,
+        failurePolicy: 'continue',
+      },
+    },
+  },
+})
+```
+
+A provider outage usually takes out both stages, so set the policy on both if you want the turn to survive one.
+
+With `'continue'`, Mastra reports the failure through OM diagnostics, keeps the failed input pending for a later cycle, and lets the turn continue. It doesn't advance observation boundaries or discard unobserved messages. A Reflector failure leaves already-persisted observations committed and retries reflection at the next threshold crossing.
+
+The policy covers only Observer and Reflector model and provider failures in synchronous runs: at `blockAfter`, when async buffering is off, and in resource-scoped observation. Persistence, indexing, transform, locking, invariant and explicit abort failures stay fatal.
+
+Background buffering failures never stop the turn, whatever the policy. They're reported as `om_buffering_failed`, and the failed input stays pending. If it keeps growing, it reaches `blockAfter`, where synchronous observation applies `failurePolicy`.
+
+:::warning
+
+`'continue'` has no backstop for a long outage. Unobserved messages stay pending and keep growing in the main agent's context until they reach the model's context limit.
 
 :::
+
+## Temporal gap markers
+
+Temporal gap markers insert a short reminder before a new user message when at least 10 minutes have passed since the previous message in the thread. They're off by default.
+
+```typescript title="src/mastra/memory.ts"
+import { Memory } from '@mastra/memory'
+
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      temporalMarkers: true,
+    },
+  },
+})
+```
+
+The marker is stored in memory and also emitted as a transient reminder event, so clients can render it as a timeline hint. The Observer sees the markers too, so observations can say when something happened, for example "User asked about deployment after a 2-day gap".
+
+## Token estimates
+
+OM decides when to observe from local token estimates, not from the provider's usage report. Text is estimated with `tokenx`; images use provider-aware heuristics, which also apply to image-like `file` parts. Provider counts can run higher than the estimate, which is why [context-overflow recovery](/docs/memory/observational-memory#context-overflow-recovery) exists.
+
+### Token-count cache
+
+OM caches estimates in message metadata so threshold checks don't recount the same content:
+
+- Per-part estimates are stored on `part.providerMetadata.mastra` and reused while the cache version and tokenizer source match.
+- Messages with string-only content (no parts) use a message-level cache.
+- Message and conversation overhead is recalculated every pass. Only payload estimates are cached.
+- `data-*` and `reasoning` parts are skipped and not cached.
+
+### Supplying your own estimate for a file
+
+You can attach a token estimate to an `image` or `file` part with `providerMetadata.mastra.tokenEstimate`. The token counter uses it as is:
+
+```typescript
+const filePart = {
+  type: 'file',
+  data: 'storage://bucket/large-report.pdf',
+  mimeType: 'application/pdf',
+  filename: 'large-report.pdf',
+  providerMetadata: {
+    mastra: {
+      tokenEstimate: {
+        v: 0,
+        source: 'client',
+        key: 'client',
+        tokens: 100_000,
+      },
+    },
+  },
+}
+```
+
+- `v`: cache schema version. Set it to `0`. OM doesn't read it for caller entries.
+- `source`: must be `'client'`. This marks the entry as authoritative so it isn't recomputed or overwritten.
+- `key`: set to `'client'`. Framework entries put a content hash here. `'client'` keeps your estimate stable across writes.
+- `tokens`: the count to use. Must be a finite, non-negative number.
+
+The estimate is honored only on `image` and `file` parts. `text` and `tool-invocation` parts are always counted.
+
+## Limiting what the Observer re-reads
+
+By default the Observer receives the full observation log as context with every batch of new messages, plus the previous `current-task` and `suggested-response` values. When the log grows large, set `observation.previousObserverTokens` to cap it:
+
+```typescript title="src/mastra/memory.ts"
+import { Memory } from '@mastra/memory'
+
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      observation: {
+        previousObserverTokens: 10_000,
+      },
+    },
+  },
+})
+```
+
+- `false` (default): send the full log.
+- A number such as `2000`: keep about that many tokens of the most recent observations.
+- `0`: send no previous observations.
+
+When a buffered reflection is pending, the lines it already covers are replaced with the reflection before truncation.
+
+## Let the Observer manage working memory
+
+Set `observation.manageWorkingMemory: true` to have the Observer keep [working memory](/docs/memory/working-memory) up to date, instead of relying on the main agent to call the working memory tool.
+
+```typescript title="src/mastra/memory.ts"
+import { Memory } from '@mastra/memory'
+
+const memory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+    },
+    observationalMemory: {
+      observation: {
+        manageWorkingMemory: true,
+      },
+    },
+  },
+})
+```
+
+This adds a `WorkingMemoryExtractor` and changes two working memory defaults:
+
+- `workingMemory.agentManaged` defaults to `false`, so the main agent no longer gets the working memory tool and instructions. Set it to `true` to keep them.
+- `workingMemory.useStateSignals` defaults to `true`, which moves working memory out of the system prompt into state signals so updates don't invalidate the prompt cache.
+
+## Hooks
+
+`observationalMemory.hooks` takes two kinds of hooks:
+
+- **Lifecycle hooks** (`onObservationStart`, `onObservationEnd`, `onReflectionStart`, `onReflectionEnd`) are for telemetry. They receive `threadId`, `resourceId` and `trigger`; the end hooks also receive the model call's `usage`, `providerMetadata` and any `error`. They never change what OM stores.
+- **Transform hooks** (`beforeObservation`, `afterObservation`, `beforeReflection`, `afterReflection`) change the data flowing through a cycle. Return nothing to pass the input through, or return a replacement.
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      hooks: {
+        // Drop or redact messages before the Observer sees them.
+        beforeObservation: ({ messages }) => ({
+          messages: messages.filter(m => !isSensitive(m)),
+        }),
+        // Rewrite observations before they are persisted.
+        afterObservation: ({ observations }) => ({
+          observations: redact(observations),
+        }),
+        // Rewrite the text the Reflector condenses.
+        beforeReflection: ({ observations }) => ({
+          observations: stripInternalNotes(observations),
+        }),
+        afterReflection: async ({ observations, resourceId }) => {
+          await syncToExternalStore(resourceId, observations)
+        },
+      },
+    },
+  },
+})
+```
+
+Transform hooks are always awaited, on every path: manual `observe()` and `reflect()`, synchronous observation during a turn, and async buffering. If `beforeObservation` returns an empty `messages` array, the Observer call is skipped and those messages are still marked as observed. If a transform hook throws, the cycle fails before committing the transformed text. Extractor callbacks and other side effects that already ran aren't rolled back.
+
+`afterObservation` and `afterReflection` replace only the observation or reflection text. They don't touch the structured extractor values stored in thread metadata, and reflection extraction runs before `afterReflection`. Don't treat an after hook as a redaction boundary for everything in the cycle.
+
+Hooks receive `threadId` and `resourceId`, so they can also update working memory with `memory.updateWorkingMemory()`. Those updates aren't atomic with the OM commit.
+
+To keep skill instructions out of the Observer, use [`skillResultRedactor`](#skillresultredactor).
+
+## Migrating existing threads
+
+No migration is needed. OM reads existing messages and observes them when a thread first exceeds `observation.messageTokens`, processing the backlog then. Under the deprecated resource scope, all unobserved messages across a resource's threads are processed together, which can take a long time for users with many threads.
 
 ## Streaming data parts
 
@@ -1168,15 +1353,15 @@ Emitted when the Observer updates the thread title. Only emitted when `observati
 
 ## Standalone usage
 
-Most users should use the `Memory` class above. Using `ObservationalMemory` directly is mainly useful for benchmarking, experimentation, or when you need to control processor ordering with other processors (like [guardrails](/docs/agents/guardrails)).
+Most apps should use the `Memory` class. Use the `ObservationalMemory` engine directly for benchmarking, experiments, or when OM must run in a specific order with other processors such as [guardrails](/docs/agents/guardrails).
 
-The `ObservationalMemory` class is the engine; to attach it to an agent, wrap it in an `ObservationalMemoryProcessor`, which needs a `Memory` instance for loading and persisting messages. Note that `stores.memory` is typed as optional on storage adapters, so a non-null assertion (or a runtime check) is needed:
+Wrap the engine in an `ObservationalMemoryProcessor`, which needs a `Memory` instance to load and persist messages. `stores.memory` is typed as optional on storage adapters, so assert or check it:
 
 ```typescript title="src/mastra/agents/agent.ts"
-import { ObservationalMemory, ObservationalMemoryProcessor } from '@mastra/memory/processors'
-import { Memory } from '@mastra/memory'
 import { Agent } from '@mastra/core/agent'
 import { LibSQLStore } from '@mastra/libsql'
+import { Memory } from '@mastra/memory'
+import { ObservationalMemory, ObservationalMemoryProcessor } from '@mastra/memory/processors'
 
 const storage = new LibSQLStore({
   id: 'my-storage',
@@ -1201,13 +1386,24 @@ const omProcessor = new ObservationalMemoryProcessor(om, memory)
 
 export const agent = new Agent({
   id: 'my-agent',
-  name: 'my-agent',
+  name: 'My Agent',
   instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   inputProcessors: [omProcessor],
   outputProcessors: [omProcessor],
 })
 ```
+
+The engine takes the same options as the `observationalMemory` config, plus `storage`, `onDebugEvent` and `obscureThreadIds`. See [standalone config](#standalone-config).
+
+`om.observe()` only observes once pending tokens reach the threshold. Pass `force: true` to observe pending messages now. The bypass applies to that call only.
+
+```typescript
+const result = await om.observe({ threadId, resourceId, force: true })
+// result.observed is true when pending messages were observed
+```
+
+Agents don't need this to recover from context-window errors. [Context-overflow recovery](/docs/memory/observational-memory#context-overflow-recovery) handles that.
 
 ### Standalone config
 
@@ -1239,17 +1435,6 @@ The standalone `ObservationalMemory` class accepts all the same options as the `
   },
 ]}
 />
-
-### Forcing observation
-
-`observe()` only observes once pending tokens reach the observation threshold. Pass `force: true` to observe pending messages regardless of the threshold. The bypass applies to that call only and isn't saved to the record's config.
-
-```typescript
-const result = await om.observe({ threadId, resourceId, force: true })
-// result.observed: true if pending messages were observed
-```
-
-Agents don't need this to recover from context-window errors. `observation.observeOnContextOverflow` handles that automatically.
 
 ## Recall tool
 
@@ -1291,7 +1476,7 @@ Group IDs in search results include the record that holds them (`groupId@recordI
     isOptional: true,
     defaultValue: "'messages'",
     description:
-      'What to retrieve. `"messages"` (default) pages through message history. `"threads"` lists threads for the current user. `"search"` finds messages by semantic similarity (requires vector store and embedder). `"observations"` pages original observation groups around a search hit.',
+      'What to retrieve. `"messages"` (default) pages through message history. `"threads"` lists threads for the current user. `"search"` finds messages by semantic similarity (requires a vector store, plus an embedder unless the store generates embeddings itself). `"observations"` pages original observation groups around a search hit.',
   },
   {
     name: 'groupId',
@@ -1550,7 +1735,7 @@ Group IDs in search results include the record that holds them (`groupId@recordI
 new ModelByInputTokens(config)
 ```
 
-Where `config` is an object with `upTo` keys that map token thresholds (numbers) to model targets. Each tier needs a concrete model. The example below names specific models instead of `"auto"`.
+Where `config` is an object with `upTo` keys that map token thresholds (numbers) to model targets. Each tier needs a concrete model ID, not `"auto"`.
 
 #### Example
 
@@ -1609,6 +1794,19 @@ const memory = new Memory({
     },
   },
 })
+```
+
+Pass `toolNames` to redact a different set of tools. To combine it with your own transform, chain the outputs and await each hook:
+
+```typescript oxfmt:false
+const dropSkillResults = skillResultRedactor()
+
+hooks: {
+  beforeObservation: async input => {
+    const messages = (await dropSkillResults(input))?.messages ?? input.messages
+    return { messages: messages.filter(m => m.role !== 'signal') }
+  },
+}
 ```
 
 #### Parameters

@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { listedRepository } from '../../../../e2e/ui/factory-projects';
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
+import { sessionCardsWhileBoardLoads } from '../../../../e2e/ui/session-cards';
 import { createAppRoutes } from '../../router';
 
 const FACTORY_ID = 'fp-1';
@@ -110,42 +111,54 @@ afterEach(() => {
   document.title = 'Mastra Factory';
 });
 
+const pullRequestCard = {
+  id: 'wi-1',
+  orgId: 'org-1',
+  createdBy: 'user-1',
+  factoryProjectId: FACTORY_ID,
+  externalSource: {
+    integrationId: 'github',
+    type: 'pull-request',
+    externalId: '1567',
+    url: 'https://github.com/acme/app/pull/1567',
+  },
+  parentWorkItemId: null,
+  title: 'Fix the auth refresh race',
+  stages: ['review'],
+  stageHistory: [],
+  sessions: {
+    [SESSION_ID]: {
+      sessionId: SESSION_ID,
+      branch: 'factory/pr-1567',
+      threadId: THREAD_ID,
+      startedBy: 'user-1',
+    },
+  },
+  metadata: { number: 1567 },
+  revision: 1,
+  createdAt: '2026-07-29T00:00:00.000Z',
+  updatedAt: '2026-07-29T00:00:00.000Z',
+};
+
 describe('ThreadPage document title', () => {
   it('shows the PR number for review sessions', async () => {
     stubBase({
-      workItems: [
-        {
-          id: 'wi-1',
-          orgId: 'org-1',
-          createdBy: 'user-1',
-          factoryProjectId: FACTORY_ID,
-          externalSource: {
-            integrationId: 'github',
-            type: 'pull-request',
-            externalId: '1567',
-            url: 'https://github.com/acme/app/pull/1567',
-          },
-          parentWorkItemId: null,
-          title: 'Fix the auth refresh race',
-          stages: ['review'],
-          stageHistory: [],
-          sessions: {
-            [SESSION_ID]: {
-              sessionId: SESSION_ID,
-              branch: 'factory/pr-1567',
-              threadId: THREAD_ID,
-              startedBy: 'user-1',
-            },
-          },
-          metadata: { number: 1567 },
-          revision: 1,
-          createdAt: '2026-07-29T00:00:00.000Z',
-          updatedAt: '2026-07-29T00:00:00.000Z',
-        },
-      ],
+      workItems: [pullRequestCard],
       threads: [{ id: THREAD_ID, title: 'A different title that must lose to the PR number' }],
     });
     await renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
+
+    await waitFor(() => expect(document.title).toBe('#1567 | Mastra Factory'));
+  });
+
+  it('shows the PR number while the board is still loading', async () => {
+    stubBase({ workItems: [pullRequestCard], threads: [{ id: THREAD_ID, title: 'Review the auth fix' }] });
+    server.use(sessionCardsWhileBoardLoads(FACTORY_ID, SESSION_ID, [pullRequestCard]));
+    // The board read never settles, so there is no idle state to wait for before reading the title.
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`],
+    });
+    renderWithProviders(<RouterProvider router={router} />);
 
     await waitFor(() => expect(document.title).toBe('#1567 | Mastra Factory'));
   });
@@ -197,7 +210,7 @@ describe('ThreadPage document title', () => {
     await renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
 
     await waitFor(() => expect(document.title).toBe('#42 | Mastra Factory'));
-    expect(await screen.findByRole('link', { name: 'Sess-1: Fix flaky login' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Fix flaky login' })).toBeInTheDocument();
   });
 
   it('shows the team key for Linear issue-backed work sessions', async () => {

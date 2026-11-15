@@ -15,7 +15,6 @@ export function createCallbackTests(context: DurableAgentTestContext) {
   describe('callbacks', () => {
     it('should invoke onFinish callback when streaming completes', async () => {
       const mockModel = createTextStreamModel('Complete response');
-      let finishData: any = null;
 
       const agent = await createAgent({
         id: 'finish-callback-agent',
@@ -24,22 +23,16 @@ export function createCallbackTests(context: DurableAgentTestContext) {
         model: mockModel,
       });
 
-      const { cleanup } = await agent.stream('Test', {
-        onFinish: data => {
-          finishData = data;
-        },
-      });
+      let onFinish!: (data: any) => void;
+      const finished = new Promise(resolve => (onFinish = resolve));
+      const { cleanup } = await agent.stream('Test', { onFinish });
 
-      // Wait for workflow to complete
-      await new Promise(resolve => setTimeout(resolve, eventPropagationDelay * 2));
-
-      expect(finishData).not.toBeNull();
+      expect(await finished).toBeDefined();
       cleanup();
     });
 
     it('should invoke onError callback when error occurs', async () => {
       const errorModel = createErrorModel('Simulated LLM error');
-      let errorReceived: Error | string | null = null;
 
       const agent = await createAgent({
         id: 'error-callback-agent',
@@ -48,16 +41,11 @@ export function createCallbackTests(context: DurableAgentTestContext) {
         model: errorModel,
       });
 
-      const { cleanup } = await agent.stream('Test', {
-        onError: ({ error }) => {
-          errorReceived = error;
-        },
-      });
+      let onError!: (error: Error | string) => void;
+      const errored = new Promise(resolve => (onError = resolve));
+      const { cleanup } = await agent.stream('Test', { onError: ({ error }) => onError(error) });
 
-      // Wait for error to propagate
-      await new Promise(resolve => setTimeout(resolve, eventPropagationDelay * 2));
-
-      expect(errorReceived).not.toBeNull();
+      expect(await errored).toBeTruthy();
       cleanup();
     });
 

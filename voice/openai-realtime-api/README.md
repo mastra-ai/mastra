@@ -16,7 +16,7 @@ import { getMicrophoneStream } from '@mastra/node-audio';
 
 const voice = new OpenAIRealtimeVoice({
   apiKey: process.env.OPENAI_API_KEY,
-  model: 'gpt-4o-mini-realtime',
+  model: 'gpt-realtime-2.1-mini',
 });
 
 voice.updateSession({

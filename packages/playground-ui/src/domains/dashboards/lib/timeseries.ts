@@ -14,16 +14,18 @@ import {
   formatSchema,
   matchesGroups,
   queryRefSchema,
+  SERIES_COLORS,
   unknownQueryIssues,
   valueExprSchema,
 } from './values';
-import type { LabelledValue, ValueExpr, ValueRef } from './values';
+import type { ChartColorName, LabelledValue, ValueExpr, ValueRef } from './values';
 
 export const timeseriesSeriesSchema = z
   .object({
     dataKey: z.string().min(1),
     label: z.string().min(1),
-    color: colorSchema,
+    /** Left out, the series takes one by its position among the view's series. */
+    color: colorSchema.optional(),
     emphasis: z.boolean().optional(),
     /** The series' value per bucket. */
     value: valueExprSchema,
@@ -81,8 +83,8 @@ export type ChartBucket = BucketLabels & Record<string, number | string | undefi
 
 export type ShapedTimeseries = {
   data: ChartBucket[];
-  /** The series shown, each with its range total when it has one. */
-  series: (Omit<TimeseriesSeries, 'rangeTotal'> & { rangeTotal?: number })[];
+  /** The series shown, each with its color (its own or its position's) and its range total when it has one. */
+  series: (Omit<TimeseriesSeries, 'rangeTotal' | 'color'> & { color: ChartColorName; rangeTotal?: number })[];
   /** Hours per bucket, for a clicked bucket's window. */
   stepHours: number;
   /** The card's total, from `options.total`. */
@@ -164,13 +166,14 @@ export function shapeTimeseries({
     rangeValue(responses.get(ref.query), ref, totals.has(ref.query) ? undefined : bucketed(ref)) ?? 0;
   const overRange = (expr: ValueExpr) => evaluate(expr, rangeOf) ?? 0;
 
-  const perSeries = options.series.map(s => {
+  const perSeries = options.series.map((s, index) => {
     const values = grid.map((_, i) => {
       const v = evaluate(s.value, ref => bucketed(ref)[i]);
       return v === undefined ? undefined : s.round ? Math.round(v) : v;
     });
     const sum = values.reduce<number>((a, v) => a + (v ?? 0), 0);
-    return { s, values, rangeTotal: s.rangeTotal ? overRange(s.rangeTotal) : undefined, sum };
+    const color = s.color ?? SERIES_COLORS[index % SERIES_COLORS.length] ?? 'neutral';
+    return { s, color, values, rangeTotal: s.rangeTotal ? overRange(s.rangeTotal) : undefined, sum };
   });
 
   const shown = perSeries.filter(p => !options.hideEmpty || (p.rangeTotal ?? p.sum) > 0);
@@ -196,6 +199,7 @@ export function shapeTimeseries({
     data,
     series: shown.map((p, i) => ({
       ...p.s,
+      color: p.color,
       emphasis: options.emphasizeFirst ? i === 0 : p.s.emphasis,
       rangeTotal: p.rangeTotal,
     })),

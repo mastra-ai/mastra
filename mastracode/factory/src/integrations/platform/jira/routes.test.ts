@@ -50,7 +50,6 @@ function buildApp(
     withJira?: boolean;
     withIntake?: boolean;
     appDbConfigured?: boolean;
-    ingestFactoryIssues?: (input: unknown) => Promise<unknown>;
   } = {},
 ) {
   const app = new Hono();
@@ -65,7 +64,6 @@ function buildApp(
       auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
       intake: (options.withIntake ?? true) ? seed.intake : undefined,
       appDbConfigured: options.appDbConfigured ?? true,
-      ...(options.ingestFactoryIssues ? { ingestFactoryIssues: options.ingestFactoryIssues } : {}),
     }),
   );
   return app;
@@ -269,13 +267,13 @@ describe('issues route', () => {
     expect(listActiveJiraIssues).not.toHaveBeenCalled();
   });
 
-  it('returns an empty page when there is no saved intake config', async () => {
+  it('treats an org with no saved intake config as Jira intake turned off', async () => {
     seed = await createFactoryStorageForTests();
 
     const res = await buildApp(org1()).request('/web/jira/issues');
 
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: 'jira_intake_disabled' });
     expect(listActiveJiraIssues).not.toHaveBeenCalled();
   });
 
@@ -317,7 +315,7 @@ describe('issues route — Factory source bindings', () => {
   };
 
   const bind = (sourceId: string, factoryProjectId: string, board = 'work') =>
-    seed.intake.setBinding({ orgId: 'org1', integrationId: 'jira', sourceId, factoryProjectId, board });
+    seed.intake.setBinding({ orgId: 'org1', integrationId: 'jira', sourceId, factoryProjectId });
 
   beforeEach(async () => {
     await seed.intake.saveConfig({
@@ -407,22 +405,6 @@ describe('issues route — Factory source bindings', () => {
     expect(listActiveJiraIssues).not.toHaveBeenCalled();
   });
 
-  it('withholds a source routed to the Factory without a board', async () => {
-    await seedProjects(2);
-    await seed.intake.setBinding({
-      orgId: 'org1',
-      integrationId: 'jira',
-      sourceId: '1',
-      factoryProjectId: projectA,
-    });
-
-    const res = await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}`);
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
-    expect(listActiveJiraIssues).not.toHaveBeenCalled();
-  });
-
   it('forwards the pagination cursor together with the scoped selection', async () => {
     await seedProjects(2);
     await bind('1', projectA);
@@ -443,47 +425,5 @@ describe('issues route — Factory source bindings', () => {
       { projectId: '1', include: null, exclude: [] },
       { projectId: '2', include: null, exclude: [] },
     ]);
-  });
-
-  it('ingests a board-scoped listing through the Factory rules', async () => {
-    await seedProjects(2);
-    await bind('1', projectA);
-    const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
-
-    const res = await buildApp(org1(), { ingestFactoryIssues }).request(
-      `/web/jira/issues?factoryProjectId=${projectA}`,
-    );
-
-    expect(res.status).toBe(200);
-    expect(ingestFactoryIssues).toHaveBeenCalledWith({
-      orgId: 'org1',
-      userId: 'u1',
-      factoryProjectId: projectA,
-      issues: [
-        expect.objectContaining({
-          id: 'jira-issue:encoded-reference',
-          identifier: 'ENG-42',
-          title: 'Fix intake sync',
-          stateType: 'unstarted',
-          assignee: 'Ada',
-          author: 'Grace',
-          project: 'ENG',
-          site: null,
-          sourceId: '1',
-        }),
-      ],
-      intakeBoards: { '1': 'work' },
-    });
-  });
-
-  it('does not ingest an unscoped listing', async () => {
-    await seedProjects(2);
-    await bind('1', projectA);
-    const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
-
-    const res = await buildApp(org1(), { ingestFactoryIssues }).request('/web/jira/issues');
-
-    expect(res.status).toBe(200);
-    expect(ingestFactoryIssues).not.toHaveBeenCalled();
   });
 });

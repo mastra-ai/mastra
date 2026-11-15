@@ -461,6 +461,50 @@ describe('createOnScorerHook', () => {
     );
   });
 
+  it.each(['tracing', 'tracingContext'] as const)(
+    'inherits score redaction through the %s observability alias',
+    async observabilityAlias => {
+      const mockScorer = {
+        id: 'test-scorer',
+        name: 'test-scorer',
+        run: vi.fn().mockResolvedValue({
+          score: 0.8,
+          input: { secret: 'prepared-input' },
+          output: { secret: 'prepared-output' },
+        }),
+      };
+      mockMastra.getAgentById.mockReturnValue({
+        listScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
+      });
+
+      await hook({
+        runId: 'test-run',
+        scorer: { id: 'test-scorer' },
+        input: [{ message: 'test' }],
+        output: { result: 'test' },
+        source: 'LIVE',
+        entity: { id: 'test-entity' },
+        entityType: 'AGENT',
+        [observabilityAlias]: {
+          currentSpan: {
+            id: 'span-live',
+            traceId: 'trace-live',
+            isValid: true,
+            traceState: { hideInput: true, hideOutput: false },
+            observabilityInstance: { getExporters: () => [] },
+          },
+        },
+      });
+
+      expect(mockScorer.run).toHaveBeenCalledWith(
+        expect.objectContaining({ _internal: { hideInput: true, hideOutput: false } }),
+      );
+      expect(mockScoresStore.saveScore).toHaveBeenCalledWith(
+        expect.objectContaining({ input: '[REDACTED]', output: '[REDACTED]' }),
+      );
+    },
+  );
+
   it('correlates the score to the exported ancestor span when the current span is hidden', async () => {
     // Durable agents run scorers inside a workflow whose spans are marked
     // internal and never reach storage. The span itself reports which exported

@@ -14,9 +14,7 @@ import {
   factoryId,
   projectRepositoryId,
   reviewName,
-  reviewRowName,
   workName,
-  workRowName,
   workSessionId,
 } from './fixtures/sessionHoverDetails';
 
@@ -89,7 +87,7 @@ describe('Workspace activity indicators', () => {
     renderSection();
 
     // The row must exist before the absence of its belt means anything.
-    const row = (await screen.findByRole('link', { name: workRowName })).closest('li');
+    const row = (await screen.findByRole('link', { name: workName })).closest('li');
     assert(row);
     expect(within(row).queryByRole('status', { name: `Agent working in ${workName}` })).not.toBeInTheDocument();
   });
@@ -107,7 +105,7 @@ describe('Workspace activity indicators', () => {
 
     renderSection();
 
-    expect(await screen.findByRole('link', { name: reviewRowName })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: reviewName })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'factory/pr-99-authentication-refresh' })).not.toBeInTheDocument();
   });
 });

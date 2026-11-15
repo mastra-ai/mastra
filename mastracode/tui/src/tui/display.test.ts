@@ -84,6 +84,17 @@ describe('showFormattedError', () => {
 
     expect(renderedText(state)).toContain('retry 1/10 in 0.5s');
   });
+
+  it('shows the provider safety wording and a likely cause for content-filter errors', () => {
+    const state = createState();
+
+    showFormattedError(state, new Error('Your request was rejected as a result of our safety system.'));
+
+    const text = renderedText(state);
+    expect(text).toContain('safety system blocked this request');
+    expect(text).toContain('rejected as a result of our safety system');
+    expect(text).toContain('Hint: Retry, rephrase, or use /model to switch models');
+  });
 });
 
 /** Minimal chat child standing in for an inline prompt component (#21966). */

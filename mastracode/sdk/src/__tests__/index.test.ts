@@ -1,4 +1,13 @@
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import type { ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import type { ProcessAPIErrorArgs, Processor, StreamErrorRetryProcessorOptions } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
+import { InMemoryStore } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const providerRegistryMock: Record<string, unknown> = {};
@@ -116,6 +125,7 @@ const controllerSetThreadSettingMock = vi.fn();
 const controllerSetThreadSettingOnMock = vi.fn();
 const controllerEmitMock = vi.fn();
 const controllerGetSessionMock = vi.fn();
+const controllerResolveToolApprovalMock = vi.fn((_toolName: string, _scope?: unknown) => 'ask');
 let createdSessionMock: any;
 const createMcpManagerMock = vi.fn();
 const hookManagerConstructorMock = vi.fn();
@@ -254,6 +264,7 @@ vi.mock('@mastra/core/agent-controller', async importOriginal => ({
         getWorkspace: () => undefined,
         getThreadScope: () => ({}),
         emit: (event: unknown) => controllerEmitMock(event),
+        resolveToolApproval: (toolName: string, scope?: unknown) => controllerResolveToolApprovalMock(toolName, scope),
         state: {
           get: () => controllerStateMock,
           set: (state: unknown) => controllerSetStateMock(state),
@@ -490,7 +501,9 @@ vi.mock('../utils/project.js', () => ({
   getResourceIdOverride: getResourceIdOverrideMock,
 }));
 
-const createStorageMock = vi.fn((): { storage: unknown; backend?: string } => ({ storage: {} }));
+const createStorageMock = vi.fn((): { storage: unknown; backend?: string } => ({
+  storage: new InMemoryStore({ id: 'code-sdk-test' }),
+}));
 const createVectorStoreMock = vi.fn(() => ({}));
 
 vi.mock('../utils/storage-factory.js', () => ({
@@ -510,6 +523,126 @@ vi.mock('../utils/thread-lock.js', () => ({
   releaseThreadLock: vi.fn(),
 }));
 
+const sse = (frame: Record<string, unknown>) => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`;
+const OUTPUT_FRAME = {
+  type: 'response.output_text.delta',
+  content_index: 0,
+  delta: 'Partial output.',
+  item_id: 'msg-1',
+  logprobs: [],
+  output_index: 0,
+  sequence_number: 1,
+};
+
+/**
+ * Serves one OpenAI Responses request from a local server and returns the error
+ * the real `@ai-sdk/openai` provider raises for it, so the error lane sees the
+ * shapes it gets in production.
+ */
+async function openAIResponsesFailure(respond: (res: ServerResponse) => void): Promise<unknown> {
+  const server = createServer((_req, res) => respond(res));
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const { createOpenAI } = await import('@ai-sdk/openai');
+    const { port } = server.address() as AddressInfo;
+    const openai = createOpenAI({ apiKey: 'test-key', baseURL: `http://127.0.0.1:${port}/v1` });
+    try {
+      const { stream } = await openai.responses('gpt-5.4').doStream({
+        prompt: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+      });
+      for await (const chunk of stream) {
+        if (chunk.type === 'error') return chunk.error;
+      }
+    } catch (error) {
+      return error;
+    }
+    throw new Error('Expected the response stream to fail');
+  } finally {
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+  }
+}
+
+/**
+ * Runs one model step's error through Mastra Code's default error lane the way
+ * core's agentic loop does: the lane is the configured `errorProcessors` with the
+ * Agent's stability defaults resolved in, every retry goes through
+ * `ProcessorRunner.runProcessAPIError` with the shared retry count, and the loop
+ * stops when no processor retries or the shared `maxProcessorRetries` is spent.
+ * Retry delays are zeroed; matchers and budgets are the configured ones.
+ * Returns the id of the processor that asked for each retry.
+ */
+async function runDefaultErrorLane(error: unknown, writer = { custom: vi.fn(async () => {}) }): Promise<string[]> {
+  const core = await vi.importActual<typeof import('@mastra/core/processors')>('@mastra/core/processors');
+  const { Agent, MessageList } = await vi.importActual<typeof import('@mastra/core/agent')>('@mastra/core/agent');
+  const { createMastraCode } = await import('../index.js');
+  await createMastraCode();
+
+  const config = agentConstructorMock.mock.calls
+    .map(call => call[0] as { errorProcessors?: Processor[]; maxProcessorRetries?: number } | undefined)
+    .find(candidate => candidate?.errorProcessors?.some(processor => processor.id === 'stream-error-retry-processor'))!;
+  const retryOptions = streamErrorRetryProcessorConstructorMock.mock.calls[0]![0] as StreamErrorRetryProcessorOptions;
+  // This file mocks the core processors; put the real ones back in their configured slots.
+  const real: Record<string, () => Processor> = {
+    'provider-history-compat': () => new core.ProviderHistoryCompat(),
+    'cyber-refusal-handler': () => new core.CyberRefusalHandler(),
+    'stream-error-retry-processor': () =>
+      new core.StreamErrorRetryProcessor({
+        ...retryOptions,
+        matchers: retryOptions.matchers!.map(entry => (typeof entry === 'function' ? entry : { ...entry, delayMs: 0 })),
+      }),
+  };
+  const configured = config.errorProcessors!.map(processor => real[processor.id]?.() ?? processor);
+  const agent = new Agent({
+    id: 'lane',
+    name: 'lane',
+    instructions: '',
+    model: 'openai/gpt-5.4',
+    errorProcessors: configured,
+  });
+  const lane = (await agent.listErrorProcessors(new RequestContext())) as Processor[];
+
+  const owners: string[] = [];
+  const errorProcessors = lane.map(processor => {
+    const processAPIError = processor.processAPIError?.bind(processor);
+    if (!processAPIError) return processor;
+    return Object.assign(Object.create(processor) as Processor, {
+      processAPIError: async (args: ProcessAPIErrorArgs) => {
+        const result = await processAPIError(args);
+        if (result?.retry) owners.push(processor.id);
+        return result;
+      },
+    });
+  });
+  const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
+  const runner = new core.ProcessorRunner({
+    inputProcessors: [],
+    outputProcessors: [],
+    errorProcessors,
+    logger: logger as any,
+    agentName: 'lane',
+  });
+  const messageList = new MessageList();
+  let messageId = 0;
+  for (let retryCount = 0; retryCount < config.maxProcessorRetries!; retryCount++) {
+    const { retry } = await runner.runProcessAPIError({
+      error,
+      messages: [],
+      messageList,
+      stepNumber: 0,
+      steps: [],
+      retryCount,
+      requestContext: new RequestContext(),
+      writer,
+      rotateResponseMessageId: () => `msg-${++messageId}`,
+    });
+    if (!retry) break;
+  }
+  // A processor that throws is logged and skipped by the runner; none should.
+  expect(logger.error).not.toHaveBeenCalled();
+  return owners;
+}
+
 describe('createMastraCode', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -525,7 +658,7 @@ describe('createMastraCode', () => {
     mastraCodeGatewayMock.getApiKey.mockClear();
     mastraCodeGatewayMock.resolveLanguageModel.mockClear();
     createStorageMock.mockReset();
-    createStorageMock.mockReturnValue({ storage: {}, backend: 'memory' });
+    createStorageMock.mockReturnValue({ storage: new InMemoryStore({ id: 'code-sdk-test' }), backend: 'memory' });
     createVectorStoreMock.mockReset();
     createVectorStoreMock.mockReturnValue({});
     getDynamicMemoryMock.mockReset();
@@ -564,6 +697,8 @@ describe('createMastraCode', () => {
     });
     controllerStateMock = { cavemanObservations: false };
     controllerThreadMetadataMock = undefined;
+    controllerResolveToolApprovalMock.mockReset();
+    controllerResolveToolApprovalMock.mockImplementation(() => 'ask');
     controllerModeMock = 'build';
     controllerModelMock = 'anthropic/claude-opus-4-6';
     loadSettingsMock.mockReset();
@@ -1222,7 +1357,7 @@ describe('createMastraCode', () => {
   // even though the instance is a real store. Detection must be structural.
   describe('injected storage from a foreign @mastra/core copy', () => {
     class ForeignCompositeStore {
-      stores = {};
+      stores = new InMemoryStore({ id: 'foreign-code-sdk-test' }).stores;
       async init() {}
       __registerMastra() {}
     }
@@ -1339,7 +1474,7 @@ describe('createMastraCode', () => {
       getPluginSignalProviders: vi.fn(() => []),
     };
 
-    createStorageMock.mockReturnValue({ storage: {}, backend: 'pg' });
+    createStorageMock.mockReturnValue({ storage: new InMemoryStore({ id: 'code-sdk-plugin-test' }), backend: 'pg' });
     const built = await createMastraCode({ pluginManager: pluginManager as any });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
@@ -1872,6 +2007,76 @@ describe('createMastraCode', () => {
     expect(options?.getBasePath?.({ requestContext: undefined })).toBe(process.cwd());
   });
 
+  it('does not read literal sibling instructions outside the untrusted primary checkout', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mastracode-reminder-scope-'));
+    try {
+      const primary = join(root, 'primary');
+      const sibling = join(root, 'sibling');
+      mkdirSync(primary);
+      mkdirSync(sibling);
+      const siblingInstructions = join(sibling, 'AGENTS.md');
+      writeFileSync(siblingInstructions, 'untrusted sibling instructions');
+
+      const { createMastraCode } = await import('../index.js');
+      await createMastraCode();
+      const options = agentsMdInjectorConstructorMock.mock.calls[0]?.[0] as {
+        getReader: (args: { requestContext: { get: (key: string) => unknown } }) => {
+          pathExists: (path: string) => boolean | Promise<boolean>;
+          readFile: (path: string) => string | Promise<string>;
+        };
+      };
+      const requestContext = {
+        get: () => ({
+          getState: () => ({
+            projectPath: root,
+            instructionRoots: ['primary'],
+            untrustedCheckout: true,
+            baseRef: 'main',
+          }),
+        }),
+      };
+      const reader = options.getReader({ requestContext });
+      expect(typeof reader.pathExists(siblingInstructions)).toBe('boolean');
+      expect(await reader.pathExists(siblingInstructions)).toBe(false);
+      expect(() => reader.readFile(siblingInstructions)).toThrow();
+      const ignoredPaths = (
+        agentsMdInjectorConstructorMock.mock.calls[0]?.[0] as {
+          getIgnoredInstructionPaths: (args: { requestContext: typeof requestContext }) => string[] | Promise<string[]>;
+        }
+      ).getIgnoredInstructionPaths({ requestContext });
+      expect(Array.isArray(ignoredPaths)).toBe(true);
+      expect(ignoredPaths).toEqual([]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('uses asynchronous instruction callbacks when core advertises support', async () => {
+    const { AgentsMDInjector } = await import('@mastra/core/processors');
+    Object.defineProperty(AgentsMDInjector, 'supportsAsyncInstructionReaders', { value: true, configurable: true });
+    try {
+      const { createMastraCode } = await import('../index.js');
+      await createMastraCode();
+      const options = agentsMdInjectorConstructorMock.mock.calls[0]?.[0] as {
+        getReader: (args: { requestContext: { get: () => unknown } }) => {
+          pathExists: (path: string) => boolean | Promise<boolean>;
+        };
+        getIgnoredInstructionPaths: (args: { requestContext: { get: () => unknown } }) => string[] | Promise<string[]>;
+      };
+      const requestContext = {
+        get: () => ({ getState: () => ({ projectPath: '/missing', untrustedCheckout: true, baseRef: 'main' }) }),
+      };
+      const exists = options.getReader({ requestContext }).pathExists('/missing/AGENTS.md');
+      expect(exists).toBeInstanceOf(Promise);
+      await exists;
+      const ignoredPaths = options.getIgnoredInstructionPaths({ requestContext });
+      expect(ignoredPaths).toBeInstanceOf(Promise);
+      await ignoredPaths;
+    } finally {
+      Reflect.deleteProperty(AgentsMDInjector, 'supportsAsyncInstructionReaders');
+    }
+  }, 30_000);
+
   it('configures a single StreamErrorRetryProcessor with per-matcher policies', async () => {
     const { createMastraCode } = await import('../index.js');
 
@@ -1881,16 +2086,29 @@ describe('createMastraCode', () => {
     const options = streamErrorRetryProcessorConstructorMock.mock.calls[0]?.[0] as
       | { matchers?: Array<{ match?: unknown; maxRetries?: number; delayMs?: unknown; onRetry?: unknown }> }
       | undefined;
-    expect(options?.matchers).toHaveLength(3);
+    expect(options?.matchers).toHaveLength(4);
 
-    // First matcher: Bad Request (400) with maxRetries 1 and 2s delay.
-    const badRequestPolicy = options!.matchers![0]!;
+    // First matcher: stream cuts after the provider accepted the request are claimed
+    // with no retries, so account rotation alone retries them (see 'default error lane').
+    const streamCutPolicy = options!.matchers![0] as { match?: (error: unknown) => boolean; maxRetries?: number };
+    expect(streamCutPolicy.maxRetries).toBe(0);
+    const cutAfter200 = Object.assign(
+      new Error('Failed to process successful response', {
+        cause: new TypeError('terminated', { cause: new Error('other side closed') }),
+      }),
+      { statusCode: 200 },
+    );
+    expect(streamCutPolicy.match!(cutAfter200)).toBe(true);
+    expect(streamCutPolicy.match!(new Error('Cannot connect to API: other side closed'))).toBe(false);
+
+    // Second matcher: Bad Request (400) with maxRetries 1 and 2s delay.
+    const badRequestPolicy = options!.matchers![1]!;
     expect(typeof badRequestPolicy.match).toBe('function');
     expect(badRequestPolicy.maxRetries).toBe(1);
     expect(badRequestPolicy.delayMs).toBe(2000);
 
-    // Second matcher: transient connection failures with maxRetries 10, visible status, and exponential backoff.
-    const transientConnectionPolicy = options!.matchers![1] as {
+    // Third matcher: transient connection failures with maxRetries 10, visible status, and exponential backoff.
+    const transientConnectionPolicy = options!.matchers![2] as {
       match?: (error: unknown) => boolean;
       maxRetries?: number;
       delayMs?: (args: { error?: unknown; retryCount: number }) => number;
@@ -1930,8 +2148,8 @@ describe('createMastraCode', () => {
     // High retry counts are capped at the max delay (30000ms).
     expect(transientConnectionPolicy.delayMs!({ retryCount: 10 })).toBe(30000);
 
-    // Third matcher: provider server failures use the same retry budget and visible status.
-    const serverErrorPolicy = options!.matchers![2] as typeof transientConnectionPolicy;
+    // Fourth matcher: provider server failures use the same retry budget and visible status.
+    const serverErrorPolicy = options!.matchers![3] as typeof transientConnectionPolicy;
     expect(typeof serverErrorPolicy.match).toBe('function');
     expect(serverErrorPolicy.match!(new Error('Internal Server Error'))).toBe(true);
     expect(
@@ -1953,6 +2171,60 @@ describe('createMastraCode', () => {
     expect(serverErrorPolicy.maxRetries).toBe(10);
     expect(serverErrorPolicy.delayMs!({ retryCount: 0 })).toBe(500);
     expect(typeof serverErrorPolicy.onRetry).toBe('function');
+  });
+
+  describe('default error lane', () => {
+    const MAX_STREAM_CUT_RETRIES = 2;
+    const ROTATION_ONLY = Array.from({ length: MAX_STREAM_CUT_RETRIES }, () => 'mastracode-account-rotation');
+
+    it('leaves a stream cut after HTTP 200 to account rotation alone', async () => {
+      // The socket closes after the provider accepted the request and streamed output.
+      const error = await openAIResponsesFailure(res => {
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        res.write(sse(OUTPUT_FRAME), () => setTimeout(() => res.socket?.destroy(), 20));
+      });
+      expect(error).toMatchObject({ message: 'Failed to process successful response', statusCode: 200 });
+      const writer = { custom: vi.fn(async () => {}) };
+
+      expect(await runDefaultErrorLane(error, writer)).toEqual(ROTATION_ONLY);
+      // Retried on the same account: no switch and no outage part.
+      expect(writer.custom).not.toHaveBeenCalled();
+    }, 15_000);
+
+    it('leaves a stream duration-limit error frame to account rotation alone', async () => {
+      const error = await openAIResponsesFailure(res => {
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        res.end(
+          sse(OUTPUT_FRAME) +
+            sse({
+              type: 'error',
+              sequence_number: 2,
+              error: {
+                type: 'server_error',
+                code: 'request_timeout',
+                message: 'The response stream exceeded its time limit.',
+                param: null,
+              },
+            }),
+        );
+      });
+      // The provider derives a 504 for this frame, which reads like a gateway timeout.
+      expect(error).toMatchObject({ code: 'request_timeout', statusCode: 504 });
+      const writer = { custom: vi.fn(async () => {}) };
+
+      expect(await runDefaultErrorLane(error, writer)).toEqual(ROTATION_ONLY);
+      expect(writer.custom).not.toHaveBeenCalled();
+    }, 15_000);
+
+    it('keeps the generic transient budget for a connection dropped before any response', async () => {
+      const error = await openAIResponsesFailure(res => res.socket?.destroy());
+      expect(error).toMatchObject({ message: expect.stringMatching(/other side closed/), isRetryable: true });
+      expect((error as { statusCode?: unknown }).statusCode).toBeUndefined();
+
+      expect(await runDefaultErrorLane(error)).toEqual(
+        Array.from({ length: 10 }, () => 'stream-error-retry-processor'),
+      );
+    }, 15_000);
   });
 
   it('registers account rotation in the error lane after stream error retries, and the start notice in the input lane only', async () => {
@@ -2173,6 +2445,42 @@ describe('createMastraCode', () => {
     expect(built.controller).toBeDefined();
   });
 
+  it('reports plugin signal provider errors through the plugin manager', async () => {
+    const { SignalProvider } = await import('@mastra/core/signals');
+    const { createMastraCode } = await import('../index.js');
+
+    class BrokenProvider extends SignalProvider<string> {
+      readonly id = 'acme-broken-signals';
+      async start() {
+        throw new Error('provider warm-up broke');
+      }
+    }
+    const reportPluginError = vi.fn();
+    const pluginManager = {
+      reload: vi.fn(async () => [{ id: 'acme.plugin', status: 'active', toolNames: [] }]),
+      getPluginTools: vi.fn(() => ({})),
+      setRuntime: vi.fn(),
+      onReload: vi.fn(),
+      getPluginSignalProviders: vi.fn(() => [
+        { pluginId: 'acme.plugin', versionStamp: 'v1', value: new BrokenProvider() },
+      ]),
+      getPluginProcessors: vi.fn(() => ({ input: [], output: [] })),
+      reportPluginError,
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await createMastraCode({ pluginManager: pluginManager as any });
+
+    await vi.waitFor(() =>
+      expect(reportPluginError).toHaveBeenCalledWith({
+        pluginId: 'acme.plugin',
+        message: 'Plugin "acme.plugin" signal provider "acme-broken-signals" failed to start: provider warm-up broke',
+      }),
+    );
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it('stops plugin signal providers and stops listening for reloads on teardown', async () => {
     const { SignalProvider } = await import('@mastra/core/signals');
     const { createMastraCode } = await import('../index.js');
@@ -2288,10 +2596,12 @@ describe('createMastraCode', () => {
       modelRoute: { entries: [{ id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol' }] },
       yolo: false,
       sandboxAllowedPaths: ['/active-only'],
+      permissionRules: { categories: { edit: 'allow' }, tools: {} },
     };
     controllerThreadMetadataMock = {
       currentModelId: 'openai/gpt-5.6-sol',
       modeModelId_build: 'anthropic/claude-fable-5-1',
+      permissionRules: { categories: { edit: 'ask' }, tools: { view: 'allow' } },
       modelRoute: {
         entries: [
           { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5-1' },
@@ -2347,9 +2657,18 @@ describe('createMastraCode', () => {
       },
       yolo: false,
       sandboxAllowedPaths: [],
+      // The woken thread's own rules, not the open thread's.
+      permissionRules: { categories: { edit: 'ask' }, tools: { view: 'allow' } },
     });
     expect(controllerContext.getSubagentModelId({ agentType: 'explore' })).toBe('openai/gpt-5.6-mini');
-    expect(decision.streamOptions.requireToolApproval).toBe(true);
+    // Only calls the woken thread's policy does not allow pause for approval.
+    const requireToolApproval = decision.streamOptions.requireToolApproval;
+    expect(requireToolApproval).toBeTypeOf('function');
+    controllerResolveToolApprovalMock.mockImplementation(toolName => (toolName === 'view' ? 'allow' : 'ask'));
+    expect(requireToolApproval({ toolName: 'view' })).toBe(false);
+    expect(requireToolApproval({ toolName: 'write_file' })).toBe(true);
+    expect(controllerResolveToolApprovalMock).toHaveBeenCalledWith('view', decision.streamOptions.requestContext);
+    expect(decision.streamOptions.toolCallConcurrency).toEqual({ strategy: 'called' });
     controllerSetStateMock.mockClear();
 
     const pendingFallback = {

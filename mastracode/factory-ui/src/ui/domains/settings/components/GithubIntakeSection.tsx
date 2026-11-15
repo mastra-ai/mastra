@@ -1,17 +1,16 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { RotateCcw } from 'lucide-react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import type { GithubStatus } from '../../workspaces/services/github';
 import { useIntakeSelection } from '../hooks/useIntakeSelection';
 import { GithubConnectButton, GithubManageButton } from './GithubConnectionControls';
-import { GithubLabelRouting } from './GithubLabelRouting';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { SourcePicker } from './IntakeSourcePicker';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { IntakeSyncControl } from './common/IntakeSyncControl';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 
 export function GithubIntakeSection({
   config,
@@ -19,6 +18,9 @@ export function GithubIntakeSection({
   statusQuery,
 }: IntakeSectionProps & { statusQuery: UseQueryResult<GithubStatus> }) {
   const selection = useIntakeSelection('github');
+  const dependabotSelection = useIntakeSelection('dependabot');
+  // Present only when the server registers Dependabot intake alongside GitHub.
+  const dependabot = config.dependabot;
   const factoriesQuery = useFactoriesQuery();
   const status = statusQuery.data;
   const connected = status?.connected === true;
@@ -56,7 +58,7 @@ export function GithubIntakeSection({
           <Button
             size="sm"
             variant="ghost"
-            icon={<RotateCcw />}
+            icon={<IconArrowRotateCounterClockwise />}
             disabled={statusQuery.isFetching}
             onClick={() => void statusQuery.refetch()}
           >
@@ -84,18 +86,42 @@ export function GithubIntakeSection({
           {factoriesQuery.isSuccess && slugs.length === 0 && (
             <SettingsRow label="No linked repositories yet" description="Link a repository to a Factory to add one." />
           )}
-          {slugs.length > 0 &&
-            githubFactories.map(factory => (
-              <GithubLabelRouting
-                key={factory.id}
-                factoryProjectId={factory.id}
-                name={factory.name}
-                showScope={githubFactories.length > 1}
-                repositories={factory.repositories
-                  .filter(repository => repository.provider !== 'gitlab')
-                  .map(repository => repository.slug)}
-              />
-            ))}
+        </>
+      )}
+      {connected && dependabot && (
+        <>
+          <SettingsRow
+            label="Dependabot alerts"
+            description="Create a card for each open Dependabot alert in selected repositories."
+          >
+            <IntakeSyncControl
+              label="Sync alerts"
+              accessibleLabel="Sync Dependabot alerts"
+              description="Poll selected repositories for open Dependabot alerts every 15 minutes. Cards close when the alert is fixed or dismissed."
+              checked={dependabot.enabled}
+              disabled={false}
+              onCheckedChange={enabled => dependabotSelection.update(current => ({ ...current, enabled }))}
+            />
+          </SettingsRow>
+          {dependabot.enabled && (
+            <SourcePicker
+              label="Dependabot repositories"
+              addLabel="Add repository"
+              itemIcon={<SettingsIntegrationIcon provider="github" />}
+              groups={[{ id: 'dependabot-repositories', items: slugs.map(slug => ({ id: slug, label: slug })) }]}
+              selectedIds={dependabot.sourceIds}
+              saving={dependabotSelection.saving}
+              loading={factoriesQuery.isPending}
+              error={factoriesQuery.isError ? "Couldn't load linked repositories." : undefined}
+              onRetry={() => void factoriesQuery.refetch()}
+              onToggleItem={slug =>
+                dependabotSelection.update(current => ({
+                  ...current,
+                  sourceIds: toggleSourceId(current.sourceIds, slug),
+                }))
+              }
+            />
+          )}
         </>
       )}
     </IntakeProviderCard>

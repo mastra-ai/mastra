@@ -251,7 +251,7 @@ const voice = new OpenAIRealtimeVoice()
 // Or initialize with specific configuration
 const voiceWithConfig = new OpenAIRealtimeVoice({
   apiKey: 'your-openai-api-key',
-  model: 'gpt-5.1-realtime-preview-2024-12-17',
+  model: 'gpt-realtime-2.1-mini',
   speaker: 'alloy', // Default voice
 })
 
@@ -301,7 +301,7 @@ voice.connect()
     type: 'string',
     description: 'The model ID to use for real-time voice interactions.',
     isOptional: true,
-    defaultValue: "'gpt-5.1-realtime-preview-2024-12-17'",
+    defaultValue: "'gpt-realtime-2.1-mini'",
   },
   {
     name: 'apiKey',

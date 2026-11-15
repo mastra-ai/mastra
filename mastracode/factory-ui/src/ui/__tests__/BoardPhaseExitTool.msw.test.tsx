@@ -42,7 +42,7 @@ function card(id: string, issue: number, title: string, stage: string): WireWork
     stageHistory: [],
     sessions: {},
     metadata: {},
-    commentCount: 0,
+    description: null,
     revision: 1,
     createdAt: '2026-11-06T08:00:00.000Z',
     updatedAt: '2026-11-06T08:00:00.000Z',

@@ -128,6 +128,11 @@ export interface TraceEntry {
 
 /** In-memory implementation of ObservabilityStorage for testing and development. */
 export class ObservabilityInMemory extends ObservabilityStorage {
+  /** In-memory observability data is local to this process. */
+  public override get persistenceLocation(): 'local' {
+    return 'local';
+  }
+
   private db: InMemoryDB;
 
   constructor({ db }: { db: InMemoryDB }) {
@@ -147,6 +152,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         'tag-discovery',
         'metric-discovery',
         'feedback',
+        'feedback-replacement',
       ] as const;
     }
 
@@ -161,6 +167,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       'metric-discovery',
       'delta-polling',
       'feedback',
+      'feedback-replacement',
     ] as const;
   }
 
@@ -2287,7 +2294,22 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   // Feedback
   // ============================================================================
 
+  protected override async writeFeedbackReplacement(args: CreateFeedbackArgs): Promise<void> {
+    // No await between checking identity and the synchronous in-memory upsert.
+    this.assertFeedbackReplacementIdentity(
+      args.feedback,
+      this.db.feedbackRecords.find(record => record.feedbackId === args.feedback.feedbackId),
+    );
+    await this.createFeedback({ feedback: args.feedback, onConflict: 'replace' });
+  }
+
   async createFeedback(args: CreateFeedbackArgs): Promise<void> {
+    if (
+      args.onConflict === 'ignore' &&
+      args.feedback.feedbackId &&
+      this.db.feedbackRecords.some(record => record.feedbackId === args.feedback.feedbackId)
+    )
+      return;
     const record = {
       ...args.feedback,
       feedbackSource: args.feedback.feedbackSource ?? args.feedback.source ?? '',
@@ -2304,6 +2326,12 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
   async batchCreateFeedback(args: BatchCreateFeedbackArgs): Promise<void> {
     for (const fb of args.feedbacks) {
+      if (
+        args.onConflict === 'ignore' &&
+        fb.feedbackId &&
+        this.db.feedbackRecords.some(record => record.feedbackId === fb.feedbackId)
+      )
+        continue;
       const record = {
         ...fb,
         feedbackSource: fb.feedbackSource ?? fb.source ?? '',

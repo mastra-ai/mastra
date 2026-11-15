@@ -4,7 +4,6 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { BOARD_CARD_LAYOUT_CLASS } from '../boardLayout';
-import { EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
 
 import { useParams } from 'react-router';
@@ -16,6 +15,7 @@ import type { DragPayload } from '../boardDrag';
 import { cardContextSessions, cardThreadSession, itemThreadSession } from '../boardItems';
 import { reworkReason } from '../reworkReason';
 import type { BoardLayout } from '../boardLayout';
+import { boardLoop } from '../boardFlow';
 import { itemBoard } from '../boardStages';
 import {
   awaitsTriageDecision,
@@ -41,6 +41,7 @@ import { WorkItemDetailsPanel } from './WorkItemDetailsPanel';
 import { WorkItemListRow } from './WorkItemListRow';
 import type { WorkItemMenuProps } from './WorkItemMenuItems';
 import { WorkItemMenuItems } from './WorkItemMenuItems';
+import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
 
 export function WorkItemCard({
   item,
@@ -57,6 +58,7 @@ export function WorkItemCard({
   proposal,
   approvingDecisionId,
   retryingDecisionId,
+  queuePosition,
   onApproveProposal,
   onDismissProposal,
   onRetryDecision,
@@ -82,6 +84,8 @@ export function WorkItemCard({
   evaluatingStage?: string;
   transitionReason?: string;
   decision?: FactoryDecisionSummary;
+  /** The decision's place in the run queue while it waits for a run slot. */
+  queuePosition?: number;
   /** Run a rule wants to start on this card, waiting for someone to release it. */
   proposal?: FactoryDecisionSummary;
   approvingDecisionId?: string;
@@ -101,12 +105,13 @@ export function WorkItemCard({
   const morph = useCardMorph();
   const catalog = useBoardCatalog(item.githubProjectId);
   const boardId = itemBoard(item);
-  const custom = boardId !== 'work' && boardId !== 'review';
   const definition = catalog.data?.find(board => board.id === boardId);
+  // A board without a pull request loop advances cards through its own phases instead.
+  const custom = boardLoop(definition) === undefined;
 
   const startingLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
   const sessions = item.sessions;
-  const moves = cardMoves(item, columnStage);
+  const moves = cardMoves(item, columnStage, definition);
   const primaryMove = primaryCardMove(moves, columnStage, { sessions, stageHistory: item.stageHistory });
   const threadSession = cardThreadSession(item, definition?.phases, columnStage);
   const contextSessions = cardContextSessions(item, definition?.phases, columnStage);
@@ -126,9 +131,10 @@ export function WorkItemCard({
     preparing: startingLabel,
     retryRequested: decision !== undefined && retryingDecisionId === decision.id,
     decision,
+    queuePosition,
     transitionReason,
     sessionStatus,
-    held: awaitsTriageDecision(item, columnStage),
+    held: awaitsTriageDecision(item, columnStage, definition),
   });
   const { status, owner, wick } = state;
   const lockedByYou = owner.kind === 'you';
@@ -139,11 +145,10 @@ export function WorkItemCard({
   const retryDecisionId = status.kind === 'error' ? status.retryDecisionId : undefined;
   const primaryAction = cardPrimaryAction({
     item,
+    board: definition,
     columnStage,
     move: primaryMove,
-    resumeStage: custom
-      ? undefined
-      : resumeStage(columnStage, { board: boardId, sessions, stageHistory: item.stageHistory }),
+    resumeStage: resumeStage(columnStage, { sessions, stageHistory: item.stageHistory }, definition),
     nextPhase: custom ? nextPhase : undefined,
     waiting: status.kind === 'waiting' ? status : undefined,
     hasSession: threadSession !== undefined,
@@ -316,7 +321,7 @@ export function WorkItemCard({
                       aria-label={`Actions for ${item.title}`}
                       className={REVEAL_ON_CARD_HOVER}
                     >
-                      <EllipsisVertical size={13} aria-hidden />
+                      <IconDotGrid1x3Vertical size={13} aria-hidden />
                     </Button>
                   }
                 />

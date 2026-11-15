@@ -2,7 +2,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
@@ -27,6 +27,7 @@ const draft = {
     sandboxProvider: 'local',
     sandboxWorkdir: '/workspace/hello',
   },
+  workConfirmed: true,
   modelScope: 'factory',
   model: { providerId: 'openai', modelId: 'openai/gpt-5.6-sol', method: 'api_key' },
 };
@@ -48,6 +49,16 @@ function clearOnboarding() {
 }
 
 describe('Factory root route', () => {
+  beforeEach(() => {
+    // Ambient board plumbing for the tests that land on a Factory's work board.
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions: [] })),
+      http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
+        HttpResponse.json({ categories: {}, tools: {} }),
+      ),
+    );
+  });
+
   it('redirects the bare factory URL to the work board', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -69,11 +80,14 @@ describe('Factory root route', () => {
         HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
+      ),
     );
 
     const router = renderFactoryRoute('/');
 
-    await screen.findByRole('heading', { name: 'Set up your factory.' });
+    await screen.findByRole('heading', { name: 'Set up your factory' });
     expect(router.state.location.pathname).toBe('/onboarding');
   });
 
@@ -93,8 +107,8 @@ describe('Factory root route', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/factories/fp-1/work'));
   });
 
-  it('keeps the review open after a failed confirmation created its factory', async () => {
-    seedOnboarding('review', 'fp-1');
+  it('keeps the Model section open after a failed confirmation created its factory', async () => {
+    seedOnboarding('model', 'fp-1');
 
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -111,14 +125,14 @@ describe('Factory root route', () => {
     const router = renderFactoryRoute('/onboarding');
 
     try {
-      await screen.findByRole('heading', { name: 'Ready to create.' });
+      await screen.findByRole('button', { name: 'Create factory' });
       expect(router.state.location.pathname).toBe('/onboarding');
     } finally {
       clearOnboarding();
     }
   });
 
-  it('continues from project management to account setup', async () => {
+  it('continues from project management to model setup', async () => {
     seedOnboarding('project-management', null);
 
     server.use(
@@ -137,8 +151,9 @@ describe('Factory root route', () => {
     renderFactoryRoute('/onboarding');
 
     try {
-      await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
-      await screen.findByRole('heading', { name: 'Choose your setup.' });
+      // The seeded draft already has a repository, which is a source on its own.
+      await user.click(await screen.findByRole('button', { name: 'Continue' }));
+      await screen.findByRole('button', { name: 'Create factory' });
     } finally {
       clearOnboarding();
     }
@@ -160,7 +175,7 @@ describe('Factory root route', () => {
     const router = renderFactoryRoute('/?linear=connected');
 
     try {
-      await screen.findByRole('heading', { name: 'Connect your work.' });
+      await screen.findByRole('heading', { name: 'Work' });
       expect(router.state.location.pathname).toBe('/onboarding');
     } finally {
       clearOnboarding();

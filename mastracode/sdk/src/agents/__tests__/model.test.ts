@@ -1096,6 +1096,23 @@ describe('resolveModel', () => {
       expect(ModelRouterLanguageModel).not.toHaveBeenCalled();
     });
 
+    it("routes a Factory tenant's mastra-prefixed model with the tenant's own gateway key", () => {
+      setCredentialStoreProvider(() => ({
+        allowEnvironmentFallback: false,
+        reload() {},
+        get: () => undefined,
+        getStoredApiKey: (providerId: string) => (providerId === 'mastra-gateway' ? 'msk_tenant_key' : undefined),
+        getApiKey: async () => undefined,
+      }));
+      const requestContext = makeRequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+
+      const result = resolveModel('mastra/anthropic/claude-sonnet-4', { requestContext }) as Record<string, unknown>;
+
+      expect(result.__provider).toBe('mastra-gateway-delegate');
+      expect(result.args).toMatchObject({ providerId: 'anthropic', apiKey: 'msk_tenant_key' });
+    });
+
     it('routes explicit mastra-prefixed anthropic OAuth model through custom gateway middleware', () => {
       mockAuthStorageInstance.get.mockReturnValue({
         type: 'oauth',

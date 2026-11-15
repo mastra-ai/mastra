@@ -1,12 +1,13 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DiffStat } from '@mastra/playground-ui/components/DiffStat';
-import { FileDiff, MessageSquare, NotepadText } from 'lucide-react';
+import { FileDiff } from 'lucide-react';
 
 import type { WorkspaceChanges } from '../../../../api/types';
 import { RecreateSandboxAction } from './RecreateSandboxAction';
 import type { RecreateSandboxTarget } from './RecreateSandboxAction';
 import { WorkspaceOverviewStatus } from './WorkspaceOverviewStatus';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconNotepad } from '@mastra/playground-ui/icons/central/IconNotepad';
 
 interface WorkspaceOverviewProps {
   changes?: WorkspaceChanges;
@@ -14,9 +15,6 @@ interface WorkspaceOverviewProps {
   changesError?: Error;
   onShowFiles: () => void;
   onShowChanges: () => void;
-  /** From the board snapshot the thread already polls; absent when the thread has no work item. */
-  commentCount?: number;
-  onShowComments?: () => void;
   /** Present only when the server says the viewer may recreate this session's sandbox. */
   recreateSandbox?: RecreateSandboxTarget;
 }
@@ -40,8 +38,6 @@ export function WorkspaceOverview({
   changesError,
   onShowFiles,
   onShowChanges,
-  commentCount,
-  onShowComments,
   recreateSandbox,
 }: WorkspaceOverviewProps) {
   const stats = changeStats(changes);
@@ -65,18 +61,9 @@ export function WorkspaceOverview({
         </Txt>
       </Button>
       <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowFiles}>
-        <NotepadText />
+        <IconNotepad />
         <span>Files</span>
       </Button>
-      {onShowComments ? (
-        <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowComments}>
-          <MessageSquare />
-          <span>Comments</span>
-          <Txt as="span" variant="meta" tone="muted" className="ml-auto">
-            {commentCount === 0 ? 'None yet' : commentCount}
-          </Txt>
-        </Button>
-      ) : null}
       {recreateSandbox ? (
         <RecreateSandboxAction
           target={recreateSandbox}

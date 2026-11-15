@@ -1,12 +1,13 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { IconPlugin1 } from '@mastra/playground-ui/icons/central/IconPlugin1';
+import { IconSettingsGear1 } from '@mastra/playground-ui/icons/central/IconSettingsGear1';
 import { useAuthorize, useExistingConnections, useToolkits } from '@mastra/react/hooks/tool-providers';
 import { useQueryClient } from '@tanstack/react-query';
-import { Settings, Plug } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { UseFormSetValue } from 'react-hook-form';
-
 import { ManageConnectionDialog } from '../../../../tool-providers/components/manage-connection-dialog';
 import type { ToolProviderConnectionFormValue, ToolProvidersFormValue } from '../../../../tool-providers/schemas';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
@@ -224,7 +225,7 @@ export const ToolkitConnectionControl = ({
   if (activeConnections.length === 0) {
     return (
       <Button
-        icon={<Plug />}
+        icon={<IconPlugin1 />}
         type="button"
         size="sm"
         onClick={handleConnect}
@@ -248,7 +249,7 @@ export const ToolkitConnectionControl = ({
         disabled={disabled}
         data-testid={`toolkit-manage-${testIdSuffix}`}
       >
-        <Settings />
+        <IconSettingsGear1 />
       </Button>
 
       {manageOpen && (

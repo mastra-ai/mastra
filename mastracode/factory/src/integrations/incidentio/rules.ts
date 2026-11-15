@@ -6,14 +6,17 @@ import {
   eventBoardId,
   rulePhaseField,
   withBoardClosure,
+  withIntakeTarget,
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
+import { toBoardSource } from '../../boards/project-boards.js';
+import type { ProjectBoardSource } from '../../boards/project-boards.js';
 import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type { FactoryIncidentioRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
+import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
-import type { IntegrationContext } from '../base.js';
 import type { IncidentioEventRules } from './default-rules.js';
 
 const RULE_TIMEOUT_MS = 5_000;
@@ -51,7 +54,7 @@ export interface IncidentioIssueIngress {
   labels: string[];
   createdAt: string;
   updatedAt: string;
-  /** incident.io source the follow-up was read from; resolves the bound board via `intakeBoards`. */
+  /** incident.io source the follow-up was read from. */
   sourceId?: string | null;
 }
 
@@ -59,7 +62,8 @@ export interface IncidentioRulesOptions {
   projects: Pick<FactoryProjectsStorage, 'get'>;
   storage: WorkItemsStorage;
   configVersion: string;
-  boards: BoardRegistry;
+  /** The code boards, or the per-project source so a project's stored boards run its cards. */
+  boards: BoardRegistry | ProjectBoardSource;
   incidentioRules: IncidentioEventRules;
 }
 
@@ -68,8 +72,6 @@ export interface IncidentioRulesIngress {
   userId: string;
   factoryProjectId: string;
   issues: IncidentioIssueIngress[];
-  /** Board id per bound incident.io source id, from the project's intake bindings. */
-  intakeBoards?: Readonly<Record<string, string>>;
 }
 
 type IngressStatus = 'committed' | 'replayed' | 'missing';
@@ -85,12 +87,20 @@ export function boardEventFor(context: Pick<FactoryIncidentioRuleContext, 'event
   return context.item ? undefined : { type: 'work_item.created' };
 }
 
+const ingressIdFor = (issue: IncidentioIssueIngress) => `incidentio:${issue.id}:${issue.updatedAt}`;
+
 export class IncidentioRules {
   constructor(private readonly options: IncidentioRulesOptions) {}
+
+  /** The project's boards, loaded at the start of {@link ingest}. */
+  #boards(scope: StoredBoardScope): BoardRegistry {
+    return toBoardSource(this.options.boards).forProject(scope);
+  }
 
   async ingest(input: IncidentioRulesIngress): Promise<{ status: IngressStatus; ingested: number }> {
     const project = await this.options.projects.get({ orgId: input.orgId, id: input.factoryProjectId });
     if (!project) return { status: 'missing', ingested: 0 };
+    await toBoardSource(this.options.boards).load(input);
 
     // A finished card may still be only in the legacy table; copy it so the issue finds it.
     await this.options.storage.copyLegacyCards({
@@ -98,13 +108,32 @@ export class IncidentioRules {
       factoryProjectId: input.factoryProjectId,
       sources: input.issues.map(issue => ({ integrationId: 'incidentio', type: 'issue', externalId: issue.id })),
     });
-    const items = await this.options.storage.list({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
+    // The shared list is the cache itself: only the card handed on to rules is cloned.
+    const items = await this.options.storage.listShared({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
     const itemsBySourceKey = new Map(items.map(item => [item.externalSource?.externalId, item]));
+    const ingressIds = new Map(input.issues.map(issue => [issue, ingressIdFor(issue)]));
+    const recorded = await this.options.storage.listRecordedIngress(
+      input.orgId,
+      input.factoryProjectId,
+      [...ingressIds.values()],
+    );
     const statuses: IngressStatus[] = [];
+    const failures: unknown[] = [];
     for (const issue of input.issues) {
+      if (recorded.has(ingressIds.get(issue)!)) {
+        statuses.push('replayed');
+        continue;
+      }
       // One card per follow-up per project; other projects may file their own.
-      statuses.push(await this.#ingestIssue(input, issue, itemsBySourceKey.get(issue.id)));
+      const relatedItem = itemsBySourceKey.get(issue.id);
+      try {
+        statuses.push(await this.#ingestIssue(input, issue, relatedItem && structuredClone(relatedItem)));
+      } catch (error) {
+        failures.push(error);
+      }
     }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) throw new AggregateError(failures, `${failures.length} incident.io follow-ups failed`);
     if (statuses.some(status => status === 'committed')) return { status: 'committed', ingested: statuses.length };
     if (statuses.some(status => status === 'replayed')) return { status: 'replayed', ingested: statuses.length };
     return { status: 'missing', ingested: statuses.length };
@@ -116,7 +145,7 @@ export class IncidentioRules {
     relatedItem: Card | undefined,
     attempt = 1,
   ): Promise<IngressStatus> {
-    const ingressId = `incidentio:${issue.id}:${issue.updatedAt}`;
+    const ingressId = ingressIdFor(issue);
     const actor = { type: 'human' as const, id: input.userId };
 
     // Closed follow-ups without existing work items should not create new ones.
@@ -126,8 +155,6 @@ export class IncidentioRules {
     }
 
     const event = isClosed ? 'followUpClosed' : 'followUpObserved';
-    const boundBoardId = issue.sourceId ? input.intakeBoards?.[issue.sourceId] : undefined;
-    const boundBoard = boundBoardId ? this.options.boards.get(boundBoardId) : undefined;
     const context: FactoryIncidentioRuleContext = {
       tenant: { orgId: input.orgId, projectId: input.factoryProjectId },
       actor,
@@ -151,11 +178,11 @@ export class IncidentioRules {
             },
             board: boardForWorkItem(relatedItem),
             itemRevision: relatedItem.revision,
-            ...withBoardClosure(this.options.boards, relatedItem),
-            ...rulePhaseField(this.options.boards, relatedItem),
+            ...withBoardClosure(this.#boards(input), relatedItem),
+            ...rulePhaseField(this.#boards(input), relatedItem),
           }
         : {}),
-      ...(boundBoard ? { intake: { board: boundBoard.id, initialPhase: boundBoard.initialPhase } } : {}),
+      ...withIntakeTarget(this.#boards(input)),
       event,
       issue,
     };
@@ -164,12 +191,12 @@ export class IncidentioRules {
 
     const ownedByDeployment = deploymentOwnsEvent(
       this.options.incidentioRules,
-      boardEventHandlers(this.options.boards, eventBoardId(context), 'incidentio'),
+      boardEventHandlers(this.#boards(input), eventBoardId(context), 'incidentio'),
       context.event,
     );
     const rule = selectEventRule(
       this.options.incidentioRules,
-      boardEventHandlers(this.options.boards, eventBoardId(context), 'incidentio'),
+      boardEventHandlers(this.#boards(input), eventBoardId(context), 'incidentio'),
       context.event,
     );
     let decision: FactoryRuleDecision | void = undefined;
@@ -183,7 +210,7 @@ export class IncidentioRules {
         decisions = validateFactoryRuleDecisions([decision]).map(entry => {
           assertFactoryDecisionTarget(
             entry,
-            this.options.boards,
+            this.#boards(input),
             relatedItem ? boardForWorkItem(relatedItem) : undefined,
           );
           return { ...entry };
@@ -234,19 +261,4 @@ export class IncidentioRules {
     }
     return committed.status;
   }
-}
-
-export function attachIncidentioRules(
-  incidentio: { readonly rules: IncidentioEventRules },
-  context: IntegrationContext,
-): ((input: IncidentioRulesIngress) => Promise<unknown>) | undefined {
-  if (!context.runtime) return undefined;
-  const rules = new IncidentioRules({
-    projects: context.storage.projects,
-    storage: context.runtime.workItems,
-    configVersion: context.runtime.configVersion,
-    boards: context.runtime.boards,
-    incidentioRules: incidentio.rules,
-  });
-  return input => rules.ingest(input);
 }

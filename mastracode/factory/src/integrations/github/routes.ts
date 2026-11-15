@@ -34,6 +34,7 @@ import { normalizeSessionTitle } from '../../session/session-title.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
 import type { MemorySettingsStorage } from '../../storage/domains/memory-settings/base.js';
+import { isFactoryPrincipalId } from '../../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
@@ -46,8 +47,8 @@ import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js
 import type { GithubIntegration } from './integration.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
 import type { GithubPatKind } from './pat.js';
-import { polledPullRequestEvent } from './rules.js';
-import type { PolledPullRequestState, ReconcileRepository } from './rules.js';
+import { listedPullRequestState, polledPullRequestEvent } from './rules.js';
+import type { ReconcileRepository } from './rules.js';
 
 import { reclaimDeletedSessionSandbox } from './sandbox-release.js';
 import {
@@ -315,52 +316,11 @@ function polledIssueEvent(
   };
 }
 
-interface ListedPullRequest {
-  number: number;
-  title: string;
-  url: string;
-  author: string | null;
-  assignees: string[];
-  requestedReviewers: string[];
-  labels: string[];
-  headBranch: string;
-  baseBranch: string;
-  createdAt: string;
-}
-
-function listedPullRequestEvent(
-  project: ResolvedProjectRepository,
-  pullRequest: ListedPullRequest,
-): ParsedGithubWebhook {
-  return polledPullRequestEvent(
-    reconcileRepositoryOf(project),
-    pullRequest.number,
-    listedOpenPullRequestState(pullRequest),
-  );
-}
-
 function reconcileRepositoryOf(project: ResolvedProjectRepository): ReconcileRepository {
   return {
     id: Number(project.repository.externalId),
     fullName: project.repository.slug,
     installationId: Number(project.installation.externalId),
-  };
-}
-
-function listedOpenPullRequestState(pullRequest: ListedPullRequest): PolledPullRequestState {
-  return {
-    title: pullRequest.title,
-    url: pullRequest.url,
-    state: 'open',
-    draft: false,
-    merged: false,
-    assignees: pullRequest.assignees,
-    requestedReviewers: pullRequest.requestedReviewers,
-    labels: pullRequest.labels,
-    headBranch: pullRequest.headBranch,
-    baseBranch: pullRequest.baseBranch,
-    author: pullRequest.author ?? undefined,
-    createdAt: pullRequest.createdAt,
   };
 }
 
@@ -371,60 +331,10 @@ async function ingestPolledEvents(
   if (!ingestFactoryEvent) return;
   const results = await Promise.allSettled(events.map(event => ingestFactoryEvent(event)));
   const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-  // Best-effort: a rule-ingress failure must not fail the GitHub list response it piggybacks on.
+  // Best-effort: one failed row must not stop the rest of the backlog page from landing.
   if (rejected) {
     console.warn('[Mastra Factory] Failed to ingest polled GitHub events', { error: rejected.reason });
   }
-}
-
-// Under the boards' 30 s issue and pull request polls: a lone board still runs the rules on every poll while passes take under 10 s.
-const POLLED_PAGE_INGEST_REST_MS = 20_000;
-// A stuck pass keeps its page so no other pass piles onto it, but stops holding the boards' lists after this.
-const POLLED_PAGE_INGEST_WAIT_MS = 10_000;
-// Past this a pass is presumed stuck, and the next poll runs the rules again as if it were not there.
-const POLLED_PAGE_INGEST_ABANDON_MS = 120_000;
-
-function waitAtMost(pass: Promise<void>): Promise<void> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const waited = new Promise<void>(resolve => {
-    timer = setTimeout(resolve, POLLED_PAGE_INGEST_WAIT_MS);
-  });
-  return Promise.race([pass, waited]).finally(() => clearTimeout(timer));
-}
-
-/**
- * One rules pass per listed page at a time, whichever board asked, then a rest: each pass reads the
- * whole project, and every open board polls the same pages. A board joins a running pass unless it
- * looks stuck, and a resting page still ingests the issues or pull requests its last pass did not list.
- * Keys name the feed as well as the page, so an issue page never joins a pull request pass.
- */
-function createPolledPageIngest() {
-  const running = new Map<string, { startedAt: number; done: Promise<void> }>();
-  const resting = new Map<string, { finishedAt: number; ingested: Set<number> }>();
-  return <T extends { number: number }>(
-    key: string,
-    listed: readonly T[],
-    ingest: (listed: readonly T[]) => Promise<void>,
-  ): Promise<void> => {
-    const pending = running.get(key);
-    if (pending && Date.now() - pending.startedAt < POLLED_PAGE_INGEST_ABANDON_MS) return waitAtMost(pending.done);
-    // Finish order: a key is only set again after it was pruned, so the oldest entries come first.
-    for (const [rested, { finishedAt }] of resting) {
-      if (Date.now() - finishedAt < POLLED_PAGE_INGEST_REST_MS) break;
-      resting.delete(rested);
-    }
-    const rest = resting.get(key);
-    const due = rest ? listed.filter(entry => !rest.ingested.has(entry.number)) : listed;
-    if (due.length === 0) return Promise.resolve();
-    const done = ingest(due).finally(() => {
-      if (running.get(key)?.done !== done) return;
-      running.delete(key);
-      if (rest) for (const entry of due) rest.ingested.add(entry.number);
-      else resting.set(key, { finishedAt: Date.now(), ingested: new Set(due.map(entry => entry.number)) });
-    });
-    running.set(key, { startedAt: Date.now(), done });
-    return waitAtMost(done);
-  };
 }
 
 const LINKED_BACKLOG_MAX_PAGES = 5;
@@ -442,28 +352,12 @@ function listedIssueOf(issue: Awaited<ReturnType<GithubIntegration['intake']['li
   };
 }
 
-function listedPullRequestOf(
-  pr: Awaited<ReturnType<GithubIntegration['versionControl']['listPullRequests']>>['pullRequests'][number],
-): ListedPullRequest {
-  return {
-    number: Number(pr.id),
-    title: pr.title,
-    url: pr.url,
-    author: pr.author,
-    assignees: pr.assignees ?? [],
-    requestedReviewers: pr.requestedReviewers ?? [],
-    labels: pr.labels ?? [],
-    headBranch: pr.headBranch,
-    baseBranch: pr.baseBranch,
-    createdAt: pr.createdAt,
-  };
-}
-
 /**
  * Feed a just-linked repository's open issues and pull requests through the
- * same rules ingress the list routes use, so its backlog reaches the board
- * without anyone browsing it. Rows owned by another integration don't resolve
- * through this integration's storage handle and are skipped.
+ * rules ingress, so its backlog reaches the board without anyone browsing it.
+ * The reconcile sweeps only recover items filed after the link. Rows owned by
+ * another integration don't resolve through this integration's storage handle
+ * and are skipped.
  */
 export async function ingestLinkedRepositoryBacklog(args: {
   github: GithubIntegration;
@@ -497,7 +391,10 @@ export async function ingestLinkedRepositoryBacklog(args: {
       cursor: String(page),
     });
     await ingestPolledEvents(
-      pullRequests.map(pr => listedPullRequestEvent(project, listedPullRequestOf(pr))),
+      pullRequests.map(pr => {
+        const state = listedPullRequestState(pr);
+        return polledPullRequestEvent(reconcileRepositoryOf(project), state.number, state);
+      }),
       args.ingestFactoryEvent,
     );
     if (nextCursor === null) break;
@@ -525,7 +422,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   } = options;
   const diagnostics = () =>
     getGithubFeatureDiagnostics({ github, auth, appDbConfigured: storage !== undefined, stateSigner, sandbox });
-  const ingestPolledPage = createPolledPageIngest();
 
   // The status route is always registered so the SPA can detect the disabled state.
   routes.push(
@@ -863,16 +759,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             createdAt: issue.createdAt,
             updatedAt: issue.updatedAt,
           }));
-          // The label is part of the page: the triage feed polls a filtered page beside the unfiltered one.
-          await ingestPolledPage(
-            `issues:${loaded.project.installation.externalId}:${loaded.project.repository.externalId}:${page}:${label ?? ''}`,
-            responseIssues,
-            listed =>
-              ingestPolledEvents(
-                listed.map(issue => polledIssueEvent(loaded.project, issue)),
-                options.ingestFactoryEvent,
-              ),
-          );
           return c.json({
             issues: responseIssues,
             nextPage: nextCursor === null ? null : Number(nextCursor),
@@ -962,15 +848,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             createdAt: pr.createdAt,
             updatedAt: pr.updatedAt,
           }));
-          await ingestPolledPage(
-            `prs:${loaded.project.installation.externalId}:${loaded.project.repository.externalId}:${page}`,
-            responsePullRequests,
-            listed =>
-              ingestPolledEvents(
-                listed.map(pullRequest => listedPullRequestEvent(loaded.project, pullRequest)),
-                options.ingestFactoryEvent,
-              ),
-          );
           return c.json({
             pullRequests: responsePullRequests,
             nextPage: nextCursor === null ? null : Number(nextCursor),
@@ -1309,10 +1186,16 @@ function createSessionOwnerProfileResolver(users: SessionOwnerUserProvider | und
   };
 
   return async (userIds: string[]): Promise<Map<string, SessionOwnerProfile>> => {
-    if (!users) return new Map();
-
-    const requestedUserIds = [...new Set(userIds)].slice(0, MAX_SESSION_OWNER_PROFILES);
     const profiles = new Map<string, SessionOwnerProfile>();
+    // A session the Factory owns has no person to look up; it is named for what it is.
+    for (const userId of userIds) {
+      if (isFactoryPrincipalId(userId)) profiles.set(userId, { id: userId, name: 'Factory' });
+    }
+    if (!users) return profiles;
+
+    const requestedUserIds = [...new Set(userIds)]
+      .filter(userId => !isFactoryPrincipalId(userId))
+      .slice(0, MAX_SESSION_OWNER_PROFILES);
     const unresolvedUserIds: string[] = [];
     const now = Date.now();
 

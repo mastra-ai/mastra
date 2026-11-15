@@ -117,5 +117,8 @@ export type {
   CreateFeedbackResponse,
   CreateScoreBody,
   CreateScoreResponse,
+  DeleteFeedbackResponse,
+  DeleteScoresResponse,
+  DeleteTracesResponse,
   ReplaceFeedbackBody,
 } from './resources/observability-route-types';

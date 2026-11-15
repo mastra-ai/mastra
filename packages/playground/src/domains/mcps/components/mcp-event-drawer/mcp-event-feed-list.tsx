@@ -1,6 +1,6 @@
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { RadioIcon } from 'lucide-react';
+import { IconPodcast1 } from '@mastra/playground-ui/icons/central/IconPodcast1';
 import type { EventFeedItem } from '../../hooks/use-mcp-event-feed';
 import { McpEventOccurrenceRow } from './mcp-event-occurrence-row';
 
@@ -11,7 +11,7 @@ export function McpEventFeedList({ items }: { items: EventFeedItem[] }) {
   if (items.length === 0) {
     return (
       <EmptyState
-        iconSlot={<RadioIcon />}
+        iconSlot={<IconPodcast1 />}
         titleSlot="No events yet"
         descriptionSlot="Start listening or poll to see occurrences here."
       />

@@ -26,7 +26,6 @@ import { scopeJiraSourcesToProject } from './binding-scope.js';
 import { unfilteredJiraScopes } from './intake-jql.js';
 import { DEPLOYMENT_CONNECTION } from './integration.js';
 import type { JiraIntegration } from './integration.js';
-import type { JiraRulesIngress } from './rules.js';
 
 type RouteContext = Context;
 
@@ -56,12 +55,6 @@ export interface MountJiraRoutesOptions {
    * project filter; when absent, only the disabled `status` route is served.
    */
   intake?: IntakeStorage;
-  /**
-   * Factory rules ingress for observed issues. When present, a board-scoped
-   * issue listing also materializes new cards through the Jira event rules —
-   * the same automatic intake Linear has.
-   */
-  ingestFactoryIssues?: (input: JiraRulesIngress) => Promise<unknown>;
   /** Filed cards, so a Factory keeps reading issues it filed after a label filter moves them to another slice. */
   workItems?: Pick<WorkItemsStorage, 'getByProjectSource'>;
 }
@@ -247,7 +240,6 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
               selectedIds,
             })
           : null;
-        const intakeBoards = projectScope?.intakeBoards ?? null;
         const scopes = projectScope?.scopes ?? unfilteredJiraScopes(selectedIds);
         if (scopes.length === 0) {
           return c.json({ issues: [], nextCursor: null });
@@ -271,15 +263,6 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
             updatedAt: issue.updatedAt,
             sourceId: issue.sourceId || null,
           }));
-          if (factoryProjectId && intakeBoards && options.ingestFactoryIssues) {
-            await options.ingestFactoryIssues({
-              orgId: resolved.tenant.orgId,
-              userId: resolved.tenant.userId,
-              factoryProjectId,
-              issues: issuePayload.map(issue => ({ ...issue, site: null })),
-              intakeBoards,
-            });
-          }
           return c.json({ issues: issuePayload, nextCursor });
         } catch (err) {
           return jiraFetchError(loose(c), err);
@@ -325,7 +308,7 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
           // Factory never filed, reads like one that doesn't exist (as on Linear).
           const routed =
             issue?.sourceId != null &&
-            issue.sourceId in projectScope.intakeBoards &&
+            projectScope.sourceIds.includes(issue.sourceId) &&
             (projectScope.takes(issue.sourceId, issue.labels) ||
               !!(await workItems?.getByProjectSource({
                 orgId: resolved.tenant.orgId,

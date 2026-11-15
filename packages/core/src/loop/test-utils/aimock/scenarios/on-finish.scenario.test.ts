@@ -333,10 +333,19 @@ describeForAllEngines(
         },
       });
       if (phase === 'tool-result') {
-        // A tool-result tripwire terminates without invoking onFinish.
+        // A tool-result tripwire ends the run. Durable engines settle it without
+        // onFinish; the in-process loop calls onFinish with the tripwire and without
+        // the blocked result.
         expect(await output.toolResults).toEqual([]);
         expect(chunks!.filter(chunk => chunk.type === 'tool-result')).toEqual([]);
-        expect(finish).toBeUndefined();
+        if (isDurableEngineVariant(engine)) {
+          expect(finish).toBeUndefined();
+          return;
+        }
+        await expect.poll(() => finish).toBeDefined();
+        expect(finish!.tripwire?.reason).toBe('Result blocked.');
+        expect(finish!.toolResults).toEqual([]);
+        expect(JSON.stringify(finish)).not.toContain('private');
         return;
       }
       await expect.poll(() => finish).toBeDefined();

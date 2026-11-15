@@ -4,7 +4,9 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Field, FieldDescription, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Pencil, X, Check } from 'lucide-react';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
 import { DatasetFieldErrors } from '../dataset-field-errors';
 
 /** Schema validation error from API */
@@ -57,7 +59,7 @@ export function EditModeContent({
     <>
       <div className="mb-4">
         <Txt as="h3" variant="heading" className="flex items-center gap-2">
-          <Pencil className="h-5 w-5" /> Edit Item
+          <IconPencil className="h-5 w-5" /> Edit Item
         </Txt>
       </div>
 
@@ -130,10 +132,10 @@ export function EditModeContent({
         </Field>
 
         <div className="flex gap-2 pt-4">
-          <Button icon={<Check />} variant="primary" onClick={onSave} disabled={isSaving}>
+          <Button icon={<IconCheckmark1 />} variant="primary" onClick={onSave} disabled={isSaving}>
             {isSaving ? 'Saving...' : 'Save changes'}
           </Button>
-          <Button icon={<X />} onClick={onCancel} disabled={isSaving}>
+          <Button icon={<IconCrossMedium />} onClick={onCancel} disabled={isSaving}>
             Cancel
           </Button>
         </div>

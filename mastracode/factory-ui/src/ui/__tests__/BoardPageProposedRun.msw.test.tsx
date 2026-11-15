@@ -153,7 +153,6 @@ function stubBoardEndpoints({
           {
             id: FACTORY_ID,
             name: 'Acme Factory',
-            autoRunEnabled: false,
             repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
           },
         ],
@@ -283,7 +282,6 @@ describe('Board card with a proposed run', () => {
       http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
         HttpResponse.json({ enabled: true, connected: true, workspace: { id: 'workspace-1' } }),
       ),
-      http.get(`${TEST_BASE_URL}/web/linear/issues`, () => HttpResponse.json({ issues: [], nextCursor: null })),
     );
     const { client } = renderBoard('work', `/factories/${FACTORY_ID}/work?item=${ITEM_ID}`);
 
@@ -360,7 +358,7 @@ describe('Board card with a proposed run', () => {
     // Triage left the card for a person, so the card leads with that decision
     // and keeps the parked run out of reach until it is made.
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
-    expect(await within(card).findByText('Triaged and waiting for you')).toBeVisible();
+    expect(await within(card).findByText('Held for your go-ahead')).toBeVisible();
     expect(within(card).queryByText('Suggested: Investigate')).not.toBeInTheDocument();
     const accept = within(card).getByRole('button', { name: 'Accept and plan' });
     expect(accept).toHaveAttribute('data-variant', 'primary');

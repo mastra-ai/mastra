@@ -43,12 +43,6 @@ Route handlers return serializable values or streams and throw `HTTPException` w
 
 `@mastra/server/server-adapter` exports the abstract `MastraServer` contract and common route-registration utilities. Adapter packages implement framework-specific streaming, parameter extraction, response handling, context middleware, authentication middleware, and HTTP logging around this contract.
 
-The package's OpenAPI-derived route metadata can be refreshed from `packages/server` with:
-
-```bash
-pnpm run pull:openapispec
-```
-
 - [`MastraServer` adapter reference](https://mastra.ai/reference/server/mastra-server)
 - [Server adapter guide](https://mastra.ai/docs/server/server-adapters)
 

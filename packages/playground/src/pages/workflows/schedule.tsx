@@ -6,12 +6,15 @@ import { RelativeTimestamp } from '@mastra/playground-ui/components/RelativeTime
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
+import { IconCalendarClock } from '@mastra/playground-ui/icons/central/IconCalendarClock';
+import { IconPause } from '@mastra/playground-ui/icons/central/IconPause';
+import { IconPlay } from '@mastra/playground-ui/icons/central/IconPlay';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useSchedule, useScheduleTriggers, useToggleSchedule } from '@mastra/react/hooks/schedules';
-import { ArrowLeftIcon, CalendarClockIcon, PauseIcon, PlayIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { decodeRouteParam, navCrumb } from '@/domains/navigation/crumbs';
@@ -39,7 +42,7 @@ export default function SchedulePage() {
   const crumbs = [
     navCrumb('/workflows'),
     schedulesCrumb,
-    { id: 'schedule', label: decodeRouteParam(scheduleId), icon: CalendarClockIcon },
+    { id: 'schedule', label: decodeRouteParam(scheduleId), icon: IconCalendarClock },
   ];
   const { paths } = useLinkComponent();
   const { data: schedule, error } = useSchedule({ scheduleId: scheduleId, queryOptions: { enabled: !!scheduleId } });
@@ -89,7 +92,7 @@ export default function SchedulePage() {
       actionRow={
         <ActionRow>
           <ActionRow.End>
-            <Button render={<Link to={paths.schedulesLink()} />} variant="ghost" icon={<ArrowLeftIcon />}>
+            <Button render={<Link to={paths.schedulesLink()} />} variant="ghost" icon={<IconArrowLeft />}>
               Back to schedules
             </Button>
             {workflowId ? (
@@ -97,7 +100,7 @@ export default function SchedulePage() {
                 Open workflow
               </Button>
             ) : null}
-            {schedule ? (
+            {schedule && schedule.status !== 'completed' ? (
               <Button
                 onClick={() => {
                   const action = schedule.status === 'active' ? 'pause' : 'resume';
@@ -111,12 +114,12 @@ export default function SchedulePage() {
               >
                 {schedule.status === 'active' ? (
                   <>
-                    <PauseIcon />
+                    <IconPause />
                     Pause
                   </>
                 ) : (
                   <>
-                    <PlayIcon />
+                    <IconPlay />
                     Resume
                   </>
                 )}
@@ -143,10 +146,15 @@ export default function SchedulePage() {
                 '—'
               )}
             </MetaItem>
-            <MetaItem label="Cron">
+            <MetaItem label={schedule.cron ? 'Cron' : 'Runs at'}>
               <Txt as="span" variant="body" font="mono">
-                {schedule.cron}
+                {schedule.cron ?? (schedule.runAt ? new Date(schedule.runAt).toLocaleString() : '—')}
               </Txt>
+              {schedule.endAt ? (
+                <span className="ml-2 text-caption text-muted-foreground">
+                  until {new Date(schedule.endAt).toLocaleString()}
+                </span>
+              ) : null}
               {schedule.timezone ? (
                 <Txt as="span" variant="caption" tone="muted" className="ml-2">
                   {schedule.timezone}

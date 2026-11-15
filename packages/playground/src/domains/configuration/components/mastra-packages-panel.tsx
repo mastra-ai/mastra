@@ -3,9 +3,12 @@ import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
+import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
+import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraPackages } from '@mastra/react/hooks/configuration';
-import { ArrowRight, CircleCheck, ExternalLink, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { usePackageUpdates } from '../hooks/use-package-updates';
 import type { PackageUpdateInfo } from '../hooks/use-package-updates';
@@ -69,7 +72,7 @@ export const MastraPackagesPanel = ({ version }: MastraPackagesPanelProps) => {
             aria-label="Changelog"
             render={<a href={RELEASES_URL} target="_blank" rel="noopener noreferrer" />}
           >
-            <ExternalLink />
+            <IconSquareArrowTopRight />
           </Button>
         </div>
       </div>
@@ -110,7 +113,7 @@ function UpdateStatus({
   if (outdatedCount === 0 && deprecatedCount === 0) {
     return (
       <p className="mt-0.5 flex items-center gap-1.5 text-meta text-success-indicator">
-        <CircleCheck className="size-3.5" />
+        <IconCircleCheck className="size-3.5" />
         Up to date
       </p>
     );
@@ -128,7 +131,7 @@ function UpdateStatus({
         deprecatedCount > 0 ? 'text-destructive-foreground' : 'text-warning-foreground',
       )}
     >
-      <TriangleAlert className="size-3.5" />
+      <IconExclamationTriangle className="size-3.5" />
       {parts.join(', ')}
     </p>
   );
@@ -153,7 +156,7 @@ function PackageRow({ pkg }: { pkg: PackageUpdateInfo }) {
       <span className={cn('font-mono tabular-nums', versionToneClass(pkg))}>{pkg.version}</span>
       {needsUpdate && pkg.latestVersion && (
         <>
-          <ArrowRight aria-label="updates to" className="size-3 text-placeholder" />
+          <IconArrowRight aria-label="updates to" className="size-3 text-placeholder" />
           <span className="font-mono text-foreground tabular-nums">{pkg.latestVersion}</span>
         </>
       )}

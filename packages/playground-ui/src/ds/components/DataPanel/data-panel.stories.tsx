@@ -1,10 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CalendarClockIcon, TimerIcon, BotIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../Button';
 import { TooltipProvider } from '../Tooltip';
 import { DataPanel } from './data-panel';
 import type { DataPanelProps } from './data-panel-root';
+import { IconCalendarClock } from '@/ds/icons/central/IconCalendarClock';
+import { IconRobot } from '@/ds/icons/central/IconRobot';
+import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
 
 const meta: Meta<typeof DataPanel> = {
   title: 'Composite/DataPanel',
@@ -85,13 +87,13 @@ export const WithMetadata: Story = {
             Trace <b>abc123</b>
           </DataPanel.Heading>
           <DataPanel.Metadata>
-            <DataPanel.Meta as="a" href="#" icon={<BotIcon />} tooltip="Agent">
+            <DataPanel.Meta as="a" href="#" icon={<IconRobot />} tooltip="Agent">
               weather-agent
             </DataPanel.Meta>
-            <DataPanel.Meta icon={<CalendarClockIcon />} tooltip="Started at 2024-01-01 10:00:00">
+            <DataPanel.Meta icon={<IconCalendarClock />} tooltip="Started at 2024-01-01 10:00:00">
               2 min ago
             </DataPanel.Meta>
-            <DataPanel.Meta icon={<TimerIcon />} tooltip="Duration 1,234ms">
+            <DataPanel.Meta icon={<IconStopwatch />} tooltip="Duration 1,234ms">
               1.2s
             </DataPanel.Meta>
           </DataPanel.Metadata>
@@ -123,10 +125,10 @@ export const Inline: Story = {
               Span <b>abc123</b>
             </DataPanel.Heading>
             <DataPanel.Metadata>
-              <DataPanel.Meta icon={<BotIcon />} tooltip="Agent">
+              <DataPanel.Meta icon={<IconRobot />} tooltip="Agent">
                 weather-agent
               </DataPanel.Meta>
-              <DataPanel.Meta icon={<TimerIcon />} tooltip="Duration 1,234ms">
+              <DataPanel.Meta icon={<IconStopwatch />} tooltip="Duration 1,234ms">
                 1.2s
               </DataPanel.Meta>
             </DataPanel.Metadata>

@@ -14,9 +14,12 @@ import type { ExecutableSandbox } from '../sandbox/materialization.js';
 import { peekSessionSandbox, sessionLayout } from '../sandbox/session-sandbox.js';
 import type { SessionLayout, SessionLayoutRepository } from '../sandbox/session-sandbox.js';
 import { peekSessionEnvironment } from '../session/environment-state-processor.js';
+import { sessionMemoryResourceId } from '../session/session-threads.js';
+import type { SessionRunBindings, SessionThreadLookup } from '../session/session-threads.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { loose } from './route.js';
 import type { RouteAuth } from './route.js';
+import { canReadSessionResource, canViewSourceControlSession } from './session-access.js';
 
 /**
  * Server-side directory browser for the web project picker.
@@ -261,10 +264,11 @@ function assertRelativePath(path: string, label: string): string {
   return normalized;
 }
 
-function assertApprovedRenderedRoot(renderedRoot: string): string {
+function assertApprovedRenderedRoot(renderedRoot: string, layout?: SessionLayout): string {
   const safeRoot = assertRelativePath(renderedRoot, 'root');
-  if (!APPROVED_RENDERED_ROOTS.has(safeRoot)) throw new Error('Root is not approved for rendered workspace access');
-  return safeRoot;
+  if (APPROVED_RENDERED_ROOTS.has(safeRoot)) return safeRoot;
+  if (layout?.repos.length && layout.repos.some(repo => `${repo.prefix}.artifacts` === safeRoot)) return safeRoot;
+  throw new Error('Root is not approved for rendered workspace access');
 }
 
 async function confinedWorkspacePath(
@@ -464,13 +468,16 @@ export async function listArtifacts(root: string, workspacePath: string): Promis
 export interface SessionFsDeps {
   auth: RouteAuth;
   sessions: { getBySessionId(sessionId: string): Promise<SourceControlSession | null> };
+  /** Resolves the memory resource a session runs on, so a session still on its owner's memory stays the owner's. */
+  controller?: SessionThreadLookup;
+  workItems?: SessionRunBindings;
 }
 
 /**
  * Resolve a `workspacePath` query param as a Factory session id. Returns the
- * session when one exists and the caller owns it, `null` when no session
- * matches (the caller should fall back to local-path handling), and throws
- * when a session exists but belongs to another tenant.
+ * session when one exists and the caller may read it (the same rule as the
+ * session conversation routes), `null` when no session matches (the caller
+ * should fall back to local-path handling), and throws otherwise.
  */
 async function resolveAuthorizedSession(
   c: Context,
@@ -483,7 +490,11 @@ async function resolveAuthorizedSession(
   if (deps.auth.enabled()) {
     await deps.auth.ensureUser(c);
     const tenant = deps.auth.tenant(c);
-    if (!tenant || tenant.orgId !== session.orgId || tenant.userId !== session.userId) {
+    if (!tenant || !canViewSourceControlSession(session, tenant)) {
+      throw new Error('Session is not available to the current user');
+    }
+    const resourceId = await sessionMemoryResourceId(deps.controller, session, deps.workItems);
+    if (!canReadSessionResource(session, resourceId, tenant)) {
       throw new Error('Session is not available to the current user');
     }
   }
@@ -555,11 +566,18 @@ export async function listSessionRenderedPath(
   session: SourceControlSession,
   renderedRoot: string,
 ): Promise<WorkspaceRenderedListing> {
-  const safeRoot = assertApprovedRenderedRoot(renderedRoot);
   const handle = await sessionSandbox(session);
+  const safeRoot = assertApprovedRenderedRoot(renderedRoot, handle?.layout);
   const rootPath = posixPath.join(handle?.layout.root ?? '', safeRoot);
   const empty: WorkspaceRenderedListing = { workspacePath: session.sessionId, root: safeRoot, rootPath, entries: [] };
   if (!handle) return empty;
+
+  // Do not enumerate a checkout reached through a symlink: even listing would
+  // expose names and metadata outside the session's physical workspace.
+  const physical = await realPaths(handle.sandbox, handle.layout.root, [safeRoot]);
+  if (physical.paths[0] && physical.paths[0] !== posixPath.join(physical.root, safeRoot)) {
+    throw new Error('Path is not available in this session');
+  }
 
   // One round trip: emit "type\tsize\tmtime\tpath" per entry. `safeRoot` comes
   // from a fixed allowlist so interpolating it (quoted) is safe. The listing is
@@ -802,7 +820,7 @@ export async function readSessionWorkspaceFile(session: SourceControlSession, pa
   const handle = await sessionSandbox(session);
   if (!handle) throw new Error('Session workspace is not available');
   const { layout, sandbox } = handle;
-  treeLocation(layout, safePath);
+  const location = treeLocation(layout, safePath);
   // Judge the file by where it really is as well as by the path asked for: a
   // symlink to `.env` must not serve it. Rendered roots (plans, reports) are
   // served even when a checkout ignores them, but not through such a symlink.
@@ -812,7 +830,9 @@ export async function readSessionWorkspaceFile(session: SourceControlSession, pa
   // The file itself may be a symlink, but not a folder on the way to it.
   const throughLink = parent !== '.' && real.paths[1] !== posixPath.join(real.root, parent);
   if (target === undefined || throughLink) throw new Error('Path is not available in this session');
-  const trusted = APPROVED_RENDERED_ROOTS.has(safePath.split('/')[0] ?? '');
+  const trusted =
+    APPROVED_RENDERED_ROOTS.has(safePath.split('/')[0] ?? '') ||
+    Boolean(location.repo && location.relative.startsWith('.artifacts/'));
   const checked = [...new Set([...(trusted ? [] : [safePath]), ...(target === safePath ? [] : [target])])];
   if ((await ignoredTreePaths(sandbox, layout, checked)).size > 0) {
     throw new Error('Path is not available in this session');

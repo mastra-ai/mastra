@@ -2,7 +2,6 @@
 
 import type { DatasetItemToolMock, AddDatasetItemParams } from '@mastra/client-js';
 import { useDatasetMutations, useDatasets } from '@mastra/react/hooks/datasets';
-import { Check, X } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { Button } from '@/ds/components/Button';
@@ -13,6 +12,8 @@ import { Field, FieldLabel } from '@/ds/components/Field';
 import { Form } from '@/ds/components/Form';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
 import { Txt } from '@/ds/components/Txt';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { useLinkComponent } from '@/lib/framework';
 import { toast } from '@/utils/toast';
 
@@ -322,11 +323,11 @@ export function SaveAsDatasetItemDialog({
           </Field>
 
           <div className="flex justify-end gap-2 pt-4">
-            <Button icon={<X />} type="button" onClick={handleCancel}>
+            <Button icon={<IconCrossMedium />} type="button" onClick={handleCancel}>
               Cancel
             </Button>
             <Button
-              icon={<Check />}
+              icon={<IconCheckmark1 />}
               type="submit"
               variant="default"
               disabled={addItem.isPending || trajectoryLoading || !isSelectedDatasetListed}

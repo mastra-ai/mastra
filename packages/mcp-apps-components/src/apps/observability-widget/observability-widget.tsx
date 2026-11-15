@@ -22,6 +22,7 @@ import type { ReactNode } from 'react';
 import { readOpened, readView } from './opened';
 import type { HostView, Opened } from './opened';
 import { OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY } from './tool';
+import { useConfigure } from './use-configure';
 import { usePin } from './use-pin';
 import { useToolResults } from './use-tool-results';
 
@@ -96,7 +97,8 @@ function Widget({
 }) {
   const { env } = opened;
   const [state, setState] = useState<WidgetState>({});
-  const pin = usePin(app, widget, opened.datePreset, opened.customRange, opened.filters);
+  const configureButton = useConfigure(app, widget, opened.datePreset, opened.customRange, opened.filters);
+  const pinButton = usePin(app, widget, opened.datePreset, opened.customRange, opened.filters);
   const first = planWidget(prepared, env, state);
   const discovered = useToolResults(app, first.status === 'ready' ? first.discover : [], opened.projectId);
   // Planned again with the discover answers so far; both lists go out in the same render.
@@ -115,7 +117,14 @@ function Widget({
         sent.retry();
       }}
       scope={scope}
-      pin={pin}
+      actions={
+        configureButton || pinButton ? (
+          <>
+            {configureButton}
+            {pinButton}
+          </>
+        ) : undefined
+      }
     />
   );
 }

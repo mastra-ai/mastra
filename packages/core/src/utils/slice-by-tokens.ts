@@ -13,3 +13,8 @@ const UNPAIRED_SURROGATE_RE = /[\uD800-\uDFFF]/gu;
 export function sliceByTokensSafe(text: string, start: number, end?: number): string {
   return sliceByTokens(text, start, end).replace(UNPAIRED_SURROGATE_RE, '\uFFFD');
 }
+
+/** `text.slice(start, end)` by UTF-16 index, with the same repair for a cut inside a surrogate pair. */
+export function sliceSafe(text: string, start?: number, end?: number): string {
+  return text.slice(start, end).replace(UNPAIRED_SURROGATE_RE, '\uFFFD');
+}

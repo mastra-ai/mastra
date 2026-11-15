@@ -37,6 +37,8 @@ export type GithubStatusReason =
   | 'auth_required'
   | 'organization_required'
   | 'not_connected'
+  /** Platform withholds a personal-account install while the Mastra organization has more than one member. */
+  | 'personal_install_hidden'
   | 'ready'
   | 'unavailable';
 
@@ -249,12 +251,6 @@ export interface FactoryProjectPayload {
   modelScope?: FactoryModelScope;
   /** Thinking level every session and run uses until it picks its own. */
   defaultThinkingLevel?: ThinkingLevelSetting;
-  /** Whether Factory rules may start agent runs without someone asking for them. */
-  autoRunEnabled?: boolean;
-  /** Whether Review agents publish test results as a commit check. Defaults to off. */
-  reviewTestChecksEnabled?: boolean;
-  /** Whether Work items get an independent self-review before the change request opens. Defaults to off. */
-  selfReviewEnabled?: boolean;
 }
 
 /** A Factory project row from `GET /web/factory/projects`, with its linked repositories. */
@@ -448,14 +444,10 @@ export async function updateFactoryThinkingDefault(
 
 export interface ApplyFactoryDefaultModelResult {
   modelId: string;
-  applied: string[];
-  skipped: Array<{
-    threadId: string;
-    reason: 'not-running' | 'work-item-missing' | 'stage-inactive' | 'thread-missing' | 'mode-unknown' | 'apply-failed';
-  }>;
+  status: 'started';
 }
 
-/** Apply the Factory default model to currently running work and review sessions. */
+/** Start applying the Factory default model to currently running work and review sessions. */
 export async function applyFactoryDefaultModelToSessions(
   baseUrl: string,
   factoryProjectId: string,
@@ -469,22 +461,6 @@ export async function applyFactoryDefaultModelToSessions(
     },
   );
   return readJsonOrThrow<ApplyFactoryDefaultModelResult>(res, 'Failed to switch running sessions');
-}
-
-/** Toggle a Factory's automation settings: rule-started runs, self-review, review test checks. */
-export async function updateFactoryAutomation(
-  baseUrl: string,
-  factoryProjectId: string,
-  patch: Pick<FactoryProjectPayload, 'autoRunEnabled' | 'reviewTestChecksEnabled' | 'selfReviewEnabled'>,
-): Promise<FactoryProjectPayload> {
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
-    method: 'PATCH',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(patch),
-  });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update automation');
-  return project;
 }
 
 /**

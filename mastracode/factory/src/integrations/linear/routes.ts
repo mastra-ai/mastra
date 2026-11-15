@@ -17,15 +17,15 @@ import type { Context } from 'hono';
 
 import { isTerminalWorkItem } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
+import { toBoardSource } from '../../boards/project-boards.js';
+import type { ProjectBoardSource } from '../../boards/project-boards.js';
 import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
-import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { LinearIntegration, LinearProject, LinearTeam } from './integration.js';
 import { LinearReauthRequiredError } from './integration.js';
-import type { LinearRulesIngress } from './rules.js';
 
 type RouteContext = Context;
 
@@ -89,7 +89,6 @@ export interface MountLinearRoutesOptions {
    * belonging to no project.
    */
   projects?: { list(input: { orgId: string }): Promise<unknown[]> };
-  ingestFactoryIssues?: (input: LinearRulesIngress) => Promise<unknown>;
   /**
    * Work-item lookup so the detail route can keep serving a card this Factory
    * already holds after the issue's winning source was routed elsewhere. When
@@ -97,7 +96,7 @@ export interface MountLinearRoutesOptions {
    */
   workItems?: Pick<WorkItemsStorage, 'getByProjectSource' | 'listShared'>;
   /** Installed boards, so a held card's terminal status follows its own board. */
-  boards?: BoardRegistry;
+  boards?: BoardRegistry | ProjectBoardSource;
 }
 
 /**
@@ -105,10 +104,10 @@ export interface MountLinearRoutesOptions {
  * Factory project.
  *
  * A Linear issue carries no Factory project of its own, so without a binding
- * every board view would ingest every selected source's issues into whichever
+ * every board view would show every selected source's issues in whichever
  * project happened to be on screen. Routing is explicit: a source feeds this
- * project only when its binding names both the project and a board. Returns
- * the bound board per source so the ingest lands cards where the user asked.
+ * project only when it is bound to the project. The intake discovery sweep
+ * uses the same binding rule when it creates cards.
  */
 async function scopeSourceIdsToProject({
   intake,
@@ -120,15 +119,11 @@ async function scopeSourceIdsToProject({
   orgId: string;
   factoryProjectId: string;
   selectedIds: string[];
-}): Promise<Record<string, string>> {
+}): Promise<string[]> {
   const selected = new Set(selectedIds);
-  const intakeBoards: Record<string, string> = {};
-  for (const binding of await intake.listBindings({ orgId, integrationId: 'linear' })) {
-    if (binding.factoryProjectId === factoryProjectId && binding.board && selected.has(binding.sourceId)) {
-      intakeBoards[binding.sourceId] = binding.board;
-    }
-  }
-  return intakeBoards;
+  return (await intake.listBindings({ orgId, integrationId: 'linear' }))
+    .filter(binding => binding.factoryProjectId === factoryProjectId && selected.has(binding.sourceId))
+    .map(binding => binding.sourceId);
 }
 
 /**
@@ -192,8 +187,8 @@ async function holdsLiveCardFor(
   issueId: string | undefined,
 ) {
   if (!options.workItems) return false;
-  const isLive = (item: Card) =>
-    !(options.boards ? isTerminalWorkItem(options.boards, item) : isTerminalFactoryRuleStage(item.stages));
+  const boards = toBoardSource(options.boards);
+  const isLive = (item: Card) => !isTerminalWorkItem(boards.forProject(item), item);
   const byIdentifier = await options.workItems.getByProjectSource({
     orgId,
     factoryProjectId,
@@ -439,10 +434,10 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
 
         // No sources selected means nothing is synced — don't fan out to Linear.
         const selectedIds = selection.sourceIds ?? [];
-        // A board request is also an ingest, so it only ever sees the sources
-        // routed to a board of that Factory project. Sources may be projects or
-        // whole teams; both are keyed by their opaque source id.
-        const intakeBoards = factoryProjectId
+        // A board request only ever sees the sources bound to that Factory
+        // project. Sources may be projects or whole teams; both are keyed by
+        // their opaque source id.
+        const boundSourceIds = factoryProjectId
           ? await scopeSourceIdsToProject({
               intake,
               orgId: resolved.tenant.orgId,
@@ -450,7 +445,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
               selectedIds,
             })
           : null;
-        const routedSourceIds = intakeBoards ? Object.keys(intakeBoards) : selectedIds;
+        const routedSourceIds = boundSourceIds ?? selectedIds;
         if (routedSourceIds.length === 0) {
           return c.json({ issues: [], nextCursor: null });
         }
@@ -465,7 +460,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
           });
           // Source precedence must be resolved against the complete selection,
           // then the winning issues can be narrowed to this Factory project.
-          const routedIssues = intakeBoards
+          const routedIssues = boundSourceIds
             ? issues.filter(issue => issue.sourceId != null && routedSourceIds.includes(issue.sourceId))
             : issues;
           const issuePayload = routedIssues.map(issue => ({
@@ -485,15 +480,6 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
             sourceId: issue.sourceId ?? null,
             projectId: issue.projectId ?? null,
           }));
-          if (factoryProjectId && intakeBoards && options.ingestFactoryIssues) {
-            await options.ingestFactoryIssues({
-              orgId: resolved.tenant.orgId,
-              userId: resolved.tenant.userId,
-              factoryProjectId,
-              issues: issuePayload,
-              intakeBoards,
-            });
-          }
           return c.json({ issues: issuePayload, nextCursor });
         } catch (err) {
           return linearFetchError(loose(c), err);
@@ -534,14 +520,12 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
           return c.json({ error: 'linear_intake_disabled', message: 'Linear intake is turned off in Settings.' }, 404);
         }
         const selectedIds = selection.sourceIds ?? [];
-        const routedSourceIds = Object.keys(
-          await scopeSourceIdsToProject({
-            intake,
-            orgId: resolved.tenant.orgId,
-            factoryProjectId,
-            selectedIds,
-          }),
-        );
+        const routedSourceIds = await scopeSourceIdsToProject({
+          intake,
+          orgId: resolved.tenant.orgId,
+          factoryProjectId,
+          selectedIds,
+        });
         // A card this Factory already ingested stays readable after its issue's
         // winning source moved to a source routed elsewhere: the fetch widens to
         // every selected source (never beyond the selection), and the routing

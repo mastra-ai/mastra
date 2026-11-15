@@ -283,6 +283,21 @@ describe('describeScheduleSource', () => {
     );
   });
 
+  it('keeps a multi-line prompt on one line', () => {
+    expect(describeScheduleSource({ prompt: 'Check CI\n\n  then\treport\r\nfailures ' })).toBe(
+      '"Check CI then report failures"',
+    );
+  });
+
+  it('keeps a multi-line script extra prompt on one line', () => {
+    expect(
+      describeScheduleSource({
+        file: { path: '/w/c.sh', displayPath: './c.sh', mode: 'script' },
+        extraPrompt: 'Summarize\nthe output\n\nbriefly',
+      }),
+    ).toBe('run ./c.sh + "Summarize the output briefly"');
+  });
+
   it('shortens ids to 8 characters', () => {
     expect(shortScheduleId('0f75d166-0763-4c11-9fdc-9280aa16535c')).toBe('0f75d166');
   });

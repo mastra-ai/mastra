@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { chmod, mkdtemp, mkdir, realpath, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -231,6 +231,7 @@ function makeSession(overrides: Partial<SourceControlSession> = {}): SourceContr
     projectRepositoryId: 'pr-1',
     orgId: 'org-1',
     userId: 'user-1',
+    visibility: 'org',
     branch: 'main',
     title: null,
     baseBranch: 'main',
@@ -297,7 +298,14 @@ function seedSessionSandbox(
   return { executeCommand };
 }
 
-function makeSessionFs({ session = makeSession() }: { session?: SourceControlSession } = {}) {
+function makeSessionFs({
+  session = makeSession(),
+  ownThreadResourceId,
+}: {
+  session?: SourceControlSession;
+  /** The memory resource the session's own thread is on; no thread when omitted. */
+  ownThreadResourceId?: string;
+} = {}) {
   const ensureUser = vi.fn(async () => undefined);
   return {
     ensureUser,
@@ -309,6 +317,11 @@ function makeSessionFs({ session = makeSession() }: { session?: SourceControlSes
         isOrganizationAdmin: async () => false,
       },
       sessions: { getBySessionId: vi.fn(async () => session) },
+      controller: {
+        queryThreadById: vi.fn(async () =>
+          ownThreadResourceId ? ({ id: session.sessionId, resourceId: ownThreadResourceId } as never) : null,
+        ),
+      },
     },
   };
 }
@@ -485,6 +498,43 @@ function attachHostSandbox(parent: string, slugs: string[]) {
 describe('live session file tree', () => {
   const names = (listing: { entries: Array<{ name: string; type: string }> }) =>
     listing.entries.map(entry => `${entry.type === 'directory' ? 'd' : 'f'} ${entry.name}`);
+
+  it('reads a submitted plan in a checkout of a multi-repository session', async () => {
+    const { parent } = await seedHostCheckouts(['acme/mastra', 'acme/website']);
+    const planPath = 'mastra/.artifacts/plans/issue-30361.md';
+    await mkdir(join(parent, 'mastra', '.artifacts', 'plans'), { recursive: true });
+    await writeFile(join(parent, 'mastra', '.gitignore'), '.env\n.artifacts/\n');
+    await writeFile(join(parent, planPath), '# Approved scope\n');
+
+    const listing = await listSessionRenderedPath(makeSession(), 'mastra/.artifacts');
+    expect(listing.rootPath).toBe(join(parent, 'mastra', '.artifacts'));
+    expect(listing.entries).toContainEqual(expect.objectContaining({ path: 'plans/issue-30361.md' }));
+    await expect(readSessionWorkspaceFile(makeSession(), planPath)).resolves.toMatchObject({
+      path: planPath,
+      content: '# Approved scope\n',
+    });
+    await expect(listSessionRenderedPath(makeSession(), 'unrelated/.artifacts')).rejects.toThrow(
+      'Root is not approved for rendered workspace access',
+    );
+    await writeFile(join(parent, 'mastra', '.env'), 'SECRET=123');
+    await symlink(join(parent, 'mastra', '.env'), join(parent, 'mastra', '.artifacts', 'plans', 'secret.md'));
+    await expect(readSessionWorkspaceFile(makeSession(), 'mastra/.artifacts/plans/secret.md')).rejects.toThrow(
+      'Path is not available in this session',
+    );
+  });
+
+  it('rejects a symlinked checkout before listing external artifacts', async () => {
+    const { parent } = await seedHostCheckouts(['acme/mastra', 'acme/website']);
+    const outside = await realpath(await mkdtemp(join(tmpdir(), 'factory-external-artifacts-')));
+    await mkdir(join(outside, '.artifacts'), { recursive: true });
+    await writeFile(join(outside, '.artifacts', 'hidden-plan.md'), 'private plan');
+    await rm(join(parent, 'mastra'), { recursive: true });
+    await symlink(outside, join(parent, 'mastra'));
+
+    await expect(listSessionRenderedPath(makeSession(), 'mastra/.artifacts')).rejects.toThrow(
+      'Path is not available in this session',
+    );
+  });
 
   it('lists one directory, folders first, without git internals or ignored entries', async () => {
     await seedHostCheckouts();
@@ -721,10 +771,48 @@ describe('live session file tree', () => {
     expect(ensureUser).toHaveBeenCalledTimes(5);
   });
 
-  it("refuses another user's session before touching its sandbox", async () => {
+  it("refuses another user's private session before touching its sandbox", async () => {
     const { executeCommand } = await seedHostCheckouts();
-    const { deps } = makeSessionFs();
+    const { deps } = makeSessionFs({ session: makeSession({ visibility: 'private' }) });
     deps.auth.tenant = () => ({ orgId: 'org-1', userId: 'someone-else' });
+    const tree = await requestSessionRoute('/web/workspace/tree', deps);
+
+    expect((await tree(`?workspacePath=${makeSession().sessionId}`)).status).toBe(403);
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it("serves another org member's org-visible session on its Factory's memory", async () => {
+    await seedHostCheckouts();
+    const { deps } = makeSessionFs({
+      session: makeSession({ visibility: 'org', factoryProjectId: 'fp-1' }),
+      ownThreadResourceId: 'fp-1',
+    });
+    deps.auth.tenant = () => ({ orgId: 'org-1', userId: 'someone-else' });
+    const tree = await requestSessionRoute('/web/workspace/tree', deps);
+    const rendered = await requestSessionRoute('/web/workspace/rendered/list', deps);
+    const id = makeSession().sessionId;
+
+    expect((await tree(`?workspacePath=${id}&path=src`)).status).toBe(200);
+    expect((await rendered(`?workspacePath=${id}&root=.artifacts`)).status).toBe(200);
+  });
+
+  it("refuses another member an org-visible session still on its owner's memory", async () => {
+    const { executeCommand } = await seedHostCheckouts();
+    const { deps } = makeSessionFs({
+      session: makeSession({ visibility: 'org', factoryProjectId: 'fp-1' }),
+      ownThreadResourceId: 'user-1',
+    });
+    deps.auth.tenant = () => ({ orgId: 'org-1', userId: 'someone-else' });
+    const tree = await requestSessionRoute('/web/workspace/tree', deps);
+
+    expect((await tree(`?workspacePath=${makeSession().sessionId}`)).status).toBe(403);
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('refuses an org-visible session to a caller from another org', async () => {
+    const { executeCommand } = await seedHostCheckouts();
+    const { deps } = makeSessionFs({ session: makeSession({ visibility: 'org' }) });
+    deps.auth.tenant = () => ({ orgId: 'org-2', userId: 'user-1' });
     const tree = await requestSessionRoute('/web/workspace/tree', deps);
 
     expect((await tree(`?workspacePath=${makeSession().sessionId}`)).status).toBe(403);
@@ -733,8 +821,11 @@ describe('live session file tree', () => {
 });
 
 describe('listSessionRenderedPath', () => {
-  it('lists rendered entries from the session sandbox in one command', async () => {
+  it('confines the rendered root before listing session sandbox entries', async () => {
     const { executeCommand } = seedSessionSandbox(script => {
+      if (script.includes('readlink -f')) {
+        return { exitCode: 0, stdout: `${WORKDIR}\0${WORKDIR}/.artifacts\0` };
+      }
       expect(script).toContain(`'${WORKDIR}/.artifacts'`);
       return {
         exitCode: 0,
@@ -756,8 +847,8 @@ describe('listSessionRenderedPath', () => {
       expect.objectContaining({ name: 'understand-pr', path: 'understand-pr', type: 'directory', size: 0 }),
       expect.objectContaining({ name: 'HISTORY.md', path: 'understand-pr/HISTORY.md', type: 'file', size: 5 }),
     ]);
-    expect(executeCommand).toHaveBeenCalledTimes(1);
-    expect(executeCommand.mock.calls[0]?.[2]?.maxRetainedBytes).toBe(Infinity);
+    expect(executeCommand).toHaveBeenCalledTimes(2);
+    expect(executeCommand.mock.calls[1]?.[2]?.maxRetainedBytes).toBe(Infinity);
   });
 
   it('returns an empty listing when this process holds no sandbox for the session', async () => {

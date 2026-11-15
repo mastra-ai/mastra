@@ -5,11 +5,11 @@ import { Entity, EntityContent, EntityName, EntityDescription } from '@mastra/pl
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { useStoredSkills } from '@mastra/react/hooks/agents';
-import { Plus } from 'lucide-react';
 import { useState } from 'react';
-import { useWatch } from 'react-hook-form';
 
+import { useWatch } from 'react-hook-form';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { SkillEditDialog } from './skill-edit-dialog';
 import { SectionHeader } from '@/domains/cms';
@@ -70,7 +70,7 @@ export function SkillsPage() {
           />
 
           {!readOnly && (
-            <Button size="sm" onClick={() => setDialogOpen(true)} icon={<Plus />}>
+            <Button size="sm" onClick={() => setDialogOpen(true)} icon={<IconPlusLarge />}>
               Add a skill
             </Button>
           )}
@@ -105,7 +105,7 @@ export function SkillsPage() {
               descriptionSlot="Create a skill to give your agent specialized knowledge."
               actionSlot={
                 !readOnly ? (
-                  <Button onClick={() => setDialogOpen(true)} icon={<Plus />}>
+                  <Button onClick={() => setDialogOpen(true)} icon={<IconPlusLarge />}>
                     Add a skill
                   </Button>
                 ) : undefined

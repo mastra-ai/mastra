@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createBoardRegistry, defineBoard } from '../boards/index.js';
+import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { decisionOvertaken, decisionRetryable } from './decision-applicability.js';
@@ -74,50 +74,44 @@ describe('decisionOvertaken on the Work board', () => {
   });
 
   it('matches a board installed as work in place of the built-in one by context, not by phase name', async () => {
-    const replacement = createBoardRegistry({
-      boards: [
-        defineBoard({
-          id: 'work',
-          name: 'Work',
-          initialPhase: 'intake',
-          phases: {
-            intake: { kind: 'resting', name: 'Intake', nextPhases: ['design', 'done'] },
-            design: {
-              kind: 'working',
-              name: 'Design',
-              runner: { context: 'work', skill: 'factory-plan' },
-              nextPhases: ['done'],
-            },
-            done: { kind: 'terminal', name: 'Done' },
+    const replacement = boardRegistryOf([
+      defineBoard({
+        id: 'work',
+        name: 'Work',
+        initialPhase: 'intake',
+        phases: {
+          intake: { kind: 'resting', name: 'Intake', nextPhases: ['design', 'done'] },
+          design: {
+            kind: 'working',
+            name: 'Design',
+            runner: { context: 'work', skill: 'factory-plan' },
+            nextPhases: ['done'],
           },
-        }),
-      ],
-      includeDefaultBoards: false,
-    });
+          done: { kind: 'terminal', name: 'Done' },
+        },
+      }),
+    ]);
     expect(await heldInIntakeThenMoved('factory-plan', 'work', 'design', replacement)).toBe(false);
   });
 
   it('matches a replacement work board that reuses the Planning name by context too', async () => {
-    const replacement = createBoardRegistry({
-      boards: [
-        defineBoard({
-          id: 'work',
-          name: 'Work',
-          initialPhase: 'intake',
-          phases: {
-            intake: { kind: 'resting', name: 'Intake', nextPhases: ['planning', 'done'] },
-            planning: {
-              kind: 'working',
-              name: 'Planning',
-              runner: { context: 'work', skill: 'design' },
-              nextPhases: ['done'],
-            },
-            done: { kind: 'terminal', name: 'Done' },
+    const replacement = boardRegistryOf([
+      defineBoard({
+        id: 'work',
+        name: 'Work',
+        initialPhase: 'intake',
+        phases: {
+          intake: { kind: 'resting', name: 'Intake', nextPhases: ['planning', 'done'] },
+          planning: {
+            kind: 'working',
+            name: 'Planning',
+            runner: { context: 'work', skill: 'design' },
+            nextPhases: ['done'],
           },
-        }),
-      ],
-      includeDefaultBoards: false,
-    });
+          done: { kind: 'terminal', name: 'Done' },
+        },
+      }),
+    ]);
     // Built-in Work would hand Planning only factory-plan runs; this board runs its own skill there.
     expect(await heldInIntakeThenMoved('design', 'work', 'planning', replacement)).toBe(false);
   });

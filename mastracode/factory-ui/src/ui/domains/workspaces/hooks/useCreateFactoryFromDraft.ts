@@ -3,7 +3,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
-import { boardCatalogQueryOptions } from '../../../../hooks/useBoardCatalog';
 import { useCreateFactoryMutation, useLinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { useSaveIntakeBindingMutation, useSaveIntakeSelectionMutation } from '../../../../hooks/useIntakeConfig';
 import { fetchIntakeConfig, IntakeBindingConflictError, selectIntakeSource } from '../../factory/services/intake';
@@ -31,7 +30,7 @@ export function useCreateFactoryFromDraft({
   onRepositoryLinked,
   onCreated,
 }: CreateFactoryFromDraftOptions) {
-  const { baseUrl, client } = useApiConfig();
+  const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   const createFactory = useCreateFactoryMutation();
   const linkRepository = useLinkRepositoryMutation();
@@ -39,26 +38,16 @@ export function useCreateFactoryFromDraft({
   const saveLinearSelection = useSaveIntakeSelectionMutation('linear');
   const saveJiraSelection = useSaveIntakeSelectionMutation('jira');
 
-  // Issues belong on Work. An app that replaced the built-in boards leaves the
-  // source routed but boardless, so intake settings prompt for a board instead
-  // of guessing one.
-  const resolveIntakeBoard = async (factoryProjectId: string) => {
-    const { boards } = await queryClient.query(boardCatalogQueryOptions(client, factoryProjectId));
-    return boards.some(board => board.id === 'work') ? 'work' : null;
-  };
-
   const feedProject = async (input: {
     integrationId: 'linear' | 'jira';
     sourceId: string;
     factoryProjectId: string;
-    board: string | null;
   }) => {
     try {
       await saveIntakeBinding.mutateAsync({
         integrationId: input.integrationId,
         sourceId: input.sourceId,
         factoryProjectId: input.factoryProjectId,
-        board: input.board,
       });
     } catch (error) {
       // A Jira project already feeding another factory with all its issues is not taken over; the
@@ -89,7 +78,6 @@ export function useCreateFactoryFromDraft({
         await onRepositoryLinked(linked.projectRepositoryId);
       }
 
-      const board = draft.linearProjectId || draft.jiraProjectId ? await resolveIntakeBoard(factory.id) : null;
       await Promise.all([
         updateFactoryDefaultModel(baseUrl, factory.id, modelId),
         draft.linearProjectId
@@ -97,11 +85,10 @@ export function useCreateFactoryFromDraft({
               integrationId: 'linear',
               sourceId: draft.linearProjectId,
               factoryProjectId: factory.id,
-              board,
             })
           : undefined,
         draft.jiraProjectId
-          ? feedProject({ integrationId: 'jira', sourceId: draft.jiraProjectId, factoryProjectId: factory.id, board })
+          ? feedProject({ integrationId: 'jira', sourceId: draft.jiraProjectId, factoryProjectId: factory.id })
           : undefined,
       ]);
       await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });

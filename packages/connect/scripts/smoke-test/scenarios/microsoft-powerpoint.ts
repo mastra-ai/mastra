@@ -1,8 +1,6 @@
 import type { Scenario, ScenarioStep } from '../scenario.js';
+import { buildMinimalPptx } from '../ooxml.js';
 import { errorMessage, makeStep, probeTool, requireTools } from '../scenario.js';
-
-const POWERPOINT_CONTENT =
-  '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';
 
 const ESSENTIAL_TOOLS = [
   'microsoft_powerpoint_create_presentation',
@@ -23,8 +21,9 @@ function isAccountCapabilityError(error: unknown): boolean {
 
 /**
  * Full Microsoft PowerPoint lifecycle against a disposable presentation in
- * an accessible tenant drive. The tiny PPTX fixture is the same valid OOXML
- * package used by the upstream integration template tests.
+ * an accessible tenant drive. The presentation is a minimal but complete
+ * OOXML package (master, layout, theme, slide) so Office can render and
+ * export it.
  */
 export const microsoftPowerpointScenario: Scenario = {
   integrationId: 'microsoft-powerpoint',
@@ -204,7 +203,7 @@ export const microsoftPowerpointScenario: Scenario = {
       const created = await call<{ id: string; name: string }>('microsoft_powerpoint_create_presentation', {
         driveId,
         filename: originalFilename,
-        content: POWERPOINT_CONTENT,
+        content: buildMinimalPptx(runId).toString('base64'),
       });
       originalId = created.id;
       steps.push(makeStep('create presentation', 'microsoft_powerpoint_create_presentation', 'pass', created.id));
@@ -369,7 +368,7 @@ export const microsoftPowerpointScenario: Scenario = {
         await call('microsoft_powerpoint_update_presentation_content', {
           driveId,
           itemId: originalId,
-          content: POWERPOINT_CONTENT,
+          content: buildMinimalPptx(`${runId} updated`).toString('base64'),
         });
         steps.push(makeStep('update content', 'microsoft_powerpoint_update_presentation_content', 'pass'));
       } catch (error) {
@@ -516,25 +515,34 @@ export const microsoftPowerpointScenario: Scenario = {
     }
 
     if (copyAttempted) {
+      // The copy runs asynchronously and lands next to the original in the drive root. Page root children
+      // instead of using search: search reads a lagging index, so a finished copy can stay invisible for minutes.
+      const COPY_WAIT_MS = 60_000;
+      const deadline = Date.now() + COPY_WAIT_MS;
       let searchError: unknown;
-      for (let attempt = 0; attempt < 10 && copyIds.size === 0; attempt++) {
-        if (attempt > 0) await delay(1_000);
+      while (copyIds.size === 0 && Date.now() < deadline) {
         try {
-          const result = await call<{ items: Array<{ id: string; name: string }> }>(
-            'microsoft_powerpoint_list_presentations',
-            { drive_id: driveId, query: copyName },
-          );
-          for (const item of result.items) {
-            if (item.name === copyName) copyIds.add(item.id);
-          }
+          let cursor: string | undefined;
+          do {
+            const page: { items: Array<{ id: string; name: string }>; next_cursor?: string } = await call(
+              'microsoft_powerpoint_list_presentations',
+              { drive_id: driveId, ...(cursor && { cursor }) },
+            );
+            for (const item of page.items) {
+              if (item.name === copyName) copyIds.add(item.id);
+            }
+            cursor = page.next_cursor;
+          } while (cursor && copyIds.size === 0);
+          searchError = undefined;
         } catch (error) {
           searchError = error;
         }
+        if (copyIds.size === 0) await delay(2_000);
       }
       if (copyIds.size === 0) {
         const detail = searchError
           ? errorMessage(searchError)
-          : `copy ${copyName} did not become visible within 10 seconds`;
+          : `copy ${copyName} did not appear in the drive root within ${COPY_WAIT_MS / 1000} seconds`;
         log.error(`Could not locate copied presentation ${copyName} — clean up manually.`, detail);
         steps.push(makeStep('locate copied presentation', 'microsoft_powerpoint_list_presentations', 'fail', detail));
       } else {

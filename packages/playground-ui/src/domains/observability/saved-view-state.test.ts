@@ -241,3 +241,19 @@ describe("the page's default date preset", () => {
     expect(applySavedView(view, new URLSearchParams()).params.has(TRACE_DATE_PRESET_PARAM)).toBe(false);
   });
 });
+
+describe.each(['traces', 'spans'] as const)('text search in %s saved views', page => {
+  describe('when a search is saved', () => {
+    it('restores the term when the view is applied', () => {
+      const state = savedViewFromSearchParams(page, new URLSearchParams('textSearch=needle'));
+      const applied = applySavedView(state, new URLSearchParams('textSearch=other'));
+      expect(applied.params.get('textSearch')).toBe('needle');
+    });
+  });
+  describe('when a view has no search', () => {
+    it('clears a search left by the previous view', () => {
+      const state = savedViewFromSearchParams(page, new URLSearchParams());
+      expect(applySavedView(state, new URLSearchParams('textSearch=old')).params.has('textSearch')).toBe(false);
+    });
+  });
+});

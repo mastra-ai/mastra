@@ -1,4 +1,5 @@
 import { workItemPhaseSemantics } from '../../boards/index.js';
+import { toBoardSource } from '../../boards/project-boards.js';
 import type { IntegrationContext } from '../base.js';
 import {
   githubItemSources,
@@ -87,7 +88,8 @@ export function createGithubIssueReconciler(
         const carded = new Set<number>();
 
         for (const project of projects) {
-          const items = await options.storage.list({
+          await rules.loadBoards(project);
+          const items = await options.storage.listShared({
             orgId: project.orgId,
             factoryProjectId: project.factoryProjectId,
           });
@@ -95,7 +97,7 @@ export function createGithubIssueReconciler(
             const issueNumber = reconcilableIssueNumber(item, repository);
             if (!issueNumber) continue;
             carded.add(issueNumber);
-            if (workItemPhaseSemantics(options.boards, item)?.kind === 'terminal') continue;
+            if (workItemPhaseSemantics(toBoardSource(options.boards).forProject(item), item)?.kind === 'terminal') continue;
             let list = itemsByNumber.get(issueNumber);
             if (!list) {
               list = [];
@@ -124,7 +126,7 @@ export function createGithubIssueReconciler(
                 factoryProjectId: project.factoryProjectId,
                 sources: uncarded.flatMap(issue => githubItemSources(repository.id, 'issue', issue.number)),
               });
-              const items = await options.storage.list({
+              const items = await options.storage.listShared({
                 orgId: project.orgId,
                 factoryProjectId: project.factoryProjectId,
               });

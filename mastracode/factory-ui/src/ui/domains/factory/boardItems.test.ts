@@ -33,7 +33,7 @@ function workItem(overrides: Partial<WorkItem> = {}): WorkItem {
     stageHistory: [],
     sessions: {},
     metadata: { githubPullRequestNumber: 22765, author: 'LekoArts' },
-    commentCount: 0,
+    description: null,
     revision: 1,
     createdAt: '2026-09-02T12:00:00.000Z',
     updatedAt: '2026-09-02T12:00:00.000Z',
@@ -89,6 +89,12 @@ describe('workItemMeta', () => {
       workItemMeta(workItem({ source: 'gitlab-pr', metadata: { gitlabMergeRequestIid: 5, author: 'Rhys' } })),
     ).toEqual(['!5', 'Rhys', 'just now']);
     expect(externalLinkLabel('gitlab-pr')).toBe('Open in GitLab');
+  });
+
+  it('names a card filed by hand by its card number', () => {
+    expect(
+      workItemMeta(workItem({ source: 'manual', sourceKey: null, url: null, metadata: { cardNumber: 12 } })),
+    ).toEqual(['#12', 'just now']);
   });
 });
 
@@ -299,5 +305,53 @@ describe('persistedSourceKeys', () => {
         url: 'https://github.com/acme/repo/pull/22765',
       }),
     ).toBe(true);
+  });
+
+  it("counts a pull request attached to an issue card as filed, so Intake doesn't offer it again", () => {
+    const pullRequest = {
+      id: 'source-pr',
+      workItemId: 'work-1',
+      provider: 'github' as const,
+      integrationId: 'github',
+      sourceType: 'pull-request',
+      workspaceId: null,
+      externalId: 'pull-request:github:10:pull-request:2',
+      sourceKey: 'github:pull-request:github:10:pull-request:2',
+      key: null,
+      url: 'https://github.com/acme/repo/pull/2',
+      state: 'open',
+      labels: [],
+      author: null,
+      metadata: { githubPullRequestNumber: 2 },
+      revision: 1,
+      syncedAt: null,
+      createdAt: new Date('2026-09-02T12:00:00.000Z'),
+      updatedAt: new Date('2026-09-02T12:00:00.000Z'),
+    };
+    const issueCard = workItem({
+      source: 'github-issue',
+      sourceKey: 'github:10:issue:1',
+      url: 'https://github.com/acme/repo/issues/1',
+      metadata: { githubIssueNumber: 1, githubRepositoryId: 10 },
+      workItem: {
+        provider: 'github',
+        key: null,
+        url: 'https://github.com/acme/repo/issues/1',
+        title: 'init repo',
+        state: 'open',
+        labels: [],
+        author: null,
+        metadata: {},
+        sources: [pullRequest],
+      },
+    });
+
+    const keys = persistedSourceKeys([issueCard]);
+
+    expect(isPersistedCandidate(keys, { sourceKey: 'github:10:pull-request:2', url: '' })).toBe(true);
+    expect(isPersistedCandidate(keys, { sourceKey: 'none', url: 'https://github.com/acme/repo/pull/2' })).toBe(true);
+    expect(
+      isPersistedCandidate(keys, { sourceKey: 'github:10:pull-request:3', url: 'https://github.com/acme/repo/pull/3' }),
+    ).toBe(false);
   });
 });

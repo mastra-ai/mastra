@@ -182,7 +182,7 @@ type InputShared_Auxiliary_278 =
           };
     };
 
-type InputShared_Auxiliary_732 =
+type InputShared_Auxiliary_735 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -227,27 +227,27 @@ type InputShared_Auxiliary_732 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_732[];
+      args: InputShared_Auxiliary_735[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_732;
+      arg: InputShared_Auxiliary_735;
     };
 
-type InputShared_Auxiliary_806 = {
+type InputShared_Auxiliary_809 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_806[] | undefined;
+  children?: InputShared_Auxiliary_809[] | undefined;
 };
 
-type Shared_Auxiliary_795 = {
+type Shared_Auxiliary_799 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_795[] | undefined;
+  children?: Shared_Auxiliary_799[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -1849,7 +1849,7 @@ type InputShared_Type_89 = {
       }
     | undefined;
   steps: InputShared_Type_84[];
-  predicates: InputShared_Auxiliary_732[];
+  predicates: InputShared_Auxiliary_735[];
 };
 
 type InputShared_Type_90 = {
@@ -1863,7 +1863,7 @@ type InputShared_Type_90 = {
     | undefined;
   step: InputShared_Type_84;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_732;
+  predicate: InputShared_Auxiliary_735;
 };
 
 type InputShared_Type_91 =
@@ -3556,7 +3556,7 @@ type Shared_Type_62 = {
     | undefined;
   /** Milliseconds from the model call to the first token received; null when unknown */
   timeToFirstTokenMs?: (number | null) | undefined;
-  /** Errors in this span and all nested spans; null when unknown */
+  /** Failures originating directly on this span; null when unknown */
   errorCount?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
@@ -3695,7 +3695,7 @@ type Shared_Type_64 = {
     | undefined;
   /** Milliseconds from the model call to the first token received; null when unknown */
   timeToFirstTokenMs?: (number | null) | undefined;
-  /** Errors in this span and all nested spans; null when unknown */
+  /** Failures originating directly on this span; null when unknown */
   errorCount?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
@@ -3706,6 +3706,9 @@ type Shared_Type_64 = {
 type Shared_Type_65 = {
   traceId: string;
   rootSpanId: string;
+  rootKind?: ('native' | 'external') | undefined;
+  runtimeDurationMs?: (number | null) | undefined;
+  errorCount?: (number | null) | undefined;
   name: string;
   entityId: string | null;
   parentSpanId: string | null;
@@ -3884,6 +3887,12 @@ type Shared_Type_69 = {
   deltaPolling: boolean;
   /** Advanced trace queries (POST /observability/traces/query). When false, list traces with GET /observability/traces/light instead. */
   traceQuery: boolean;
+  /** Supports explicit `rootSource: 'aggregated'` trace queries */
+  traceQueryAggregatedRoots: boolean;
+  /** Literal substring search across any span in a trace */
+  traceQueryTextSearch: boolean;
+  /** Literal substring search within individual spans */
+  spanQueryTextSearch: boolean;
   /** `durationMs` predicates in trace and thread queries */
   traceQueryRootDuration: boolean;
   /** `runId`, `sessionId`, `userId` and `organizationId` predicates in trace and thread queries */
@@ -3916,6 +3925,10 @@ type Shared_Type_69 = {
   threadQueryRows: boolean;
   /** Span queries (POST /observability/spans/query) */
   spanQuery: boolean;
+  /** Whether completed spans can be sorted by duration */
+  spanQueryDurationSort: boolean;
+  /** Whether spans can be sorted by model and provider */
+  spanQueryModelProviderSort: boolean;
   /** Additional identity, context and parent/root entity predicates in span queries. Treat a missing value as unavailable. */
   spanQueryContextFields: boolean;
   /** `model` and `provider` predicates in span queries and span aggregates. Treat a missing value as unavailable. */
@@ -3930,6 +3943,8 @@ type Shared_Type_69 = {
   traceQueryOutcomeFields: boolean;
   /** Days of traces the store keeps. Older traces are gone, so clients can stop users from picking dates before them. Omitted when the store does not report a limit. */
   traceRetentionDays?: number | undefined;
+  /** Full feedback replacement with PUT */
+  feedbackReplacement: boolean;
   /** Feedback endpoints (/observability/feedback and /observability/feedback/*). Unsupported feedback routes return 501. */
   feedback: boolean;
 };
@@ -4489,7 +4504,7 @@ type Shared_Type_88 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_795[] | undefined;
+  files?: Shared_Auxiliary_799[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -5282,7 +5297,9 @@ type Shared_Type_125 = {
   threadId?: string | undefined;
   resourceId?: string | undefined;
   prompt: string;
-  cron: string;
+  cron?: string | undefined;
+  runAt?: number | undefined;
+  endAt?: number | undefined;
   timezone?: string | undefined;
   status: 'active' | 'paused' | 'completed';
   nextFireAt: number;
@@ -5334,7 +5351,9 @@ type Shared_Type_127 = {
   id: string;
   workflowId: string;
   agentId?: undefined | undefined;
-  cron: string;
+  cron?: string | undefined;
+  runAt?: number | undefined;
+  endAt?: number | undefined;
   timezone?: string | undefined;
   status: 'active' | 'paused' | 'completed';
   nextFireAt: number;
@@ -9676,6 +9695,32 @@ export interface GetMemoryThreadsThreadIdWorkingMemory_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /memory/working-memory
+// ============================================================================
+export type GetMemoryWorkingMemory_QueryParams = GetMemoryThreadsThreadIdWorkingMemory_QueryParams;
+
+export type GetMemoryWorkingMemory_Response = GetMemoryThreadsThreadIdWorkingMemory_Response;
+
+export type GetMemoryWorkingMemory_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (GetMemoryWorkingMemory_QueryParams extends never
+      ? {}
+      : {} extends GetMemoryWorkingMemory_QueryParams
+        ? { query?: GetMemoryWorkingMemory_QueryParams }
+        : { query: GetMemoryWorkingMemory_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetMemoryWorkingMemory_RouteContract {
+  pathParams: never;
+  queryParams: GetMemoryWorkingMemory_QueryParams;
+  body: never;
+  request: GetMemoryWorkingMemory_Request;
+  response: GetMemoryWorkingMemory_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /memory/save-messages
 // ============================================================================
 export type PostMemorySaveMessages_QueryParams = GetMemoryConfig_QueryParams;
@@ -11059,6 +11104,8 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'WORKFLOW'
           | 'TRAJECTORY'
           | 'STEP'
+          | 'SCORER'
+          | 'PROCESSOR'
           | 'EXTERNAL'
           | 'agent_run'
           | 'scorer_run'
@@ -11146,6 +11193,8 @@ export interface GetObservabilityTracesTraceIdSpanIdScores_RouteContract {
 // Route: POST /observability/traces/query
 // ============================================================================
 export type PostObservabilityTracesQuery_Body = {
+  rootSource?: ('legacy' | 'aggregated') | undefined;
+  textSearch?: string | undefined;
   timeRange: {
     from: string;
     to: string;
@@ -11489,8 +11538,9 @@ export type PostObservabilitySpansQuery_Body = {
     to: string;
   };
   where?: InputShared_Auxiliary_231 | undefined;
+  textSearch?: string | undefined;
   orderBy?: {
-    field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs';
+    field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs' | 'durationMs' | 'model' | 'provider';
     direction: 'asc' | 'desc';
   }[];
   page?: {
@@ -12606,6 +12656,94 @@ export interface PostObservabilityFeedback_RouteContract {
   body: PostObservabilityFeedback_Body;
   request: PostObservabilityFeedback_Request;
   response: PostObservabilityFeedback_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PUT /observability/feedback/:feedbackId
+// ============================================================================
+export type PutObservabilityFeedbackFeedbackId_PathParams = GetObservabilityFeedbackFeedbackId_PathParams;
+
+export type PutObservabilityFeedbackFeedbackId_Body = {
+  /** Context handling; defaults to provided on OSS and resolve on Platform */
+  contextMode?: ('resolve' | 'provided') | undefined;
+  feedback: {
+    feedbackId: string;
+    /** Unique trace identifier */
+    traceId: string;
+    /** Span ID this feedback applies to */
+    spanId?: (string | null) | undefined;
+    feedbackSource?: (string | null) | undefined;
+    source?: (string | null) | undefined;
+    /** Type of feedback (e.g., 'thumbs', 'rating', 'correction') */
+    feedbackType: string;
+    /** Feedback value (rating number or correction text) */
+    value: number | string;
+    comment?: (string | null) | undefined;
+    feedbackUserId?: (string | null) | undefined;
+    entityType?: (InputShared_Type_15 | null) | undefined;
+    entityId?: (string | null) | undefined;
+    entityName?: (string | null) | undefined;
+    parentEntityType?: (InputShared_Type_15 | null) | undefined;
+    parentEntityId?: (string | null) | undefined;
+    parentEntityName?: (string | null) | undefined;
+    rootEntityType?: (InputShared_Type_15 | null) | undefined;
+    rootEntityId?: (string | null) | undefined;
+    rootEntityName?: (string | null) | undefined;
+    userId?: (string | null) | undefined;
+    organizationId?: (string | null) | undefined;
+    resourceId?: (string | null) | undefined;
+    runId?: (string | null) | undefined;
+    sessionId?: (string | null) | undefined;
+    threadId?: (string | null) | undefined;
+    requestId?: (string | null) | undefined;
+    environment?: (string | null) | undefined;
+    serviceName?: (string | null) | undefined;
+    scope?:
+      | ({
+          [key: string]: unknown;
+        } | null)
+      | undefined;
+    entityVersionId?: (string | null) | undefined;
+    parentEntityVersionId?: (string | null) | undefined;
+    rootEntityVersionId?: (string | null) | undefined;
+    experimentId?: (string | null) | undefined;
+    executionSource?: (string | null) | undefined;
+    tags?: (string[] | null) | undefined;
+    /** ID of the source record this feedback is linked to (e.g. experiment result ID) */
+    sourceId?: (string | null) | undefined;
+    /** User-defined metadata */
+    metadata?:
+      | ({
+          [key: string]: unknown;
+        } | null)
+      | undefined;
+    /** Feedback review workflow status */
+    reviewStatus?: ('needs-review' | 'reviewed') | undefined;
+    timestamp: string;
+  };
+};
+
+export type PutObservabilityFeedbackFeedbackId_Response = PostObservabilityFeedback_Response;
+
+export type PutObservabilityFeedbackFeedbackId_Request = Simplify<
+  (PutObservabilityFeedbackFeedbackId_PathParams extends never
+    ? {}
+    : { params: PutObservabilityFeedbackFeedbackId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutObservabilityFeedbackFeedbackId_Body extends never
+      ? {}
+      : {} extends PutObservabilityFeedbackFeedbackId_Body
+        ? { body?: PutObservabilityFeedbackFeedbackId_Body }
+        : { body: PutObservabilityFeedbackFeedbackId_Body })
+>;
+
+export interface PutObservabilityFeedbackFeedbackId_RouteContract {
+  pathParams: PutObservabilityFeedbackFeedbackId_PathParams;
+  queryParams: never;
+  body: PutObservabilityFeedbackFeedbackId_Body;
+  request: PutObservabilityFeedbackFeedbackId_Request;
+  response: PutObservabilityFeedbackFeedbackId_Response;
   responseType: 'json';
 }
 
@@ -15529,6 +15667,77 @@ export interface PostWorkflowsWorkflowIdObserveStreamLegacy_RouteContract {
   request: PostWorkflowsWorkflowIdObserveStreamLegacy_Request;
   response: PostWorkflowsWorkflowIdObserveStreamLegacy_Response;
   responseType: 'stream';
+}
+
+// ============================================================================
+// Route: ALL /mcp
+// ============================================================================
+export type AllMcp_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface AllMcp_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: AllMcp_Request;
+  response: unknown;
+  responseType: 'mcp-http';
+}
+
+// ============================================================================
+// Route: GET /mcp/builtin
+// ============================================================================
+export type GetMcpBuiltin_Response =
+  | {
+      enabled: false;
+      /** 'config': server.mcp.enabled is false. 'production-without-auth': not under mastra dev and no server.auth */
+      disabledReason: 'config' | 'production-without-auth';
+    }
+  | {
+      enabled: true;
+      /** Endpoint path including the API prefix, e.g. /api/mcp */
+      path: string;
+      /** Whether @mastra/mcp is installed; the endpoint answers 501 without it */
+      mcpPackageInstalled: boolean;
+      /** Configured toolsets this server can serve */
+      toolsets: (
+        | 'agents'
+        | 'workflows'
+        | 'tools'
+        | 'memory'
+        | 'observability'
+        | 'observability_analytics'
+        | 'stored_agents'
+      )[];
+      readOnly: boolean;
+      auth:
+        | {
+            type: 'open';
+            /** Open because of the mastra dev default, not server.mcp.enabled: true */
+            devOnly: boolean;
+          }
+        | {
+            type: 'protected';
+            provider: string | null;
+          };
+    };
+
+export type GetMcpBuiltin_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetMcpBuiltin_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetMcpBuiltin_Request;
+  response: GetMcpBuiltin_Response;
+  responseType: 'json';
 }
 
 // ============================================================================
@@ -20113,7 +20322,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_806[] | undefined;
+  files?: InputShared_Auxiliary_809[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -20171,7 +20380,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_806[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_809[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -22442,6 +22651,8 @@ export type GetDatasetsDatasetIdExperimentsExperimentIdResults_QueryParams = {
   perPage?: number | undefined;
   /** Only return results that have all of these tags */
   tags?: string[] | undefined;
+  /** Only return results with this review status */
+  status?: ('needs-review' | 'reviewed' | 'complete') | undefined;
   orderBy?:
     | (
         | {
@@ -22531,6 +22742,8 @@ export interface PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Ro
 // ============================================================================
 export type PostDatasetsDatasetIdCompare_PathParams = GetDatasetsDatasetId_PathParams;
 
+export type PostDatasetsDatasetIdCompare_QueryParams = GetDatasetsDatasetId_QueryParams;
+
 export type PostDatasetsDatasetIdCompare_Body =
   | {
       /** IDs of the experiments to compare (2 to 10). Each one gets a result entry per item. */
@@ -22564,7 +22777,11 @@ export type PostDatasetsDatasetIdCompare_Response = {
 
 export type PostDatasetsDatasetIdCompare_Request = Simplify<
   (PostDatasetsDatasetIdCompare_PathParams extends never ? {} : { params: PostDatasetsDatasetIdCompare_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostDatasetsDatasetIdCompare_QueryParams extends never
+      ? {}
+      : {} extends PostDatasetsDatasetIdCompare_QueryParams
+        ? { query?: PostDatasetsDatasetIdCompare_QueryParams }
+        : { query: PostDatasetsDatasetIdCompare_QueryParams }) &
     (PostDatasetsDatasetIdCompare_Body extends never
       ? {}
       : {} extends PostDatasetsDatasetIdCompare_Body
@@ -22574,7 +22791,7 @@ export type PostDatasetsDatasetIdCompare_Request = Simplify<
 
 export interface PostDatasetsDatasetIdCompare_RouteContract {
   pathParams: PostDatasetsDatasetIdCompare_PathParams;
-  queryParams: never;
+  queryParams: PostDatasetsDatasetIdCompare_QueryParams;
   body: PostDatasetsDatasetIdCompare_Body;
   request: PostDatasetsDatasetIdCompare_Request;
   response: PostDatasetsDatasetIdCompare_Response;
@@ -23817,7 +24034,9 @@ export type PostSchedules_Body =
   | {
       id?: string | undefined;
       agentId: string;
-      cron: string;
+      cron?: string | undefined;
+      runAt?: number | undefined;
+      endAt?: number | undefined;
       timezone?: string | undefined;
       prompt: string;
       name?: string | undefined;
@@ -23846,7 +24065,9 @@ export type PostSchedules_Body =
   | {
       id?: string | undefined;
       workflowId: string;
-      cron: string;
+      cron?: string | undefined;
+      runAt?: number | undefined;
+      endAt?: number | undefined;
       timezone?: string | undefined;
       inputData?: unknown | undefined;
       initialState?: unknown | undefined;
@@ -23891,6 +24112,8 @@ export type PatchSchedulesScheduleId_PathParams = GetSchedulesScheduleId_PathPar
 
 export type PatchSchedulesScheduleId_Body = {
   cron?: string | undefined;
+  runAt?: number | undefined;
+  endAt?: (number | null) | undefined;
   timezone?: string | undefined;
   status?: ('active' | 'paused') | undefined;
   metadata?:
@@ -25925,6 +26148,7 @@ export interface RouteTypes {
   'GET /memory/threads/:threadId': GetMemoryThreadsThreadId_RouteContract;
   'GET /memory/threads/:threadId/messages': GetMemoryThreadsThreadIdMessages_RouteContract;
   'GET /memory/threads/:threadId/working-memory': GetMemoryThreadsThreadIdWorkingMemory_RouteContract;
+  'GET /memory/working-memory': GetMemoryWorkingMemory_RouteContract;
   'POST /memory/save-messages': PostMemorySaveMessages_RouteContract;
   'POST /memory/threads': PostMemoryThreads_RouteContract;
   'PATCH /memory/threads/:threadId': PatchMemoryThreadsThreadId_RouteContract;
@@ -25980,6 +26204,7 @@ export interface RouteTypes {
   'GET /observability/feedback': GetObservabilityFeedback_RouteContract;
   'GET /observability/feedback/:feedbackId': GetObservabilityFeedbackFeedbackId_RouteContract;
   'POST /observability/feedback': PostObservabilityFeedback_RouteContract;
+  'PUT /observability/feedback/:feedbackId': PutObservabilityFeedbackFeedbackId_RouteContract;
   'DELETE /observability/feedback': DeleteObservabilityFeedback_RouteContract;
   'PATCH /observability/feedback/:feedbackId/review-status': PatchObservabilityFeedbackFeedbackIdReviewStatus_RouteContract;
   'POST /observability/feedback/aggregate': PostObservabilityFeedbackAggregate_RouteContract;
@@ -26046,6 +26271,8 @@ export interface RouteTypes {
   'POST /agents/:agentId/stream-legacy': PostAgentsAgentIdStreamLegacy_RouteContract;
   'POST /workflows/:workflowId/stream-legacy': PostWorkflowsWorkflowIdStreamLegacy_RouteContract;
   'POST /workflows/:workflowId/observe-stream-legacy': PostWorkflowsWorkflowIdObserveStreamLegacy_RouteContract;
+  'ALL /mcp': AllMcp_RouteContract;
+  'GET /mcp/builtin': GetMcpBuiltin_RouteContract;
   'GET /mcp/v0/servers': GetMcpV0Servers_RouteContract;
   'GET /mcp/v0/servers/:id': GetMcpV0ServersId_RouteContract;
   'GET /mcp/:serverId/tools': GetMcpServerIdTools_RouteContract;
@@ -26793,6 +27020,9 @@ export interface Client {
   '/logs/transports': {
     GET: GetLogsTransports_RouteContract;
   };
+  '/mcp': {
+    ALL: AllMcp_RouteContract;
+  };
   '/mcp/:serverId/events': {
     GET: GetMcpServerIdEvents_RouteContract;
   };
@@ -26840,6 +27070,9 @@ export interface Client {
   };
   '/mcp/:serverId/tools/:toolId/execute': {
     POST: PostMcpServerIdToolsToolIdExecute_RouteContract;
+  };
+  '/mcp/builtin': {
+    GET: GetMcpBuiltin_RouteContract;
   };
   '/mcp/v0/servers': {
     GET: GetMcpV0Servers_RouteContract;
@@ -26911,6 +27144,9 @@ export interface Client {
     GET: GetMemoryThreadsThreadIdWorkingMemory_RouteContract;
     POST: PostMemoryThreadsThreadIdWorkingMemory_RouteContract;
   };
+  '/memory/working-memory': {
+    GET: GetMemoryWorkingMemory_RouteContract;
+  };
   '/observability/branches': {
     GET: GetObservabilityBranches_RouteContract;
   };
@@ -26948,6 +27184,7 @@ export interface Client {
   };
   '/observability/feedback/:feedbackId': {
     GET: GetObservabilityFeedbackFeedbackId_RouteContract;
+    PUT: PutObservabilityFeedbackFeedbackId_RouteContract;
   };
   '/observability/feedback/:feedbackId/review-status': {
     PATCH: PatchObservabilityFeedbackFeedbackIdReviewStatus_RouteContract;

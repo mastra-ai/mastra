@@ -133,16 +133,17 @@ function fallbackStatusFromMetadata(
   return undefined;
 }
 
-export async function syncInitialThreadState(state: TUIState): Promise<void> {
+export async function syncInitialThreadState(state: TUIState, isCurrent: () => boolean = () => true): Promise<void> {
   const initThreadId = state.session.thread.getId();
   if (!initThreadId) {
     setCurrentThreadTitle(state, undefined);
     state.fallbackStatus = undefined;
     return;
   }
+  const ownsUpdate = () => isCurrent() && state.session.thread.getId() === initThreadId;
 
   const initThreads = await state.session.thread.list();
-  if (state.session.thread.getId() !== initThreadId) return;
+  if (!ownsUpdate()) return;
 
   const initThread = initThreads.find(t => t.id === initThreadId);
   const metadata = initThread?.metadata as Record<string, unknown> | undefined;
@@ -165,11 +166,11 @@ export async function syncInitialThreadState(state: TUIState): Promise<void> {
       [MODEL_FALLBACK_STATE_KEY]: validPendingFallback,
     };
     const applied = state.session.state.setIf
-      ? await state.session.state.setIf(updates, () => state.session.thread.getId() === initThreadId)
-      : state.session.thread.getId() === initThreadId
+      ? await state.session.state.setIf(updates, ownsUpdate)
+      : ownsUpdate()
         ? await state.session.state.set(updates).then(() => true)
         : false;
-    if (!applied || state.session.thread.getId() !== initThreadId) return;
+    if (!applied || !ownsUpdate()) return;
   }
 
   setCurrentThreadTitle(state, initThread?.title);
@@ -178,7 +179,7 @@ export async function syncInitialThreadState(state: TUIState): Promise<void> {
   // Prefer the durable ThreadState objective; fall back to the legacy
   // thread-metadata goal for threads created before the migration.
   if (state.local) await state.goalManager.loadFromThread(state.local);
-  if (state.session.thread.getId() !== initThreadId) return;
+  if (!ownsUpdate()) return;
   if (!state.goalManager.getGoal()) {
     state.goalManager.loadFromThreadMetadata(metadata);
   }
@@ -210,6 +211,7 @@ export class MastraTUI {
   private cleanupKeyHandlers?: () => void;
   private cleanupPluginReloadListener?: () => void;
   private cleanupPluginUpdateListener?: () => void;
+  private cleanupPluginErrorListener?: () => void;
   private cleanupBackgroundCompletionListener?: () => void;
   private backgroundNoticeQueue = Promise.resolve();
   private lastStreamError: string | null = null;
@@ -409,6 +411,7 @@ export class MastraTUI {
    */
   async run(): Promise<void> {
     await this.init();
+    if (this.stopped) return;
 
     // Run SessionStart hooks (fire and forget)
     const hookMgr = this.state.hookManager;
@@ -420,7 +423,9 @@ export class MastraTUI {
     // submitted exactly like typed input, so slash commands and skills work too.
     if (this.state.options.initialMessage) {
       const { resumeSkipNotice } = this.state.options;
-      if (resumeSkipNotice && (await this.resumedConversation())) {
+      const resumed = resumeSkipNotice ? await this.resumedConversation() : false;
+      if (this.stopped) return;
+      if (resumeSkipNotice && resumed) {
         showInfo(this.state, resumeSkipNotice);
       } else {
         await this.submitUserInput(this.state.options.initialMessage);
@@ -429,8 +434,9 @@ export class MastraTUI {
 
     // Main interactive loop — never blocks on streaming,
     // so the editor stays responsive for queued follow-ups.
-    while (true) {
+    while (!this.stopped) {
       const userInput = await this.getUserInput();
+      if (this.stopped) return;
       // allow space as transparent continue (for recovering from api errors manually)
       if (!userInput.trim() && userInput !== ' ') continue;
       await this.submitUserInput(userInput);
@@ -477,6 +483,7 @@ export class MastraTUI {
 
       const optimisticMessageId = this.renderOptimisticUserMessage(content, images);
       const allowed = await this.runUserPromptHook(userInput);
+      if (this.stopped) return;
       if (!allowed) {
         this.removeOptimisticUserMessage(optimisticMessageId);
         return;
@@ -607,10 +614,14 @@ export class MastraTUI {
       return;
     }
 
-    pendingThread.then(send).catch((error: unknown) => {
-      this.removeOptimisticUserMessage(optimisticMessageId);
-      showSessionError(this.state, error);
-    });
+    pendingThread
+      .then(() => {
+        if (!this.stopped) send();
+      })
+      .catch((error: unknown) => {
+        this.removeOptimisticUserMessage(optimisticMessageId);
+        showSessionError(this.state, error);
+      });
   }
 
   private signalMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
@@ -719,6 +730,11 @@ export class MastraTUI {
       this.cleanupKeyHandlers = undefined;
     }
 
+    // Typed input must not reach the agent once stopped.
+    this.state.editor.onSubmit = undefined;
+    this.pendingUserInputResolve = undefined;
+    this.queuedUserInput = [];
+
     if (this.cleanupPluginReloadListener) {
       this.cleanupPluginReloadListener();
       this.cleanupPluginReloadListener = undefined;
@@ -727,6 +743,11 @@ export class MastraTUI {
     if (this.cleanupPluginUpdateListener) {
       this.cleanupPluginUpdateListener();
       this.cleanupPluginUpdateListener = undefined;
+    }
+
+    if (this.cleanupPluginErrorListener) {
+      this.cleanupPluginErrorListener();
+      this.cleanupPluginErrorListener = undefined;
     }
 
     if (this.cleanupBackgroundCompletionListener) {
@@ -738,6 +759,7 @@ export class MastraTUI {
       this.state.unsubscribe();
     }
     this.state.renderScheduler?.dispose();
+    this.state.mouseController?.dispose();
     disposeAssistantRenderState(this.state);
     this.state.ui.stop();
   }
@@ -757,6 +779,10 @@ export class MastraTUI {
   // Initialization
   // ===========================================================================
 
+  // Every await below can end with the TUI stopped (Ctrl+C sends SIGINT before the
+  // TUI owns the keyboard; a double Ctrl+C works at startup prompts after it). The
+  // `stopped` checks keep a stopped TUI from subscribing, taking the terminal back,
+  // or starting anything after shutdown has begun.
   private async init(): Promise<void> {
     if (this.state.isInitialized) return;
 
@@ -764,8 +790,10 @@ export class MastraTUI {
     const local = this.state.local;
     if (local) {
       await local.controller.init();
+      if (this.stopped) return;
       await local.controller.getMastra()?.startWorkers();
     }
+    if (this.stopped) return;
 
     if (this.state.pluginManager && !this.cleanupPluginReloadListener) {
       this.cleanupPluginReloadListener = this.state.pluginManager.onReload(plugins =>
@@ -784,8 +812,15 @@ export class MastraTUI {
       });
     }
 
+    if (this.state.pluginManager && !this.cleanupPluginErrorListener) {
+      this.cleanupPluginErrorListener = this.state.pluginManager.onPluginError(event => {
+        showError(this.state, event.message);
+      });
+    }
+
     // Load custom slash commands
     await loadCustomSlashCommands(this.state);
+    if (this.stopped) return;
 
     // Install autocomplete immediately; refresh once the workspace resolves.
     setupAutocomplete(this.state);
@@ -808,7 +843,12 @@ export class MastraTUI {
     this.state.ui.start();
 
     // Resume the latest unlocked thread for this directory.
-    const startupResumeIssue = await resumeThreadOnStartup(this.state, this.state.options.resumeThreadId);
+    const startupResumeIssue = await resumeThreadOnStartup(
+      this.state,
+      this.state.options.resumeThreadId,
+      () => !this.stopped,
+    );
+    if (this.stopped) return;
     // A --pack startup applies to whatever thread startup selected, including a
     // resumed one — it overrides the thread's sticky pack for this session.
     // Validation happens here, after the resume, because a resumed thread
@@ -828,8 +868,10 @@ export class MastraTUI {
       activateModePackInSettings(settings, packId);
       saveSettings(settings);
       await applyCurrentThreadPack({ state: this.state }, { packId });
+      if (this.stopped) return;
     }
-    await this.syncThreadActivePackMetadata();
+    await this.syncThreadActivePackMetadata(undefined, () => !this.stopped);
+    if (this.stopped) return;
 
     // Subscribe to controller events
     subscribeToAgentController(this.state, event => this.handleEvent(event));
@@ -848,10 +890,12 @@ export class MastraTUI {
     // thread selection fired before we were listening).
     // This emits om_status → display_state_changed → updateStatusLine.
     await this.state.local?.controller.loadOMProgress(this.state.local.session);
+    if (this.stopped) return;
 
     // Sync current thread metadata — the thread_changed event from
     // Initial thread setup ran before we subscribed above.
-    await syncInitialThreadState(this.state);
+    await syncInitialThreadState(this.state, () => !this.stopped);
+    if (this.stopped) return;
 
     this.state.isInitialized = true;
 
@@ -877,12 +921,15 @@ export class MastraTUI {
     }
 
     // Render existing messages
-    await this.renderExistingMessagesAndSeedIdleCounter();
+    await this.renderExistingMessagesAndSeedIdleCounter(() => !this.stopped);
+    if (this.stopped) return;
     // Render existing tasks if any
     await renderExistingTasks(this.state);
+    if (this.stopped) return;
 
     if (this.shouldShowOnboarding()) {
       await this.showOnboarding();
+      if (this.stopped) return;
     }
 
     if (startupResumeIssue?.kind === 'missing') {
@@ -1371,6 +1418,7 @@ export class MastraTUI {
         this.state.editor.addToHistory(text);
       }
       this.state.editor.setText('');
+      this.state.mouseController?.setInputMouseMode(false);
 
       if (this.state.session.run.isRunning()) {
         if (text.startsWith('/')) {
@@ -1484,7 +1532,8 @@ export class MastraTUI {
       addUserMessage: msg => addUserMessage(this.state, msg),
       addChildBeforeFollowUps: child => this.addChildBeforeFollowUps(child),
       fireMessage: (content, images) => this.fireMessage(content, images),
-      setGoal: (objective, cancelMessage) => setGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage),
+      setGoal: (objective, cancelMessage) =>
+        setGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage, { useSessionModelAsJudge: true }),
       sendGoalReminder: (goal, options) => sendGoalReminder(this.buildCommandContext(), goal, options),
       queueFollowUpMessage: content => this.queueFollowUpMessage(content),
       renderExistingMessages: isCurrent => this.renderExistingMessagesAndSeedIdleCounter(isCurrent),
@@ -1520,6 +1569,7 @@ export class MastraTUI {
       // User cancelled at the mode-selection step.
       return;
     }
+    if (this.stopped) return;
 
     return new Promise(resolve => {
       const dialog = new LoginDialogComponent(this.state.ui, providerId, (success, message) => {
@@ -1553,6 +1603,10 @@ export class MastraTUI {
           this.state.ui.hideOverlay();
 
           const { PROVIDER_DEFAULT_MODELS } = await import('@mastra/code-sdk/auth/storage');
+          if (this.stopped) {
+            resolve();
+            return;
+          }
           const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
           if (defaultModel) {
             await this.state.session.model.switch(defaultModel);
@@ -1586,6 +1640,7 @@ export class MastraTUI {
     }));
 
     const access = await this.buildProviderAccess();
+    if (this.stopped) return;
     const hasProviderAccess = Object.values(access).some(Boolean);
 
     const savedSettings = loadSettings();
@@ -1629,6 +1684,7 @@ export class MastraTUI {
         onLogin: (providerId: string, done: () => void) => {
           this.performLogin(providerId).then(async () => {
             try {
+              if (this.stopped) return;
               const updatedAccess = await this.buildProviderAccess();
               const updatedHasAccess = Object.values(updatedAccess).some(Boolean);
               component.updateModePacks(getAvailableModePacks(updatedAccess, savedSettings.customModelPacks));
@@ -1642,7 +1698,7 @@ export class MastraTUI {
         },
         onSelectModel: async (title: string, modeColor?: string): Promise<string | undefined> => {
           const availableModels = await this.state.controller.listAvailableModels();
-          if (availableModels.length === 0) return undefined;
+          if (this.stopped || availableModels.length === 0) return undefined;
 
           return new Promise<string | undefined>(resolveModel => {
             const selector = new ModelSelectorComponent({
@@ -1685,6 +1741,7 @@ export class MastraTUI {
     const modes = this.state.controller.listModes();
 
     await this.state.session.state.set({ yolo: result.yolo });
+    if (this.stopped) return;
 
     const settings = loadSettings();
     settings.onboarding.completedAt = new Date().toISOString();
@@ -1730,7 +1787,9 @@ export class MastraTUI {
 
     saveSettings(settings);
     await applyCurrentThreadPack({ state: this.state }, { packId: activeModePackId });
+    if (this.stopped) return;
     await this.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
+    if (this.stopped) return;
     this.state.fallbackStatus = undefined;
 
     updateStatusLine(this.state);

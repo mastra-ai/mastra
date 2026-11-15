@@ -1,11 +1,14 @@
 import type { ReactNode } from 'react';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Building2, KeyRound, Sparkles, UserRound } from 'lucide-react';
 import { CONNECTION_METHOD_LABEL } from '../../../hooks/useProviderConnection';
 import type { OnboardingPreviewProps } from './OnboardingPreview';
 import { SketchLabel } from './SketchLabel';
 import { OnboardingModelLabel } from './OnboardingModelLabel';
 import { OnboardingPersonalConnectionStatus } from './OnboardingPersonalConnectionStatus';
+import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
+import { IconKey1 } from '@mastra/playground-ui/icons/central/IconKey1';
+import { IconSparklesTwo } from '@mastra/playground-ui/icons/central/IconSparklesTwo';
+import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 
 function workAccountLabel(personalWork: boolean, local: boolean) {
   if (personalWork) return 'Work owner’s account';
@@ -20,7 +23,7 @@ function workSourceLabel(personalWork: boolean, local: boolean) {
 }
 
 export function OnboardingAccountsPreview({
-  step,
+  showModels = true,
   modelScope = 'factory',
   local = false,
   model,
@@ -29,19 +32,18 @@ export function OnboardingAccountsPreview({
   personalProviderId,
   personalConnectionMethod,
   personalModel,
-}: OnboardingPreviewProps) {
+}: Omit<OnboardingPreviewProps, 'step'> & { showModels?: boolean }) {
   const shared = modelScope === 'factory';
   const personalWork = modelScope === 'user';
-  const setup = step === 'model-setup';
   const accountLabel = workAccountLabel(personalWork, local);
   const sourceLabel = workSourceLabel(personalWork, local);
   return (
     <section key={modelScope} aria-label="Account setup preview" className="onboarding-account-labels relative h-full">
-      <AccountSource x={shared ? 148 : 28} label={sourceLabel} icon={personalWork ? <KeyRound /> : <Building2 />} />
+      <AccountSource x={shared ? 148 : 28} label={sourceLabel} icon={personalWork ? <IconKey1 /> : <IconBuildings />} />
       {!shared && (
         <>
-          <AccountSource x={148} label="Personal" icon={<KeyRound />} />
-          <AccountSource x={268} label="Personal" icon={<KeyRound />} />
+          <AccountSource x={148} label="Personal" icon={<IconKey1 />} />
+          <AccountSource x={268} label="Personal" icon={<IconKey1 />} />
         </>
       )}
       <SessionIllustration x={148} label="Team" />
@@ -61,8 +63,8 @@ export function OnboardingAccountsPreview({
           Your sessions
         </Txt>
       </SketchLabel>
-      {!setup && (
-        <div className="onboarding-scene-detail absolute inset-x-7 top-[89%] grid grid-cols-2 gap-6">
+      {showModels && (
+        <div className="absolute inset-x-7 top-[89%] grid grid-cols-2 gap-6">
           <div role="group" aria-label="Factory work model" className="min-w-0">
             <Txt variant="meta" className="mb-2">
               {accountLabel}
@@ -116,12 +118,12 @@ function SessionIllustration({ x, label }: { x: number; label: string }) {
   return (
     <SketchLabel x={x + 10} y={169} width={84}>
       <div className="flex items-center gap-2">
-        <UserRound className="text-muted-foreground hidden size-3 shrink-0 min-[900px]:block" />
+        <IconUser className="text-muted-foreground hidden size-3 shrink-0 min-[900px]:block" />
         <Txt variant="meta">{label}</Txt>
       </div>
       <div className="bg-fill mt-3 h-1 rounded-full min-[900px]:mt-4 min-[900px]:h-3" />
       <div className="text-muted-foreground mt-3 hidden items-center gap-2 min-[900px]:flex">
-        <Sparkles className="size-3 shrink-0" />
+        <IconSparklesTwo className="size-3 shrink-0" />
         <div className="bg-fill h-1 w-full rounded-full" />
       </div>
     </SketchLabel>
