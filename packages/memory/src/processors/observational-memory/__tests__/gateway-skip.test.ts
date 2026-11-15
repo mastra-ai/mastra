@@ -7,7 +7,8 @@
  * nothing is ever persisted locally and nothing is recalled server-side either.
  *
  * These tests pin both outcomes, the legacy fallback for models that cannot answer the
- * question, and the mid-run transition between two owners.
+ * question, the mid-run transition between two owners, and that a drain which cannot save
+ * its turn surfaces the failure instead of reporting a successful run.
  */
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
@@ -291,6 +292,48 @@ describe('ObservationalMemoryProcessor — gateway memory ownership', () => {
 
       expect(result).toBe(messageList);
       expect(persistSpy).toHaveBeenCalledTimes(1);
+      expect(state.__omTurn).toBeUndefined();
+    });
+
+    it('surfaces a storage failure while draining the open turn before a gateway-managed step', async () => {
+      const messageList = buildConversation();
+      const state: Record<string, unknown> = {};
+
+      // Step 0: local owner, so a turn is open with its messages still unsaved.
+      await processor.processInputStep(buildInputStepArgs(messageList, state, 0, createLocalMemoryGatewayModel()));
+      expect(state.__omTurn).toBeDefined();
+
+      const persistSpy = vi.spyOn(om, 'persistMessages').mockRejectedValue(new Error('storage unavailable'));
+
+      // Step 1: the gateway took over. The drain must not report success while the turn is
+      // unsaved, so the storage failure has to reach the caller.
+      await expect(
+        processor.processInputStep(buildInputStepArgs(messageList, state, 1, createManagedGatewayModel())),
+      ).rejects.toThrow('storage unavailable');
+
+      // The drain retried the turn's unsaved messages directly before giving up, and the
+      // sealed turn is not left behind for a later step to reuse.
+      expect(persistSpy).toHaveBeenCalledTimes(2);
+      expect(persistSpy.mock.calls.at(-1)![0].map(message => message.id)).toEqual(['msg-1', 'msg-2']);
+      expect(state.__omTurn).toBeUndefined();
+    });
+
+    it('surfaces a storage failure while draining during output finalization', async () => {
+      const messageList = buildConversation();
+      const state: Record<string, unknown> = {};
+
+      await processor.processInputStep(buildInputStepArgs(messageList, state, 0, createLocalMemoryGatewayModel()));
+      expect(state.__omTurn).toBeDefined();
+
+      // Ownership flips to the gateway without another input step (a resumed stream).
+      state.__isGatewayMemoryManaged = true;
+      const persistSpy = vi.spyOn(om, 'persistMessages').mockRejectedValue(new Error('storage unavailable'));
+
+      await expect(processor.processOutputResult(buildOutputResultArgs(messageList, state))).rejects.toThrow(
+        'storage unavailable',
+      );
+
+      expect(persistSpy).toHaveBeenCalledTimes(2);
       expect(state.__omTurn).toBeUndefined();
     });
   });

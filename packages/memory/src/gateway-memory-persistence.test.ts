@@ -99,6 +99,12 @@ describe('local memory for a gateway model (#30391)', () => {
       expect.arrayContaining([expect.stringContaining('PELICAN')]),
     );
 
+    // Both halves of the turn are stored: the user message and the model's reply. A
+    // regression that saves only one side of the pair fails on these assertions.
+    const assistantMessages = stored.messages.filter(message => message.role === 'assistant');
+    expect(assistantMessages).toHaveLength(1);
+    expect(JSON.stringify(assistantMessages[0]!.content)).toContain('ok');
+
     const recalled = await memory.recall({ threadId, resourceId, perPage: false });
     expect(recalled.messages.map(message => JSON.stringify(message.content))).toEqual(
       expect.arrayContaining([expect.stringContaining('PELICAN')]),

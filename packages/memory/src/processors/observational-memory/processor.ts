@@ -212,14 +212,29 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
    * changed — would otherwise never be ended and its messages never persisted. `end()` with
    * no arguments flushes what the turn already tracked; finalization passes the accepted
    * terminal list for the same reason the regular output path does.
+   *
+   * A rejected write is not swallowed. `end()` marks the turn ended before it persists, so a
+   * failed write leaves the turn unusable and its messages would be lost silently while the run
+   * reported success. The drain persists those messages directly and rethrows, so a storage
+   * failure surfaces instead of dropping the turn.
    */
   private async endActiveTurn(state: Record<string, unknown>, messageList?: MessageList): Promise<void> {
     const activeTurn = asLiveTurn(state.__omTurn) ?? this.turn;
-    if (activeTurn && !activeTurn.ended) {
-      await (messageList ? activeTurn.end(messageList) : activeTurn.end()).catch(() => {});
-    }
     this.turn = undefined;
     state.__omTurn = undefined;
+    if (!activeTurn || activeTurn.ended) return;
+
+    const terminalList = messageList ?? activeTurn.messageList;
+    const unsavedMessages = [...terminalList.get.input.db(), ...terminalList.get.response.db()];
+
+    try {
+      await activeTurn.end(terminalList);
+    } catch (error) {
+      if (unsavedMessages.length > 0) {
+        await this.engine.persistMessages(unsavedMessages, activeTurn.threadId, activeTurn.resourceId).catch(() => {});
+      }
+      throw error;
+    }
   }
 
   // ─── Processor lifecycle hooks ──────────────────────────────────────────
