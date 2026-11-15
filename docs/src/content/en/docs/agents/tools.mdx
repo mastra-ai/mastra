@@ -321,7 +321,7 @@ Mastra doesn't call `toModelOutput` when the tool's input, request context, or o
 
 Because issue messages are left out, a refinement such as `.refine(..., { message: 'endDate must be after startDate' })` reaches the model only as `endDate: custom`. If the model needs that rule to retry, state it in the tool's `description` or in the field's `.describe()` text, which the model always receives. Tools without `toModelOutput` still send the full issue messages to the model.
 
-For an expected failure that isn't a validation problem, such as a record that doesn't exist, throw an error from `execute` or include the failure case in `outputSchema`. Returning a value that doesn't match `outputSchema`, like `{ error: 'Customer not found' }`, fails output validation, so the model sees the validation error instead of your message.
+When a tool returns a value that doesn't match its `outputSchema`, such as `{ error: 'Customer not found' }`, output validation fails and the model gets the validation error, not your message. To report an expected failure like a missing record, throw an error from `execute` or add that case to `outputSchema`.
 
 ## Tools that run on the client
 
