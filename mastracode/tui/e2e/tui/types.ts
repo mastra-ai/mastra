@@ -114,6 +114,7 @@ export type ScenarioName =
   | 'plugins-local-tool'
   | 'plugins-local-hot-reload'
   | 'plugins-local-reload-failure'
+  | 'plugins-signal-provider-start-failure'
   | 'plugins-github-install-gh-cli-pnpm-10'
   | 'plugins-github-install-gh-cli-pnpm-11'
   | 'plugins-github-install-missing-corepack'
