@@ -67,10 +67,25 @@ describe('reported provider-added prompt', () => {
     raw: { raw: { attribution: { request_fields: requestFields } } },
   });
 
-  it('sums every request field the provider reports', () => {
+  it('sums the instructions and tools fields the provider reports', () => {
     expect(readReportedProviderAdded(usage({ instructions: { input_tokens: 53 }, tools: { input_tokens: 69 } }))).toBe(
       122,
     );
+  });
+
+  it('leaves message, reasoning and unknown fields out of the provider-added cost', () => {
+    expect(
+      readReportedProviderAdded(
+        usage({
+          instructions: { input_tokens: 53 },
+          tools: { input_tokens: 69 },
+          messages: { input_tokens: 5000 },
+          reasoning: { input_tokens: 4000 },
+          some_new_field: { input_tokens: 3000 },
+        }),
+      ),
+    ).toBe(122);
+    expect(readReportedProviderAdded(usage({ messages: { input_tokens: 5000 } }))).toBeUndefined();
   });
 
   it('is unknown when there is no split or a field has no count', () => {
