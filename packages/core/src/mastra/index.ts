@@ -3099,9 +3099,6 @@ export class Mastra<
         });
       }
 
-      // Ownership changes future policy only; existing streams and injected services stay intact.
-      if (!Object.is(underlyingAgent, agent)) underlyingAgent.__ownExecutionEnginePolicy?.();
-
       // Set the Mastra instance on the durable agent for observability
       durableAgent.__setMastra?.(this);
 

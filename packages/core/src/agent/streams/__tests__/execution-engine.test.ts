@@ -67,15 +67,4 @@ describe('registered execution policy', () => {
     if (typeof effective === 'object') effective.executionEngine = false;
     expect(policy.engine).toBe('evented');
   });
-
-  it.each(values)('makes wrapper ownership irreversible for %j', durable => {
-    const policy = new ExecutionEnginePolicy(durable);
-    policy.register({ executionEngine: 'evented', cleanupTimeoutMs: 0 });
-    policy.ownByWrapper();
-    expect(policy.durable).toEqual({ executionEngine: false });
-    expect(policy.engine).toBe(false);
-    expect(policy.inherited).toBe(false);
-    expect(policy.register({ executionEngine: 'durable' })).toBe('wrapper-owned');
-    expect(policy.durable).toEqual({ executionEngine: false });
-  });
 });

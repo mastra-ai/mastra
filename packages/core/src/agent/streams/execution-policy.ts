@@ -10,7 +10,6 @@ export class ExecutionEnginePolicy {
   #effective: DurableOption;
   #frozen = false;
   #registered = false;
-  #wrapperOwned = false;
   #inherited = false;
 
   constructor(configured: DurableOption) {
@@ -35,8 +34,7 @@ export class ExecutionEnginePolicy {
   }
 
   /** Returns the diagnostic kind when registration would change a fixed selection. */
-  register(defaults: ExecutionEngineDefaults = {}): 'locked' | 'wrapper-owned' | undefined {
-    if (this.#wrapperOwned) return defaults.executionEngine ? 'wrapper-owned' : undefined;
+  register(defaults: ExecutionEngineDefaults = {}): 'locked' | undefined {
     const explicit = typeof this.#configured === 'object' ? this.#configured : {};
     let candidate: DurableOption = this.#configured;
     if (candidate !== false && Object.keys(defaults).length) {
@@ -56,12 +54,5 @@ export class ExecutionEnginePolicy {
     }
     this.freeze();
     return conflict ? 'locked' : undefined;
-  }
-
-  ownByWrapper(): void {
-    this.#wrapperOwned = true;
-    this.#effective = { executionEngine: false };
-    this.#inherited = false;
-    this.freeze();
   }
 }

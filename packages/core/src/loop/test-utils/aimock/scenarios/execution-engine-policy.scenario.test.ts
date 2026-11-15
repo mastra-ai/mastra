@@ -40,8 +40,43 @@ describe('Configured native engines remain native execution', () => {
     }
   }
 
+  for (const strategy of ['durable', 'evented'] as const) {
+    for (const method of ['stream', 'generate'] as const) {
+      it.each([
+        undefined,
+        false,
+        { executionEngine: false },
+        { executionEngine: 'durable' },
+        { executionEngine: 'evented' },
+      ] as const)(`${strategy}/${method}: wrapping leaves direct runs unchanged with durable=%j`, async durable => {
+        const llm = getMock();
+        llm.on({ endpoint: 'chat' }, { content: 'Your order has shipped.' });
+        const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` });
+        const agent = new Agent({
+          id: 'wrapped-order',
+          name: 'Wrapped order',
+          instructions: 'Help with orders.',
+          model: openai('gpt-4o'),
+          durable,
+        });
+        const wrap = strategy === 'evented' ? createEventedAgent : createDurableAgent;
+        const wrapped = wrap({ agent });
+        new Mastra({ agents: { wrapped }, durable: { executionEngine: 'evented' } });
+        const output = await agent[method]('Where is my order?', {});
+        expect(await output.text).toBe('Your order has shipped.');
+        expect(agent.durable).toEqual(durable);
+        expect(agent.__getExecutionEnginePolicy()).toBe(typeof durable === 'object' ? durable.executionEngine : false);
+        expect(wrapped.__getExecutionEngineStrategy()).toBe(strategy);
+        expect(hasDurableExecution(agent)).toBe(false);
+        if (method === 'stream') expect(output).toBeInstanceOf(MastraModelOutput);
+        else expect(output).not.toBeInstanceOf(MastraModelOutput);
+        expect(JSON.stringify(llm.getRequests()[0]?.body)).toContain('Where is my order?');
+      });
+    }
+  }
+
   it.each(['durable', 'evented'] as const)(
-    '%s ownership preserves an already-running native tool loop',
+    '%s wrapping preserves an already-running native tool loop',
     async executionEngine => {
       const llm = getMock();
       llm.on(
@@ -77,8 +112,9 @@ describe('Configured native engines remain native execution', () => {
         await started.promise;
         const bus = agent.__getStreamBus();
         const wrap = executionEngine === 'evented' ? createEventedAgent : createDurableAgent;
+        const before = agent.durable;
         const wrapped = wrap({ agent });
-        expect(agent.durable).toEqual({ executionEngine: false });
+        expect(agent.durable).toEqual(before);
         expect(agent.__getStreamBus()).toBe(bus);
         expect(hasDurableExecution(agent)).toBe(false);
         expect(hasDurableExecution(wrapped)).toBe(true);

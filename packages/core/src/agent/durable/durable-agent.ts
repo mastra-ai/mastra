@@ -915,7 +915,6 @@ export class DurableAgent<
       notifications: agent.__getNotificationConfig(),
     });
 
-    agent.__ownExecutionEnginePolicy();
     this.#wrappedAgent = agent;
     this.#runRegistry = new ExtendedRunRegistry();
     this.#maxSteps = maxSteps;

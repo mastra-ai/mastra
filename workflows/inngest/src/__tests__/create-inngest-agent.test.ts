@@ -131,16 +131,15 @@ describe('createInngestAgent factory function', () => {
       });
       expect(registered.getAgent('wrapped')).toBe(wrapped);
       expect(wrapped.agent).toBe(agent);
-      expect(agent.durable).toEqual({ executionEngine: false });
+      expect(agent.__getExecutionEnginePolicy()).toBe(registerFirst ? executionEngine : false);
       expect(agent.getPubSub()).toBe(registered.pubsub);
-      expect(wrapped.getPubSub()).toBe(registered.pubsub);
       expect(wrapped.pubsub).toBeInstanceOf(CachingPubSub);
       expect(wrapped.pubsub).not.toBe(registered.pubsub);
       // Inngest has no core strategy accessor. Its Proxy must remain on the legacy compatibility path.
       expect(Reflect.get(wrapped, '__getExecutionEngineStrategy')).toBeUndefined();
       expect(isDurableAgentLike(wrapped)).toBe(true);
       host.addAgent(agent);
-      expect(agent.durable).toEqual({ executionEngine: false });
+      expect(agent.__getExecutionEnginePolicy()).toBe(executionEngine);
       await expect(registered.recoverAllDurableAgents()).resolves.toEqual({
         agents: 1,
         recovered: 0,
@@ -152,7 +151,9 @@ describe('createInngestAgent factory function', () => {
       expect(isInngestAgent(fork)).toBe(true);
       const forkHost = new Mastra({ logger: false, agents: { fork }, durable: { executionEngine } });
       expect(forkHost.getAgent('fork')).toBe(fork);
-      expect(fork.agent.durable).toEqual({ executionEngine: false });
+      expect(fork.agent.__getExecutionEnginePolicy()).toBe(false);
+      forkHost.addAgent(fork.agent);
+      expect(fork.agent.__getExecutionEnginePolicy()).toBe(executionEngine);
       expect(fork.durableLoopWorkflowName).toBe('inngest:durable-agentic-loop');
     },
   );

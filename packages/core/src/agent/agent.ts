@@ -1768,11 +1768,6 @@ export class Agent<
     return this.#executionEnginePolicy.durable;
   }
 
-  /** @internal Wrapper ownership overrides future policy, not an existing bus or run. */
-  __ownExecutionEnginePolicy(): void {
-    this.#executionEnginePolicy.ownByWrapper();
-  }
-
   /** @internal Configured policy, not a claim of active durable execution. */
   __getExecutionEnginePolicy() {
     return this.#executionEnginePolicy.engine;
@@ -1784,9 +1779,7 @@ export class Agent<
     if (diagnostic) {
       this.#warnExecutionPolicy(
         diagnostic,
-        diagnostic === 'locked'
-          ? 'Execution engine policy is fixed for this Agent instance; conflicting registration defaults were ignored.'
-          : 'Wrapper-owned inner Agent stays plain; registration cannot restore inherited execution engine policy.',
+        'Execution engine policy is fixed for this Agent instance; conflicting registration defaults were ignored.',
       );
     }
     if (typeof this.#defaultOptions !== 'function') this.#warnInheritedExecutionOptions(this.#defaultOptions);

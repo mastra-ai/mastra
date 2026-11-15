@@ -187,14 +187,14 @@ describe('native Agent stored-registration policy', () => {
   );
 });
 
-// COR-1563: wrapping an independently registered Agent must not leave inherited execution policy behind.
-describe('wrapper ownership overrides the whole inner durable field', () => {
-  it('does not restore wrapper-owned defaults from a non-engine host', () => {
+// COR-1563: wrapping must not change direct Agent policy or confer stored registration.
+describe('wrappers leave inner durable policy unchanged', () => {
+  it('accepts ordinary stream defaults after wrapping without freezing policy', () => {
     const inner = new Agent(config);
     createDurableAgent({ agent: inner });
     const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
     new Mastra({ agents: { inner }, durable: { cleanupTimeoutMs: 999 } });
-    expect(inner.durable).toEqual({ executionEngine: false });
+    expect(inner.durable).toEqual({ cleanupTimeoutMs: 999 });
     expect(warn.mock.calls.filter(([message]) => String(message).includes('Native execution activation'))).toHaveLength(
       0,
     );
@@ -244,12 +244,14 @@ describe('wrapper ownership overrides the whole inner durable field', () => {
               const bus = resolveBus ? agent.__getStreamBus() : undefined;
               const transport = bus?.pubsub;
               const cache = bus?.cache;
-              const capturedConfig = bus?.forkConfig;
+              const cleanupTimeoutMs = bus?.cleanupTimeoutMs;
               const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
+              const before = agent.durable;
+              const selected = agent.__getExecutionEnginePolicy();
               const wrapped = wrapper.wrap(agent);
               expect(warn).not.toHaveBeenCalled();
-              expect(agent.durable).toEqual({ executionEngine: false });
-              expect(agent.__getExecutionEnginePolicy()).toBe(false);
+              expect(agent.durable).toEqual(before);
+              expect(agent.__getExecutionEnginePolicy()).toBe(selected);
               expect(wrapped.__getExecutionEngineStrategy()).toBe(wrapper.engine);
               expect(hasDurableExecution(wrapped)).toBe(true);
               expect(isDurableAgentLike(wrapped)).toBe(true);
@@ -258,19 +260,22 @@ describe('wrapper ownership overrides the whole inner durable field', () => {
                 expect(agent.__getStreamBus()).toBe(bus);
                 expect(bus.pubsub).toBe(transport);
                 expect(bus.cache).toBe(cache);
-                expect(bus.forkConfig).toEqual(capturedConfig);
+                expect(bus.cleanupTimeoutMs).toBe(cleanupTimeoutMs);
               }
               // A distinct host avoids the existing duplicate-key restriction for replacing a plain registration.
               const wrapperHost = new Mastra({ agents: { wrapped }, durable: { executionEngine } });
               expect(wrapperHost.getAgent('wrapped')).toBe(wrapped);
+              expect(agent.durable).toEqual(before);
+              expect(agent.__getExecutionEnginePolicy()).toBe(selected);
               for (let attempt = 0; attempt < 2; attempt++) mastra.addAgent(agent);
-              expect(agent.durable).toEqual({ executionEngine: false });
+              const explicit = typeof durable === 'object' ? durable.executionEngine : undefined;
+              expect(agent.__getExecutionEnginePolicy()).toBe(
+                durable === false ? false : (explicit ?? executionEngine),
+              );
+              if (durable === false) expect(agent.durable).toBe(false);
+              else expect(agent.durable).toMatchObject({ shouldCache, shouldPersistSnapshot, cleanupTimeoutMs: 0 });
               expect(wrapped.__getExecutionEngineStrategy()).toBe(wrapper.engine);
-              expect(
-                warn.mock.calls.filter(([message]) =>
-                  String(message).includes('Wrapper-owned inner Agent stays plain'),
-                ),
-              ).toHaveLength(1);
+              expect(warn).not.toHaveBeenCalled();
               warn.mockRestore();
             },
           );
@@ -279,55 +284,51 @@ describe('wrapper ownership overrides the whole inner durable field', () => {
     }
   }
 
-  it.each([false, true])('discards explicit durable transport without reconfiguring an existing bus=%s', resolveBus => {
-    const durableBus = new EventEmitterPubSub();
-    const topLevelBus = new EventEmitterPubSub();
-    const wrapperBus = new EventEmitterPubSub();
-    const shouldCache = () => false;
-    const shouldPersistSnapshot = () => true;
-    const agent = new Agent({
-      ...config,
-      pubsub: topLevelBus,
-      durable: {
-        executionEngine: 'evented',
-        pubsub: durableBus,
+  it.each([false, true])(
+    'preserves explicit inner settings independently of wrapper settings with existing bus=%s',
+    resolveBus => {
+      const durableBus = new EventEmitterPubSub();
+      const topLevelBus = new EventEmitterPubSub();
+      const wrapperBus = new EventEmitterPubSub();
+      const shouldCache = () => false;
+      const shouldPersistSnapshot = () => true;
+      const agent = new Agent({
+        ...config,
+        pubsub: topLevelBus,
+        durable: {
+          executionEngine: 'evented',
+          pubsub: durableBus,
+          cache: false,
+          cleanupTimeoutMs: 0,
+          shouldCache,
+          shouldPersistSnapshot,
+        },
+      });
+      const bus = resolveBus ? agent.__getStreamBus() : undefined;
+      const transport = bus?.pubsub;
+      const before = agent.durable;
+      const wrapped = createDurableAgent({
+        agent,
+        pubsub: wrapperBus,
         cache: false,
         cleanupTimeoutMs: 0,
         shouldCache,
         shouldPersistSnapshot,
-      },
-    });
-    const bus = resolveBus ? agent.__getStreamBus() : undefined;
-    const transport = bus?.pubsub;
-    const wrapped = createDurableAgent({
-      agent,
-      pubsub: wrapperBus,
-      cache: false,
-      cleanupTimeoutMs: 0,
-      shouldCache,
-      shouldPersistSnapshot,
-    });
-    expect(agent.durable).toEqual({ executionEngine: false });
-    expect(agent.getPubSub()).toBe(topLevelBus);
-    expect(wrapped.__getStreamBus()?.pubsub).toBe(wrapperBus);
-    const futureBus = agent.__getStreamBus();
-    if (bus) {
-      expect(futureBus).toBe(bus);
-      expect(futureBus?.pubsub).toBe(transport);
-      expect(futureBus?.cache).toBeNull();
-      expect(futureBus?.forkConfig).toMatchObject({
-        pubsub: durableBus,
-        cache: false,
-        cleanupTimeoutMs: 0,
-        shouldCache,
       });
-    } else {
-      expect(futureBus?.forkConfig.pubsub).toBe(topLevelBus);
-      expect(futureBus?.forkConfig.cache).toBeUndefined();
-      expect(futureBus?.forkConfig.shouldCache).toBeUndefined();
-      expect(futureBus?.forkConfig.cleanupTimeoutMs).toBe(30_000);
-    }
-  });
+      expect(agent.durable).toEqual(before);
+      expect(agent.getPubSub()).toBe(topLevelBus);
+      expect(wrapped.__getStreamBus()?.pubsub).toBe(wrapperBus);
+      const futureBus = agent.__getStreamBus();
+      if (bus) {
+        expect(futureBus).toBe(bus);
+        expect(futureBus?.pubsub).toBe(transport);
+      }
+      expect(futureBus?.cache).toBeNull();
+      expect(futureBus?.pubsub).toBe(durableBus);
+      expect(futureBus?.cleanupTimeoutMs).toBe(0);
+      expect(agent.durable).toMatchObject({ cache: false, shouldCache, shouldPersistSnapshot });
+    },
+  );
 
   it('retains forced evented strategy before host/storage fallback and isolates wrapped forks', () => {
     const agent = new Agent({ ...config, durable: { executionEngine: 'durable' } });
@@ -337,7 +338,7 @@ describe('wrapper ownership overrides the whole inner durable field', () => {
     expect(fork).toBeInstanceOf(EventedAgent);
     if (!(fork instanceof EventedAgent)) throw new Error('Expected an evented wrapper fork');
     expect(fork.__getExecutionEngineStrategy()).toBe('evented');
-    expect(fork.agent.durable).toEqual({ executionEngine: false });
-    expect(agent.durable).toEqual({ executionEngine: false });
+    expect(fork.agent.durable).toEqual({ executionEngine: 'durable' });
+    expect(agent.durable).toEqual({ executionEngine: 'durable' });
   });
 });
