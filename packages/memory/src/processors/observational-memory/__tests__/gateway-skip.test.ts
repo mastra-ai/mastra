@@ -7,8 +7,9 @@
  * nothing is ever persisted locally and nothing is recalled server-side either.
  *
  * These tests pin both outcomes, the legacy fallback for models that cannot answer the
- * question, the mid-run transition between two owners, and that a drain which cannot save
- * its turn surfaces the failure instead of reporting a successful run.
+ * question, that a credential the gateway cannot resolve is surfaced rather than read as
+ * local ownership, the mid-run transition between two owners, and that a drain which cannot
+ * save its turn surfaces the failure instead of reporting a successful run.
  */
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
@@ -213,21 +214,6 @@ describe('ObservationalMemoryProcessor — gateway memory ownership', () => {
       expect(savedMessages.map(message => message.id)).toEqual(['msg-1', 'msg-2']);
     });
 
-    it('treats a throwing ownership check as local', async () => {
-      const state: Record<string, unknown> = {};
-      const messageList = new MessageList({ threadId, resourceId });
-      const throwingModel = {
-        ...createLegacyGatewayModel('mastra'),
-        isGatewayMemoryManaged: vi.fn().mockRejectedValue(new Error('missing credential')),
-      };
-
-      await processor.processInputStep(buildInputStepArgs(messageList, state, 0, throwingModel));
-
-      // An unresolvable credential is not proof the gateway serves memory.
-      expect(state.__isGatewayMemoryManaged).toBe(false);
-      expect(state.__omTurn).toBeDefined();
-    });
-
     it('does not skip a non-mastra gateway or a plain model', async () => {
       const otherGatewayState: Record<string, unknown> = {};
       await processor.processInputStep(
@@ -245,6 +231,30 @@ describe('ObservationalMemoryProcessor — gateway memory ownership', () => {
         buildInputStepArgs(new MessageList({ threadId, resourceId }), plainModelState, 0, 'test-model'),
       );
       expect(plainModelState.__isGatewayMemoryManaged).toBe(false);
+    });
+  });
+
+  describe('when ownership cannot be determined', () => {
+    it('surfaces the failed ownership lookup instead of running local memory', async () => {
+      const state: Record<string, unknown> = {};
+      const messageList = new MessageList({ threadId, resourceId });
+      const unknownModel = {
+        ...createLegacyGatewayModel('mastra'),
+        isGatewayMemoryManaged: vi.fn().mockRejectedValue(new Error('gateway auth hook failed')),
+      };
+      const persistSpy = vi.spyOn(om, 'persistMessages');
+
+      await expect(processor.processInputStep(buildInputStepArgs(messageList, state, 0, unknownModel))).rejects.toThrow(
+        'gateway auth hook failed',
+      );
+
+      // Reporting "local" would run local memory for a step whose model call resolves its own
+      // credential and can still reach gateway-served memory — the double write this guards.
+      expect(state.__isGatewayMemoryManaged).toBeUndefined();
+      expect(state.__omTurn).toBeUndefined();
+
+      await processor.processOutputResult(buildOutputResultArgs(messageList, state));
+      expect(persistSpy).not.toHaveBeenCalled();
     });
   });
 

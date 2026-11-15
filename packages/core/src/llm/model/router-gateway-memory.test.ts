@@ -9,6 +9,10 @@ import { ModelRouterLanguageModel } from './router.js';
  * (`msk_…`). Organization keys (`msk-gateway-…`, `mskv2_…`) are served by a
  * gateway without the memory API, so memory has to stay local — and a model that
  * isn't on the gateway at all is never gateway-managed.
+ *
+ * A credential the gateway cannot resolve is not read as local ownership: only a
+ * missing credential reports `false`, and any other lookup failure is thrown, so a
+ * failed lookup can never make the gateway and the local store both save the thread.
  */
 describe('ModelRouterLanguageModel.isGatewayMemoryManaged', () => {
   afterEach(() => {
@@ -50,16 +54,47 @@ describe('ModelRouterLanguageModel.isGatewayMemoryManaged', () => {
     expect(await router.isGatewayMemoryManaged()).toBe(false);
   });
 
-  it('reports false without throwing when the gateway credential cannot be resolved', async () => {
-    const throwing = createGateway('mastra', {
+  it('reports false when the gateway has no credential configured', async () => {
+    const missing = createGateway('mastra', {
       getApiKey: async () => {
-        throw new Error('credential unavailable');
+        throw new Error('Missing MASTRA_GATEWAY_API_KEY environment variable');
       },
     });
-    const router = new ModelRouterLanguageModel('mastra/openai/gpt-4o', [throwing]);
+    const router = new ModelRouterLanguageModel('mastra/openai/gpt-4o', [missing]);
 
+    // A missing credential keeps memory local — the model call reports the same error.
     expect(router.gatewayId).toBe('mastra');
     await expect(router.isGatewayMemoryManaged()).resolves.toBe(false);
+  });
+
+  it('surfaces a failed credential lookup instead of reporting local ownership', async () => {
+    const failing = createGateway('mastra', {
+      getApiKey: async () => {
+        throw new Error('gateway auth hook failed');
+      },
+    });
+    const router = new ModelRouterLanguageModel('mastra/openai/gpt-4o', [failing]);
+
+    // Anything but a missing credential has to surface: reporting "local" here would store the
+    // same thread twice, because the model call resolves this credential through the same path.
+    expect(router.gatewayId).toBe('mastra');
+    await expect(router.isGatewayMemoryManaged()).rejects.toThrow('gateway auth hook failed');
+  });
+
+  it('reports the resolved key when a lookup fails before succeeding', async () => {
+    let lookups = 0;
+    const flaky = createGateway('mastra', {
+      getApiKey: async () => {
+        lookups += 1;
+        if (lookups === 1) throw new Error('gateway auth hook failed');
+        return 'msk_live_project_key';
+      },
+    });
+    const router = new ModelRouterLanguageModel('mastra/openai/gpt-4o', [flaky]);
+
+    // The failure is not remembered as "local" for the next step.
+    await expect(router.isGatewayMemoryManaged()).rejects.toThrow('gateway auth hook failed');
+    await expect(router.isGatewayMemoryManaged()).resolves.toBe(true);
   });
 });
 

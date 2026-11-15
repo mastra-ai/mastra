@@ -98,15 +98,14 @@ const CONTEXT_OVERFLOW_STEP_KEY = '__omContextOverflowStep';
  * memory API, so memory has to stay local. Newer `@mastra/core` exposes that decision on the
  * router model; when it is absent (older core, or a plain model) fall back to the historical
  * `mastra/` prefix check so gateway-side memory is never double-processed.
+ *
+ * A model that fails the check is not treated as local. Core answers `false` for a credential
+ * that is missing and throws for any other failure; letting that through keeps the two sides in
+ * agreement.
  */
 async function isGatewayMemoryManaged(model: ProcessInputStepArgs['model']): Promise<boolean> {
   if (typeof model === 'object' && model !== null && typeof (model as any).isGatewayMemoryManaged === 'function') {
-    try {
-      // A credential we can't resolve is not proof the gateway serves memory — stay local.
-      return Boolean(await (model as any).isGatewayMemoryManaged());
-    } catch {
-      return false;
-    }
+    return Boolean(await (model as any).isGatewayMemoryManaged());
   }
   return typeof model === 'object' && model !== null && 'gatewayId' in model && (model as any).gatewayId === 'mastra';
 }

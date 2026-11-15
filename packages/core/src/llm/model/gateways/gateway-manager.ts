@@ -20,10 +20,11 @@ const MISSING_AUTH_ERROR_IDS = new Set<string>([
  * Returns true for errors that represent an expected "auth not available"
  * state (no matching gateway, missing credentials/env vars, missing provider
  * config). Real gateway failures (token exchange errors, network bugs,
- * malformed auth hooks) are not matched here so {@link hasAuth} can re-throw
- * them instead of silently hiding them.
+ * malformed auth hooks) are not matched here so {@link hasAuth} and
+ * `ModelRouterLanguageModel.isGatewayMemoryManaged` can re-throw them instead
+ * of silently hiding them.
  */
-function isExpectedMissingAuthError(error: unknown): boolean {
+export function isExpectedMissingAuthError(error: unknown): boolean {
   if (error instanceof MastraError) {
     return MISSING_AUTH_ERROR_IDS.has(error.id);
   }

@@ -18,6 +18,7 @@ import type {
   MastraModelGatewayInterface,
 } from './gateways/base.js';
 import { defaultGateways } from './gateways/defaults.js';
+import { isExpectedMissingAuthError } from './gateways/gateway-manager.js';
 import { GatewayManager } from './gateways/index.js';
 import { gatewayServesObservationalMemory } from './gateways/mastra.js';
 import { isOpenRouterModel, prepareToolsForMastraGateway } from './mastra-gateway-provider-tools.js';
@@ -310,8 +311,14 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
    * through the memory-aware gateway, while organization keys (`msk-gateway-…`, `mskv2_…`) are
    * served by a gateway without the memory API. Callers that would otherwise skip local memory
    * processing for gateway models (the Observational Memory processor) use this to tell the two
-   * apart. Returns `false` for non-gateway models and whenever the credential can't be resolved,
-   * so memory is only treated as gateway-owned when the resolved key says so.
+   * apart.
+   *
+   * Returns `false` for a model that isn't on the Mastra gateway, and for a credential that is
+   * missing (`MASTRA_GATEWAY_NO_API_KEY`, an unset environment variable) — the model call reports
+   * that error itself. Any other failure to resolve the credential is thrown, matching the
+   * contract of `GatewayManager.hasAuth`. The model call resolves its credential through this same
+   * path, so answering "local" when the lookup failed is how the gateway and the local store both
+   * end up saving the same conversation.
    */
   async isGatewayMemoryManaged(): Promise<boolean> {
     if (this.gatewayId !== 'mastra') return false;
@@ -319,8 +326,9 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       const resolved = this.#manager.resolveModelId(this.config.routerId);
       const auth = await this.resolveAuth(resolved.providerId, resolved.modelId);
       return gatewayServesObservationalMemory(auth.apiKey);
-    } catch {
-      return false;
+    } catch (error) {
+      if (isExpectedMissingAuthError(error)) return false;
+      throw error;
     }
   }
 

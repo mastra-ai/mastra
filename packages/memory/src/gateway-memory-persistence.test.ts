@@ -12,7 +12,9 @@
  *
  * The gateway serves Observational Memory for a Gateway project key, so neither the
  * local storage nor the gateway may double up. A Gateway organization key is served
- * by a gateway without the memory API, so memory has to stay local.
+ * by a gateway without the memory API, so memory has to stay local. A credential the
+ * gateway cannot resolve is thrown, not read as local ownership, so a failed lookup
+ * can never make the two sides store the same thread.
  */
 
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
@@ -57,7 +59,7 @@ function createMastraGateway(apiKey: string, model: MockLanguageModelV2): Mastra
   };
 }
 
-function createGatewayAgent(apiKey: string, model: MockLanguageModelV2) {
+function createGatewayAgent(gateway: MastraModelGatewayInterface) {
   const memory = new Memory({
     storage: new InMemoryStore(),
     options: {
@@ -74,7 +76,7 @@ function createGatewayAgent(apiKey: string, model: MockLanguageModelV2) {
     id: 'gateway-memory-agent',
     name: 'Gateway memory agent',
     instructions: 'Answer the question.',
-    model: new ModelRouterLanguageModel('mastra/openai/gpt-4o', [createMastraGateway(apiKey, model)]),
+    model: new ModelRouterLanguageModel('mastra/openai/gpt-4o', [gateway]),
     memory,
   });
 
@@ -84,7 +86,7 @@ function createGatewayAgent(apiKey: string, model: MockLanguageModelV2) {
 describe('local memory for a gateway model (#30391)', () => {
   it('persists and recalls a turn when the gateway has no memory API', async () => {
     const { model, prompts } = createActorModel();
-    const { agent, memory } = createGatewayAgent('mskv2_current', model);
+    const { agent, memory } = createGatewayAgent(createMastraGateway('mskv2_current', model));
     const gateway = new ModelRouterLanguageModel('mastra/openai/gpt-4o', [createMastraGateway('mskv2_current', model)]);
 
     // The real router resolves the real credential for the model the agent runs.
@@ -99,11 +101,14 @@ describe('local memory for a gateway model (#30391)', () => {
       expect.arrayContaining([expect.stringContaining('PELICAN')]),
     );
 
-    // Both halves of the turn are stored: the user message and the model's reply. A
-    // regression that saves only one side of the pair fails on these assertions.
+    // Both halves of the turn are stored: the user message and the model's reply. The reply is
+    // asserted as the stored text part, so a record whose parts are empty can't stand in for it.
     const assistantMessages = stored.messages.filter(message => message.role === 'assistant');
     expect(assistantMessages).toHaveLength(1);
-    expect(JSON.stringify(assistantMessages[0]!.content)).toContain('ok');
+    const assistantText = assistantMessages[0]!.content.parts
+      .map(part => (part.type === 'text' ? part.text : ''))
+      .join('');
+    expect(assistantText).toBe('ok');
 
     const recalled = await memory.recall({ threadId, resourceId, perPage: false });
     expect(recalled.messages.map(message => JSON.stringify(message.content))).toEqual(
@@ -121,12 +126,40 @@ describe('local memory for a gateway model (#30391)', () => {
 
   it('leaves memory on the gateway, with no local write, for a project key', async () => {
     const { model } = createActorModel();
-    const { agent, memory } = createGatewayAgent('msk_live_project_key', model);
+    const { agent, memory } = createGatewayAgent(createMastraGateway('msk_live_project_key', model));
 
     await agent.generate('Remember the word PELICAN', { memory: { thread: threadId, resource: resourceId } });
 
     const store = await memory.storage.getStore('memory');
     const stored = await store!.listMessages({ threadId, resourceId, perPage: false });
     expect(stored.messages).toHaveLength(0);
+  });
+
+  it('writes nothing locally when the ownership lookup fails', async () => {
+    const { model } = createActorModel();
+    let lookups = 0;
+    const flakyGateway: MastraModelGatewayInterface = {
+      ...createMastraGateway('msk_live_project_key', model),
+      getApiKey: async () => {
+        lookups += 1;
+        if (lookups === 1) throw new Error('gateway auth hook failed');
+        return 'msk_live_project_key';
+      },
+    };
+    const { agent, memory } = createGatewayAgent(flakyGateway);
+
+    // A failed ownership lookup is surfaced, not read as local ownership.
+    await expect(
+      agent.generate('Remember the word PELICAN', { memory: { thread: threadId, resource: resourceId } }),
+    ).rejects.toThrow('gateway auth hook failed');
+
+    // The failure reaches the caller, and no reply is written locally. A swallowed lookup used
+    // to finish the run and store the model's answer here.
+    const store = await memory.storage.getStore('memory');
+    const stored = await store!.listMessages({ threadId, resourceId, perPage: false });
+    const assistantParts = stored.messages
+      .filter(message => message.role === 'assistant')
+      .flatMap(message => message.content.parts);
+    expect(assistantParts.filter(part => part.type === 'text')).toHaveLength(0);
   });
 });
