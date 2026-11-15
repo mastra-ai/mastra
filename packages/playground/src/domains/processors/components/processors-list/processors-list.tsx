@@ -1,6 +1,6 @@
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import type { DataListSort } from '@mastra/playground-ui/components/DataList';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconFileArrowRightIn } from '@mastra/playground-ui/icons/central/IconFileArrowRightIn';
 import { IconFileArrowRightOut } from '@mastra/playground-ui/icons/central/IconFileArrowRightOut';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
@@ -132,7 +132,7 @@ export function ProcessorsList({ processors, isLoading, search = '', sort, onSor
             <DataList.DescriptionCell>{description}</DataList.DescriptionCell>
             {phaseKeys.map(key => (
               <DataList.TextCell key={key} className="text-center">
-                {phaseSet.has(key) && <IconCheckmark1 className="mx-auto size-4" />}
+                {phaseSet.has(key) && <IconCheckmark2Medium className="mx-auto size-4" />}
               </DataList.TextCell>
             ))}
             <DataList.TextCell className="text-center">{agentsCount || ''}</DataList.TextCell>

@@ -1,12 +1,13 @@
-import { FileAudio, FileVideo } from 'lucide-react';
 import type { RefObject } from 'react';
 import { ComposerAttachmentEntry } from './composer-attachment-entry';
 import { useAttachmentPreview } from './use-attachment-preview';
 import type { AttachmentPreviewProps } from './use-attachment-preview';
 import { Button } from '@/ds/components/Button';
 import { Dialog, DialogTitle, DialogContent, DialogHeader, DialogBody } from '@/ds/components/Dialog';
+import { IconAudio } from '@/ds/icons/central/IconAudio';
 import { IconFileBend } from '@/ds/icons/central/IconFileBend';
 import { IconFileText } from '@/ds/icons/central/IconFileText';
+import { IconVideoClip } from '@/ds/icons/central/IconVideoClip';
 import { cn } from '@/utils/cn';
 
 interface PdfEntryProps extends AttachmentPreviewProps {
@@ -92,8 +93,8 @@ interface FileChipEntryProps {
   contentType?: string;
 }
 const iconForContentType = (contentType?: string) => {
-  if (contentType?.startsWith('video/')) return { Icon: FileVideo, label: 'Video file' };
-  if (contentType?.startsWith('audio/')) return { Icon: FileAudio, label: 'Audio file' };
+  if (contentType?.startsWith('video/')) return { Icon: IconVideoClip, label: 'Video file' };
+  if (contentType?.startsWith('audio/')) return { Icon: IconAudio, label: 'Audio file' };
   if (contentType?.startsWith('text/') || contentType === 'application/pdf')
     return { Icon: IconFileText, label: 'Document file' };
   return { Icon: IconFileBend, label: 'File' };

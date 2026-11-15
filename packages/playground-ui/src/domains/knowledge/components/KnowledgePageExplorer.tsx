@@ -38,7 +38,7 @@ import { Tree } from '@/ds/components/Tree';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
 import { IconArrowRight } from '@/ds/icons/central/IconArrowRight';
-import { IconChainLink1 } from '@/ds/icons/central/IconChainLink1';
+import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
 import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { IconFileText } from '@/ds/icons/central/IconFileText';
@@ -1438,7 +1438,7 @@ export function KnowledgePageExplorer({
                       className={allLinks ? '[--control-icon:var(--foreground)]' : undefined}
                       onClick={() => setAllLinks(current => !current)}
                     >
-                      <IconChainLink1 />
+                      <IconChainLink3 />
                     </Button>
                     <Button
                       aria-label="Link counts"

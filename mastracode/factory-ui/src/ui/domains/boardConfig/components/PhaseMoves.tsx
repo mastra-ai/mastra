@@ -6,9 +6,9 @@ import type { ReactNode } from 'react';
 
 import type { StoredPhaseInfo } from '../../../../api/types';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
 import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 const TILE = 'inline-flex h-8 max-w-48 min-w-0 items-center gap-1.5 rounded-lg border px-2.5';
 
@@ -82,10 +82,10 @@ export function PhaseMoves({
               {locked ? (
                 <IconLock className="size-3.5" aria-hidden />
               ) : allowed ? (
-                <IconCheckmark1 className="size-3.5" aria-hidden />
+                <IconCheckmark2Medium className="size-3.5" aria-hidden />
               ) : (
                 !disabled && (
-                  <IconPlusLarge
+                  <IconPlusMedium
                     className="invisible size-3.5 group-hover/move:visible group-focus-visible/move:visible"
                     aria-hidden
                   />

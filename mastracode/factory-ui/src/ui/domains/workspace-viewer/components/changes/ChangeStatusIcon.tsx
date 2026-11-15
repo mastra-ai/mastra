@@ -1,4 +1,3 @@
-import { SquareDot } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import type { WorkspaceChangeStatus } from '../../../../../api/types';
@@ -6,9 +5,10 @@ import { IconArrowRightSquare } from '@mastra/playground-ui/icons/central/IconAr
 import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
 import { IconSquarePlus } from '@mastra/playground-ui/icons/central/IconSquarePlus';
 import { IconSquareMinus } from '@mastra/playground-ui/icons/central/IconSquareMinus';
+import { IconChanges } from '@mastra/playground-ui/icons/central/IconChanges';
 
 const STATUS_ICONS: Record<WorkspaceChangeStatus, { Icon: LucideIcon; label: string; className: string }> = {
-  modified: { Icon: SquareDot, label: 'Modified', className: 'text-warning-indicator' },
+  modified: { Icon: IconChanges, label: 'Modified', className: 'text-warning-indicator' },
   added: { Icon: IconSquarePlus, label: 'Added', className: 'text-success-indicator' },
   untracked: { Icon: IconSquarePlus, label: 'Untracked', className: 'text-success-indicator' },
   copied: { Icon: IconSquarePlus, label: 'Copied', className: 'text-success-indicator' },

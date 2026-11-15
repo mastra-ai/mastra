@@ -6,8 +6,8 @@ import type { EnvironmentVariablesEditorReadOnlyItemProps } from './environment-
 import { Button } from '@/ds/components/Button';
 import { DataList } from '@/ds/components/DataList/data-list';
 import { Txt } from '@/ds/components/Txt';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
-import { IconCode } from '@/ds/icons/central/IconCode';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
 import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
 import { IconEyeSlash } from '@/ds/icons/central/IconEyeSlash';
 import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
@@ -33,7 +33,7 @@ export function EnvironmentVariablesEditorReadOnlyItem({
   const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 1500, showToast: false });
   const isRevealed = revealed ?? uncontrolledRevealed;
   const displayedValue = isRevealed ? value : '************';
-  const leadingIcon = icon ?? <IconCode />;
+  const leadingIcon = icon ?? <IconCodeBrackets />;
   const resolvedCopyValue = copyValue ?? getCopyableReadOnlyValue(value);
   const canCopyValue = isRevealed && Boolean(resolvedCopyValue);
 
@@ -99,7 +99,7 @@ export function EnvironmentVariablesEditorReadOnlyItem({
                   className="absolute right-0 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100"
                   onClick={handleCopyValue}
                 >
-                  {isCopied ? <IconCheckmark1 aria-hidden /> : <IconSquareBehindSquare1 aria-hidden />}
+                  {isCopied ? <IconCheckmark2Medium aria-hidden /> : <IconSquareBehindSquare1 aria-hidden />}
                 </Button>
               )}
             </span>

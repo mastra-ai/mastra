@@ -21,8 +21,8 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
-import { IconBubble2 } from '@mastra/playground-ui/icons/central/IconBubble2';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconBubbleWide } from '@mastra/playground-ui/icons/central/IconBubbleWide';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
 import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
 import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
@@ -225,7 +225,7 @@ export function AgentPlaygroundVersionBar({
                 <DropdownMenu.Content align="end">
                   <DropdownMenu.Item onSelect={() => setShowMessageDialog(true)}>
                     <Icon size="xs">
-                      <IconBubble2 />
+                      <IconBubbleWide />
                     </Icon>
                     Save with message
                   </DropdownMenu.Item>
@@ -251,7 +251,7 @@ export function AgentPlaygroundVersionBar({
               ) : (
                 <>
                   <Icon size="xs">
-                    <IconCheckmark1 />
+                    <IconCheckmark2Medium />
                   </Icon>
                   {isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
                 </>

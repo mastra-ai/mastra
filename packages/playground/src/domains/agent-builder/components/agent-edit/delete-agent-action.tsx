@@ -1,7 +1,7 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useStoredAgentMutations, useStoredAgentDependents } from '@mastra/react/hooks/agents';
 import { useState } from 'react';
@@ -77,7 +77,7 @@ const DeleteAgentDialog = ({
             Cancel
           </AlertDialog.Cancel>
           <Button
-            icon={<IconTrashCan />}
+            icon={<TrashIcon />}
             variant="destructive"
             data-testid="agent-builder-delete-agent-confirm"
             disabled={isPending || isDependentsLoading}
@@ -105,7 +105,7 @@ export const DeleteAgentPanelButton = ({ agentId, agentName, disabled = false }:
   return (
     <>
       <Button
-        icon={<IconTrashCan />}
+        icon={<TrashIcon />}
         onClick={() => setOpen(true)}
         disabled={disabled || isPending}
         data-testid="agent-builder-delete-agent"
@@ -140,7 +140,7 @@ export const DeleteAgentMenuItem = ({ agentId, agentName, disabled = false }: De
           setOpen(true);
         }}
       >
-        <IconTrashCan />
+        <TrashIcon />
         <span>Delete agent</span>
       </DropdownMenu.Item>
       <DeleteAgentDialog

@@ -4,7 +4,7 @@ import { ArrayAddButtonContext, FormReadOnlyContext } from '../field-context';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
 import { IconBrackets1 } from '@/ds/icons/central/IconBrackets1';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 
 export function ArrayWrapper({ label, children, onAddItem }: ArrayWrapperProps) {
   const readOnly = useContext(FormReadOnlyContext);
@@ -26,7 +26,7 @@ export function ArrayWrapper({ label, children, onAddItem }: ArrayWrapperProps) 
             aria-label={`Add ${label} item`}
             onClick={onAddItem}
           >
-            <IconPlusLarge />
+            <IconPlusMedium />
             Add item
           </Button>
         )}

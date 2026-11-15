@@ -1,8 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
-import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useAgent } from '@mastra/react/hooks/agents';
@@ -50,7 +50,7 @@ export function AgentDetailHeaderActions({ agentId, showConfig = true }: AgentDe
         tooltip="Copy session URL to share with your team"
         data-testid="agent-entity-header-share"
       >
-        {isShareCopied ? <IconCheckmark1 /> : <IconChainLink1 />}
+        {isShareCopied ? <IconCheckmark2Medium /> : <IconChainLink3 />}
       </Button>
       {showConfig && <AgentConfigToggle />}
     </>

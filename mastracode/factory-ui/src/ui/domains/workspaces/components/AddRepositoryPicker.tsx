@@ -16,7 +16,6 @@ import { SettingsItem, SettingsSkeleton } from '@mastra/playground-ui/new/settin
 import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { useRef, useState } from 'react';
 
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
@@ -26,6 +25,7 @@ import { gitLabProjectRepository } from '../../factory/services/gitlab';
 import { IntegrationItemIcon } from '../../settings/components/IntegrationItem';
 import type { FactoryProject, GithubStatus, SourceControlRepository } from '../services/github';
 import { isGitLabRepository } from '../services/github';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 export function AddRepositoryPicker({
   factory,
@@ -149,7 +149,7 @@ export function AddRepositoryPicker({
               >
                 <Button
                   size="sm"
-                  icon={<IconPlusLarge />}
+                  icon={<IconPlusMedium />}
                   aria-label={`Add ${repo.fullName}`}
                   disabled={Boolean(addingRepository)}
                   onClick={() => onAddRepository(repo)}

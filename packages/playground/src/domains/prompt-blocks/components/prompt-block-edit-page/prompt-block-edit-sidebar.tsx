@@ -8,13 +8,13 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import { useStoredAgents } from '@mastra/react/hooks/agents';
-
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
 import type { UseFormReturn } from 'react-hook-form';
@@ -56,7 +56,7 @@ function RecursiveFieldRenderer({
             )}
           </JSONSchemaForm.FieldList>
           <JSONSchemaForm.AddField className="mt-2" size="sm">
-            <IconPlusLarge />
+            <IconPlusMedium />
             Add nested variable
           </JSONSchemaForm.AddField>
         </JSONSchemaForm.NestedFields>
@@ -165,7 +165,7 @@ export function PromptBlockEditSidebar({
 
             <div className="p-2">
               <JSONSchemaForm.AddField>
-                <IconPlusLarge />
+                <IconPlusMedium />
                 Add variable
               </JSONSchemaForm.AddField>
             </div>
@@ -228,7 +228,7 @@ export function PromptBlockEditSidebar({
                 </>
               ) : (
                 <>
-                  <IconCheckmark1 />
+                  <IconCheckmark2Medium />
                   Publish
                 </>
               )}
@@ -243,7 +243,7 @@ export function PromptBlockEditSidebar({
               </>
             ) : (
               <>
-                <IconCheckmark1 />
+                <IconCheckmark2Medium />
                 Create prompt block
               </>
             )}

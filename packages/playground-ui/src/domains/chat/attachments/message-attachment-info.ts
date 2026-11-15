@@ -1,7 +1,9 @@
-import { FileAudio, FileSpreadsheet, FileVideo } from 'lucide-react';
+import { IconAudio } from '@/ds/icons/central/IconAudio';
 import { IconFileBend } from '@/ds/icons/central/IconFileBend';
 import { IconFileText } from '@/ds/icons/central/IconFileText';
 import { IconImages1 } from '@/ds/icons/central/IconImages1';
+import { IconTable } from '@/ds/icons/central/IconTable';
+import { IconVideoClip } from '@/ds/icons/central/IconVideoClip';
 import { isRemoteUrl } from '@/lib/file';
 
 export function attachmentName(name: string | undefined, src: string | undefined, fallback: string) {
@@ -24,13 +26,13 @@ export function attachmentInfo(name: string, contentType?: string) {
     mime === 'application/vnd.ms-excel' ||
     ['XLS', 'XLSX', 'CSV', 'TSV', 'ODS'].includes(extension ?? '')
   ) {
-    return { Icon: FileSpreadsheet, label: extension || 'Spreadsheet' };
+    return { Icon: IconTable, label: extension || 'Spreadsheet' };
   }
   if (mime?.startsWith('image/'))
     return { Icon: IconImages1, label: extension || mime.slice(6).split('+')[0]?.toUpperCase() || 'Image' };
   if (mime === 'application/pdf' || extension === 'PDF') return { Icon: IconFileText, label: 'PDF' };
-  if (mime?.startsWith('audio/')) return { Icon: FileAudio, label: extension || 'Audio' };
-  if (mime?.startsWith('video/')) return { Icon: FileVideo, label: extension || 'Video' };
+  if (mime?.startsWith('audio/')) return { Icon: IconAudio, label: extension || 'Audio' };
+  if (mime?.startsWith('video/')) return { Icon: IconVideoClip, label: extension || 'Video' };
   if (mime?.startsWith('text/')) return { Icon: IconFileText, label: extension || 'Text' };
   return { Icon: IconFileBend, label: extension || 'File' };
 }

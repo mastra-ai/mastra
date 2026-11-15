@@ -1,7 +1,7 @@
 import type { StoredPromptBlockResponse } from '@mastra/client-js';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import type { DataListSort } from '@mastra/playground-ui/components/DataList';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
 import { useMemo } from 'react';
@@ -78,10 +78,10 @@ export function PromptsList({
             <DataList.NameCell>{name}</DataList.NameCell>
             <DataList.DescriptionCell>{description}</DataList.DescriptionCell>
             <DataList.TextCell className="text-center">
-              {(block.hasDraft || !block.activeVersionId) && <IconCheckmark1 className="mx-auto size-4" />}
+              {(block.hasDraft || !block.activeVersionId) && <IconCheckmark2Medium className="mx-auto size-4" />}
             </DataList.TextCell>
             <DataList.TextCell className="text-center">
-              {block.activeVersionId && <IconCheckmark1 className="mx-auto size-4" />}
+              {block.activeVersionId && <IconCheckmark2Medium className="mx-auto size-4" />}
             </DataList.TextCell>
             <DataList.DateCell timestamp={block.updatedAt} />
           </DataList.RowLink>

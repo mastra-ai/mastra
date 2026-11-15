@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Switch } from '../Switch';
 import { Section } from './section';
 import type { SectionVariant } from './section';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 
 type SectionPlaygroundProps = {
   variant: SectionVariant;
@@ -84,7 +84,7 @@ export const WithAction: Story = {
       <Section.Header inset={inset}>
         <Section.Heading>Agents</Section.Heading>
         <Button size="md">
-          <IconPlusLarge className="size-4" />
+          <IconPlusMedium className="size-4" />
           Add agent
         </Button>
       </Section.Header>

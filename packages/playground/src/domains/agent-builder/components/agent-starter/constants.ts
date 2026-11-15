@@ -1,5 +1,5 @@
 import { IconBubbleQuestion } from '@mastra/playground-ui/icons/central/IconBubbleQuestion';
-import { IconChatBubbles } from '@mastra/playground-ui/icons/central/IconChatBubbles';
+import { IconBubbleText } from '@mastra/playground-ui/icons/central/IconBubbleText';
 import { IconGraduateCap } from '@mastra/playground-ui/icons/central/IconGraduateCap';
 import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
 
@@ -8,7 +8,7 @@ export const FALLBACK_MODEL = { provider: 'google', name: 'gemini-2.5-flash' } a
 export const EXAMPLES = [
   {
     title: 'Support triage',
-    icon: IconChatBubbles,
+    icon: IconBubbleText,
     prompt:
       'Build an agent that triages incoming customer support emails. Classify urgency, route to the right team, and draft a polite first reply that asks for missing details.',
   },

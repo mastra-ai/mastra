@@ -6,7 +6,7 @@ import { observeToastLayout } from './observe-toast-layout';
 import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
 import { IconExclamationCircle } from '@/ds/icons/central/IconExclamationCircle';
 import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
-import { IconLightBulb } from '@/ds/icons/central/IconLightBulb';
+import { IconLightBulbSimple } from '@/ds/icons/central/IconLightBulbSimple';
 import { cn } from '@/lib/utils';
 import './toaster.css';
 
@@ -15,7 +15,7 @@ export interface ToasterProps extends SonnerToasterProps {
 }
 
 const toneIcons = {
-  success: <IconLightBulb aria-hidden />,
+  success: <IconLightBulbSimple aria-hidden />,
   error: <IconExclamationCircle aria-hidden />,
   warning: <IconExclamationTriangle aria-hidden />,
   info: <IconCircleInfo aria-hidden />,

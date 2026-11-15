@@ -1,11 +1,11 @@
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconCircleBanSign } from '@mastra/playground-ui/icons/central/IconCircleBanSign';
 import { IconClock } from '@mastra/playground-ui/icons/central/IconClock';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
-import { CirclePause } from 'lucide-react';
+import { IconPause } from '@mastra/playground-ui/icons/central/IconPause';
 
 export interface WorkflowRunStatusInlineProps {
   status: WorkflowRunStatus;
@@ -33,13 +33,13 @@ export function WorkflowRunStatusInline({ status }: WorkflowRunStatusInlineProps
 function getStatusVisual(status: WorkflowRunStatus): { icon: React.ReactNode; color: string } {
   switch (status) {
     case 'success':
-      return { icon: <IconCheckmark1 size={14} />, color: 'text-success-indicator' };
+      return { icon: <IconCheckmark2Medium size={14} />, color: 'text-success-indicator' };
     case 'failed':
       return { icon: <IconCrossMedium size={14} />, color: 'text-destructive-foreground' };
     case 'running':
       return { icon: <Spinner />, color: 'text-muted-foreground' };
     case 'suspended':
-      return { icon: <CirclePause size={14} />, color: 'text-info-indicator' };
+      return { icon: <IconPause size={14} />, color: 'text-info-indicator' };
     case 'canceled':
       return { icon: <IconCircleBanSign size={14} />, color: 'text-muted-foreground' };
     case 'pending':

@@ -3,10 +3,10 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { IconBox } from '@mastra/playground-ui/icons/central/IconBox';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import type { ReactNode } from 'react';
 
 import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 export function ProviderRows({
   children,
@@ -22,7 +22,7 @@ export function ProviderRows({
       {children}
       <li>
         <Button variant="ghost" size="sm" className="h-10 w-full justify-start" disabled={addDisabled} onClick={onAdd}>
-          <IconPlusLarge aria-hidden="true" />
+          <IconPlusMedium aria-hidden="true" />
           Add provider
         </Button>
       </li>

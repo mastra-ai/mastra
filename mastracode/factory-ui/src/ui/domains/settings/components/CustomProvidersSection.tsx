@@ -10,7 +10,6 @@ import {
   SettingsNoticeRow,
   SettingsSkeleton,
 } from '@mastra/playground-ui/new/settings';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { IconServer } from '@mastra/playground-ui/icons/central/IconServer';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
@@ -18,6 +17,7 @@ import type { ReactNode } from 'react';
 import type { CustomProviderInfo } from '../../../../api/types';
 import { useCustomProvidersQuery, useRemoveCustomProvider } from '../../../../hooks/use-custom-providers';
 import { CustomProviderForm } from './CustomProviderForm';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 /**
  * Organization-scoped OpenAI-compatible endpoint definitions. Keys are
@@ -45,7 +45,7 @@ export function CustomProvidersSection() {
   };
 
   const addProvider = draft ? undefined : (
-    <Button size="sm" icon={<IconPlusLarge />} onClick={() => setDraft('new')} disabled={busy}>
+    <Button size="sm" icon={<IconPlusMedium />} onClick={() => setDraft('new')} disabled={busy}>
       Add provider
     </Button>
   );

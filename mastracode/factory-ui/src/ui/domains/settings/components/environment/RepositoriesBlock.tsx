@@ -8,10 +8,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { SettingsItem, SettingsItemIcon, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Unlink } from 'lucide-react';
 import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
 import { IconDotGrid2x3 } from '@mastra/playground-ui/icons/central/IconDotGrid2x3';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 import { useId, useState } from 'react';
 
 import type {
@@ -21,6 +19,8 @@ import type {
 import { SettingsIntegrationIcon } from '../brand-icons/SettingsIntegrationIcon';
 import { CommittedInput } from './CommittedInput';
 import type { SaveEnvironment } from './CommittedInput';
+import { IconBrokenChainLink3 } from '@mastra/playground-ui/icons/central/IconBrokenChainLink3';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 // Number every link 1..n (dead links last) and send only ids + positions so concurrent edits survive.
 export function reorderPatch(ordered: FactoryEnvironmentRepository[]): FactoryEnvironmentRepositoryPatch[] {
@@ -135,7 +135,7 @@ function DeadRepositoryRow({
       <SettingsItem
         media={
           <SettingsItemIcon>
-            <Unlink />
+            <IconBrokenChainLink3 />
           </SettingsItemIcon>
         }
         title={
@@ -147,7 +147,7 @@ function DeadRepositoryRow({
         <Button
           variant="ghost"
           size="sm"
-          icon={<IconTrashCan />}
+          icon={<TrashIcon />}
           aria-label={`Remove ${UNAVAILABLE_LABEL}`}
           disabled={disabled}
           onClick={onRemove}
@@ -247,7 +247,7 @@ function RepositoryRow({
         <Button
           variant="ghost"
           size="sm"
-          icon={<IconTrashCan />}
+          icon={<TrashIcon />}
           aria-label={`Remove ${label}`}
           disabled={disabled}
           onClick={onRemove}

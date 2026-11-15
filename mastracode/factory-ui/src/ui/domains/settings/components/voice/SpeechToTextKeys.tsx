@@ -7,7 +7,6 @@ import {
   SettingsNoticeRow,
   SettingsSkeleton,
 } from '@mastra/playground-ui/new/settings';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { useState } from 'react';
 
 import type { ProviderInfo, VoiceSettingsResponse } from '../../../../../api/types';
@@ -18,6 +17,7 @@ import { ConnectedProviderRow } from '../models/providers/ConnectedProviderRow';
 import type { ProviderConnection } from '../models/providers/ConnectedProviderRow';
 import { CREDENTIAL_STATUS, sharedSourceStatus, useCredentialAccess } from '../provider-credential';
 import { AddSpeechToTextKeyDrawer } from './AddSpeechToTextKeyDrawer';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 /**
  * Deepgram only transcribes, so the chat provider catalog does not list it. An env key wins over a stored one
@@ -59,7 +59,7 @@ export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scop
 
   const connected = options.flatMap(({ connection }) => (connection ? [connection] : []));
   const addProvider = (
-    <Button size="sm" icon={<IconPlusLarge />} disabled={actionsDisabled} onClick={() => setAddOpen(true)}>
+    <Button size="sm" icon={<IconPlusMedium />} disabled={actionsDisabled} onClick={() => setAddOpen(true)}>
       Add provider
     </Button>
   );

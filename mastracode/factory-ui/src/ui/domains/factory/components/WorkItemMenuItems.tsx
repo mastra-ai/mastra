@@ -15,7 +15,7 @@ import type { BoardStageId } from '../stages';
 import { BoardStageIcon, actionIcon } from './BoardIcons';
 import { IconArrowUpRight } from '@mastra/playground-ui/icons/central/IconArrowUpRight';
 import { IconCircleBanSign } from '@mastra/playground-ui/icons/central/IconCircleBanSign';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 export interface WorkItemMenuProps {
   item: WorkItem;
@@ -121,7 +121,7 @@ export function WorkItemMenuItems({
           </DropdownMenu.Item>
         ))}
       <DropdownMenu.Item disabled={yourRequestInFlight} onClick={onRemove}>
-        <IconTrashCan aria-hidden />
+        <TrashIcon aria-hidden />
         <span>Remove</span>
       </DropdownMenu.Item>
     </>

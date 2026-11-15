@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Loader2 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { useVoiceSettings } from '../../../../hooks/use-voice-settings';
@@ -9,6 +8,7 @@ import type { VoiceDictation, VoiceDictationState } from './useVoiceDictation';
 import { IconMicrophone } from '@mastra/playground-ui/icons/central/IconMicrophone';
 import { IconMicrophoneOff } from '@mastra/playground-ui/icons/central/IconMicrophoneOff';
 import { IconStop } from '@mastra/playground-ui/icons/central/IconStop';
+import { IconLoadingCircle } from '@mastra/playground-ui/icons/central/IconLoadingCircle';
 
 const TOOLTIPS: Record<VoiceDictationState, string> = {
   idle: 'Dictate',
@@ -26,7 +26,7 @@ interface ComposerVoiceButtonProps {
 function VoiceIcon({ state }: { state: VoiceDictationState }) {
   if (state === 'recording') return <IconStop size={14} />;
   if (state === 'transcribing')
-    return <Loader2 size={14} className="motion-safe:animate-spin motion-reduce:animate-none" />;
+    return <IconLoadingCircle size={14} className="motion-safe:animate-spin motion-reduce:animate-none" />;
   return <IconMicrophone size={14} />;
 }
 

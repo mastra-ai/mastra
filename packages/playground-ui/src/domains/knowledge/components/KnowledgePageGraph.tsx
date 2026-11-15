@@ -64,9 +64,9 @@ import { IconArrowWallUp } from '@/ds/icons/central/IconArrowWallUp';
 import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
 import { IconFullscreen1 } from '@/ds/icons/central/IconFullscreen1';
 import { IconLayersTwo } from '@/ds/icons/central/IconLayersTwo';
-import { IconMinusLarge } from '@/ds/icons/central/IconMinusLarge';
+import { IconMinusMedium } from '@/ds/icons/central/IconMinusMedium';
 import { IconPin } from '@/ds/icons/central/IconPin';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 
 const NO_PANE_INSETS: PaneInsets = { left: 0, right: 0 };
 type PaneStyle = CSSProperties & { '--knowledge-pane-left': string };
@@ -1629,7 +1629,7 @@ function KnowledgePageGraphInner({
             aria-label="Zoom out"
             onClick={() => void reactFlow.zoomOut({ duration: fitDuration(prefersMotion()) })}
           >
-            <IconMinusLarge />
+            <IconMinusMedium />
           </Button>
           <Button
             size="icon-sm"
@@ -1637,7 +1637,7 @@ function KnowledgePageGraphInner({
             aria-label="Zoom in"
             onClick={() => void reactFlow.zoomIn({ duration: fitDuration(prefersMotion()) })}
           >
-            <IconPlusLarge />
+            <IconPlusMedium />
           </Button>
           <Button
             size="icon-sm"

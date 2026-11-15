@@ -1,6 +1,6 @@
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
@@ -64,7 +64,7 @@ export function ProposalTag({
           }}
           className={cn(quietTextHover, 'p-0.5')}
         >
-          <IconCheckmark1 className="h-3 w-3" />
+          <IconCheckmark2Medium className="h-3 w-3" />
         </button>
       </span>
     );

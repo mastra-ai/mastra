@@ -5,8 +5,8 @@ import { Link } from 'react-router';
 import { useActiveRunResourceIds } from '../../../../hooks/useActiveRunResources';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import type { CardContextSession } from '../boardItems';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
 import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 
 export function cardSessionPath(factoryId: string, session: CardContextSession): string {
   return `/factories/${factoryId}/workspaces/${session.ref.sessionId}/threads/${session.ref.threadId}`;
@@ -52,7 +52,7 @@ export function SessionContextMenu({
                   current
                 </Txt>
               )}
-              {open ? <IconCheckmark1 aria-hidden /> : null}
+              {open ? <IconCheckmark2Medium aria-hidden /> : null}
             </DropdownMenu.Item>
           );
         })}

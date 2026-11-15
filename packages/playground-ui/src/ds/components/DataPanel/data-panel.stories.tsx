@@ -4,7 +4,7 @@ import { Button } from '../Button';
 import { TooltipProvider } from '../Tooltip';
 import { DataPanel } from './data-panel';
 import type { DataPanelProps } from './data-panel-root';
-import { IconCalendarClock } from '@/ds/icons/central/IconCalendarClock';
+import { IconCalendarClock4 } from '@/ds/icons/central/IconCalendarClock4';
 import { IconRobot } from '@/ds/icons/central/IconRobot';
 import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
 
@@ -90,7 +90,7 @@ export const WithMetadata: Story = {
             <DataPanel.Meta as="a" href="#" icon={<IconRobot />} tooltip="Agent">
               weather-agent
             </DataPanel.Meta>
-            <DataPanel.Meta icon={<IconCalendarClock />} tooltip="Started at 2024-01-01 10:00:00">
+            <DataPanel.Meta icon={<IconCalendarClock4 />} tooltip="Started at 2024-01-01 10:00:00">
               2 min ago
             </DataPanel.Meta>
             <DataPanel.Meta icon={<IconStopwatch />} tooltip="Duration 1,234ms">

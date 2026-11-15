@@ -3,7 +3,7 @@ import { TextAndIcon } from './text-and-icon';
 import { IconCalendar1 } from '@/ds/icons/central/IconCalendar1';
 import { IconCall } from '@/ds/icons/central/IconCall';
 import { IconClock } from '@/ds/icons/central/IconClock';
-import { IconEmail1 } from '@/ds/icons/central/IconEmail1';
+import { IconEmail2 } from '@/ds/icons/central/IconEmail2';
 import { IconMapPin } from '@/ds/icons/central/IconMapPin';
 import { IconUser } from '@/ds/icons/central/IconUser';
 
@@ -54,7 +54,7 @@ export const WithEmail: Story = {
   args: {
     children: (
       <>
-        <IconEmail1 />
+        <IconEmail2 />
         hello@example.com
       </>
     ),
@@ -69,7 +69,7 @@ export const AllExamples: Story = {
         John Doe
       </TextAndIcon>
       <TextAndIcon>
-        <IconEmail1 />
+        <IconEmail2 />
         john@example.com
       </TextAndIcon>
       <TextAndIcon>

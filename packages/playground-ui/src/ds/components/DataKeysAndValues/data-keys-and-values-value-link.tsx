@@ -1,5 +1,5 @@
 import { dataKeysAndValuesValueStyles } from './shared';
-import { IconChainLink1 } from '@/ds/icons/central/IconChainLink1';
+import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
 import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -43,7 +43,7 @@ export function DataKeysAndValuesValueLink({ className, children, href, as }: Da
     <dd className={cn(dataKeysAndValuesValueStyles, className)}>
       <Component {...navigationProps} className={linkClassName}>
         <span>{children}</span>
-        <IconChainLink1 />
+        <IconChainLink3 />
       </Component>
     </dd>
   );

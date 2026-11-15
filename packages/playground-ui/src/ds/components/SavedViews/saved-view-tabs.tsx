@@ -1,4 +1,3 @@
-import { LayersPlusIcon, TextCursorInputIcon } from 'lucide-react';
 import { Fragment, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { SavedViewNameInput } from './saved-view-name-input';
@@ -11,11 +10,13 @@ import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import type { FilterBarField, FilterBarOperator } from '@/ds/components/FilterBar/types';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/ds/components/HoverCard';
 import { Txt } from '@/ds/components/Txt';
+import { IconInputForm } from '@/ds/icons/central/IconInputForm';
+import { IconLayersThree } from '@/ds/icons/central/IconLayersThree';
 import { IconLayersTwo } from '@/ds/icons/central/IconLayersTwo';
 import { IconPencil } from '@/ds/icons/central/IconPencil';
 import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
-import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
 import { Icon } from '@/ds/icons/Icon';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 import { controlHeight } from '@/ds/primitives/control-size';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
@@ -107,7 +108,7 @@ export function SavedViewTabs<TSettings>({
           disabled={draft !== undefined}
           onClick={() => views.create(newViewSettings)}
         >
-          <LayersPlusIcon />
+          <IconLayersThree />
         </Button>
       )}
     </div>
@@ -204,9 +205,9 @@ function SavedViewTab<TSettings>({
 }) {
   const actions: ViewAction[] = [
     { label: 'Edit view', icon: <IconPencil aria-hidden />, onClick: onEdit },
-    { label: 'Rename', icon: <TextCursorInputIcon aria-hidden />, onClick: onRename },
+    { label: 'Rename', icon: <IconInputForm aria-hidden />, onClick: onRename },
     { label: 'Duplicate', icon: <IconSquareBehindSquare1 aria-hidden />, onClick: onDuplicate },
-    { label: 'Delete view', icon: <IconTrashCan aria-hidden />, onClick: onDelete, destructive: true },
+    { label: 'Delete view', icon: <TrashIcon aria-hidden />, onClick: onDelete, destructive: true },
   ];
   const [menuOpen, setMenuOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);

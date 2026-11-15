@@ -26,7 +26,7 @@ import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/co
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { FolderGit2, ListPlus } from 'lucide-react';
+import { FolderGit2 } from 'lucide-react';
 import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
 import { IconCircleRecord } from '@mastra/playground-ui/icons/central/IconCircleRecord';
 import { IconColumns3 } from '@mastra/playground-ui/icons/central/IconColumns3';
@@ -34,7 +34,6 @@ import { IconFontStyle } from '@mastra/playground-ui/icons/central/IconFontStyle
 import { IconHashtag } from '@mastra/playground-ui/icons/central/IconHashtag';
 import { IconMerged } from '@mastra/playground-ui/icons/central/IconMerged';
 import { IconPlugin1 } from '@mastra/playground-ui/icons/central/IconPlugin1';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
 import { IconShieldCheck } from '@mastra/playground-ui/icons/central/IconShieldCheck';
 import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
@@ -50,6 +49,8 @@ import type { Facts } from './conditionFields';
 import { MANY, VALUELESS, canNest, emptyRow, fromRule, isGroup, newKey, toRule, valueFor } from './conditionTree';
 import type { Group, Item, Row } from './conditionTree';
 import { narrowSuggestions } from './sourceSuggestions';
+import { IconListAdd } from '@mastra/playground-ui/icons/central/IconListAdd';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 const FIELD_ICONS: Record<string, LucideIcon> = {
   'item.labels': IconTag,
@@ -176,12 +177,12 @@ function GroupLines({
 
   const actions = (
     <>
-      <RuleAddButton icon={<IconPlusLarge />} onClick={() => add(emptyRow())}>
+      <RuleAddButton icon={<IconPlusMedium />} onClick={() => add(emptyRow())}>
         Add condition
       </RuleAddButton>
       {canNest(depth) && (
         <RuleAddButton
-          icon={<ListPlus />}
+          icon={<IconListAdd />}
           onClick={() => add({ key: newKey(), logic: group.logic === 'AND' ? 'OR' : 'AND', items: [emptyRow()] })}
         >
           Add group

@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Waypoints, Workflow } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Sidebar, useSidebar } from '.';
 import { Avatar } from '@/ds/components/Avatar';
@@ -17,11 +16,12 @@ import { Input } from '@/ds/components/Input';
 import { LogoWithoutText } from '@/ds/components/Logo';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { LogsIcon, MetricsIcon, TraceIcon } from '@/ds/icons';
-import { IconBell } from '@/ds/icons/central/IconBell';
+import { IconAgents } from '@/ds/icons/central/IconAgents';
+import { IconBell2 } from '@/ds/icons/central/IconBell2';
 import { IconBox } from '@/ds/icons/central/IconBox';
 import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
 import { IconHome } from '@/ds/icons/central/IconHome';
-import { IconKey1 } from '@/ds/icons/central/IconKey1';
+import { IconKey2 } from '@/ds/icons/central/IconKey2';
 import { IconLab } from '@/ds/icons/central/IconLab';
 import { IconLayoutGrid1 } from '@/ds/icons/central/IconLayoutGrid1';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
@@ -31,6 +31,7 @@ import { IconServer1 } from '@/ds/icons/central/IconServer1';
 import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
 import { IconTodos } from '@/ds/icons/central/IconTodos';
 import { IconUserDuo } from '@/ds/icons/central/IconUserDuo';
+import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { focusRing } from '@/ds/primitives/transitions';
 import { KeyboardShortcutsProvider } from '@/lib/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@/lib/keyboard/use-keydown';
@@ -168,7 +169,7 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
                     title: 'Infrastructure',
                     links: [
                       { name: 'Deploys', url: '/deploys', icon: <IconBox /> },
-                      { name: 'Gateway', url: '/gateway', icon: <Workflow />, opensView: true },
+                      { name: 'Gateway', url: '/gateway', icon: <WorkflowIcon />, opensView: true },
                       { name: 'Databases', url: '/databases', icon: <IconServer1 /> },
                     ],
                     moreLinks: [
@@ -190,7 +191,7 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
                     key: 'project-settings',
                     separator: true,
                     links: [
-                      { name: 'Environments', url: '/environments', icon: <Waypoints />, opensView: true },
+                      { name: 'Environments', url: '/environments', icon: <IconAgents />, opensView: true },
                       { name: 'Settings', url: '/settings', icon: <IconSettingsGear1 />, opensView: true },
                     ],
                   },
@@ -200,9 +201,9 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
 
             <Sidebar.NavStack.View value="gateway" title="Gateway" returnFocusRef={menuTriggerRef}>
               <Sidebar.NavList>
-                <Sidebar.NavLink link={{ name: 'API keys', url: '/gateway/api-keys', icon: <IconKey1 /> }} isActive />
+                <Sidebar.NavLink link={{ name: 'API keys', url: '/gateway/api-keys', icon: <IconKey2 /> }} isActive />
                 <Sidebar.NavLink link={{ name: 'Usage', url: '/gateway/usage', icon: <MetricsIcon /> }} />
-                <Sidebar.NavLink link={{ name: 'Threads', url: '/gateway/threads', icon: <Workflow /> }} />
+                <Sidebar.NavLink link={{ name: 'Threads', url: '/gateway/threads', icon: <WorkflowIcon /> }} />
                 <Sidebar.NavLink link={{ name: 'Logs', url: '/gateway/logs', icon: <LogsIcon /> }} />
                 <Sidebar.NavLink link={{ name: 'Settings', url: '/gateway/settings', icon: <IconSettingsGear1 /> }} />
               </Sidebar.NavList>
@@ -210,8 +211,8 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
 
             <Sidebar.NavStack.View value="environments" title="Environments" returnFocusRef={menuTriggerRef}>
               <Sidebar.NavList>
-                <Sidebar.NavLink link={{ name: 'Environments', url: '/environments', icon: <Waypoints /> }} isActive />
-                <Sidebar.NavLink link={{ name: 'Environment variables', url: '/variables', icon: <IconKey1 /> }} />
+                <Sidebar.NavLink link={{ name: 'Environments', url: '/environments', icon: <IconAgents /> }} isActive />
+                <Sidebar.NavLink link={{ name: 'Environment variables', url: '/variables', icon: <IconKey2 /> }} />
               </Sidebar.NavList>
             </Sidebar.NavStack.View>
 
@@ -257,11 +258,11 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
               <div className="px-2 py-1 text-meta text-muted-foreground">justin@mastra.ai</div>
               <DropdownMenu.Separator />
               <DropdownMenu.Item onSelect={() => openView('gateway')}>
-                <Workflow />
+                <WorkflowIcon />
                 Gateway
               </DropdownMenu.Item>
               <DropdownMenu.Item onSelect={() => openView('environments')}>
-                <Waypoints />
+                <IconAgents />
                 Environments
               </DropdownMenu.Item>
               <DropdownMenu.Item onSelect={() => openView('settings')}>
@@ -275,7 +276,7 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
                 Organization settings
               </DropdownMenu.Item>
               <DropdownMenu.Item>
-                <IconBell />
+                <IconBell2 />
                 Notifications
               </DropdownMenu.Item>
             </DropdownMenu.Content>
