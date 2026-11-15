@@ -7,10 +7,12 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconSparklesTwo } from '@mastra/playground-ui/icons/central/IconSparklesTwo';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useStoredSkills } from '@mastra/react/hooks/agents';
 import { useCurrentUser } from '@mastra/react/hooks/auth';
-import { DownloadIcon, PlusIcon, SparklesIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -85,14 +87,14 @@ export default function AgentBuilderSkillsPage() {
             actionSlot={
               canWriteSkills ? (
                 <div className="flex items-center gap-2">
-                  <Button variant="primary" onClick={goToCreate} icon={<PlusIcon />}>
+                  <Button variant="primary" onClick={goToCreate} icon={<IconPlusLarge />}>
                     New skill
                   </Button>
                   {enabledRegistry && (
                     <Button
                       variant="default"
                       onClick={() => setRegistryDialog({ id: enabledRegistry.id, label: enabledRegistry.label })}
-                      icon={<DownloadIcon />}
+                      icon={<IconArrowInbox />}
                     >
                       Browse registry
                     </Button>
@@ -117,7 +119,7 @@ export default function AgentBuilderSkillsPage() {
               <ActionRow.Start>
                 <PageHeader>
                   <PageHeader.Title>
-                    <SparklesIcon /> My skills
+                    <IconSparklesTwo /> My skills
                   </PageHeader.Title>
                   <PageHeader.Description>Skills you've created.</PageHeader.Description>
                 </PageHeader>
@@ -128,12 +130,12 @@ export default function AgentBuilderSkillsPage() {
                     <Button
                       variant="default"
                       onClick={() => setRegistryDialog({ id: enabledRegistry.id, label: enabledRegistry.label })}
-                      icon={<DownloadIcon />}
+                      icon={<IconArrowInbox />}
                     >
                       Browse registry
                     </Button>
                   )}
-                  <Button variant="primary" onClick={goToCreate} icon={<PlusIcon />}>
+                  <Button variant="primary" onClick={goToCreate} icon={<IconPlusLarge />}>
                     New skill
                   </Button>
                 </ActionRow.End>

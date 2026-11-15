@@ -2,7 +2,8 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState, EmptyStateIllustration } from '@mastra/playground-ui/components/EmptyState';
 import type { EmptyStateIllustrationName } from '@mastra/playground-ui/components/EmptyState';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { LogIn, RotateCcw } from 'lucide-react';
+import { IconArrowBoxRight } from '@mastra/playground-ui/icons/central/IconArrowBoxRight';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 
@@ -65,11 +66,14 @@ export function LoadErrorState({ title, error, onRetry, retrying }: RetryProps &
       descriptionSlot={failure.description}
       actionSlot={
         failure.signIn ? (
-          <Button icon={<LogIn />} render={<Link to={`/signin?returnTo=${encodeURIComponent(returnTo)}`} />}>
+          <Button
+            icon={<IconArrowBoxRight />}
+            render={<Link to={`/signin?returnTo=${encodeURIComponent(returnTo)}`} />}
+          >
             Sign in
           </Button>
         ) : (
-          <Button icon={<RotateCcw />} disabled={retrying} onClick={onRetry}>
+          <Button icon={<IconArrowRotateCounterClockwise />} disabled={retrying} onClick={onRetry}>
             {retrying ? 'Trying again…' : 'Try again'}
           </Button>
         )
@@ -108,7 +112,7 @@ export function SidebarLoadError({
         disabled={retrying}
         onClick={onRetry}
       >
-        <RotateCcw aria-hidden />
+        <IconArrowRotateCounterClockwise aria-hidden />
       </Button>
     </div>
   );

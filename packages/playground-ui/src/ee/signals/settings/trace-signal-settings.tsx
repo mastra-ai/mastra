@@ -1,5 +1,4 @@
 import type { TraceSignalDefinition } from '@mastra/client-js';
-import { Settings, ArchiveRestore, Archive, Pencil, LayoutGrid } from 'lucide-react';
 import { useState } from 'react';
 
 import { useTraceIntelligence } from '../use-trace-intelligence';
@@ -12,6 +11,11 @@ import { Notice } from '@/ds/components/Notice';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Switch } from '@/ds/components/Switch';
 import { Txt } from '@/ds/components/Txt';
+import { IconArchive } from '@/ds/icons/central/IconArchive';
+import { IconLayoutGrid1 } from '@/ds/icons/central/IconLayoutGrid1';
+import { IconPencil } from '@/ds/icons/central/IconPencil';
+import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconUnarchiv } from '@/ds/icons/central/IconUnarchiv';
 
 export function TraceSignalSettingsButton({ open, onClick }: { open: boolean; onClick: () => void }) {
   const { signalManagement } = useTraceIntelligence();
@@ -28,7 +32,7 @@ export function TraceSignalSettingsButton({ open, onClick }: { open: boolean; on
       aria-expanded={open}
       onClick={onClick}
     >
-      <Settings aria-hidden="true" />
+      <IconSettingsGear1 aria-hidden="true" />
     </Button>
   );
 }
@@ -39,7 +43,7 @@ export function TraceSignalSettingsPanel({ onClose }: { onClose: () => void }) {
       <DataDetailsPanel>
         <DataDetailsPanel.Header>
           <DataDetailsPanel.Heading className="items-center text-subheading text-foreground">
-            <Settings aria-hidden="true" /> Trace signal settings
+            <IconSettingsGear1 aria-hidden="true" /> Trace signal settings
           </DataDetailsPanel.Heading>
           <DataDetailsPanel.CloseButton onClick={onClose} tooltip="Close settings" />
         </DataDetailsPanel.Header>
@@ -133,7 +137,7 @@ function TraceSignalSettingsContent() {
             </Txt>
           </div>
           <Button
-            icon={<LayoutGrid />}
+            icon={<IconLayoutGrid1 />}
             size="sm"
             variant="primary"
             disabled={!canManage || atLimit}
@@ -165,7 +169,7 @@ function TraceSignalSettingsContent() {
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <Button
-                  icon={<Pencil />}
+                  icon={<IconPencil />}
                   size="sm"
                   variant="ghost"
                   disabled={!canManage}
@@ -174,7 +178,7 @@ function TraceSignalSettingsContent() {
                   Edit
                 </Button>
                 <Button
-                  icon={<Archive />}
+                  icon={<IconArchive />}
                   size="sm"
                   variant="ghost"
                   disabled={
@@ -221,7 +225,7 @@ function TraceSignalSettingsContent() {
                   {definition.displayLabel}
                 </Txt>
                 <Button
-                  icon={<ArchiveRestore />}
+                  icon={<IconUnarchiv />}
                   size="sm"
                   variant="ghost"
                   disabled={

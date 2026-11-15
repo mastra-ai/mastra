@@ -4,7 +4,6 @@ import { Sidebar, useMaybeSidebar } from '@mastra/playground-ui/components/Sideb
 import { PullRequestIcon } from '@mastra/playground-ui/components/PullRequestIcon';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Pin, User } from 'lucide-react';
 import { useId, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -25,6 +24,8 @@ import { relativeTime } from '../../../../lib/date/relativeTime';
 import type { PullRequestStatus } from '../../factory/boardItems';
 import { isPullRequestSource } from '../../factory/services/workItems';
 import type { LivePullRequestStatus } from '../../../../hooks/useWorkspacePullRequestStatuses';
+import { IconPin } from '@mastra/playground-ui/icons/central/IconPin';
+import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 
 /**
  * Shared sidebar row for workspace/user sessions. Built on `Sidebar.NavLink`
@@ -175,7 +176,7 @@ export function SessionNavRow({
         {runByFactory ? <span className="text-muted-foreground ml-1.5">run by Factory</span> : null}
       </Sidebar.NavLabel>
       {pinned && !loading ? (
-        <Pin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
+        <IconPin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
       ) : null}
       {statusLabel ? (
         <span id={statusId} hidden>
@@ -363,7 +364,7 @@ function SessionSourceIcon({
   pullRequestStatus?: PullRequestStatus;
 }) {
   if (source === 'user') {
-    return <User data-source="user" aria-hidden className="text-muted-foreground size-3.5 shrink-0" />;
+    return <IconUser data-source="user" aria-hidden className="text-muted-foreground size-3.5 shrink-0" />;
   }
   if (pullRequestStatus) {
     return <PullRequestIcon data-source={source} status={pullRequestStatus} aria-hidden className="size-3.5" />;

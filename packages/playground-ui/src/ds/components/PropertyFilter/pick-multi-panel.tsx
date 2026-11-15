@@ -1,7 +1,8 @@
-import { CheckIcon, SearchIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Spinner } from '@/ds/components/Spinner/spinner';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { menuEmptyClass, menuItemButtonClass, menuItemCheckClass, menuSearchClasses } from '@/ds/primitives/menu-item';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { cn } from '@/lib/utils';
@@ -35,7 +36,7 @@ function PickMultiItem({
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {checked && (
         <span className={menuItemCheckClass}>
-          <CheckIcon />
+          <IconCheckmark1 />
         </span>
       )}
     </button>
@@ -82,7 +83,7 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
     <>
       {field.searchable !== false && (
         <div className={menuSearchClasses.container}>
-          <SearchIcon className={menuSearchClasses.icon} />
+          <IconMagnifyingGlass className={menuSearchClasses.icon} />
           <input
             type="text"
             value={query}

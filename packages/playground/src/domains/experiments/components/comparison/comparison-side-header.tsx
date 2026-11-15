@@ -5,26 +5,24 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { getShortId } from '@mastra/playground-ui/components/Text';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { IconCalendar1 } from '@mastra/playground-ui/icons/central/IconCalendar1';
+import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
+import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconClock } from '@mastra/playground-ui/icons/central/IconClock';
+import { IconCoins } from '@mastra/playground-ui/icons/central/IconCoins';
+import { IconExclamationCircle } from '@mastra/playground-ui/icons/central/IconExclamationCircle';
+import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
+import { IconHashtag } from '@mastra/playground-ui/icons/central/IconHashtag';
+import { IconHistory } from '@mastra/playground-ui/icons/central/IconHistory';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconTarget } from '@mastra/playground-ui/icons/central/IconTarget';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
-import {
-  CalendarIcon,
-  ChevronDownIcon,
-  CircleAlertIcon,
-  ClockIcon,
-  CoinsIcon,
-  Link2Icon,
-  GaugeIcon,
-  HashIcon,
-  HistoryIcon,
-  PencilIcon,
-  TargetIcon,
-  StarIcon,
-} from 'lucide-react';
+import { Star } from 'lucide-react';
 import { useState } from 'react';
 import { RenameExperimentDialog } from '../rename-experiment-dialog';
 import type { ComparisonRole } from './build-comparison-rows';
@@ -90,17 +88,17 @@ export function ComparisonSideTitle({ role, label, experiment, onSetBaseline }: 
             render={
               <Button size="sm" className="max-w-full min-w-0">
                 <span className="min-w-0 truncate">{experiment.name || shortId}</span>
-                <ChevronDownIcon aria-hidden />
+                <IconChevronBottom aria-hidden />
               </Button>
             }
           />
           <DropdownMenu.Content align="start" className="min-w-48">
             <DropdownMenu.Item render={<Link href={`/experiments/${experiment.id}`} />}>
-              <Link2Icon /> View experiment
+              <IconChainLink1 /> View experiment
             </DropdownMenu.Item>
             {canRename && (
               <DropdownMenu.Item onSelect={() => setRenameOpen(true)}>
-                <PencilIcon /> Rename experiment
+                <IconPencil /> Rename experiment
               </DropdownMenu.Item>
             )}
           </DropdownMenu.Content>
@@ -121,7 +119,7 @@ export function ComparisonSideTitle({ role, label, experiment, onSetBaseline }: 
                 />
               }
             >
-              <Badge variant={sideVariant[role]} size="md" icon={<StarIcon />}>
+              <Badge variant={sideVariant[role]} size="md" icon={<Star />}>
                 {label}
               </Badge>
             </TooltipTrigger>
@@ -131,7 +129,7 @@ export function ComparisonSideTitle({ role, label, experiment, onSetBaseline }: 
           <Badge
             variant={sideVariant[role]}
             size="md"
-            icon={role === 'baseline' ? <StarIcon className="fill-current" /> : <StarIcon />}
+            icon={role === 'baseline' ? <Star className="fill-current" /> : <Star />}
           >
             {label}
           </Badge>
@@ -180,7 +178,7 @@ export function ComparisonSideSummary({
           ? [
               {
                 id: 'target',
-                icon: experiment.targetType === 'agent' ? <AgentIcon /> : <TargetIcon />,
+                icon: experiment.targetType === 'agent' ? <AgentIcon /> : <IconTarget />,
                 label: experiment.targetType === 'agent' ? 'Agent' : 'Target',
                 value:
                   experiment.targetType === 'agent' ? (
@@ -198,7 +196,7 @@ export function ComparisonSideSummary({
           ? [
               {
                 id: 'dataset-version',
-                icon: <HistoryIcon />,
+                icon: <IconHistory />,
                 label: 'Dataset version',
                 value: (
                   <ComparisonDatasetVersion
@@ -215,7 +213,7 @@ export function ComparisonSideSummary({
           ? [
               {
                 id: 'created-at',
-                icon: <CalendarIcon />,
+                icon: <IconCalendar1 />,
                 label: 'Created',
                 value: formatDate(createdAt, 'date'),
                 delta: null,
@@ -232,7 +230,7 @@ export function ComparisonSideSummary({
       ? [
           {
             id: 'total-cost',
-            icon: <CoinsIcon />,
+            icon: <IconCoins />,
             label: 'Total cost',
             value: formatCostValue(usage.cost, usage.costUnit),
             rawValue: usage.cost,
@@ -247,7 +245,7 @@ export function ComparisonSideSummary({
       ? [
           {
             id: 'avg-duration',
-            icon: <ClockIcon />,
+            icon: <IconClock />,
             label: 'Avg duration',
             value: formatDuration(metrics.averageDurationMs) ?? '-',
             rawValue: metrics.averageDurationMs,
@@ -263,7 +261,7 @@ export function ComparisonSideSummary({
       ? [
           {
             id: 'avg-score',
-            icon: <GaugeIcon />,
+            icon: <IconGauge />,
             label: 'Avg score',
             value: formatScore(metrics.averageScore),
             rawValue: metrics.averageScore,
@@ -276,7 +274,7 @@ export function ComparisonSideSummary({
       ? [
           {
             id: 'total-tokens',
-            icon: <HashIcon />,
+            icon: <IconHashtag />,
             label: 'Total tokens',
             value: formatTokenCount(usage.tokens),
             rawValue: usage.tokens,
@@ -291,7 +289,7 @@ export function ComparisonSideSummary({
       ? [
           {
             id: 'errors',
-            icon: <CircleAlertIcon />,
+            icon: <IconExclamationCircle />,
             label: 'Errors',
             value: String(metrics.errorCount),
             delta: trend(metrics.errorCount, baselineMetrics?.errorCount),

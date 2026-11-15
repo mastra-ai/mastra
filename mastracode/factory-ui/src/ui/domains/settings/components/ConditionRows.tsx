@@ -26,24 +26,21 @@ import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/co
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import {
-  CircleCheck,
-  CircleDot,
-  Columns3,
-  FolderGit2,
-  GitMerge,
-  GitPullRequest,
-  Hash,
-  ListPlus,
-  Plug,
-  Plus,
-  ShieldCheck,
-  Tag,
-  Type,
-  User,
-  Users,
-  Zap,
-} from 'lucide-react';
+import { FolderGit2, ListPlus } from 'lucide-react';
+import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
+import { IconCircleRecord } from '@mastra/playground-ui/icons/central/IconCircleRecord';
+import { IconColumns3 } from '@mastra/playground-ui/icons/central/IconColumns3';
+import { IconFontStyle } from '@mastra/playground-ui/icons/central/IconFontStyle';
+import { IconHashtag } from '@mastra/playground-ui/icons/central/IconHashtag';
+import { IconMerged } from '@mastra/playground-ui/icons/central/IconMerged';
+import { IconPlugin1 } from '@mastra/playground-ui/icons/central/IconPlugin1';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
+import { IconShieldCheck } from '@mastra/playground-ui/icons/central/IconShieldCheck';
+import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
+import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
+import { IconUserDuo } from '@mastra/playground-ui/icons/central/IconUserDuo';
+import { IconZap } from '@mastra/playground-ui/icons/central/IconZap';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
@@ -55,23 +52,23 @@ import type { Group, Item, Row } from './conditionTree';
 import { narrowSuggestions } from './sourceSuggestions';
 
 const FIELD_ICONS: Record<string, LucideIcon> = {
-  'item.labels': Tag,
-  'item.title': Type,
-  'item.author': User,
-  'item.key': Hash,
-  'item.state': CircleDot,
-  'item.assignees': Users,
-  'item.pullRequest': GitPullRequest,
-  'author.trusted': ShieldCheck,
-  'source.kind': GitPullRequest,
-  'source.integration': Plug,
-  'source.provider': Plug,
+  'item.labels': IconTag,
+  'item.title': IconFontStyle,
+  'item.author': IconUser,
+  'item.key': IconHashtag,
+  'item.state': IconCircleRecord,
+  'item.assignees': IconUserDuo,
+  'item.pullRequest': IconPullRequest,
+  'author.trusted': IconShieldCheck,
+  'source.kind': IconPullRequest,
+  'source.integration': IconPlugin1,
+  'source.provider': IconPlugin1,
   'source.repository': FolderGit2,
-  'pullRequest.closesIssue': GitMerge,
-  'closedIssue.phase': Columns3,
-  'closedIssue.hasPullRequest': GitPullRequest,
-  'event.type': Zap,
-  'event.reason': CircleCheck,
+  'pullRequest.closesIssue': IconMerged,
+  'closedIssue.phase': IconColumns3,
+  'closedIssue.hasPullRequest': IconPullRequest,
+  'event.type': IconZap,
+  'event.reason': IconCircleCheck,
 };
 
 function operatorLabel(field: FilterBarField | undefined, operator: string): string {
@@ -179,7 +176,7 @@ function GroupLines({
 
   const actions = (
     <>
-      <RuleAddButton icon={<Plus />} onClick={() => add(emptyRow())}>
+      <RuleAddButton icon={<IconPlusLarge />} onClick={() => add(emptyRow())}>
         Add condition
       </RuleAddButton>
       {canNest(depth) && (
@@ -257,7 +254,7 @@ function GroupLines({
 }
 
 function FieldIcon({ id }: { id: string }) {
-  const Icon = FIELD_ICONS[id] ?? CircleDot;
+  const Icon = FIELD_ICONS[id] ?? IconCircleRecord;
   return <Icon aria-hidden="true" className="text-muted-foreground size-3.5 shrink-0" />;
 }
 

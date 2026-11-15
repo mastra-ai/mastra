@@ -1,7 +1,8 @@
-import { ArrowDownRightIcon, ArrowUpRightIcon } from 'lucide-react';
 import { Badge } from '@/ds/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowDownRight } from '@/ds/icons/central/IconArrowDownRight';
+import { IconArrowUpRight } from '@/ds/icons/central/IconArrowUpRight';
 import { cn } from '@/lib/utils';
 
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
@@ -43,7 +44,7 @@ export function MetricsKpiCardChange({
   className?: string;
 }) {
   const flat = isFlat(changePct);
-  const Icon = changePct >= 0 ? ArrowUpRightIcon : ArrowDownRightIcon;
+  const Icon = changePct >= 0 ? IconArrowUpRight : IconArrowDownRight;
   const formattedChange = formatChange(changePct);
   const description = prevValue ? `${comparison} (${prevValue})` : comparison;
 

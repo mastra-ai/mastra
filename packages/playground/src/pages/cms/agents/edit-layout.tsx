@@ -5,9 +5,14 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
+import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
+import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
+import { IconRocket } from '@mastra/playground-ui/icons/central/IconRocket';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useAgent, useAgentVersion, useAgentVersions, useStoredAgent } from '@mastra/react/hooks/agents';
-import { Check, Download, GitPullRequest, Save, Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -71,11 +76,11 @@ function EditFormContent({
     <Notice variant="info" title="This is a previous version" className="mb-4">
       <Notice.Message>You are seeing a specific version of the agent.</Notice.Message>
       <div className="flex items-center gap-2">
-        <Button icon={<Eye />} type="button" variant="default" size="sm" onClick={() => setSearchParams({})}>
+        <Button icon={<IconEyeOpen />} type="button" variant="default" size="sm" onClick={() => setSearchParams({})}>
           View latest version
         </Button>
         <Button
-          icon={<Rocket />}
+          icon={<IconRocket />}
           type="button"
           variant="default"
           size="sm"
@@ -270,7 +275,7 @@ function EditLayoutWrapper() {
               size="sm"
               onClick={() => void handleDownloadJson()}
               disabled={isSavingDraft || isSubmitting}
-              icon={<Download />}
+              icon={<IconArrowInbox />}
             >
               Download JSON
             </Button>
@@ -287,7 +292,7 @@ function EditLayoutWrapper() {
                 });
               }}
             >
-              <GitPullRequest />
+              <IconPullRequest />
               Open PR
             </Button>
           </>
@@ -307,7 +312,7 @@ function EditLayoutWrapper() {
               </>
             ) : (
               <>
-                <Save />
+                <IconFloppyDisk1 />
                 Save
               </>
             )}
@@ -329,7 +334,7 @@ function EditLayoutWrapper() {
               </>
             ) : (
               <>
-                <Check />
+                <IconCheckmark1 />
                 {isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
               </>
             )}

@@ -1,7 +1,8 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import type { DropdownMenuTriggerProps } from '@mastra/playground-ui/components/DropdownMenu';
-import { RotateCcw, Settings2 } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 
 export function PropertiesMenu({
   label,
@@ -10,7 +11,7 @@ export function PropertiesMenu({
   onReset,
   align = 'start',
   variant = 'ghost',
-  icon = <Settings2 size={15} aria-hidden />,
+  icon = <IconSettingsSliderHor size={15} aria-hidden />,
   children,
 }: {
   label: string;
@@ -50,7 +51,7 @@ export function PropertiesMenu({
         {children}
         <DropdownMenu.Separator />
         <DropdownMenu.Item disabled={changedCount === 0} onClick={onReset}>
-          <RotateCcw aria-hidden />
+          <IconArrowRotateCounterClockwise aria-hidden />
           <span>Reset to default</span>
         </DropdownMenu.Item>
       </DropdownMenu.Content>

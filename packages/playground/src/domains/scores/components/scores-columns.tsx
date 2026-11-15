@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { Columns3Icon } from 'lucide-react';
+import { IconColumns3 } from '@mastra/playground-ui/icons/central/IconColumns3';
 import { COLUMN_LABELS, TOGGLEABLE_COLUMNS } from '../hooks/use-scores-columns';
 import type { ScoresColumnsState } from '../hooks/use-scores-columns';
 
@@ -8,7 +8,7 @@ export function ScoresColumnsMenu({ visibleColumns, toggleColumn }: Omit<ScoresC
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
-        <Button icon={<Columns3Icon />}>Columns</Button>
+        <Button icon={<IconColumns3 />}>Columns</Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end">
         <DropdownMenu.Label>Toggle columns</DropdownMenu.Label>

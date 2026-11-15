@@ -1,8 +1,8 @@
-import { CheckIcon } from 'lucide-react';
 import { useContext } from 'react';
 import type { ReactNode } from 'react';
 import { StepsHeadingContext } from './steps-context';
 import { Txt } from '@/ds/components/Txt';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -34,7 +34,7 @@ export function Step({ title, description, action, done, className, children }: 
           )}
         >
           {done ? (
-            <CheckIcon className="size-3.5" aria-label="Done" />
+            <IconCheckmark1 className="size-3.5" aria-label="Done" />
           ) : (
             <Txt as="span" variant="column" className="before:content-[counter(ds-step)]" aria-hidden />
           )}

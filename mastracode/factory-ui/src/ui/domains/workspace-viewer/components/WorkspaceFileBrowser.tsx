@@ -4,21 +4,6 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import {
-  ArrowLeft,
-  Eye,
-  EyeOff,
-  File,
-  FileCode,
-  FileJson,
-  FileText,
-  Folder,
-  FolderOpen,
-  FolderSymlink,
-  Image,
-  NotepadText,
-  RefreshCw,
-} from 'lucide-react';
 import { useIsFetching, useQueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
@@ -27,6 +12,19 @@ import { WakeSandbox } from './WakeSandbox';
 import type { WorkspaceTreeEntry } from '../../../../api/types';
 import { useWorkspaceTree } from '../../../../hooks/use-fs';
 import { treeRowContainmentClass } from '../layout';
+import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
+import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
+import { IconEyeSlash } from '@mastra/playground-ui/icons/central/IconEyeSlash';
+import { IconFileBend } from '@mastra/playground-ui/icons/central/IconFileBend';
+import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
+import { IconFolder1 } from '@mastra/playground-ui/icons/central/IconFolder1';
+import { IconFolderOpen } from '@mastra/playground-ui/icons/central/IconFolderOpen';
+import { IconImages1 } from '@mastra/playground-ui/icons/central/IconImages1';
+import { IconJson } from '@mastra/playground-ui/icons/central/IconJson';
+import { IconScript } from '@mastra/playground-ui/icons/central/IconScript';
+import { IconFolderLink } from '@mastra/playground-ui/icons/central/IconFolderLink';
+import { IconNotepad } from '@mastra/playground-ui/icons/central/IconNotepad';
 
 function getFileIcon(path: string): ReactNode {
   const ext = path.split('.').pop()?.toLowerCase();
@@ -35,29 +33,29 @@ function getFileIcon(path: string): ReactNode {
     case 'tsx':
     case 'js':
     case 'jsx':
-      return <FileCode className="text-badge-blue-indicator" />;
+      return <IconScript className="text-badge-blue-indicator" />;
     case 'json':
-      return <FileJson className="text-badge-amber-indicator" />;
+      return <IconJson className="text-badge-amber-indicator" />;
     case 'md':
     case 'mdx':
-      return <FileText className="text-muted-foreground" />;
+      return <IconFileText className="text-muted-foreground" />;
     case 'png':
     case 'jpg':
     case 'jpeg':
     case 'gif':
     case 'svg':
     case 'webp':
-      return <Image className="text-muted-foreground" />;
+      return <IconImages1 className="text-muted-foreground" />;
     default:
-      return <File className="text-muted-foreground" />;
+      return <IconFileBend className="text-muted-foreground" />;
   }
 }
 
 function getFolderIcon(isOpen: boolean): ReactNode {
   return isOpen ? (
-    <FolderOpen className="text-badge-amber-indicator" />
+    <IconFolderOpen className="text-badge-amber-indicator" />
   ) : (
-    <Folder className="text-badge-amber-indicator" />
+    <IconFolder1 className="text-badge-amber-indicator" />
   );
 }
 
@@ -132,7 +130,7 @@ function WorkspaceTreeItem({ entry, ...props }: TreeLevelProps & { entry: Worksp
     return (
       <Tree.File id={`${FOLDER_LINK_ID}${entry.linkedPath}`} className={treeRowContainmentClass}>
         <Tree.Icon>
-          <FolderSymlink className="text-badge-amber-indicator" />
+          <IconFolderLink className="text-badge-amber-indicator" />
         </Tree.Icon>
         <Tree.Label>
           {entry.name}
@@ -224,9 +222,9 @@ export function WorkspaceFileBrowser({
     <aside className="flex min-h-0 w-full min-w-0 grow flex-col" aria-label="Workspace files">
       <div className="flex min-h-10 items-center gap-1.5 px-1.5 py-1">
         <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label="Back to workspace">
-          <ArrowLeft />
+          <IconArrowLeft />
         </Button>
-        <NotepadText className="text-muted-foreground" size={14} />
+        <IconNotepad className="text-muted-foreground" size={14} />
         <Txt tone="ink" as="h2" variant="column">
           Files
         </Txt>
@@ -241,7 +239,7 @@ export function WorkspaceFileBrowser({
                 aria-pressed={showHidden}
                 aria-label={showHidden ? 'Hide hidden files' : 'Show hidden files'}
               >
-                {showHidden ? <Eye /> : <EyeOff />}
+                {showHidden ? <IconEyeOpen /> : <IconEyeSlash />}
               </Button>
             }
           />
@@ -254,7 +252,7 @@ export function WorkspaceFileBrowser({
           disabled={isRefreshing}
           aria-label={isRefreshing ? 'Refreshing workspace files' : 'Refresh workspace files'}
         >
-          {isRefreshing ? <Spinner size="sm" /> : <RefreshCw />}
+          {isRefreshing ? <Spinner size="sm" /> : <IconArrowRotateClockwise />}
         </Button>
       </div>
       {content ? (

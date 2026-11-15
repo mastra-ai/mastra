@@ -13,12 +13,13 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ExternalLink, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useEffect, useEffectEvent, useState } from 'react';
 
 import type { OAuthStartResponse } from '../../../../api/types';
 import { useCompleteProviderOAuth, usePollProviderOAuth } from '../../../../hooks/use-providers';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 
 interface ProviderOAuthDialogProps {
   provider: string;
@@ -70,7 +71,7 @@ function PasteCodeDialog({ provider, session, onClose, onComplete, scopeNotice }
             {session.instructions}
           </Txt>
           <Button onClick={() => openAuthorizationUrl(session.url)}>
-            <ExternalLink />
+            <IconSquareArrowTopRight />
             Open authorization page
           </Button>
           <Input
@@ -164,7 +165,7 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete, scopeNotice 
             </div>
           )}
           <Button className="w-full" onClick={() => openAuthorizationUrl(session.url)}>
-            <ExternalLink />
+            <IconSquareArrowTopRight />
             Open authorization page
           </Button>
         </DialogBody>

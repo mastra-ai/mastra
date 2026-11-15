@@ -1,8 +1,8 @@
 import { Header, HeaderTitle } from '@mastra/playground-ui/components/Header';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { IconPackage } from '@mastra/playground-ui/icons/central/IconPackage';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useMastraTemplates } from '@mastra/react/hooks/templates';
-import { PackageIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -71,7 +71,7 @@ export default function Templates() {
       <Header>
         <HeaderTitle>
           <Icon>
-            <PackageIcon />
+            <IconPackage />
           </Icon>
           Templates
         </HeaderTitle>

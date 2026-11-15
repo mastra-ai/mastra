@@ -1,9 +1,10 @@
 import type { AutoFormFieldProps } from '@autoform/react';
 import { v4 as uuid } from '@lukeed/uuid';
-import { Plus, TrashIcon } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/ds/components/Button';
 import { Input } from '@/ds/components/Input';
+import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
 
 interface KeyValuePair {
   id: string;
@@ -95,11 +96,18 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field })
             aria-label="Remove pair"
             onClick={() => removePair(pair.id)}
           >
-            <TrashIcon />
+            <IconTrashCan />
           </Button>
         </div>
       ))}
-      <Button type="button" variant="ghost" size="sm" className="justify-self-start" onClick={addPair} icon={<Plus />}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="justify-self-start"
+        onClick={addPair}
+        icon={<IconPlusLarge />}
+      >
         Add pair
       </Button>
     </div>

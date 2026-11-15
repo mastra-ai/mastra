@@ -1,16 +1,18 @@
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { DataListTopCell } from './data-list-top-cell';
 import type { DataListTopCellProps } from './data-list-top-cell';
 import { Button } from '@/ds/components/Button';
+import { IconArrowDown } from '@/ds/icons/central/IconArrowDown';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
+import { IconSortArrowUpDown } from '@/ds/icons/central/IconSortArrowUpDown';
 import { cn } from '@/lib/utils';
 
 export type DataListSort = 'asc' | 'desc';
 
 const sortIcons = {
-  asc: ArrowUp,
-  desc: ArrowDown,
-  none: ArrowUpDown,
+  asc: IconArrowUp,
+  desc: IconArrowDown,
+  none: IconSortArrowUpDown,
 };
 
 const sortLabels = {

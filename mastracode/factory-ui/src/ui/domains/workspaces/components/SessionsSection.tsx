@@ -1,7 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar, useMaybeSidebarState } from '@mastra/playground-ui/components/Sidebar';
-import { ArrowUpDown, CircleDashed, Clock, Plus, UserRound } from 'lucide-react';
+import { IconCircleDashed } from '@mastra/playground-ui/icons/central/IconCircleDashed';
+import { IconClock } from '@mastra/playground-ui/icons/central/IconClock';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconSortArrowUpDown } from '@mastra/playground-ui/icons/central/IconSortArrowUpDown';
+import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 import type { ReactNode } from 'react';
 import { useParams } from 'react-router';
 
@@ -99,7 +103,7 @@ export function SessionsSection() {
                 onClick={() => openNewUserSession(factoryId)}
                 disabled={deletion.deleting}
               >
-                <Plus size={15} />
+                <IconPlusLarge size={15} />
               </Button>
             )}
             <PropertiesMenu
@@ -112,28 +116,28 @@ export function SessionsSection() {
             >
               <DropdownMenu.RadioSub
                 label="Sort"
-                icon={<ArrowUpDown aria-hidden />}
+                icon={<IconSortArrowUpDown aria-hidden />}
                 options={SESSION_SORT_MENU_OPTIONS}
                 value={view.sort}
                 onValueChange={sort => updateView({ sort })}
               />
               <DropdownMenu.RadioSub
                 label="Owner"
-                icon={<UserRound aria-hidden />}
+                icon={<IconUser aria-hidden />}
                 options={sessionOwnerMenuOptions(rows, viewerUserId)}
                 value={filters.owner}
                 onValueChange={owner => changeFilters({ owner })}
               />
               <DropdownMenu.RadioSub
                 label="Status"
-                icon={<CircleDashed aria-hidden />}
+                icon={<IconCircleDashed aria-hidden />}
                 options={SESSION_STATUS_MENU_OPTIONS}
                 value={filters.status}
                 onValueChange={status => changeFilters({ status })}
               />
               <DropdownMenu.RadioSub
                 label="Updated"
-                icon={<Clock aria-hidden />}
+                icon={<IconClock aria-hidden />}
                 options={SESSION_UPDATED_MENU_OPTIONS}
                 value={filters.updated}
                 onValueChange={updated => changeFilters({ updated })}

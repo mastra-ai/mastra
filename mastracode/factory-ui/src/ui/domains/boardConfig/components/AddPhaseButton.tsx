@@ -11,7 +11,6 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Plus } from 'lucide-react';
 import { useId, useState } from 'react';
 import { useNavigate } from 'react-router';
 
@@ -20,6 +19,7 @@ import { useOverlays } from '../../../lib/overlays';
 import { useBoardDraft } from '../BoardDraftProvider';
 import { boardConfigPath } from '../boardConfigPaths';
 import { keyFromName, keyProblem } from '../boardDraft';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 
 /**
  * Adds a phase to the end of the board's draft and opens its page. New phases are resting; their kind changes on
@@ -43,7 +43,7 @@ export function AddPhaseButton({
       <Button
         size="sm"
         variant="ghost"
-        icon={<Plus />}
+        icon={<IconPlusLarge />}
         className="justify-start"
         disabled={disabled}
         onClick={() => setOpen(true)}

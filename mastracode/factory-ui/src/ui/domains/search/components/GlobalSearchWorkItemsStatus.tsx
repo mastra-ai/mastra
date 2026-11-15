@@ -1,5 +1,5 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { RefreshCw } from 'lucide-react';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 
 // Session titles come from board cards, so a board failure downgrades them to branch names.
 export function GlobalSearchWorkItemsStatus({ failed, onRetry }: { failed: boolean; onRetry: () => void }) {
@@ -11,7 +11,7 @@ export function GlobalSearchWorkItemsStatus({ failed, onRetry }: { failed: boole
         variant="warning"
         action={
           <Notice.Button onClick={onRetry}>
-            Retry <RefreshCw />
+            Retry <IconArrowRotateClockwise />
           </Notice.Button>
         }
       >

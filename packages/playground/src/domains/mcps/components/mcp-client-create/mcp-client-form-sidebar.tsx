@@ -5,11 +5,13 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { Check, PlusIcon, XIcon } from 'lucide-react';
 import { Controller, useWatch } from 'react-hook-form';
 import type { UseFormReturn } from 'react-hook-form';
-
 import { MCPServerCombobox } from '../mcp-server-combobox';
 import type { MCPClientFormValues } from './use-mcp-client-form';
 import { SectionHeader } from '@/domains/cms';
@@ -201,13 +203,13 @@ export function MCPClientFormSidebar({
                           aria-label="Remove variable"
                           onClick={() => removeEnvVar(index)}
                         >
-                          <XIcon />
+                          <IconCrossMedium />
                         </Button>
                       )}
                     </div>
                   ))}
                   {!readOnly && (
-                    <Button size="sm" onClick={addEnvVar} className="w-fit" icon={<PlusIcon />}>
+                    <Button size="sm" onClick={addEnvVar} className="w-fit" icon={<IconPlusLarge />}>
                       Add variable
                     </Button>
                   )}
@@ -263,7 +265,7 @@ export function MCPClientFormSidebar({
             ) : (
               <>
                 <Icon>
-                  <Check />
+                  <IconCheckmark1 />
                 </Icon>
                 {submitLabel}
               </>

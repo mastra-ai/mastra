@@ -1,8 +1,8 @@
-import { MenuIcon } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useSidebar } from './sidebar-context';
 import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerTitle } from '@/ds/components/Drawer';
+import { IconBarsThree } from '@/ds/icons/central/IconBarsThree';
 import { overlaySurfaceStyle, surfaceGroupStateLayerStyle } from '@/ds/primitives/raised-surface';
 import { ResizeHandleIndicator } from '@/ds/primitives/resize-handle-indicator';
 import { quietTextHoverInGroup } from '@/ds/primitives/typography';
@@ -219,7 +219,7 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
                     'inline-flex size-9 items-center justify-center rounded-full backdrop-blur-sm group-focus-visible:ring-1 group-focus-visible:ring-border-focus',
                   )}
                 >
-                  <MenuIcon className="size-4" />
+                  <IconBarsThree className="size-4" />
                 </span>
               </button>
             </DrawerClose>

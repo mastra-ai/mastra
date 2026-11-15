@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { BracesIcon } from 'lucide-react';
 import { fn } from 'storybook/test';
 
 import { ThemeProvider } from '../ThemeProvider';
 import { TooltipProvider } from '../Tooltip';
 import { DataDetailsPanel } from './index';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
 
 const meta: Meta<typeof DataDetailsPanel> = {
   title: 'DataDisplay/DataDetailsPanel',
@@ -57,7 +57,7 @@ export const Populated: Story = {
               <DataDetailsPanel.KeyValueList.Key>Started</DataDetailsPanel.KeyValueList.Key>
               <DataDetailsPanel.KeyValueList.Value>August 26, 2026 at 21:42</DataDetailsPanel.KeyValueList.Value>
             </DataDetailsPanel.KeyValueList>
-            <DataDetailsPanel.CodeSection title="Response" icon={<BracesIcon />} codeStr={responseBody} />
+            <DataDetailsPanel.CodeSection title="Response" icon={<IconCodeBrackets />} codeStr={responseBody} />
           </div>
         </DataDetailsPanel.Content>
       </DataDetailsPanel>

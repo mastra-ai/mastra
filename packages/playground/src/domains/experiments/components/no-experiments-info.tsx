@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ExternalLinkIcon, Plus } from 'lucide-react';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 
 export const NoExperimentsInfo = ({ onRunExperiment }: { onRunExperiment?: () => void }) => (
   <EmptyState
@@ -14,7 +15,7 @@ export const NoExperimentsInfo = ({ onRunExperiment }: { onRunExperiment?: () =>
     actionSlot={
       <div className="flex flex-col items-center gap-2">
         {onRunExperiment && (
-          <Button variant="primary" onClick={onRunExperiment} icon={<Plus />}>
+          <Button variant="primary" onClick={onRunExperiment} icon={<IconPlusLarge />}>
             New experiment
           </Button>
         )}
@@ -22,7 +23,7 @@ export const NoExperimentsInfo = ({ onRunExperiment }: { onRunExperiment?: () =>
           variant="ghost"
           render={<a href="https://mastra.ai/docs/evals/experiments" target="_blank" rel="noopener noreferrer" />}
 
-          icon={<ExternalLinkIcon />}
+          icon={<IconSquareArrowTopRight />}
         >
           Experiments documentation
         </Button>

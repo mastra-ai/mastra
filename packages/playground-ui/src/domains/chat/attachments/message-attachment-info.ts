@@ -1,4 +1,7 @@
-import { File, FileAudio, FileImage, FileSpreadsheet, FileText, FileVideo } from 'lucide-react';
+import { FileAudio, FileSpreadsheet, FileVideo } from 'lucide-react';
+import { IconFileBend } from '@/ds/icons/central/IconFileBend';
+import { IconFileText } from '@/ds/icons/central/IconFileText';
+import { IconImages1 } from '@/ds/icons/central/IconImages1';
 import { isRemoteUrl } from '@/lib/file';
 
 export function attachmentName(name: string | undefined, src: string | undefined, fallback: string) {
@@ -24,12 +27,12 @@ export function attachmentInfo(name: string, contentType?: string) {
     return { Icon: FileSpreadsheet, label: extension || 'Spreadsheet' };
   }
   if (mime?.startsWith('image/'))
-    return { Icon: FileImage, label: extension || mime.slice(6).split('+')[0]?.toUpperCase() || 'Image' };
-  if (mime === 'application/pdf' || extension === 'PDF') return { Icon: FileText, label: 'PDF' };
+    return { Icon: IconImages1, label: extension || mime.slice(6).split('+')[0]?.toUpperCase() || 'Image' };
+  if (mime === 'application/pdf' || extension === 'PDF') return { Icon: IconFileText, label: 'PDF' };
   if (mime?.startsWith('audio/')) return { Icon: FileAudio, label: extension || 'Audio' };
   if (mime?.startsWith('video/')) return { Icon: FileVideo, label: extension || 'Video' };
-  if (mime?.startsWith('text/')) return { Icon: FileText, label: extension || 'Text' };
-  return { Icon: File, label: extension || 'File' };
+  if (mime?.startsWith('text/')) return { Icon: IconFileText, label: extension || 'Text' };
+  return { Icon: IconFileBend, label: extension || 'File' };
 }
 
 export function textAttachment(data: string, name?: string) {

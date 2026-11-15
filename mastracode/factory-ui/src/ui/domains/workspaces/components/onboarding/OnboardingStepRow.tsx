@@ -1,7 +1,7 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check } from 'lucide-react';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
 import { useId } from 'react';
 import { ONBOARDING_SECTIONS } from '../../services/onboardingSteps';
 import type { OnboardingSection } from '../../services/onboardingSteps';
@@ -76,7 +76,7 @@ export function OnboardingDoneRow({
           className="bg-foreground text-background grid size-6 shrink-0 place-items-center rounded-full"
           aria-hidden="true"
         >
-          <Check className="size-3.5" />
+          <IconCheckmark1 className="size-3.5" />
         </span>
         <Txt as="span" tone="muted" className="w-20 shrink-0">
           {label}

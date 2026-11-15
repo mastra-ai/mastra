@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ChevronDownIcon, CopyIcon, ScissorsIcon, ClipboardIcon, SearchIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../Button';
 import { Combobox } from '../Combobox';
@@ -8,6 +7,11 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from '../InputGroup';
 import { Popover, PopoverContent, PopoverTrigger } from '../Popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
 import { ButtonsGroup, ButtonsGroupText } from './buttons-group';
+import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconClipboard } from '@/ds/icons/central/IconClipboard';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
+import { IconScissors1 } from '@/ds/icons/central/IconScissors1';
+import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 
 const meta: Meta<typeof ButtonsGroup> = {
   title: 'Composite/ButtonsGroup',
@@ -46,11 +50,11 @@ export const Sizes: Story = {
         <ButtonsGroup key={size} size={size} aria-label={`${size} group`}>
           <InputGroup className="w-50">
             <InputGroupAddon align="inline-start">
-              <SearchIcon />
+              <IconMagnifyingGlass />
             </InputGroupAddon>
             <InputGroupInput aria-label={`Search (${size})`} placeholder="Search" />
           </InputGroup>
-          <Button icon={<CopyIcon />}>Copy</Button>
+          <Button icon={<IconSquareBehindSquare1 />}>Copy</Button>
           <ButtonsGroupText>{size}</ButtonsGroupText>
           <Select defaultValue="recent">
             <SelectTrigger size="lg" aria-label="Sort by">
@@ -62,7 +66,7 @@ export const Sizes: Story = {
             </SelectContent>
           </Select>
           <Button size="icon-lg" aria-label="More options">
-            <ChevronDownIcon />
+            <IconChevronBottom />
           </Button>
         </ButtonsGroup>
       ))}
@@ -84,7 +88,7 @@ export const AsSplitButton: Story = {
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
           <Button size="icon-md" aria-label="More save options">
-            <ChevronDownIcon />
+            <IconChevronBottom />
           </Button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end">
@@ -103,7 +107,7 @@ export const PopoverFirstSegmentOpen: Story = {
       <Popover defaultOpen>
         <PopoverTrigger variant="ghost" size="sm">
           Claude Opus 5.5
-          <ChevronDownIcon />
+          <IconChevronBottom />
         </PopoverTrigger>
         <PopoverContent align="start">Model menu</PopoverContent>
       </Popover>
@@ -128,15 +132,15 @@ export const VerticalWithIcons: Story = {
   render: () => (
     <ButtonsGroup orientation="vertical">
       <Button>
-        <CopyIcon />
+        <IconSquareBehindSquare1 />
         Copy
       </Button>
       <Button>
-        <ScissorsIcon />
+        <IconScissors1 />
         Cut
       </Button>
       <Button>
-        <ClipboardIcon />
+        <IconClipboard />
         Paste
       </Button>
     </ButtonsGroup>
@@ -193,7 +197,7 @@ export const SearchWithDropdown: Story = {
       <ButtonsGroup className="w-105">
         <InputGroup>
           <InputGroupAddon align="inline-start">
-            <SearchIcon />
+            <IconMagnifyingGlass />
           </InputGroupAddon>
           <InputGroupInput
             type="search"

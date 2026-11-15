@@ -4,7 +4,6 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { BOARD_CARD_LAYOUT_CLASS } from '../boardLayout';
-import { EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
 
 import { useParams } from 'react-router';
@@ -42,6 +41,7 @@ import { WorkItemDetailsPanel } from './WorkItemDetailsPanel';
 import { WorkItemListRow } from './WorkItemListRow';
 import type { WorkItemMenuProps } from './WorkItemMenuItems';
 import { WorkItemMenuItems } from './WorkItemMenuItems';
+import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
 
 export function WorkItemCard({
   item,
@@ -321,7 +321,7 @@ export function WorkItemCard({
                       aria-label={`Actions for ${item.title}`}
                       className={REVEAL_ON_CARD_HOVER}
                     >
-                      <EllipsisVertical size={13} aria-hidden />
+                      <IconDotGrid1x3Vertical size={13} aria-hidden />
                     </Button>
                   }
                 />

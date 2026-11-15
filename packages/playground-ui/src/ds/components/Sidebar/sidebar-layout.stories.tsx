@@ -1,23 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import {
-  Brain,
-  CalendarClock,
-  Home,
-  Bot,
-  Workflow,
-  Settings,
-  Database,
-  FileText,
-  History,
-  Users,
-  Bell,
-  LifeBuoy,
-  BookOpen,
-  Radio,
-  Search,
-  Sparkles,
-  Wrench,
-} from 'lucide-react';
+import { Workflow } from 'lucide-react';
 import { useState, forwardRef } from 'react';
 import { getIsLinkActive, Sidebar, SidebarProvider, useSidebar } from '.';
 import type { SidebarProviderProps, SidebarSection } from '.';
@@ -48,6 +30,22 @@ import {
   WorkflowIcon,
   WorkspacesIcon,
 } from '@/ds/icons';
+import { IconBell } from '@/ds/icons/central/IconBell';
+import { IconBook } from '@/ds/icons/central/IconBook';
+import { IconBrain } from '@/ds/icons/central/IconBrain';
+import { IconCalendarClock } from '@/ds/icons/central/IconCalendarClock';
+import { IconFileText } from '@/ds/icons/central/IconFileText';
+import { IconHistory } from '@/ds/icons/central/IconHistory';
+import { IconHome } from '@/ds/icons/central/IconHome';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
+import { IconMaintenance } from '@/ds/icons/central/IconMaintenance';
+import { IconPodcast1 } from '@/ds/icons/central/IconPodcast1';
+import { IconRescueRing } from '@/ds/icons/central/IconRescueRing';
+import { IconRobot } from '@/ds/icons/central/IconRobot';
+import { IconServer1 } from '@/ds/icons/central/IconServer1';
+import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSparklesTwo } from '@/ds/icons/central/IconSparklesTwo';
+import { IconUserDuo } from '@/ds/icons/central/IconUserDuo';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import type { LinkComponentProps } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
@@ -245,13 +243,13 @@ const StudioSidebarBody = () => {
 
       <div className="mb-2">
         <Sidebar.NavList>
-          <Sidebar.NavLink asChild state={state} link={{ name: 'Search', url: '#', icon: <Search /> }}>
+          <Sidebar.NavLink asChild state={state} link={{ name: 'Search', url: '#', icon: <IconMagnifyingGlass /> }}>
             <button
               type="button"
               aria-label="Search and navigate"
               className={`${raisedSurfaceStyle} state-layer text-foreground hover:text-foreground [&_svg]:text-muted-foreground [&:hover_svg]:text-foreground`}
             >
-              <Search />
+              <IconMagnifyingGlass />
               <Sidebar.NavLabel state={state}>Search</Sidebar.NavLabel>
               {state !== 'collapsed' && (
                 <kbd
@@ -268,7 +266,10 @@ const StudioSidebarBody = () => {
 
       <div className="mb-1">
         <Sidebar.NavList>
-          <Sidebar.NavLink state={state} link={{ name: 'Agent Builder', url: '/agent-builder', icon: <Wrench /> }} />
+          <Sidebar.NavLink
+            state={state}
+            link={{ name: 'Agent Builder', url: '/agent-builder', icon: <IconMaintenance /> }}
+          />
         </Sidebar.NavList>
       </div>
 
@@ -282,7 +283,7 @@ const StudioSidebarBody = () => {
       <Sidebar.Footer className="pb-3">
         <Sidebar.NavList>
           <Sidebar.NavLink state={state} link={{ name: 'Settings', url: '/settings', icon: <SettingsIcon /> }} />
-          <Sidebar.NavLink state={state} link={{ name: 'Resources', url: '/resources', icon: <BookOpen /> }} />
+          <Sidebar.NavLink state={state} link={{ name: 'Resources', url: '/resources', icon: <IconBook /> }} />
         </Sidebar.NavList>
         {state !== 'collapsed' && (
           <>
@@ -316,8 +317,8 @@ export const Default: Story = {
         <Sidebar.Nav>
           <Sidebar.NavSection>
             <Sidebar.NavList>
-              <Sidebar.NavLink link={{ name: 'Home', url: '/', icon: <Home /> }} isActive />
-              <Sidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <Bot /> }} />
+              <Sidebar.NavLink link={{ name: 'Home', url: '/', icon: <IconHome /> }} isActive />
+              <Sidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <IconRobot /> }} />
               <Sidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
             </Sidebar.NavList>
           </Sidebar.NavSection>
@@ -338,8 +339,8 @@ export const WithSections: Story = {
           <Sidebar.NavSection>
             <Sidebar.NavHeader>Main</Sidebar.NavHeader>
             <Sidebar.NavList>
-              <Sidebar.NavLink link={{ name: 'Dashboard', url: '/', icon: <Home /> }} isActive />
-              <Sidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <Bot /> }} />
+              <Sidebar.NavLink link={{ name: 'Dashboard', url: '/', icon: <IconHome /> }} isActive />
+              <Sidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <IconRobot /> }} />
               <Sidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
             </Sidebar.NavList>
           </Sidebar.NavSection>
@@ -349,8 +350,8 @@ export const WithSections: Story = {
           <Sidebar.NavSection>
             <Sidebar.NavHeader>Data</Sidebar.NavHeader>
             <Sidebar.NavList>
-              <Sidebar.NavLink link={{ name: 'Storage', url: '/storage', icon: <Database /> }} />
-              <Sidebar.NavLink link={{ name: 'Logs', url: '/logs', icon: <FileText /> }} />
+              <Sidebar.NavLink link={{ name: 'Storage', url: '/storage', icon: <IconServer1 /> }} />
+              <Sidebar.NavLink link={{ name: 'Logs', url: '/logs', icon: <IconFileText /> }} />
             </Sidebar.NavList>
           </Sidebar.NavSection>
         </Sidebar.Nav>
@@ -384,11 +385,11 @@ export const WithNestedItems: Story = {
                   {
                     name: 'Agents',
                     url: '/agents',
-                    icon: <Bot />,
+                    icon: <IconRobot />,
                     children: [
-                      { name: 'Templates', url: '/agents/templates', icon: <Sparkles /> },
-                      { name: 'Memory', url: '/agents/memory', icon: <Brain /> },
-                      { name: 'Channels', url: '/agents/channels', icon: <Radio /> },
+                      { name: 'Templates', url: '/agents/templates', icon: <IconSparklesTwo /> },
+                      { name: 'Memory', url: '/agents/memory', icon: <IconBrain /> },
+                      { name: 'Channels', url: '/agents/channels', icon: <IconPodcast1 /> },
                     ],
                   },
                   {
@@ -396,8 +397,8 @@ export const WithNestedItems: Story = {
                     url: '/workflows',
                     icon: <Workflow />,
                     children: [
-                      { name: 'Runs', url: '/workflows/runs', icon: <History /> },
-                      { name: 'Schedules', url: '/workflows/schedules', icon: <CalendarClock /> },
+                      { name: 'Runs', url: '/workflows/runs', icon: <IconHistory /> },
+                      { name: 'Schedules', url: '/workflows/schedules', icon: <IconCalendarClock /> },
                     ],
                   },
                 ],
@@ -406,7 +407,7 @@ export const WithNestedItems: Story = {
                 key: 'settings',
                 title: 'Admin',
                 separator: true,
-                links: [{ name: 'Settings', url: '/settings', icon: <Settings /> }],
+                links: [{ name: 'Settings', url: '/settings', icon: <IconSettingsGear1 /> }],
               },
             ]}
             isActive={(link, siblings) => getIsLinkActive(link, '/agents/templates', siblings)}
@@ -427,8 +428,8 @@ export const WithFooter: Story = {
         <Sidebar.Nav>
           <Sidebar.NavSection>
             <Sidebar.NavList>
-              <Sidebar.NavLink link={{ name: 'Home', url: '/', icon: <Home /> }} isActive />
-              <Sidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <Bot /> }} />
+              <Sidebar.NavLink link={{ name: 'Home', url: '/', icon: <IconHome /> }} isActive />
+              <Sidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <IconRobot /> }} />
               <Sidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
             </Sidebar.NavList>
           </Sidebar.NavSection>
@@ -436,9 +437,9 @@ export const WithFooter: Story = {
 
         <Sidebar.Footer>
           <Sidebar.NavList>
-            <Sidebar.NavLink link={{ name: 'Team', url: '/team', icon: <Users /> }} />
-            <Sidebar.NavLink link={{ name: 'Notifications', url: '/notifications', icon: <Bell /> }} />
-            <Sidebar.NavLink link={{ name: 'Settings', url: '/settings', icon: <Settings /> }} />
+            <Sidebar.NavLink link={{ name: 'Team', url: '/team', icon: <IconUserDuo /> }} />
+            <Sidebar.NavLink link={{ name: 'Notifications', url: '/notifications', icon: <IconBell /> }} />
+            <Sidebar.NavLink link={{ name: 'Settings', url: '/settings', icon: <IconSettingsGear1 /> }} />
           </Sidebar.NavList>
           <Sidebar.Trigger />
         </Sidebar.Footer>
@@ -471,8 +472,8 @@ const SidebarBody = () => (
       <Sidebar.NavSection>
         <Sidebar.NavHeader>Workspace</Sidebar.NavHeader>
         <Sidebar.NavList>
-          <Sidebar.NavLink link={{ name: 'Overview', url: '/', icon: <Home /> }} isActive />
-          <Sidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <Bot /> }} />
+          <Sidebar.NavLink link={{ name: 'Overview', url: '/', icon: <IconHome /> }} isActive />
+          <Sidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <IconRobot /> }} />
           <Sidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
         </Sidebar.NavList>
       </Sidebar.NavSection>
@@ -559,8 +560,8 @@ export const Floating: Story = {
           <Sidebar.NavSection>
             <Sidebar.NavHeader>Workspace</Sidebar.NavHeader>
             <Sidebar.NavList>
-              <Sidebar.NavLink link={{ name: 'Overview', url: '/', icon: <Home /> }} isActive />
-              <Sidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <Bot /> }} />
+              <Sidebar.NavLink link={{ name: 'Overview', url: '/', icon: <IconHome /> }} isActive />
+              <Sidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <IconRobot /> }} />
               <Sidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
             </Sidebar.NavList>
           </Sidebar.NavSection>
@@ -583,15 +584,15 @@ const ParityBody = () => (
       <Sidebar.NavSection>
         <Sidebar.NavHeader>Workspace</Sidebar.NavHeader>
         <Sidebar.NavList>
-          <Sidebar.NavLink link={{ name: 'Overview', url: '/', icon: <Home /> }} isActive />
-          <Sidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <Bot /> }} />
+          <Sidebar.NavLink link={{ name: 'Overview', url: '/', icon: <IconHome /> }} isActive />
+          <Sidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <IconRobot /> }} />
           <Sidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
         </Sidebar.NavList>
       </Sidebar.NavSection>
     </Sidebar.Nav>
     <Sidebar.Footer>
       <Sidebar.NavList>
-        <Sidebar.NavLink link={{ name: 'Settings', url: '/settings', icon: <Settings /> }} />
+        <Sidebar.NavLink link={{ name: 'Settings', url: '/settings', icon: <IconSettingsGear1 /> }} />
       </Sidebar.NavList>
       <Sidebar.Trigger />
     </Sidebar.Footer>
@@ -640,11 +641,14 @@ export const AsChild: Story = {
             <Sidebar.NavSection>
               <Sidebar.NavHeader>Navigation</Sidebar.NavHeader>
               <Sidebar.NavList>
-                <Sidebar.NavLink link={{ name: 'Home', url: '/', icon: <Home /> }} isActive={activeKey === 'home'} />
+                <Sidebar.NavLink
+                  link={{ name: 'Home', url: '/', icon: <IconHome /> }}
+                  isActive={activeKey === 'home'}
+                />
 
                 <Sidebar.NavLink asChild isActive={activeKey === 'agents'}>
                   <button type="button" onClick={() => setActiveKey('agents')}>
-                    <Bot />
+                    <IconRobot />
                     <Sidebar.NavLabel>Agents (button)</Sidebar.NavLabel>
                   </button>
                 </Sidebar.NavLink>
@@ -654,7 +658,7 @@ export const AsChild: Story = {
                     render={
                       <Sidebar.NavLink asChild>
                         <button type="button">
-                          <LifeBuoy />
+                          <IconRescueRing />
                           <Sidebar.NavLabel>Contact support</Sidebar.NavLabel>
                         </button>
                       </Sidebar.NavLink>
@@ -671,7 +675,7 @@ export const AsChild: Story = {
 
                 <Sidebar.NavLink asChild>
                   <a href="https://mastra.ai/docs" target="_blank" rel="noreferrer">
-                    <BookOpen />
+                    <IconBook />
                     <Sidebar.NavLabel>Docs (custom anchor)</Sidebar.NavLabel>
                   </a>
                 </Sidebar.NavLink>
@@ -713,8 +717,8 @@ export const Mobile: Story = {
           <Sidebar.NavSection>
             <Sidebar.NavHeader>Workspace</Sidebar.NavHeader>
             <Sidebar.NavList>
-              <Sidebar.NavLink link={{ name: 'Overview', url: '/', icon: <Home /> }} isActive />
-              <Sidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <Bot /> }} />
+              <Sidebar.NavLink link={{ name: 'Overview', url: '/', icon: <IconHome /> }} isActive />
+              <Sidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <IconRobot /> }} />
               <Sidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
             </Sidebar.NavList>
           </Sidebar.NavSection>

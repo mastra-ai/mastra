@@ -5,10 +5,13 @@ import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
+import { IconHistory } from '@mastra/playground-ui/icons/central/IconHistory';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useDatasetMutations } from '@mastra/react/hooks/datasets';
-import { EllipsisVerticalIcon, History, Pencil, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { EditModeContent } from '../dataset-detail/dataset-item-form';
@@ -294,7 +297,7 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
             <DropdownMenu>
               <DropdownMenu.Trigger asChild>
                 <Button size="icon-sm" variant="ghost" tooltip="Open actions menu" aria-label="Open actions menu">
-                  <EllipsisVerticalIcon />
+                  <IconDotGrid1x3Vertical />
                 </Button>
               </DropdownMenu.Trigger>
               <DropdownMenu.Content align="end" className="w-48">
@@ -303,15 +306,15 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
                     navigate(`/datasets/${datasetId}/items/${item.id}/versions?version=${item.datasetVersion}`)
                   }
                 >
-                  <History />
+                  <IconHistory />
                   Item versions
                 </DropdownMenu.Item>
                 <DropdownMenu.Item onSelect={() => setIsEditing(true)}>
-                  <Pencil />
+                  <IconPencil />
                   Edit
                 </DropdownMenu.Item>
                 <DropdownMenu.Item onSelect={() => setShowDeleteConfirm(true)} variant="destructive">
-                  <Trash2 />
+                  <IconTrashCan />
                   Delete item
                 </DropdownMenu.Item>
               </DropdownMenu.Content>

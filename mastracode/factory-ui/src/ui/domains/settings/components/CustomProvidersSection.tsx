@@ -10,7 +10,8 @@ import {
   SettingsNoticeRow,
   SettingsSkeleton,
 } from '@mastra/playground-ui/new/settings';
-import { Plus, Server } from 'lucide-react';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconServer } from '@mastra/playground-ui/icons/central/IconServer';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -44,7 +45,7 @@ export function CustomProvidersSection() {
   };
 
   const addProvider = draft ? undefined : (
-    <Button size="sm" icon={<Plus />} onClick={() => setDraft('new')} disabled={busy}>
+    <Button size="sm" icon={<IconPlusLarge />} onClick={() => setDraft('new')} disabled={busy}>
       Add provider
     </Button>
   );
@@ -81,7 +82,7 @@ export function CustomProvidersSection() {
             key={provider.id}
             media={
               <SettingsItemIcon>
-                <Server />
+                <IconServer />
               </SettingsItemIcon>
             }
             title={provider.name}

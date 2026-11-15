@@ -7,7 +7,7 @@ import {
   SettingsNoticeRow,
   SettingsSkeleton,
 } from '@mastra/playground-ui/new/settings';
-import { Plus } from 'lucide-react';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { useState } from 'react';
 
 import type { ProviderInfo, VoiceSettingsResponse } from '../../../../../api/types';
@@ -59,7 +59,7 @@ export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scop
 
   const connected = options.flatMap(({ connection }) => (connection ? [connection] : []));
   const addProvider = (
-    <Button size="sm" icon={<Plus />} disabled={actionsDisabled} onClick={() => setAddOpen(true)}>
+    <Button size="sm" icon={<IconPlusLarge />} disabled={actionsDisabled} onClick={() => setAddOpen(true)}>
       Add provider
     </Button>
   );

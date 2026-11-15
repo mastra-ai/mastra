@@ -1,11 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowUpRight, Plus, Settings, Trash } from 'lucide-react';
 import { Fragment } from 'react';
 import { Input } from '../Input';
 import { TooltipProvider } from '../Tooltip';
 import { Txt } from '../Txt';
 import type { ButtonVariant } from './Button';
 import { Button } from './Button';
+import { IconArrowUpRight } from '@/ds/icons/central/IconArrowUpRight';
+import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const ALL_VARIANTS: ButtonVariant[] = [
@@ -92,7 +95,7 @@ export const Disabled: Story = {
 
 export const WithIcon: Story = {
   args: {
-    icon: <Plus />,
+    icon: <IconPlusLarge />,
     children: 'Add Item',
   },
 };
@@ -102,14 +105,14 @@ export const WithIconSizes: Story = {
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-4">
         {(['sm', 'md', 'lg'] as const).map(size => (
-          <Button key={size} size={size} icon={<Plus />}>
+          <Button key={size} size={size} icon={<IconPlusLarge />}>
             Add item
           </Button>
         ))}
       </div>
       <div className="flex items-center gap-4">
         {(['sm', 'md', 'lg'] as const).map(size => (
-          <Button key={size} size={size} iconEnd={<ArrowUpRight />}>
+          <Button key={size} size={size} iconEnd={<IconArrowUpRight />}>
             Open portal
           </Button>
         ))}
@@ -132,14 +135,14 @@ export const IconBesideText: Story = {
     <div className="flex flex-col gap-4">
       {(['sm', 'md', 'lg'] as const).map(size => (
         <div key={size} className="flex items-center gap-2">
-          <Button size={size} icon={<Plus />}>
+          <Button size={size} icon={<IconPlusLarge />}>
             Add item
           </Button>
           <Button size={`icon-${size}`} tooltip="Settings">
-            <Settings />
+            <IconSettingsGear1 />
           </Button>
           <Button size={`icon-${size}`} variant="ghost" tooltip="Delete">
-            <Trash />
+            <IconTrashCan />
           </Button>
         </div>
       ))}
@@ -149,7 +152,7 @@ export const IconBesideText: Story = {
 
 export const IconButtonDefault: Story = {
   args: {
-    children: <Settings />,
+    children: <IconSettingsGear1 />,
     tooltip: 'Settings',
     size: 'icon-md',
     variant: 'default',
@@ -161,7 +164,7 @@ export const IconButtonVariants: Story = {
     <div className="flex flex-wrap items-center gap-2">
       {ALL_VARIANTS.filter(variant => variant !== 'link').map(variant => (
         <Button key={variant} size="icon-md" variant={variant} tooltip={variant}>
-          <Settings />
+          <IconSettingsGear1 />
         </Button>
       ))}
     </div>
@@ -172,13 +175,13 @@ export const IconButtonSizes: Story = {
   render: () => (
     <div className="flex items-center gap-2">
       <Button size="icon-sm" tooltip="Small">
-        <Settings />
+        <IconSettingsGear1 />
       </Button>
       <Button size="icon-md" tooltip="Medium">
-        <Settings />
+        <IconSettingsGear1 />
       </Button>
       <Button size="icon-lg" tooltip="Large">
-        <Settings />
+        <IconSettingsGear1 />
       </Button>
     </div>
   ),
@@ -186,7 +189,7 @@ export const IconButtonSizes: Story = {
 
 export const IconButtonDisabled: Story = {
   args: {
-    children: <Settings />,
+    children: <IconSettingsGear1 />,
     tooltip: 'Settings (disabled)',
     size: 'icon-md',
     disabled: true,
@@ -217,7 +220,7 @@ export const VariantSizeMatrix: Story = {
             lg
           </Button>
           <Button variant={variant} size="lg" render={variant === 'link' ? <a href="#" /> : undefined}>
-            <Trash />
+            <IconTrashCan />
             with icon
           </Button>
         </Fragment>
@@ -269,7 +272,7 @@ export const Link: Story = {
         <Button
           variant="link"
           render={<a href="https://mastra.ai" target="_blank" rel="noopener noreferrer" />}
-          iconEnd={<ArrowUpRight />}
+          iconEnd={<IconArrowUpRight />}
         >
           Open billing portal
         </Button>
@@ -290,7 +293,7 @@ export const WithIconEnd: Story = {
   render: () => (
     <div className="flex items-center gap-4">
       {(['default', 'ghost', 'primary'] as const).map(variant => (
-        <Button key={variant} variant={variant} iconEnd={<ArrowUpRight />}>
+        <Button key={variant} variant={variant} iconEnd={<IconArrowUpRight />}>
           Open portal
         </Button>
       ))}

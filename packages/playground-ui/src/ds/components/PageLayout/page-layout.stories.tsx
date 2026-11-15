@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowLeftIcon, BoxesIcon, PlusIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { expect, within } from 'storybook/test';
 
@@ -10,6 +9,9 @@ import { EmptyState } from '../EmptyState';
 import { Input } from '../Input';
 import { Txt } from '../Txt';
 import { PageLayout } from './index';
+import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
+import { IconBox2 } from '@/ds/icons/central/IconBox2';
+import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
 import { MainCard } from '@/ds/new/layout/app-shell';
 import { PageHeader } from '@/ds/new/layout/page-header';
 
@@ -46,13 +48,13 @@ const headerActions = <Button>Docs</Button>;
 const pageHeader = (
   <PageHeader>
     <PageHeader.Icon>
-      <BoxesIcon strokeWidth={2.5} />
+      <IconBox2 />
     </PageHeader.Icon>
     <PageHeader.Title>Resources</PageHeader.Title>
     <PageHeader.Description>Agents, workflows and tools available in this workspace.</PageHeader.Description>
     <PageHeader.Action>
       <Button variant="primary">
-        <PlusIcon />
+        <IconPlusLarge />
         Create resource
       </Button>
     </PageHeader.Action>
@@ -123,7 +125,7 @@ function ComparisonHeader({
 const backLink = (
   <PageHeader.Eyebrow>
     <a href="#resources">
-      <ArrowLeftIcon aria-hidden />
+      <IconArrowLeft aria-hidden />
       Back to resources
     </a>
   </PageHeader.Eyebrow>

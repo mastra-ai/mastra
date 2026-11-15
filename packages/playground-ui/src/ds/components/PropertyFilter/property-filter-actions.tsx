@@ -1,6 +1,9 @@
-import { EllipsisVerticalIcon, SaveIcon, Trash2Icon, XIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button/Button';
 import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconDotGrid1x3Vertical } from '@/ds/icons/central/IconDotGrid1x3Vertical';
+import { IconFloppyDisk1 } from '@/ds/icons/central/IconFloppyDisk1';
+import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
 
 export type PropertyFilterActionsProps = {
   disabled?: boolean;
@@ -31,7 +34,7 @@ export function PropertyFilterActions({
   return (
     <div className="flex items-center gap-2">
       {onClear && (
-        <Button disabled={disabled} size="md" onClick={onClear} icon={<XIcon />}>
+        <Button disabled={disabled} size="md" onClick={onClear} icon={<IconCrossMedium />}>
           Clear
         </Button>
       )}
@@ -40,26 +43,26 @@ export function PropertyFilterActions({
         <DropdownMenu>
           <DropdownMenu.Trigger asChild>
             <Button disabled={disabled} size="icon-md" aria-label="More filter actions">
-              <EllipsisVerticalIcon />
+              <IconDotGrid1x3Vertical />
             </Button>
           </DropdownMenu.Trigger>
           <DropdownMenu.Content align="end">
             {onRemoveAll && (
               <DropdownMenu.Item onSelect={() => onRemoveAll()}>
-                <XIcon />
+                <IconCrossMedium />
                 Remove all filters
               </DropdownMenu.Item>
             )}
             {onRemoveAll && (onSave || onRemoveSaved) && <DropdownMenu.Separator />}
             {onSave && (
               <DropdownMenu.Item onSelect={() => onSave()}>
-                <SaveIcon />
+                <IconFloppyDisk1 />
                 Save filters for next time
               </DropdownMenu.Item>
             )}
             {onRemoveSaved && (
               <DropdownMenu.Item onSelect={() => onRemoveSaved()}>
-                <Trash2Icon />
+                <IconTrashCan />
                 Remove saved filters
               </DropdownMenu.Item>
             )}

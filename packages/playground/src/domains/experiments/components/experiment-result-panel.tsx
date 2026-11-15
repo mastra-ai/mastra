@@ -9,22 +9,20 @@ import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/components/review-status-badge';
 import { SpanPayloadToolCalls } from '@mastra/playground-ui/domains/traces/components/span-payload/span-payload-primitives';
+import { IconCalendar1 } from '@mastra/playground-ui/icons/central/IconCalendar1';
+import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
+import { IconCircleRecord } from '@mastra/playground-ui/icons/central/IconCircleRecord';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconFingerPrint1 } from '@mastra/playground-ui/icons/central/IconFingerPrint1';
+import { IconLab } from '@mastra/playground-ui/icons/central/IconLab';
+import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { getShortId } from '@mastra/playground-ui/utils/id';
 import { useTraceFeedback } from '@mastra/react/hooks/traces';
-import {
-  CalendarIcon,
-  CheckCircle,
-  CircleDotIcon,
-  ClipboardPlus,
-  FingerprintIcon,
-  FlaskConical,
-  TagIcon,
-  X,
-} from 'lucide-react';
+import { ClipboardPlus } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import { useExperimentResultUsage } from '../hooks/use-experiment-result-usage';
@@ -198,7 +196,7 @@ function ExperimentResultPanelBody({
     ...usageMetrics,
     {
       id: 'item-id',
-      icon: <FingerprintIcon />,
+      icon: <IconFingerPrint1 />,
       label: 'Item Id',
       value: (
         <span className="flex items-center gap-1.5">
@@ -214,7 +212,7 @@ function ExperimentResultPanelBody({
       ? [
           {
             id: 'created',
-            icon: <CalendarIcon />,
+            icon: <IconCalendar1 />,
             label: 'Created',
             value: formatDate(result.createdAt, 'date-time'),
             delta: null,
@@ -225,7 +223,7 @@ function ExperimentResultPanelBody({
       ? [
           {
             id: 'status',
-            icon: <CircleDotIcon />,
+            icon: <IconCircleRecord />,
             label: 'Status',
             value: <ReviewStatusBadge status={result.status} />,
             delta: null,
@@ -236,7 +234,7 @@ function ExperimentResultPanelBody({
       ? [
           {
             id: 'tags',
-            icon: <TagIcon />,
+            icon: <IconTag />,
             label: 'Tags',
             value: (
               <ResultTags
@@ -326,7 +324,7 @@ function ExperimentResultPanelBody({
           </Button>
         )}
         {onComplete && result.status === 'needs-review' && (
-          <Button size="sm" variant="primary" onClick={onComplete} icon={<CheckCircle />}>
+          <Button size="sm" variant="primary" onClick={onComplete} icon={<IconCircleCheck />}>
             Mark as reviewed
           </Button>
         )}
@@ -339,7 +337,7 @@ function ExperimentResultPanelBody({
               tooltip="See experiment"
               aria-label="See experiment"
             >
-              <FlaskConical />
+              <IconLab />
             </Button>
           )}
           {result.traceId && onShowTrace && (
@@ -421,7 +419,7 @@ function ResultTags({ tags, selectedResults, onTagsChange, tagVocabulary, isUpda
               onClick={() => onTagsChange(tags.filter(t => t !== tag))}
               className="cursor-pointer rounded-sm hover:opacity-70 disabled:opacity-50"
             >
-              <X className="size-3" />
+              <IconCrossMedium className="size-3" />
             </button>
           )}
         </ComputedTag>

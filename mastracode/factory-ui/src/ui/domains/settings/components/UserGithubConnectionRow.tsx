@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Link2 } from 'lucide-react';
+import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
 
 import { useApiConfig } from '../../../../api/config';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
@@ -26,7 +26,7 @@ export function UserGithubConnectionRow() {
       name="GitHub"
       description="Connect it so issues and PRs you create are authored as you."
     >
-      <Button size="sm" icon={<Link2 />} onClick={() => connectUserGithub(baseUrl)}>
+      <Button size="sm" icon={<IconChainLink1 />} onClick={() => connectUserGithub(baseUrl)}>
         Connect GitHub
       </Button>
     </IntegrationItem>
