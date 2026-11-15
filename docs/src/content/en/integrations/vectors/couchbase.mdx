@@ -155,7 +155,7 @@ Searches for similar vectors.
 
 :::warning
 
-The `filter` and `includeVector` parameters aren't currently supported. Filtering must be performed client-side after retrieving results or through the Couchbase SDK's Search capabilities. Retrieve the vector embedding by fetching the full document by ID with the Couchbase SDK.
+The `filter` and `includeVector` parameters aren't currently supported, and passing either throws a `MastraError`. Filter results client-side after retrieving them, or use the Couchbase SDK's Search capabilities. Retrieve the vector embedding by fetching the full document by ID with the Couchbase SDK.
 
 :::
 
@@ -182,7 +182,7 @@ The `filter` and `includeVector` parameters aren't currently supported. Filterin
     name: 'filter',
     type: 'Record<string, any>',
     isOptional: true,
-    description: 'Not supported. Filters passed here are ignored.',
+    description: 'Not supported. Passing a non-empty filter throws an error.',
   },
   {
     name: 'includeVector',
@@ -362,6 +362,7 @@ try {
 - Index creation delays may impact immediate querying after creation.
 - Vector dimension is enforced at ingest only after `createIndex()` creates a new index on the same `CouchbaseVector` instance. Calling `createIndex()` for an index that already exists doesn't turn on the ingest check. When the check is on, `upsert()` and `updateVector()` throw on a dimension mismatch. `query()` always checks the query vector against the index dimension.
 - `deleteVectors()` supports deletion by ID only. Metadata-filter deletion isn't supported.
+- `query()` can't filter by metadata. Mastra memory's semantic recall filters by thread or resource, so it doesn't work with Couchbase as its vector store.
 - Vector insertion and index updates are eventually consistent. Strong consistency isn't guaranteed immediately after writes.
 
 ## Related

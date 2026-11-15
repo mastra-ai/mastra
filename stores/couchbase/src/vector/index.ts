@@ -257,7 +257,25 @@ export class CouchbaseVector extends MastraVector {
     }
   }
 
-  async query({ indexName, queryVector, topK = 10, includeVector = false }: QueryVectorParams): Promise<QueryResult[]> {
+  async query({
+    indexName,
+    queryVector,
+    topK = 10,
+    includeVector = false,
+    filter,
+  }: QueryVectorParams): Promise<QueryResult[]> {
+    // The search request below has no metadata filter, so a filter would be silently ignored and
+    // results from outside it returned. Refuse it instead.
+    if (filter && Object.keys(filter).length > 0) {
+      throw new MastraError({
+        id: createVectorErrorId('COUCHBASE', 'QUERY', 'FILTER_NOT_SUPPORTED'),
+        text: 'Couchbase query filters are not supported; this store cannot restrict results by metadata',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     if (!queryVector) {
       throw new MastraError({
         id: createVectorErrorId('COUCHBASE', 'QUERY', 'MISSING_VECTOR'),

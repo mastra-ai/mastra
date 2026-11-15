@@ -655,6 +655,30 @@ describe('Unit Testing CouchbaseVector', () => {
       ).rejects.toThrow('Including vectors in search results is not yet supported by the Couchbase vector store');
     });
 
+    it('should reject a query filter instead of ignoring it, without searching or exposing filter values', async () => {
+      mockScopeSearchFn.mockClear();
+      const error = await couchbase_client
+        .query({
+          indexName: test_indexName,
+          queryVector: [1.0, 2.0, 3.0],
+          filter: { resource_id: 'sensitive-resource-id' },
+        })
+        .catch(e => e);
+      expect(error.id).toBe('MASTRA_VECTOR_COUCHBASE_QUERY_FILTER_NOT_SUPPORTED');
+      expect(error.message).toContain('filters are not supported');
+      expect(error.message).not.toContain('sensitive-resource-id');
+      expect(JSON.stringify(error.details ?? {})).not.toContain('sensitive-resource-id');
+      expect(mockScopeSearchFn).not.toHaveBeenCalled();
+    });
+
+    it('should still query when the filter is empty', async () => {
+      mockScopeSearchFn.mockClear();
+      await expect(
+        couchbase_client.query({ indexName: test_indexName, queryVector: [1.0, 2.0, 3.0], filter: {} }),
+      ).resolves.toBeInstanceOf(Array);
+      expect(mockScopeSearchFn).toHaveBeenCalledTimes(1);
+    });
+
     it('should throw error for empty vectors array in upsert', async () => {
       await expect(
         couchbase_client.upsert({
