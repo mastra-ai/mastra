@@ -249,6 +249,8 @@ const results = await mongoVector.query({
 
 Mastra passes the filter to the index only when every field it references is declared in `filterFields` and every operator is one the index accepts: `$and`, `$or`, `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, and `$nin`. A filter that uses an undeclared field or any other operator takes a fallback path: Mastra matches the collection first and passes the matching document IDs into the vector search. That fallback holds only while the ID set fits within MongoDB's 16 MB BSON document limit. On large collections the query fails once that limit is exceeded, so declare your filter fields when you expect selective filters over large data sets.
 
+Full-text search gets the same treatment: `textQuery()` and the text branch of `hybridQuery()` push the metadata filter into the search request whenever the text index can evaluate it, so keyword matches the filter would discard are never scored. The text index decides that, not a separate declaration — a `dynamic` mapping covers every field, a field-mapped index covers only the non-dotted fields it lists, and string values need a `token`-typed field. A filter the text index can't evaluate falls back to a `$match` after `$search`, which returns the same documents but scores every keyword match first.
+
 pgVector applies the filter as an ordinary query condition:
 
 ```ts

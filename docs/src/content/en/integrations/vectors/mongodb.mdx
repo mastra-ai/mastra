@@ -403,7 +403,7 @@ await store.waitForSearchIndexReady({ indexName: 'precedents' })
 
 Runs a full-text (BM25) search against a MongoDB Search index. By default it targets the text-search index recorded for this index (set by `createSearchIndex()`, or the dynamic `${collectionName}_search_index` auto-created by `createIndex()`). Pass `searchIndexName` to target a specific index for this call.
 
-Metadata filters here (like `hybridQuery()`) are applied via a `$match` stage. For the vector branch of `hybridQuery()`, filters on fields not declared via `filterFields` at index creation are transparently materialised as candidate `_id`s (the same fallback `query()` uses), so undeclared-field filters don't error.
+Metadata filters here (like `hybridQuery()`) are pushed into the search request itself whenever the text index can evaluate them, so Atlas Search only scores and materialises the documents that pass the filter. Pushdown applies when every field the filter references is covered by the index — a `dynamic` mapping covers any field, a field-mapped index covers the non-dotted fields it declares — and every operator and value type is one Atlas Search accepts (`$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$exists`, `$and`, `$or`; string values additionally need a `token`-typed field). Everything else is applied as a `$match` stage after `$search`, as before; date values are normalised to ISO strings before the filter reaches the store, so date filters are never pushed down. For the vector branch of `hybridQuery()`, filters on fields not declared via `filterFields` at index creation are transparently materialised as candidate `_id`s (the same fallback `query()` uses), so undeclared-field filters don't error.
 
 <PropertiesTable
   content={[

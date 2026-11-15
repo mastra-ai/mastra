@@ -209,6 +209,23 @@ interface RegistryDoc extends IndexTarget {
   metric?: string;
 }
 
+/**
+ * Read-only view of an Atlas Search index's field mappings, used to decide whether a metadata
+ * filter can be evaluated inside the `$search` stage. Unlike the vectorSearch index (where a
+ * filter on an undeclared path is a hard server error), an Atlas Search `compound.filter` on a
+ * path the index does not declare silently matches NOTHING, so pushdown must be derived from the
+ * real mapping and never attempted speculatively.
+ */
+interface SearchIndexMapping {
+  /** True for a `{ dynamic: true }` mapping, which indexes every field of the document. */
+  dynamic: boolean;
+  /** Declared path → the set of Atlas Search field types declared for it (e.g. `token`, `number`). */
+  fields: Map<string, Set<string>>;
+}
+
+/** BSON kind of a filter literal, used to check it against the index's declared field types. */
+type SearchLiteralKind = 'string' | 'number' | 'boolean' | 'date' | 'objectId' | 'unsupported';
+
 /** Name an index's embedding mode for a conflict message. */
 function describeEmbedding(config?: { path: string; model: string } | null): string {
   return config ? `autoEmbed (path "${config.path}", model "${config.model}")` : 'client-side vectors';
@@ -249,6 +266,16 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * `_id` is excluded because it is materialised separately by the fallback path.
    */
   private declaredFilterPaths: Map<string, Set<string>> = new Map();
+  /**
+   * Per-text-index cache of that Atlas Search index's field mappings, keyed by
+   * `${collectionName}::${textIndexName}` (search index names are unique per collection, not per
+   * database). Populated on first use and invalidated by createSearchIndex/deleteIndex.
+   *
+   * Mirrors {@link declaredFilterPaths}, but with a stricter consequence for getting it wrong: an
+   * Atlas Search `compound.filter` on a path the index does not declare matches nothing WITHOUT
+   * erroring, so a query must never push down a filter it has not confirmed the index can evaluate.
+   */
+  private searchIndexMappings: Map<string, SearchIndexMapping> = new Map();
   /**
    * Per-index target: where the data lives, what the Atlas index is called, and whether
    * the collection is caller-owned (bring-your-own). `isByo` is captured at createIndex
@@ -298,6 +325,26 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     '$lte',
     '$in',
     '$nin',
+  ]);
+  /**
+   * MongoDB query operators that can be translated into an Atlas Search `compound.filter` clause —
+   * the text-search analogue of {@link MongoDBVector.PUSHDOWN_OPERATORS}. Anything outside this set
+   * (`$regex`, `$not`, `$size`, `$elemMatch`, …) falls back to the post-`$search` `$match`, which
+   * supports the full query language. Widening this set is only safe for operators Atlas Search
+   * actually accepts in a filter clause.
+   */
+  private static readonly SEARCH_CLAUSE_OPERATORS = new Set([
+    '$and',
+    '$or',
+    '$eq',
+    '$ne',
+    '$gt',
+    '$gte',
+    '$lt',
+    '$lte',
+    '$in',
+    '$nin',
+    '$exists',
   ]);
   private mongoMetricMap: { [key: string]: string } = {
     cosine: 'cosine',
@@ -1123,6 +1170,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       if (!created) {
         await collection.updateSearchIndex(name, definition);
       }
+      // The definition may just have been (re)written, so any mapping cached for this text index
+      // no longer describes it: drop it and let the next query re-read the live mapping.
+      this.invalidateSearchIndexMapping(collectionName, name);
       if (waitUntilReady) {
         await this.waitForSearchIndexReady({ indexName });
       }
@@ -1161,9 +1211,20 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     try {
       const collection = await this.getCollection(collectionName, true);
       const metadataFilter = this.transformMetadataFilter(this.transformFilter(filter), metadataMode);
+      const hasMetadataFilter = Object.keys(metadataFilter).length > 0;
+      // When the text index can express the filter, evaluate it inside the search request so Atlas
+      // only scores and materialises the documents that survive the filter. Otherwise the filter
+      // stays on the `$match` below — same results, just paid for after scoring every keyword match.
+      const searchFilterClauses = hasMetadataFilter
+        ? await this.tryBuildTextSearchFilter(metadataFilter, collection, collectionName, textIndex)
+        : null;
       const pipeline: Document[] = [
-        { $search: { index: textIndex, text: { query, path: paths } } },
-        ...(Object.keys(metadataFilter).length ? [{ $match: metadataFilter }] : []),
+        {
+          $search: searchFilterClauses
+            ? { index: textIndex, compound: { must: [{ text: { query, path: paths } }], filter: searchFilterClauses } }
+            : { index: textIndex, text: { query, path: paths } },
+        },
+        ...(hasMetadataFilter && !searchFilterClauses ? [{ $match: metadataFilter }] : []),
         { $limit: Math.min(10000, topK) },
         // Score is projected via $meta inside buildProjection (not a preceding $set) so it
         // never pollutes `metadata: '$$ROOT'` in document mode.
@@ -1320,9 +1381,16 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         }
       }
 
+      const textFilterClauses = hasMetadataFilter
+        ? await this.tryBuildTextSearchFilter(metadataFilter, collection, collectionName, textIndex)
+        : null;
       const textPipeline: Document[] = [
-        { $search: { index: textIndex, text: { query, path: paths } } },
-        ...(hasMetadataFilter ? [{ $match: metadataFilter }] : []),
+        {
+          $search: textFilterClauses
+            ? { index: textIndex, compound: { must: [{ text: { query, path: paths } }], filter: textFilterClauses } }
+            : { index: textIndex, text: { query, path: paths } },
+        },
+        ...(hasMetadataFilter && !textFilterClauses ? [{ $match: metadataFilter }] : []),
         { $limit: perBranch },
       ];
 
@@ -1953,6 +2021,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           this.collections.delete(collectionName);
         }
         this.declaredFilterPaths.delete(indexName);
+        // The text search index (or the whole collection) may be gone, so drop any cached mapping
+        // for it: a stale mapping must not let a later query push a filter down against it.
+        this.invalidateSearchIndexMapping(collectionName, textSearchIndexName);
         this.indexTargets.delete(indexName);
         // Remove the durable registry entry LAST so a fresh process no longer resolves this
         // index. Because the physical drop above is idempotent, a retry after an interrupted
@@ -2363,6 +2434,75 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     return paths;
   }
 
+  /** Cache key for {@link getSearchIndexMapping} — search index names are unique per collection. */
+  private searchIndexMappingKey(collectionName: string, textIndexName: string): string {
+    return `${collectionName}::${textIndexName}`;
+  }
+
+  /**
+   * Drop a cached search-index mapping. Called wherever an Atlas Search index definition changes
+   * (createSearchIndex, deleteIndex) so the next query re-reads the live mapping instead of
+   * pushing a filter down against a mapping that no longer describes the index.
+   */
+  private invalidateSearchIndexMapping(collectionName: string, textIndexName?: string): void {
+    if (!textIndexName) return;
+    this.searchIndexMappings.delete(this.searchIndexMappingKey(collectionName, textIndexName));
+  }
+
+  /**
+   * Read (once, then cache) the field mappings of the Atlas Search index used by textQuery /
+   * hybridQuery, so a metadata filter can be pushed into `$search` only when the index really can
+   * evaluate it. Returns `undefined` — uncached — whenever the mapping cannot be trusted, which
+   * makes the caller fall back to the always-correct post-`$search` `$match`.
+   *
+   * Uncached-on-doubt mirrors {@link getDeclaredFilterPaths}: `latestDefinition` is the most
+   * recently *requested* definition, and while an update is building Atlas keeps answering with
+   * the previous one, so only a READY index's mapping is read and cached. Getting this wrong is
+   * worse here than for the vector index: a `compound.filter` on an undeclared path matches
+   * nothing *without* erroring, so an over-optimistic read would silently return zero results.
+   */
+  private async getSearchIndexMapping(
+    collection: Collection<MongoDBDocument>,
+    collectionName: string,
+    textIndexName: string,
+  ): Promise<SearchIndexMapping | undefined> {
+    const key = this.searchIndexMappingKey(collectionName, textIndexName);
+    const cached = this.searchIndexMappings.get(key);
+    if (cached) return cached;
+
+    const indexInfo: any[] = await (collection as any).listSearchIndexes().toArray();
+    const indexData = indexInfo.find((idx: any) => idx.name === textIndexName);
+    if (indexData?.status !== 'READY') return undefined;
+
+    const mappings = indexData.latestDefinition?.mappings;
+    const fields = new Map<string, Set<string>>();
+    for (const [path, specs] of Object.entries(mappings?.fields ?? {})) {
+      const types = new Set<string>();
+      for (const spec of Array.isArray(specs) ? specs : []) {
+        const type = (spec as any)?.type;
+        if (typeof type === 'string') types.add(type);
+        // Mirror the nested `{ type: 'document', fields: {...} }` shape too, so a declared
+        // sub-field is still recognised instead of being treated as undeclared.
+        for (const nestedPath of Object.keys((spec as any)?.fields ?? {})) {
+          const nestedKey = `${path}.${nestedPath}`;
+          const nestedTypes = fields.get(nestedKey) ?? new Set<string>();
+          for (const nestedSpec of Array.isArray((spec as any).fields[nestedPath])
+            ? (spec as any).fields[nestedPath]
+            : []) {
+            const nestedType = (nestedSpec as any)?.type;
+            if (typeof nestedType === 'string') nestedTypes.add(nestedType);
+          }
+          fields.set(nestedKey, nestedTypes);
+        }
+      }
+      if (types.size) fields.set(path, types);
+    }
+
+    const mapping: SearchIndexMapping = { dynamic: mappings?.dynamic === true, fields };
+    this.searchIndexMappings.set(key, mapping);
+    return mapping;
+  }
+
   /**
    * True when `filter` can be passed directly to `$vectorSearch.filter`: every
    * field path it references is a declared filter field and every operator is in
@@ -2384,6 +2524,209 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       if (!this.canPushDownFilter(value, declaredPaths)) return false;
     }
     return true;
+  }
+
+  /**
+   * A value that is a document of operators or nested fields rather than a literal match value.
+   * Arrays are literals for our purposes: Mongo's array-matching rules (an array value matches when
+   * any array element matches) are not what an Atlas Search `equals` on the array would do.
+   */
+  private isSearchNestedDoc(value: any): boolean {
+    return (
+      value !== null &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      !(value instanceof Date) &&
+      !(value instanceof ObjectId) &&
+      !(value instanceof RegExp) &&
+      !Buffer.isBuffer(value)
+    );
+  }
+
+  /** BSON kind of a filter literal, so it can be checked against the index's declared field types. */
+  private searchLiteralKind(value: any): SearchLiteralKind {
+    if (typeof value === 'string') return 'string';
+    if (typeof value === 'number') return 'number';
+    if (typeof value === 'boolean') return 'boolean';
+    if (value instanceof Date) return 'date';
+    if (value instanceof ObjectId) return 'objectId';
+    return 'unsupported';
+  }
+
+  /**
+   * Whether the text index indexes `path` at all. A `dynamic: true` mapping indexes every field.
+   * A static mapping is only trusted for a NON-dotted path: released MongoDB servers read a dotted
+   * key in `mappings.fields` as a literal field name, so a clause on `metadata.price` declared as
+   * `'metadata.price'` matches nothing. Widening this to dotted declarations is safe only once that
+   * upstream behaviour is fixed, which is what the bring-your-own-collection hardening does.
+   */
+  private isSearchPathCovered(path: string, mapping: SearchIndexMapping): boolean {
+    if (mapping.dynamic) return true;
+    return !path.includes('.') && mapping.fields.has(path);
+  }
+
+  /**
+   * Whether Atlas Search can evaluate an equality clause on `path` for a literal of `kind`. Atlas
+   * indexes a `string` field analysed, so `equals` against one is rejected server-side ("needs to
+   * be indexed as token"); a `token` declaration is a single whole-value term and so matches Mongo
+   * equality exactly.
+   */
+  private supportsSearchEquality(path: string, kind: SearchLiteralKind, mapping: SearchIndexMapping): boolean {
+    if (kind === 'number' || kind === 'boolean' || kind === 'date' || kind === 'objectId') return true;
+    return kind === 'string' && mapping.fields.get(path)?.has('token') === true;
+  }
+
+  /**
+   * Whether Atlas Search can evaluate a range clause for a literal of `kind`. Strings are excluded
+   * even when declared `token`: term ordering belongs to the search analyser, not to Mongo's BSON
+   * string collation, so the two need not agree.
+   */
+  private supportsSearchRange(kind: SearchLiteralKind): boolean {
+    return kind === 'number' || kind === 'date';
+  }
+
+  /**
+   * Clauses for a bare literal or an explicit `$eq`. Returns `null` when the value is not something
+   * Atlas Search matches the same way Mongo does.
+   */
+  private buildSearchEqualityClauses(path: string, value: any, mapping: SearchIndexMapping): Document[] | null {
+    // `{ field: null }` also matches documents where the field is missing; an Atlas Search
+    // `equals: null` matches only an explicit null, so it keeps the `$match` fallback.
+    if (value === null) return null;
+    const kind = this.searchLiteralKind(value);
+    if (!this.supportsSearchEquality(path, kind, mapping)) return null;
+    return [{ equals: { path, value } }];
+  }
+
+  /**
+   * Clauses for one field of a metadata filter, or `null` if any of its operators cannot be
+   * expressed the way Mongo evaluates them. Every shape here was checked against a live Atlas
+   * Search index, including documents where the field is missing or null.
+   */
+  private buildSearchFieldClauses(path: string, value: any, mapping: SearchIndexMapping): Document[] | null {
+    if (!this.isSearchPathCovered(path, mapping)) return null;
+    if (!this.isSearchNestedDoc(value)) return this.buildSearchEqualityClauses(path, value, mapping);
+
+    const clauses: Document[] = [];
+    let range: Document | null = null;
+    let rangeKind: SearchLiteralKind | null = null;
+
+    for (const [operator, operand] of Object.entries(value)) {
+      // $and/$or are only valid at the top level of a filter, so they — and every operator outside
+      // SEARCH_CLAUSE_OPERATORS — keep the `$match` fallback.
+      if (!MongoDBVector.SEARCH_CLAUSE_OPERATORS.has(operator) || operator === '$and' || operator === '$or') {
+        return null;
+      }
+
+      if (operator === '$eq' || operator === '$ne') {
+        const equality = this.buildSearchEqualityClauses(path, operand, mapping);
+        if (!equality) return null;
+        // Mongo's $ne also matches documents missing the field, and so does mustNot(equals).
+        clauses.push(operator === '$eq' ? equality[0]! : { compound: { mustNot: equality } });
+        continue;
+      }
+
+      if (operator === '$in' || operator === '$nin') {
+        // An empty $in matches nothing in Mongo but is rejected by Atlas Search ("value cannot be
+        // empty"), so it keeps the fallback.
+        if (!Array.isArray(operand) || operand.length === 0) return null;
+        for (const entry of operand) {
+          if (!this.supportsSearchEquality(path, this.searchLiteralKind(entry), mapping)) return null;
+        }
+        const clause = { in: { path, value: operand } };
+        clauses.push(operator === '$in' ? clause : { compound: { mustNot: [clause] } });
+        continue;
+      }
+
+      if (operator === '$exists') {
+        if (typeof operand !== 'boolean') return null;
+        clauses.push(operand ? { exists: { path } } : { compound: { mustNot: [{ exists: { path } }] } });
+        continue;
+      }
+
+      // $gt/$gte/$lt/$lte: Atlas Search takes every bound on a field in one `range` clause, and
+      // only for a single literal kind.
+      const kind = this.searchLiteralKind(operand);
+      if (!this.supportsSearchRange(kind)) return null;
+      if (rangeKind !== null && rangeKind !== kind) return null;
+      rangeKind = kind;
+      range ??= { path };
+      range[operator.slice(1)] = operand;
+    }
+
+    if (range) clauses.push({ range });
+    return clauses.length ? clauses : null;
+  }
+
+  /**
+   * Translate a Mongo metadata filter into the clauses of an Atlas Search `compound.filter`, or
+   * `null` — meaning "use the post-`$search` `$match` for the whole filter" — as soon as any part
+   * of it cannot be expressed. All-or-nothing is deliberate: a filter clause on a path the text
+   * index does not declare matches nothing *without* erroring, so a partial or speculative pushdown
+   * would silently drop results instead of failing loudly.
+   */
+  private buildSearchFilterClauses(filter: Document, mapping: SearchIndexMapping): Document[] | null {
+    if (!this.isSearchNestedDoc(filter)) return null;
+
+    const clauses: Document[] = [];
+    for (const [key, value] of Object.entries(filter)) {
+      if (!key.startsWith('$')) {
+        const fieldClauses = this.buildSearchFieldClauses(key, value, mapping);
+        if (!fieldClauses) return null;
+        clauses.push(...fieldClauses);
+        continue;
+      }
+
+      // $and/$or are the only operators Mongo allows at the top level of a filter. ($nor, $expr,
+      // $where and friends are valid Mongo but keep the fallback.)
+      if (key !== '$and' && key !== '$or') return null;
+      if (!Array.isArray(value) || value.length === 0) return null;
+
+      const operands: Document[][] = [];
+      for (const operand of value) {
+        const operandClauses = this.buildSearchFilterClauses(operand, mapping);
+        if (!operandClauses?.length) return null;
+        operands.push(operandClauses);
+      }
+
+      if (key === '$and') {
+        // Entries of `must` are ANDed, so each operand's clauses can be flattened in as siblings.
+        clauses.push({ compound: { must: operands.flat() } });
+      } else {
+        // Entries of `should` are ORed and each must be a single clause, so a multi-clause operand
+        // is wrapped in a nested `compound.must`.
+        clauses.push({
+          compound: {
+            should: operands.map(operand => (operand.length === 1 ? operand[0]! : { compound: { must: operand } })),
+            minimumShouldMatch: 1,
+          },
+        });
+      }
+    }
+
+    return clauses.length ? clauses : null;
+  }
+
+  /**
+   * Clauses to evaluate `metadataFilter` inside the search request, or `null` to keep the
+   * post-`$search` `$match`. Both the mapping read and the translation are guarded: a filter the
+   * server would accept must never turn into a client-side failure, and an Atlas Search filter
+   * clause on a path the index does not declare matches nothing without erroring, so falling back
+   * is always the safe direction.
+   */
+  private async tryBuildTextSearchFilter(
+    metadataFilter: Document,
+    collection: Collection<MongoDBDocument>,
+    collectionName: string,
+    textIndexName: string,
+  ): Promise<Document[] | null> {
+    try {
+      const mapping = await this.getSearchIndexMapping(collection, collectionName, textIndexName);
+      if (!mapping) return null;
+      return this.buildSearchFilterClauses(metadataFilter, mapping);
+    } catch {
+      return null;
+    }
   }
 
   /**

@@ -791,6 +791,415 @@ describe('MongoDBVector filterFields (#18587)', () => {
     });
   });
 
+  // Tests for GitHub issue #30360 - apply metadata filters during text and hybrid search.
+  // https://github.com/mastra-ai/mastra/issues/30360
+  describe('text search filter push-down (#30360)', () => {
+    const makeCursor = (docs: any[]) => ({
+      toArray: async () => docs,
+      map: (cb: (d: any) => any) => ({ toArray: async () => docs.map(cb) }),
+    });
+
+    const dynamicMapping = { dynamic: true, fields: new Map<string, Set<string>>() };
+    const staticMapping = (fields: Record<string, string[]>) => ({
+      dynamic: false,
+      fields: new Map(Object.entries(fields).map(([path, types]) => [path, new Set(types)])),
+    });
+
+    /** A `listSearchIndexes` result reporting the given mapping for the default text index name. */
+    const textIndexInfo = (
+      options: { dynamic?: boolean; fields?: Record<string, string[]>; status?: string } = {},
+    ) => ({
+      name: 'col_search',
+      status: options.status ?? 'READY',
+      latestDefinition: {
+        mappings: {
+          dynamic: options.dynamic ?? false,
+          fields: Object.fromEntries(
+            Object.entries(options.fields ?? {}).map(([path, types]) => [path, types.map(type => ({ type }))]),
+          ),
+        },
+      },
+    });
+
+    /**
+     * Wire up a mocked, unconnected instance whose collection reports `indexes` and whose text
+     * index resolves to `col_search` (a managed index on collection `col`).
+     */
+    const stubSearch = (v: MongoDBVector, indexes: () => any[]) => {
+      const aggregate = vi.fn().mockReturnValue(makeCursor([]));
+      const listSearchIndexes = vi.fn(() => ({ toArray: async () => indexes() }));
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate, listSearchIndexes });
+      (v as any).indexTargets.set('idx', {
+        collectionName: 'col',
+        searchIndexName: 'col_vec',
+        isByo: false,
+        textSearchIndexName: 'col_search',
+      });
+      return { aggregate, listSearchIndexes };
+    };
+
+    describe('getSearchIndexMapping', () => {
+      const collection = (indexes: () => any[]) => ({
+        listSearchIndexes: vi.fn(() => ({ toArray: async () => indexes() })),
+      });
+
+      it('does not read or cache a mapping until the text index is READY', async () => {
+        const v = makeVector();
+        let indexes: any[] = [];
+        const col = collection(() => indexes);
+
+        // Index not there yet: nothing to read, nothing cached, so a later call retries.
+        expect(await (v as any).getSearchIndexMapping(col, 'col', 'col_search')).toBeUndefined();
+        expect((v as any).searchIndexMappings.size).toBe(0);
+
+        // A staged definition must not be trusted: while an update builds Atlas keeps serving the
+        // previous mapping, and a filter clause on a path the live index does not index matches
+        // nothing *without* erroring — a silently empty result set.
+        indexes = [textIndexInfo({ status: 'BUILDING', dynamic: true })];
+        expect(await (v as any).getSearchIndexMapping(col, 'col', 'col_search')).toBeUndefined();
+        expect((v as any).searchIndexMappings.size).toBe(0);
+
+        // READY: readable, and cached under collection::index.
+        indexes = [textIndexInfo({ dynamic: true })];
+        const mapping = await (v as any).getSearchIndexMapping(col, 'col', 'col_search');
+        expect(mapping).toEqual({ dynamic: true, fields: new Map() });
+        expect((v as any).searchIndexMappings.get('col::col_search')).toBe(mapping);
+        expect(col.listSearchIndexes).toHaveBeenCalledTimes(3);
+
+        // Cached now — no further reads.
+        expect(await (v as any).getSearchIndexMapping(col, 'col', 'col_search')).toBe(mapping);
+        expect(col.listSearchIndexes).toHaveBeenCalledTimes(3);
+      });
+
+      it('keys the cache by collection as well as index name', async () => {
+        const v = makeVector();
+        // Atlas Search index names are unique per collection, not per database.
+        const colA = collection(() => [textIndexInfo({ dynamic: true })]);
+        const colB = collection(() => [textIndexInfo({ dynamic: false })]);
+
+        expect(await (v as any).getSearchIndexMapping(colA, 'col_a', 'col_search')).toEqual({
+          dynamic: true,
+          fields: new Map(),
+        });
+        expect(await (v as any).getSearchIndexMapping(colB, 'col_b', 'col_search')).toEqual({
+          dynamic: false,
+          fields: new Map(),
+        });
+        expect((v as any).searchIndexMappings.size).toBe(2);
+      });
+
+      it('normalises declared field types, including nested document declarations', async () => {
+        const v = makeVector();
+        const col = collection(() => [
+          textIndexInfo({
+            fields: {
+              title: ['string'],
+              tag: ['token'],
+              'meta.amount': ['number'],
+              meta: ['document'],
+            },
+          }),
+        ]);
+
+        const mapping = await (v as any).getSearchIndexMapping(col, 'col', 'col_search');
+        expect(mapping.dynamic).toBe(false);
+        expect(mapping.fields.get('title')).toEqual(new Set(['string']));
+        expect(mapping.fields.get('tag')).toEqual(new Set(['token']));
+        expect(mapping.fields.get('meta.amount')).toEqual(new Set(['number']));
+      });
+    });
+
+    describe('buildSearchFilterClauses', () => {
+      const clausesOf = (v: MongoDBVector, filter: any, mapping: any) =>
+        (v as any).buildSearchFilterClauses(filter, mapping);
+
+      it('translates the operators Atlas Search evaluates the way Mongo does', () => {
+        const v = makeVector();
+
+        expect(clausesOf(v, { 'metadata.price': 100 }, dynamicMapping)).toEqual([
+          { equals: { path: 'metadata.price', value: 100 } },
+        ]);
+        expect(clausesOf(v, { 'metadata.price': { $eq: 100 } }, dynamicMapping)).toEqual([
+          { equals: { path: 'metadata.price', value: 100 } },
+        ]);
+        // $ne also matches documents missing the field, which mustNot(equals) does too.
+        expect(clausesOf(v, { 'metadata.price': { $ne: 100 } }, dynamicMapping)).toEqual([
+          { compound: { mustNot: [{ equals: { path: 'metadata.price', value: 100 } }] } },
+        ]);
+        expect(clausesOf(v, { 'metadata.price': { $in: [1, 2] } }, dynamicMapping)).toEqual([
+          { in: { path: 'metadata.price', value: [1, 2] } },
+        ]);
+        expect(clausesOf(v, { 'metadata.price': { $nin: [1, 2] } }, dynamicMapping)).toEqual([
+          { compound: { mustNot: [{ in: { path: 'metadata.price', value: [1, 2] } }] } },
+        ]);
+        expect(clausesOf(v, { 'metadata.price': { $exists: true } }, dynamicMapping)).toEqual([
+          { exists: { path: 'metadata.price' } },
+        ]);
+        expect(clausesOf(v, { 'metadata.price': { $exists: false } }, dynamicMapping)).toEqual([
+          { compound: { mustNot: [{ exists: { path: 'metadata.price' } }] } },
+        ]);
+        // Every bound on one field collapses into a single `range` clause.
+        expect(clausesOf(v, { 'metadata.price': { $gt: 1, $lte: 5 } }, dynamicMapping)).toEqual([
+          { range: { path: 'metadata.price', gt: 1, lte: 5 } },
+        ]);
+        expect(clausesOf(v, { 'metadata.inStock': false }, dynamicMapping)).toEqual([
+          { equals: { path: 'metadata.inStock', value: false } },
+        ]);
+        const day = new Date('2024-01-01T00:00:00.000Z');
+        expect(clausesOf(v, { 'metadata.created': { $gte: day } }, dynamicMapping)).toEqual([
+          { range: { path: 'metadata.created', gte: day } },
+        ]);
+      });
+
+      it('emits sibling clauses for sibling fields, which $search ANDs', () => {
+        const v = makeVector();
+
+        expect(clausesOf(v, { 'metadata.price': { $lt: 1500 }, 'metadata.inStock': true }, dynamicMapping)).toEqual([
+          { range: { path: 'metadata.price', lt: 1500 } },
+          { equals: { path: 'metadata.inStock', value: true } },
+        ]);
+      });
+
+      it('flattens $and into a single nested compound.must', () => {
+        const v = makeVector();
+
+        expect(
+          clausesOf(v, { $and: [{ 'metadata.price': { $lt: 1500 } }, { 'metadata.inStock': true }] }, dynamicMapping),
+        ).toEqual([
+          {
+            compound: {
+              must: [
+                { range: { path: 'metadata.price', lt: 1500 } },
+                { equals: { path: 'metadata.inStock', value: true } },
+              ],
+            },
+          },
+        ]);
+      });
+
+      it('ORs $or operands via compound.should with minimumShouldMatch', () => {
+        const v = makeVector();
+
+        expect(
+          clausesOf(v, { $or: [{ 'metadata.price': { $lt: 100 } }, { 'metadata.inStock': false }] }, dynamicMapping),
+        ).toEqual([
+          {
+            compound: {
+              should: [
+                { range: { path: 'metadata.price', lt: 100 } },
+                { equals: { path: 'metadata.inStock', value: false } },
+              ],
+              minimumShouldMatch: 1,
+            },
+          },
+        ]);
+
+        // Each entry of `should` must be ONE clause, so a multi-clause operand is wrapped.
+        expect(
+          clausesOf(v, { $or: [{ 'metadata.price': { $gt: 1, $lt: 5 }, 'metadata.inStock': true }] }, dynamicMapping),
+        ).toEqual([
+          {
+            compound: {
+              should: [
+                {
+                  compound: {
+                    must: [
+                      { range: { path: 'metadata.price', gt: 1, lt: 5 } },
+                      { equals: { path: 'metadata.inStock', value: true } },
+                    ],
+                  },
+                },
+              ],
+              minimumShouldMatch: 1,
+            },
+          },
+        ]);
+      });
+
+      it('keeps the $match fallback for filters Atlas Search cannot evaluate the same way', () => {
+        const v = makeVector();
+        const fallbacks: any[] = [
+          { 'metadata.name': 'widget' }, // analysed string: `equals` needs a token mapping
+          { 'metadata.name': { $regex: '^wid' } },
+          { 'metadata.name': /^wid/ },
+          { 'metadata.maybe': null }, // `equals: null` misses documents with no field at all
+          { 'metadata.price': { $in: [] } }, // Atlas rejects an empty `in`; Mongo matches nothing
+          { 'metadata.price': { $in: [100, null] } }, // not every element is expressible
+          { 'metadata.price': { $not: { $gt: 1 } } },
+          { 'metadata.tags': ['a', 'b'] }, // array-matching rules differ
+          { 'metadata.tags': { $elemMatch: { $gt: 1 } } },
+          { $nor: [{ 'metadata.price': 1 }] },
+          { $and: [] },
+        ];
+
+        for (const filter of fallbacks) expect(clausesOf(v, filter, dynamicMapping)).toBeNull();
+      });
+
+      it('only pushes onto paths the index covers, and only for supported types', () => {
+        const v = makeVector();
+        const typed = staticMapping({ price: ['number'], inStock: ['boolean'], title: ['string'] });
+
+        // A non-dotted declared path is covered.
+        expect(clausesOf(v, { price: { $lt: 1500 } }, typed)).toEqual([{ range: { path: 'price', lt: 1500 } }]);
+        expect(clausesOf(v, { inStock: true }, typed)).toEqual([{ equals: { path: 'inStock', value: true } }]);
+        // An undeclared path silently matches nothing, so it must never be pushed down.
+        expect(clausesOf(v, { undeclared: 1 }, typed)).toBeNull();
+        // A dotted declaration is read literally by released servers, so it is not trusted.
+        expect(
+          clausesOf(v, { 'metadata.price': { $lt: 1500 } }, staticMapping({ 'metadata.price': ['number'] })),
+        ).toBeNull();
+        // 'string' is analysed: equality needs an explicit `token` declaration.
+        expect(clausesOf(v, { title: 'widget' }, typed)).toBeNull();
+        expect(clausesOf(v, { title: 'widget' }, staticMapping({ title: ['token'] }))).toEqual([
+          { equals: { path: 'title', value: 'widget' } },
+        ]);
+        // Ranges are numeric/date only: term order is not BSON string collation.
+        expect(clausesOf(v, { title: { $lt: 'b' } }, staticMapping({ title: ['token'] }))).toBeNull();
+      });
+    });
+
+    describe('textQuery pipeline', () => {
+      it('evaluates a pushable filter inside $search instead of a following $match', async () => {
+        const v = makeVector();
+        const { aggregate } = stubSearch(v, () => [textIndexInfo({ dynamic: true })]);
+
+        await v.textQuery({ indexName: 'idx', query: 'keyboard', paths: ['title'], topK: 5, filter: { price: 100 } });
+
+        const pipeline = aggregate.mock.calls[0][0];
+        expect(pipeline[0].$search).toEqual({
+          index: 'col_search',
+          compound: {
+            must: [{ text: { query: 'keyboard', path: ['title'] } }],
+            filter: [{ equals: { path: 'metadata.price', value: 100 } }],
+          },
+        });
+        expect(pipeline.some((stage: any) => stage.$match)).toBe(false);
+      });
+
+      it('keeps the $match fallback when the filter cannot be expressed in $search', async () => {
+        const v = makeVector();
+        const { aggregate } = stubSearch(v, () => [textIndexInfo({ dynamic: true })]);
+
+        await v.textQuery({ indexName: 'idx', query: 'keyboard', paths: ['title'], filter: { title: 'widget' } });
+
+        const pipeline = aggregate.mock.calls[0][0];
+        expect(pipeline[0].$search).toEqual({ index: 'col_search', text: { query: 'keyboard', path: ['title'] } });
+        expect(pipeline[1]).toEqual({ $match: { 'metadata.title': 'widget' } });
+      });
+
+      it('keeps the $match fallback until the text index reports READY', async () => {
+        const v = makeVector();
+        const { aggregate } = stubSearch(v, () => [textIndexInfo({ dynamic: true, status: 'BUILDING' })]);
+
+        await v.textQuery({ indexName: 'idx', query: 'keyboard', paths: ['title'], filter: { price: 100 } });
+
+        const pipeline = aggregate.mock.calls[0][0];
+        expect(pipeline[0].$search).toEqual({ index: 'col_search', text: { query: 'keyboard', path: ['title'] } });
+        expect(pipeline.some((stage: any) => stage.$match)).toBe(true);
+      });
+
+      it('does not read the mapping at all when there is no filter', async () => {
+        const v = makeVector();
+        const { aggregate } = stubSearch(v, () => [textIndexInfo({ dynamic: true })]);
+
+        await v.textQuery({ indexName: 'idx', query: 'keyboard', paths: ['title'] });
+
+        const pipeline = aggregate.mock.calls[0][0];
+        expect(pipeline[0].$search).toEqual({ index: 'col_search', text: { query: 'keyboard', path: ['title'] } });
+        expect(pipeline.some((stage: any) => stage.$match)).toBe(false);
+        expect((v as any).searchIndexMappings.size).toBe(0);
+      });
+    });
+
+    describe('hybridQuery text branch', () => {
+      it('evaluates a pushable filter inside the text branch of $rankFusion', async () => {
+        const v = makeVector();
+        const { aggregate } = stubSearch(v, () => [textIndexInfo({ dynamic: true })]);
+        vi.spyOn(v as any, 'assertRankFusionSupported').mockResolvedValue(undefined);
+        // Keep the VECTOR branch on its pushdown path so the only aggregate call is the fused one
+        // (otherwise the branch materialises candidate _ids through a first aggregate).
+        vi.spyOn(v as any, 'getDeclaredFilterPaths').mockResolvedValue(new Set(['metadata.price']));
+
+        await v.hybridQuery({
+          indexName: 'idx',
+          queryVector: [0, 1, 0, 0],
+          query: 'offshore entity',
+          paths: ['note'],
+          topK: 2,
+          filter: { price: 100 },
+        });
+
+        const textPipeline = aggregate.mock.calls[0][0][0].$rankFusion.input.pipelines.text;
+        expect(textPipeline[0].$search).toEqual({
+          index: 'col_search',
+          compound: {
+            must: [{ text: { query: 'offshore entity', path: ['note'] } }],
+            filter: [{ equals: { path: 'metadata.price', value: 100 } }],
+          },
+        });
+        expect(textPipeline.some((stage: any) => stage.$match)).toBe(false);
+      });
+
+      it('keeps the $match fallback in the text branch when the filter cannot be expressed', async () => {
+        const v = makeVector();
+        const { aggregate } = stubSearch(v, () => [textIndexInfo({ dynamic: true })]);
+        vi.spyOn(v as any, 'assertRankFusionSupported').mockResolvedValue(undefined);
+        vi.spyOn(v as any, 'getDeclaredFilterPaths').mockResolvedValue(new Set(['metadata.note']));
+
+        await v.hybridQuery({
+          indexName: 'idx',
+          queryVector: [0, 1, 0, 0],
+          query: 'offshore entity',
+          paths: ['note'],
+          topK: 2,
+          filter: { note: 'offshore' },
+        });
+
+        const textPipeline = aggregate.mock.calls[0][0][0].$rankFusion.input.pipelines.text;
+        expect(textPipeline[0].$search.text).toEqual({ query: 'offshore entity', path: ['note'] });
+        expect(textPipeline).toContainEqual({ $match: { 'metadata.note': 'offshore' } });
+      });
+    });
+
+    describe('mapping cache invalidation', () => {
+      it('drops a cached mapping when createSearchIndex (re)writes the definition', async () => {
+        const v = makeVector();
+        const updateSearchIndex = vi.fn().mockResolvedValue(undefined);
+        (v as any).indexTargets.set('idx', { collectionName: 'col', searchIndexName: 'col_vec', isByo: false });
+        vi.spyOn(v as any, 'getCollection').mockResolvedValue({ updateSearchIndex });
+        vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+        vi.spyOn(v as any, 'createSearchIndexIgnoringExisting').mockResolvedValue(false);
+        // No `fields`, so the default dynamic text index name is `${collectionName}_search_index`.
+        (v as any).searchIndexMappings.set('col::col_search_index', dynamicMapping);
+
+        await v.createSearchIndex({ indexName: 'idx' });
+
+        expect(updateSearchIndex).toHaveBeenCalledWith('col_search_index', expect.anything());
+        expect((v as any).searchIndexMappings.has('col::col_search_index')).toBe(false);
+      });
+
+      it('drops a cached mapping on deleteIndex', async () => {
+        const v = makeVector();
+        (v as any).indexTargets.set('idx', {
+          collectionName: 'col',
+          searchIndexName: 'col_vec',
+          isByo: true,
+          textSearchIndexName: 'col_search',
+        });
+        vi.spyOn(v as any, 'getCollection').mockResolvedValue({
+          dropSearchIndex: vi.fn().mockResolvedValue(undefined),
+        });
+        vi.spyOn(v as any, 'isIndexNameReferencedElsewhere').mockResolvedValue(false);
+        vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
+        (v as any).searchIndexMappings.set('col::col_search', dynamicMapping);
+
+        await v.deleteIndex({ indexName: 'idx' });
+
+        expect((v as any).searchIndexMappings.has('col::col_search')).toBe(false);
+      });
+    });
+  });
+
   describe('query push-down', () => {
     const makeCursor = (docs: any[]) => ({
       toArray: async () => docs,
@@ -1112,6 +1521,188 @@ describe('MongoDBVector filterFields (#18587)', () => {
       expect(res.every(r => typeof r.score === 'number' && r.score > 0)).toBe(true);
       // RRF scores are rank-based reciprocals, so distinct-rank hits get distinct scores.
       if (res.length > 1) expect(res[0].score).toBeGreaterThan(res[1].score);
+    });
+
+    it('keeps correct results for a filter the field-mapped text index does not cover (#30360)', async () => {
+      // This index is field-mapped (`fields: ['note']`) and therefore not dynamic, so a filter on
+      // `amount` is not covered and stays on the post-$search `$match`. An uncovered filter is a
+      // lost optimisation, never a wrong answer.
+      const res = await searchVector.textQuery({
+        indexName: idxName,
+        query: 'shell company',
+        paths: ['note'],
+        topK: 5,
+        metadataMode: 'document',
+        filter: { amount: { $lt: 1500 } },
+      });
+      // The text half matches oidA and oidB; the filter drops oidB (amount 5000).
+      expect(res.map(r => r.id)).toEqual([oidA.toHexString()]);
+    });
+  });
+
+  describe('text search filter push-down on a live index (#30360)', () => {
+    const pushCol = 'search_pushdown';
+    const pushIdx = 'search_pushdown';
+    const pushVecIdx = 'search_pushdown_vec';
+    const pushTextIdx = `${pushCol}_search_index`;
+    const d1 = new ObjectId();
+    const d2 = new ObjectId();
+    const d3 = new ObjectId();
+    const d4 = new ObjectId();
+    const day = (n: number) => new Date(Date.UTC(2026, 0, n));
+    let pushVector: MongoDBVector;
+
+    const sortedIds = (rows: { id: string }[]) => rows.map(r => r.id).sort();
+
+    /** Ground truth: the documents Mongo itself selects for the same predicate. */
+    const expectedIds = async (rawFilter: any) =>
+      (await pushVector['db'].collection(pushCol).find(rawFilter).project({ _id: 1 }).toArray())
+        .map((d: any) => d._id.toHexString())
+        .sort();
+
+    beforeAll(async () => {
+      pushVector = new MongoDBVector({ uri, dbName, id: 'mongodb-search-pushdown-test' });
+      await pushVector.connect();
+      // createIndex preserves an existing textSearchIndexName by design, so clear any stale
+      // registry entry from a previous run before creating the index.
+      await pushVector['db']
+        .collection('__mastra_vector_indexes__')
+        .deleteOne({ _id: pushIdx as any })
+        .catch(() => {});
+      const col = pushVector['db'].collection(pushCol);
+      await col.deleteMany({});
+      // Non-collinear vectors (no ties under cosine). d3 deliberately has no `price`.
+      await col.insertMany([
+        {
+          _id: d1 as any,
+          embedding: [1, 0, 0, 0],
+          note: 'wire transfer to shell company',
+          metadata: { price: 100, inStock: true, thread_id: 't-1', createdAt: day(1) },
+        },
+        {
+          _id: d2 as any,
+          embedding: [0, 1, 0, 0],
+          note: 'invoice from offshore entity shell company',
+          metadata: { price: 5000, inStock: false, thread_id: 't-2', createdAt: day(2) },
+        },
+        {
+          _id: d3 as any,
+          embedding: [0, 0, 1, 0],
+          note: 'legitimate payment vendor shell',
+          metadata: { inStock: true, thread_id: 't-1', createdAt: day(3) },
+        },
+        {
+          _id: d4 as any,
+          embedding: [0, 0, 0, 1],
+          note: 'second shell company wire transfer',
+          metadata: { price: 200, inStock: true, thread_id: 't-3', createdAt: day(4) },
+        },
+      ]);
+      // A MANAGED index: createIndex provisions the collection and the dynamic
+      // `${pushCol}_search_index` text index, whose mapping covers the dotted `metadata.<field>`
+      // paths a field-mode metadata filter resolves to.
+      await pushVector.createIndex({ indexName: pushIdx, dimension: 4, searchIndexName: pushVecIdx });
+      await pushVector.waitForIndexReady({ indexName: pushIdx, timeoutMs: 60000 });
+      await pushVector.waitForSearchIndexReady({ indexName: pushIdx, timeoutMs: 120000 });
+      // Every note contains "shell", so the text half of each query matches all four documents
+      // and the filter is the only thing that narrows the result.
+      await waitForSync(
+        pushVector,
+        pushIdx,
+        async () => {
+          const r = await pushVector.textQuery({ indexName: pushIdx, query: 'shell', paths: ['note'], topK: 10 });
+          return r.length === 4;
+        },
+        60000,
+        500,
+      );
+    });
+
+    afterAll(async () => {
+      await pushVector['db']
+        .collection(pushCol)
+        .drop()
+        .catch(() => {});
+      await pushVector['db']
+        .collection('__mastra_vector_indexes__')
+        .deleteOne({ _id: pushIdx as any })
+        .catch(() => {});
+      await pushVector.disconnect();
+    });
+
+    it('reads the real text index mapping and gates pushdown on the value type', async () => {
+      const col = await (pushVector as any).getCollection(pushCol);
+      const build = (metadataFilter: any) =>
+        (pushVector as any).tryBuildTextSearchFilter(metadataFilter, col, pushCol, pushTextIdx);
+
+      // A numeric metadata filter is covered → clauses the search request can evaluate itself.
+      expect(await build({ 'metadata.price': { $lt: 1500 } })).toEqual([
+        { range: { path: 'metadata.price', lt: 1500 } },
+      ]);
+      // Reading the mapping cached what the LIVE index declares: the managed text index is
+      // dynamic, so it covers any path but declares no typed fields.
+      expect((pushVector as any).searchIndexMappings.get(`${pushCol}::${pushTextIdx}`)).toEqual({
+        dynamic: true,
+        fields: new Map(),
+      });
+      // A string filter is NOT pushed down: a dynamic mapping declares no `token` type, and
+      // Atlas errors ("Path ... needs to be indexed as token") on `equals`/`range` over a string.
+      expect(await build({ 'metadata.thread_id': 't-1' })).toBeNull();
+      // Nor is a date filter: the shared filter translator normalises Date values to ISO strings
+      // before this point (src/vector/filter.ts), and Atlas rejects a string range on a date field
+      // too. It stays on the $match fallback rather than emitting a clause Atlas would refuse.
+      expect(await build({ 'metadata.createdAt': { $gte: day(2).toISOString() } })).toBeNull();
+    });
+
+    // Field mode prefixes bare metadata keys with `metadata.`, so each case passes the caller's
+    // filter plus the same predicate written the way Mongo evaluates it as the ground truth.
+    const pushdownCases: [string, any, any][] = [
+      ['a numeric range', { price: { $lt: 1500 } }, { 'metadata.price': { $lt: 1500 } }],
+      ['boolean equality', { inStock: true }, { 'metadata.inStock': true }],
+      [
+        '$ne, which also matches the document with no price',
+        { price: { $ne: 100 } },
+        { 'metadata.price': { $ne: 100 } },
+      ],
+      [
+        '$nin, which also matches the document with no price',
+        { price: { $nin: [100, 200] } },
+        { 'metadata.price': { $nin: [100, 200] } },
+      ],
+      ['$exists: false', { price: { $exists: false } }, { 'metadata.price': { $exists: false } }],
+      [
+        '$or',
+        { $or: [{ price: { $lt: 1500 } }, { inStock: false }] },
+        { $or: [{ 'metadata.price': { $lt: 1500 } }, { 'metadata.inStock': false }] },
+      ],
+      ['an uncovered string field, which falls back to $match', { thread_id: 't-1' }, { 'metadata.thread_id': 't-1' }],
+    ];
+
+    it.each(pushdownCases)('returns the documents Mongo selects for %s', async (_label, filter, raw) => {
+      const expected = await expectedIds(raw);
+      expect(expected.length).toBeGreaterThan(0);
+      const res = await pushVector.textQuery({
+        indexName: pushIdx,
+        query: 'shell',
+        paths: ['note'],
+        topK: 10,
+        filter,
+      });
+      expect(sortedIds(res)).toEqual(expected);
+    });
+
+    it('applies the filter to the text branch of hybridQuery too', async () => {
+      const expected = await expectedIds({ 'metadata.price': { $lt: 1500 } });
+      const res = await pushVector.hybridQuery({
+        indexName: pushIdx,
+        queryVector: [0, 1, 0, 0],
+        query: 'shell',
+        paths: ['note'],
+        topK: 4,
+        filter: { price: { $lt: 1500 } },
+      });
+      expect(res.length).toBeGreaterThan(0);
+      expect(sortedIds(res)).toEqual(expected);
     });
   });
 
