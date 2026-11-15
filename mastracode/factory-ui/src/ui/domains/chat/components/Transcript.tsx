@@ -49,7 +49,7 @@ function turnReply(steps: MessageEntry[], runningTurn: boolean): string | undefi
     .join('\n\n');
 }
 
-export const Transcript = memo(function Transcript({ tail }: { tail?: TranscriptTail }) {
+export function Transcript({ tail }: { tail?: TranscriptTail }) {
   const { sessionId, sessionEnabled, baseUrl, owner } = useChatSessionContext();
   const { transcript, resolvePrompt, busy, viewerId } = useChatTranscript();
   const { entries } = transcript;
@@ -103,9 +103,9 @@ export const Transcript = memo(function Transcript({ tail }: { tail?: Transcript
       />
     </ArrivalScope>
   );
-});
+}
 
-export const TranscriptEntries = memo(function TranscriptEntries({
+export function TranscriptEntries({
   entries,
   restoredHistory = false,
   isSubmitting = false,
@@ -222,7 +222,7 @@ export const TranscriptEntries = memo(function TranscriptEntries({
       </ActivityDisclosureProvider>
     </FactoryKnowledgeLinks>
   );
-});
+}
 
 interface TranscriptEntryContentProps {
   entry: TimelineEntry;

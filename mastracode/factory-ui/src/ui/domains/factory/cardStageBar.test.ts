@@ -101,9 +101,13 @@ describe('cardStages', () => {
   });
 
   it("leaves out the phases a board declares no move to, such as an older Work board's Triage", () => {
-    const stages = ids(cardStages(issueWithPullRequest(['pr-review']), workBoardInfo));
-
-    expect(stages.track).not.toContain('triage');
+    expect(ids(cardStages(issueWithPullRequest(['pr-review']), workBoardInfo)).track).toEqual([
+      'intake',
+      'planning',
+      'execute',
+      'pr-review',
+      'done',
+    ]);
   });
 
   it('holds an issue card without a pull request out of Review', () => {

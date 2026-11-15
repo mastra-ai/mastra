@@ -1,6 +1,7 @@
 import { useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
+import { useRouteSessionId } from '../../../../hooks/useRouteSessionId';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import type { ChangeRequestProvider } from '../services/githubSubscriptions';
@@ -13,9 +14,8 @@ interface SessionRepository {
 }
 
 export function useSessionRepository(): SessionRepository {
-  const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId: string; threadId: string }>();
-  // User threads carry the session id as `threadId` (see ChatSessionProvider).
-  const session = useUserSessionQuery(sessionId ?? threadId);
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const session = useUserSessionQuery(useRouteSessionId());
   const factory = useFactoryQuery(factoryId);
   const repository = factory.data?.repositories.find(
     candidate => candidate.projectRepositoryId === session.data?.projectRepositoryId,

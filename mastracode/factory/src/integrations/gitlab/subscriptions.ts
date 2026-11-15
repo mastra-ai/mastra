@@ -84,10 +84,7 @@ export async function subscribeToMergeRequest(
 ): Promise<GitLabSignalSubscriptionRow> {
   const targetKey = mergeRequestTargetKey(input);
   const existing = (await storage.subscriptions.listByTarget(targetKey)).find(row => sameSession(row, input));
-  if (existing) {
-    if (existing.status !== 'open') await storage.subscriptions.updateStatus(existing.id, 'open');
-    return { ...existing, status: 'open' };
-  }
+  if (existing) return existing;
 
   return storage.subscriptions.create({
     orgId: input.orgId,

@@ -136,17 +136,6 @@ describe('FactorySessionPage', () => {
     });
   });
 
-  it('leaves the session, the board and the card to the sidebar and the panel when the card holds one session', async () => {
-    stubHeader(workItem(undefined));
-    renderHeader();
-
-    expect(await screen.findByRole('group', { name: 'Card stage' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Switch session' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Work' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Issue #7: Fix sandbox setup')).not.toBeInTheDocument();
-  });
-
   describe("the stage bar follows the card's own board", () => {
     const to = (...phases: string[]) => phases.map(phase => ({ outcome: null, to: phase }));
     const launchBoard: InstalledBoardInfo = {

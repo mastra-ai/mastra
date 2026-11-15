@@ -250,11 +250,15 @@ function issueCardWithSources(sources: NonNullable<WorkItemRow['sources']>) {
   };
 }
 
-describe('ThreadPage pull request link placement', () => {
-  // Wide enough to dock the panel beside the conversation.
-  beforeEach(() => {
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 1200, 800));
+function stubPageWidth(width: number) {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    const restingSidebarWidth = parseFloat(this.style.getPropertyValue('--sidebar-width'));
+    return new DOMRect(0, 0, Number.isNaN(restingSidebarWidth) ? width : restingSidebarWidth, 800);
   });
+}
+
+describe('ThreadPage pull request link placement', () => {
+  beforeEach(() => stubPageWidth(1200));
   afterEach(() => vi.restoreAllMocks());
 
   describe('when the current Factory session reviews a pull request', () => {
@@ -352,34 +356,6 @@ describe('ThreadPage pull request link placement', () => {
       ).toBeInTheDocument();
     });
 
-    it('names the reviewed pull request by its number alone, leaving its author and age to GitHub', async () => {
-      const card = pullRequestCard();
-      stubThreadRoute(
-        [
-          {
-            ...card,
-            workItem: {
-              provider: 'github' as const,
-              key: `mastra-ai/mastra#${PULL_REQUEST_NUMBER}`,
-              url: PULL_REQUEST_URL,
-              title: card.title,
-              state: 'open',
-              labels: [],
-              author: 'mastra-platform[bot]',
-              metadata: { githubPullRequestNumber: PULL_REQUEST_NUMBER, state: 'open' },
-            },
-          },
-        ],
-        [],
-      );
-      renderThreadRoute();
-
-      const panel = await findSessionPanel();
-      const reviewed = await within(panel).findByRole('link', { name: `Open PR #${PULL_REQUEST_NUMBER}` });
-      expect(reviewed).toHaveTextContent(new RegExp(`^PR #${PULL_REQUEST_NUMBER}$`));
-      expect(within(panel).queryByText(/mastra-platform/)).not.toBeInTheDocument();
-    });
-
     it.each([
       ['as the card links it', pullRequestSubscription],
       [
@@ -466,6 +442,43 @@ describe('ThreadPage pull request link placement', () => {
       const merged = within(panel).getByRole('link', { name: 'Open PR #4 merged' });
       expect(open).toHaveAttribute('href', 'https://github.com/mastra-ai/mastra/pull/5');
       expect(open.compareDocumentPosition(merged) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('names a carried pull request from another repository with that repository', async () => {
+      stubThreadRoute(
+        [
+          issueCardWithSources([
+            {
+              ...pullRequestSource(7, 'open'),
+              id: 'source-pr-docs-7',
+              externalId: 'pull-request:github-pr:docs-7',
+              key: 'mastra-ai/docs#7',
+              url: 'https://github.com/mastra-ai/docs/pull/7',
+            },
+          ]),
+        ],
+        [],
+      );
+      renderThreadRoute();
+
+      const panel = await findSessionPanel();
+      const docs = await within(panel).findByRole('link', { name: 'Open PR mastra-ai/docs#7' });
+      expect(docs).toHaveAttribute('href', 'https://github.com/mastra-ai/docs/pull/7');
+      expect(docs).toHaveTextContent(/#7\s*docs/);
+    });
+
+    it('still lists the pull requests the card carries when the subscriptions request fails, saying the list may be out of date', async () => {
+      stubThreadRoute([issueCardWithSources([pullRequestSource(4, 'merged'), pullRequestSource(5, 'open')])], []);
+      server.use(http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => new HttpResponse(null, { status: 500 })));
+      renderThreadRoute();
+
+      const panel = await findSessionPanel();
+      expect(await within(panel).findByRole('link', { name: 'Open PR #5' })).toBeInTheDocument();
+      expect(within(panel).getByRole('link', { name: 'Open PR #4 merged' })).toBeInTheDocument();
+      expect(
+        within(panel).getByText("Couldn't load the session's pull requests, so this list may be out of date."),
+      ).toBeInTheDocument();
+      expect(within(panel).getByRole('heading', { name: 'Pull requests' })).toBeInTheDocument();
     });
 
     it("leaves a pull request that has its own Review card to that card's link, with the status the thread last heard", async () => {
@@ -656,7 +669,7 @@ describe('ThreadPage pull request link placement', () => {
       expect(card).toHaveTextContent("Couldn't load the card.");
     });
 
-    it('names no phase it would have to guess when the board catalog fails', async () => {
+    it('names no phase it would have to guess when the board catalog fails, keeping the card stage in the header', async () => {
       const card = { ...issueCard(), stageHistory: [] };
       const followUp = { ...issueCard(null), id: 'related-item', parentWorkItemId: card.id, title: 'Follow-up work' };
       stubThreadRoute([card, { ...followUp, sessions: {} }], []);
@@ -670,18 +683,21 @@ describe('ThreadPage pull request link placement', () => {
       const activity = within(await findSessionPanel()).getByRole('region', { name: 'Card activity' });
       expect(within(activity).getByRole('link', { name: /^Open .*: Follow-up work$/ })).toBeInTheDocument();
       expect(activity).toHaveTextContent("Couldn't load the board, so phases aren't shown.");
+      const stage = await within(await findPageHeader()).findByRole('group', { name: 'Card stage' });
+      expect(stage).toHaveTextContent('Building');
+      expect(stage).toHaveTextContent("Couldn't load the board");
+      expect(within(stage).queryByRole('button')).not.toBeInTheDocument();
     });
   });
 
   describe('when the window is too narrow to dock the panel', () => {
     it('opens the panel over the conversation from the header', async () => {
-      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 800, 800));
+      stubPageWidth(800);
       const user = userEvent.setup();
       stubThreadRoute([issueCard()], []);
       renderThreadRoute();
 
-      const header = await findPageHeader();
-      await user.click(await within(header).findByRole('button', { name: 'Session panel' }));
+      await user.click(await screen.findByRole('button', { name: 'Session panel' }));
 
       const dialog = await screen.findByRole('dialog');
       expect(await within(dialog).findByRole('link', { name: `Open Issue #${ISSUE_NUMBER}` })).toHaveAttribute(

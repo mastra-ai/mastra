@@ -5,7 +5,7 @@ import type { BoardCardState, BoardCardStatus } from './boardCardState';
 import { allowsMove, boardLoop, phaseKindOf } from './boardFlow';
 import type { BoardInfo, BoardLoop } from './boardFlow';
 import { itemSessionSpec } from './boardItems';
-import { cardChangeRequest, changeRequestStatus } from './changeRequestState';
+import { cardChangeRequest, changeRequestStatus, isOpenChangeRequest } from './changeRequestState';
 import { cardHasPullRequest, isPullRequestSource } from './services/workItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 import type { BoardStageId } from './stages';
@@ -99,9 +99,7 @@ export function cardMoves(item: MovableCard, columnStage: BoardStageId, board: B
 
 function openPullRequestInCompleted(item: MovableCard, columnStage: BoardStageId, loop: BoardLoop): boolean {
   const request = columnStage === loop.completed ? cardChangeRequest(item) : undefined;
-  if (!request) return false;
-  const status = changeRequestStatus(request);
-  return status === undefined || status === 'open' || status === 'draft';
+  return request !== undefined && isOpenChangeRequest(changeRequestStatus(request));
 }
 
 /**

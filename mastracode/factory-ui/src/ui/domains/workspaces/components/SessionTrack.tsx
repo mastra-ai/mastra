@@ -7,7 +7,12 @@ import type { CSSProperties } from 'react';
 import type { BoardInfo } from '../../factory/boardFlow';
 import { phaseLabel } from '../../factory/boardStages';
 import { elapsedLabel } from '../../factory/cardStageBar';
-import { boardPhaseIconKind, stageStrongTintClass, stageTintClass } from '../../factory/components/BoardIcons';
+import {
+  boardPhaseIconKind,
+  stageStrongTintClass,
+  stageTintClass,
+  unfocusedStageClass,
+} from '../../factory/components/BoardIcons';
 import type { TrailPerson } from '../hooks/useSessionTrail';
 import { trackMomentLabel, trackStartLabel } from '../services/sessionTrack';
 import type { TrackLayout, TrackPin, TrackSpan, TrackStage } from '../services/sessionTrack';
@@ -104,7 +109,7 @@ export function SessionTrack({
 }) {
   const [focus, setFocus] = useState<TrackFocus>();
   const nameOf = (personId: string) => people.get(personId)?.name ?? personId;
-  const fadedUnlessFocused = (key: string) => focus !== undefined && focus.key !== key && 'opacity-40';
+  const fadedUnlessFocused = (key: string) => focus !== undefined && focus.key !== key && unfocusedStageClass;
 
   return (
     <div role="img" aria-label={trackSummary(layout, nameOf, board)} className="flex flex-col gap-1">

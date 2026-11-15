@@ -618,6 +618,36 @@ describe('WorkspaceViewerPanel', () => {
       expect(diffText(returnedPanel)).not.toContain('export const agent = {};');
     });
 
+    it('opens the branch changes the overview counts, even after uncommitted work was shown', async () => {
+      installHandlers();
+      const notes = { path: 'NOTES.md', status: 'untracked', additions: 1, deletions: 0 } as const;
+      const notesPatch =
+        'diff --git a/NOTES.md b/NOTES.md\nnew file mode 100644\nindex 0000000..1111111\n--- /dev/null\n+++ b/NOTES.md\n@@ -0,0 +1 @@\n+draft notes\n';
+      server.use(
+        pendingChangesHandler(),
+        patchesHandler({
+          branch: { changes: [AGENT_CHANGE], patches: { [AGENT_CHANGE.path]: AGENT_PATCH } },
+          uncommitted: { changes: [notes], patches: { [notes.path]: notesPatch } },
+        }),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+      await user.click(await screen.findByRole('button', { name: 'Changes, 1 file' }));
+      const changesPanel = await screen.findByTestId('workspace-changes-panel');
+      await user.click(within(changesPanel).getByRole('button', { name: 'Branch changes' }));
+      await user.click(await screen.findByRole('menuitemradio', { name: 'Uncommitted changes' }));
+      await waitFor(() => expect(diffText(changesPanel)).toContain('draft notes'));
+
+      await user.click(screen.getByRole('button', { name: 'Back to overview' }));
+      await user.click(await screen.findByRole('button', { name: 'Changes, 1 file' }));
+
+      const reopenedPanel = await screen.findByTestId('workspace-changes-panel');
+      expect(within(reopenedPanel).getByRole('button', { name: 'Branch changes' })).toBeInTheDocument();
+      await waitFor(() => expect(diffText(reopenedPanel)).toContain('export const agent = {};'));
+      expect(diffText(reopenedPanel)).not.toContain('draft notes');
+    });
+
     it('does not present cached change totals after a refresh fails', async () => {
       installHandlers();
       server.use(

@@ -97,9 +97,6 @@ function ThreadPageMain({
   workspacePath: string | undefined;
   threadId: string | undefined;
 }) {
-  const railBoxRef = useRef<HTMLDivElement>(null);
-  const { wider: railFits } = useWiderThan(railBoxRef, RAIL_MIN_REM);
-
   return (
     <ThreadSessionEffects workspacePath={workspacePath}>
       <FactorySessionPage>
@@ -109,11 +106,21 @@ function ThreadPageMain({
           composerLabel="Thread composer"
           composerStatus={<TeammateSessionLine />}
           className={threadShellClass}
-          contentRef={railBoxRef}
-          contentOverlay={railFits ? <ThreadRailLayer /> : undefined}
+          contentOverlay={<ThreadRailSlot />}
         />
       </FactorySessionPage>
     </ThreadSessionEffects>
+  );
+}
+
+function ThreadRailSlot() {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const { wider: railFits } = useWiderThan(boxRef, RAIL_MIN_REM);
+
+  return (
+    <div ref={boxRef} className="pointer-events-none absolute inset-0">
+      {railFits && <ThreadRailLayer />}
+    </div>
   );
 }
 

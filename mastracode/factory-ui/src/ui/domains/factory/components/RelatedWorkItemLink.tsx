@@ -6,9 +6,9 @@ import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { Link } from 'react-router';
 
 import { externalLinkLabel } from '../boardItems';
-import { CHANGE_REQUEST_STATUS_LABELS, cardChangeRequest, changeRequestStatus } from '../changeRequestState';
+import { cardChangeRequest, changeRequestStatus, changeRequestStatusLabel } from '../changeRequestState';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
-import { relationshipLabel, workItemIdentifier, workItemReferenceLabel } from '../services/relationships';
+import { relatedCardName, relationshipLabel, workItemReference } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import { isPullRequestSource } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
@@ -32,19 +32,16 @@ export function RelatedWorkItemLink({
 }) {
   const live = kind === 'session';
   const external = kind === 'external';
-  const reference =
-    workItemIdentifier(item) === undefined ? undefined : workItemReferenceLabel(item, contextRepository);
+  const reference = workItemReference(item, contextRepository);
   const relation = relationshipLabel(item, contextRepository);
-  const titleSuffix = reference === undefined ? '' : `: ${item.title}`;
+  const name = relatedCardName(item, contextRepository);
   const pullRequest = isPullRequestSource(item.source) ? cardChangeRequest(item) : undefined;
   const pullRequestStatus = pullRequest && changeRequestStatus(pullRequest, subscriptions);
   const statusLabel =
-    pullRequest && pullRequestStatus
-      ? CHANGE_REQUEST_STATUS_LABELS[pullRequest.provider][pullRequestStatus]
-      : undefined;
-  let ariaLabel = `Open ${relation}${titleSuffix}`;
-  if (live) ariaLabel = `Open live session for ${relation}${titleSuffix}`;
-  if (external) ariaLabel = `${externalLinkLabel(item.source)}: ${relation}${titleSuffix}`;
+    pullRequest && pullRequestStatus ? changeRequestStatusLabel(pullRequest.provider, pullRequestStatus) : undefined;
+  let ariaLabel = `Open ${name}`;
+  if (live) ariaLabel = `Open live session for ${name}`;
+  if (external) ariaLabel = `${externalLinkLabel(item.source)}: ${name}`;
   if (statusLabel !== undefined) ariaLabel = `${ariaLabel}, ${statusLabel}`;
 
   const content = (

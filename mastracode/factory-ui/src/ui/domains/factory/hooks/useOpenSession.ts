@@ -1,13 +1,13 @@
 import { useMatch, useParams } from 'react-router';
 
+import { useRouteSessionId } from '../../../../hooks/useRouteSessionId';
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { getUserSessionLabel } from '../../workspaces/services/sessionPresentation';
 
 export function useOpenSession() {
-  const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId: string; threadId: string }>();
-  // User threads carry the session id as `threadId` (see ChatSessionProvider).
+  const { factoryId } = useParams<{ factoryId: string }>();
   const isUserThread = Boolean(useMatch('/factories/:factoryId/user/threads/:threadId'));
-  const userSessionId = sessionId ?? threadId;
+  const userSessionId = useRouteSessionId();
   const sessionQuery = useUserSessionQuery(userSessionId);
   const workspaces = useWorkspacesQuery(factoryId);
   // Prefer the list row: PageTitle patches it with the generated title, the detail cache is not updated.

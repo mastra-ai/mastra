@@ -1,5 +1,5 @@
 import type { SessionPullRequestTarget } from '../../../../hooks/useSessionPullRequestSubscriptions';
-import { cardChangeRequest, changeRequestStatus } from '../../factory/changeRequestState';
+import { cardChangeRequest, changeRequestStatus, isSettledChangeRequest } from '../../factory/changeRequestState';
 import type { CardChangeRequest } from '../../factory/changeRequestState';
 import { relatedWorkItemIndex } from '../../factory/services/relationships';
 import type { WorkItem } from '../../factory/services/workItems';
@@ -50,7 +50,7 @@ export function sessionPullRequestTargets(
     const entry = index.get(sessionId);
     const pullRequest = entry?.pullRequest;
     const status = pullRequest && changeRequestStatus(pullRequest);
-    if (!entry || !pullRequest || status === 'merged' || status === 'closed') return [];
+    if (!entry || !pullRequest || isSettledChangeRequest(status)) return [];
     return [{ sessionId, threadId: entry.threadId, provider: pullRequest.provider }];
   });
 }

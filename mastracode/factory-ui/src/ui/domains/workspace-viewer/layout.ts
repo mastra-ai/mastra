@@ -12,6 +12,7 @@ export const RAIL_MIN_REM = 58;
 
 type CardWidthStyle = CSSProperties & { '--workspace-card-max': string };
 type ThreadGeometryStyle = CardWidthStyle & {
+  '--workspace-card-min': string;
   '--thread-column': string;
   '--thread-gutter': string;
   '--thread-edge': string;
@@ -22,6 +23,7 @@ export const cardWidthStyle: CardWidthStyle = { '--workspace-card-max': `${CARD_
 
 export const threadGeometryStyle = (scrollbarGutters: number): ThreadGeometryStyle => ({
   ...cardWidthStyle,
+  '--workspace-card-min': `${CARD_MIN_REM}rem`,
   '--thread-column': `${COLUMN_REM}rem`,
   '--thread-gutter': `${GUTTER_REM}rem`,
   '--thread-edge': `${EDGE_REM}rem`,
@@ -45,14 +47,14 @@ export const composerColumnClass = 'px-1 md:px-1';
  * 6px inset (`p-1.5`) and the 1px border that sit between them and the card edge. */
 export const cardRadiusClass = 'rounded-[calc(var(--spacing-control-sm)/2+7px)]';
 
-/** How much of the chat each view asks the card for; the card animates between them. */
+/** A percentage, not a length: a taller window then moves the card without restarting its height transition. */
 export const cardHeightClass = {
   compact: 'h-auto',
-  full: 'h-(--card-room)',
+  full: 'h-full',
 };
 
 /** `cqh` of the page header's layer, which spans the page. */
-export const cardMaxHeightClass = '[--card-room:calc(100cqh-2*var(--chat-header-top))] max-h-(--card-room)';
+export const cardTrackClass = 'h-[calc(100cqh-2*var(--chat-header-top))]';
 
 export type WorkspacePanelSize = keyof typeof cardHeightClass;
 
@@ -68,21 +70,22 @@ export const treeRowContainmentClass = '[content-visibility:auto] [contain-intri
 export const overviewScrollClass = 'flex min-h-0 w-full min-w-0 grow flex-col overflow-y-auto';
 
 /** Read through descendant selectors: a variable or `group-*` variant on this box would restyle the whole transcript. */
-export const panelStateAttributes = (docked: boolean, moving: boolean) => ({
+export const panelStateAttributes = (docked: boolean, moved: boolean) => ({
   'data-panel-docked': docked || undefined,
-  'data-panel-moving': moving || undefined,
+  'data-panel-moved': moved || undefined,
 });
 
+// Instant until the panel first moves: the first measurement follows a layout, and would unfold the panel on page load.
+const motionClock =
+  'duration-0 [[data-panel-moved]_&]:duration-(--resize-dur) ease-(--resize-ease) motion-reduce:transition-none';
+
+/** Only `--panel-reveal` transitions; geometry is that value times live sizes, so a resize mid-motion never cancels it. */
+export const panelRevealClass = `[[data-panel-docked]_&]:[--panel-reveal:1] [transition-property:--panel-reveal] ${motionClock}`;
+
 export const reservedSpaceClass = {
-  viewport: '[[data-panel-docked]_&]:pe-[calc(var(--chat-edge)+var(--workspace-files-inset))]',
-  header: 'pe-3 [[data-panel-docked]_&]:pe-[calc(--spacing(3)+var(--workspace-files-header-inset))]',
-  dock: 'left-0 [[data-panel-docked]_&]:left-(--workspace-files-header-inset)',
+  viewport: `${panelRevealClass} pe-[calc(var(--chat-edge)+var(--chat-inset-end)+var(--panel-reveal)*var(--workspace-files-inset))]`,
+  header: `${panelRevealClass} pe-[calc(--spacing(3)+var(--panel-reveal)*var(--workspace-files-header-inset))]`,
+  dock: `${panelRevealClass} left-[calc(var(--panel-reveal)*var(--workspace-files-header-inset))]`,
 };
 
-/** One clock for everything the dock moves, or the actions drift. */
-export const reservedSpaceTransitionClass =
-  'duration-0 [[data-panel-moving]_&]:duration-(--resize-dur) ease-(--resize-ease) motion-reduce:transition-none';
-
-/** Durations repeat over the card's transition properties, so on `height` its width and right edge land at once. */
-export const cardTransitionClass =
-  'duration-0 data-[motion=height]:duration-[var(--resize-dur),0s] data-[motion=place]:duration-(--resize-dur) ease-(--resize-ease) motion-reduce:transition-none';
+export const cardMotionClass = `${motionClock} data-resized:duration-(--resize-dur)`;

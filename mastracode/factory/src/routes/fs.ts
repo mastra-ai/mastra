@@ -834,6 +834,12 @@ grep -z '^1[26]0000 ' "$staged" || [ $? -eq 1 ]
 xargs -0 sh -c 'for p; do if [ -L "$p" ]; then printf "120000 untracked\\t%s\\0" "$p"; fi; done' sh <"$untracked"
 `;
 
+/** Whole NUL-terminated paths of a listing capped at `MAX_FILE_INDEX_BYTES + 1` bytes, and whether the cap cut it. */
+function boundedPaths(stdout: string): { paths: string[]; truncated: boolean } {
+  const truncated = Buffer.byteLength(stdout) > MAX_FILE_INDEX_BYTES;
+  return { paths: (truncated ? stdout.slice(0, stdout.lastIndexOf('\0') + 1) : stdout).split('\0'), truncated };
+}
+
 async function refusedLinks(sandbox: ExecutableSandbox, layout: SessionLayout, links: string[]): Promise<Set<string>> {
   if (links.length === 0) return new Set();
   const real = await realPaths(sandbox, layout.root, links, '-f');
@@ -882,24 +888,20 @@ async function checkoutFiles(
   for (const result of [listed, deleted, special]) {
     if (result.exitCode !== 0) throw new Error(`Unable to list files: ${result.stderr.trim() || 'git failed'}`);
   }
-  const truncated = Buffer.byteLength(listed.stdout) > MAX_FILE_INDEX_BYTES;
-  // A cut list ends inside a path; only whole ones are kept.
-  const whole = truncated ? listed.stdout.slice(0, listed.stdout.lastIndexOf('\0') + 1) : listed.stdout;
+  const listing = boundedPaths(listed.stdout);
   const records = special.stdout.split('\0');
   const entriesOfMode = (mode: string) =>
     records.filter(record => record.startsWith(`${mode} `)).map(record => record.slice(record.indexOf('\t') + 1));
   const unopenable = new Set([...deleted.stdout.split('\0'), ...entriesOfMode('160000')]);
   // A conflicted file is listed once per stage; an untracked repository as its folder, ending in `/`.
   const paths = new Set(
-    whole
-      .split('\0')
-      .filter(
-        path =>
-          path &&
-          !path.endsWith('/') &&
-          !unopenable.has(path) &&
-          !path.split('/').some(segment => HIDDEN_TREE_ENTRIES.has(segment)),
-      ),
+    listing.paths.filter(
+      path =>
+        path &&
+        !path.endsWith('/') &&
+        !unopenable.has(path) &&
+        !path.split('/').some(segment => HIDDEN_TREE_ENTRIES.has(segment)),
+    ),
   );
   const links = [...new Set(entriesOfMode('120000'))].filter(path => paths.has(path));
   const refused = await refusedLinks(
@@ -909,8 +911,65 @@ async function checkoutFiles(
   );
   return {
     paths: Array.from(paths, path => `${repo.prefix}${path}`).filter(path => !refused.has(path)),
-    truncated,
+    truncated: listing.truncated,
   };
+}
+
+/** Walks a multi-repository root as the tree does: no ignore rules, no git internals or setup markers, no symlinked folders. */
+async function rootFiles(
+  sandbox: ExecutableSandbox,
+  layout: SessionLayout,
+): Promise<{ paths: string[]; truncated: boolean }> {
+  const options = { timeout: 30_000, maxRetainedBytes: Infinity };
+  const skipped = [
+    ...[...HIDDEN_TREE_ENTRIES].map(name => ['-name', name]),
+    ...layout.repos.map(repo => ['-path', `./${repo.prefix.slice(0, -1)}`]),
+  ].flatMap((test, i) => (i === 0 ? test : ['-o', ...test]));
+  const walk = [
+    '-c',
+    'cd "$1" && shift && exec find . "$@"',
+    'mastracode-root-files',
+    layout.root,
+    '(',
+    ...skipped,
+    ')',
+    '-prune',
+    '-o',
+  ];
+  const [listed, linked] = await Promise.all([
+    sandbox.executeCommand(
+      'sh',
+      [
+        '-c',
+        BOUNDED_OUTPUT_SCRIPT,
+        'mastracode-bounded',
+        String(MAX_FILE_INDEX_BYTES + 1),
+        'sh',
+        ...walk,
+        '(',
+        '-type',
+        'f',
+        '-o',
+        '-type',
+        'l',
+        ')',
+        '-print0',
+      ],
+      options,
+    ),
+    sandbox.executeCommand('sh', [...walk, '-type', 'l', '-print0'], options),
+  ]);
+  for (const result of [listed, linked]) {
+    if (result.exitCode !== 0) throw new Error(`Unable to list files: ${result.stderr.trim() || 'find failed'}`);
+  }
+  const listing = boundedPaths(listed.stdout);
+  const paths = new Set(listing.paths.filter(Boolean).map(path => path.slice('./'.length)));
+  const links = linked.stdout
+    .split('\0')
+    .map(path => path.slice('./'.length))
+    .filter(path => paths.has(path));
+  const refused = await refusedLinks(sandbox, layout, links);
+  return { paths: [...paths].filter(path => !refused.has(path)), truncated: listing.truncated };
 }
 
 // Passive like every session read: no sandbox in this process means `available: false`, never a new sandbox.
@@ -918,7 +977,10 @@ export async function listSessionWorkspaceFiles(session: SourceControlSession): 
   const handle = await sessionSandbox(session);
   if (!handle) return { workspacePath: session.sessionId, available: false, paths: [], truncated: false };
   const { layout, sandbox } = handle;
-  const settled = await Promise.allSettled(layout.repos.map(repo => checkoutFiles(sandbox, layout, repo)));
+  const settled = await Promise.allSettled([
+    ...layout.repos.map(repo => checkoutFiles(sandbox, layout, repo)),
+    ...(layout.repos.length > 1 ? [rootFiles(sandbox, layout)] : []),
+  ]);
   const checkouts = settled.flatMap(checkout => (checkout.status === 'fulfilled' ? [checkout.value] : []));
   const failed = settled.find((checkout): checkout is PromiseRejectedResult => checkout.status === 'rejected');
   if (failed && checkouts.length === 0) throw failed.reason;

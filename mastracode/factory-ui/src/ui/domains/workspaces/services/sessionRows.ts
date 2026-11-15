@@ -3,9 +3,8 @@ import type { InstalledBoardInfo } from '../../../../api/types';
 import { cardContextSessions, cardThreadSession, externalLinkLabel } from '../../factory/boardItems';
 import type { PullRequestStatus } from '../../factory/boardItems';
 import { itemBoard } from '../../factory/boardStages';
-import { changeRequestSource, changeRequestStatus } from '../../factory/changeRequestState';
+import { CHANGE_REQUEST_TERMS, changeRequestStatus, isSettledChangeRequest } from '../../factory/changeRequestState';
 import type { CardChangeRequest } from '../../factory/changeRequestState';
-import { stageMoves } from '../../factory/stageStays';
 import type { PullRequestSubscription } from '../../factory/services/githubSubscriptions';
 import type { WorkItem, WorkItemSource } from '../../factory/services/workItems';
 import {
@@ -92,22 +91,6 @@ export interface SessionListRow {
   waitingSessionId?: string;
   createdAt: string;
   updatedAt: string;
-  time: SessionRowTime;
-}
-
-export interface SessionRowTime {
-  at: string;
-  event: 'moved' | 'started';
-}
-
-export function sessionRowTime(session: FactoryUserSession, item: WorkItem | undefined): SessionRowTime {
-  const moved = item
-    ? stageMoves(item)
-        .map(entry => entry.enteredAt)
-        .toSorted()
-        .at(-1)
-    : undefined;
-  return moved === undefined ? { at: session.createdAt, event: 'started' } : { at: moved, event: 'moved' };
 }
 
 export function sessionActivityStatus(row: {
@@ -169,7 +152,7 @@ function sessionExternalLinks(
     ? [{ url: item.url, source: item.source, label: sessionExternalLinkLabel(item.source) }]
     : [];
   if (pullRequest?.url && !links.some(link => link.url === pullRequest.url)) {
-    const source = changeRequestSource(pullRequest.provider);
+    const source = CHANGE_REQUEST_TERMS[pullRequest.provider].source;
     links.push({ url: pullRequest.url, source, label: sessionExternalLinkLabel(source) });
   }
   return links;
@@ -181,7 +164,7 @@ function isSettled(
   pullRequestStatus: PullRequestStatus | undefined,
 ): boolean {
   if (item && reachedTerminalPhase(item, boards)) return true;
-  return pullRequestStatus === 'merged' || pullRequestStatus === 'closed';
+  return isSettledChangeRequest(pullRequestStatus);
 }
 
 export interface FactorySessionRowInput {
@@ -251,7 +234,6 @@ export function buildFactorySessionRow({
     pinned,
     createdAt: session.createdAt,
     updatedAt: item?.updatedAt ?? session.updatedAt,
-    time: sessionRowTime(session, item),
   };
 }
 
@@ -437,6 +419,5 @@ export function buildUserSessionRow({
     pinned,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
-    time: sessionRowTime(session, undefined),
   };
 }

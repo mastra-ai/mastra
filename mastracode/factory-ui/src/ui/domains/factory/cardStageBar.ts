@@ -4,7 +4,7 @@ import { allowsMove, boardLoop, phaseOf } from './boardFlow';
 import type { BoardInfo } from './boardFlow';
 import { contextLabel, phaseContext } from './boardItems';
 import { currentItemStage, phaseName, pullRequestMayEnter } from './boardStages';
-import { cardChangeRequest, changeRequestStatus } from './changeRequestState';
+import { cardChangeRequest, changeRequestStatus, isOpenChangeRequest } from './changeRequestState';
 import type { PullRequestSubscription } from './services/githubSubscriptions';
 import { changeRequestReference } from './sessionChangeRequests';
 import { isPullRequestSource } from './services/workItems';
@@ -91,7 +91,7 @@ export function stageDescription(
   if (phase.kind === 'terminal') {
     const pullRequest = boardLoop(board)?.pullRequestReview === undefined ? undefined : cardChangeRequest(item);
     const status = pullRequest && changeRequestStatus(pullRequest, session.subscriptions);
-    return pullRequest?.number !== undefined && (status === 'open' || status === 'draft')
+    return pullRequest?.number !== undefined && isOpenChangeRequest(status)
       ? `Usually automatic when ${changeRequestReference(pullRequest, session.repository)} merges`
       : `Marks it ${phaseName(phase).toLowerCase()}`;
   }

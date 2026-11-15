@@ -1,6 +1,13 @@
 import type { PullRequestStatus } from './boardItems';
 import type { CardChangeRequest } from './changeRequestState';
-import { cardChangeRequest, cardChangeRequests, changeRequestKey, changeRequestStatus } from './changeRequestState';
+import {
+  CHANGE_REQUEST_TERMS,
+  cardChangeRequest,
+  cardChangeRequests,
+  changeRequestKey,
+  changeRequestStatus,
+  isOpenChangeRequest,
+} from './changeRequestState';
 import type { ChangeRequestProvider, PullRequestSubscription } from './services/githubSubscriptions';
 import { referenceLabel } from './services/relationships';
 import type { WorkItem } from './services/workItems';
@@ -15,19 +22,19 @@ export interface SessionChangeRequest {
 
 export function changeRequestNumberLabel(request: Pick<SessionChangeRequest, 'provider' | 'number'>) {
   if (request.number === undefined) return undefined;
-  return `${request.provider === 'gitlab' ? '!' : '#'}${request.number}`;
+  return `${CHANGE_REQUEST_TERMS[request.provider].sigil}${request.number}`;
 }
 
 export function changeRequestReference(
   request: Pick<SessionChangeRequest, 'provider' | 'number'> & { url?: string },
   contextRepository?: string,
 ): string {
-  const kind = request.provider === 'gitlab' ? 'MR' : 'PR';
+  const { kind, sigil } = CHANGE_REQUEST_TERMS[request.provider];
   if (request.number === undefined) return kind;
   return referenceLabel(
     {
       kind,
-      sigil: request.provider === 'gitlab' ? '!' : '#',
+      sigil,
       number: request.number,
       repository: request.url === undefined ? undefined : changeRequestRepository(request.url),
     },
@@ -95,10 +102,7 @@ export function sessionChangeRequests({
     .filter(linked)
     .map(request => sessionRequest(request, subscriptions))
     .toReversed()
-    .toSorted(
-      (a, b) =>
-        Number(b.status === 'open' || b.status === 'draft') - Number(a.status === 'open' || a.status === 'draft'),
-    );
+    .toSorted((a, b) => Number(isOpenChangeRequest(b.status)) - Number(isOpenChangeRequest(a.status)));
   const candidates: SessionChangeRequest[] = [
     ...carried,
     ...subscriptions.map(subscription => ({

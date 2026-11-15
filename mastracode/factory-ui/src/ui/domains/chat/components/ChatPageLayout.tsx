@@ -4,7 +4,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 
-import { reservedSpaceClass, reservedSpaceTransitionClass } from '../../workspace-viewer/layout';
+import { reservedSpaceClass } from '../../workspace-viewer/layout';
 import { chatHeaderStyle, headerCapsuleClass } from './chatPageHeader';
 import { useSidebarHeaderSlots } from './useSidebarHeaderSlots';
 
@@ -47,9 +47,8 @@ export function ChatPageLayout({
           <div
             data-slot="chat-page-header"
             className={cn(
-              'grid items-center gap-x-2 ps-3 pt-(--chat-header-top) transition-[padding]',
+              'grid items-center gap-x-2 ps-3 pt-(--chat-header-top)',
               reservedSpaceClass.header,
-              reservedSpaceTransitionClass,
               // Equal side tracks keep the center on the row's midline, whatever the title holds.
               headerCenter ? 'grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]' : 'grid-cols-[minmax(0,1fr)_auto]',
             )}

@@ -8,7 +8,7 @@ import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { ChatPageLayout } from '../../chat/components/ChatPageLayout';
 import { UserSessionSharing } from '../../workspaces/components/UserSessionSharing';
 import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
-import { useWorkspacePanelDockActions } from '../../workspace-viewer/hooks/useWorkspacePanelDockActions';
+import { WorkspacePanelDock } from '../../workspace-viewer/components/WorkspacePanelDock';
 import { cardContextSessions, phaseContext } from '../boardItems';
 import type { CardContextSession } from '../boardItems';
 import { currentItemStage } from '../boardStages';
@@ -16,6 +16,7 @@ import { useSessionCard } from '../hooks/useSessionCard';
 import { useOpenSession } from '../hooks/useOpenSession';
 import type { WorkItem } from '../services/workItems';
 import { CardStageBar } from './CardStageBar';
+import { CardStageSummary } from './CardStageSummary';
 import { SessionContextMenu, cardSessionPath } from './SessionContextMenu';
 import { ThreadSubscriptionsRefresh } from './ThreadSubscriptionsRefresh';
 
@@ -50,18 +51,38 @@ function openSessionContext(
   return { ...open, workingSession: sessions.find(candidate => candidate.current) };
 }
 
+function stageUnavailable(
+  board: InstalledBoardInfo | undefined,
+  boards: readonly InstalledBoardInfo[] | undefined,
+  boardsFailed: boolean,
+  factoryFailed: boolean,
+): string | undefined {
+  if (boardsFailed) return "Couldn't load the board";
+  if (boards !== undefined && board === undefined) return 'Board not installed';
+  if (factoryFailed) return "Couldn't load the factory";
+  return undefined;
+}
+
 export function FactorySessionPage({ children }: { children: ReactNode }) {
   const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId: string; threadId: string }>();
   const { session, isUserThread, title: sessionTitle } = useOpenSession();
-  const factory = useFactoryQuery(factoryId).data;
-  const { item: currentItem, sessionItems, board: boardEntry, loading: cardLoading } = useSessionCard();
-  const dockActions = useWorkspacePanelDockActions();
+  const factoryQuery = useFactoryQuery(factoryId);
+  const factory = factoryQuery.data;
+  const {
+    item: currentItem,
+    sessionItems,
+    board: boardEntry,
+    boards,
+    loading: cardLoading,
+    boardsFailed,
+  } = useSessionCard();
 
   const openContext =
     currentItem && sessionId && threadId ? openSessionContext(currentItem, boardEntry, sessionId, threadId) : undefined;
   const switchable = openContext && openContext.sessions.length > 1 ? openContext : undefined;
   // No title until the card is known: the session's own would flash, then go.
   const title = currentItem ? switchable && `${switchable.label} session` : cardLoading ? undefined : sessionTitle;
+  const stageNote = stageUnavailable(boardEntry, boards, boardsFailed, factoryQuery.isLoadingError);
 
   return (
     <ChatPageLayout
@@ -96,10 +117,12 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
             factory={factory}
             openContext={openContext?.context}
           />
+        ) : currentItem && stageNote ? (
+          <CardStageSummary item={currentItem} board={boardEntry} note={stageNote} />
         ) : undefined
       }
       headerActions={<WorkspaceFilesToggle />}
-      dockActions={dockActions}
+      dockActions={actions => <WorkspacePanelDock>{actions}</WorkspacePanelDock>}
     >
       <ThreadSubscriptionsRefresh />
       {children}

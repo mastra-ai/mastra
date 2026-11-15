@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { BrowserContext, Locator, Page } from '@playwright/test';
 
+import { DOCK_MIN_REM } from '../src/ui/domains/workspace-viewer/layout';
 import { HEAVY, heavySessionHandlers } from './ui/heavy-session';
 import { server } from './ui/msw-server';
 
@@ -131,6 +132,41 @@ test.describe('Session panel with a heavy session', () => {
     await expect(panel).not.toHaveAttribute('inert');
   });
 
+  test('unfolds the panel as smoothly when collapsing the sidebar makes room for it as when clicked open', async ({
+    page,
+  }) => {
+    await openPanel(page);
+    const toggle = page.getByRole('button', { name: 'Session panel' });
+    const chatWidth = (await boxOf(page.locator('[data-slot="chat-page-header"]').locator('..'))).width;
+    await page.setViewportSize({ width: Math.floor(1600 - chatWidth + DOCK_MIN_REM * 16) - 40, height: 1000 });
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByTestId('workspace-files-card')).toHaveAttribute('inert');
+    await transitionsEnd(page);
+
+    const widths = page.evaluate(
+      () =>
+        new Promise<number[]>(resolve => {
+          const widths: number[] = [];
+          const sample = () => {
+            const card = document.querySelector<HTMLElement>('[data-testid="workspace-files-card"]');
+            const width = card?.parentElement?.getBoundingClientRect().width;
+            if (width) widths.push(width);
+            if (!card?.inert && widths.length > 10 && widths.slice(-10).every(seen => seen === width)) resolve(widths);
+            else requestAnimationFrame(sample);
+          };
+          requestAnimationFrame(sample);
+        }),
+    );
+    await page.getByRole('separator', { name: /^Resize sidebar/ }).focus();
+    await page.keyboard.press('Enter');
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+
+    const unfold = await widths;
+    const travel = Math.max(...unfold) - Math.min(...unfold);
+    const steps = unfold.slice(1).map((width, frame) => Math.abs(width - (unfold[frame] ?? width)));
+    expect(Math.max(...steps)).toBeLessThan(travel / 2);
+  });
+
   test('keeps the conversation as wide beside the panel under classic scrollbars', async ({ playwright, baseURL }) => {
     const browser = await playwright.chromium.launch({
       ignoreDefaultArgs: ['--hide-scrollbars'],
@@ -159,7 +195,9 @@ test.describe('Session panel with a heavy session', () => {
     }
   });
 
-  test('finds a file among thousands and opens it where the tree keeps it', async ({ page }, testInfo) => {
+  test('finds a file among twelve hundred across checkouts and opens it where the tree keeps it', async ({
+    page,
+  }, testInfo) => {
     const panel = await openPanel(page);
     await panel.getByRole('button', { name: CHANGES }).click();
     await panel.getByRole('tab', { name: 'Files' }).click();

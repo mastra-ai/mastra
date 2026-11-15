@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 
 import { workspacePanelKey } from '../context/WorkspacePanelContext';
 import { useWorkspacePanel } from '../context/useWorkspacePanel';
-import { reservedSpaceClass, reservedSpaceTransitionClass } from '../layout';
+import { reservedSpaceClass } from '../layout';
 import { WorkspacePanelDockCard } from './WorkspacePanelDockCard';
 
 function measureCapsule(capsule: HTMLDivElement) {
@@ -18,20 +18,24 @@ function measureCapsule(capsule: HTMLDivElement) {
 
 export function WorkspacePanelDock({ children }: { children: ReactNode }) {
   const panel = useWorkspacePanel();
+  const Dock = panel.workspacePath ? 'aside' : 'div';
 
   return (
-    <div
+    <Dock
+      aria-label={panel.workspacePath ? 'Session panel' : undefined}
       className={cn(
-        'relative flex justify-self-end transition-[left] starting:left-0',
-        '[--dock-overhang:--spacing(1)] [--capsule-radius:calc(var(--spacing-control-sm)/2+--spacing(0.5))]',
+        'relative flex justify-self-end',
+        '[--dock-overhang:--spacing(1)] [--capsule-height:calc(var(--spacing-control-sm)+--spacing(1))]',
         reservedSpaceClass.dock,
-        reservedSpaceTransitionClass,
       )}
     >
-      <div ref={measureCapsule} className="pointer-events-auto relative z-1 flex items-center gap-0.5 p-0.5">
+      <div
+        ref={measureCapsule}
+        className="pointer-events-auto relative z-1 flex items-center gap-0.5 p-0.5 empty:hidden"
+      >
         {children}
       </div>
-      <WorkspacePanelDockCard key={workspacePanelKey(panel)} />
-    </div>
+      {panel.workspacePath && <WorkspacePanelDockCard key={workspacePanelKey(panel)} />}
+    </Dock>
   );
 }

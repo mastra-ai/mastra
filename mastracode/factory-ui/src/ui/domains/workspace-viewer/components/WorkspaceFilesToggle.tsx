@@ -53,7 +53,7 @@ export function WorkspaceFilesToggle() {
           popoverSizeClass[size],
         )}
       >
-        <WorkspaceFilesContent onSizeChange={setSize} />
+        <WorkspaceFilesContent visible={open} onSizeChange={setSize} />
       </PopoverContent>
     </Popover>
   );

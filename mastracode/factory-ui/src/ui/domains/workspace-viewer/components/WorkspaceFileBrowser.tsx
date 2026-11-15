@@ -7,6 +7,7 @@ import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { hashKey, useIsFetching, useQueryClient } from '@tanstack/react-query';
+import type { UseQueryResult } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 import { queryKeys } from '../../../../api/keys';
@@ -56,6 +57,14 @@ function LinkTarget({ target }: { target?: string }) {
 /** Dotfiles and dot-folders, hidden unless the viewer asks for them. */
 function isHidden(entry: WorkspaceTreeEntry): boolean {
   return entry.name.startsWith('.');
+}
+
+function changeMarksNotice(changes: UseQueryResult<ChangeMarks>, sandboxRunning: boolean): string | undefined {
+  if (changes.isError) return 'Change marks unavailable';
+  if (!changes.data) return undefined;
+  if (changes.data.unreadable.length > 0) return `Change marks unavailable for ${changes.data.unreadable.join(', ')}`;
+  if (!changes.data.read && sandboxRunning) return 'Change marks unavailable';
+  return undefined;
 }
 
 interface TreeLevelProps {
@@ -179,8 +188,10 @@ export function WorkspaceFileBrowser({
   onQueryChange,
 }: WorkspaceFileBrowserProps) {
   const queryClient = useQueryClient();
-  const marks = useWorkspaceChanges(workspacePath, { enabled: visible, select: changeMarks }).data ?? NO_CHANGE_MARKS;
+  const changes = useWorkspaceChanges(workspacePath, { enabled: visible, select: changeMarks });
+  const marks = changes.isError ? NO_CHANGE_MARKS : (changes.data ?? NO_CHANGE_MARKS);
   const root = useWorkspaceTree(workspacePath, '', { enabled: visible });
+  const marksNotice = changeMarksNotice(changes, root.data?.available === true);
   const indexHash = hashKey(queryKeys.workspaceFileIndex(workspacePath));
   const entries = (root.data?.entries ?? []).filter(entry => showHidden || !isHidden(entry));
   const openFound = (path: string) => {
@@ -196,7 +207,7 @@ export function WorkspaceFileBrowser({
       predicate: query => finder.finding || query.queryHash !== indexHash,
     }) > 0;
   const refresh = () => {
-    void queryClient.refetchQueries({ queryKey: queryKeys.workspaceTreeScope(workspacePath), type: 'active' });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceTreeScope(workspacePath) });
     void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceChanges(workspacePath), exact: true });
   };
   // A symlinked folder opens its target and every folder above it.
@@ -264,6 +275,11 @@ export function WorkspaceFileBrowser({
           {isRefreshing ? <Spinner size="sm" /> : <IconArrowRotateClockwise />}
         </Button>
       </div>
+      {marksNotice ? (
+        <Txt as="p" variant="caption" tone="muted" className="px-3 pb-1 wrap-anywhere">
+          {marksNotice}
+        </Txt>
+      ) : null}
       {finder.finding ? (
         <FileFinderResults workspacePath={workspacePath} finder={finder} changes={marks.files} />
       ) : content ? (

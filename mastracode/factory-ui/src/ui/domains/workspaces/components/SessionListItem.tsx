@@ -85,7 +85,7 @@ export function SessionListItem({
       pullRequest={row.pullRequest}
       pullRequestStatus={row.pullRequestStatus}
       repository={row.repository}
-      time={row.time}
+      updatedAt={row.updatedAt}
       compact={compact}
       subItems={subItems}
     />

@@ -200,6 +200,7 @@ describe('ThreadPage header', () => {
     // The stage bar waits on the card, so by now the header has everything it will show.
     expect(await within(header).findByRole('group', { name: 'Card stage' })).toBeInTheDocument();
     expect(within(header).queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+    expect(within(header).queryByRole('button', { name: 'Switch session' })).not.toBeInTheDocument();
     expect(within(header).getByRole('button', { name: 'Toggle sidebar' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Open navigation menu')).not.toBeInTheDocument();
     expect(within(header).queryByRole('link', { name: 'Work' })).not.toBeInTheDocument();
@@ -212,7 +213,8 @@ describe('ThreadPage header', () => {
     const header = await findPageHeader();
     expect(await within(header).findByRole('heading', { level: 1, name: 'salut ca va ?' })).toBeInTheDocument();
     expect(within(header).queryByText('User sessions')).not.toBeInTheDocument();
-    expect(within(header).getByRole('button', { name: 'Session panel' })).toBeInTheDocument();
+    const panel = screen.getByRole('complementary', { name: 'Session panel' });
+    expect(within(panel).getByRole('button', { name: 'Session panel' })).toBeInTheDocument();
   });
 
   it('shares from the header and restores privacy from the sidebar menu', async () => {

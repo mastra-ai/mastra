@@ -192,9 +192,9 @@ describe('ThreadPage loading shell', () => {
     renderThreadRoute();
     sessionGate.resolve();
 
-    const header = await findPageHeader();
+    await findPageHeader();
     expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
-    expect(within(header).getByRole('button', { name: 'Session panel' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Session panel' })).toBeInTheDocument();
 
     messagesGate.resolve();
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());

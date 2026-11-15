@@ -23,64 +23,6 @@ describe('sessionBoard', () => {
   });
 });
 
-describe('row time', () => {
-  it("shows the card's last stage move, not its last edit", () => {
-    const item = testWorkItem({
-      updatedAt: '2026-09-09T09:00:00.000Z',
-      stageHistory: [
-        {
-          stage: 'triage',
-          enteredAt: '2026-09-04T10:00:00.000Z',
-          exitedAt: '2026-09-05T10:00:00.000Z',
-          by: 'user-1',
-        },
-        { stage: 'execute', enteredAt: '2026-09-05T10:00:00.000Z', by: 'user-1' },
-      ],
-    });
-
-    expect(factoryRow(testSession('s1'), { item }).time).toEqual({ at: '2026-09-05T10:00:00.000Z', event: 'moved' });
-  });
-
-  it('shows when the session started while the card has only arrived in its first phase', () => {
-    const session = testSession('s1', { createdAt: '2026-09-01T08:00:00.000Z' });
-    const item = testWorkItem({
-      createdAt: '2026-09-04T10:00:00.000Z',
-      stageHistory: [{ stage: 'triage', enteredAt: '2026-09-04T10:00:00.000Z', by: 'user-1' }],
-    });
-
-    expect(factoryRow(session, { item }).time).toEqual({ at: '2026-09-01T08:00:00.000Z', event: 'started' });
-  });
-
-  it('shows when the session started while the card sits where it was filed, in several phases at once', () => {
-    const session = testSession('s1', { createdAt: '2026-09-01T08:00:00.000Z' });
-    const item = testWorkItem({
-      createdAt: '2026-09-04T10:00:00.000Z',
-      stageHistory: [
-        { stage: 'planning', enteredAt: '2026-09-04T10:00:00.000Z', by: 'user-1' },
-        { stage: 'execute', enteredAt: '2026-09-04T10:00:00.000Z', by: 'user-1' },
-      ],
-    });
-
-    expect(factoryRow(session, { item }).time).toEqual({ at: '2026-09-01T08:00:00.000Z', event: 'started' });
-  });
-
-  it('shows the first placement of a card filed with no phase as a move', () => {
-    const item = testWorkItem({
-      createdAt: '2026-09-04T09:00:00.000Z',
-      stageHistory: [{ stage: 'triage', enteredAt: '2026-09-04T10:00:00.000Z', by: 'user-1' }],
-    });
-
-    expect(factoryRow(testSession('s1'), { item }).time).toEqual({ at: '2026-09-04T10:00:00.000Z', event: 'moved' });
-  });
-
-  it('shows when the session started when there is no stage move to show', () => {
-    const session = testSession('s1', { createdAt: '2026-09-01T08:00:00.000Z', updatedAt: '2026-09-09T09:00:00.000Z' });
-
-    expect(factoryRow(session).time).toEqual({ at: '2026-09-01T08:00:00.000Z', event: 'started' });
-    expect(userRow('u1', { createdAt: '2026-09-01T08:00:00.000Z' }).time.event).toBe('started');
-  });
-});
-
 describe('sessionActivityStatus', () => {
   const quiet = { initializing: false, running: false, attention: false, settled: false };
 

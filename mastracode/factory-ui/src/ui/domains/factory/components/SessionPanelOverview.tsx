@@ -4,17 +4,18 @@ import { useParams } from 'react-router';
 
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useThreadSubscriptions } from '../../chat/hooks/useThreadSubscriptions';
+import type { WorkspaceSectionSlots } from '../../workspace-viewer/context/WorkspacePanelContext';
 import { cardProjectRepositoryId } from '../boardRepository';
+import { changeRequestsHeading, changeRequestsNoun } from '../changeRequestState';
 import { useSessionCard } from '../hooks/useSessionCard';
-import { useSessionRepository } from '../hooks/useSessionRepository';
+import { useSessionSubscriptions } from '../hooks/useSessionSubscriptions';
 import { ownChangeRequest, sessionChangeRequests } from '../sessionChangeRequests';
 import { relatedWorkItemIndex } from '../services/relationships';
 import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
 import { toMinute } from '../stageStays';
-import { CardChangeRequestRow } from './CardChangeRequestRow';
 import { CardDescription } from './CardDescription';
 import { CardSourceRow } from './CardSourceRow';
+import { ChangeRequestLink } from './ChangeRequestLink';
 import { ChangeRequestList } from './ChangeRequestList';
 import { MovesGraph } from './MovesGraph';
 import { RelatedCards } from './RelatedCards';
@@ -23,12 +24,12 @@ import { SectionLoadError } from './SectionLoadError';
 const sectionClass = 'flex flex-col gap-3 p-1.5 pb-3';
 
 // Must render inside `ChatSessionBoundary`: the subscriptions follow the chat session.
-export function SessionPanelOverview({ workspace }: { workspace: (changeRequest?: ReactNode) => ReactNode }) {
-  const { factoryId, threadId } = useParams<{ factoryId: string; threadId: string }>();
-  const session = useSessionRepository();
+export function SessionPanelOverview({ workspace }: { workspace: (slots?: WorkspaceSectionSlots) => ReactNode }) {
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const { session, links } = useSessionSubscriptions();
   const { repository, provider } = session;
+  const workspaceRepository = repository && { slug: repository.slug, provider };
   const factoryQuery = useFactoryQuery(factoryId);
-  const links = useThreadSubscriptions(threadId, repository !== undefined, provider);
   const card = useSessionCard();
   const now = useClock(toMinute);
   const pullRequestsFailed = session.failed || links.failed;
@@ -40,6 +41,7 @@ export function SessionPanelOverview({ workspace }: { workspace: (changeRequest?
 
   if (card.failed || !card.item || !factoryId) {
     const requests = sessionChangeRequests({ subscriptions: links.subscriptions, provider });
+    const providers = repository ? [provider] : [];
     return (
       <>
         {card.failed ? (
@@ -47,13 +49,13 @@ export function SessionPanelOverview({ workspace }: { workspace: (changeRequest?
             <SectionLoadError>Couldn't load the card.</SectionLoadError>
           </section>
         ) : null}
-        {workspace()}
+        {workspace({ repository: workspaceRepository })}
         {pullRequestsFailed || requests.length > 0 ? (
-          <section aria-label="Pull requests" className={sectionClass}>
+          <section aria-label={changeRequestsHeading(providers)} className={sectionClass}>
             {pullRequestsFailed ? (
-              <SectionLoadError>Couldn't load pull requests.</SectionLoadError>
+              <SectionLoadError>{`Couldn't load ${changeRequestsNoun(providers)}.`}</SectionLoadError>
             ) : (
-              <ChangeRequestList requests={requests} provider={provider} repository={repository?.slug} />
+              <ChangeRequestList requests={requests} repository={repository?.slug} complete />
             )}
           </section>
         ) : null}
@@ -71,6 +73,7 @@ export function SessionPanelOverview({ workspace }: { workspace: (changeRequest?
     provider,
     shownElsewhere: [sourceUrl, ownRequest?.url, ...related.map(relatedItem => relatedItem.url ?? undefined)],
   });
+  const requestsNoun = changeRequestsNoun(repository ? [provider] : requests.map(request => request.provider));
   const moved = item.stageHistory.some(entry => entry.exitedAt);
   const showsPhases = related.length > 0 || moved;
 
@@ -89,18 +92,22 @@ export function SessionPanelOverview({ workspace }: { workspace: (changeRequest?
           repositoryFailed={session.failed}
         />
       </section>
-      {workspace(
-        ownRequest ? (
-          <CardChangeRequestRow item={item} request={ownRequest} repository={repository?.slug} />
+      {workspace({
+        repository: workspaceRepository,
+        changeRequest: ownRequest ? (
+          <ChangeRequestLink request={ownRequest} sessionRepository={repository?.slug} label="reference" />
         ) : undefined,
-      )}
+      })}
       {pullRequestsFailed || requests.length > 0 || showsPhases ? (
         <section aria-label="Card activity" className={sectionClass}>
+          <ChangeRequestList requests={requests} repository={repository?.slug} complete={!pullRequestsFailed} />
           {pullRequestsFailed ? (
-            <SectionLoadError>Couldn't load pull requests.</SectionLoadError>
-          ) : (
-            <ChangeRequestList requests={requests} provider={provider} repository={repository?.slug} />
-          )}
+            <SectionLoadError>
+              {requests.length > 0
+                ? `Couldn't load the session's ${requestsNoun}, so this list may be out of date.`
+                : `Couldn't load ${requestsNoun}.`}
+            </SectionLoadError>
+          ) : null}
           <RelatedCards
             related={related}
             boards={card.boards}

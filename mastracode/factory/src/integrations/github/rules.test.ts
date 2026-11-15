@@ -5291,6 +5291,71 @@ describe('createGithubPullRequestReconciler', () => {
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(1);
   });
 
+  it('reads a closed pull request open again when it is reopened, and a later missed close still reaches its card', async () => {
+    const context = await setup('write');
+    const card = await createCard(context, {
+      number: 21,
+      stages: ['canceled'],
+      metadata: {
+        author: 'pr-author',
+        state: 'closed',
+        draft: false,
+        merged: false,
+        assignees: ['assignee'],
+        requestedReviewers: ['reviewer'],
+        labels: ['bug'],
+        [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'closed',
+      },
+    });
+    const reconcile = createReconciler(
+      context,
+      vi.fn(async () => ({ ...mergedState(21), merged: false, mergedBy: undefined })),
+    );
+    const rules = new GithubRules({
+      github: context.github,
+      sourceControl: context.sourceControl,
+      integrationStorage: context.integrationStorage,
+      projects: context.projects,
+      storage: context.workItems,
+      configVersion: 'factory-config-v1',
+      boards: createTriageWorkRegistry(),
+    });
+    await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ checked: 0 });
+
+    await expect(
+      rules.ingest({
+        event: 'pull_request',
+        deliveryId: 'delivery-reopen-21',
+        payload: {
+          action: 'reopened',
+          installation: { id: 7 },
+          repository: { id: 10, full_name: 'acme/repo' },
+          sender: { login: 'maintainer' },
+          pull_request: {
+            number: 21,
+            title: 'PR 21',
+            html_url: 'https://github.com/acme/repo/pull/21',
+            state: 'open',
+            draft: false,
+            merged: false,
+            user: { login: 'pr-author' },
+            head: { ref: 'feature' },
+            base: { ref: 'main' },
+          },
+        },
+      }),
+    ).resolves.toEqual({ status: 'committed' });
+    expect(await context.workItems.get({ orgId: 'org-1', id: card.item.id })).toMatchObject({
+      stages: ['canceled'],
+      workItem: { state: 'open' },
+    });
+
+    await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ checked: 1, closed: 1 });
+    expect(await context.workItems.get({ orgId: 'org-1', id: card.item.id })).toMatchObject({
+      workItem: { state: 'closed' },
+    });
+  });
+
   it('continues closed reconciliation when terminal decision cleanup fails', async () => {
     const context = await setup('read');
     const card = await createCard(context, { number: 17, stages: ['done'] });
@@ -6797,7 +6862,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       number: number,
       body: string | null,
       deliveryId = `delivery-open-${number}`,
-      action: 'opened' | 'closed' | 'edited' = 'opened',
+      action: 'opened' | 'closed' | 'reopened' | 'edited' = 'opened',
       merged = false,
       headBranch = `feature-${number}`,
     ) {
@@ -7166,6 +7231,22 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       const [card] = await h.cards();
       expect(card).toMatchObject({ id: issue.id, stages: ['intake'] });
       expect(card!.workItem.state).toBe('open');
+    });
+
+    it("reads a pull request on its issue's card open again when it is reopened", async () => {
+      const h = await harness('write');
+      await h.issueCard(42, 'intake');
+      await h.ingest(openedPullRequest(17, 'Fixes #42'));
+      await h.ingest(openedPullRequest(17, 'Fixes #42', 'delivery-close-17', 'closed'));
+      const pullRequestSources = async () =>
+        (await h.cards()).flatMap(card => card.workItem.sources.filter(source => source.sourceType === 'pull-request'));
+      expect(await pullRequestSources()).toEqual([expect.objectContaining({ state: 'closed' })]);
+
+      await h.ingest(openedPullRequest(17, 'Fixes #42', 'delivery-reopen-17', 'reopened'));
+
+      expect(await pullRequestSources()).toEqual([
+        expect.objectContaining({ state: 'open', metadata: expect.objectContaining({ state: 'open', merged: false }) }),
+      ]);
     });
 
     const builderSession = { threadId: 'thread-work', sessionId: 'session-work', branch: 'factory/issue-42-build', startedBy: 'user-1' };

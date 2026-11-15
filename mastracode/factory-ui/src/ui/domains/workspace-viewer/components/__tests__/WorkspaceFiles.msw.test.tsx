@@ -1,5 +1,5 @@
 import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -15,8 +15,8 @@ import type { ChatTranscriptApi } from '../../../chat/context/ChatTranscriptCont
 import { initialTranscript } from '../../../chat/services/transcript';
 import type { FactoryUserSession } from '../../../workspaces/services/user-sessions';
 import { WorkspaceFilesProvider } from '../../context/WorkspaceFilesProvider';
-import { useWorkspacePanelDockActions } from '../../hooks/useWorkspacePanelDockActions';
 import { WorkspaceFilesToggle } from '../WorkspaceFilesToggle';
+import { WorkspacePanelDock } from '../WorkspacePanelDock';
 
 const CHANGES_URL = `${TEST_BASE_URL}/web/workspace/changes`;
 const WORKSPACE = 'session-1';
@@ -57,9 +57,11 @@ class PanelResizeObserver implements ResizeObserver {
 }
 
 function SessionFrame() {
-  const dockActions = useWorkspacePanelDockActions();
   return (
-    <ChatPageLayout headerActions={<WorkspaceFilesToggle />} dockActions={dockActions}>
+    <ChatPageLayout
+      headerActions={<WorkspaceFilesToggle />}
+      dockActions={actions => <WorkspacePanelDock>{actions}</WorkspacePanelDock>}
+    >
       {null}
     </ChatPageLayout>
   );
@@ -315,7 +317,7 @@ describe('WorkspaceFiles', () => {
   });
 
   describe('when the chat crosses the dock threshold', () => {
-    it('folds the docked card into its capsule, then hands over to a compact popover', async () => {
+    it('folds the docked card into its capsule and offers the panel from the header instead', async () => {
       stubContainerWidth(1200);
       const user = userEvent.setup();
       const { client } = renderPanel();
@@ -327,21 +329,16 @@ describe('WorkspaceFiles', () => {
 
       resizeChat(900);
 
-      const card = screen.getByTestId('workspace-files-card');
-      expect(card).toHaveAttribute('inert');
+      expect(screen.getByTestId('workspace-files-card')).toHaveAttribute('inert');
       expect(screen.getByRole('button', { name: 'Session panel' })).toHaveAttribute('aria-pressed', 'false');
-
-      const surface = card.parentElement;
-      if (!surface) throw new Error('The docked card has no surface');
-      fireEvent.transitionEnd(surface);
-      expect(screen.queryByTestId('workspace-files-card')).not.toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: 'Session panel' }));
 
-      expect(await screen.findByRole('button', { name: /^Changes(,|$)/ })).toBeInTheDocument();
+      const popover = await screen.findByRole('dialog');
+      expect(await within(popover).findByRole('button', { name: /^Changes(,|$)/ })).toBeInTheDocument();
     });
 
-    it('unfolds the card it was folding when the chat widens again, still on the view it showed', async () => {
+    it('unfolds the same card when the chat widens again, still on the view it showed', async () => {
       stubContainerWidth(1200);
       const user = userEvent.setup();
       const { client } = renderPanel();
@@ -366,7 +363,7 @@ describe('WorkspaceFiles', () => {
       stubContainerWidth(900);
       renderPanel();
       await screen.findByRole('button', { name: 'Session panel' });
-      expect(screen.queryByTestId('workspace-files-card')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('workspace-viewer-panel')).not.toBeInTheDocument();
 
       resizeChat(1200);
 
@@ -374,7 +371,7 @@ describe('WorkspaceFiles', () => {
       expect(screen.getByRole('button', { name: 'Session panel' })).toHaveAttribute('aria-pressed', 'true');
     });
 
-    it('hands a card the viewer closed straight over to the header, whose popover then opens alone', async () => {
+    it('keeps a card the viewer closed folded, and opens the header popover alone', async () => {
       stubContainerWidth(1200);
       const user = userEvent.setup();
       const { client } = renderPanel();
@@ -386,34 +383,11 @@ describe('WorkspaceFiles', () => {
 
       resizeChat(900);
 
-      expect(screen.queryByTestId('workspace-files-card')).not.toBeInTheDocument();
-
       await user.click(screen.getByRole('button', { name: 'Session panel' }));
 
-      expect(await screen.findByRole('button', { name: /^Changes(,|$)/ })).toBeInTheDocument();
-      expect(screen.queryByTestId('workspace-files-card')).not.toBeInTheDocument();
-    });
-
-    it('hands over without folding when the viewer prefers reduced motion', async () => {
-      vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
-        matches: query === '(prefers-reduced-motion: reduce)',
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        addListener: () => {},
-        removeListener: () => {},
-        dispatchEvent: () => false,
-      }));
-      stubContainerWidth(1200);
-      const { client } = renderPanel();
-
-      await waitForMutationsIdle(client);
-      expect(await screen.findByTestId('workspace-files-card')).not.toHaveAttribute('inert');
-
-      resizeChat(900);
-
-      expect(screen.queryByTestId('workspace-files-card')).not.toBeInTheDocument();
+      const popover = await screen.findByRole('dialog');
+      expect(await within(popover).findByRole('button', { name: /^Changes(,|$)/ })).toBeInTheDocument();
+      expect(screen.getByTestId('workspace-files-card')).toHaveAttribute('inert');
     });
   });
 
@@ -423,7 +397,7 @@ describe('WorkspaceFiles', () => {
       const user = userEvent.setup();
       const { changesRequests } = renderPanel();
 
-      expect(screen.queryByTestId('workspace-files-card')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('workspace-viewer-panel')).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /^Changes(,|$)/ })).not.toBeInTheDocument();
       expect(changesRequests).toEqual([]);
 

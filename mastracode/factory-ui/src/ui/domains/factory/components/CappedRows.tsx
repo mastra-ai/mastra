@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
 
 const SHOWN_ROWS = 4;
 
@@ -21,8 +21,8 @@ export function CappedRows<T>({ items, render }: { items: readonly T[]; render: 
           aria-expanded={expanded}
           onClick={() => setExpanded(!expanded)}
         >
-          <IconChevronBottom className={expanded ? 'rotate-180' : undefined} />
-          {expanded ? 'Show fewer' : `Show ${items.length - SHOWN_ROWS} more`}
+          <DisclosureChevron />
+          {expanded ? 'Show less' : `Show ${items.length - SHOWN_ROWS} more`}
         </Button>
       ) : null}
     </>

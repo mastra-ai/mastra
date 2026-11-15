@@ -6,13 +6,11 @@ import { useClock } from '@mastra/playground-ui/hooks/use-clock';
 import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
 import { IconChevronLeft } from '@mastra/playground-ui/icons/central/IconChevronLeft';
 import { IconChevronRight } from '@mastra/playground-ui/icons/central/IconChevronRight';
-import { useParams } from 'react-router';
 
 import type { InstalledBoardInfo, InstalledPhaseInfo } from '../../../../api/types';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useSidebarWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { headerCapsuleClass } from '../../chat/components/chatPageHeader';
-import { useThreadSubscriptions } from '../../chat/hooks/useThreadSubscriptions';
 import type { FactoryProject } from '../../workspaces/services/github';
 import { BUSY_CARD_MOVE_REFUSAL, boardCardState, canMoveTo } from '../boardCardState';
 import { phaseName } from '../boardStages';
@@ -22,7 +20,7 @@ import { useItemDecisions } from '../hooks/useBoardDecisions';
 import { useItemSessionStatuses } from '../hooks/useItemSessionStatuses';
 import { useBoardItems } from '../hooks/useBoardItems';
 import { useRepositoryChoice } from '../hooks/useRepositoryChoice';
-import { useSessionRepository } from '../hooks/useSessionRepository';
+import { useSessionSubscriptions } from '../hooks/useSessionSubscriptions';
 import type { WorkItem } from '../services/workItems';
 import { BoardStageIcon, phaseIconKind } from './BoardIcons';
 import { RepositoryPickerDialog } from './RepositoryPickerDialog';
@@ -52,9 +50,9 @@ export function CardStageBar({
     onFailure: message => toast.error(message),
   });
   const repositoryChoice = useRepositoryChoice(factory, board);
-  const { threadId } = useParams<{ threadId: string }>();
-  const { repository, provider } = useSessionRepository();
-  const { subscriptions } = useThreadSubscriptions(threadId, repository !== undefined, provider);
+  const { session, links } = useSessionSubscriptions();
+  const repository = session.repository;
+  const subscriptions = links.subscriptions;
   const parkedSessionIds = useSidebarWorkItemsQuery(factory.id).data?.parkedSessionIds ?? NO_SESSIONS;
   const sessionStatus = useItemSessionStatuses({ factoryProjectId: factory.id, items: [item], parkedSessionIds }).get(
     item.id,

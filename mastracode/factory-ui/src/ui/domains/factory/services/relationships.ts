@@ -2,6 +2,7 @@ import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { relatedCardIndex } from '@mastra/factory/work-items/related-cards';
 import type { PullRequestFacts } from '@mastra/factory/work-items/related-cards';
 import { githubNumberForItem, SOURCE_LABELS, sourceCreatedAt, sourceMetadata, workItemKey } from '../boardItems';
+import { CHANGE_REQUEST_TERMS } from '../changeRequestState';
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { rememberedBoardPath } from './boardViews';
 import type { WorkItem, WorkItemSource } from './workItems';
@@ -59,9 +60,13 @@ export function relationshipPath(
 }
 
 export function relationshipLabel(item: WorkItem, contextRepository?: string): string {
-  const reference =
-    workItemIdentifier(item) === undefined ? item.title : workItemReferenceLabel(item, contextRepository);
+  const reference = workItemReference(item, contextRepository) ?? item.title;
   return isPullRequestSource(item.source) ? `Review: ${reference}` : `Work item: ${reference}`;
+}
+
+export function relatedCardName(item: WorkItem, contextRepository?: string): string {
+  const relation = relationshipLabel(item, contextRepository);
+  return workItemReference(item, contextRepository) === undefined ? relation : `${relation}: ${item.title}`;
 }
 
 /** What a person types to find the item: `#20456` on GitHub, `ENG-123` on Linear or Jira. */
@@ -103,15 +108,15 @@ export function referenceLabel(
 const CODE_HOST_REFERENCES: Partial<Record<WorkItemSource, Pick<CodeHostReference, 'kind' | 'sigil'>>> = {
   'github-issue': { kind: 'Issue', sigil: '#' },
   'gitlab-issue': { kind: 'Issue', sigil: '#' },
-  'github-pr': { kind: 'PR', sigil: '#' },
-  'gitlab-pr': { kind: 'MR', sigil: '!' },
+  'github-pr': CHANGE_REQUEST_TERMS.github,
+  'gitlab-pr': CHANGE_REQUEST_TERMS.gitlab,
 };
 
-export function workItemReferenceLabel(item: IdentifiableItem, contextRepository?: string): string {
-  const codeHost = CODE_HOST_REFERENCES[item.source];
+export function workItemReference(item: IdentifiableItem, contextRepository?: string): string | undefined {
   const identifier = workItemIdentifier(item);
-  if (!codeHost) return identifier ?? SOURCE_LABELS[item.source];
-  const key = /^(.+\/[^#!/]+)?[#!](\d+)$/.exec(identifier ?? '');
+  const codeHost = CODE_HOST_REFERENCES[item.source];
+  if (identifier === undefined || !codeHost) return identifier;
+  const key = /^(.+\/[^#!/]+)?[#!](\d+)$/.exec(identifier);
   if (!key) return codeHost.kind;
   return referenceLabel({ ...codeHost, number: key[2], repository: key[1] }, contextRepository);
 }
@@ -121,7 +126,8 @@ export function workItemMeta(item: WorkItem, contextRepository?: string): readon
   const author = typeof metadata.author === 'string' ? metadata.author : undefined;
   const assignee = typeof metadata.assignee === 'string' ? metadata.assignee : undefined;
   const age = relativeTime(sourceCreatedAt(metadata) ?? item.createdAt);
-  if (workItemIdentifier(item) === undefined) return [SOURCE_LABELS[item.source], age];
+  const reference = workItemReference(item, contextRepository);
+  if (reference === undefined) return [SOURCE_LABELS[item.source], age];
   const owner = githubNumberForItem(item) === undefined ? (assignee ?? author) : author;
-  return [workItemReferenceLabel(item, contextRepository), ...(owner ? [owner] : []), age];
+  return [reference, ...(owner ? [owner] : []), age];
 }

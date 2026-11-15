@@ -45,7 +45,7 @@ interface FileFinderResultsProps {
 
 export function FileFinderResults({ workspacePath, finder, changes }: FileFinderResultsProps) {
   const { index, found, active, setActive } = finder;
-  if (index.isLoading) {
+  if (index.isLoading || (index.isFetching && found.total === 0)) {
     return <SkeletonRows label="Indexing files" rows={8} className="gap-3 p-3" rowClassName="h-3 w-full" />;
   }
   if (index.error) {

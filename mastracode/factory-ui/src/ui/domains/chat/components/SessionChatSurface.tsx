@@ -1,9 +1,9 @@
 import { TranscriptAnnotations } from '@mastra/playground-ui/components/ai/annotations';
 import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import type { ReactNode, RefObject } from 'react';
+import type { ReactNode } from 'react';
 
-import { composerColumnClass, reservedSpaceClass, reservedSpaceTransitionClass } from '../../workspace-viewer/layout';
+import { composerColumnClass, reservedSpaceClass } from '../../workspace-viewer/layout';
 import { ActivityLine } from './ActivityLine';
 import { chatHeaderRoomPx } from './chatPageHeader';
 import { ComposerPanel } from './ComposerPanel';
@@ -26,7 +26,6 @@ interface SessionChatSurfaceProps {
   /** Leads the status row above the composer. */
   composerStatus?: ReactNode;
   className?: string;
-  contentRef?: RefObject<HTMLDivElement | null>;
   contentOverlay?: ReactNode;
 }
 
@@ -36,7 +35,6 @@ export function SessionChatSurface({
   composerLabel,
   composerStatus,
   className,
-  contentRef,
   contentOverlay,
 }: SessionChatSurfaceProps) {
   const { busy, loadMore, transcript } = useChatTranscript();
@@ -56,10 +54,8 @@ export function SessionChatSurface({
     >
       {secondaryBar && <ChatShell.Bar className="not-empty:mt-(--chat-header-room)">{secondaryBar}</ChatShell.Bar>}
       <ChatShell.Stage>
-        <ChatShell.Viewport
-          className={cn('transition-[padding]', reservedSpaceClass.viewport, reservedSpaceTransitionClass)}
-        >
-          <div ref={contentRef} className="relative flex min-h-full min-w-0 flex-1 flex-col">
+        <ChatShell.Viewport className={reservedSpaceClass.viewport}>
+          <div className="relative flex min-h-full min-w-0 flex-1 flex-col">
             {/* A fixed slot: mounting the rail straight into this box would restyle the whole transcript beside it. */}
             <div className="contents">{contentOverlay}</div>
             <ChatShell.Content

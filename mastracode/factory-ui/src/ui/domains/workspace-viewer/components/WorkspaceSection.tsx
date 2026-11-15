@@ -22,10 +22,17 @@ interface WorkspaceBranch {
   provider?: RepositoryProvider;
 }
 
+interface WorkspaceRepositoryCounts {
+  total: number;
+  changed: number;
+  unreadable: number;
+}
+
 interface WorkspaceChangeStats {
   files: number;
   additions?: number;
   deletions?: number;
+  repositories?: WorkspaceRepositoryCounts;
 }
 
 export type WorkspaceChangesSummary =
@@ -34,10 +41,21 @@ export type WorkspaceChangesSummary =
   | { state: 'failed' }
   | { state: 'read'; stats: WorkspaceChangeStats };
 
+function filesLabel({ files, repositories }: WorkspaceChangeStats): string {
+  const label = pluralize(files, 'file');
+  if (!repositories || files === 0) return label;
+  return `${label} in ${repositories.changed} of ${repositories.total} repos`;
+}
+
+function unreadableLabel({ repositories }: WorkspaceChangeStats): string | undefined {
+  return repositories?.unreadable ? `${pluralize(repositories.unreadable, 'repo')} unreadable` : undefined;
+}
+
 function changesName(changes: WorkspaceChangesSummary): string {
   if (changes.state === 'loading') return 'Changes, loading';
   if (changes.state === 'failed') return 'Changes, unavailable';
-  if (changes.state === 'read') return `Changes, ${pluralize(changes.stats.files, 'file')}`;
+  if (changes.state === 'read')
+    return ['Changes', filesLabel(changes.stats), unreadableLabel(changes.stats)].filter(Boolean).join(', ');
   return 'Changes';
 }
 
@@ -62,6 +80,7 @@ export function WorkspaceSection({
 }) {
   const linesId = useId();
   const stats = changes.state === 'read' ? changes.stats : undefined;
+  const unreadable = stats && unreadableLabel(stats);
   const lines =
     stats && stats.files > 0 && stats.additions !== undefined && stats.deletions !== undefined
       ? { additions: stats.additions, deletions: stats.deletions }
@@ -127,7 +146,12 @@ export function WorkspaceSection({
         ) : null}
         {stats ? (
           <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
-            {pluralize(stats.files, 'file')}
+            {filesLabel(stats)}
+          </Txt>
+        ) : null}
+        {unreadable ? (
+          <Txt as="span" variant="caption" tone="muted">
+            {unreadable}
           </Txt>
         ) : null}
         {lines ? (

@@ -5,6 +5,8 @@ import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRende
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { CSSProperties } from 'react';
+
 import type { WorkspaceFilePreview } from './workspace-file-preview';
 import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 
@@ -16,17 +18,16 @@ function formatBytes(size: number) {
 
 /** CSS counters, so copying the code never copies the numbers. */
 const numberedLineClass =
-  '[counter-increment:line] before:mr-4 before:inline-block before:text-right before:text-placeholder before:content-[counter(line)]';
-/** Whole literal classes: Tailwind cannot see built ones. */
-const numberedLineByDigits = [
-  'before:w-[1ch]',
-  'before:w-[2ch]',
-  'before:w-[3ch]',
-  'before:w-[4ch]',
-  'before:w-[5ch]',
-  'before:w-[6ch]',
-  'before:w-[7ch]',
-].map(width => () => `${numberedLineClass} ${width}`);
+  '[counter-increment:line] before:mr-4 before:inline-block before:w-[calc(var(--line-digits)*1ch)] before:text-right before:text-placeholder before:content-[counter(line)]';
+const numberedLine = () => numberedLineClass;
+
+type GutterStyle = CSSProperties & { '--line-digits': number };
+
+function lineCount(text: string): number {
+  let count = 1;
+  for (let at = text.indexOf('\n'); at !== -1; at = text.indexOf('\n', at + 1)) count++;
+  return count;
+}
 
 interface WorkspaceFileViewerProps {
   filePath: string;
@@ -47,7 +48,7 @@ export function WorkspaceFileViewer({
 }: WorkspaceFileViewerProps) {
   const content = file?.content ?? '';
   const isMarkdown = file?.language === 'markdown';
-  const numberedLine = numberedLineByDigits[String(content.split('\n').length).length - 1];
+  const gutter: GutterStyle = { '--line-digits': String(lineCount(content)).length };
 
   return (
     <section className="flex min-h-0 min-w-0 grow flex-col" aria-label="Workspace file viewer">
@@ -115,6 +116,7 @@ export function WorkspaceFileViewer({
                 code={content}
                 lang={file.language}
                 lineClassName={numberedLine}
+                style={gutter}
                 className="border-border bg-background text-caption text-foreground m-0 rounded-md border p-3 font-mono [counter-reset:line]"
               />
             ) : null}

@@ -9,23 +9,47 @@ import {
   sourcePullRequestNumber,
 } from './services/workItems';
 
-export const CHANGE_REQUEST_STATUS_LABELS: Record<ChangeRequestProvider, Record<PullRequestStatus, string>> = {
-  github: {
-    draft: 'Draft pull request',
-    open: 'Open pull request',
-    closed: 'Closed pull request',
-    merged: 'Merged pull request',
-  },
-  gitlab: {
-    draft: 'Draft merge request',
-    open: 'Open merge request',
-    closed: 'Closed merge request',
-    merged: 'Merged merge request',
-  },
+interface ChangeRequestTerms {
+  kind: 'PR' | 'MR';
+  sigil: '#' | '!';
+  singular: string;
+  plural: string;
+  source: 'github-pr' | 'gitlab-pr';
+}
+
+export const CHANGE_REQUEST_TERMS: Record<ChangeRequestProvider, ChangeRequestTerms> = {
+  github: { kind: 'PR', sigil: '#', singular: 'pull request', plural: 'pull requests', source: 'github-pr' },
+  gitlab: { kind: 'MR', sigil: '!', singular: 'merge request', plural: 'merge requests', source: 'gitlab-pr' },
 };
 
-export function changeRequestSource(provider: ChangeRequestProvider): 'github-pr' | 'gitlab-pr' {
-  return provider === 'gitlab' ? 'gitlab-pr' : 'github-pr';
+const STATUS_WORDS: Record<PullRequestStatus, string> = {
+  draft: 'Draft',
+  open: 'Open',
+  closed: 'Closed',
+  merged: 'Merged',
+};
+
+export function changeRequestStatusLabel(provider: ChangeRequestProvider, status: PullRequestStatus): string {
+  return `${STATUS_WORDS[status]} ${CHANGE_REQUEST_TERMS[provider].singular}`;
+}
+
+export function changeRequestsNoun(providers: readonly ChangeRequestProvider[]): string {
+  const [first, ...rest] = providers;
+  if (first === undefined || rest.some(provider => provider !== first)) return 'pull and merge requests';
+  return CHANGE_REQUEST_TERMS[first].plural;
+}
+
+export function changeRequestsHeading(providers: readonly ChangeRequestProvider[]): string {
+  const noun = changeRequestsNoun(providers);
+  return `${noun.charAt(0).toUpperCase()}${noun.slice(1)}`;
+}
+
+export function isOpenChangeRequest(status: PullRequestStatus | undefined): boolean {
+  return status === 'open' || status === 'draft';
+}
+
+export function isSettledChangeRequest(status: PullRequestStatus | undefined): boolean {
+  return status === 'merged' || status === 'closed';
 }
 
 export interface CardChangeRequest {
@@ -99,9 +123,8 @@ function subscriptionFor(
   request: CardChangeRequest,
   subscriptions: readonly PullRequestSubscription[],
 ): PullRequestSubscription | undefined {
-  if (request.url === undefined) {
-    return subscriptions.find(subscription => subscription.pullRequestNumber === request.number);
-  }
+  // Numbers repeat across repositories, so a request without a URL matches no subscription.
+  if (request.url === undefined) return undefined;
   const key = changeRequestKey(request.url);
   return subscriptions.find(subscription => changeRequestKey(subscription.url) === key);
 }

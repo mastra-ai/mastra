@@ -39,10 +39,10 @@ function finishedFileChanges(transcript: readonly TimelineEntry[]): string[] {
 }
 
 /**
- * Mark the Files tab's folders and open file stale whenever a tool that can
- * change files finishes, so what's on screen refetches (and anything else
- * refetches when next shown). Tool calls already in the transcript on mount
- * don't count: the first fetch is already fresh.
+ * Mark the Files tab's folders, the open file and the session's changes stale
+ * whenever a tool that can change files finishes, so what's on screen
+ * refetches (and anything else refetches when next shown). Tool calls already
+ * in the transcript on mount don't count: the first fetch is already fresh.
  */
 export function useRefreshWorkspaceFilesOnToolCalls(
   workspacePath: string | undefined,
@@ -59,6 +59,6 @@ export function useRefreshWorkspaceFilesOnToolCalls(
     if (!ids.some(id => !previous.ids.has(id))) return;
     void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceTreeScope(workspacePath) });
     void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFileScope(workspacePath) });
-    void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceChanges(workspacePath), exact: true });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceChanges(workspacePath) });
   }, [queryClient, transcript, workspacePath]);
 }

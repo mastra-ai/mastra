@@ -11,7 +11,7 @@ import { phaseLabel } from '../boardStages';
 import { elapsedLabel } from '../cardStageBar';
 import { movesGraph } from '../movesGraph';
 import type { WorkItemStageEntry } from '../services/workItems';
-import { BoardStageIcon, boardPhaseIconKind, stageColorClass } from './BoardIcons';
+import { BoardStageIcon, boardPhaseIconKind, stageColorClass, unfocusedStageClass } from './BoardIcons';
 
 const laneClass = 'h-5';
 
@@ -140,7 +140,7 @@ export function MovesGraph({
                           'relative h-(--bar) w-full rounded-full motion-safe:transition-opacity',
                           stageColorClass(stay.entry.stage, stay.kind),
                           stay.working ? 'bg-current' : 'bg-current/30',
-                          shown && stay.index !== shown.index && 'opacity-30',
+                          shown && stay.index !== shown.index && unfocusedStageClass,
                         )}
                       >
                         {stay.current && stay.working ? (

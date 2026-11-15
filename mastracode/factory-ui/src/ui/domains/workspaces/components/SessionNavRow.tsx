@@ -11,7 +11,7 @@ import type { Location } from 'react-router';
 import { SourceIcon } from '../../factory/components/BoardIcons';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import type { SessionSource } from '../services/sessionPresentation';
-import type { SessionExternalLink, SessionRowTime } from '../services/sessionRows';
+import type { SessionExternalLink } from '../services/sessionRows';
 import type { SessionRowStatus } from '../services/sessionStatus';
 import { ActivityBelt } from '@mastra/playground-ui/components/Activity';
 import { SessionActionsMenu } from './SessionActionsMenu';
@@ -21,7 +21,7 @@ import type { SessionPreviewDetails } from './SessionPreviewCard';
 import { SessionSharingPopover } from './SessionSharingPopover';
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import type { PullRequestStatus } from '../../factory/boardItems';
-import { CHANGE_REQUEST_STATUS_LABELS } from '../../factory/changeRequestState';
+import { changeRequestStatusLabel } from '../../factory/changeRequestState';
 import type { CardChangeRequest } from '../../factory/changeRequestState';
 import { changeRequestNumberLabel, changeRequestReference } from '../../factory/sessionChangeRequests';
 import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
@@ -67,7 +67,7 @@ export function SessionNavRow({
   pullRequest,
   pullRequestStatus,
   repository,
-  time,
+  updatedAt,
   compact,
   subItems,
 }: {
@@ -112,8 +112,7 @@ export function SessionNavRow({
   pullRequest?: CardChangeRequest;
   pullRequestStatus?: PullRequestStatus;
   repository?: string;
-  /** The card's last stage move, or the session's start when there is no card; shown on the second line. */
-  time: SessionRowTime;
+  updatedAt: string;
   /** Single-line row; otherwise a second line shows its time and its change request. */
   compact: boolean;
   /** Rows nested under this one: a card's child sessions. */
@@ -131,7 +130,7 @@ export function SessionNavRow({
   const statusAt = pullRequestPlacement({ source, pullRequest, pullRequestStatus, compact, merged, loading, status });
   const statusLabel =
     (statusAt === 'icon' || statusAt === 'line') && pullRequest && pullRequestStatus
-      ? [CHANGE_REQUEST_STATUS_LABELS[pullRequest.provider][pullRequestStatus], changeRequestNumberLabel(pullRequest)]
+      ? [changeRequestStatusLabel(pullRequest.provider, pullRequestStatus), changeRequestNumberLabel(pullRequest)]
           .filter(Boolean)
           .join(' ')
       : undefined;
@@ -172,7 +171,7 @@ export function SessionNavRow({
           compact ? undefined : (
             <SessionMetaLine
               id={timeId}
-              time={time}
+              updatedAt={updatedAt}
               pullRequest={pullRequest}
               repository={repository}
               status={statusAt === 'line' ? pullRequestStatus : undefined}
@@ -209,7 +208,7 @@ export function SessionNavRow({
   };
   const belt = loading ? undefined : status;
   const trailing = loading ? 'loading' : statusAt === 'badge' ? 'merged' : undefined;
-  const mergedLabel = CHANGE_REQUEST_STATUS_LABELS[pullRequest?.provider ?? 'github'].merged;
+  const mergedLabel = changeRequestStatusLabel(pullRequest?.provider ?? 'github', 'merged');
   const action = (
     <>
       <span ref={anchor} aria-hidden className="pointer-events-none absolute inset-0" />
@@ -311,32 +310,27 @@ function pullRequestPlacement({
   return undefined;
 }
 
-const TIME_EVENT_LABELS: Record<SessionRowTime['event'], string> = {
-  moved: 'Last stage move',
-  started: 'Started',
-};
-
 /** The link describes the change request itself, so the line only draws it. */
 function SessionMetaLine({
   id,
-  time,
+  updatedAt,
   pullRequest,
   repository,
   status,
 }: {
   id: string;
-  time: SessionRowTime;
+  updatedAt: string;
   pullRequest: CardChangeRequest | undefined;
   repository: string | undefined;
   /** Omitted when the leading icon already shows the change request's state. */
   status: PullRequestStatus | undefined;
 }) {
   const reference = pullRequest?.number === undefined ? undefined : changeRequestReference(pullRequest, repository);
-  const ago = relativeTime(time.at);
+  const ago = relativeTime(updatedAt);
   return (
     <>
-      <time id={id} dateTime={time.at} title={`${TIME_EVENT_LABELS[time.event]} ${ago}`} className="tabular-nums">
-        <span className="sr-only">{TIME_EVENT_LABELS[time.event]} </span>
+      <time id={id} dateTime={updatedAt} title={`Updated ${ago}`} className="tabular-nums">
+        <span className="sr-only">Updated </span>
         {ago}
       </time>
       {status || reference ? (

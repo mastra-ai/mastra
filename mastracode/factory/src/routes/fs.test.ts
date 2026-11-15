@@ -764,7 +764,61 @@ describe('live session file tree', () => {
     ]);
   });
 
-  it('leaves nested repositories out of the index, with or without a .gitmodules entry', async () => {
+  it('indexes the files at a multi-repository root that the tree opens, without listing a checkout twice', async () => {
+    const { parent } = await seedHostCheckouts(['acme/repo', 'acme/docs']);
+    await writeFile(join(parent, 'notes.md'), '# notes');
+    await mkdir(join(parent, '.artifacts', 'plans'), { recursive: true });
+    await writeFile(join(parent, '.artifacts', 'plans', 'x.md'), '# plan');
+    await mkdir(join(parent, '.git'));
+    await writeFile(join(parent, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+    for (const dir of [parent, join(parent, 'repo')]) {
+      await mkdir(join(dir, '.mastra-sandbox'));
+      await writeFile(join(dir, '.mastra-sandbox', 'setup'), 'done');
+    }
+    await symlink('repo/README.md', join(parent, 'readme-link.md'));
+    await symlink('repo/.env', join(parent, 'env-link'));
+    await symlink('docs', join(parent, 'docs-link'));
+
+    const index = await listSessionWorkspaceFiles(makeSession());
+
+    expect(index.truncated).toBe(false);
+    expect(index.paths.toSorted()).toEqual([
+      '.artifacts/plans/x.md',
+      'docs/.gitignore',
+      'docs/README.md',
+      'docs/src/agent.ts',
+      'docs/src/nested/deep.ts',
+      'notes.md',
+      'readme-link.md',
+      'repo/.gitignore',
+      'repo/README.md',
+      'repo/src/agent.ts',
+      'repo/src/nested/deep.ts',
+    ]);
+    for (const path of index.paths) await expect(readSessionWorkspaceFile(makeSession(), path)).resolves.toBeTruthy();
+  });
+
+  it('indexes a file with a merge conflict once', async () => {
+    const { parent } = await seedHostCheckouts();
+    const repo = join(parent, 'repo');
+    const git = (...args: string[]) =>
+      execFileAsync('git', ['-C', repo, '-c', 'user.name=Factory', '-c', 'user.email=factory@example.com', ...args]);
+    await git('add', 'README.md');
+    await git('commit', '-q', '-m', 'base');
+    await git('checkout', '-q', '-b', 'theirs');
+    await writeFile(join(repo, 'README.md'), 'theirs');
+    await git('commit', '-q', '-am', 'theirs');
+    await git('checkout', '-q', '-');
+    await writeFile(join(repo, 'README.md'), 'ours');
+    await git('commit', '-q', '-am', 'ours');
+    await expect(git('merge', '-q', 'theirs')).rejects.toThrow();
+
+    const index = await listSessionWorkspaceFiles(makeSession());
+
+    expect(index.paths.toSorted()).toEqual(['.gitignore', 'README.md', 'src/agent.ts', 'src/nested/deep.ts']);
+  });
+
+  it('leaves out a gitlink with no .gitmodules entry and an untracked nested repository', async () => {
     const { parent } = await seedHostCheckouts();
     const repo = join(parent, 'repo');
     const git = (dir: string, ...args: string[]) =>

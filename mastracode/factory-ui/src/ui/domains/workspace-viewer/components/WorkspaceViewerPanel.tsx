@@ -9,8 +9,7 @@ import type { WorkspaceChanges, WorkspaceChangesScope } from '../../../../api/ty
 import { useWorkspaceChanges, useWorkspaceFile } from '../../../../hooks/use-fs';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
-import { useSessionRepository } from '../../factory/hooks/useSessionRepository';
-import type { WorkspacePanelPage } from '../context/WorkspacePanelContext';
+import type { WorkspacePanelPage, WorkspaceSectionSlots } from '../context/WorkspacePanelContext';
 import { overviewScrollClass } from '../layout';
 import type { WorkspacePanelSize } from '../layout';
 import type { RepositoryProviders } from './changes/tree/change-tree';
@@ -22,6 +21,7 @@ import { WorkspaceFileViewer } from './WorkspaceFileViewer';
 import { WorkspaceSection } from './WorkspaceSection';
 import type { WorkspaceChangesSummary } from './WorkspaceSection';
 import { selectWorkspaceFilePreview } from './workspace-file-preview';
+import { unreadableRepositories } from './changes/unreadable-repositories';
 import { IconChevronLeft } from '@mastra/playground-ui/icons/central/IconChevronLeft';
 
 interface WorkspaceViewerPanelProps {
@@ -47,11 +47,18 @@ const viewPanelClass = 'flex h-auto min-h-0 grow flex-col overflow-hidden';
 function changesSummary(changes: UseQueryResult<WorkspaceChanges>): WorkspaceChangesSummary {
   if (changes.isLoading) return { state: 'loading' };
   if (changes.isError) return { state: 'failed' };
-  if (!changes.data?.available) return { state: 'unread' };
   const { data } = changes;
+  if (!data) return { state: 'unread' };
+  const unreadable = unreadableRepositories(data).length;
+  if (!data.available) return unreadable > 0 ? { state: 'failed' } : { state: 'unread' };
+  const repositories = data.repositories && {
+    total: data.repositories.length,
+    changed: data.repositories.filter(repository => repository.changes.length > 0).length,
+    unreadable,
+  };
   return {
     state: 'read',
-    stats: { files: data.changes.length, additions: data.additions, deletions: data.deletions },
+    stats: { files: data.changes.length, additions: data.additions, deletions: data.deletions, repositories },
   };
 }
 
@@ -82,7 +89,6 @@ export const WorkspaceViewerPanel = memo(function WorkspaceViewerPanel({
   const [visitedSandbox, setVisitedSandbox] = useState(false);
   const changes = useWorkspaceChanges(workspacePath, { enabled: visible && (readsChanges || visitedSandbox) });
   const factory = useFactoryQuery(factoryProjectId);
-  const { repository: sessionRepository, provider } = useSessionRepository();
   const repositoryProviders: RepositoryProviders | undefined = factory.data
     ? Object.fromEntries(factory.data.repositories.map(repo => [repo.slug.toLowerCase(), repo.provider]))
     : undefined;
@@ -91,7 +97,8 @@ export const WorkspaceViewerPanel = memo(function WorkspaceViewerPanel({
     select: selectWorkspaceFilePreview,
   });
   const changesState = changesSummary(changes);
-  const noChanges = changesState.state === 'read' && changesState.stats.files === 0;
+  const noChanges =
+    changesState.state === 'read' && changesState.stats.files === 0 && !changesState.stats.repositories?.unreadable;
 
   const show = (next: WorkspacePanelView) => {
     setView(next);
@@ -110,7 +117,7 @@ export const WorkspaceViewerPanel = memo(function WorkspaceViewerPanel({
       <IconChevronLeft />
     </Button>
   ) : undefined;
-  const workspace = (changeRequest?: ReactNode) => (
+  const workspace = ({ changeRequest, repository }: WorkspaceSectionSlots = {}) => (
     <WorkspaceSection
       loading={session.isLoading}
       workspace={
@@ -118,14 +125,17 @@ export const WorkspaceViewerPanel = memo(function WorkspaceViewerPanel({
           ? {
               branch: session.data.branch,
               baseBranch: session.data.baseBranch,
-              repository: sessionRepository?.slug,
-              provider,
+              repository: repository?.slug,
+              provider: repository?.provider,
             }
           : undefined
       }
       changes={changesState}
       changeRequest={changeRequest}
-      onOpen={() => show(noChanges ? { type: 'files' } : { type: 'changes' })}
+      onOpen={() => {
+        setChangesScope('branch');
+        show(noChanges ? { type: 'files' } : { type: 'changes' });
+      }}
       autoFocus={view.type === 'overview' && view.returned}
       action={
         canRecreateSandbox && sessionId ? (

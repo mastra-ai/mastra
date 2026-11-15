@@ -6,9 +6,9 @@ import { Link } from 'react-router';
 import type { InstalledBoardInfo } from '../../../../api/types';
 import { boardOf } from '../boardFlow';
 import { currentItemStage, phaseLabel } from '../boardStages';
-import { CHANGE_REQUEST_STATUS_LABELS, cardChangeRequest, changeRequestStatus } from '../changeRequestState';
+import { cardChangeRequest, changeRequestStatus, changeRequestStatusLabel } from '../changeRequestState';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
-import { relationshipLabel, relationshipPath, workItemReferenceLabel } from '../services/relationships';
+import { relatedCardName, relationshipPath, workItemReference } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import { WorkItemSourceIcon } from './BoardCardParts';
 import { BoardStageIcon, boardPhaseIconKind, stageColorClass } from './BoardIcons';
@@ -40,16 +40,17 @@ export function RelatedCardLink({
   const phase = stage === undefined ? undefined : phaseLabel(board, stage);
   const request = cardChangeRequest(item);
   const status = request && changeRequestStatus(request, subscriptions);
-  const statusLabel = request && status && CHANGE_REQUEST_STATUS_LABELS[request.provider][status];
-  const name = [`Open ${relationshipLabel(item, repository)}: ${item.title}`, phase, statusLabel]
-    .filter(Boolean)
-    .join(', ');
+  const statusLabel = request && status && changeRequestStatusLabel(request.provider, status);
+  const name = [`Open ${relatedCardName(item, repository)}`, phase, statusLabel].filter(Boolean).join(', ');
+  const reference = workItemReference(item, repository);
   return (
     <Button variant="ghost" size="sm" className="w-full justify-start" aria-label={name} render={<Link to={to} />}>
       <WorkItemSourceIcon item={item} subscriptions={subscriptions} />
-      <Txt as="span" variant="caption" tone="muted" className="shrink-0">
-        {workItemReferenceLabel(item, repository)}
-      </Txt>
+      {reference === undefined ? null : (
+        <Txt as="span" variant="caption" tone="muted" className="shrink-0">
+          {reference}
+        </Txt>
+      )}
       <span className="min-w-0 truncate">{item.title}</span>
       {stage === undefined ? null : (
         <span className="ml-auto flex shrink-0 items-center gap-1">

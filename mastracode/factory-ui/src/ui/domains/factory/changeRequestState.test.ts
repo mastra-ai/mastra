@@ -74,4 +74,22 @@ describe('changeRequestStatus', () => {
     expect(changeRequestStatus(request(), [undated])).toBe('open');
     expect(changeRequestStatus(request({ state: undefined, syncedAt: undefined }), [undated])).toBe('closed');
   });
+
+  it('hears a subscription whose URL differs only by a trailing slash or letter case', () => {
+    expect(
+      changeRequestStatus(request({ url: 'https://github.com/Acme/App/pull/42/' }), [
+        subscription('merged', '2026-07-21T10:00:00.000Z'),
+      ]),
+    ).toBe('merged');
+  });
+
+  it("never takes another repository's status for a request without a URL that shares its number", () => {
+    const otherRepository = {
+      ...subscription('merged', '2026-07-21T10:00:00.000Z'),
+      repoFullName: 'acme/docs',
+      url: 'https://github.com/acme/docs/pull/42',
+    };
+    expect(changeRequestStatus(request({ url: undefined }), [otherRepository])).toBe('open');
+    expect(changeRequestStatus(request({ url: undefined, state: undefined }), [otherRepository])).toBeUndefined();
+  });
 });

@@ -1,16 +1,22 @@
-import { useMatch, useParams } from 'react-router';
+import { useParams } from 'react-router';
 
+import { useRouteSessionId } from '../../../../hooks/useRouteSessionId';
 import { workspacePanelKey } from '../context/WorkspacePanelContext';
 import { useWorkspacePanel } from '../context/useWorkspacePanel';
 import type { WorkspacePanelSize } from '../layout';
 import { WorkspaceViewerPanel } from './WorkspaceViewerPanel';
 
-export function WorkspaceFilesContent({ onSizeChange }: { onSizeChange: (size: WorkspacePanelSize) => void }) {
+export function WorkspaceFilesContent({
+  visible,
+  onSizeChange,
+}: {
+  visible: boolean;
+  onSizeChange: (size: WorkspacePanelSize) => void;
+}) {
   const panel = useWorkspacePanel();
-  const { open, workspacePath, threadId, readsChanges, page } = panel;
-  const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
-  // User sessions route as user/threads/:threadId, where the thread segment is the session id.
-  const userThreadMatch = useMatch('/factories/:factoryId/user/threads/:threadId');
+  const { workspacePath, threadId, readsChanges, page } = panel;
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const sessionId = useRouteSessionId();
   if (!workspacePath || !threadId) return null;
 
   return (
@@ -19,10 +25,10 @@ export function WorkspaceFilesContent({ onSizeChange }: { onSizeChange: (size: W
         key={workspacePanelKey(panel)}
         workspacePath={workspacePath}
         onSizeChange={onSizeChange}
-        visible={open}
+        visible={visible}
         readsChanges={readsChanges}
         factoryProjectId={factoryId}
-        sessionId={sessionId ?? userThreadMatch?.params.threadId}
+        sessionId={sessionId}
         page={page}
       />
     </div>

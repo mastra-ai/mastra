@@ -457,7 +457,7 @@ export interface GithubRulesOptions {
 /** Identity under which label and assignee syncs are recorded. */
 const CARD_SYNC_USER_ID = 'factory-rule-dispatcher';
 
-type IssueActionHandler = (
+type CardSyncHandler = (
   parsed: ParsedGithubWebhook,
   repositoryId: number,
   repositoryName: string,
@@ -611,10 +611,67 @@ export class GithubRules {
     }
   }
 
-  /** `issues` actions that are not rule events but still update an existing card. */
-  #issueActionHandler(parsed: ParsedGithubWebhook): IssueActionHandler | undefined {
+  /** A reopened pull request reads open again; clearing the sweep's settled stamp lets a later close replay. */
+  async #syncReopenedPullRequest(
+    parsed: ParsedGithubWebhook,
+    repositoryId: number,
+    repositoryName: string,
+    project: ExternalRepositoryProjectTarget,
+  ): Promise<{ status: 'ignored' | 'committed' }> {
+    const pullRequest = object(parsed.payload.pull_request);
+    const pullRequestNumber = number(pullRequest?.number);
+    if (!pullRequestNumber) return { status: 'ignored' };
+    const card = await this.#relatedItem(
+      project.orgId,
+      project.factoryProjectId,
+      repositoryId,
+      repositoryName,
+      undefined,
+      pullRequestNumber,
+      undefined,
+      null,
+    );
+    if (!card) return { status: 'ignored' };
+    const open = { state: 'open', merged: false, draft: boolean(pullRequest?.draft) ?? false };
+    const attached = attachedPullRequestSource(card, repositoryId, repositoryName, pullRequestNumber);
+    if (attached) {
+      if (attached.state !== 'closed') return { status: 'ignored' };
+      await this.options.storage.syncWorkItemSource({
+        orgId: card.orgId,
+        factoryProjectId: card.factoryProjectId,
+        provider: attached.provider,
+        externalId: attached.externalId,
+        patch: { state: 'open', metadata: open },
+      });
+      return { status: 'committed' };
+    }
+    if (card.externalSource?.type !== 'pull-request') return { status: 'ignored' };
+    const metadata = { ...card.workItem.metadata, ...card.metadata };
+    if (metadata.state !== 'closed') return { status: 'ignored' };
+    const updated = await this.options.storage.syncCard({
+      orgId: card.orgId,
+      id: card.id,
+      userId: CARD_SYNC_USER_ID,
+      patch: {
+        metadata: {
+          ...open,
+          ...(metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY] === undefined
+            ? {}
+            : { [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: null }),
+        },
+      },
+    });
+    return { status: updated ? 'committed' : 'ignored' };
+  }
+
+  /** `issues` and `pull_request` actions that are not rule events but still update an existing card. */
+  #cardSyncHandler(parsed: ParsedGithubWebhook): CardSyncHandler | undefined {
+    const action = string(parsed.payload.action);
+    if (parsed.event === 'pull_request') {
+      return action === 'reopened' ? (...args) => this.#syncReopenedPullRequest(...args) : undefined;
+    }
     if (parsed.event !== 'issues') return undefined;
-    switch (string(parsed.payload.action)) {
+    switch (action) {
       case 'labeled':
       case 'unlabeled':
         return (...args) => this.#syncIssueLabels(...args);
@@ -649,12 +706,12 @@ export class GithubRules {
       return { status: 'ignored' };
     }
     if (!installationId || !repositoryId || !repositoryName || !login) return { status: 'ignored' };
-    const issueAction = this.#issueActionHandler(parsed);
+    const cardSync = this.#cardSyncHandler(parsed);
     const handle = event
       ? (project: ExternalRepositoryProjectTarget) =>
           this.#ingestProject(parsed, event, installationId, repositoryId, repositoryName, login, project)
-      : issueAction
-        ? (project: ExternalRepositoryProjectTarget) => issueAction(parsed, repositoryId, repositoryName, project)
+      : cardSync
+        ? (project: ExternalRepositoryProjectTarget) => cardSync(parsed, repositoryId, repositoryName, project)
         : undefined;
     if (!handle) return { status: 'ignored' };
 

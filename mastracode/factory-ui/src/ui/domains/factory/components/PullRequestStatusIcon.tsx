@@ -1,7 +1,7 @@
 import { PullRequestIcon } from '@mastra/playground-ui/components/PullRequestIcon';
 
 import type { PullRequestStatus } from '../boardItems';
-import { CHANGE_REQUEST_STATUS_LABELS } from '../changeRequestState';
+import { CHANGE_REQUEST_TERMS, changeRequestStatusLabel } from '../changeRequestState';
 import type { ChangeRequestProvider } from '../services/githubSubscriptions';
 
 export function PullRequestStatusIcon({
@@ -19,12 +19,12 @@ export function PullRequestStatusIcon({
 }) {
   return (
     <PullRequestIcon
-      data-source={provider === 'gitlab' ? 'gitlab-pr' : 'github-pr'}
+      data-source={CHANGE_REQUEST_TERMS[provider].source}
       status={status}
       size={size}
       className={className}
       role={decorative ? undefined : 'img'}
-      aria-label={decorative ? undefined : CHANGE_REQUEST_STATUS_LABELS[provider][status]}
+      aria-label={decorative ? undefined : changeRequestStatusLabel(provider, status)}
       aria-hidden={decorative || undefined}
     />
   );

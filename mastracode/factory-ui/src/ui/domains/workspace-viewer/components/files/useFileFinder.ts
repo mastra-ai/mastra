@@ -1,6 +1,6 @@
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
-import { useDeferredValue, useId, useState } from 'react';
+import { useDeferredValue, useId, useMemo, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 
 import { useApiConfig } from '../../../../../api/config';
@@ -21,22 +21,6 @@ interface UseFileFinderOptions {
   onQueryChange: (query: string) => void;
   boost: Boost;
   onOpen: (path: string) => void;
-}
-
-interface Ranking {
-  paths: readonly string[] | undefined;
-  searched: string;
-  boost: Boost;
-  found: FoundFiles;
-}
-
-function rank(paths: readonly string[] | undefined, searched: string, boost: Boost): Ranking {
-  return {
-    paths,
-    searched,
-    boost,
-    found: paths ? findFiles(paths, searched, { limit: SHOWN_MATCHES, boost }) : NOTHING_FOUND,
-  };
 }
 
 export interface FileFinder {
@@ -69,13 +53,10 @@ export function useFileFinder({
   const finding = searched.trim() !== '';
   const index = useWorkspaceFileIndex(workspacePath, { enabled: visible && query.trim() !== '' });
   const paths = finding && index.isSuccess && index.data.available ? index.data.paths : undefined;
-  const [ranking, setRanking] = useState(() => rank(paths, searched, boost));
-  let current = ranking;
-  if (ranking.paths !== paths || ranking.searched !== searched || ranking.boost !== boost) {
-    current = rank(paths, searched, boost);
-    setRanking(current);
-  }
-  const { found } = current;
+  const found = useMemo(
+    () => (paths ? findFiles(paths, searched, { limit: SHOWN_MATCHES, boost }) : NOTHING_FOUND),
+    [paths, searched, boost],
+  );
   const [cursor, setCursor] = useState({ query: searched, at: 0 });
   const count = found.matches.length;
   const showingResults = count > 0;

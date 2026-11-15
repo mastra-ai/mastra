@@ -1,11 +1,12 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { IconArrowUpRight } from '@mastra/playground-ui/icons/central/IconArrowUpRight';
 
-import { cardLabels, sourceMetadata } from '../boardItems';
-import { workItemReferenceLabel } from '../services/relationships';
+import { SOURCE_LABELS, cardLabels, sourceMetadata } from '../boardItems';
+import { workItemReference } from '../services/relationships';
 import { sourceState } from '../services/workItemPresentation';
 import type { WorkItem } from '../services/workItems';
 import { MetadataLabels } from './BoardCardParts';
+import { outboundArrowClass } from './ChangeRequestLink';
 import { SourceStateBadge } from './SourceStateBadge';
 
 export function CardSourceRow({
@@ -22,7 +23,7 @@ export function CardSourceRow({
   const labelled = cardLabels(metadata).length > 0;
   if (!url && !state && !labelled) return null;
 
-  const reference = workItemReferenceLabel(item, repository);
+  const reference = workItemReference(item, repository) ?? SOURCE_LABELS[item.source];
   return (
     <div className="flex min-w-0 flex-col gap-1">
       {url || state ? (
@@ -32,11 +33,11 @@ export function CardSourceRow({
               render={<a href={url} target="_blank" rel="noreferrer" />}
               variant="ghost"
               size="sm"
-              className="min-w-0"
+              className="group/outbound min-w-0"
               aria-label={`Open ${reference}`}
             >
               <span className="truncate">{reference}</span>
-              <IconArrowUpRight aria-hidden />
+              <IconArrowUpRight aria-hidden className={outboundArrowClass} />
             </Button>
           ) : null}
           <SourceStateBadge item={item} />

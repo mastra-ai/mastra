@@ -26,7 +26,7 @@ import { IconHammer } from '@mastra/playground-ui/icons/central/IconHammer';
 // GitHub keeps issue vs PR distinct — card meta shows #N for both
 const SOURCE_ICONS: Record<WorkItemSource, { icon: ComponentType<SVGProps<SVGSVGElement>>; className: string }> = {
   'github-issue': { icon: GithubIcon, className: 'text-foreground' },
-  'github-pr': { icon: IconPullRequest, className: 'text-badge-green-indicator' },
+  'github-pr': { icon: IconPullRequest, className: 'text-muted-foreground' },
   'gitlab-issue': { icon: GitLabIcon, className: 'text-badge-red-indicator' },
   'gitlab-pr': { icon: GitLabIcon, className: 'text-badge-red-indicator' },
   'linear-issue': { icon: LinearIcon, className: 'text-badge-blue-indicator' },
@@ -207,6 +207,8 @@ export function stageStrongTintClass(stage: string, kind?: BoardPhaseKind): stri
 export function stageColorClass(stage: string, kind?: BoardPhaseKind): string {
   return TONE_CLASSES[stageToneFor(stage, kind)].icon;
 }
+
+export const unfocusedStageClass = 'opacity-30';
 
 export function BoardStageIcon({
   stage,

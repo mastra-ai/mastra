@@ -44,7 +44,7 @@ const subscribedMergeRequest: PullRequestSubscription = {
   updatedAt: '2026-09-20T00:00:00.000Z',
 };
 
-function createWireWorkItem(type: 'pull-request' | 'issue') {
+function createWireWorkItem(type: 'pull-request' | 'issue', metadata?: Record<string, unknown>) {
   return {
     id: `work-item-${type}`,
     orgId: 'org-1',
@@ -69,21 +69,22 @@ function createWireWorkItem(type: 'pull-request' | 'issue') {
       },
     },
     metadata:
-      type === 'pull-request'
+      metadata ??
+      (type === 'pull-request'
         ? {
             gitlabMergeRequestIid: MERGE_REQUEST_IID,
             gitlabProjectId: 86555418,
             gitlabHost: 'gitlab.com',
             state: 'open',
           }
-        : { identifier: `${PROJECT_PATH}#3`, state: 'opened' },
+        : { identifier: `${PROJECT_PATH}#3`, state: 'opened' }),
     revision: 1,
     createdAt: '2026-09-20T00:00:00.000Z',
     updatedAt: '2026-09-20T00:00:00.000Z',
   };
 }
 
-function stubThreadRoute(workItem: unknown, subscriptions: PullRequestSubscription[]) {
+function stubThreadRoute(workItem: ReturnType<typeof createWireWorkItem>, subscriptions: PullRequestSubscription[]) {
   const githubSubscriptionRequests = vi.fn<() => void>();
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -244,12 +245,13 @@ describe('ThreadPage merge request link placement', () => {
       expect(within(panel).getByRole('region', { name: 'Workspace' })).toHaveTextContent(PROJECT_PATH);
       const mergeRequest = await within(panel).findByRole('link', { name: `Open MR !${SUBSCRIBED_IID}` });
       expect(mergeRequest).toHaveAttribute('href', SUBSCRIBED_URL);
+      expect(within(panel).getByRole('heading', { name: 'Merge requests 1' })).toBeInTheDocument();
       expect(linksTo(await screen.findByRole('region', { name: 'Thread composer' }), SUBSCRIBED_URL)).toHaveLength(0);
       expect(githubSubscriptionRequests).not.toHaveBeenCalled();
     });
 
     it('names the issue by its GitLab number when the card carries no project reference', async () => {
-      stubThreadRoute({ ...createWireWorkItem('issue'), metadata: { gitlabIssueIid: 3, state: 'opened' } }, []);
+      stubThreadRoute(createWireWorkItem('issue', { gitlabIssueIid: 3, state: 'opened' }), []);
       renderThreadRoute();
 
       const panel = await findSessionPanel();
@@ -257,6 +259,16 @@ describe('ThreadPage merge request link placement', () => {
         'href',
         `https://gitlab.com/${PROJECT_PATH}/-/issues/3`,
       );
+    });
+
+    it('says the merge requests could not load, never calling them pull requests', async () => {
+      stubThreadRoute(createWireWorkItem('issue'), []);
+      server.use(http.get(`${TEST_BASE_URL}/web/gitlab/subscriptions`, () => new HttpResponse(null, { status: 500 })));
+      renderThreadRoute();
+
+      const panel = await findSessionPanel();
+      expect(await within(panel).findByText("Couldn't load merge requests.")).toBeInTheDocument();
+      expect(within(panel).queryByText(/pull request/i)).not.toBeInTheDocument();
     });
   });
 });
