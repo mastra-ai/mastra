@@ -7,7 +7,7 @@ import { FieldItem, FieldLabel } from '@/ds/components/Field';
 import type { FieldLabelProps } from '@/ds/components/Field';
 import { Txt } from '@/ds/components/Txt';
 import { IconBubbleQuestion } from '@/ds/icons/central/IconBubbleQuestion';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { Icon } from '@/ds/icons/Icon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
@@ -100,7 +100,7 @@ export const AskUserOptionRow = ({
 export type AskUserSubmitButtonProps = Omit<ComponentProps<typeof Button>, 'children'> & { children?: ReactNode };
 
 export const AskUserSubmitButton = ({ children = 'Submit answer', ...props }: AskUserSubmitButtonProps) => (
-  <Button icon={<IconCheckmark1 />} type="button" size="sm" variant="primary" {...props}>
+  <Button icon={<IconCheckmark2Medium />} type="button" size="sm" variant="primary" {...props}>
     {children}
   </Button>
 );

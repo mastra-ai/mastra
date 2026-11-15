@@ -3,8 +3,8 @@ import * as React from 'react';
 
 import { buttonVariants } from '@/ds/components/Button/Button';
 import { inputGroupClassName, inputGroupControlClassName } from '@/ds/components/InputGroup/input-group';
-import { IconMinusLarge } from '@/ds/icons/central/IconMinusLarge';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconMinusMedium } from '@/ds/icons/central/IconMinusMedium';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { Icon } from '@/ds/icons/Icon';
 import { ControlSizeContext, controlHeight } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
@@ -71,7 +71,7 @@ function InputNumberDecrement({ className, children, ...props }: InputNumberDecr
       className={cn(inputNumberButtonClassName, className)}
       {...props}
     >
-      <Icon size="sm">{children ?? <IconMinusLarge />}</Icon>
+      <Icon size="sm">{children ?? <IconMinusMedium />}</Icon>
     </NumberFieldPrimitive.Decrement>
   );
 }
@@ -87,7 +87,7 @@ function InputNumberIncrement({ className, children, ...props }: InputNumberIncr
       className={cn(inputNumberButtonClassName, className)}
       {...props}
     >
-      <Icon size="sm">{children ?? <IconPlusLarge />}</Icon>
+      <Icon size="sm">{children ?? <IconPlusMedium />}</Icon>
     </NumberFieldPrimitive.Increment>
   );
 }

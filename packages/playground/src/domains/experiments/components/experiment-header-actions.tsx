@@ -3,7 +3,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
 import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 import { useState } from 'react';
 import { RenameExperimentDialog } from '@/domains/experiments/components/rename-experiment-dialog';
 import { RerunExperimentButton } from '@/domains/experiments/components/rerun-experiment-button';
@@ -40,7 +40,7 @@ export function ExperimentHeaderActions({ experiment, onDeleteClick }: Experimen
             )}
             {onDeleteClick && (
               <DropdownMenu.Item onSelect={onDeleteClick} variant="destructive">
-                <IconTrashCan /> Delete experiment
+                <TrashIcon /> Delete experiment
               </DropdownMenu.Item>
             )}
           </DropdownMenu.Content>

@@ -5,7 +5,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { pluralize } from '@mastra/playground-ui/utils/string';
-import { FileDiff, GitMerge } from 'lucide-react';
+import { GitMerge } from 'lucide-react';
 import { useId } from 'react';
 import type { ReactNode } from 'react';
 
@@ -13,6 +13,7 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { RepositoryProvider } from './changes/tree/change-tree';
 import { REPOSITORY_PROVIDER_ICONS } from './repositoryProviderIcons';
 import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
+import { IconChanges } from '@mastra/playground-ui/icons/central/IconChanges';
 import { IconChevronRight } from '@mastra/playground-ui/icons/central/IconChevronRight';
 
 interface WorkspaceBranch {
@@ -134,7 +135,7 @@ export function WorkspaceSection({
         aria-describedby={lines ? linesId : undefined}
         onClick={onOpen}
       >
-        <FileDiff aria-hidden />
+        <IconChanges aria-hidden />
         Changes
         {changes.state === 'loading' ? (
           <Skeleton aria-hidden className="h-3 w-12 motion-reduce:before:animate-none" />

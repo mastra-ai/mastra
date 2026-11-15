@@ -1,12 +1,12 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Hourglass } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import type { RunQueueResponse } from '../services/decisions';
 import { factoryAttentionTargetPath } from '../services/attention';
+import { IconHourglass } from '@mastra/playground-ui/icons/central/IconHourglass';
 
 type QueuedRun = RunQueueResponse['queued'][number];
 
@@ -41,7 +41,7 @@ export function RunQueueIndicator({ factoryId, queue }: { factoryId: string; que
         aria-label={`${queue.queuedCount} queued${running}`}
         tooltip={slotsLabel(queue.slots) ?? 'Automated runs waiting for a run slot'}
       >
-        <Hourglass aria-hidden />
+        <IconHourglass aria-hidden />
         <span className="tabular-nums">{queue.queuedCount} queued</span>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" className="w-[min(24rem,calc(100vw-1.5rem))]">

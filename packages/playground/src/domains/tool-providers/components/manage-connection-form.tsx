@@ -6,12 +6,12 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
+import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
 import { IconChevronLeft } from '@mastra/playground-ui/icons/central/IconChevronLeft';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useDisconnectConnection } from '@mastra/react/hooks/tool-providers';
 
+import { useDisconnectConnection } from '@mastra/react/hooks/tool-providers';
 import { Unplug } from 'lucide-react';
 import { useState } from 'react';
 import { titleize } from './titleize';
@@ -82,7 +82,7 @@ export const ManageConnectionForm = ({
               <img src={iconUrl} alt="" className="size-8 object-contain" />
             ) : (
               <Icon size="lg" className="text-muted-foreground">
-                <IconChainLink1 />
+                <IconChainLink3 />
               </Icon>
             )}
           </div>

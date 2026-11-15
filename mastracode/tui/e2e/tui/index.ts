@@ -180,6 +180,7 @@ import {
   pluginsLocalReloadFailureScenario,
   pluginsLocalToolScenario,
   pluginsScaffoldInstallToolScenario,
+  pluginsSignalProviderStartFailureScenario,
   pluginsStreamingToolOutputScenario,
 } from './plugins.js';
 import { previewLinesSettingsScenario } from './preview-lines-settings.js';
@@ -421,6 +422,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'plugins-local-tool': pluginsLocalToolScenario,
   'plugins-local-hot-reload': pluginsLocalHotReloadScenario,
   'plugins-local-reload-failure': pluginsLocalReloadFailureScenario,
+  'plugins-signal-provider-start-failure': pluginsSignalProviderStartFailureScenario,
   'plugins-github-install-gh-cli-pnpm-10': pluginsGithubInstallPnpm10Scenario,
   'plugins-github-install-gh-cli-pnpm-11': pluginsGithubInstallPnpm11Scenario,
   'plugins-github-install-gh-cli-pnpm-12': pluginsGithubInstallPnpm12Scenario,

@@ -1,6 +1,6 @@
 import { dataKeysAndValuesValueStyles } from './shared';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { cn } from '@/lib/utils';
@@ -38,7 +38,7 @@ export function DataKeysAndValuesValueWithCopyBtn({
             aria-label={isCopied ? 'Copied!' : copyTooltip}
           >
             <span className="min-w-0 truncate">{children}</span>
-            {isCopied ? <IconCheckmark1 /> : <IconSquareBehindSquare1 />}
+            {isCopied ? <IconCheckmark2Medium /> : <IconSquareBehindSquare1 />}
           </button>
         </TooltipTrigger>
         <TooltipContent>{isCopied ? 'Copied!' : copyTooltip}</TooltipContent>

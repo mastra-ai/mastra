@@ -16,16 +16,16 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconLoadingCircle } from '@mastra/playground-ui/icons/central/IconLoadingCircle';
 import { IconPackage } from '@mastra/playground-ui/icons/central/IconPackage';
 import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
+
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Loader2 } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import {
@@ -201,7 +201,7 @@ export function BuilderAddSkillDialog({
               <ScrollArea className="flex-1 rounded-lg border border-border">
                 {isLoadingPopular || isSearching ? (
                   <div className="flex items-center justify-center py-5">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    <IconLoadingCircle className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
                 ) : displaySkills.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-5 text-muted-foreground">
@@ -236,7 +236,7 @@ export function BuilderAddSkillDialog({
                                     variant="meta"
                                     className="inline-flex items-center gap-1 rounded bg-info-subtle px-1.5 py-0.5 text-info-subtle-foreground"
                                   >
-                                    <IconCheckmark1 className="h-2.5 w-2.5" />
+                                    <IconCheckmark2Medium className="h-2.5 w-2.5" />
                                     Installed
                                   </Txt>
                                 )}
@@ -308,7 +308,7 @@ export function BuilderAddSkillDialog({
 
                   {isLoadingPreview ? (
                     <div className="flex flex-1 items-center justify-center">
-                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      <IconLoadingCircle className="h-6 w-6 animate-spin text-muted-foreground" />
                     </div>
                   ) : previewContent ? (
                     <ScrollArea className="flex-1">

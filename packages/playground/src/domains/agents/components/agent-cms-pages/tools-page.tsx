@@ -6,7 +6,7 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { passwordManagerOptOutProps } from '@mastra/playground-ui/primitives/password-manager-autofill';
@@ -14,8 +14,8 @@ import { controlStateColorTransition, focusRing } from '@mastra/playground-ui/pr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
-import { useTools } from '@mastra/react/hooks/tools';
 
+import { useTools } from '@mastra/react/hooks/tools';
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
@@ -225,7 +225,7 @@ export function ToolsPage() {
             {canEditToolMembership && unselectedOptions.length > 0 && (
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" icon={<IconPlusLarge />}>
+                  <Button variant="ghost" size="sm" icon={<IconPlusMedium />}>
                     Add tools
                   </Button>
                 </PopoverTrigger>

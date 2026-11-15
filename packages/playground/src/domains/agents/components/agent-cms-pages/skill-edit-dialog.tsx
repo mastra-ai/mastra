@@ -5,7 +5,7 @@ import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SkillSimpleForm } from '@mastra/playground-ui/domains/skills/skill-simple-form';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
 import { IconChevronRight } from '@mastra/playground-ui/icons/central/IconChevronRight';
 import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
@@ -14,8 +14,8 @@ import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
 import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
 import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 import { IconSquareBehindSquare1 } from '@mastra/playground-ui/icons/central/IconSquareBehindSquare1';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
@@ -324,7 +324,7 @@ export function SkillEditDialog({
                 </Select>
               )}
               <Button
-                icon={isExistingSkill ? <IconCheckmark1 /> : <SkillIcon />}
+                icon={isExistingSkill ? <IconCheckmark2Medium /> : <SkillIcon />}
                 variant="primary"
                 size="sm"
                 onClick={handleSave}

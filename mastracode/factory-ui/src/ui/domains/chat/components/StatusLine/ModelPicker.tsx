@@ -25,7 +25,7 @@ import { useOrganizationScopedFactory } from './useOrganizationScopedFactory';
 import { ModelThinkingGroup } from './ModelThinkingGroup';
 import { SessionThinkingIcon } from './SessionThinkingIcon';
 import { SessionThinkingSettings } from './SessionThinkingSettings';
-import { IconKey1 } from '@mastra/playground-ui/icons/central/IconKey1';
+import { IconKey2 } from '@mastra/playground-ui/icons/central/IconKey2';
 
 function groupByProvider(models: AvailableModelOption[]): [string, AvailableModelOption[]][] {
   const groups = new Map<string, AvailableModelOption[]>();
@@ -101,7 +101,7 @@ interface ModelMenuProps {
 }
 
 const renderProviderIcon = (provider: string) => (
-  <ProviderBrandIcon provider={provider} fallback={<IconKey1 className="size-3.5" />} />
+  <ProviderBrandIcon provider={provider} fallback={<IconKey2 className="size-3.5" />} />
 );
 
 function ModelMenu({

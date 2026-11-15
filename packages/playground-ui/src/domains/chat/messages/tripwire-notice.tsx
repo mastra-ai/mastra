@@ -1,5 +1,4 @@
 import type { TripwireMetadata } from '@mastra/react';
-import { ShieldAlert } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/ds/components/Badge';
 import { Code } from '@/ds/components/Code';
@@ -8,6 +7,7 @@ import { Txt } from '@/ds/components/Txt';
 import { IconArrowRotateClockwise } from '@/ds/icons/central/IconArrowRotateClockwise';
 import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
 import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconShield2 } from '@/ds/icons/central/IconShield2';
 import { IconTag } from '@/ds/icons/central/IconTag';
 
 export interface TripwireNoticeProps {
@@ -23,7 +23,7 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
   );
 
   return (
-    <Notice variant="warning" title="Content Blocked" icon={<ShieldAlert />}>
+    <Notice variant="warning" title="Content Blocked" icon={<IconShield2 />}>
       <div className="flex flex-col gap-3">
         <Notice.Message className="break-words whitespace-pre-wrap">{reason}</Notice.Message>
 

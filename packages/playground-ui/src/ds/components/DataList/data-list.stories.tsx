@@ -6,7 +6,7 @@ import { DataListSkeleton } from './data-list-skeleton';
 import { Button } from '@/ds/components/Button';
 import { Status } from '@/ds/components/StatusIndicators';
 import { IconPencil } from '@/ds/icons/central/IconPencil';
-import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 import { useTableKeydown } from '@/lib/keyboard';
 
 const meta: Meta<typeof DataList> = {
@@ -258,7 +258,7 @@ export const WithActions: Story = {
               aria-label={`Delete ${item.name}`}
               onClick={event => event.stopPropagation()}
             >
-              <IconTrashCan />
+              <TrashIcon />
             </Button>
           </DataList.ActionsCell>
         </DataList.RowWrapper>

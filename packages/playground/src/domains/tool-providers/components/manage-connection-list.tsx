@@ -3,7 +3,7 @@ import { DialogBody, DialogFooter } from '@mastra/playground-ui/components/Dialo
 import { Entity, EntityContent, EntityName } from '@mastra/playground-ui/components/Entity';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { IconChevronRight } from '@mastra/playground-ui/icons/central/IconChevronRight';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import type { ManageableConnection } from './manage-connection-dialog';
 
@@ -63,7 +63,7 @@ export const ManageConnectionList = ({
               <Spinner size="sm" />
             ) : (
               <Icon>
-                <IconPlusLarge />
+                <IconPlusMedium />
               </Icon>
             )}
             Add connection

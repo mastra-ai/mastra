@@ -15,7 +15,7 @@ import { useState } from 'react';
 import { useApiConfig } from '../../../../api/config';
 import { connectLinear } from '../../factory/services/linear';
 import type { LinearWorkspaceConnection } from '../../factory/services/linear';
-import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
+import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
 
 export function LinearWorkspaceControl({
   workspace,
@@ -30,7 +30,7 @@ export function LinearWorkspaceControl({
     <>
       <Button
         size="sm"
-        icon={<IconChainLink1 />}
+        icon={<IconChainLink3 />}
         aria-label={`Reconnect ${workspace.name}`}
         onClick={() => setOpen(true)}
       >

@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Workflow } from 'lucide-react';
 import { Badge } from '../Badge';
 import { EntityHeader } from './entity-header';
 import { IconRobot } from '@/ds/icons/central/IconRobot';
 import { IconServer1 } from '@/ds/icons/central/IconServer1';
 import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 
 const meta: Meta<typeof EntityHeader> = {
   title: 'Composite/EntityHeader',
@@ -35,7 +35,7 @@ export const Loading: Story = {
 export const WithChildren: Story = {
   render: () => (
     <div className="w-100 rounded-lg bg-card">
-      <EntityHeader icon={<Workflow />} title="Data Processing Pipeline">
+      <EntityHeader icon={<WorkflowIcon />} title="Data Processing Pipeline">
         <p className="text-body text-muted-foreground">Processes incoming data and transforms it for analysis</p>
       </EntityHeader>
     </div>

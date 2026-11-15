@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ListFilterPlusIcon, NetworkIcon } from 'lucide-react';
+import { NetworkIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { traceFilterFieldColor } from '@/domains/traces/trace-filters';
@@ -25,6 +25,7 @@ import { Txt } from '@/ds/components/Txt';
 import { IconBox } from '@/ds/icons/central/IconBox';
 import { IconColumns3 } from '@/ds/icons/central/IconColumns3';
 import { IconDotGrid1x3Vertical } from '@/ds/icons/central/IconDotGrid1x3Vertical';
+import { IconFilter2 } from '@/ds/icons/central/IconFilter2';
 import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
 import { IconGlobe } from '@/ds/icons/central/IconGlobe';
 import { IconLayoutColumn } from '@/ds/icons/central/IconLayoutColumn';
@@ -269,7 +270,7 @@ export const AllToolbars: StoryObj = {
           <ActionRow>
             <ActionRow.Start>
               <StandalonePicker />
-              <Button size="sm" icon={<ListFilterPlusIcon />}>
+              <Button size="sm" icon={<IconFilter2 />}>
                 Add filter
               </Button>
             </ActionRow.Start>

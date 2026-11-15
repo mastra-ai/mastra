@@ -1,5 +1,4 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { CirclePause } from 'lucide-react';
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import { parse } from 'superjson';
@@ -15,6 +14,7 @@ import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowDownLeft } from '@/ds/icons/central/IconArrowDownLeft';
 import { IconArrowUpRight } from '@/ds/icons/central/IconArrowUpRight';
+import { IconPause } from '@/ds/icons/central/IconPause';
 import { IconPlay } from '@/ds/icons/central/IconPlay';
 import { Icon } from '@/ds/icons/Icon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -76,7 +76,7 @@ export function WorkflowSuspendedSteps({
         <div className="flex items-center justify-between gap-3 border-b border-border bg-background px-5 py-4">
           <Txt as="h2" variant="column" tone="ink" className="flex items-center gap-2">
             <Icon>
-              <CirclePause />
+              <IconPause />
             </Icon>
             Step suspended
           </Txt>

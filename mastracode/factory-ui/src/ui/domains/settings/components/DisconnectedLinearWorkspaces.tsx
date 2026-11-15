@@ -1,13 +1,13 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsItem } from '@mastra/playground-ui/new/settings';
-import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 
 import { useApiConfig } from '../../../../api/config';
 import { connectLinear } from '../../factory/services/linear';
 import type { DisconnectedLinearWorkspace } from './intakeSourceGroups';
 import { IntegrationItemIcon } from './IntegrationItem';
+import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 /**
  * Saved Linear sources from workspaces that are no longer connected. Their
@@ -47,13 +47,13 @@ export function DisconnectedLinearWorkspaces({
                 </span>
               }
             >
-              <Button size="sm" variant="ghost" icon={<IconChainLink1 />} onClick={() => connectLinear(baseUrl)}>
+              <Button size="sm" variant="ghost" icon={<IconChainLink3 />} onClick={() => connectLinear(baseUrl)}>
                 Reconnect
               </Button>
               <Button
                 size="sm"
                 variant="ghost"
-                icon={<IconTrashCan />}
+                icon={<TrashIcon />}
                 aria-label={`Remove ${name}`}
                 onClick={() => onRemove(workspace.sourceIds)}
               >

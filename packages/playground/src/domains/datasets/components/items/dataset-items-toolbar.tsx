@@ -8,13 +8,13 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
 import { IconArrowOutOfBox } from '@mastra/playground-ui/icons/central/IconArrowOutOfBox';
 import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
 import { IconFolderAddRight } from '@mastra/playground-ui/icons/central/IconFolderAddRight';
-import { IconJson } from '@mastra/playground-ui/icons/central/IconJson';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
+import { IconMoveFolder } from '@mastra/playground-ui/icons/central/IconMoveFolder';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { FolderOutput } from 'lucide-react';
 
 export type DatasetItemsToolbarProps = {
   // Normal mode actions
@@ -124,7 +124,7 @@ export function DatasetItemsToolbar({
         )}
         {onAddToDatasetClick && (
           <DropdownMenu.Item onSelect={onAddToDatasetClick}>
-            <FolderOutput />
+            <IconMoveFolder />
             <span>Copy items to dataset</span>
           </DropdownMenu.Item>
         )}
@@ -132,7 +132,7 @@ export function DatasetItemsToolbar({
           <>
             <DropdownMenu.Separator />
             <DropdownMenu.Item onSelect={onDeleteClick} variant="destructive">
-              <IconTrashCan /> Delete items
+              <TrashIcon /> Delete items
             </DropdownMenu.Item>
           </>
         )}
@@ -171,7 +171,7 @@ export function DatasetItemsToolbar({
                   <IconArrowOutOfBox /> Import CSV
                 </DropdownMenu.Item>
                 <DropdownMenu.Item onSelect={onImportJsonClick}>
-                  <IconJson /> Import JSON
+                  <IconFileText /> Import JSON
                 </DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu>

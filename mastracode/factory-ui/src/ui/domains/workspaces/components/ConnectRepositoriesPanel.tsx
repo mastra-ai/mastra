@@ -9,7 +9,6 @@ import {
   SettingsSkeleton,
 } from '@mastra/playground-ui/new/settings';
 import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { useRef, useState } from 'react';
 
 import { useLinkRepositoryMutation, useUnlinkRepositoryMutation } from '../../../../hooks/useFactories';
@@ -20,6 +19,7 @@ import type { RepositoryProviders } from '../../settings/components/environment/
 import { useEnvironmentSave } from '../../settings/components/environment/useEnvironmentSave';
 import type { FactoryProject } from '../services/github';
 import { AddRepositoryPicker } from './AddRepositoryPicker';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject }) {
   const sidePanel = useSidePanelDrawer();
@@ -38,7 +38,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
   const addRepository = (
     <DrawerTrigger
       render={
-        <Button ref={addButton} type="button" size="sm" icon={<IconPlusLarge />} disabled={mutationPending}>
+        <Button ref={addButton} type="button" size="sm" icon={<IconPlusMedium />} disabled={mutationPending}>
           Add repository
         </Button>
       }

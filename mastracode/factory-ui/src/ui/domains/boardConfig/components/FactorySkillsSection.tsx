@@ -14,9 +14,9 @@ import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
 import type { FactorySkillInfo, InstalledBoardInfo } from '../../../../api/types';
 import { orderedBoards } from '../../factory/boardCatalog';
 import { FactorySkillEditorDialog } from '../../settings/components/FactorySkillEditorDialog';
-import { IconCode } from '@mastra/playground-ui/icons/central/IconCode';
 import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
 import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
 
 /** Skills some board's settings already show: the ones its phases run. None while the boards are unknown. */
 function boardSkillNames(boards: InstalledBoardInfo[] | undefined): Set<string> {
@@ -43,7 +43,7 @@ function SkillContent({ content }: { content: string }) {
         onClick={() => setRaw(shown => !shown)}
         className="absolute top-1 right-4 opacity-0 transition-opacity group-hover/content:opacity-100 focus-visible:opacity-100"
       >
-        {raw ? <IconFileText /> : <IconCode />}
+        {raw ? <IconFileText /> : <IconCodeBrackets />}
       </Button>
     </div>
   );

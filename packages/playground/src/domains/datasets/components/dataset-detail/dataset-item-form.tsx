@@ -4,7 +4,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Field, FieldDescription, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
 import { DatasetFieldErrors } from '../dataset-field-errors';
@@ -132,7 +132,7 @@ export function EditModeContent({
         </Field>
 
         <div className="flex gap-2 pt-4">
-          <Button icon={<IconCheckmark1 />} variant="primary" onClick={onSave} disabled={isSaving}>
+          <Button icon={<IconCheckmark2Medium />} variant="primary" onClick={onSave} disabled={isSaving}>
             {isSaving ? 'Saving...' : 'Save changes'}
           </Button>
           <Button icon={<IconCrossMedium />} onClick={onCancel} disabled={isSaving}>

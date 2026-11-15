@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { TokenBudget } from './token-budget';
 import { TokenBudgetDetail } from './token-budget-detail';
 import { IconBrain } from '@/ds/icons/central/IconBrain';
-import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
+import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
 
 const meta: Meta<typeof TokenBudget> = {
   title: 'DataDisplay/TokenBudget',
@@ -39,7 +39,7 @@ export const Details: Story = {
   render: () => (
     <div className="grid w-112 gap-5 rounded-xl border border-border bg-background p-5">
       <TokenBudgetDetail
-        icon={<IconChatBubbles />}
+        icon={<IconBubbleText />}
         label="Messages"
         tokens={5_200}
         threshold={8_000}

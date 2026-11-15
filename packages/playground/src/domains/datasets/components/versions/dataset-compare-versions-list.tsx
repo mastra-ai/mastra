@@ -5,7 +5,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconCircleBanSign } from '@mastra/playground-ui/icons/central/IconCircleBanSign';
 import { IconMathEquals } from '@mastra/playground-ui/icons/central/IconMathEquals';
 import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { focusRing, transitions } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -23,7 +23,7 @@ const versionInfoConfig = {
   added: {
     badgeVariant: 'info' as const,
     borderColor: 'border-info-edge',
-    icon: <IconPlusLarge />,
+    icon: <IconPlusMedium />,
     tooltip: 'Added in this version',
   },
   changed: {

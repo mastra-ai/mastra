@@ -1,6 +1,5 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import type { FilterBarField, FilterBarOperator, FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
-import { UserRoundSearch } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { factoryParticipantId } from '@mastra/factory/work-items/card-people';
 import { PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
@@ -18,6 +17,7 @@ import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanVi
 import { IconUserAdded } from '@mastra/playground-ui/icons/central/IconUserAdded';
 import { IconUserDuo } from '@mastra/playground-ui/icons/central/IconUserDuo';
 import { IconUserEdit } from '@mastra/playground-ui/icons/central/IconUserEdit';
+import { IconPersona } from '@mastra/playground-ui/icons/central/IconPersona';
 
 export const BOARD_FILTER_OPERATORS: FilterBarOperator[] = [{ id: 'in', label: 'is any of', arity: 'many' }];
 
@@ -31,7 +31,7 @@ const FIELD_PRESENTATION: Record<BoardFilterFieldId, { label: string; icon: Luci
   teammate: { label: 'Involves', icon: IconUserDuo },
   author: { label: 'Author', icon: IconUserEdit },
   assignee: { label: 'Assignee', icon: IconUserAdded },
-  reviewer: { label: 'Review requested', icon: UserRoundSearch },
+  reviewer: { label: 'Review requested', icon: IconPersona },
   worked: { label: 'Worked on by', icon: IconElectrocardiogram },
   label: { label: 'Label', icon: IconTag },
 };

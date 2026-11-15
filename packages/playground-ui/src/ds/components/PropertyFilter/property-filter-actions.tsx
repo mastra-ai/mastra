@@ -3,7 +3,7 @@ import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { IconDotGrid1x3Vertical } from '@/ds/icons/central/IconDotGrid1x3Vertical';
 import { IconFloppyDisk1 } from '@/ds/icons/central/IconFloppyDisk1';
-import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 
 export type PropertyFilterActionsProps = {
   disabled?: boolean;
@@ -62,7 +62,7 @@ export function PropertyFilterActions({
             )}
             {onRemoveSaved && (
               <DropdownMenu.Item onSelect={() => onRemoveSaved()}>
-                <IconTrashCan />
+                <TrashIcon />
                 Remove saved filters
               </DropdownMenu.Item>
             )}

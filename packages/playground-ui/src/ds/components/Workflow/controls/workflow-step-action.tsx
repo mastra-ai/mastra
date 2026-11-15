@@ -1,10 +1,10 @@
-import { ShieldAlertIcon } from 'lucide-react';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { IconArrowRotateCounterClockwise } from '@/ds/icons/central/IconArrowRotateCounterClockwise';
 import { IconClock } from '@/ds/icons/central/IconClock';
 import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
 import { IconExclamationCircle } from '@/ds/icons/central/IconExclamationCircle';
 import { IconPlay } from '@/ds/icons/central/IconPlay';
+import { IconShield2 } from '@/ds/icons/central/IconShield2';
 import { IconSidebarSimpleRightWide } from '@/ds/icons/central/IconSidebarSimpleRightWide';
 import { IconStepForwards } from '@/ds/icons/central/IconStepForwards';
 
@@ -16,7 +16,7 @@ const actions = {
   continueRun: { icon: IconStepForwards, label: 'Continue run' },
   resumeData: { icon: IconArrowRotateCounterClockwise, label: 'Resume data' },
   error: { icon: IconExclamationCircle, label: 'Error' },
-  tripwire: { icon: ShieldAlertIcon, label: 'Tripwire' },
+  tripwire: { icon: IconShield2, label: 'Tripwire' },
 };
 
 export interface WorkflowStepActionProps {

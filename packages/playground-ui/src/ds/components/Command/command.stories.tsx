@@ -19,7 +19,7 @@ import {
 } from './command';
 import { IconBox } from '@/ds/icons/central/IconBox';
 import { IconBranch } from '@/ds/icons/central/IconBranch';
-import { IconBubble2 } from '@/ds/icons/central/IconBubble2';
+import { IconBubbleWide } from '@/ds/icons/central/IconBubbleWide';
 import { IconCalculator } from '@/ds/icons/central/IconCalculator';
 import { IconCalendar1 } from '@/ds/icons/central/IconCalendar1';
 import { IconChart6 } from '@/ds/icons/central/IconChart6';
@@ -359,7 +359,7 @@ export const InDialogWithDisabledRows: Story = {
               <CommandGroup heading="Coming soon">
                 {['HubSpot', 'Discord'].map(name => (
                   <CommandItem key={name} disabled onSelect={() => setPicked(name)}>
-                    <IconBubble2 className={iconClassName} />
+                    <IconBubbleWide className={iconClassName} />
                     <span className="flex-1">{name}</span>
                   </CommandItem>
                 ))}
@@ -377,7 +377,7 @@ export const InDialogWithDisabledRows: Story = {
 
 const InsetFooter = () => (
   <>
-    <Button variant="ghost" size="sm" icon={<IconBubble2 />}>
+    <Button variant="ghost" size="sm" icon={<IconBubbleWide />}>
       Send feedback
     </Button>
     <span className="flex items-center gap-1.5">

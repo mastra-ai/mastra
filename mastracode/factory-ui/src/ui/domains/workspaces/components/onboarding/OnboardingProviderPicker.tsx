@@ -7,7 +7,6 @@ import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { IconChevronGrabberVertical } from '@mastra/playground-ui/icons/central/IconChevronGrabberVertical';
 import { IconPlugin1 } from '@mastra/playground-ui/icons/central/IconPlugin1';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { useState } from 'react';
 
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
@@ -20,6 +19,7 @@ import { ProviderBrandIcon } from '../ProviderBrandIcon';
 import { OnboardingProviderOption } from './OnboardingProviderOption';
 import { OnboardingProviderOptions } from './OnboardingProviderOptions';
 import { OnboardingProviderSummary } from './OnboardingProviderSummary';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 /**
  * A lane's own provider as one row that opens a searchable list: a switch between API-key providers
@@ -152,7 +152,7 @@ export function OnboardingProviderPicker({
           />
           {shownTab === 'api_key' && (
             <OnboardingProviderOption
-              icon={<IconPlusLarge aria-hidden="true" />}
+              icon={<IconPlusMedium aria-hidden="true" />}
               title="Add a custom provider"
               // A sign-in still starting would open its dialog over this one.
               disabled={connection.pending}

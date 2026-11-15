@@ -3,8 +3,6 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar, useMaybeSidebarState } from '@mastra/playground-ui/components/Sidebar';
 import { IconCircleDashed } from '@mastra/playground-ui/icons/central/IconCircleDashed';
 import { IconClock } from '@mastra/playground-ui/icons/central/IconClock';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
-import { IconSortArrowUpDown } from '@mastra/playground-ui/icons/central/IconSortArrowUpDown';
 import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 import type { ReactNode } from 'react';
 import { useParams } from 'react-router';
@@ -34,6 +32,8 @@ import {
   SESSION_UPDATED_MENU_OPTIONS,
   sessionOwnerMenuOptions,
 } from './sessionPropertyOptions';
+import { IconArrowTopBottom } from '@mastra/playground-ui/icons/central/IconArrowTopBottom';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 export function SessionsSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -88,7 +88,7 @@ export function SessionsSection() {
                 onClick={() => openNewUserSession(factoryId)}
                 disabled={deletion.deleting}
               >
-                <IconPlusLarge size={15} />
+                <IconPlusMedium size={15} />
               </Button>
             )}
             <PropertiesMenu
@@ -101,7 +101,7 @@ export function SessionsSection() {
             >
               <DropdownMenu.RadioSub
                 label="Sort"
-                icon={<IconSortArrowUpDown aria-hidden />}
+                icon={<IconArrowTopBottom aria-hidden />}
                 options={SESSION_SORT_MENU_OPTIONS}
                 value={view.sort}
                 onValueChange={sort => updateView({ sort })}

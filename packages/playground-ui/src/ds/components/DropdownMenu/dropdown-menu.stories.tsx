@@ -6,17 +6,17 @@ import { DropdownMenu } from './dropdown-menu';
 import type { DropdownMenuRadioOption } from './dropdown-menu';
 import { IconArrowBoxLeft } from '@/ds/icons/central/IconArrowBoxLeft';
 import { IconArrowRotateCounterClockwise } from '@/ds/icons/central/IconArrowRotateCounterClockwise';
-import { IconBubble2 } from '@/ds/icons/central/IconBubble2';
+import { IconArrowTopBottom } from '@/ds/icons/central/IconArrowTopBottom';
+import { IconBubbleWide } from '@/ds/icons/central/IconBubbleWide';
 import { IconCircleDashed } from '@/ds/icons/central/IconCircleDashed';
 import { IconCloud } from '@/ds/icons/central/IconCloud';
 import { IconCreditCard1 } from '@/ds/icons/central/IconCreditCard1';
-import { IconEmail1 } from '@/ds/icons/central/IconEmail1';
+import { IconEmail2 } from '@/ds/icons/central/IconEmail2';
 import { IconKeyboard } from '@/ds/icons/central/IconKeyboard';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { IconRescueRing } from '@/ds/icons/central/IconRescueRing';
 import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
 import { IconSettingsSliderHor } from '@/ds/icons/central/IconSettingsSliderHor';
-import { IconSortArrowUpDown } from '@/ds/icons/central/IconSortArrowUpDown';
 import { IconUser } from '@/ds/icons/central/IconUser';
 import { IconUserAdd } from '@/ds/icons/central/IconUserAdd';
 import { IconUserDuo } from '@/ds/icons/central/IconUserDuo';
@@ -186,7 +186,7 @@ export const WithLabelsAndGroups: Story = {
             <span>Invite users</span>
           </DropdownMenu.Item>
           <DropdownMenu.Item>
-            <IconPlusLarge />
+            <IconPlusMedium />
             <span>New team</span>
             <DropdownMenu.Shortcut>Ctrl+T</DropdownMenu.Shortcut>
           </DropdownMenu.Item>
@@ -291,7 +291,7 @@ export const WithRadioSubs: Story = {
         <DropdownMenu.Content align="end">
           <DropdownMenu.RadioSub
             label="Sort"
-            icon={<IconSortArrowUpDown aria-hidden />}
+            icon={<IconArrowTopBottom aria-hidden />}
             options={listSortOptions}
             value={sort}
             onValueChange={setSort}
@@ -334,11 +334,11 @@ export const WithSubMenu: Story = {
       <DropdownMenu.Trigger>Open Menu</DropdownMenu.Trigger>
       <DropdownMenu.Content className="w-56">
         <DropdownMenu.Item>
-          <IconEmail1 />
+          <IconEmail2 />
           <span>Email</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item>
-          <IconBubble2 />
+          <IconBubbleWide />
           <span>Message</span>
         </DropdownMenu.Item>
         <DropdownMenu.Separator />
@@ -349,16 +349,16 @@ export const WithSubMenu: Story = {
           </DropdownMenu.SubTrigger>
           <DropdownMenu.SubContent>
             <DropdownMenu.Item>
-              <IconEmail1 />
+              <IconEmail2 />
               <span>Email</span>
             </DropdownMenu.Item>
             <DropdownMenu.Item>
-              <IconBubble2 />
+              <IconBubbleWide />
               <span>Message</span>
             </DropdownMenu.Item>
             <DropdownMenu.Separator />
             <DropdownMenu.Item>
-              <IconPlusLarge />
+              <IconPlusMedium />
               <span>More...</span>
             </DropdownMenu.Item>
           </DropdownMenu.SubContent>
@@ -471,11 +471,11 @@ export const KitchenSink: Story = {
             </DropdownMenu.SubTrigger>
             <DropdownMenu.SubContent>
               <DropdownMenu.Item>
-                <IconEmail1 />
+                <IconEmail2 />
                 <span>Email</span>
               </DropdownMenu.Item>
               <DropdownMenu.Item>
-                <IconBubble2 />
+                <IconBubbleWide />
                 <span>Message</span>
               </DropdownMenu.Item>
             </DropdownMenu.SubContent>

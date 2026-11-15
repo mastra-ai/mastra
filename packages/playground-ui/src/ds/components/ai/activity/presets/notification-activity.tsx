@@ -4,7 +4,7 @@ import { messagePreview, messagePreviewShowsAll } from './message-preview';
 import { Badge } from '@/ds/components/Badge';
 import type { BadgeVariant } from '@/ds/components/Badge';
 import { Txt } from '@/ds/components/Txt';
-import { IconBell } from '@/ds/icons/central/IconBell';
+import { IconBell2 } from '@/ds/icons/central/IconBell2';
 import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 
 export interface NotificationActivityProps {
@@ -49,7 +49,7 @@ export function NotificationActivity({
     <ActivityItem
       label={label}
       detail={messagePreview(message)}
-      icon={icon ?? <IconBell className="text-warning-foreground" aria-hidden />}
+      icon={icon ?? <IconBell2 className="text-warning-foreground" aria-hidden />}
       badges={
         hasBadges && (
           <>

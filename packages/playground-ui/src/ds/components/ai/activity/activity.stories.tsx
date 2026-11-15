@@ -14,7 +14,7 @@ import {
   ActivityTrigger,
 } from './activity';
 import { Badge } from '@/ds/components/Badge';
-import { IconBell } from '@/ds/icons/central/IconBell';
+import { IconBell2 } from '@/ds/icons/central/IconBell2';
 import { IconBrain } from '@/ds/icons/central/IconBrain';
 import { IconConsole } from '@/ds/icons/central/IconConsole';
 import { IconFileText } from '@/ds/icons/central/IconFileText';
@@ -151,7 +151,7 @@ export const EveryKind: Story = {
         aria-label="Signal: factory-phase"
       />
       <ActivityItem
-        icon={<IconBell className="text-warning-foreground" aria-hidden />}
+        icon={<IconBell2 className="text-warning-foreground" aria-hidden />}
         label="github / issue-opened"
         badges={
           <Badge size="xs" variant="orange">

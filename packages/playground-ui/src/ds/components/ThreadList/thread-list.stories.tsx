@@ -11,7 +11,7 @@ import {
   ThreadListSeparator,
 } from './thread-list';
 import { IconDotGrid1x3Vertical } from '@/ds/icons/central/IconDotGrid1x3Vertical';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 
 const initialThreads = [
   'Compare vector databases for semantic search',
@@ -37,7 +37,7 @@ function ThreadListPreview({ embedded = false }: { embedded?: boolean }) {
     <div className="h-96 w-80">
       <ThreadList embedded={embedded}>
         <ThreadListNewItem render={<a href="#new" />}>
-          <IconPlusLarge />
+          <IconPlusMedium />
           New thread
         </ThreadListNewItem>
         <ThreadListSeparator />

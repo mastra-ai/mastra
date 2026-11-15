@@ -5,7 +5,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
-import { IconBubble2 } from '@mastra/playground-ui/icons/central/IconBubble2';
+import { IconBubbleWide } from '@mastra/playground-ui/icons/central/IconBubbleWide';
 import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
 import { IconChevronTop } from '@mastra/playground-ui/icons/central/IconChevronTop';
 import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
@@ -309,7 +309,7 @@ export function MemorySidebarBody({
                   {/* Memory setup at a glance: filled badge = on, faded = off */}
                   <span data-testid="memory-config-badges" className="mt-1.5 flex flex-wrap items-center gap-1.5">
                     <ConfigBadge
-                      icon={IconBubble2}
+                      icon={IconBubbleWide}
                       tooltip={recentMessages.description}
                       enabled={recentMessages.enabled}
                       value={recentMessages.maxMessages}

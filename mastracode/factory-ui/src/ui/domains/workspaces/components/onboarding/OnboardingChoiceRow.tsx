@@ -1,9 +1,9 @@
 import { RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
 import { useId } from 'react';
 import type { ReactNode } from 'react';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 
 /**
  * One row of an onboarding radio group. The radio stays for keyboard and screen readers but is visually
@@ -64,7 +64,7 @@ export function OnboardingChoiceRow({
       </span>
       {selected && (
         <span className="onboarding-enter flex h-5 shrink-0 items-center">
-          <IconCheckmark1 aria-hidden="true" className="size-4" />
+          <IconCheckmark2Medium aria-hidden="true" className="size-4" />
         </span>
       )}
     </label>

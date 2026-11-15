@@ -8,7 +8,7 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
 import { IconHistory } from '@mastra/playground-ui/icons/central/IconHistory';
 import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useDatasetMutations } from '@mastra/react/hooks/datasets';
@@ -314,7 +314,7 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
                   Edit
                 </DropdownMenu.Item>
                 <DropdownMenu.Item onSelect={() => setShowDeleteConfirm(true)} variant="destructive">
-                  <IconTrashCan />
+                  <TrashIcon />
                   Delete item
                 </DropdownMenu.Item>
               </DropdownMenu.Content>

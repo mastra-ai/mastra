@@ -68,8 +68,8 @@ import { useRowDrag } from './useRowDrag';
 import { IconArrowDown } from '@mastra/playground-ui/icons/central/IconArrowDown';
 import { IconArrowUp } from '@mastra/playground-ui/icons/central/IconArrowUp';
 import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 const ROUTE_WHEN_SCHEMA = ruleGroupSchema(INTAKE_ROUTE_RULE_FIELDS);
 const STALE_CODES = new Set(['revision_mismatch', 'intake_route_set_mismatch', 'intake_route_not_found']);
@@ -590,7 +590,7 @@ function RouteCard({
               </DropdownMenu.Item>
               <DropdownMenu.Separator />
               <DropdownMenu.Item variant="destructive" onClick={onRemove}>
-                <IconTrashCan /> Delete
+                <TrashIcon /> Delete
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu>
@@ -1085,7 +1085,7 @@ function RouteList({
           </div>
         ) : (
           <div className="pl-4">
-            <RuleAddButton icon={<IconPlusLarge />} onClick={() => setAdding(true)}>
+            <RuleAddButton icon={<IconPlusMedium />} onClick={() => setAdding(true)}>
               {scope.kind === 'moves' ? 'Add card move' : 'Add route'}
             </RuleAddButton>
           </div>

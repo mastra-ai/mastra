@@ -11,6 +11,7 @@ import {
   classifyPrFailure,
   compareFiles,
   failingFilesFromLog,
+  isTransientGhError,
   projectRootsFromConfigs,
   gitDiffFiles,
   jobKeysFor,
@@ -18,6 +19,7 @@ import {
   nextGreenRun,
   prRuns,
   recordPrFailures,
+  retryTransient,
   syncFiles,
 } from './update.mjs';
 
@@ -508,4 +510,92 @@ test('git diff fallback: finds the merge base below the shallow checkout, with l
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// A gh stand-in that exits like gh does on a GitHub error, so the retry sees the real error shape.
+function failingGh(dir, stderrLines) {
+  const counter = path.join(dir, 'calls');
+  const bin = path.join(dir, 'gh');
+  fs.writeFileSync(
+    bin,
+    `#!/bin/sh
+n=$(cat "${counter}" 2>/dev/null || echo 0); n=$((n+1)); echo $n > "${counter}"
+case $n in
+${stderrLines.map((line, i) => `  ${i + 1}) echo '${line}' >&2; exit 1;;`).join('\n')}
+esac
+echo '{"ok":true}'
+`,
+    { mode: 0o755 },
+  );
+  return {
+    call: () => execFileSync(bin, ['api', 'x'], { encoding: 'utf8', stdio: 'pipe' }),
+    calls: () => Number(fs.readFileSync(counter, 'utf8')),
+  };
+}
+
+test('gh retry: a 502 then success returns the response after one wait', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-retry-'));
+  try {
+    const gh = failingGh(dir, ['gh: Server Error (HTTP 502)']);
+    const waits = [];
+    assert.equal(retryTransient(gh.call, [5, 20, 60], ms => waits.push(ms)).trim(), '{"ok":true}');
+    assert.deepEqual(waits, [5]);
+    assert.equal(gh.calls(), 2);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('gh retry: gives up after the last delay and throws the GitHub error', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-retry-'));
+  try {
+    const gh = failingGh(dir, Array(4).fill('gh: Server Error (HTTP 503)'));
+    const waits = [];
+    assert.throws(
+      () => retryTransient(gh.call, [5, 20, 60], ms => waits.push(ms)),
+      e => /HTTP 503/.test(e.stderr),
+    );
+    assert.deepEqual(waits, [5, 20, 60]);
+    assert.equal(gh.calls(), 4);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('gh retry: a 404 or an unknown flag fails at once', () => {
+  for (const line of ['gh: Not Found (HTTP 404)', 'unknown flag: --allow-escape-sequences']) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-retry-'));
+    try {
+      const gh = failingGh(dir, [line]);
+      const waits = [];
+      assert.throws(() => retryTransient(gh.call, [5], ms => waits.push(ms)));
+      assert.deepEqual(waits, []);
+      assert.equal(gh.calls(), 1);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+});
+
+test('gh retry: which GitHub errors are transient', () => {
+  const transient = [
+    'gh: Server Error (HTTP 500)',
+    'gh: Bad Gateway (HTTP 502)',
+    'gh: Gateway Timeout (HTTP 504)',
+    'gh: API rate limit exceeded (HTTP 403)',
+    'gh: You have exceeded a secondary rate limit (HTTP 403)',
+    'gh: Too Many Requests (HTTP 429)',
+    'Get "https://api.github.com/x": read tcp: connection reset by peer',
+    'Get "https://api.github.com/x": net/http: TLS handshake timeout',
+    'Get "https://api.github.com/x": unexpected EOF',
+    'Get "https://api.github.com/x": EOF',
+  ];
+  const permanent = [
+    'gh: Not Found (HTTP 404)',
+    'gh: Resource not accessible by integration (HTTP 403)',
+    'gh: Validation Failed (HTTP 422)',
+    'unknown flag: --allow-escape-sequences',
+  ];
+  for (const stderr of transient) assert.equal(isTransientGhError({ stderr }), true, stderr);
+  for (const stderr of permanent) assert.equal(isTransientGhError({ stderr }), false, stderr);
 });

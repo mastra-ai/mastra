@@ -1,7 +1,6 @@
 import { useMastraClient } from '@mastra/react';
 import { traceSpansQueryOptions, useTraceSpans } from '@mastra/react/hooks/traces';
 import { useQueries } from '@tanstack/react-query';
-import { MessageSquareReplyIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { FeedbackOptions } from './feedback-options';
 import { TraceScoresTab } from '@/domains/scores';
@@ -16,6 +15,7 @@ import { useTracesListSource } from '@/domains/traces/hooks/use-traces-list-sour
 import type { UseTracesListSourceArgs } from '@/domains/traces/hooks/use-traces-list-source';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
+import { IconBubbleSparkle } from '@/ds/icons/central/IconBubbleSparkle';
 import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
 import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 import { Icon } from '@/ds/icons/Icon';
@@ -177,7 +177,7 @@ function ThreadTraceRowContent({
           {withFeedback && (
             <ThreadTrace.Tab value="feedback">
               <Icon size="xs">
-                <MessageSquareReplyIcon />
+                <IconBubbleSparkle />
               </Icon>
               Feedback
             </ThreadTrace.Tab>

@@ -21,7 +21,7 @@ import {
 } from '@/ds/components/Command';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowRotateCounterClockwise } from '@/ds/icons/central/IconArrowRotateCounterClockwise';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 import { cn } from '@/utils/cn';
 import { compareModelReleaseDates } from '@/utils/model';
@@ -182,7 +182,7 @@ export function ModelPickerPanel({
                     render={addProvider.render}
                     onClick={onAddProvider}
                   >
-                    <IconPlusLarge aria-hidden />
+                    <IconPlusMedium aria-hidden />
                   </Button>
                 ) : undefined
               }

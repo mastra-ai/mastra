@@ -1,4 +1,3 @@
-import { Loader2 } from 'lucide-react';
 import type { Step } from '../context/use-current-run';
 import { workflowStatusTone, workflowStatusToneBar, workflowStatusToneText } from '../workflow-status-tone';
 import type { TimelineRow } from './workflow-timeline-utils';
@@ -7,9 +6,10 @@ import { Txt } from '@/ds/components/Txt';
 import { IconArrowCornerDownRight } from '@/ds/icons/central/IconArrowCornerDownRight';
 import { IconArrowUpWall } from '@/ds/icons/central/IconArrowUpWall';
 import { IconArrowWallDown } from '@/ds/icons/central/IconArrowWallDown';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconCircleBanSign } from '@/ds/icons/central/IconCircleBanSign';
 import { IconCircleX } from '@/ds/icons/central/IconCircleX';
+import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
 import { IconPause } from '@/ds/icons/central/IconPause';
 import { IconQuestionmarkCircle } from '@/ds/icons/central/IconQuestionmarkCircle';
 import { IconSkip } from '@/ds/icons/central/IconSkip';
@@ -19,15 +19,15 @@ import { cn } from '@/utils/cn';
 import { formatDuration } from '@/utils/duration';
 
 const statusPresentation = {
-  success: { label: 'Completed', icon: IconCheckmark1 },
+  success: { label: 'Completed', icon: IconCheckmark2Medium },
   failed: { label: 'Failed', icon: IconCircleX },
   suspended: { label: 'Needs input', icon: IconPause },
   waiting: { label: 'Waiting', icon: IconStopwatch },
   paused: { label: 'Paused', icon: IconPause },
   skipped: { label: 'Skipped', icon: IconSkip },
-  running: { label: 'Running', icon: Loader2 },
+  running: { label: 'Running', icon: IconLoadingCircle },
   canceled: { label: 'Canceled', icon: IconCircleBanSign },
-} satisfies Record<Step['status'], { label: string; icon: typeof IconCheckmark1 }>;
+} satisfies Record<Step['status'], { label: string; icon: typeof IconCheckmark2Medium }>;
 
 const unknownStatus = { label: 'Status unavailable', icon: IconQuestionmarkCircle };
 

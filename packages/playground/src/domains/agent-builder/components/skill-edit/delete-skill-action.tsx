@@ -1,7 +1,7 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -57,7 +57,7 @@ const DeleteSkillDialog = ({ open, onOpenChange, skillName, isPending, onConfirm
           Cancel
         </AlertDialog.Cancel>
         <Button
-          icon={<IconTrashCan />}
+          icon={<TrashIcon />}
           variant="destructive"
           data-testid="skill-builder-delete-skill-confirm"
           disabled={isPending}
@@ -92,7 +92,7 @@ export const DeleteSkillPanelButton = ({ skillId, skillName, disabled = false }:
         disabled={disabled || isPending}
         className="w-full"
         data-testid="skill-builder-delete-skill"
-        icon={<IconTrashCan />}
+        icon={<TrashIcon />}
       >
         <span>Delete skill</span>
       </Button>
@@ -121,7 +121,7 @@ export const DeleteSkillMenuItem = ({ skillId, skillName, disabled = false }: De
           setOpen(true);
         }}
       >
-        <IconTrashCan />
+        <TrashIcon />
         <span>Delete skill</span>
       </DropdownMenu.Item>
       <DeleteSkillDialog

@@ -1,5 +1,5 @@
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
-import { IconPodcast1 } from '@mastra/playground-ui/icons/central/IconPodcast1';
+import { IconSignalTower } from '@mastra/playground-ui/icons/central/IconSignalTower';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useEventDrawerParam } from '../../hooks/use-event-drawer-param';
 import { McpEventDrawerBody } from './mcp-event-drawer-body';
@@ -13,7 +13,7 @@ export function McpEventDrawer({ serverId }: { serverId: string }) {
       <DataPanel.Header>
         <DataPanel.Heading>
           <Icon size="sm" className="text-muted-foreground">
-            <IconPodcast1 />
+            <IconSignalTower />
           </Icon>
           <span className="truncate">{eventName}</span>
         </DataPanel.Heading>

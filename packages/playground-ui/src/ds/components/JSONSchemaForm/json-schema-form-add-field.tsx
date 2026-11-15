@@ -3,7 +3,7 @@ import { useJSONSchemaForm } from './json-schema-form-context';
 import { useJSONSchemaFormNestedContext } from './json-schema-form-nested-context';
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 
 export type JSONSchemaFormAddFieldProps = Omit<ButtonProps, 'onClick'>;
 
@@ -19,7 +19,7 @@ export function AddField({ children, ...props }: JSONSchemaFormAddFieldProps) {
   }, [addField, parentPath]);
 
   return (
-    <Button icon={<IconPlusLarge />} type="button" {...props} onClick={handleClick}>
+    <Button icon={<IconPlusMedium />} type="button" {...props} onClick={handleClick}>
       {children || 'Add field'}
     </Button>
   );

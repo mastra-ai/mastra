@@ -453,6 +453,48 @@ describe('PluginManager', () => {
     });
   });
 
+  describe('plugin errors reported before anyone listens', () => {
+    it('hands them to the first listener, once', () => {
+      const manager = new PluginManager({ projectRoot: '/tmp/mc-early-errors', homeDir: '/tmp/mc-early-errors-home' });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // At startup the signal lane reports before the TUI exists to subscribe.
+      manager.reportPluginError({ pluginId: 'acme.early', message: 'provider failed to start: early' });
+      expect(warn).toHaveBeenCalledWith('provider failed to start: early');
+
+      const first: unknown[] = [];
+      manager.onPluginError(event => {
+        first.push(event);
+      });
+      const second: unknown[] = [];
+      manager.onPluginError(event => {
+        second.push(event);
+      });
+      manager.reportPluginError({ pluginId: 'acme.later', message: 'later' });
+
+      expect(first).toEqual([
+        { pluginId: 'acme.early', message: 'provider failed to start: early' },
+        { pluginId: 'acme.later', message: 'later' },
+      ]);
+      expect(second).toEqual([{ pluginId: 'acme.later', message: 'later' }]);
+      warn.mockRestore();
+    });
+
+    it('keeps only the most recent ones while nobody listens', () => {
+      const manager = new PluginManager({ projectRoot: '/tmp/mc-early-errors', homeDir: '/tmp/mc-early-errors-home' });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      for (let i = 0; i < 25; i++) manager.reportPluginError({ pluginId: 'acme.flaky', message: `error ${i}` });
+
+      const messages: string[] = [];
+      manager.onPluginError(event => {
+        messages.push(event.message);
+      });
+
+      expect(messages).toEqual(Array.from({ length: 20 }, (_, i) => `error ${i + 5}`));
+      warn.mockRestore();
+    });
+  });
+
   it('does not report a GitHub plugin as updated when its update fails to load', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
     const projectRoot = path.join(tempDir, 'project');

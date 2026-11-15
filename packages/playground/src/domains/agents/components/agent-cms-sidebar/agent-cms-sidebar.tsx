@@ -1,11 +1,11 @@
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import { cn } from '@mastra/playground-ui/utils/cn';
 
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMemo } from 'react';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { isActive } from './agent-cms-is-active';
@@ -109,7 +109,7 @@ const SidebarLink = ({
       >
         {done ? (
           <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-success-subtle text-success-subtle-foreground">
-            <IconCheckmark1 className="size-3.5" />
+            <IconCheckmark2Medium className="size-3.5" />
           </div>
         ) : (
           <Txt

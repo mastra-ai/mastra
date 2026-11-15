@@ -13,7 +13,7 @@ import {
 
 import { EnvironmentSection } from './EnvironmentSection';
 import { SettingsSubsection } from './SettingsSubsection';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 export function FactoryManagementSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -52,7 +52,7 @@ export function FactoryManagementSection() {
                     disabled={deleteMutation.isPending}
                     aria-label={`Delete ${factory.name}`}
                   >
-                    <IconTrashCan size={14} />
+                    <TrashIcon className="size-3.5" />
                     Delete
                   </Button>
                 }

@@ -8,7 +8,6 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { CirclePause } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 
@@ -29,12 +28,13 @@ import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleC
 import { IconCircleDashed } from '@mastra/playground-ui/icons/central/IconCircleDashed';
 import { IconCircleX } from '@mastra/playground-ui/icons/central/IconCircleX';
 import { IconFilter2 } from '@mastra/playground-ui/icons/central/IconFilter2';
-import { IconArrowsRepeat } from '@mastra/playground-ui/icons/central/IconArrowsRepeat';
+import { IconArrowsRepeatRightLeft } from '@mastra/playground-ui/icons/central/IconArrowsRepeatRightLeft';
+import { IconPause } from '@mastra/playground-ui/icons/central/IconPause';
 
 const GROUP_PRESENTATION: Record<RuleDecisionGroupKey, { label: string; icon: LucideIcon }> = {
   all: { label: 'All effects', icon: IconFilter2 },
   active: { label: 'Active', icon: IconCircleDashed },
-  proposed: { label: 'Awaiting approval', icon: CirclePause },
+  proposed: { label: 'Awaiting approval', icon: IconPause },
   failed: { label: 'Failed', icon: IconCircleX },
   succeeded: { label: 'Succeeded', icon: IconCircleCheck },
 };
@@ -46,7 +46,7 @@ const STATUS_STYLE: Record<
   { icon: LucideIcon; tone: BadgeVariant; label: string; live?: true }
 > = {
   pending: { icon: IconCircleDashed, tone: 'info', label: 'queued' },
-  proposed: { icon: CirclePause, tone: 'warning', label: 'awaiting approval' },
+  proposed: { icon: IconPause, tone: 'warning', label: 'awaiting approval' },
   dismissed: { icon: IconCircleBanSign, tone: 'neutral', label: 'dismissed' },
   superseded: { icon: IconCircleBanSign, tone: 'neutral', label: 'superseded' },
   leased: { icon: IconCircleDashed, tone: 'cyan', label: 'running', live: true },
@@ -231,7 +231,13 @@ function DecisionRow({
         {label}
       </Badge>
       {decision.attempts > 1 ? (
-        <Badge size="xs" variant="neutral" emphasis="subtle" icon={<IconArrowsRepeat aria-hidden />} title="Attempts">
+        <Badge
+          size="xs"
+          variant="neutral"
+          emphasis="subtle"
+          icon={<IconArrowsRepeatRightLeft aria-hidden />}
+          title="Attempts"
+        >
           {decision.attempts}
         </Badge>
       ) : null}

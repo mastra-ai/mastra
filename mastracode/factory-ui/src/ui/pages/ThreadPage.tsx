@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { MessageSquareOff } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router';
@@ -33,6 +32,7 @@ import { useRefreshWorkspaceFilesOnToolCalls } from '../domains/workspace-viewer
 import { newUserSessionPath } from '../domains/workspaces/services/factoryPaths';
 
 import '../domains/chat/components/chat-enter.css';
+import { IconBubbleCrossed } from '@mastra/playground-ui/icons/central/IconBubbleCrossed';
 
 const threadShellClass = cn(chatColumnClass, '[--chat-gutter:0.25rem]');
 
@@ -74,7 +74,7 @@ function SessionNotFoundMain({ factoryId }: { factoryId: string | undefined }) {
       <div className="grid min-h-0 place-items-center">
         <EmptyState
           as="h1"
-          iconSlot={<MessageSquareOff />}
+          iconSlot={<IconBubbleCrossed />}
           titleSlot="Session not found"
           descriptionSlot="This session does not exist, or it is private to another user."
           actionSlot={

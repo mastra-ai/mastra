@@ -13,11 +13,11 @@ import type { GithubPatKind } from '../../workspaces/services/github';
 import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { SettingsSubsection } from './SettingsSubsection';
 import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 // GitHub App tokens cannot authorize the gh CLI endpoints; sandboxes use PATs.
 export function GithubPatBlock() {
@@ -105,7 +105,7 @@ function TokenRow({
         <Button
           ref={editButton}
           size="sm"
-          icon={configured ? <IconPencil /> : <IconPlusLarge />}
+          icon={configured ? <IconPencil /> : <IconPlusMedium />}
           disabled={removeMutation.isPending}
           onClick={() => setEditing(true)}
         >
@@ -114,7 +114,7 @@ function TokenRow({
         {configured && (
           <Button
             size="sm"
-            icon={<IconTrashCan />}
+            icon={<TrashIcon />}
             disabled={removeMutation.isPending}
             onClick={() => removeMutation.mutate()}
           >
@@ -172,7 +172,7 @@ function TokenEditor({
           <Button
             variant="primary"
             size="sm"
-            icon={<IconCheckmark1 />}
+            icon={<IconCheckmark2Medium />}
             disabled={saveMutation.isPending || !draft.trim()}
             onClick={save}
           >

@@ -4,10 +4,10 @@ import type { SidebarLink } from '@mastra/playground-ui/components/Sidebar';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { IconBlocks } from '@mastra/playground-ui/icons/central/IconBlocks';
 import { IconLibrary } from '@mastra/playground-ui/icons/central/IconLibrary';
+import { IconServer } from '@mastra/playground-ui/icons/central/IconServer';
 import { IconStar } from '@mastra/playground-ui/icons/central/IconStar';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
-import { ServerCogIcon } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
@@ -42,7 +42,7 @@ const skillsLink: SidebarLink = {
 const infrastructureLink: SidebarLink = {
   name: 'Infrastructure',
   url: '/agent-builder/infrastructure',
-  icon: <ServerCogIcon className="h-4 w-4" />,
+  icon: <IconServer className="h-4 w-4" />,
 };
 
 type AgentBuilderSidebarProps = {
