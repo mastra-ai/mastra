@@ -1,5 +1,14 @@
 # mastracode
 
+## 0.50.1-alpha.3
+
+### Patch Changes
+
+- **Showed plugin failures in the session.** When a plugin fails to reload, Mastra Code now shows an error saying it is still running the previous version, and signal provider errors from plugins appear the same way instead of only on the console. ([#30412](https://github.com/mastra-ai/mastra/pull/30412))
+
+- Updated dependencies [[`02dbde1`](https://github.com/mastra-ai/mastra/commit/02dbde13cc09e9605279b46cb49f03f3b91dd48f), [`7f09a63`](https://github.com/mastra-ai/mastra/commit/7f09a63553cd382c5098fa25f8c42312a3d82494), [`5686fa1`](https://github.com/mastra-ai/mastra/commit/5686fa16edd60a1a30b97dbbdf97e852e588436b)]:
+  - @mastra/code-sdk@1.19.1-alpha.3
+
 ## 0.50.1-alpha.2
 
 ### Patch Changes

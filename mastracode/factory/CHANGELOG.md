@@ -1,5 +1,29 @@
 # @mastra/factory
 
+## 0.29.0-alpha.3
+
+### Minor Changes
+
+- Added opt-in health metrics to Factory, sent through `mastra.metrics`. Pick the groups you want, since every record counts towards observability usage: ([#30225](https://github.com/mastra-ai/mastra/pull/30225))
+
+  ```ts
+  new MastraFactory({
+    // ...
+    metrics: { groups: ['process', 'postgres', 'redis', 'sandbox', 'intake'] }, // or 'all'
+  });
+  ```
+
+  Or set `FACTORY_METRICS=all` (or a list like `sandbox,intake`). `FACTORY_METRICS_INTERVAL_MS` (default 60s, minimum 15s) and `FACTORY_METRICS_MAX_PER_MIN` (default 500) tune how often records are sent and cap their volume. Metrics are named `mastra_factory_*` and labeled with `service` (`api`, `worker` or `all`) so split deployments can be told apart.
+
+### Patch Changes
+
+- Fixed a pull request Factory opened for a card whose issue lives in Jira, Linear or incident.io getting a card of its own on GitHub. The pull request now attaches to that card and moves it to Review, as it already does on GitLab, so the work is no longer tracked on two cards while it is being reviewed. Fixes [#30358](https://github.com/mastra-ai/mastra/issues/30358). ([#30418](https://github.com/mastra-ai/mastra/pull/30418))
+
+- Deliver Factory notifications when their bound session no longer exists, including concurrent notifications. Notifications for a role that has been handed off remain suppressed. ([#30422](https://github.com/mastra-ai/mastra/pull/30422))
+
+- Updated dependencies [[`02dbde1`](https://github.com/mastra-ai/mastra/commit/02dbde13cc09e9605279b46cb49f03f3b91dd48f), [`7f09a63`](https://github.com/mastra-ai/mastra/commit/7f09a63553cd382c5098fa25f8c42312a3d82494), [`5686fa1`](https://github.com/mastra-ai/mastra/commit/5686fa16edd60a1a30b97dbbdf97e852e588436b)]:
+  - @mastra/code-sdk@1.19.1-alpha.3
+
 ## 0.29.0-alpha.2
 
 ### Patch Changes

@@ -1,5 +1,23 @@
 # @mastra/code-sdk
 
+## 1.19.1-alpha.3
+
+### Patch Changes
+
+- Fixed `mastracode` crashing on startup after a fresh install. `@mastra/code-sdk` now requires `@mastra/core` 1.84 or newer, the first version with the knowledge scope helpers it imports. Before, npm could install `@mastra/core` 1.83, and `mastracode --help` failed with "does not provide an export named 'encodeKnowledgeScopeId'". ([#30425](https://github.com/mastra-ai/mastra/pull/30425))
+
+- `@mastra/code-sdk` now ships its own copy of the Knowledge scope id encoder instead of importing `encodeKnowledgeScopeId` from `@mastra/core`. If npm installs an older `@mastra/core`, `mastracode` still starts instead of crashing with "does not provide an export named 'encodeKnowledgeScopeId'". A test keeps the copy's output identical to core's. ([#30427](https://github.com/mastra-ai/mastra/pull/30427))
+
+- **Kept a plugin running when its reload fails.** A reload that fails for a plugin that was working (a bad update, a throwing resolver) now keeps the plugin's last good tools, signal providers and version stamp, and records the error as `reloadError` instead of removing the plugin. Disabling, blocking or uninstalling it still removes everything, and the next successful load replaces the kept one. ([#30412](https://github.com/mastra-ai/mastra/pull/30412))
+
+  **Added plugin error notifications.** `PluginManager.onPluginError` reports each distinct reload failure once, along with signal provider errors from running plugins. With no listener, errors still go to `console.warn`.
+
+  ```ts
+  const unsubscribe = pluginManager.onPluginError(({ pluginId, message }) => {
+    console.error(`[${pluginId}] ${message}`);
+  });
+  ```
+
 ## 1.19.1-alpha.2
 
 ### Patch Changes
