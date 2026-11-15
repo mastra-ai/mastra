@@ -18,7 +18,7 @@ Autumn documents its [sandbox and live environments](https://docs.useautumn.com/
 
 ### 2. Create the image feature and credit pool
 
-In the sandbox dashboard, open **Plans → Features**. Create these two resources in order. Display names help people recognize them; IDs are the values used in configuration.
+In the sandbox dashboard, open **Catalog → Features**. Create these two resources in order. Display names help people recognize them; IDs are the values used in configuration.
 
 | Resource        | Display name     | ID                 | Required settings                                     |
 | --------------- | ---------------- | ------------------ | ----------------------------------------------------- |
@@ -35,8 +35,8 @@ For the first Studio test, use a free plan with a recurring allowance:
 
 1. In **Plans**, select **Create Plan**, name it **Studio Sandbox**, and use ID `studio-sandbox` (or record the generated plan ID).
 2. Select **Free** and enable **Auto-enable** before creating your test customer.
-3. Select **Add Feature to Plan**, choose **Image Credits** (`image_credits`), and grant **30 credits per month**.
-4. Keep usage finite and disable overage/pay-per-use beyond the allowance. Save and activate the plan.
+3. In the plan editor, select **Add new feature**, choose **Image Credits** (`image_credits`), select **Included**, and set **Grant Amount** to `30` with interval **per month**. The feature selector may open automatically for a new plan.
+4. Keep **Unlimited** off and don't select **Priced** or enable overage. Select **Save** in the feature dialog, then select the plan editor's separate **Save** action. Confirm **30 image credits per month** is shown and **You have unsaved changes** is gone.
 
 Grant the credit pool, rather than an additional direct `generated_images` balance. A direct image allowance would be consumed ahead of the pool and doesn't match this template's pool verification. See Autumn's [free plans](https://docs.useautumn.com/documentation/modelling-pricing/free-plans) and [feature balance behavior](https://docs.useautumn.com/documentation/concepts/features).
 
@@ -100,6 +100,8 @@ The command checks the existing sandbox customer, feature, flat 1:1 pool mapping
 
 All generated files stay in ignored `data/`, with private permissions. The key never goes into Studio. Setup prints the workspace ID and token expiration, not the token. Running setup again with the same configuration reuses the identity, workspace and signing key and issues a fresh JWT. It preserves execution history and never replenishes spent credits. A changed customer/feature/pool binding is rejected rather than silently moving an existing payer.
 
+Starting the server also creates `data/autumn-sandbox/workflow.db` for native workflow and conversation persistence. The bundled image service stores PNGs in `data/private-images/`. Preserve both directories when backing up this sandbox; the billing database alone doesn't contain transcripts or image bytes.
+
 This command replaces `npm run setup` for this walkthrough. The local setup command accepts only local simulated billing; `data/local-profiles.json` credentials don't authenticate in Autumn mode.
 
 ### 7. Start Studio and authenticate
@@ -135,7 +137,7 @@ Expect HTTP 200 for agent definitions and conversation history, followed by an a
 ### 8. Test billed operations in Studio
 
 1. Open **Agents → Studio Assistant** and ask: “Generate one private illustration of a blue bird in a quiet forest.” Check the structured receipt for `executionStatus: "completed"`, settled billing and `billedUnits: 1`, plus a private artifact reference. Run `npm run autumn:check` again; available credits should be B − 1.
-2. Ask: “Create a three-style illustration kit of the same blue bird.” Review the three saved prompts in Notion-inspired, 3D and vector illustration styles. While approval is pending, three credits are held: available credits show B − 4. A hold isn't a confirmed charge.
+2. Ask: “Create a three-style illustration kit of the same blue bird.” Expand the **Image kit start** or **Image kit query** tool card and review `result.pending.approval.prompts`. The three saved prompts request separate, single-panel illustrations in Notion-inspired, 3D and vector styles. While approval is pending, three credits are held: available credits show B − 4. A hold isn't a confirmed charge.
 3. Select **Approve**. After all three images persist and settlement confirms, expect one parent receipt with `billedUnits: 3`; nested image agents have no separate charge. The available balance remains B − 4.
 4. Reopen the conversation and ask: “Query my saved image and kit operations.” Querying saved work doesn't generate again or consume more credits.
 5. For a separate cancellation test, start another kit and select **Decline**. Its receipt must show cancellation and release before you treat the held credits as returned. **Stop** only ends conversation activity; explicitly ask to cancel if business work should be canceled.
@@ -158,15 +160,16 @@ Keep `signing-key.json`, `profile.json` and the database together. Deleting the 
 
 ### Troubleshoot the sandbox walkthrough
 
-| Symptom                              | Action                                                                                                                        |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| HTTP 401 in Studio                   | Use `autumn:header`, not `local-profiles.json` or the Autumn secret key. Renew if expired and save the configuration.         |
-| API check passes but Studio fails    | Check the Studio URL/prefix, saved header, and any stale workspace header.                                                    |
-| Setup rejects the environment        | Use the exact sandbox paths and database URL above; remove duplicate/exported settings and leave `BILLING_CONFIG_FILE` unset. |
-| Customer or feature not found        | Check Sandbox is selected and copy IDs, not names, Stripe IDs or URLs.                                                        |
-| Missing/unsupported allowance        | Attach the plan to the existing customer; grant the pool, disable unlimited/overage, and use a flat 1:1 rate.                 |
-| Setup lock exists                    | Confirm no setup/renew command is running, then remove only `data/autumn-sandbox/setup.lock` and retry.                       |
-| Missing key or changed payer binding | Restore the original sandbox files and IDs; don't delete the database or reset balances to fix authentication.                |
+| Symptom                                     | Action                                                                                                                                                                              |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP 401 in Studio                          | Use `autumn:header`, not `local-profiles.json` or the Autumn secret key. Renew if expired and save the configuration.                                                               |
+| `Your API key has expired` in the assistant | Replace `OPENAI_API_KEY` with a valid model key, then restart `npm run dev`. This model API error is separate from the Studio JWT; renewing the JWT doesn't refresh the OpenAI key. |
+| API check passes but Studio fails           | Check the Studio URL/prefix, saved header, and any stale workspace header.                                                                                                          |
+| Setup rejects the environment               | Use the exact sandbox paths and database URL above; remove duplicate/exported settings and leave `BILLING_CONFIG_FILE` unset.                                                       |
+| Customer or feature not found               | Check Sandbox is selected and copy IDs, not names, Stripe IDs or URLs.                                                                                                              |
+| Missing/unsupported allowance               | Attach the plan to the existing customer; grant the pool, disable unlimited/overage, and use a flat 1:1 rate.                                                                       |
+| Setup lock exists                           | Confirm no setup/renew command is running, then remove only `data/autumn-sandbox/setup.lock` and retry.                                                                             |
+| Missing key or changed payer binding        | Restore the original sandbox files and IDs; don't delete the database or reset balances to fix authentication.                                                                      |
 
 ### Optional: test a paid subscription
 

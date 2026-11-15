@@ -91,9 +91,7 @@ it('image kit reserves three credits and confirms once after approved full succe
   expect(approvedPrompts).toHaveLength(3);
   expect(new Set(approvedPrompts).size).toBe(3);
   for (const prompt of approvedPrompts) {
-    expect(prompt.startsWith(`${brief}\n`)).toBe(true);
-    expect(prompt).toContain('Illustration for books and websites');
-    expect(prompt).toContain("Preserve the brief's subject and content; no additional scenes");
+    expect(prompt).toContain(`<subject>${brief}</subject>`);
     expect(prompt.length).toBeLessThanOrEqual(2000);
   }
   expect(approvedPrompts[0]).toMatch(/Notion-inspired.*minimal black-and-white hand-drawn line art.*light background/);
@@ -163,6 +161,27 @@ it('image kit reserves three credits and confirms once after approved full succe
   }
 });
 
+it('a brief asking for several styles still sends one single-panel illustration per image request', async () => {
+  const f = await fixture();
+  // A live Studio brief describing the whole kit made each image a collage.
+  const brief =
+    'Create a three-style kit of a blue bird in a quiet forest with watercolor, gouache and vector variants.';
+  const { id, response } = await f.start('single-panel-kit', brief);
+  const prompts = response.body.result.pending.approval.prompts;
+  const completed = await f.resume(id);
+  expect(completed.body.billing).toMatchObject({ billedUnits: 3, settlementStatus: 'settled' });
+  expect(f.boundary.images).toHaveLength(3);
+  for (const [index, image] of f.boundary.images.entries()) {
+    expect(image.n).toBe(1);
+    expect(image.prompt).toBe(prompts[index]);
+    expect(image.prompt).toContain(brief);
+    expect(image.prompt).toMatch(/^ONE illustration\./);
+    expect(image.prompt).toContain('No text/collage/panels');
+    expect(image.prompt).toContain('Ignore styles/variants in <subject>');
+    expect(image.prompt).toContain(`<subject>${brief}</subject>`);
+  }
+});
+
 it('image kit preserves a maximum-length subject in all three approval prompts', async () => {
   const f = await fixture();
   const brief = `${'A blue bird perched on a branch in a quiet forest. '.repeat(40).slice(0, 1799)}.`;
@@ -172,7 +191,7 @@ it('image kit preserves a maximum-length subject in all three approval prompts',
   const prompts: string[] = response.body.result.pending.approval.prompts;
   expect(prompts).toHaveLength(3);
   for (const prompt of prompts) {
-    expect(prompt.startsWith(`${brief}\n`)).toBe(true);
+    expect(prompt).toContain(`<subject>${brief}</subject>`);
     expect(prompt.length).toBeLessThanOrEqual(2000);
   }
   expect(prompts[0]).toContain('Notion-inspired style');

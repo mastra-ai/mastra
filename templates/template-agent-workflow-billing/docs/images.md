@@ -74,7 +74,7 @@ Open the saved PNG with your image viewer. For an artifact created by another pr
 
 Current membership and creator ownership are checked on every read. Other workspace members cannot download another person's image. Reads send private, no-store headers and never bill. Missing, corrupt or unsafe linked files return `410` with `artifact_unavailable`; replay keeps its saved financial identity and never regenerates the file. Pending financial settlement does not expose image bytes.
 
-Private files are stored in `private-images` beside the configured billing database, with generated filenames and restrictive permissions. Retain the database together with its workflow snapshots and image directory when moving local state. No automatic destructive cleanup runs.
+The bundled entry point stores private PNGs in `data/private-images/` under the project root, with generated filenames and restrictive permissions. A custom `ImageService` directory can override that location. Retain the billing database, native workflow/conversation database and image directory together when moving state. In the Autumn sandbox walkthrough the databases are under `data/autumn-sandbox/`, while images remain in `data/private-images/`. No automatic destructive cleanup runs.
 
 ## Existing local state
 

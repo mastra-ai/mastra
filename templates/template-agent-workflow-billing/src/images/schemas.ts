@@ -23,7 +23,13 @@ export const artifactSchema = z
   .refine(value => value.width === 1024 || value.height === 1024);
 export type Artifact = z.infer<typeof artifactSchema>;
 export const imageOutputSchema = z.strictObject({ artifacts: z.tuple([artifactSchema]) });
-export const kitInputSchema = z.strictObject({ brief: briefSchema.max(1800) });
+export const kitInputSchema = z.strictObject({
+  brief: briefSchema
+    .max(1800)
+    .describe(
+      'Only the subject and setting of ONE illustration, for example: A blue bird in a quiet forest. Do not include kits, styles, variants, layouts, multiple panels or image counts. The workflow supplies those.',
+    ),
+});
 export const promptsSchema = z.tuple([briefSchema, briefSchema, briefSchema]);
 export const kitStateSchema = z.strictObject({ brief: briefSchema, prompts: promptsSchema });
 export const kitOutputSchema = kitStateSchema.extend({

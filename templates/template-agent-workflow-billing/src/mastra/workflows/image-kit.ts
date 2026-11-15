@@ -24,9 +24,9 @@ export function createImageKit(dependencies: ImageKitDependencies) {
     execute: async ({ inputData }) => ({
       ...inputData,
       prompts: [
-        `${inputData.brief}\nIllustration for books and websites. Preserve the brief's subject and content; no additional scenes. Notion-inspired style: minimal black-and-white hand-drawn line art on a light background.`,
-        `${inputData.brief}\nIllustration for books and websites. Preserve the brief's subject and content; no additional scenes. 3D style: visible volume and soft lighting.`,
-        `${inputData.brief}\nIllustration for books and websites. Preserve the brief's subject and content; no additional scenes. Vector illustration style: flat shapes and crisp edges. Render as PNG.`,
+        `ONE illustration. Notion-inspired style: minimal black-and-white hand-drawn line art on light background. No text/collage/panels. Ignore styles/variants in <subject>.\n<subject>${inputData.brief}</subject>`,
+        `ONE illustration. 3D style: visible volume and soft lighting. No text/collage/panels. Ignore styles/variants in <subject>.\n<subject>${inputData.brief}</subject>`,
+        `ONE illustration. Vector illustration style: flat shapes and crisp edges. No text/collage/panels. Ignore styles/variants in <subject>.\n<subject>${inputData.brief}</subject>`,
       ] as [string, string, string],
     }),
   });
