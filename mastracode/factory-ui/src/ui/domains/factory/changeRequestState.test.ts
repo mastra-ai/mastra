@@ -69,12 +69,6 @@ describe('changeRequestStatus', () => {
     ).toBe('draft');
   });
 
-  it("keeps what the source knows over a subscription from a server that doesn't say when it heard", () => {
-    const { updatedAt: _updatedAt, ...undated } = subscription('closed', '2026-07-21T10:00:00.000Z');
-    expect(changeRequestStatus(request(), [undated])).toBe('open');
-    expect(changeRequestStatus(request({ state: undefined, syncedAt: undefined }), [undated])).toBe('closed');
-  });
-
   it('hears a subscription whose URL differs only by a trailing slash or letter case', () => {
     expect(
       changeRequestStatus(request({ url: 'https://github.com/Acme/App/pull/42/' }), [

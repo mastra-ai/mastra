@@ -139,7 +139,7 @@ export function changeRequestStatus(
   if (known === 'merged' || subscription.status === 'merged') return 'merged';
   // Subscribing again reopens a subscription without asking the code host, so its "open" never undoes a known close.
   if (known === 'closed' && subscription.status === 'open') return 'closed';
-  const subscribedAt = subscription.updatedAt === undefined ? Number.NaN : Date.parse(subscription.updatedAt);
+  const subscribedAt = Date.parse(subscription.updatedAt);
   if (known !== undefined && request.syncedAt !== undefined && !(subscribedAt > request.syncedAt)) return known;
   return subscription.status === 'open' ? openStatus(request) : subscription.status;
 }

@@ -25,3 +25,5 @@ Go to file searches every file in the workspace, not only folders already opened
 - A section that can't load says so instead of looking empty.
 
 Search now sits only in the sidebar, on phones too. Cmd/Ctrl+K still opens it.
+
+The sidebar no longer asks for each session's pull request status every 5 seconds. It reads the status again when the board's live feed reports a change.

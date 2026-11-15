@@ -45,6 +45,7 @@ const REREAD_ONCE_THE_FEED_CONNECTS = [
   /^GET \/web\/factory\/projects\/[^/]+\/boards\/[^/]+\/phases\b/,
   /^GET \/web\/factory\/projects\/[^/]+\/decisions\b/,
   /^GET \/api\/agent-controller\/code\/active-runs$/,
+  /^GET \/web\/(github|gitlab)\/subscriptions\b/,
 ];
 const CARDS_URL = 'GET /web/factory/projects/factory-1/work-items';
 // Any page asks for the cards holding a session, which its sidebar marks.

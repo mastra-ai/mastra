@@ -6,8 +6,6 @@ import type {
 } from '../ui/domains/factory/services/githubSubscriptions';
 import { pullRequestSubscriptionsQuery } from '../ui/domains/factory/services/githubSubscriptions';
 
-const SESSION_PULL_REQUEST_SUBSCRIPTIONS_POLL_MS = 5_000;
-
 export interface SessionPullRequestTarget {
   sessionId: string;
   threadId: string;
@@ -27,11 +25,8 @@ export function useSessionPullRequestSubscriptions({
     queries: targets.map(target =>
       queryOptions({
         ...pullRequestSubscriptionsQuery(baseUrl, target.sessionId, target.threadId, target.provider, enabled),
+        // The feed provider refreshes this. A hidden tab holds no stream, so refresh on return.
         refetchOnWindowFocus: true,
-        refetchInterval: query =>
-          query.state.data?.some(subscription => subscription.status === 'open')
-            ? SESSION_PULL_REQUEST_SUBSCRIPTIONS_POLL_MS
-            : false,
       }),
     ),
   });

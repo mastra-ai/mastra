@@ -8,6 +8,7 @@ import { cardMoveMutationKey, queryKeys } from '../../../../api/keys';
 import { useRecentlyVisible } from '../../../lib/hooks/useDocumentVisible';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { streamFeedEvents } from '../services/feedEvents';
+import { pullRequestSubscriptionsRootKey } from '../services/githubSubscriptions';
 import { RequestError } from '../services/request';
 
 const RETRY_MS = 3_000;
@@ -46,6 +47,9 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
       factsKey,
       queryKeys.factoryDecisionsRoot(factoryProjectId),
       queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, baseUrl),
+      // The server settles a pull request's subscription on the event that settles its card.
+      pullRequestSubscriptionsRootKey('github'),
+      pullRequestSubscriptionsRootKey('gitlab'),
     ];
     // One read per query at a time, with at most one more queued behind it: a frame cancelling a slow
     // read for the next would starve a busy board, and a read that never ends holds up only its own query.

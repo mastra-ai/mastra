@@ -8,8 +8,12 @@ export interface PullRequestSubscription {
   repoFullName: string;
   pullRequestNumber: number;
   status: 'open' | 'closed' | 'merged';
-  updatedAt?: string;
+  updatedAt: string;
   url: string;
+}
+
+export function pullRequestSubscriptionsRootKey(provider: ChangeRequestProvider) {
+  return [provider, 'subscriptions'] as const;
 }
 
 export function pullRequestSubscriptionsQueryKey(
@@ -17,7 +21,7 @@ export function pullRequestSubscriptionsQueryKey(
   threadId: string | undefined,
   provider: ChangeRequestProvider = 'github',
 ) {
-  return [provider, 'subscriptions', sessionId, threadId] as const;
+  return [...pullRequestSubscriptionsRootKey(provider), sessionId, threadId] as const;
 }
 
 export function pullRequestSubscriptionsQuery(
@@ -51,7 +55,7 @@ function isPullRequestSubscription(value: unknown): value is PullRequestSubscrip
     Number.isInteger(value.pullRequestNumber) &&
     value.pullRequestNumber > 0 &&
     isPullRequestStatus(value.status) &&
-    (value.updatedAt === undefined || typeof value.updatedAt === 'string') &&
+    typeof value.updatedAt === 'string' &&
     typeof value.url === 'string'
   );
 }
