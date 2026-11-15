@@ -256,6 +256,39 @@ describe('resumeThreadOnStartup', () => {
     expect(state.pendingNewThread).toBe(false);
   });
 
+  it('does not change resource or switch to a requested thread when the caller stopped while threads were listed', async () => {
+    const requested = {
+      ...createThread('thread-requested', 'Requested', '2026-08-28T10:00:00Z'),
+      resourceId: 'resource-2',
+    };
+    const setResourceId = vi.fn().mockResolvedValue(undefined);
+    const switchThread = vi.fn().mockResolvedValue(undefined);
+    let current = true;
+    const state = {
+      projectInfo: { rootPath: '/tmp/project' },
+      pendingNewThread: true,
+      controller: { setResourceId },
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: {
+          getId: vi.fn(() => null),
+          list: vi.fn(async () => {
+            current = false;
+            return [requested];
+          }),
+          switch: switchThread,
+        },
+      },
+    } as any;
+    state.local = { controller: state.controller, session: state.session };
+
+    await expect(resumeThreadOnStartup(state, 'thread-requested', () => current)).resolves.toBeUndefined();
+
+    expect(setResourceId).not.toHaveBeenCalled();
+    expect(switchThread).not.toHaveBeenCalled();
+    expect(state.pendingNewThread).toBe(true);
+  });
+
   it('does not ask about a drifted thread when the caller stopped while drifted threads were listed', async () => {
     vi.mocked(askModalQuestion).mockReset();
     const current = { value: true };
