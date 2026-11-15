@@ -5,6 +5,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
 import { DEFAULT_STREAM_CLEANUP_TIMEOUT_MS } from './constants';
 import { resolveAgentStreamBus, resolveRunBus } from './resolve';
+import type { ResolvedAgentStreamBus } from './resolve';
 import type { AgentStreamsConfig } from './types';
 
 /**
@@ -14,11 +15,7 @@ import type { AgentStreamsConfig } from './types';
 export interface AgentStreamBusHooks {
   /** The Mastra-level bus and cache, once the owner is registered. */
   getMastra: () => { pubsub: PubSub; serverCache?: MastraServerCache } | undefined;
-  /**
-   * Whether run frames must live on the Mastra bus and its cache because the
-   * run's steps publish from any worker. Only called once the owner is
-   * registered.
-   */
+  /** The owner's default execution mode; wrappers select their own mode per run. */
   usesSharedRunLog: () => boolean;
   warn: (message: string) => void;
 }
@@ -42,6 +39,7 @@ export function scheduleStreamCleanup(
  */
 export class AgentStreamBus {
   readonly #hooks: AgentStreamBusHooks;
+  readonly #config: AgentStreamsConfig;
   /** Whether the user explicitly provided a pubsub (don't override with mastra.pubsub) */
   readonly #hasCustomPubsub: boolean;
   /** Inner pubsub (before CachingPubSub wrapper) */
@@ -52,14 +50,13 @@ export class AgentStreamBus {
   readonly #shouldCache: ((topic: string) => boolean) | undefined;
   /** Timeout for auto-cleanup after a stream finishes (0 = disabled) */
   readonly #cleanupTimeoutMs: number;
-  /** Resolved bus (lazily initialized) */
-  #pubsub: PubSub | null = null;
-  /** Resolved cache instance (lazily initialized) */
-  #cache: MastraServerCache | null = null;
+  /** Native/default and evented executions may use different transport/cache pairs. */
+  readonly #resolved = new Map<boolean, ResolvedAgentStreamBus>();
   /** Record cache for an unregistered agent with replay off. */
   #localRecordCache: MastraServerCache | undefined;
 
   constructor(config: AgentStreamsConfig, hooks: AgentStreamBusHooks, defaultPubsub?: PubSub) {
+    this.#config = config;
     this.#hooks = hooks;
     this.#hasCustomPubsub = !!config.pubsub;
     this.#innerPubsub = config.pubsub ?? defaultPubsub ?? new EventEmitterPubSub();
@@ -68,29 +65,36 @@ export class AgentStreamBus {
     this.#cleanupTimeoutMs = config.cleanupTimeoutMs ?? DEFAULT_STREAM_CLEANUP_TIMEOUT_MS;
   }
 
-  /**
-   * The bus to publish and subscribe run frames on: a CachingPubSub when
-   * replay is enabled, otherwise the run bus itself.
-   */
+  /** Isolate explicit wrapper settings without changing the native Agent's bus. */
+  withConfig(config: AgentStreamsConfig): AgentStreamBus {
+    return new AgentStreamBus(
+      { ...this.#config, ...Object.fromEntries(Object.entries(config).filter(([, value]) => value !== undefined)) },
+      this.#hooks,
+      this.#innerPubsub,
+    );
+  }
+
+  /** The owner's default run transport, including replay when enabled. */
   get pubsub(): PubSub {
-    this.#ensureResolved();
-    return this.#pubsub!;
+    return this.forRun(this.#hooks.usesSharedRunLog()).pubsub;
   }
 
-  /** The replay cache, or `null` when replay is disabled. */
+  /** The owner's default replay cache, or `null` when replay is disabled. */
   get cache(): MastraServerCache | null {
-    this.#ensureResolved();
-    return this.#cache;
+    return this.forRun(this.#hooks.usesSharedRunLog()).cache;
   }
 
-  /**
-   * Where run ownership records live (see `run-records.ts`): the replay cache
-   * when replay is on, so ownership is shared exactly as widely as the history
-   * it guards; otherwise Mastra's server cache; otherwise, for an unregistered
-   * agent with replay off, a cache private to this bus.
-   */
+  /** Ownership records follow the same cache as the run's replay history. */
   get runRecordCache(): MastraServerCache {
-    return this.cache ?? this.#hooks.getMastra()?.serverCache ?? (this.#localRecordCache ??= new InMemoryServerCache());
+    return this.getRunRecordCache(this.#hooks.usesSharedRunLog());
+  }
+
+  getRunRecordCache(usesSharedRunLog: boolean): MastraServerCache {
+    return (
+      this.forRun(usesSharedRunLog).cache ??
+      this.#hooks.getMastra()?.serverCache ??
+      (this.#localRecordCache ??= new InMemoryServerCache())
+    );
   }
 
   /** Grace period before a finished run's state is cleaned up (0 = never). */
@@ -103,71 +107,39 @@ export class AgentStreamBus {
     return scheduleStreamCleanup(this.#cleanupTimeoutMs, cleanup);
   }
 
-  /**
-   * Wire Mastra's bus once the owner is registered, so observers subscribing
-   * through Mastra see the frames this agent publishes.
-   */
+  /** Re-resolve transports initialized before Mastra registration. */
   registerMastra(mastraPubsub: PubSub): void {
-    // With caching disabled, a bus resolved before registration is the
-    // pre-registration run bus; drop it so it is re-resolved against Mastra.
-    if (this.#cacheConfig === false && this.#pubsub) {
-      this.#reset();
-    }
-
-    // Wire mastra.pubsub as the inner pubsub if user didn't provide a custom one.
-    // This must happen before CachingPubSub initialization.
-    if (!this.#hasCustomPubsub && !this.#pubsub) {
-      this.#innerPubsub = mastraPubsub;
-    }
-
-    // If the caching wrapper was built before registration it is bound to the
-    // pre-registration bus (the default EventEmitterPubSub). Run frames
-    // belong on the shared bus, so rebuild the wrapper there. Registration runs
-    // before the agent is used, so nothing is subscribed to the old instance.
-    if (this.#pubsub instanceof CachingPubSub && this.#pubsub.getInner() !== mastraPubsub) {
-      this.#reset();
+    if (this.#cacheConfig === false && this.#resolved.size) this.#resolved.clear();
+    if (!this.#hasCustomPubsub && !this.#resolved.size) this.#innerPubsub = mastraPubsub;
+    for (const resolved of this.#resolved.values()) {
+      if (resolved.pubsub instanceof CachingPubSub && resolved.pubsub.getInner() !== mastraPubsub) {
+        this.#resolved.clear();
+        break;
+      }
     }
   }
 
-  #reset(): void {
-    this.#pubsub = null;
-    this.#cache = null;
-  }
-
-  #ensureResolved(): void {
-    if (this.#pubsub) return;
+  /** Select the run's log without changing the owner's default routing policy. */
+  forRun(usesSharedRunLog: boolean): ResolvedAgentStreamBus {
+    const existing = this.#resolved.get(usesSharedRunLog);
+    if (existing) return existing;
     const mastra = this.#hooks.getMastra();
+    const requiresSharedBus = () => usesSharedRunLog;
     const resolved = resolveAgentStreamBus({
-      runBus: this.#runBus(mastra?.pubsub),
+      runBus: resolveRunBus({
+        agentBus: this.#innerPubsub,
+        hasCustomBus: this.#hasCustomPubsub,
+        sharedBus: mastra?.pubsub,
+        requiresSharedBus,
+        warn: this.#hooks.warn,
+      }),
       cache: this.#cacheConfig,
       shouldCache: this.#shouldCache,
       serverCache: mastra?.serverCache,
-      requiresServerCache: this.#hooks.usesSharedRunLog,
+      requiresServerCache: requiresSharedBus,
       warn: this.#hooks.warn,
     });
-    this.#pubsub = resolved.pubsub;
-    this.#cache = resolved.cache;
-  }
-
-  /**
-   * The bus a run's frames live on.
-   *
-   * Once registered, frames go on the Mastra-level bus so any Mastra instance
-   * sharing it can observe the run, even if this bus was resolved before
-   * registration. Using one bus also means one cache log per run — the
-   * property offset replay depends on.
-   *
-   * A user-provided agent-level pubsub keeps carrying run frames, unless the
-   * run's steps execute on whichever worker claims them (evented): then an
-   * observer on the agent's own bus would never see them.
-   */
-  #runBus(sharedBus: PubSub | undefined): PubSub {
-    return resolveRunBus({
-      agentBus: this.#innerPubsub,
-      hasCustomBus: this.#hasCustomPubsub,
-      sharedBus,
-      requiresSharedBus: this.#hooks.usesSharedRunLog,
-      warn: this.#hooks.warn,
-    });
+    this.#resolved.set(usesSharedRunLog, resolved);
+    return resolved;
   }
 }
