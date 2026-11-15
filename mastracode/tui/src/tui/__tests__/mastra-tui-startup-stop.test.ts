@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   setCurrentThreadTitle: vi.fn(),
   showInfo: vi.fn(),
   resumeThreadOnStartup: vi.fn(),
+  OnboardingInlineComponent: vi.fn(),
 }));
 
 function stopIfAt(stage: string): void {
@@ -73,8 +74,22 @@ vi.mock('@mastra/code-sdk/onboarding/pack-activation', () => ({
 
 vi.mock('@mastra/code-sdk/onboarding/index', async importOriginal => ({
   ...(await importOriginal<typeof import('@mastra/code-sdk/onboarding/index')>()),
-  loadSettings: vi.fn(() => ({})),
+  loadSettings: vi.fn(() => ({ onboarding: {}, models: {}, preferences: {}, customModelPacks: [] })),
   saveSettings: mocks.saveSettings,
+}));
+
+vi.mock('../onboarding-inline.js', () => ({
+  OnboardingInlineComponent: mocks.OnboardingInlineComponent,
+}));
+
+vi.mock('../overlay.js', async importOriginal => ({
+  ...(await importOriginal<typeof import('../overlay.js')>()),
+  showModalOverlay: vi.fn(),
+}));
+
+vi.mock('../status-line.js', async importOriginal => ({
+  ...(await importOriginal<typeof import('../status-line.js')>()),
+  updateStatusLine: vi.fn(),
 }));
 
 import { AssistantRenderRegistry } from '../assistant-render-registry.js';
@@ -93,6 +108,13 @@ type StartupTui = {
   checkForUpdate: ReturnType<typeof vi.fn>;
   submitUserInput: ReturnType<typeof vi.fn>;
   getUserInput: ReturnType<typeof vi.fn>;
+  pendingUserInputResolve?: (text: string) => void;
+  buildProviderAccess: ReturnType<typeof vi.fn>;
+  runUserPromptHook: ReturnType<typeof vi.fn>;
+  renderOptimisticUserMessage: ReturnType<typeof vi.fn>;
+  removeOptimisticUserMessage: ReturnType<typeof vi.fn>;
+  refreshModelAuthStatus: ReturnType<typeof vi.fn>;
+  applyOnboardingResult: (result: unknown) => Promise<void>;
   init: () => Promise<void>;
   run: () => Promise<void>;
   stop: () => void;
@@ -406,4 +428,153 @@ describe('MastraTUI startup stopped part-way', () => {
     expect(tui.submitUserInput).not.toHaveBeenCalled();
     expect(tui.getUserInput).not.toHaveBeenCalled();
   });
+
+  it('sends the startup prompt through the real submission when nothing stops it', async () => {
+    const { tui } = createStartupTui('');
+    useRealPromptSubmission(tui);
+
+    const running = tui.run();
+    await vi.waitFor(() => expect(tui.state.session.sendSignal).toHaveBeenCalledTimes(1));
+    tui.stop();
+    void running;
+
+    expect(tui.runUserPromptHook).toHaveBeenCalledWith('hello');
+    expect(tui.state.session.thread.create).toHaveBeenCalledTimes(1);
+    expect(tui.state.session.sendSignal).toHaveBeenCalledWith({ content: 'hello' });
+  });
+
+  it('does not create a thread or send the startup prompt when stopped while the prompt hook runs', async () => {
+    const { tui } = createStartupTui('prompt-hook');
+    useRealPromptSubmission(tui);
+
+    await settle(tui.run());
+    clearUpdateTimer(tui);
+
+    expect(tui.runUserPromptHook).toHaveBeenCalledWith('hello');
+    expect(tui.state.session.thread.create).not.toHaveBeenCalled();
+    expect(tui.state.session.sendSignal).not.toHaveBeenCalled();
+  });
+
+  it('does not send the startup prompt when stopped while its new thread is created', async () => {
+    const { tui } = createStartupTui('thread-create');
+    useRealPromptSubmission(tui);
+
+    await settle(tui.run());
+    clearUpdateTimer(tui);
+
+    expect(tui.state.session.thread.create).toHaveBeenCalledTimes(1);
+    expect(tui.state.session.sendSignal).not.toHaveBeenCalled();
+  });
+
+  it('does not open onboarding when stopped while provider access is read', async () => {
+    const { tui } = createStartupTui('provider-access');
+    delete (tui as Partial<StartupTui>).showOnboarding;
+    tui.buildProviderAccess = vi.fn(async () => {
+      stopIfAt('provider-access');
+      return {};
+    });
+
+    await settle(tui.init());
+    clearUpdateTimer(tui);
+
+    expect(tui.buildProviderAccess).toHaveBeenCalledTimes(1);
+    expect(mocks.OnboardingInlineComponent).not.toHaveBeenCalled();
+    expect(tui.state.activeOnboarding).toBeUndefined();
+  });
+
+  it('applies a finished onboarding when nothing stops it', async () => {
+    const { tui } = createStartupTui('');
+    useOnboardingResult(tui);
+
+    await tui.applyOnboardingResult(onboardingResult);
+
+    expect(mocks.saveSettings).toHaveBeenCalledTimes(1);
+    expect(mocks.applyCurrentThreadPack).toHaveBeenCalledTimes(1);
+    expect(tui.state.session.thread.setSetting).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not save settings or apply the pack when stopped while onboarding saves yolo', async () => {
+    const { tui } = createStartupTui('onboarding-yolo');
+    useOnboardingResult(tui);
+
+    await tui.applyOnboardingResult(onboardingResult);
+
+    expect(tui.state.session.state.set).toHaveBeenCalledTimes(1);
+    expect(mocks.saveSettings).not.toHaveBeenCalled();
+    expect(mocks.applyCurrentThreadPack).not.toHaveBeenCalled();
+  });
+
+  it('does not clear the thread fallback status when stopped while onboarding applies the pack', async () => {
+    const { tui } = createStartupTui('pack-apply');
+    useOnboardingResult(tui);
+
+    await tui.applyOnboardingResult(onboardingResult);
+
+    expect(mocks.applyCurrentThreadPack).toHaveBeenCalledTimes(1);
+    expect(tui.state.session.thread.setSetting).not.toHaveBeenCalled();
+  });
+
+  it('detaches the input handler when stopped', async () => {
+    const { tui } = createStartupTui('');
+    delete (tui as Partial<StartupTui>).getUserInput;
+
+    const running = tui.run();
+    await vi.waitFor(() => expect(tui.state.editor.onSubmit).toBeTypeOf('function'));
+    tui.stop();
+    void running;
+
+    expect(tui.state.editor.onSubmit).toBeUndefined();
+    expect(tui.pendingUserInputResolve).toBeUndefined();
+  });
+
+  it('does not submit input handed over just before a stop', async () => {
+    const { tui } = createStartupTui('');
+    delete (tui as Partial<StartupTui>).getUserInput;
+    tui.state.editor = { addToHistory: vi.fn(), setText: vi.fn() };
+    tui.state.session.run = { isRunning: () => false };
+
+    const running = tui.run();
+    await vi.waitFor(() => expect(tui.state.editor.onSubmit).toBeTypeOf('function'));
+    tui.state.editor.onSubmit('typed');
+    tui.stop();
+    await settle(running);
+
+    expect(tui.submitUserInput).toHaveBeenCalledWith('hello');
+    expect(tui.submitUserInput).not.toHaveBeenCalledWith('typed');
+  });
 });
+
+const onboardingResult = { modePack: { id: 'pack-a', models: { build: 'model-a' } }, yolo: false };
+
+function settle(running: Promise<void>): Promise<unknown> {
+  return Promise.race([running, new Promise(resolve => setTimeout(resolve, 50))]);
+}
+
+function clearUpdateTimer(tui: StartupTui): void {
+  const timer = tui.updateCheckTimer;
+  if (timer) clearInterval(timer);
+}
+
+function useRealPromptSubmission(tui: StartupTui): void {
+  delete (tui as Partial<StartupTui>).submitUserInput;
+  tui.state.pendingNewThread = true;
+  tui.state.pendingImages = [];
+  tui.state.messageComponentsById = new Map();
+  tui.state.session.model = { hasSelection: () => true };
+  tui.state.session.identity = { getResourceId: () => 'resource-1' };
+  tui.state.session.thread.create = vi.fn(async () => stopIfAt('thread-create'));
+  tui.state.session.sendSignal = vi.fn(() => ({ id: 'signal-1', accepted: Promise.resolve() }));
+  tui.renderOptimisticUserMessage = vi.fn(() => 'optimistic-1');
+  tui.removeOptimisticUserMessage = vi.fn();
+  tui.runUserPromptHook = vi.fn(async () => {
+    stopIfAt('prompt-hook');
+    return true;
+  });
+}
+
+function useOnboardingResult(tui: StartupTui): void {
+  tui.state.controller = { listModes: () => [{ id: 'build' }] };
+  tui.state.session.state = { get: () => ({}), set: vi.fn(async () => stopIfAt('onboarding-yolo')) };
+  tui.state.session.thread.setSetting = vi.fn(async () => {});
+  tui.refreshModelAuthStatus = vi.fn(async () => {});
+}
