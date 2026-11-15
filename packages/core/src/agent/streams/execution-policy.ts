@@ -29,6 +29,15 @@ export class ExecutionEnginePolicy {
     return this.#inherited;
   }
 
+  clone(): ExecutionEnginePolicy {
+    const policy = new ExecutionEnginePolicy(this.#configured);
+    policy.#effective = this.durable;
+    policy.#frozen = this.#frozen;
+    policy.#registered = this.#registered;
+    policy.#inherited = this.#inherited;
+    return policy;
+  }
+
   freeze(): void {
     this.#frozen = true;
   }

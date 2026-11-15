@@ -988,7 +988,7 @@ export class Agent<
    */
   #suspendedRunOutputProcessors = new Map<string, OutputProcessorOrWorkflow[]>();
   readonly #options?: AgentCreateOptions;
-  readonly #executionEnginePolicy: ExecutionEnginePolicy;
+  #executionEnginePolicy: ExecutionEnginePolicy;
   readonly #executionPolicyWarnings = new Set<string>();
   /** Resumable stream layer, built on first use once streams are enabled. */
   #streamBus?: AgentStreamBus;
@@ -4557,6 +4557,7 @@ export class Agent<
       fork.#primitives = this.#primitives;
     }
 
+    fork.#executionEnginePolicy = this.#executionEnginePolicy.clone();
     fork.#inheritedPubSub = this.#inheritedPubSub;
     fork.#defaultStreamPubsub = this.#defaultStreamPubsub ??= new EventEmitterPubSub();
     fork.source = this.source;

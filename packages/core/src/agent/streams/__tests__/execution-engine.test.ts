@@ -58,6 +58,21 @@ describe('registered execution policy', () => {
     expect(policy.inherited).toBe(false);
   });
 
+  it('clones inherited provenance without sharing registration state', () => {
+    const source = new ExecutionEnginePolicy(undefined);
+    const provisional = source.clone();
+    provisional.register({ executionEngine: 'durable' });
+    expect(source.engine).toBe(false);
+    expect(source.inherited).toBe(false);
+    source.register({ executionEngine: 'evented', cleanupTimeoutMs: 0 });
+    const registered = source.clone();
+    expect(registered.inherited).toBe(true);
+    expect(registered.register({ executionEngine: 'durable', cleanupTimeoutMs: 99 })).toBe('locked');
+    expect(registered.durable).toEqual({ executionEngine: 'evented', cleanupTimeoutMs: 0 });
+    expect(source.durable).toEqual({ executionEngine: 'evented', cleanupTimeoutMs: 0 });
+    expect(provisional.engine).toBe('durable');
+  });
+
   it('does not allow mutable config aliases to change lifetime selection', () => {
     const config: AgentStreamsConfig = { executionEngine: 'evented' };
     const policy = new ExecutionEnginePolicy(config);

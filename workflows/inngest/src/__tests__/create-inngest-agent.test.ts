@@ -151,7 +151,8 @@ describe('createInngestAgent factory function', () => {
       expect(isInngestAgent(fork)).toBe(true);
       const forkHost = new Mastra({ logger: false, agents: { fork }, durable: { executionEngine } });
       expect(forkHost.getAgent('fork')).toBe(fork);
-      expect(fork.agent.__getExecutionEnginePolicy()).toBe(false);
+      expect(fork.agent.__getExecutionEnginePolicy()).toBe(executionEngine);
+      expect(fork.agent.durable).toEqual(agent.durable);
       forkHost.addAgent(fork.agent);
       expect(fork.agent.__getExecutionEnginePolicy()).toBe(executionEngine);
       expect(fork.durableLoopWorkflowName).toBe('inngest:durable-agentic-loop');

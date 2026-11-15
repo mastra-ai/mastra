@@ -77,6 +77,73 @@ describe('native Agent stored-registration policy', () => {
     });
   });
 
+  it.each(['durable', 'evented'] as const)(
+    'editor forks retain inherited %s policy and stream defaults',
+    executionEngine => {
+      const shouldCache = () => false;
+      const shouldPersistSnapshot = () => true;
+      const agent = new Agent({ ...config, durable: { cache: false } });
+      const host = new Mastra({
+        logger: false,
+        agents: { policy: agent },
+        durable: { executionEngine, cleanupTimeoutMs: 0, shouldCache, shouldPersistSnapshot },
+      });
+      const fork = agent.__fork();
+      fork.__updateInstructions('Use the edited instructions.');
+      expect(fork.getMastraInstance()).toBe(host);
+      expect(fork.durable).toEqual(agent.durable);
+      expect(fork.__getExecutionEnginePolicy()).toBe(executionEngine);
+      expect(fork.__getStreamBus()?.cleanupTimeoutMs).toBe(0);
+      expect(fork.__getStreamBus()?.cache).toBeNull();
+      expect(typeof fork.durable === 'object' && fork.durable.shouldCache).toBe(shouldCache);
+      expect(typeof fork.durable === 'object' && fork.durable.shouldPersistSnapshot).toBe(shouldPersistSnapshot);
+      new Mastra({
+        logger: false,
+        agents: { fork },
+        durable: { executionEngine: executionEngine === 'evented' ? 'durable' : 'evented', cleanupTimeoutMs: 99 },
+      });
+      expect(fork.durable).toEqual(agent.durable);
+    },
+  );
+
+  it.each(inputs)('forks preserve explicit durable settings: %j', durable => {
+    const agent = new Agent({ ...config, durable });
+    const fork = agent.__fork();
+    expect(fork.durable).toEqual(durable);
+    new Mastra({ logger: false, agents: { fork }, durable: { executionEngine: 'evented' } });
+    expect(agent.durable).toEqual(durable);
+    expect(fork.__getExecutionEnginePolicy()).toBe(
+      durable === false ? false : typeof durable === 'object' ? (durable.executionEngine ?? 'evented') : 'evented',
+    );
+  });
+
+  it('an unregistered fork and its source can independently inherit different host defaults', () => {
+    const agent = new Agent(config);
+    const fork = agent.__fork();
+    new Mastra({ logger: false, agents: { fork }, durable: { executionEngine: 'evented', cleanupTimeoutMs: 0 } });
+    expect(agent.durable).toBeUndefined();
+    new Mastra({ logger: false, agents: { agent }, durable: { executionEngine: 'durable', cleanupTimeoutMs: 99 } });
+    expect(agent.__getExecutionEnginePolicy()).toBe('durable');
+    expect(fork.__getExecutionEnginePolicy()).toBe('evented');
+    expect(fork.durable).toEqual({ executionEngine: 'evented', cleanupTimeoutMs: 0 });
+  });
+
+  it.each(['stream', 'generate'] as const)('a fork retains a selection fixed by a rejected first %s', async method => {
+    const agent = new Agent({ ...config, requestContextSchema: z.object({ token: z.string() }) });
+    await expect(agent[method]('hello', { requestContext: new RequestContext<{ token: string }>() })).rejects.toThrow(
+      'Request context validation failed',
+    );
+    const fork = agent.__fork();
+    const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
+    new Mastra({ agents: { fork }, durable: { executionEngine: 'evented', cleanupTimeoutMs: 0 } });
+    expect(fork.__getExecutionEnginePolicy()).toBe(false);
+    expect(fork.durable).toEqual({ executionEngine: false, cleanupTimeoutMs: 0 });
+    expect(agent.durable).toBeUndefined();
+    expect(
+      warn.mock.calls.filter(([message]) => String(message).includes('fixed for this Agent instance')),
+    ).toHaveLength(1);
+  });
+
   it('does not turn propagated sub-agent hosts into stored registration', async () => {
     const child = new Agent({ ...config, id: 'child' });
     const parent = new Agent({ ...config, agents: { child } });
