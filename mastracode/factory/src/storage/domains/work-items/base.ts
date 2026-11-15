@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto';
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
+import type { FeedFrame } from '../../../feed-frame.js';
 import { factoryDispatchFailureMetadata } from '../../../rules/dispatch-errors.js';
 import { externalSourceForWorkItem, FACTORY_TRIAGE_TYPES } from '../../../rules/types.js';
 import type { FactoryTriageType, WorkItemSource } from '../../../rules/types.js';
@@ -25,15 +26,16 @@ import {
 } from '../../../work-items/split-migration.js';
 import type { LegacyWatermark, WorkItemSplitReport } from '../../../work-items/split-migration.js';
 import {
-  BoardScopes,
+  BoardChanges,
   bumpBoardVersions,
+  cardsNamed,
   CARD_TABLES,
   DECISION_TABLES,
   FACTORY_BOARD_VERSIONS_SCHEMA,
   readBoardVersion,
   trackBoardWrites,
 } from './board-version.js';
-import type { BoardScope } from './board-version.js';
+import type { BoardScope, ChangedCards } from './board-version.js';
 import { Cards, splitCardRows } from './cards.js';
 import { LEASE_TABLES, trackClaimableWrites } from './claimable-work.js';
 import type { FactoryClaimableWorkScope } from './claimable-work.js';
@@ -1338,7 +1340,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   readonly #listCache = new Map<string, { version: string; takenAt: number; readFrom: number; items: Card[] }>();
   // Joined only at the same board version: a poll after a write must not join a read begun before it.
   readonly #listInFlight = new Map<string, { version: string; startedAt: number; items: Promise<Card[]> }>();
-  #boardChanged: (scope: FactoryBoardScope) => void = () => {};
+  #boardChanged: (scope: FactoryBoardScope, frame: FeedFrame) => void = () => {};
   readonly #claimableWorkListeners = new Set<(scope: FactoryClaimableWorkScope) => void>();
   // Storage does not know boards: no card counts as finished until the host wires the predicate.
   #isTerminal: (item: Card) => boolean = () => false;
@@ -1423,9 +1425,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   /**
    * Wired once at boot. Fires after a committed write changes what a board shows of a card
-   * or a deferred decision, so open boards refetch instead of polling.
+   * or a deferred decision, naming the cards it changed, so open boards refetch those instead of polling.
    */
-  onBoardChanged(listener: (scope: FactoryBoardScope) => void): void {
+  onBoardChanged(listener: (scope: FactoryBoardScope, frame: FeedFrame) => void): void {
     this.#boardChanged = listener;
   }
 
@@ -1843,19 +1845,23 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   protected override get ops(): FactoryStorageOps {
     const ops = super.ops;
     // Outside a transaction a resolved write has committed, so its wake can go out at once.
-    const cards = trackBoardWrites(ops, CARD_TABLES, async scope => {
+    const cards = trackBoardWrites(ops, CARD_TABLES, async (scope, changedCards) => {
       await bumpBoardVersions(ops, [scope]);
-      this.#announceBoard(scope);
+      await this.#announceBoard(scope, changedCards);
     });
     return trackClaimableWrites(
-      trackBoardWrites(cards, DECISION_TABLES, scope => this.#announceBoard(scope)),
+      trackBoardWrites(cards, DECISION_TABLES, (scope, changedCards) => this.#announceBoard(scope, changedCards)),
       scope => this.#claimableWork(scope),
     );
   }
 
   /** Only legacy dry-run writes name no project, and no feed is keyed by org alone. */
-  #announceBoard(scope: BoardScope): void {
-    if (scope.factoryProjectId) this.#boardChanged({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId });
+  async #announceBoard(scope: BoardScope, cards: ChangedCards): Promise<void> {
+    if (!scope.factoryProjectId) return;
+    const board = { orgId: scope.orgId, factoryProjectId: scope.factoryProjectId };
+    // A failed read only costs the reader a full reread, never the committed write.
+    const named = await cardsNamed(super.ops, board, cards).catch(() => undefined);
+    this.#boardChanged(board, named ? { cards: named } : {});
   }
 
   /** `storage.withTransaction`, bumping and announcing the board of every project it wrote once it commits. */
@@ -1863,11 +1869,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     fn: (ops: FactoryStorageOps) => Promise<T>,
     options?: { isolationLevel?: 'serializable' },
   ): Promise<T> {
-    const changed = new BoardScopes();
-    const touched = new BoardScopes();
-    const cardWritten = (scope: BoardScope) => {
-      changed.add(scope);
-      touched.add(scope);
+    const changed = new BoardChanges();
+    const touched = new BoardChanges();
+    const cardWritten = (scope: BoardScope, cards: ChangedCards) => {
+      changed.add(scope, cards);
+      touched.add(scope, cards);
     };
     let queued = new Map<string, FactoryClaimableWorkScope>();
     const run = () => {
@@ -1895,12 +1901,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       result = await run();
     }
     try {
-      await bumpBoardVersions(super.ops, changed.values());
+      await bumpBoardVersions(super.ops, changed.scopes());
     } finally {
       // Only after commit: a dispatcher woken earlier could miss the uncommitted row and go idle.
       for (const scope of queued.values()) this.#claimableWork(scope);
     }
-    for (const scope of touched.values()) this.#announceBoard(scope);
+    for (const { scope, cards } of touched.changes()) await this.#announceBoard(scope, cards);
     return result;
   }
 

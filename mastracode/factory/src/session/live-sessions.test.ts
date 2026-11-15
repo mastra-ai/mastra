@@ -268,7 +268,7 @@ describe('LiveSessions on a real controller', () => {
 });
 
 describe('liveSessionsTouchingTheFeed', () => {
-  it('touches the feed of a session whose state names no Factory, read from its row', async () => {
+  it('touches the feed of a session whose state names no Factory, read from its row, naming no card', async () => {
     const controller = fakeController();
     const eventBus = new EventEmitterPubSub();
     const rows = {
@@ -284,5 +284,6 @@ describe('liveSessionsTouchingTheFeed', () => {
     recovered.start();
 
     await vi.waitFor(() => expect(frames).toHaveLength(1));
+    expect(frames).toEqual([expect.objectContaining({ data: { cards: [] } })]);
   });
 });

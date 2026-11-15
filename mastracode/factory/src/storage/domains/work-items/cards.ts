@@ -561,7 +561,7 @@ export class Cards {
       );
       for (const source of sources) await this.ops.updateAtomic(SOURCES, { id: source.id }, () => null);
       await this.ops.deleteMany(SOURCES, { ...scope, work_item_id: board.work_item_id });
-      await this.ops.deleteMany(BOARD_ITEMS, { ...scope, id: board.id });
+      await this.ops.deleteMany(BOARD_ITEMS, { ...scope, id: board.id, work_item_id: board.work_item_id });
       await this.ops.deleteMany(WORK_ITEMS, { ...scope, id: board.work_item_id });
       await this.ops.upsertOne(FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA.name, ['id'], {
         ...scope,

@@ -131,25 +131,61 @@ describe('board feed stream', () => {
     expect(await response.json()).toEqual({ error: 'unauthorized' });
   });
 
-  it('pushes one frame to a board when one of its cards changes, and none to another project', async () => {
+  it('pushes one frame naming the changed card to its board, and none to another project', async () => {
     const seed = await createFactoryStorageForTests();
     const { project } = await seedProjectItem(seed);
     const { project: other } = await seedProjectItem(seed);
     const pubsub = new EventEmitterPubSub();
-    seed.workItems.onBoardChanged(scope => touchFeed(pubsub, scope));
+    seed.workItems.onBoardChanged((scope, change) => touchFeed(pubsub, scope, change));
     const { app } = buildApp(seed, pubsub, asAlice);
     const feed = openFeed(await app.request(`/web/factory/projects/${project.id}/feed-events`));
     const otherFeed = openFeed(await app.request(`/web/factory/projects/${other.id}/feed-events`));
 
     const input = { title: 'Fix logout', stages: ['intake'], sessions: {}, metadata: {} };
-    await seed.workItems.upsert({ orgId: ORG, userId: 'user-alice', factoryProjectId: project.id, input });
+    const created = await seed.workItems.upsert({
+      orgId: ORG,
+      userId: 'user-alice',
+      factoryProjectId: project.id,
+      input,
+    });
     await seed.workItems.upsert({ orgId: ORG, userId: 'user-alice', factoryProjectId: other.id, input });
 
     await vi.waitFor(() => expect(otherFeed.frames).toHaveLength(1));
-    expect(feed.frames).toHaveLength(1);
+    expect(feed.frames).toEqual([{ event: 'feed', data: JSON.stringify({ cards: [created.item.id] }) }]);
 
     await feed.stop();
     await otherFeed.stop();
+  });
+
+  it('names the card a source refresh changed, read from its board row', async () => {
+    const seed = await createFactoryStorageForTests();
+    const { project } = await seedProjectItem(seed);
+    const pubsub = new EventEmitterPubSub();
+    seed.workItems.onBoardChanged((scope, change) => touchFeed(pubsub, scope, change));
+    const { app } = buildApp(seed, pubsub, asAlice);
+    const externalSource = { integrationId: 'github', type: 'issue', externalId: '42' };
+    const input = { title: 'Fix logout', stages: ['intake'], sessions: {}, metadata: {}, externalSource };
+    const created = await seed.workItems.upsert({
+      orgId: ORG,
+      userId: 'user-alice',
+      factoryProjectId: project.id,
+      input,
+    });
+    const source = created.item.workItem.sources[0];
+    if (!source) throw new Error('Expected the seeded source');
+    const feed = openFeed(await app.request(`/web/factory/projects/${project.id}/feed-events`));
+
+    await seed.workItems.syncWorkItemSource({
+      orgId: ORG,
+      factoryProjectId: project.id,
+      provider: source.provider,
+      externalId: source.externalId,
+      patch: { state: 'closed' },
+    });
+
+    await vi.waitFor(() => expect(feed.frames).toHaveLength(1));
+    expect(feed.frames).toEqual([{ event: 'feed', data: JSON.stringify({ cards: [created.item.id] }) }]);
+    await feed.stop();
   });
 
   it('sends a new reader a first byte at once, before any change or keepalive is due', async () => {
@@ -284,7 +320,7 @@ describe('board feed stream', () => {
 });
 
 describe('direct touches on the board feed stream', () => {
-  it('forwards a touch published straight to the project topic', async () => {
+  it('forwards a touch from a replica that names no card as a frame naming nothing', async () => {
     const seed = await createFactoryStorageForTests();
     const { project } = await seedProjectItem(seed);
     const emitter = new EventEmitter();
@@ -298,6 +334,28 @@ describe('direct touches on the board feed stream', () => {
 
     await vi.waitFor(() => expect(feed.frames).toHaveLength(1));
     expect(feed.frames[0]).toEqual({ event: 'feed', data: '{}' });
+    await feed.stop();
+  });
+
+  it.each([
+    ['a card list', { cards: ['card-1', 'card-2'] }, { cards: ['card-1', 'card-2'] }],
+    ['no card', { cards: [] }, { cards: [] }],
+    ['cards it cannot read', { cards: 'card-1' }, {}],
+    ['a list holding something else', { cards: ['card-1', 7] }, {}],
+  ])('forwards a touch naming %s as a frame naming the same, or nothing', async (_, data, frame) => {
+    const seed = await createFactoryStorageForTests();
+    const { project } = await seedProjectItem(seed);
+    const emitter = new EventEmitter();
+    const pubsub = new EventEmitterPubSub(emitter);
+    const { app } = buildApp(seed, pubsub, asAlice);
+    const topic = feedTopic(ORG, project.id);
+
+    const feed = openFeed(await app.request(`/web/factory/projects/${project.id}/feed-events`));
+    await vi.waitFor(() => expect(emitter.listenerCount(topic)).toBe(1));
+    await pubsub.publish(topic, { type: 'factory.feed.touched', runId: project.id, data });
+
+    await vi.waitFor(() => expect(feed.frames).toHaveLength(1));
+    expect(feed.frames[0]).toEqual({ event: 'feed', data: JSON.stringify(frame) });
     await feed.stop();
   });
 });

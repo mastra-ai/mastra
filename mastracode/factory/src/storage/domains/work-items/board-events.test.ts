@@ -1,6 +1,7 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it } from 'vitest';
 
+import type { FeedFrame } from '../../../feed-frame.js';
 import { factoryDecisionAttentionIdentity, WorkItemsStorage } from './base.js';
 import type { FactoryBoardScope, FactoryDeferredDecisionRecord } from './base.js';
 
@@ -15,13 +16,18 @@ async function makeStorage() {
   const storage = backend.registerDomain(new WorkItemsStorage());
   await backend.init();
   const announced: FactoryBoardScope[] = [];
+  const changes: FeedFrame[] = [];
   const titlesAtAnnounce: Array<Promise<string[]>> = [];
-  storage.onBoardChanged(scope => {
+  storage.onBoardChanged((scope, change) => {
     announced.push({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId });
+    changes.push(change);
     titlesAtAnnounce.push(storage.list(scope).then(cards => cards.map(card => card.title)));
   });
-  return { storage, announced, titlesAtAnnounce };
+  return { storage, announced, changes, titlesAtAnnounce };
 }
+
+const distinct = (changes: readonly FeedFrame[]) => [...new Set(changes.map(change => JSON.stringify(change)))];
+const naming = (...cards: string[]) => [JSON.stringify({ cards })];
 
 async function seedWorkItem(storage: WorkItemsStorage): Promise<string> {
   const created = await storage.upsert({ ...SCOPE, userId: 'u', input: item });
@@ -254,6 +260,71 @@ describe('board announcements', () => {
     });
 
     expect(announced).toEqual([]);
+  });
+
+  it('names the card a new card, an edit and a delete changed, so a board rereads that card alone', async () => {
+    const { storage, changes } = await makeStorage();
+    const id = await seedWorkItem(storage);
+    expect(distinct(changes)).toEqual(naming(id));
+    changes.length = 0;
+
+    await storage.update({ orgId: SCOPE.orgId, id, userId: 'u', patch: { title: 'Fix logout' } });
+    expect(distinct(changes)).toEqual(naming(id));
+    changes.length = 0;
+
+    await storage.delete({ orgId: SCOPE.orgId, id });
+    expect(distinct(changes)).toEqual(naming(id));
+  });
+
+  it('names no card for a decision write, which moves no card', async () => {
+    const { storage, changes } = await makeStorage();
+    const workItemId = await seedWorkItem(storage);
+    await queueDecision(storage, workItemId, 'naming');
+    changes.length = 0;
+
+    await claim(storage);
+
+    expect(changes).toEqual([{ cards: [] }]);
+  });
+
+  it('names the card a stage move moved inside its transaction', async () => {
+    const { storage, changes } = await makeStorage();
+    const workItemId = await seedWorkItem(storage);
+    const workItem = await storage.get({ orgId: SCOPE.orgId, id: workItemId });
+    if (!workItem) throw new Error('Expected the seeded work item');
+    changes.length = 0;
+
+    await storage.commitTransition({
+      ...SCOPE,
+      workItemId,
+      expectedRevision: workItem.revision,
+      destinationStage: 'plan',
+      actorId: 'user-alice',
+      ingress: { identity: 'move-1', triggerType: 'human', transitionId: 'move-1' },
+      configVersion: 'rules-v1',
+      causalChain: [],
+      evaluation: { outcome: 'accepted', decisions: [] },
+    });
+
+    expect(changes).toEqual([{ cards: [workItemId] }]);
+  });
+
+  it('names the card a source refresh changed, though only its source row moved', async () => {
+    const { storage, changes } = await makeStorage();
+    const externalSource = { integrationId: 'github', type: 'issue', externalId: '42' };
+    const created = await storage.upsert({ ...SCOPE, userId: 'u', input: { ...item, externalSource } });
+    const source = created.item.workItem.sources[0];
+    if (!source) throw new Error('Expected the seeded source');
+    changes.length = 0;
+
+    await storage.syncWorkItemSource({
+      ...SCOPE,
+      provider: source.provider,
+      externalId: source.externalId,
+      patch: { state: 'closed' },
+    });
+
+    expect(changes).toEqual([{ cards: [created.item.id] }]);
   });
 
   it('keeps the shared card list cached across a decision write, which moves no card', async () => {

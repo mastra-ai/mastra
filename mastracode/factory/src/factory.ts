@@ -938,8 +938,8 @@ export class MastraFactory {
     const keptCards = new KeptCards({ projects: factoryProjectsStorage, workItems: workItemsStorage });
     this.#keptCards = keptCards;
     const boardChangeOrigin = globalThis.crypto.randomUUID();
-    workItemsStorage.onBoardChanged(scope => {
-      touchFeed(eventBus, scope);
+    workItemsStorage.onBoardChanged((scope, frame) => {
+      touchFeed(eventBus, scope, frame);
       keptCards.changed(scope);
       publishBoardChange(eventBus, boardChangeOrigin, scope);
     });

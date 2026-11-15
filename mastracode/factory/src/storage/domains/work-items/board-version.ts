@@ -54,6 +54,36 @@ function isLeased(collection: string, row: unknown): boolean {
 
 const scopeKey = (scope: BoardScope) => `${scope.orgId}\u0000${scope.factoryProjectId ?? ''}`;
 
+/**
+ * One card row written. Board rows and legacy cards name the card, and the work item behind it when
+ * the row says so. Work item and source rows only name the work item, which `cardsNamed` resolves to
+ * its card once the write has committed.
+ */
+export type CardRowWrite = { card: string; workItem?: string } | { card?: undefined; workItem: string };
+
+/** The card rows a write changed: none for a decision, or `undefined` when the write cannot tell which. */
+export type ChangedCards = readonly CardRowWrite[] | undefined;
+
+const text = (value: unknown) => (typeof value === 'string' ? value : undefined);
+
+function cardsOf(collection: string, fields: Record<string, unknown> | null): ChangedCards {
+  const id = text(fields?.id);
+  const workItem = text(fields?.work_item_id);
+  switch (collection) {
+    case FACTORY_BOARD_ITEMS_SCHEMA.name:
+      if (id) return [{ card: id, workItem }];
+      return workItem ? [{ workItem }] : undefined;
+    case FACTORY_WORK_ITEM_SOURCES_SCHEMA.name:
+      return workItem ? [{ workItem }] : undefined;
+    case FACTORY_WORK_ITEMS_SCHEMA.name:
+      return id ? [{ workItem: id }] : undefined;
+    case 'work_items':
+      return id ? [{ card: id, workItem: id }] : undefined;
+    default:
+      return [];
+  }
+}
+
 function scopeOfRow(row: Record<string, unknown> | null): BoardScope | undefined {
   if (!row || typeof row.org_id !== 'string') return undefined;
   return typeof row.factory_project_id === 'string'
@@ -69,16 +99,16 @@ function scopeOfWhere(where: CollectionWhere): BoardScope | undefined {
 }
 
 /**
- * Wrap `ops` so every write to one of `tables` reports the board it changed, once the write has
- * resolved. Writes outside any tenant (`dangerouslyClearAll`) report nothing.
+ * Wrap `ops` so every write to one of `tables` reports the board and the cards it changed, once the
+ * write has resolved. Writes outside any tenant (`dangerouslyClearAll`) report nothing.
  */
 export function trackBoardWrites(
   ops: FactoryStorageOps,
   tables: ReadonlySet<string>,
-  changed: (scope: BoardScope) => void | Promise<void>,
+  changed: (scope: BoardScope, cards: ChangedCards) => void | Promise<void>,
 ): FactoryStorageOps {
-  const report = async (scope: BoardScope | undefined) => {
-    if (scope) await changed(scope);
+  const report = async (scope: BoardScope | undefined, cards: ChangedCards) => {
+    if (scope) await changed(scope, cards);
   };
   return new Proxy(ops, {
     get(target, property, receiver) {
@@ -102,21 +132,22 @@ export function trackBoardWrites(
               ...args,
             );
             const leaseOnly = wasLeased && isLeased(collection, row);
-            if (tables.has(collection) && patched && !leaseOnly) await report(scopeOfRow(row));
+            if (tables.has(collection) && patched && !leaseOnly)
+              await report(scopeOfRow(row), cardsOf(collection, row));
             return row;
           };
         case 'insertOne':
         case 'upsertOne':
           return async (collection: string, ...args: unknown[]) => {
             const row = await value.call(target, collection, ...args);
-            if (tables.has(collection)) await report(scopeOfRow(row));
+            if (tables.has(collection)) await report(scopeOfRow(row), cardsOf(collection, row));
             return row;
           };
         case 'updateMany':
         case 'deleteMany':
           return async (collection: string, where: CollectionWhere, ...args: unknown[]) => {
             const count: number = await value.call(target, collection, where, ...args);
-            if (tables.has(collection) && count > 0) await report(scopeOfWhere(where));
+            if (tables.has(collection) && count > 0) await report(scopeOfWhere(where), cardsOf(collection, where));
             return count;
           };
         default:
@@ -126,17 +157,74 @@ export function trackBoardWrites(
   });
 }
 
-/** Collects the boards a transaction changed so they can be bumped once it has committed. */
-export class BoardScopes {
-  readonly #scopes = new Map<string, BoardScope>();
+interface CardRowWrites {
+  cards: Set<string>;
+  /** Work items whose card no write in the same batch named. */
+  workItems: Set<string>;
+  /** Work items a board row write named the card of. */
+  carded: Set<string>;
+}
 
-  add = (scope: BoardScope): void => {
-    this.#scopes.set(scopeKey(scope), scope);
+/** Collects the boards a transaction changed, and their card rows, so they can be bumped and announced once it has committed. */
+export class BoardChanges {
+  readonly #changes = new Map<string, { scope: BoardScope; writes: CardRowWrites | undefined }>();
+
+  add = (scope: BoardScope, cards: ChangedCards): void => {
+    const key = scopeKey(scope);
+    const known = this.#changes.get(key) ?? {
+      scope,
+      writes: { cards: new Set<string>(), workItems: new Set<string>(), carded: new Set<string>() },
+    };
+    this.#changes.set(key, known);
+    if (!cards) known.writes = undefined;
+    const writes = known.writes;
+    if (!writes) return;
+    for (const { card, workItem } of cards ?? []) {
+      if (card) writes.cards.add(card);
+      if (workItem) (card ? writes.carded : writes.workItems).add(workItem);
+    }
   };
 
-  values(): BoardScope[] {
-    return [...this.#scopes.values()];
+  scopes(): BoardScope[] {
+    return [...this.#changes.values()].map(change => change.scope);
   }
+
+  changes(): { scope: BoardScope; cards: ChangedCards }[] {
+    return [...this.#changes.values()].map(({ scope, writes }) => ({
+      scope,
+      cards: writes && [
+        ...[...writes.cards].map(card => ({ card })),
+        ...[...writes.workItems].filter(workItem => !writes.carded.has(workItem)).map(workItem => ({ workItem })),
+      ],
+    }));
+  }
+}
+
+/**
+ * The card ids behind committed card row writes, reading the board row of each work item no board
+ * row write named. `undefined` when any of them has no board row left to read.
+ */
+export async function cardsNamed(
+  ops: FactoryStorageOps,
+  scope: Required<BoardScope>,
+  cards: ChangedCards,
+): Promise<string[] | undefined> {
+  if (!cards) return undefined;
+  const named = new Set<string>();
+  const unnamed = new Set<string>();
+  for (const write of cards) {
+    if (write.card !== undefined) named.add(write.card);
+    else unnamed.add(write.workItem);
+  }
+  if (unnamed.size === 0) return [...named];
+  const rows = await ops.findMany<{ id: string }>(FACTORY_BOARD_ITEMS_SCHEMA.name, {
+    org_id: scope.orgId,
+    factory_project_id: scope.factoryProjectId,
+    work_item_id: { in: [...unnamed] },
+  });
+  if (rows.length < unnamed.size) return undefined;
+  for (const row of rows) named.add(row.id);
+  return [...named];
 }
 
 export async function bumpBoardVersions(ops: FactoryStorageOps, scopes: readonly BoardScope[]): Promise<void> {
