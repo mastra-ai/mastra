@@ -26,6 +26,7 @@ describe('MemoryThread', () => {
       ok: true,
       status: 200,
       json: async () => data,
+      text: async () => JSON.stringify(data),
       headers: new Headers({
         'content-type': 'application/json',
       }),
@@ -269,6 +270,7 @@ describe('MemoryThread', () => {
         status: 400,
         statusText: 'Bad Request',
         json: async () => ({ error: 'messageIds array cannot be empty' }),
+        text: async () => JSON.stringify({ error: 'messageIds array cannot be empty' }),
         headers: new Headers({
           'content-type': 'application/json',
         }),
@@ -285,6 +287,7 @@ describe('MemoryThread', () => {
         status: 500,
         statusText: 'Internal Server Error',
         json: async () => ({ error: 'Database error' }),
+        text: async () => JSON.stringify({ error: 'Database error' }),
         headers: new Headers({
           'content-type': 'application/json',
         }),

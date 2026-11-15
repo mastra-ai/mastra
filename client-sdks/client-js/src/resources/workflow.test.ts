@@ -3,7 +3,11 @@ import { MastraClient } from '../client';
 import type { ClientOptions } from '../types';
 import { Workflow } from './workflow';
 
-const createJsonResponse = (data: any) => ({ ok: true, json: async () => data });
+const createJsonResponse = (data: any) => ({
+  ok: true,
+  json: async () => data,
+  text: async () => JSON.stringify(data),
+});
 
 describe('Workflow (fetch-mocked)', () => {
   let fetchMock: any;
@@ -461,14 +465,13 @@ describe('Workflow Client Methods', () => {
         }),
       );
     } else {
-      const response = new Response(undefined, {
+      const response = new Response(JSON.stringify(data), {
         status: 200,
         statusText: 'OK',
         headers: new Headers({
           'Content-Type': 'application/json',
         }),
       });
-      response.json = () => Promise.resolve(data);
       (global.fetch as any).mockResolvedValueOnce(response);
     }
   };

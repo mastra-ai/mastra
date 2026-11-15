@@ -12,7 +12,7 @@ const clientOptions = {
 };
 
 function mockJsonResponse(data: unknown) {
-  const response = new Response(undefined, {
+  const response = new Response(JSON.stringify(data), {
     status: 200,
     statusText: 'OK',
     headers: new Headers({
@@ -20,7 +20,6 @@ function mockJsonResponse(data: unknown) {
     }),
   });
 
-  response.json = () => Promise.resolve(data);
   (global.fetch as any).mockResolvedValueOnce(response);
 }
 

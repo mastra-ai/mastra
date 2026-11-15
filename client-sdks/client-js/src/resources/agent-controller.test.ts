@@ -13,12 +13,11 @@ describe('AgentController Resource', () => {
   const clientOptions = { baseUrl: 'http://localhost:4111' };
 
   const mockJson = (data: any) => {
-    const response = new Response(undefined, {
+    const response = new Response(JSON.stringify(data), {
       status: 200,
       statusText: 'OK',
       headers: new Headers({ 'Content-Type': 'application/json' }),
     });
-    response.json = () => Promise.resolve(data);
     (global.fetch as any).mockResolvedValueOnce(response);
   };
 

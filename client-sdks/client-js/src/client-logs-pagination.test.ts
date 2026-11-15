@@ -8,6 +8,7 @@ function mockJsonResponse() {
     ok: true,
     headers: { get: () => 'application/json' },
     json: async () => ({}),
+    text: async () => JSON.stringify({}),
   });
 }
 

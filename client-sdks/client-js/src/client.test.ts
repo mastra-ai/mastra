@@ -13,6 +13,7 @@ describe('MastraClient', () => {
           get: () => 'application/json',
         },
         json: async () => ({}),
+        text: async () => JSON.stringify({}),
       });
     };
 
@@ -169,6 +170,7 @@ describe('MastraClient', () => {
             get: () => 'application/json',
           },
           json: async () => ({ success: true }),
+          text: async () => JSON.stringify({ success: true }),
         });
 
       const result = await client.request('/test-endpoint');
@@ -205,6 +207,7 @@ describe('MastraClient', () => {
             get: () => 'application/json',
           },
           json: async () => ({ success: true }),
+          text: async () => JSON.stringify({ success: true }),
         })
         .mockResolvedValueOnce({
           ok: true,
@@ -212,6 +215,7 @@ describe('MastraClient', () => {
             get: () => 'application/json',
           },
           json: async () => ({ success: true }),
+          text: async () => JSON.stringify({ success: true }),
         });
 
       const result = await customClient.request('/test');
@@ -256,6 +260,7 @@ describe('MastraClient', () => {
             get: () => 'application/json',
           },
           json: async () => ({ customFetchUsed: true }),
+          text: async () => JSON.stringify({ customFetchUsed: true }),
         } as Response;
       });
 
@@ -304,6 +309,7 @@ describe('MastraClient', () => {
           get: () => 'application/json',
         },
         json: async () => data,
+        text: async () => JSON.stringify(data),
       });
     };
 
@@ -447,6 +453,7 @@ describe('MastraClient', () => {
             get: () => 'application/json',
           },
           json: async () => ({ message: 'Thread not found' }),
+          text: async () => JSON.stringify({ message: 'Thread not found' }),
         });
 
         await expect(
@@ -471,6 +478,7 @@ describe('MastraClient', () => {
           status: 200,
           headers: { get: () => 'application/json' },
           json: async () => mockThreads,
+          text: async () => JSON.stringify(mockThreads),
         });
 
         const result = await client.listMemoryThreads({
@@ -493,6 +501,7 @@ describe('MastraClient', () => {
           status: 200,
           headers: { get: () => 'application/json' },
           json: async () => mockThreads,
+          text: async () => JSON.stringify(mockThreads),
         });
 
         const result = await client.listMemoryThreads({
@@ -523,6 +532,7 @@ describe('MastraClient', () => {
           status: 200,
           headers: { get: () => 'application/json' },
           json: async () => mockThreads,
+          text: async () => JSON.stringify(mockThreads),
         });
 
         const result = await client.listMemoryThreads();
@@ -546,6 +556,7 @@ describe('MastraClient', () => {
           status: 200,
           headers: { get: () => 'application/json' },
           json: async () => mockThreads,
+          text: async () => JSON.stringify(mockThreads),
         });
 
         const result = await client.listMemoryThreads({
@@ -572,6 +583,7 @@ describe('MastraClient', () => {
           status: 200,
           headers: { get: () => 'application/json' },
           json: async () => mockThreads,
+          text: async () => JSON.stringify(mockThreads),
         });
 
         const result = await client.listMemoryThreads({
@@ -594,6 +606,7 @@ describe('MastraClient', () => {
           status: 200,
           headers: { get: () => 'application/json' },
           json: async () => mockThread,
+          text: async () => JSON.stringify(mockThread),
         });
 
         const thread = client.getMemoryThread({
@@ -615,6 +628,7 @@ describe('MastraClient', () => {
           status: 200,
           headers: { get: () => 'application/json' },
           json: async () => mockThread,
+          text: async () => JSON.stringify(mockThread),
         });
 
         const thread = client.getMemoryThread({
@@ -639,6 +653,7 @@ describe('MastraClient', () => {
           status: 200,
           headers: { get: () => 'application/json' },
           json: async () => mockMessages,
+          text: async () => JSON.stringify(mockMessages),
         });
 
         const result = await client.listThreadMessages('thread-1', {
@@ -661,6 +676,7 @@ describe('MastraClient', () => {
           status: 200,
           headers: { get: () => 'application/json' },
           json: async () => mockMessages,
+          text: async () => JSON.stringify(mockMessages),
         });
 
         const result = await client.listThreadMessages('thread-1', {
@@ -684,6 +700,7 @@ describe('MastraClient', () => {
           status: 200,
           headers: { get: () => 'application/json' },
           json: async () => mockMessages,
+          text: async () => JSON.stringify(mockMessages),
         });
 
         const result = await client.listThreadMessages('thread-1');
@@ -708,6 +725,7 @@ describe('MastraClient', () => {
           status: 200,
           headers: { get: () => 'application/json' },
           json: async () => mockResponse,
+          text: async () => JSON.stringify(mockResponse),
         });
 
         const result = await client.listThreadMessages('thread-1', {
@@ -733,6 +751,7 @@ describe('MastraClient', () => {
           status: 200,
           headers: { get: () => 'application/json' },
           json: async () => mockResponse,
+          text: async () => JSON.stringify(mockResponse),
         });
 
         const result = await client.deleteThread('thread-1', { agentId: 'agent-1' });
@@ -751,6 +770,7 @@ describe('MastraClient', () => {
           status: 200,
           headers: { get: () => 'application/json' },
           json: async () => mockResponse,
+          text: async () => JSON.stringify(mockResponse),
         });
 
         const result = await client.deleteThread('thread-1', { networkId: 'network-1' });
@@ -800,6 +820,7 @@ describe('MastraClient', () => {
           ok: true,
           headers: { get: () => 'application/json' },
           json: async () => mockResponse,
+          text: async () => JSON.stringify(mockResponse),
         });
 
         const result = await client.listBackgroundTasks();
@@ -813,6 +834,7 @@ describe('MastraClient', () => {
           ok: true,
           headers: { get: () => 'application/json' },
           json: async () => ({ tasks: [], total: 0 }),
+          text: async () => JSON.stringify({ tasks: [], total: 0 }),
         });
 
         await client.listBackgroundTasks({
@@ -838,6 +860,7 @@ describe('MastraClient', () => {
           ok: true,
           headers: { get: () => 'application/json' },
           json: async () => ({ tasks: [], total: 0 }),
+          text: async () => JSON.stringify({ tasks: [], total: 0 }),
         });
 
         const from = new Date('2024-01-01');
@@ -857,6 +880,7 @@ describe('MastraClient', () => {
           ok: true,
           headers: { get: () => 'application/json' },
           json: async () => body,
+          text: async () => JSON.stringify(body),
         });
       const sent = () => {
         const [url, init] = (global.fetch as any).mock.calls[0];
@@ -905,6 +929,7 @@ describe('MastraClient', () => {
           ok: true,
           headers: { get: () => 'application/json' },
           json: async () => mockTask,
+          text: async () => JSON.stringify(mockTask),
         });
 
         const result = await client.getBackgroundTask('background-task-1');
@@ -957,6 +982,7 @@ describe('MastraClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({}),
+        text: async () => JSON.stringify({}),
       });
 
       await client.getAgentBuilderActions();
@@ -978,6 +1004,7 @@ describe('MastraClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({}),
+        text: async () => JSON.stringify({}),
       });
 
       await client.createStoredSkill({
@@ -1004,6 +1031,8 @@ describe('MastraClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({ experiments: [], pagination: { total: 0, page: 0, perPage: 10, hasMore: false } }),
+        text: async () =>
+          JSON.stringify({ experiments: [], pagination: { total: 0, page: 0, perPage: 10, hasMore: false } }),
       });
     };
 
@@ -1148,6 +1177,7 @@ describe('MastraClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({ success: true }),
+        text: async () => JSON.stringify({ success: true }),
       });
 
       await client.deleteDatasetExperiment('dataset/1', 'experiment/1');
@@ -1163,6 +1193,7 @@ describe('MastraClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({ success: true }),
+        text: async () => JSON.stringify({ success: true }),
       });
 
       await client.deleteDatasetExperiment('dataset-1', 'experiment-1', {
@@ -1181,6 +1212,7 @@ describe('MastraClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({ success: true }),
+        text: async () => JSON.stringify({ success: true }),
       });
 
       await client.deleteExperiment('experiment-1', { organizationId: 'org_a', projectId: 'proj_1' });
@@ -1196,6 +1228,7 @@ describe('MastraClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({ id: 'experiment-1', datasetId: 'dataset-1' }),
+        text: async () => JSON.stringify({ id: 'experiment-1', datasetId: 'dataset-1' }),
       });
 
       const result = await client.getExperiment('experiment-1');
@@ -1212,6 +1245,7 @@ describe('MastraClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({ id: 'experiment-1', datasetId: 'dataset-1' }),
+        text: async () => JSON.stringify({ id: 'experiment-1', datasetId: 'dataset-1' }),
       });
 
       await client.getExperiment('experiment-1', { organizationId: 'org_a', projectId: 'proj_1' });
@@ -1227,6 +1261,7 @@ describe('MastraClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({ experimentId: 'experiment-1', status: 'pending' }),
+        text: async () => JSON.stringify({ experimentId: 'experiment-1', status: 'pending' }),
       });
       const provenance = {
         source: 'github',
@@ -1274,6 +1309,8 @@ describe('MastraClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({ experimentId: 'wf-run-42', status: 'running', totalItems: 3, datasetVersion: 1 }),
+        text: async () =>
+          JSON.stringify({ experimentId: 'wf-run-42', status: 'running', totalItems: 3, datasetVersion: 1 }),
       });
 
       const result = await client.createDatasetExperiment({
@@ -1301,13 +1338,15 @@ describe('MastraClient', () => {
     });
 
     it('runExperimentItem posts to the run route with the attempt', async () => {
+      const responseBody = {
+        result: { id: 'res-1', experimentId: 'exp-1', itemId: 'item-1', attempt: 0, output: { text: 'hi' } },
+        scores: [{ scorerId: 'accuracy', scorerName: 'accuracy', score: 0.9, reason: null, error: null }],
+      };
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
         headers: { get: () => 'application/json' },
-        json: async () => ({
-          result: { id: 'res-1', experimentId: 'exp-1', itemId: 'item-1', attempt: 0, output: { text: 'hi' } },
-          scores: [{ scorerId: 'accuracy', scorerName: 'accuracy', score: 0.9, reason: null, error: null }],
-        }),
+        json: async () => responseBody,
+        text: async () => JSON.stringify(responseBody),
       });
 
       const { result, scores } = await client.runExperimentItem({
@@ -1331,6 +1370,7 @@ describe('MastraClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({ id: 'res-1', experimentId: 'exp-1', itemId: 'item-1', attempt: 1 }),
+        text: async () => JSON.stringify({ id: 'res-1', experimentId: 'exp-1', itemId: 'item-1', attempt: 1 }),
       });
 
       const result = await client.submitExperimentResult({
@@ -1354,6 +1394,8 @@ describe('MastraClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({ id: 'exp-1', status: 'completed', succeededCount: 2, failedCount: 1, skippedCount: 0 }),
+        text: async () =>
+          JSON.stringify({ id: 'exp-1', status: 'completed', succeededCount: 2, failedCount: 1, skippedCount: 0 }),
       });
 
       const result = await client.finalizeExperiment({ datasetId: 'ds-1', experimentId: 'exp-1' });
@@ -1380,6 +1422,7 @@ describe('MastraClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({ id: 'item-1', toolMocks }),
+        text: async () => JSON.stringify({ id: 'item-1', toolMocks }),
       });
 
       const result = await client.addDatasetItem({ datasetId: 'ds-1', input: { q: 'x' }, toolMocks });
@@ -1396,6 +1439,7 @@ describe('MastraClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({ id: 'item-1', externalId: 'source-item-1' }),
+        text: async () => JSON.stringify({ id: 'item-1', externalId: 'source-item-1' }),
       });
 
       const result = await client.addDatasetItem({
@@ -1414,6 +1458,7 @@ describe('MastraClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({ items: [{ id: 'item-1', externalId: 'source-item-1' }], count: 1 }),
+        text: async () => JSON.stringify({ items: [{ id: 'item-1', externalId: 'source-item-1' }], count: 1 }),
       });
 
       await client.batchInsertDatasetItems({
@@ -1433,6 +1478,7 @@ describe('MastraClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({ id: 'item-1', toolMocks }),
+        text: async () => JSON.stringify({ id: 'item-1', toolMocks }),
       });
 
       await client.updateDatasetItem({ datasetId: 'ds-1', itemId: 'item-1', toolMocks });
@@ -1448,6 +1494,7 @@ describe('MastraClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({ success: true }),
+        text: async () => JSON.stringify({ success: true }),
       });
 
       await expect(
@@ -1467,6 +1514,7 @@ describe('MastraClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({ id: 'item-1', scorerIds }),
+        text: async () => JSON.stringify({ id: 'item-1', scorerIds }),
       });
 
       const result = await client.addDatasetItem({ datasetId: 'ds-1', input: { q: 'x' }, scorerIds });
@@ -1482,19 +1530,21 @@ describe('MastraClient', () => {
       const name = 'smoke-run';
       const description = 'baseline quality check';
       const metadata = { model: 'anthropic/claude-haiku-4-5' };
+      const responseBody = {
+        experimentId: 'exp-1',
+        status: 'pending',
+        totalItems: 1,
+        succeededCount: 0,
+        failedCount: 0,
+        startedAt: new Date().toISOString(),
+        completedAt: null,
+        results: [],
+      };
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
         headers: { get: () => 'application/json' },
-        json: async () => ({
-          experimentId: 'exp-1',
-          status: 'pending',
-          totalItems: 1,
-          succeededCount: 0,
-          failedCount: 0,
-          startedAt: new Date().toISOString(),
-          completedAt: null,
-          results: [],
-        }),
+        json: async () => responseBody,
+        text: async () => JSON.stringify(responseBody),
       });
 
       await client.triggerDatasetExperiment({
@@ -1520,19 +1570,21 @@ describe('MastraClient', () => {
 
     it('triggerDatasetExperiment posts agentModel in the request body', async () => {
       const agentModel = { provider: 'openai', modelId: 'gpt-5-mini' };
+      const responseBody = {
+        experimentId: 'exp-1',
+        status: 'pending',
+        totalItems: 1,
+        succeededCount: 0,
+        failedCount: 0,
+        startedAt: new Date().toISOString(),
+        completedAt: null,
+        results: [],
+      };
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
         headers: { get: () => 'application/json' },
-        json: async () => ({
-          experimentId: 'exp-1',
-          status: 'pending',
-          totalItems: 1,
-          succeededCount: 0,
-          failedCount: 0,
-          startedAt: new Date().toISOString(),
-          completedAt: null,
-          results: [],
-        }),
+        json: async () => responseBody,
+        text: async () => JSON.stringify(responseBody),
       });
 
       await client.triggerDatasetExperiment({
@@ -1553,6 +1605,7 @@ describe('MastraClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => updated,
+        text: async () => JSON.stringify(updated),
       });
 
       const result = await client.updateDatasetExperiment({
@@ -1575,6 +1628,7 @@ describe('MastraClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({ items: [{ id: 'item-1', scorerIds: [] }], count: 1 }),
+        text: async () => JSON.stringify({ items: [{ id: 'item-1', scorerIds: [] }], count: 1 }),
       });
 
       const result = await client.batchInsertDatasetItems({
@@ -1592,6 +1646,7 @@ describe('MastraClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({ id: 'item-1' }),
+        text: async () => JSON.stringify({ id: 'item-1' }),
       });
 
       await client.updateDatasetItem({ datasetId: 'ds-1', itemId: 'item-1', scorerIds: null });

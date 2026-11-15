@@ -20,7 +20,7 @@ describe('V2 Message Format Support', () => {
         role: 'user',
         content: 'Hello from v1!',
         type: 'text',
-        createdAt: new Date(),
+        createdAt: new Date().toISOString(),
         threadId: 'thread-123',
         resourceId: 'resource-123',
       },
@@ -29,6 +29,7 @@ describe('V2 Message Format Support', () => {
     (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ messages: v1Messages }),
+      text: async () => JSON.stringify({ messages: v1Messages }),
     });
 
     const result = await client.saveMessageToMemory({
@@ -51,7 +52,7 @@ describe('V2 Message Format Support', () => {
       {
         id: 'msg-v2-1',
         role: 'assistant',
-        createdAt: new Date(),
+        createdAt: new Date().toISOString(),
         threadId: 'thread-123',
         resourceId: 'resource-123',
         content: {
@@ -65,6 +66,7 @@ describe('V2 Message Format Support', () => {
     (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ messages: v2Messages }),
+      text: async () => JSON.stringify({ messages: v2Messages }),
     });
 
     const result = await client.saveMessageToMemory({
@@ -89,14 +91,14 @@ describe('V2 Message Format Support', () => {
         role: 'user',
         content: 'Question in v1 format',
         type: 'text',
-        createdAt: new Date(),
+        createdAt: new Date().toISOString(),
         threadId: 'thread-123',
         resourceId: 'resource-123',
       },
       {
         id: 'msg-v2-1',
         role: 'assistant',
-        createdAt: new Date(),
+        createdAt: new Date().toISOString(),
         threadId: 'thread-123',
         resourceId: 'resource-123',
         content: {
@@ -130,6 +132,7 @@ describe('V2 Message Format Support', () => {
     (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ messages: mixedMessages }),
+      text: async () => JSON.stringify({ messages: mixedMessages }),
     });
 
     const result = await client.saveMessageToMemory({
@@ -151,7 +154,7 @@ describe('V2 Message Format Support', () => {
     const v2MessageWithAttachments: MastraDBMessage = {
       id: 'msg-v2-att',
       role: 'user',
-      createdAt: new Date(),
+      createdAt: new Date().toISOString(),
       threadId: 'thread-123',
       resourceId: 'resource-123',
       content: {
@@ -167,6 +170,7 @@ describe('V2 Message Format Support', () => {
     (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ messages: [v2MessageWithAttachments] }),
+      text: async () => JSON.stringify({ messages: [v2MessageWithAttachments] }),
     });
 
     const result = await client.saveMessageToMemory({

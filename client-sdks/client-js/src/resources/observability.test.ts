@@ -35,14 +35,13 @@ describe('Observability Methods', () => {
 
   // Helper to mock successful API responses
   const mockSuccessfulResponse = (body: unknown = {}) => {
-    const response = new Response(undefined, {
+    const response = new Response(JSON.stringify(body), {
       status: 200,
       statusText: 'OK',
       headers: new Headers({
         'Content-Type': 'application/json',
       }),
     });
-    response.json = () => Promise.resolve(body);
     (global.fetch as any).mockResolvedValueOnce(response);
   };
 
