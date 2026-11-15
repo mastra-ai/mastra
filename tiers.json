@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-11-14",
+  "updated": "2026-11-15",
   "scope": "all",
   "files": {
     ".github/scripts/ci-routing.test.ts": {
@@ -24820,10 +24820,10 @@
       "reason": "seed-rule-b"
     },
     "packages/playground/src/domains/agent-builder/hooks/__tests__/use-autosave-agent.test.tsx": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": "2026-09-01",
-      "reason": "seed-rule-b"
+      "tier": "in",
+      "since": "2026-11-15",
+      "last_failure": "2026-11-15",
+      "reason": "versioning-fail"
     },
     "packages/playground/src/domains/agent-builder/hooks/__tests__/use-autosave-skill.test.tsx": {
       "tier": "out",
