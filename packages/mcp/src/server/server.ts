@@ -180,9 +180,11 @@ export interface MCPServerConfig extends CoreMCPServerConfig {
    */
   legacy?: 'reject' | 'stateless';
   /**
-   * Upper bound, in bytes, on the HTTP request body this server reads. A larger body is
-   * answered with a `413` JSON-RPC error before it is parsed or any tool runs. Leave it unset
-   * to keep the SDK default of 4194304 (4 MiB). Must be a positive number.
+   * Upper bound, in bytes, on the HTTP request body this server reads from the request stream.
+   * A larger body is answered with a `413` JSON-RPC error before it is parsed or any tool runs.
+   * It bounds only the body the server reads itself: when body-parsing middleware supplies the
+   * parsed body, this bound does not apply, so set the size limit on that parser as well. Leave
+   * it unset to keep the SDK default of 4194304 (4 MiB). Must be a positive number.
    */
   maxRequestBodySize?: number;
   /**

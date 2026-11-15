@@ -185,7 +185,7 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
     type: 'number',
     isOptional: true,
     description:
-      'Upper bound, in bytes, on the HTTP request body the server reads. A larger body is answered with a `413` JSON-RPC error before it is parsed, so no tool runs. Defaults to `4194304` (4 MiB). Raise it on servers that receive large `tools/call` payloads, such as base64-encoded documents. Must be a positive number. Not applied to `stdio`, which has no request bodies.',
+      'Upper bound, in bytes, on the HTTP request body the server reads from the request stream. A larger body is answered with a `413` JSON-RPC error before it is parsed, so no tool runs. It bounds only the body the server reads itself: when body-parsing middleware supplies the parsed body, this bound does not apply, so set the size limit on that parser as well. Defaults to `4194304` (4 MiB). Raise it on servers that receive large `tools/call` payloads, such as base64-encoded documents. Must be a positive number. Not applied to `stdio`, which has no request bodies.',
   },
   {
     name: 'toolResult',

@@ -17,4 +17,4 @@ const server = new MCPServer({
 });
 ```
 
-The bound is in bytes and must be positive. Leaving it unset keeps the SDK default of `4194304` (4 MiB), and a body over the limit is still rejected with a `413` JSON-RPC error before it is parsed. It applies to `startHTTP` requests only; `stdio` has no request bodies.
+The bound is in bytes and must be positive. Leaving it unset keeps the SDK default of `4194304` (4 MiB), and a body over the limit is still rejected with a `413` JSON-RPC error before it is parsed. It covers only a body the server reads itself: if body-parsing middleware supplies the parsed body, the bound does not apply, so raise the size limit on that parser too. It applies to `startHTTP` requests only; `stdio` has no request bodies.
