@@ -42,6 +42,7 @@ import {
   heartbeatSessionOpenRun,
   isOpenRunLiveElsewhere,
   listSessionOpenRuns,
+  listThreadOpenRuns,
   recordSessionRunStart,
   waitForSessionRunAudit,
 } from '../session/run-audit.js';
@@ -2690,10 +2691,11 @@ export class FactoryDecisionDispatcher {
 
   /**
    * Whether a run is in flight on `binding`: live here, or live on another dispatcher. An open-run
-   * entry with nothing live behind it is an orphan of a dead process and does not count.
+   * entry with nothing live behind it is an orphan of a dead process and does not count. Reads the
+   * binding's own thread, which the session may have switched away from.
    */
   async #hasRunInFlight(session: BoundDispatcherSession, binding: FactoryRunBindingRecord): Promise<boolean> {
-    const open = (await listSessionOpenRuns(session)).filter(entry => entry.bindingId === binding.id);
+    const open = (await listThreadOpenRuns(session, binding.threadId)).filter(entry => entry.bindingId === binding.id);
     if (open.length === 0) return false;
     if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) return true;
     return this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);

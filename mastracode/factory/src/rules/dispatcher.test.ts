@@ -193,6 +193,7 @@ function createSession(
         threadId = next;
       }),
       getSetting: vi.fn(async ({ key }: { key: string }) => settings[key]),
+      getSettingOn: vi.fn(async ({ key }: { threadId: string; key: string }) => settings[key]),
       setSetting: vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
         settings[key] = value;
       }),
@@ -2914,8 +2915,26 @@ describe('FactoryDecisionDispatcher', () => {
           ingress: { type: 'human', identity },
           cause: 'board_drag',
         });
-      return { storage, card, controller, personMoves };
+      return { storage, card, controller, session, binding, personMoves };
     }
+
+    it('refuses the move while the run is live elsewhere and the session here has switched to another thread', async () => {
+      const { session, binding, personMoves } = await cardWithOpenRun(
+        { ownerId: 'worker-2', heartbeatAt: Date.now() },
+        false,
+      );
+      // The session's current thread is another one: only the binding's thread holds the run.
+      const ledger = await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING });
+      session.thread.getSetting.mockImplementation(async () => undefined);
+      session.thread.getSettingOn.mockImplementation(async ({ threadId }: { threadId: string; key: string }) =>
+        threadId === binding.threadId ? ledger : undefined,
+      );
+
+      await expect(personMoves('planning', 'other-thread')).resolves.toMatchObject({
+        status: 'rejected',
+        code: 'card_busy',
+      });
+    });
 
     it('refuses the move into a working phase while the run is live here, and accepts it once the run ends', async () => {
       const { storage, card, controller, personMoves } = await cardWithOpenRun({}, true);

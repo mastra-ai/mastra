@@ -467,10 +467,11 @@ function optimisticStageHistory(
  * so the settle's re-read downloads it whatever the server names.
  */
 function moveUndone(asked: WorkItem) {
-  return (item: WorkItem): WorkItem =>
-    item.id === asked.id && item.revision === asked.revision
-      ? { ...item, stages: asked.stages, stageHistory: asked.stageHistory, version: undefined }
-      : item;
+  return (item: WorkItem): WorkItem => {
+    if (item.id !== asked.id) return item;
+    if (item.revision !== asked.revision) return { ...item, version: undefined };
+    return { ...item, stages: asked.stages, stageHistory: asked.stageHistory, version: undefined };
+  };
 }
 
 export function useTransitionWorkItemMutation(factoryProjectId: string | undefined, currentUserId?: string) {
@@ -510,8 +511,8 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
     onSuccess: async (result, variables, context) => {
       patchCards(queryClient, listKey, cards =>
         cards.map(item => {
-          if (item.id !== variables.item.id || item.revision !== variables.item.revision) return item;
           if (result.status === 'rejected') return moveUndone(variables.item)(item);
+          if (item.id !== variables.item.id || item.revision !== variables.item.revision) return item;
           if (result.revision <= item.revision) return item;
           const previousItem = variables.item;
           return {

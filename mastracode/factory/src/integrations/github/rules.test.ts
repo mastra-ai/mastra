@@ -1298,6 +1298,7 @@ describe('GithubRules', () => {
             threadId = next;
           }),
           getSetting: vi.fn(async () => undefined),
+          getSettingOn: vi.fn(async () => undefined),
           setSetting: vi.fn(async () => {}),
           rename: vi.fn(async () => {}),
           requireId: vi.fn(() => {
