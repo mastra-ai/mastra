@@ -2606,6 +2606,22 @@ async function subscriptionFixture(response: 'stream' | 'empty' | 'failure' = 's
   return { ...f, sources, signals, subscribe };
 }
 
+it('Studio subscriptions already aborted before dispatch do not open native streams', async () => {
+  const f = await subscriptionFixture();
+  for (let round = 0; round < 20; round++) {
+    const controller = new AbortController();
+    controller.abort();
+    await f.subscribe(controller.signal);
+    await f.runtime.settled(f.owner.threadId);
+    expect(f.sources).toHaveLength(0);
+    expect(f.signals).toHaveLength(0);
+    expect(f.runtime.subscriptions.has(f.owner.threadId)).toBe(false);
+    expect(() => f.agent.abortThreadStream({ threadId: f.owner.threadId, resourceId: f.owner.resourceId })).toThrow(
+      expect.objectContaining({ code: 'forbidden' }),
+    );
+  }
+});
+
 it.each(['end', 'cancel', 'abort', 'error', 'empty', 'failure'] as const)(
   'Studio subscription %s releases listeners and stopped conversations',
   async ending => {

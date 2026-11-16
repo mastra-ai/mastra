@@ -397,6 +397,10 @@ export function studioChatProxy(
         };
         signal.addEventListener('abort', onAbort, { once: true });
         try {
+          if (signal.aborted) {
+            await disconnect();
+            return context.body(null, 204);
+          }
           await runtime.request.run(conversation, next);
           if (!context.res.body) {
             await disconnect();
