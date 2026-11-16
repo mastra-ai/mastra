@@ -4,10 +4,8 @@ import type { MemoryStorage } from '@mastra/core/storage';
 import { externallyAuthoredWorkItem } from '../rules/types.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import type { Card } from '../storage/domains/work-items/base.js';
+import { SLACK_SESSION_BRANCH_PREFIX } from '../work-item-branch.js';
 import { sessionStampCounts } from './session-threads.js';
-
-/** Slack-started sessions live on a `slack/<thread>` branch (see `threadBranch` in the Slack integration). */
-const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
 
 /**
  * Set on a thread while it moves and turned off once the move, vectors included, is done. A

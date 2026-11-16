@@ -170,18 +170,29 @@ describe('Board configuration', () => {
     expect(configNav().getByRole('link', { name: 'Planning' })).toBeInTheDocument();
   });
 
-  it('asks before leaving unsaved board changes for Card moves, which has no save bar', async () => {
+  it('asks before leaving unsaved board changes for Rules, which has no save bar', async () => {
     stubFactory();
     serveBoard(storedWorkBoard());
     const user = userEvent.setup();
     const { router } = renderAt(`/factories/${FACTORY_ID}/work/config`);
 
     await user.type(await screen.findByRole('textbox', { name: 'Board name' }), ' board');
-    await user.click(configNav().getByRole('link', { name: 'Card moves' }));
+    await user.click(configNav().getByRole('link', { name: 'Rules' }));
     const dialog = await screen.findByRole('alertdialog', { name: 'Discard changes to Work?' });
     await user.click(within(dialog).getByRole('button', { name: 'Discard' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work/moves`));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work/rules`));
+  });
+
+  it.each([
+    ['work/moves', 'work/rules'],
+    ['boards/release/moves', 'boards/release/rules'],
+  ])('sends old Card moves links at %s to the board Rules page', async (from, to) => {
+    stubFactory();
+    serveBoard(storedWorkBoard());
+    const { router } = renderAt(`/factories/${FACTORY_ID}/${from}`);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/${to}`));
   });
 
   it('sends old Settings › Skills links to the skills beside the Work board settings', async () => {
@@ -293,18 +304,7 @@ describe('Board configuration', () => {
       configNav()
         .getAllByRole('link')
         .map(link => link.textContent),
-    ).toEqual([
-      'Skills',
-      'General',
-      'Card moves',
-      'Intake',
-      'Triage',
-      'Plan',
-      'Review',
-      'Building',
-      'Done',
-      'Canceled',
-    ]);
+    ).toEqual(['Skills', 'General', 'Rules', 'Intake', 'Triage', 'Plan', 'Review', 'Building', 'Done', 'Canceled']);
 
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(saved).toHaveBeenCalledTimes(1));

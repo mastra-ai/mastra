@@ -1,5 +1,4 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeftRight, ChartNoAxesGantt, Waypoints } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { PendingSignalProgress } from './components/signals-empty-state';
@@ -40,6 +39,9 @@ import type { SignalsViewMode } from './view-mode-tab';
 import type { SankeyChartNodeSelection } from '@/ds/components/SankeyChart';
 import { TabList, Tabs } from '@/ds/components/Tabs';
 import { Txt } from '@/ds/components/Txt';
+import { IconAgents } from '@/ds/icons/central/IconAgents';
+import { IconArrowLeftRight } from '@/ds/icons/central/IconArrowLeftRight';
+import { IconGanttChart } from '@/ds/icons/central/IconGanttChart';
 
 export interface SankeySignalsProps {
   entityId: string;
@@ -376,9 +378,9 @@ export function SankeySignals({
               className="w-fit"
             >
               <TabList variant="pill-ghost">
-                <ViewModeTab value="flow" icon={<Waypoints />} label="Flow" />
-                <ViewModeTab value="compare" icon={<ArrowLeftRight />} label="Compare" />
-                <ViewModeTab value="lifelines" icon={<ChartNoAxesGantt />} label="Lifelines" />
+                <ViewModeTab value="flow" icon={<IconAgents />} label="Flow" />
+                <ViewModeTab value="compare" icon={<IconArrowLeftRight />} label="Compare" />
+                <ViewModeTab value="lifelines" icon={<IconGanttChart />} label="Lifelines" />
               </TabList>
             </Tabs>
             <TraceIntelligenceExplainer signalCatalog={effectiveSignalCatalog} />

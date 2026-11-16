@@ -1,5 +1,6 @@
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelOption } from '@mastra/playground-ui/components/ThinkingLevel';
 
 import { useAvailableModelsQuery, useModelReasoningOptions } from '../../../../../hooks/useAvailableModels';
 import { useChatModelScope } from '../../context/useChatModelScope';
@@ -38,6 +39,11 @@ function showFailure(fallback: string) {
   return (cause: unknown) => toast.error(cause instanceof Error ? cause.message : fallback);
 }
 
+function levelSummary(options: ThinkingLevelOption<ThinkingLevelSetting>[], state: SessionThinkingState) {
+  if ('unavailableReason' in state) return state.loading ? 'loading' : 'unavailable';
+  return options.find(option => option.value === state.effective.level)?.label ?? state.effective.level;
+}
+
 /** The session's thinking level for `modelId`, shared by the controls on and inside the model picker. */
 export function useSessionThinking(modelId: string | undefined, switchingModel: boolean) {
   const thinking = useChatThinking();
@@ -51,6 +57,7 @@ export function useSessionThinking(modelId: string | undefined, switchingModel: 
   return {
     options,
     state,
+    summary: levelSummary(options, state),
     setLevel: (next: ThinkingLevelSetting) =>
       thinking.setLevel(next).catch(showFailure('Failed to change thinking level')),
     resetLevel: () => thinking.resetLevel().catch(showFailure('Failed to reset thinking level')),

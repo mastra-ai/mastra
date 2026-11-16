@@ -15,7 +15,6 @@ import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { queryKeys } from '../../api/keys';
 import { createQueryClient } from '../../query-client';
-import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';
@@ -81,7 +80,6 @@ function stubFactoryWithBoundSession() {
   // Held open after the delete so the test proves the card stops advertising a
   // dead thread on its own, rather than riding on the reconciling refetch.
   const refetchGate = deferred();
-  let sessionListRequests = 0;
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -93,7 +91,7 @@ function stubFactoryWithBoundSession() {
           {
             id: FACTORY_ID,
             name: 'Acme Factory',
-            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main' })],
           },
         ],
       }),
@@ -112,12 +110,8 @@ function stubFactoryWithBoundSession() {
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
-      HttpResponse.json({ issues: [], nextPage: null }),
-    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, async () => {
-      sessionListRequests += 1;
-      if (sessionListRequests > 1) await refetchGate.promise;
+      if (deleted.length > 0) await refetchGate.promise;
       return HttpResponse.json({ sessions });
     }),
     http.delete(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, ({ params }) => {
@@ -253,8 +247,7 @@ describe('Board card session liveness', () => {
   });
 
   it('walks idle → working → idle as a run starts and finishes', async () => {
-    const { refetchGate } = stubFactoryWithBoundSession();
-    refetchGate.resolve();
+    stubFactoryWithBoundSession();
     const active = new Set<string>();
     server.use(
       http.get('*/api/agent-controller/:controllerId/active-runs', () =>
@@ -264,7 +257,7 @@ describe('Board card session liveness', () => {
       ),
     );
     const { client } = renderWorkBoard();
-    const activityKey = queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL);
+    const activityKey = queryKeys.sessionActivity(FACTORY_ID);
 
     const card = await screen.findByTestId('work-item-card');
     expect(await screen.findByRole('link', { name: 'Open session' })).toBeInTheDocument();

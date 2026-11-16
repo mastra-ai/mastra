@@ -1,8 +1,10 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@mastra/playground-ui/components/FilterBar';
+import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
+import { IconLab } from '@mastra/playground-ui/icons/central/IconLab';
+import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
 import { hueAccentColor } from '@mastra/playground-ui/utils/colors';
-import { CheckCircleIcon, FlaskConicalIcon, TagIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import type { ReviewListStatus } from './dataset-review';
 import { getExperimentDisplayName } from '@/domains/experiments/utils/experiment-display-name';
@@ -79,7 +81,7 @@ export function ReviewQueueFilterBar({
       {
         id: EXPERIMENT_FIELD_ID,
         label: 'Experiment',
-        icon: FlaskConicalIcon,
+        icon: IconLab,
         color: hueAccentColor('pink'),
         strict: true,
         suggestions: experiments.map(experiment => ({
@@ -90,7 +92,7 @@ export function ReviewQueueFilterBar({
       {
         id: STATUS_FIELD_ID,
         label: 'Status',
-        icon: CheckCircleIcon,
+        icon: IconCircleCheck,
         color: hueAccentColor('orange'),
         strict: true,
         suggestions: STATUS_OPTIONS,
@@ -98,7 +100,7 @@ export function ReviewQueueFilterBar({
       {
         id: TAG_FIELD_ID,
         label: 'Tag',
-        icon: TagIcon,
+        icon: IconTag,
         color: hueAccentColor('pink'),
         strict: true,
         // Nothing to pick from until the items carry tags.

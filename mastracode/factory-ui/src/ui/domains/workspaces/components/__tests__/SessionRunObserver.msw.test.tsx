@@ -1,19 +1,26 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
-import { waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { queryKeys } from '../../../../../api/keys';
+import type { SessionActivity, SessionRowsRequest, SessionRowsResponse } from '../../../../../api/types';
+import { useSessionRowsQuery } from '../../../../../hooks/useSessionRows';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
 import { saveDoneSound } from '../../../settings/services/doneSound';
-import type { FactoryUserSession } from '../../services/user-sessions';
 import { resetSessionRunObserverForTests, SessionRunObserver } from '../SessionRunObserver';
 
 const FACTORY_ID = 'factory-1';
-const REPOSITORY_ID = 'repository-1';
 const SESSION_ID = 'session-1';
+const ROWS_REQUEST: SessionRowsRequest = {
+  sort: 'activity',
+  groupBy: 'none',
+  owner: 'all',
+  children: false,
+  pin: [],
+  windows: {},
+};
+const NO_ROWS: SessionRowsResponse = { total: 0, matching: 0, groups: [], boards: [], owners: [], settling: false };
 const oscillatorStart = vi.fn();
 
 class AudioContextStub {
@@ -32,45 +39,33 @@ class AudioContextStub {
   }
 }
 
-const session: FactoryUserSession = {
-  id: 'workspace-1',
-  sessionId: SESSION_ID,
-  projectRepositoryId: REPOSITORY_ID,
-  orgId: 'org-1',
-  userId: 'user-1',
-  visibility: 'org',
-  title: 'Implement loader',
-  branch: 'factory/issue-24',
-  baseBranch: 'main',
-  sandboxId: null,
-  sandboxWorkdir: null,
-  materializedAt: '2026-08-20T10:00:00.000Z',
-  createdAt: '2026-08-20T10:00:00.000Z',
-  updatedAt: '2026-08-20T10:00:00.000Z',
-};
-
-function stubRegistry(runningSessionIds: () => string[]) {
-  const sessionsList = { requests: 0 };
+function stubProject(runningSessionIds: () => string[]) {
+  const rows = { requests: 0 };
   server.use(
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => {
-      sessionsList.requests += 1;
-      return HttpResponse.json({ sessions: [session] });
-    }),
-    http.get(`${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/active-runs`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/session-activity`, () =>
       HttpResponse.json({
-        runs: runningSessionIds().map(sessionId => ({
-          runId: `run-${sessionId}`,
-          resourceId: sessionId,
-          threadId: sessionId,
-        })),
-      }),
+        runningSessionIds: runningSessionIds(),
+        parkedSessionIds: [],
+        initializingSessionIds: [],
+        cards: { working: 0, waiting: 0 },
+        settling: false,
+      } satisfies SessionActivity),
     ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/session-rows`, () => {
+      rows.requests += 1;
+      return HttpResponse.json(NO_ROWS);
+    }),
   );
-  return sessionsList;
+  return rows;
 }
 
-async function refetchRegistry(client: QueryClient) {
-  await client.invalidateQueries({ queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL) });
+function SidebarWithObserver() {
+  useSessionRowsQuery(FACTORY_ID, ROWS_REQUEST);
+  return <SessionRunObserver factoryId={FACTORY_ID} />;
+}
+
+async function refetchActivity(client: QueryClient) {
+  await client.invalidateQueries({ queryKey: queryKeys.sessionActivity(FACTORY_ID) });
   await waitForMutationsIdle(client);
 }
 
@@ -82,44 +77,53 @@ beforeEach(() => {
 });
 
 describe('SessionRunObserver', () => {
-  it('rings and refetches the sessions list once when a run it watched in flight ends', async () => {
+  it("rings and refreshes the sidebar's rows once when a run it watched in flight ends", async () => {
     let running = false;
-    const sessionsList = stubRegistry(() => (running ? [SESSION_ID] : []));
-    const { client } = renderWithProviders(<SessionRunObserver factoryId={FACTORY_ID} />);
+    const rows = stubProject(() => (running ? [SESSION_ID] : []));
+    const { client } = renderWithProviders(<SidebarWithObserver />);
     await waitForMutationsIdle(client);
-    expect(sessionsList.requests).toBe(1);
+    expect(rows.requests).toBe(1);
 
     running = true;
-    await refetchRegistry(client);
+    await refetchActivity(client);
     expect(oscillatorStart).not.toHaveBeenCalled();
-    expect(sessionsList.requests).toBe(1);
+    expect(rows.requests).toBe(1);
 
     running = false;
-    await refetchRegistry(client);
+    await refetchActivity(client);
     expect(oscillatorStart).toHaveBeenCalled();
-    expect(sessionsList.requests).toBe(2);
+    expect(rows.requests).toBe(2);
 
     oscillatorStart.mockClear();
-    await refetchRegistry(client);
+    await refetchActivity(client);
     expect(oscillatorStart).not.toHaveBeenCalled();
-    expect(sessionsList.requests).toBe(2);
+    expect(rows.requests).toBe(2);
   });
 
   it('stays silent for a run already over when the tab opened', async () => {
-    stubRegistry(() => []);
-    const { client } = renderWithProviders(<SessionRunObserver factoryId={FACTORY_ID} />);
+    stubProject(() => []);
+    const { client } = renderWithProviders(<SidebarWithObserver />);
     await waitForMutationsIdle(client);
-    await refetchRegistry(client);
+    await refetchActivity(client);
     expect(oscillatorStart).not.toHaveBeenCalled();
   });
 
-  it('refetches the sessions list once when a run starts on a session it has not listed', async () => {
-    const sessionsList = stubRegistry(() => ['session-created-by-the-dispatcher']);
-    const { client } = renderWithProviders(<SessionRunObserver factoryId={FACTORY_ID} />);
-    await waitFor(() => expect(sessionsList.requests).toBe(2));
+  it('rings once when the sidebar comes back after a run it watched ended while it was away', async () => {
+    let running = true;
+    stubProject(() => (running ? [SESSION_ID] : []));
+    const first = renderWithProviders(<SidebarWithObserver />);
+    await waitForMutationsIdle(first.client);
+    first.unmount();
 
-    await refetchRegistry(client);
-    expect(sessionsList.requests).toBe(2);
+    running = false;
+    const second = renderWithProviders(<SidebarWithObserver />);
+    await waitForMutationsIdle(second.client);
+    expect(oscillatorStart).toHaveBeenCalled();
+    oscillatorStart.mockClear();
+    second.unmount();
+
+    const third = renderWithProviders(<SidebarWithObserver />);
+    await waitForMutationsIdle(third.client);
     expect(oscillatorStart).not.toHaveBeenCalled();
   });
 });

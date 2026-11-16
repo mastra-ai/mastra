@@ -2,8 +2,8 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ProcessStepList, ProcessStepProgressBar } from '@mastra/playground-ui/components/Steps';
 import type { ProcessStep } from '@mastra/playground-ui/components/Steps';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconCircleX } from '@mastra/playground-ui/icons/central/IconCircleX';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { OctagonXIcon } from 'lucide-react';
 import { Container } from './shared';
 
 type TemplateInstallationProps = {
@@ -99,7 +99,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
             '[&>svg]:h-6 [&>svg]:w-6 [&>svg]:text-destructive-foreground [&>svg]:opacity-70',
           )}
         >
-          <OctagonXIcon />
+          <IconCircleX />
           <Txt as="span" variant="body" className="block">
             {error || 'Something went wrong'}
           </Txt>

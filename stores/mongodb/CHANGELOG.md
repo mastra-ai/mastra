@@ -1,5 +1,14 @@
 # @mastra/mongodb
 
+## 1.27.1-alpha.1
+
+### Patch Changes
+
+- Fixed startup cleanup leaving an extra observational memory record live. When a store started while another process was rolling a thread's memory over to a new generation, an older record from an earlier adapter version could stay live next to the new one. Startup now counts the record being rolled over, so the older record is retired as intended. ([#30452](https://github.com/mastra-ai/mastra/pull/30452))
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b)]:
+  - @mastra/core@1.84.0-alpha.3
+
 ## 1.27.1-alpha.0
 
 ### Patch Changes

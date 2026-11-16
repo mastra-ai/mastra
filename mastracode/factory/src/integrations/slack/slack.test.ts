@@ -1737,6 +1737,7 @@ describe('session start (onSessionStart)', () => {
         getId: vi.fn(() => 'thread-1'),
         getById: vi.fn(async () => ({ metadata: Object.fromEntries(settings) })),
         getSetting: vi.fn(async ({ key }: { key: string }) => settings.get(key) ?? null),
+        getSettingOn: vi.fn(async ({ key }: { threadId: string; key: string }) => settings.get(key) ?? null),
         setSetting: vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
           if (value === undefined) settings.delete(key);
           else settings.set(key, value);

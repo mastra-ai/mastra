@@ -1,6 +1,6 @@
-import { GripVerticalIcon } from 'lucide-react';
 import type { DragEventHandler } from 'react';
 import { Button } from '@/ds/components/Button';
+import { IconDotGrid2x3 } from '@/ds/icons/central/IconDotGrid2x3';
 import { cn } from '@/lib/utils';
 
 /** What a host's layout hands a card so it can be dragged, e.g. to rearrange a dashboard. */
@@ -22,7 +22,7 @@ export function MetricsCardDragHandle({ className, ...props }: MetricsCardDragHa
       className={cn('-my-1 shrink-0 cursor-grab active:cursor-grabbing', className)}
       {...props}
     >
-      <GripVerticalIcon />
+      <IconDotGrid2x3 />
     </Button>
   );
 }

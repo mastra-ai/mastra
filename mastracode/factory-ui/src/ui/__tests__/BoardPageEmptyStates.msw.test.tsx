@@ -31,7 +31,7 @@ describe('Board empty-state actions', () => {
             {
               id: OTHER_FACTORY_ID,
               name: 'Other Factory',
-              repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
+              repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main' })],
             },
           ],
         }),

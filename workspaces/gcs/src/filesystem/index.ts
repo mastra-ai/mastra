@@ -25,6 +25,17 @@ import type {
 import { MastraFilesystem, FileNotFoundError, FileExistsError } from '@mastra/core/workspace';
 
 /**
+ * Owner of the files inside a FUSE mount, as numeric uid/gid.
+ *
+ * Set this when commands run as a different OS user than the one the sandbox
+ * mounts as, so that user can read and write the mounted files.
+ */
+export interface MountOwner {
+  uid: number;
+  gid: number;
+}
+
+/**
  * GCS mount configuration.
  * Returned by GCSFilesystem.getMountConfig() for FUSE mounting in sandboxes.
  */
@@ -40,6 +51,11 @@ export interface GCSMountConfig extends FilesystemMountConfig {
    * sandbox paths map directly to prefixed GCS keys (matches S3/Azure mounts).
    */
   prefix?: string;
+  /**
+   * Owner of the files inside the mount, as numeric uid/gid.
+   * When unset, the sandbox probes the default user's uid/gid.
+   */
+  owner?: MountOwner;
 }
 
 /**
@@ -121,6 +137,13 @@ export interface GCSFilesystemOptions extends MastraFilesystemOptions {
   /** Mount as read-only (blocks write operations, mounts read-only in sandboxes) */
   readOnly?: boolean;
   /**
+   * Owner of the files inside the FUSE mount, as numeric uid/gid.
+   * Use this when sandbox commands run as a different OS user than the one
+   * performing the mount, so that user can read and write the mounted files.
+   * When unset, the sandbox probes the default user's uid/gid.
+   */
+  owner?: MountOwner;
+  /**
    * Custom API endpoint URL.
    * Used for local development with emulators like fake-gcs-server.
    */
@@ -188,6 +211,7 @@ export class GCSFilesystem extends MastraFilesystem {
   readonly name = 'GCSFilesystem';
   readonly provider = 'gcs';
   readonly readOnly?: boolean;
+  readonly owner?: MountOwner;
 
   status: ProviderStatus = 'pending';
 
@@ -220,6 +244,7 @@ export class GCSFilesystem extends MastraFilesystem {
     this.icon = options.icon ?? 'gcs';
     this.description = options.description;
     this.readOnly = options.readOnly;
+    this.owner = options.owner;
   }
 
   /**
@@ -275,6 +300,13 @@ export class GCSFilesystem extends MastraFilesystem {
     // Include prefix so sandbox mounts can use gcsfuse --only-dir for path alignment
     if (this.prefix) {
       config.prefix = this.prefix.replace(/\/$/, ''); // Strip trailing slash for mount commands
+    }
+
+    if (this.owner) {
+      // Copy the ids: the mount marker hashes this config, so a caller that mutates
+      // the object it passed in must not change the ownership that was mounted.
+      // Reading the fields also keeps an accessor-backed owner, which a spread would drop.
+      config.owner = { uid: this.owner.uid, gid: this.owner.gid };
     }
 
     return config;

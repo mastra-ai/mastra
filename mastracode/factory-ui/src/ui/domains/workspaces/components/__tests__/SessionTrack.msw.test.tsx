@@ -4,6 +4,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
+import { shipBoard, workBoardInfo } from '../../../../../../e2e/ui/board-catalog';
 import { layoutSessionTrack, trackMomentLabel, trackStartLabel } from '../../services/sessionTrack';
 import { SessionTrack } from '../SessionTrack';
 
@@ -21,19 +22,22 @@ function renderTrack() {
   const layout = layoutSessionTrack({
     startedAt,
     now,
-    stageHistory: [
-      {
-        stage: 'triage',
-        enteredAt: new Date(at(-1)).toISOString(),
-        exitedAt: new Date(at(0.1)).toISOString(),
-        by: 'user-ada',
-      },
-      { stage: 'execute', enteredAt: new Date(at(0.1)).toISOString(), by: 'user-grace' },
-    ],
+    card: {
+      createdAt: new Date(at(-1)).toISOString(),
+      stageHistory: [
+        {
+          stage: 'triage',
+          enteredAt: new Date(at(-1)).toISOString(),
+          exitedAt: new Date(at(0.1)).toISOString(),
+          by: 'user-ada',
+        },
+        { stage: 'execute', enteredAt: new Date(at(0.1)).toISOString(), by: 'user-grace' },
+      ],
+    },
     runs: [{ startedAt: at(2), endedAt: at(3) }],
     ownerChanges: [{ at: at(8), fromOwnerId: 'user-grace', toOwnerId: 'user-ada' }],
   });
-  render(<SessionTrack layout={layout} startedAt={startedAt} now={now} people={people} />);
+  render(<SessionTrack layout={layout} startedAt={startedAt} now={now} people={people} board={workBoardInfo} />);
   const track = screen.getByRole('img', { name: /^Session timeline/ });
   const hitArea = (piece: string) => {
     const hit = track.querySelector<HTMLElement>(`[data-track-hit="${piece}"]`);
@@ -48,15 +52,18 @@ describe('Session track', () => {
     const layout = layoutSessionTrack({
       startedAt,
       now,
-      stageHistory: [
-        { stage: 'execute', enteredAt: new Date(at(0)).toISOString(), by: 'user-ada' },
-        { stage: 'pr-review', enteredAt: new Date(at(0)).toISOString(), by: 'user-ada' },
-      ],
+      card: {
+        createdAt: new Date(at(0)).toISOString(),
+        stageHistory: [
+          { stage: 'execute', enteredAt: new Date(at(0)).toISOString(), by: 'user-ada' },
+          { stage: 'pr-review', enteredAt: new Date(at(0)).toISOString(), by: 'user-ada' },
+        ],
+      },
       runs: [],
       ownerChanges: [],
     });
 
-    render(<SessionTrack layout={layout} startedAt={startedAt} now={now} people={people} />);
+    render(<SessionTrack layout={layout} startedAt={startedAt} now={now} people={people} board={workBoardInfo} />);
 
     const track = screen.getByRole('img', { name: /^Session timeline. Building 10h, Review 10h/ });
     expect(within(track).getByText('Building')).toBeInTheDocument();
@@ -65,7 +72,7 @@ describe('Session track', () => {
 
   it.each([
     { piece: 'Agent run', readout: ['Agent run', '1h', moment(2), moment(3)] },
-    { piece: 'Triage', readout: ['Triage', '6m', moment(0), moment(0.1)] },
+    { piece: 'Triage', readout: ['Triage', '1h 6m', moment(-1), moment(0.1)] },
     { piece: 'Building', readout: ['Building', '9h 54m', moment(0.1), 'now'] },
     { piece: 'Ada Lovelace took over', readout: ['Ada Lovelace took over', moment(8)] },
   ])('names $piece with its length and its own moments on the axis', async ({ piece, readout }) => {
@@ -95,5 +102,26 @@ describe('Session track', () => {
     expect(within(track).getByText('Building')).toBeInTheDocument();
     expect(within(track).getByText(trackStartLabel(startedAt, now))).toBeInTheDocument();
     expect(within(track).getByText('now')).toBeInTheDocument();
+  });
+
+  it("names each stage by the card's own board, even where it reuses a built-in id", () => {
+    const shipped = shipBoard.phases.find(phase => phase.id === 'shipped');
+    assert(shipped);
+    const board = { ...shipBoard, phases: [{ ...shipped, id: 'execute' }] };
+    const layout = layoutSessionTrack({
+      startedAt,
+      now,
+      card: {
+        createdAt: new Date(at(0)).toISOString(),
+        stageHistory: [{ stage: 'execute', enteredAt: new Date(at(0)).toISOString(), by: 'user-ada' }],
+      },
+      runs: [],
+      ownerChanges: [],
+    });
+
+    render(<SessionTrack layout={layout} startedAt={startedAt} now={now} people={people} board={board} />);
+
+    const track = screen.getByRole('img', { name: /^Session timeline. Shipped 10h/ });
+    expect(within(track).getByText('Shipped')).toBeInTheDocument();
   });
 });

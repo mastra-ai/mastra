@@ -306,6 +306,7 @@ describe('SlackIntegration.channels', () => {
         getId: () => 'us-1',
         getById: vi.fn(async () => ({ metadata: {} })),
         getSetting: vi.fn(async () => null),
+        getSettingOn: vi.fn(async () => null),
         setSetting: vi.fn(async () => {}),
         setSettingOn: vi.fn(async () => {}),
       },

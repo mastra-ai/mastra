@@ -36,7 +36,7 @@ export function ChannelReplyMessage({
       <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2">
         {footer?.model}
         <span role="status" className="flex items-center gap-1">
-          <SlackIcon className="size-3" aria-hidden="true" />
+          <SlackIcon className="size-icon-xs" aria-hidden="true" />
           <Txt as="span" variant="meta" className={status === 'error' ? 'text-destructive-foreground' : undefined}>
             {label}
           </Txt>
