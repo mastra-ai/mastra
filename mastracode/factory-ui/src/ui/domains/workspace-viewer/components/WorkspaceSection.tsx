@@ -1,8 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { DiffStat } from '@mastra/playground-ui/components/DiffStat';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { pluralize } from '@mastra/playground-ui/utils/string';
 import { GitMerge } from 'lucide-react';
@@ -14,7 +15,9 @@ import type { RepositoryProvider } from './changes/tree/change-tree';
 import { REPOSITORY_PROVIDER_ICONS } from './repositoryProviderIcons';
 import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
 import { IconChanges } from '@mastra/playground-ui/icons/central/IconChanges';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconChevronRight } from '@mastra/playground-ui/icons/central/IconChevronRight';
+import { IconSquareBehindSquare1 } from '@mastra/playground-ui/icons/central/IconSquareBehindSquare1';
 
 interface WorkspaceBranch {
   branch: string;
@@ -62,6 +65,36 @@ function changesName(changes: WorkspaceChangesSummary): string {
 
 const rowClass = 'flex h-control-sm min-w-0 items-center gap-1.5';
 
+const branchIcon = <IconBranch aria-hidden className="text-muted-foreground size-3.5 shrink-0" />;
+
+function BranchCopyButton({ branch }: { branch: string }) {
+  const { isCopied, handleCopy } = useCopyToClipboard({ text: branch });
+  const CopyIcon = isCopied ? IconCheckmark2Medium : IconSquareBehindSquare1;
+  return (
+    <button
+      type="button"
+      aria-label={`Copy branch ${branch}`}
+      onClick={handleCopy}
+      className={cn(
+        'group/branch relative flex min-w-0 cursor-pointer items-center gap-1.5 rounded-sm pr-5',
+        focusRing,
+      )}
+    >
+      {branchIcon}
+      <Txt as="span" variant="body-sm" tone="ink" className="min-w-0 truncate">
+        {branch}
+      </Txt>
+      <CopyIcon
+        aria-hidden
+        className={cn(
+          'text-muted-foreground absolute right-0 size-3.5',
+          !isCopied && 'pointer-fine:opacity-0 group-hover/branch:opacity-100 group-focus-visible/branch:opacity-100',
+        )}
+      />
+    </button>
+  );
+}
+
 export function WorkspaceSection({
   loading,
   workspace,
@@ -90,20 +123,20 @@ export function WorkspaceSection({
   return (
     <section aria-label="Workspace" className="flex min-w-0 shrink-0 flex-col p-1.5">
       <div className={cn(rowClass, 'pl-2')}>
-        <IconBranch aria-hidden className="text-muted-foreground size-3.5 shrink-0" />
         {loading ? (
-          <SkeletonRows label="Loading workspace details" rows={1} rowClassName="h-3 w-48" className="grow" />
-        ) : workspace ? (
           <>
-            <Txt as="span" variant="body-sm" tone="ink" className="min-w-0 truncate" title={workspace.branch}>
-              {workspace.branch}
-            </Txt>
-            <CopyButton content={workspace.branch} tooltip="Copy branch name" variant="ghost" className="shrink-0" />
+            {branchIcon}
+            <SkeletonRows label="Loading workspace details" rows={1} rowClassName="h-3 w-48" className="grow" />
           </>
+        ) : workspace ? (
+          <BranchCopyButton branch={workspace.branch} />
         ) : (
-          <Txt as="span" variant="caption" tone="muted" className="min-w-0 truncate">
-            Branch details unavailable
-          </Txt>
+          <>
+            {branchIcon}
+            <Txt as="span" variant="caption" tone="muted" className="min-w-0 truncate">
+              Branch details unavailable
+            </Txt>
+          </>
         )}
         <span className="ml-auto flex shrink-0">{action}</span>
       </div>
