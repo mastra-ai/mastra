@@ -1,5 +1,5 @@
 import { createVectorErrorId } from '@mastra/core/storage';
-import { MongoServerError } from 'mongodb';
+import { MongoNetworkError, MongoServerError, ObjectId } from 'mongodb';
 import type { CommandStartedEvent, Db, Document, MongoClient, MongoClientOptions } from 'mongodb';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
@@ -7,8 +7,11 @@ import {
   DB_NAME,
   REGISTRY,
   captureCommands,
+  captureLogs,
+  clusterCreateMode,
   createRawSearchIndex,
   deferred,
+  listedId,
   pause,
   rawClient,
   reached,
@@ -16,6 +19,7 @@ import {
   seedCollection,
   seedRegistry,
   uniqueName,
+  unknownCreateMode,
 } from './__fixtures__/atlas-local';
 import { MongoDBVector } from './';
 
@@ -438,13 +442,258 @@ describe('provisioning protocol', () => {
       expect(await searchIndexNames(db, coll)).toEqual([`${coll}_vector_index`]);
     });
 
-    it('fails, never attaching, when a create errors in a way its own create may have landed', async () => {
+    it('attaches as uncertain, never owning, when a create errors in a way its own create may have landed', async () => {
+      const logs = captureLogs(a);
       const { coll, result } = await createWithRefusal(
         new MongoServerError({ code: 50, codeName: 'MaxTimeMSExpired', errmsg: 'operation exceeded time limit' }),
       );
-      expect(result?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'FAILED'));
-      expect(result?.cause?.code).toBe(50);
+      // S2 interim: `unknown` + a listed row is uncertain (I9): attached and logged, not owned.
+      expect(result).toBeUndefined();
+      expect(logs.warn.some(m => m.includes('may have been created by Mastra'))).toBe(true);
       expect((await entry(coll))?.ownsVectorIndex).not.toBe(true);
+    });
+  });
+  describe('provisioning with ids (S2)', () => {
+    let a: MongoDBVector;
+    let b: MongoDBVector;
+    const colls: string[] = [];
+    const entry = (name: string) => db.collection(REGISTRY).findOne({ _id: name as any });
+    const vectorDefinition = {
+      fields: [
+        { type: 'vector', path: 'embedding', numDimensions: 4, similarity: 'cosine' },
+        { type: 'filter', path: '_id' },
+        { type: 'filter', path: 'document' },
+      ],
+    };
+
+    beforeAll(async () => {
+      a = new MongoDBVector({ uri: ATLAS_LOCAL_URI, dbName: DB_NAME, id: 'ids-a', options: { monitorCommands: true } });
+      b = new MongoDBVector({ uri: ATLAS_LOCAL_URI, dbName: DB_NAME, id: 'ids-b' });
+      await a.connect();
+      await b.connect();
+    });
+
+    afterAll(async () => {
+      for (const c of colls) {
+        await db.collection(REGISTRY).deleteOne({ _id: c as any });
+        await db.dropCollection(c).catch(() => {});
+      }
+      await a.disconnect();
+      await b.disconnect();
+    });
+
+    async function byoColl(prefix: string) {
+      const coll = uniqueName(prefix);
+      colls.push(coll);
+      await seedCollection(db, coll, [{ title: 'a', embedding: [1, 0, 0, 0] }]);
+      return coll;
+    }
+
+    /** Run `fn` with `hooks` set on `stores`, clearing them afterwards. */
+    async function withHooks<T>(stores: MongoDBVector[], hooks: Document, fn: () => Promise<T>): Promise<T> {
+      for (const s of stores) (s as any).testHooks = hooks;
+      try {
+        return await fn();
+      } finally {
+        for (const s of stores) (s as any).testHooks = undefined;
+      }
+    }
+
+    const createByo = (s: MongoDBVector, coll: string, extra: Document = {}) =>
+      s.createIndex({ indexName: coll, dimension: 4, collectionName: coll, ...extra });
+
+    describe.each<[string, boolean]>([
+      ['local', false],
+      ['cluster', true],
+    ])('P-ID (%s)', (_label, cluster) => {
+      it('identical concurrent calls released in any order all succeed and record the listed id', async () => {
+        const coll = await byoColl('pid');
+        const gates = Array.from({ length: 5 }, () => deferred());
+        const all = deferred();
+        let arrived = 0;
+        const beforeAtlasCreate = async () => {
+          const gate = gates[arrived]!;
+          if (++arrived === 5) all.resolve();
+          await gate.promise;
+        };
+        const hooks = { beforeAtlasCreate, ...(cluster ? { createSearchIndexesCommand: clusterCreateMode(db) } : {}) };
+        await withHooks([a, b], hooks, async () => {
+          const calls = [a, b, a, b, a].map(s => createByo(s, coll));
+          try {
+            // Bounded: fails after 15 s if a call never reaches the create.
+            await reached({ reached: all });
+            // A different release order on each run.
+            for (const i of [0, 1, 2, 3, 4].sort(() => Math.random() - 0.5)) {
+              gates[i]!.resolve();
+              await new Promise(r => setTimeout(r, Math.floor(Math.random() * 5)));
+            }
+          } finally {
+            for (const g of gates) g.resolve();
+          }
+          await Promise.all(calls);
+        });
+        const docs = await db
+          .collection(REGISTRY)
+          .find({ _id: coll as any })
+          .toArray();
+        expect(docs).toHaveLength(1);
+        expect(typeof docs[0]?.generation).toBe('string');
+        expect(docs[0]?.ownsVectorIndex).toBe(true);
+        const vec = `${coll}_vector_index`;
+        expect(docs[0]?.indexIds).toEqual([{ name: vec, id: await listedId(db, coll, vec) }]);
+      });
+    });
+
+    it('P-NOROW: a successful create the P5 listing does not show is proven and recorded', async () => {
+      const coll = await byoColl('pnorow');
+      const vec = `${coll}_vector_index`;
+      await withHooks(
+        [a],
+        { listSearchIndexesStub: (_n: string, phase: string) => (phase === 'P5' ? [] : undefined) },
+        () => createByo(a, coll),
+      );
+      const e = await entry(coll);
+      expect(e?.ownsVectorIndex).toBe(true);
+      expect(e?.indexIds?.[0]?.id).toBe(await listedId(db, coll, vec));
+    });
+
+    it('P-X8: an external identical create between P3a and P4 on the cluster is recorded as ours', async () => {
+      const coll = await byoColl('px8');
+      const vec = `${coll}_vector_index`;
+      await withHooks(
+        [a],
+        {
+          createSearchIndexesCommand: clusterCreateMode(db),
+          beforeAtlasCreate: () => createRawSearchIndex(db, coll, vec, vectorDefinition),
+        },
+        () => createByo(a, coll),
+      );
+      const e = await entry(coll);
+      expect(e?.ownsVectorIndex).toBe(true);
+      expect(e?.indexIds?.[0]?.id).toBe(await listedId(db, coll, vec));
+    });
+
+    it('P-X8-OLD: an existing identical index answering with its old id is foreign by timestamp', async () => {
+      const coll = await byoColl('px8old');
+      const vec = `${coll}_vector_index`;
+      await createRawSearchIndex(db, coll, vec, vectorDefinition);
+      const OLD = ObjectId.createFromTime(Math.floor(Date.now() / 1000) - 60).toHexString();
+      const logs = captureLogs(a);
+      await withHooks(
+        [a],
+        {
+          listSearchIndexesStub: (name: string, phase: string) =>
+            phase === 'P3a' ? [] : phase === 'P5' ? [{ name, id: OLD, status: 'READY' }] : undefined,
+          createSearchIndexesCommand: async () => ({ ok: 1, indexesCreated: [{ id: OLD, name: vec }] }),
+        },
+        () => createByo(a, coll),
+      );
+      const e = await entry(coll);
+      expect(e?.ownsVectorIndex).not.toBe(true);
+      expect(e?.indexIds ?? []).toEqual([]);
+      expect(logs.warn.some(m => m.includes(vec) && m.includes(OLD))).toBe(true);
+    });
+
+    it('P-PARTIAL: a failed companion text create keeps the proven vector index owned', async () => {
+      const managed = uniqueName('ppartial');
+      colls.push(managed);
+      const refuse = async (cmd: Document, run: () => Promise<Document>) => {
+        if (cmd.indexes[0].type === 'search') {
+          throw new MongoServerError({ code: 2, codeName: 'BadValue', errmsg: 'injected' });
+        }
+        return run();
+      };
+      const result = await withHooks([a], { createSearchIndexesCommand: refuse }, () =>
+        a.createIndex({ indexName: managed, dimension: 4 }).catch(e => e),
+      );
+      expect(result).toBeInstanceOf(Error);
+      const vec = `${managed}_vector_index`;
+      const e = await entry(managed);
+      expect(e).not.toBeNull();
+      expect(e?.ownsVectorIndex).toBe(true);
+      expect(e?.indexIds).toEqual([{ name: vec, id: await listedId(db, managed, vec) }]);
+      expect(await searchIndexNames(db, managed)).toEqual([vec]);
+    });
+
+    it('P4-TIMEOUT: every createSearchIndexes carries a deadline of at most 60 s', async () => {
+      const managed = uniqueName('ptimeout');
+      colls.push(managed);
+      const events = captureCommands(a);
+      await a.createIndex({ indexName: managed, dimension: 4 });
+      const creates = events.filter(e => e.commandName === 'createSearchIndexes');
+      expect(creates).toHaveLength(2);
+      for (const c of creates) {
+        expect(c.command.maxTimeMS).toBeGreaterThan(0);
+        expect(c.command.maxTimeMS).toBeLessThanOrEqual(60_000);
+      }
+    });
+
+    describe('S2-UNKNOWN', () => {
+      it('(a) a lost response with nothing listed fails as pending and keeps the registration', async () => {
+        const coll = await byoColl('sunk_a');
+        const vec = `${coll}_vector_index`;
+        const err = await withHooks([a], { createSearchIndexesCommand: unknownCreateMode({ perform: false }) }, () =>
+          createByo(a, coll).catch(e => e),
+        );
+        expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'FAILED'));
+        expect(err?.message).toBe(
+          `The create of search index "${vec}" on "${coll}" may or may not have reached Atlas. Retry.`,
+        );
+        expect(await entry(coll)).not.toBeNull();
+        expect(await searchIndexNames(db, coll)).toEqual([]);
+      });
+
+      it('(b) a lost response with the index listed attaches, not owned, with a warning', async () => {
+        const coll = await byoColl('sunk_b');
+        const logs = captureLogs(a);
+        await withHooks([a], { createSearchIndexesCommand: unknownCreateMode({ perform: true }) }, () =>
+          createByo(a, coll),
+        );
+        expect((await entry(coll))?.ownsVectorIndex).not.toBe(true);
+        expect(logs.warn.some(m => m.includes('may have been created by Mastra'))).toBe(true);
+      });
+    });
+
+    it('P-STUCKROW: a dying row at the decisive pre-list refuses with CONFLICT and rolls back', async () => {
+      const coll = await byoColl('pstuck');
+      const vec = `${coll}_vector_index`;
+      const err = await withHooks(
+        [a],
+        {
+          listSearchIndexesStub: (name: string, phase: string) =>
+            phase === 'P3a' ? [{ name, id: 'x', status: 'DELETING' }] : undefined,
+        },
+        () => createByo(a, coll).catch(e => e),
+      );
+      expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+      expect(err?.message).toBe(
+        `search index "${vec}" on "${coll}" is in status DELETING (id x); the previous index under this name is still being removed. Retry. If it persists, drop it manually.`,
+      );
+      expect(await entry(coll)).toBeNull();
+    });
+
+    it('RF-P5ERR: a failing P5 listing after a successful create counts as no row: proven, no rollback', async () => {
+      const coll = await byoColl('rfp5');
+      const vec = `${coll}_vector_index`;
+      await withHooks(
+        [a],
+        {
+          listSearchIndexesStub: (_n: string, phase: string) => {
+            if (phase === 'P5') throw new MongoNetworkError('blip');
+            return undefined;
+          },
+        },
+        () => createByo(a, coll),
+      );
+      const e = await entry(coll);
+      expect(e?.ownsVectorIndex).toBe(true);
+      expect(e?.indexIds?.[0]?.id).toBe(await listedId(db, coll, vec));
+    });
+
+    it('RF-NAMES: an index name containing a dot is recorded by id', async () => {
+      const coll = await byoColl('rfnames');
+      await createByo(a, coll, { searchIndexName: 'v.1' });
+      expect((await entry(coll))?.indexIds).toEqual([{ name: 'v.1', id: await listedId(db, coll, 'v.1') }]);
     });
   });
 });

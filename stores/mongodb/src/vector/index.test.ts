@@ -1,5 +1,5 @@
 import { createVectorTestSuite } from '@internal/storage-test-utils';
-import { Collection, MongoClient, ObjectId } from 'mongodb';
+import { Collection, MongoClient, MongoServerError, ObjectId } from 'mongodb';
 import { vi, describe, it, expect, beforeAll, beforeEach, afterAll, test } from 'vitest';
 import { MongoDBVector } from './';
 import type { MongoDBCreateIndexParams } from './';
@@ -88,6 +88,8 @@ const dbName = 'vector_db';
 
 // Track whether Atlas Search readiness has been verified (shared across suites)
 let atlasSearchReady = false;
+// Set once the warm-up timed out, so every later suite fails at once instead of waiting again.
+let atlasSearchFailure: Error | undefined;
 
 async function waitForAtlasSearchReady(
   vectorDB: MongoDBVector,
@@ -98,6 +100,7 @@ async function waitForAtlasSearchReady(
   interval: number = 1000,
 ) {
   if (atlasSearchReady) return;
+  if (atlasSearchFailure) throw atlasSearchFailure;
   const start = Date.now();
   let lastError: any = null;
   let attempt = 0;
@@ -115,9 +118,10 @@ async function waitForAtlasSearchReady(
       await new Promise(res => setTimeout(res, interval));
     }
   }
-  throw new Error(
+  atlasSearchFailure = new Error(
     'Atlas Search did not become ready in time. Last error: ' + (lastError ? lastError.message : 'unknown'),
   );
+  throw atlasSearchFailure;
 }
 
 // deleteIndex and createSearchIndex read the durable registry, not the in-process cache.
@@ -133,6 +137,10 @@ const P0_RAW = { value: { generation: 'g0', rev: 0 }, lastErrorObject: { updated
 
 // Mocked collections that hold no Atlas Search indexes yet.
 const noSearchIndexes = () => ({ toArray: async () => [] });
+// Mocked collections that list one live search index, `existing`.
+const listing = (existing: string) => (name: string) => ({
+  toArray: async () => (name === existing ? [{ name, id: '0'.repeat(23) + 'f', status: 'READY' }] : []),
+});
 
 // Mocked db: the target collection exists, the call's own registration is live, no other one is being deleted,
 // and every registry write matches.
@@ -152,15 +160,15 @@ const stubDb = (v: MongoDBVector) => {
   const written: Record<string, unknown> = {};
   (v as any).db = {
     listCollections: () => ({ hasNext: async () => true }),
+    // The primary's clock, read before each create.
+    admin: () => ({ command: async () => ({ localTime: new Date() }) }),
     // Search-index commands go through db.command; a create answers like Atlas, with ids.
     command: vi.fn(async (cmd: any) =>
       'createSearchIndexes' in cmd
         ? {
             ok: 1,
-            indexesCreated: cmd.indexes.map((i: any, n: number) => ({
-              id: (n + 1).toString(16).padStart(24, '0'),
-              name: i.name,
-            })),
+            // Fresh ObjectIds: an id older than the create is classified foreign by its timestamp.
+            indexesCreated: cmd.indexes.map((i: any) => ({ id: new ObjectId().toHexString(), name: i.name })),
           }
         : { ok: 1 },
     ),
@@ -609,10 +617,11 @@ describe('MongoDBVector filterFields (#18587)', () => {
 
     it('still creates the full-text index when the vector index already exists, without caching paths', async () => {
       const v = makeVector();
-      const indexExists = Object.assign(new Error('index already exists'), { codeName: 'IndexAlreadyExists' });
       stubDb(v);
-      commandOf(v).mockRejectedValueOnce(indexExists); // vector index creation
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ listSearchIndexes: noSearchIndexes });
+      // The vector index is listed before the create, so it is attached, not created.
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({
+        listSearchIndexes: listing('idx_vector_index'),
+      });
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
       vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(P0);
 
@@ -620,8 +629,8 @@ describe('MongoDBVector filterFields (#18587)', () => {
 
       // The shared catch used to swallow IndexAlreadyExists from the first
       // call and skip the second, leaving the full-text index missing.
-      expect(createdIndexes(v)).toHaveLength(2);
-      expect(createdIndexes(v)[1].name).toBe('idx_search_index');
+      expect(createdIndexes(v)).toHaveLength(1);
+      expect(createdIndexes(v)[0].name).toBe('idx_search_index');
       // The existing index may declare different paths — nothing is cached.
       expect((v as any).declaredFilterPaths.has('idx')).toBe(false);
     });
@@ -709,12 +718,8 @@ describe('MongoDBVector filterFields (#18587)', () => {
 
     it('tolerates the full-text index already existing', async () => {
       const v = makeVector();
-      const indexExists = Object.assign(new Error('index already exists'), { codeName: 'IndexAlreadyExists' });
       stubDb(v);
-      commandOf(v)
-        .mockImplementationOnce(async () => ({ ok: 1 }))
-        .mockRejectedValueOnce(indexExists);
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ listSearchIndexes: noSearchIndexes });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ listSearchIndexes: listing('idx_search_index') });
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
       vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(P0);
 
@@ -1569,9 +1574,9 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const v = makeVector();
       stubDb(v);
       const order: string[] = [];
-      commandOf(v).mockImplementation(async () => {
+      commandOf(v).mockImplementation(async (cmd: any) => {
         order.push('provision');
-        return { ok: 1 };
+        return { ok: 1, indexesCreated: [{ id: new ObjectId().toHexString(), name: cmd.indexes[0].name }] };
       });
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ listSearchIndexes: noSearchIndexes });
       (v as any).indexTargets.set('idx', {
@@ -1797,12 +1802,10 @@ describe('MongoDBVector filterFields (#18587)', () => {
     it('round5: createSearchIndex updates the mapping in place when the index already exists', async () => {
       const v = makeVector();
       stubDb(v);
-      // First create succeeds; second call hits IndexAlreadyExists (returns false internally).
-      commandOf(v).mockImplementation(async (cmd: any) => {
-        if ('createSearchIndexes' in cmd) throw { codeName: 'IndexAlreadyExists' };
-        return { ok: 1 };
+      // The index is listed before the create, so it is attached and updated, not created.
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({
+        listSearchIndexes: listing('ops_idx_search_fields_index'),
       });
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ listSearchIndexes: noSearchIndexes });
       // Only a text index this registration created may be updated in place.
       stubRegistered(v, {
         idx: {
@@ -2708,7 +2711,11 @@ describe('MongoDBVector autoEmbed', () => {
       };
       (v as any).db = {
         listCollections: () => ({ hasNext: async () => true }),
-        command: vi.fn(async () => ({ ok: 1 })),
+        admin: () => ({ command: async () => ({ localTime: new Date() }) }),
+        command: vi.fn(async (cmd: any) => ({
+          ok: 1,
+          indexesCreated: cmd.indexes?.map((i: any) => ({ id: new ObjectId().toHexString(), name: i.name })),
+        })),
         collection: () => registry,
       };
 
@@ -2743,7 +2750,11 @@ describe('MongoDBVector autoEmbed', () => {
       };
       (v as any).db = {
         listCollections: () => ({ hasNext: async () => true }),
-        command: vi.fn(async () => ({ ok: 1 })),
+        admin: () => ({ command: async () => ({ localTime: new Date() }) }),
+        command: vi.fn(async (cmd: any) => ({
+          ok: 1,
+          indexesCreated: cmd.indexes?.map((i: any) => ({ id: new ObjectId().toHexString(), name: i.name })),
+        })),
         collection: () => registry,
       };
 
@@ -3767,7 +3778,8 @@ describe('MongoDBVector index ownership', () => {
       createSearchIndexesCommand: async (_cmd: unknown, run: () => Promise<unknown>) => {
         if (failed) return run();
         failed = true;
-        throw new Error('injected');
+        // A server refusal: the create is known not to have happened, so the rename is rolled back.
+        throw new MongoServerError({ code: 2, codeName: 'BadValue', errmsg: 'injected' });
       },
     };
     try {

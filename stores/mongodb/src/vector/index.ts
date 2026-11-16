@@ -29,8 +29,17 @@ import packageJson from '../../package.json';
 import { MongoDBFilterTranslator } from './filter';
 import type { MongoDBFieldCondition, MongoDBVectorFilter } from './filter';
 import { planDeleteCleanup } from './ownership';
-import { rollbackRestore } from './provisioning';
-import type { ListPhase, P0Pin, SearchIndexRow } from './provisioning';
+import {
+  CREATE_TIMEOUT_MS,
+  ID_TIMESTAMP_MARGIN_MS,
+  classify,
+  idTimestampMs,
+  isLiveRow,
+  isNewerId,
+  p4OutcomeOf,
+  rollbackRestore,
+} from './provisioning';
+import type { ListPhase, P0Pin, P4Outcome, SearchIndexRow } from './provisioning';
 import { searchDefinitionsEquivalent } from './search-definition';
 
 // Define necessary types and interfaces
@@ -356,6 +365,8 @@ interface RegistryDoc extends IndexTarget {
   retiredTextIndexNames?: string[];
   /** Bumped by every registry mutation (I5), so concurrent writers and delete transactions conflict. */
   rev?: number;
+  /** The proven Atlas id of each search index this registration created (I11b); an array, as names may contain `.`. */
+  indexIds?: { name: string; id: string }[];
   /** Set once a delete committed its decision; the entry then holds only its own drop set. */
   deleting?: boolean;
   /** Identifies the delete attempt that set `deleting`, so a stale call never finalizes a newer one. */
@@ -380,6 +391,19 @@ function literals(fields: Document): Document {
 interface P0Result {
   pin: P0Pin;
   before: RegistryDoc | null;
+}
+
+/**
+ * A provisioning failure. `rollback` is true only when nothing was proven in the call, so the
+ * caller may still undo its P0 write (I4); the caller rethrows `error`.
+ */
+class ProvisionAbort extends Error {
+  constructor(
+    readonly error: unknown,
+    readonly rollback: boolean,
+  ) {
+    super('provisioning aborted');
+  }
 }
 
 /** Names a `deleting` entry is still responsible for dropping (its drop set, as rewritten by T1). */
@@ -478,6 +502,13 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     beforeSearchIndexProvision?: (indexName: string) => Promise<void>;
     /** Wraps every `createSearchIndexes` command; `run` sends the real one. */
     createSearchIndexesCommand?: (command: Document, run: () => Promise<Document>) => Promise<Document>;
+    beforeDecisivePreList?: (indexName: string, name: string) => Promise<void>;
+    /** Replaces a listing's result for a phase; undefined means the real listing. May throw. */
+    listSearchIndexesStub?: (name: string, phase: ListPhase) => SearchIndexRow[] | undefined;
+    /** Called after the decisive pre-list found the name absent, right before the create. */
+    beforeAtlasCreate?: (indexName: string, name: string) => Promise<void>;
+    /** Called after the create returned or failed. May throw. */
+    afterAtlasCreate?: (indexName: string, name: string) => Promise<void>;
   };
   /**
    * Name of the mastra-owned collection that durably records the logical-index → target
@@ -694,6 +725,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * primary, with no read or write concern, which the server rejects for these commands.
    */
   private async runSearchIndexCommand(command: Document, timeoutMS?: number): Promise<Document> {
+    // `timeoutMS` is the client deadline; driver 7.x does not derive `maxTimeMS` from it for a
+    // generic command, so the server-side limit is sent explicitly.
+    if (timeoutMS) command = { ...command, maxTimeMS: timeoutMS };
     const run = () => this.db.command(command, { readPreference: 'primary', ...(timeoutMS ? { timeoutMS } : {}) });
     const hook = this.testHooks?.createSearchIndexesCommand;
     return 'createSearchIndexes' in command && hook ? hook(command, run) : run();
@@ -707,8 +741,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   private async listSearchIndexRows(
     collection: Collection<MongoDBDocument>,
     name: string,
-    _phase: ListPhase,
+    phase: ListPhase,
   ): Promise<SearchIndexRow[]> {
+    const stubbed = this.testHooks?.listSearchIndexesStub?.(name, phase);
+    if (stubbed) return stubbed;
     try {
       return (await collection
         // The driver's type omits readConcern, but the cursor sends it; without it a client with
@@ -782,33 +818,175 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   }
 
   /**
-   * P7: record that this store created search index `name` for `role`. Pinned on the
-   * registration's `generation` and on `name` still being its current name for the role, not on
-   * the call's `claimToken`, so an identical concurrent refresh never makes the flag miss. No
-   * upsert, so a deleted entry stays deleted. Bumps `rev` and sets a fresh `claimToken`, so a
-   * concurrent call's rollback never restores a snapshot from before this flag.
+   * P7: record that this store created search index `name` for `role`, with its proven `id`.
+   * Pinned on the registration's `generation` and on `name` still being its current name for the
+   * role, not on the call's `claimToken`, so an identical concurrent refresh never makes it miss.
+   * The id guard (I11b) requires the name's `indexIds` entry to be absent, `id`, or the R′ read
+   * just before; a newer R′ (another call's later create) is kept and logged. No upsert, so a
+   * deleted entry stays deleted. Bumps `rev` and sets a fresh `claimToken`, so a concurrent
+   * call's rollback never restores a snapshot from before this flag.
    */
   private async recordOwnership(
     indexName: string,
     role: 'vector' | 'text',
     name: string,
     generation: string,
-    _id?: string,
+    id: string,
   ): Promise<boolean> {
-    const written = await this.registry().updateOne(
+    const registry = this.registry();
+    const recorded = (await registry.findOne({ _id: indexName }))?.indexIds?.find(e => e.name === name)?.id;
+    let keep = id;
+    if (recorded && recorded !== id && isNewerId(recorded, id)) {
+      keep = recorded;
+      this.logger.warn(
+        `search index "${name}" of index "${indexName}": kept the newer recorded id ${recorded} instead of ${id}, which this call created`,
+      );
+    }
+    const written = await registry.updateOne(
       {
         _id: indexName,
         generation,
         deleting: { $ne: true },
         [role === 'vector' ? 'searchIndexName' : 'textSearchIndexName']: name,
+        $or: [
+          { indexIds: { $not: { $elemMatch: { name } } } },
+          { indexIds: { $elemMatch: { name, id: { $in: recorded ? [id, recorded] : [id] } } } },
+        ],
       },
       [
         {
-          $set: { [role === 'vector' ? 'ownsVectorIndex' : 'ownsTextIndex']: { $literal: true }, ...mutationFields() },
+          $set: {
+            [role === 'vector' ? 'ownsVectorIndex' : 'ownsTextIndex']: { $literal: true },
+            indexIds: {
+              $concatArrays: [
+                {
+                  $filter: {
+                    input: { $ifNull: ['$indexIds', []] },
+                    cond: { $ne: ['$$this.name', { $literal: name }] },
+                  },
+                },
+                { $literal: [{ name, id: keep }] },
+              ],
+            },
+            ...mutationFields(),
+          },
         },
       ],
     );
     return written.matchedCount === 1;
+  }
+
+  /**
+   * Provision one search index (§3.1, S2 interim semantics): the P3 check, the decisive pre-list
+   * (P3a), the create by raw command (P4), the verdict (P5) and recording the proven id (P7).
+   * Never rolls back itself; every failure is a {@link ProvisionAbort} telling the caller whether
+   * it still may.
+   */
+  private async provisionSearchIndex(args: {
+    indexName: string;
+    collection: Collection<MongoDBDocument>;
+    role: 'vector' | 'text';
+    op: 'CREATE_INDEX' | 'CREATE_SEARCH_INDEX';
+    description: { name: string; type: 'vectorSearch' | 'search'; definition: Document };
+    pin: P0Pin;
+    check: () => Promise<void>;
+  }): Promise<{ outcome: 'owned'; id: string } | { outcome: 'attached'; row: SearchIndexRow | undefined }> {
+    const { indexName, collection, role, op, description, pin, check } = args;
+    const { name } = description;
+    const collectionName = collection.collectionName;
+    const stuck = (row: SearchIndexRow) =>
+      new MastraError({
+        id: createVectorErrorId('MONGODB', op, 'CONFLICT'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName, collectionName },
+        text: `search index "${name}" on "${collectionName}" is in status ${row.status} (id ${row.id}); the previous index under this name is still being removed. Retry. If it persists, drop it manually.`,
+      });
+    let p4: P4Outcome | undefined;
+    try {
+      await check();
+      await this.testHooks?.beforeDecisivePreList?.(indexName, name);
+      const [pre] = await this.listSearchIndexRows(collection, name, 'P3a');
+      if (pre) {
+        if (!isLiveRow(pre)) throw stuck(pre);
+        return { outcome: 'attached', row: pre };
+      }
+      // The primary's clock, so client skew cannot trip the id-timestamp rule.
+      const creatingAt: Date = (await this.db.admin().command({ hello: 1 })).localTime;
+      await this.testHooks?.beforeAtlasCreate?.(indexName, name);
+      try {
+        const reply = await this.runSearchIndexCommand(
+          { createSearchIndexes: collectionName, indexes: [description] },
+          CREATE_TIMEOUT_MS,
+        );
+        const id = reply.indexesCreated?.[0]?.id;
+        p4 = id ? { kind: 'ok', id: String(id) } : { kind: 'unknown', error: new Error('create returned no id') };
+      } catch (error) {
+        p4 = p4OutcomeOf(error);
+      }
+      await this.testHooks?.afterAtlasCreate?.(indexName, name);
+      // A failed listing counts as no row: after `ok R` that still proves R (P5, I1).
+      const [row] = await this.listSearchIndexRows(collection, name, 'P5').catch(() => []);
+      const verdict = classify(p4, row, creatingAt);
+      if (verdict.kind === 'proven') {
+        if (!(await this.recordOwnership(indexName, role, name, pin.generation, verdict.id))) {
+          throw new ProvisionAbort(
+            new MastraError({
+              id: createVectorErrorId('MONGODB', op, 'CONFLICT'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              details: { indexName, collectionName },
+              text: `Index "${indexName}" was changed by another call while this one ran, so search index "${name}" that this call created (id ${verdict.id}) is not recorded and will not be removed by deleteIndex. Check the index and retry.`,
+            }),
+            false,
+          );
+        }
+        return { outcome: 'owned', id: verdict.id };
+      }
+      if (row && !isLiveRow(row)) throw new ProvisionAbort(stuck(row), true);
+      switch (verdict.kind) {
+        case 'foreign':
+          if (verdict.byTimestamp) {
+            const id = (p4 as { id: string }).id;
+            this.logger.warn(
+              `search index "${name}" on "${collectionName}" (id ${id}) is not recorded as created by Mastra: its id time ${new Date(idTimestampMs(id)!).toISOString()} is more than ${ID_TIMESTAMP_MARGIN_MS / 1000} s before the pre-list at ${creatingAt.toISOString()}`,
+            );
+          }
+          return { outcome: 'attached', row };
+        case 'uncertain':
+          this.logger.warn(
+            `search index "${name}" on "${collectionName}" (id ${verdict.candidateId}) may have been created by Mastra; kept; drop it manually if unused`,
+          );
+          return { outcome: 'attached', row };
+        case 'pending':
+          throw new ProvisionAbort(
+            new MastraError(
+              {
+                id: createVectorErrorId('MONGODB', op, 'FAILED'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.THIRD_PARTY,
+                details: { indexName, collectionName },
+                text: `The create of search index "${name}" on "${collectionName}" may or may not have reached Atlas. Retry.`,
+              },
+              (p4 as { error: unknown }).error,
+            ),
+            false,
+          );
+        case 'not-created': {
+          const error = (p4 as { error: any }).error;
+          // Atlas Local refuses a create racing an identical one as a duplicate name: the listed
+          // row is the winner's, never this call's, so attach (I6).
+          if (error?.code === 2 && /duplicate index name/i.test(String(error?.message)) && isLiveRow(row)) {
+            return { outcome: 'attached', row };
+          }
+          throw new ProvisionAbort(error, true);
+        }
+      }
+    } catch (error) {
+      if (error instanceof ProvisionAbort) throw error;
+      // Before the create every failure is rollback-eligible; after it, nothing is known.
+      throw new ProvisionAbort(error, !p4 || p4.kind === 'refused');
+    }
   }
 
   /**
@@ -1698,13 +1876,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         ...declaredMetadataPaths.map(path => ({ type: 'filter', path })),
       ];
 
-      // Each creation treats IndexAlreadyExists as a no-op independently. A
-      // shared catch would let an existing vector index skip creation of the
-      // companion full-text index entirely (e.g. after a previously
-      // interrupted createIndex), leaving the pair in a partial state.
-      let vectorIndexCreated: boolean;
-      try {
-        await this.assertNoPendingDrop(
+      // The vector index, then (managed only) the companion text index, each provisioned on its
+      // own: an existing vector index must not skip the text index (an interrupted createIndex).
+      const check = () =>
+        this.assertNoPendingDrop(
           targetCollection,
           indexName,
           [indexNameInternal, textSearchIndexName],
@@ -1716,41 +1891,46 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           },
           pin.generation,
         );
-        vectorIndexCreated = await this.createSearchIndexIgnoringExisting(collection, {
-          definition: { fields },
-          name: indexNameInternal,
-          type: 'vectorSearch',
-        });
-      } catch (error) {
-        // Nothing usable was provisioned, so the target must not keep resolving. Drop the
-        // collection only if this call created it, removed the entry it inserted, and no
-        // registration references the collection (read after the delete).
-        const removed = await this.rollbackRegistryEntry(
+      let vector: Awaited<ReturnType<MongoDBVector['provisionSearchIndex']>>;
+      try {
+        vector = await this.provisionSearchIndex({
           indexName,
+          collection,
+          role: 'vector',
+          op: 'CREATE_INDEX',
+          description: { definition: { fields }, name: indexNameInternal, type: 'vectorSearch' },
           pin,
-          p0Before ? rollbackRestore(p0Before, { indexName, ...p0Fields }) : null,
-        );
-        if (
-          removed &&
-          collectionCreated &&
-          !(await this.registry()
-            .findOne({ collectionName: targetCollection })
-            .catch(() => true))
-        ) {
-          this.collections.delete(targetCollection);
-          await collection.drop().catch(() => {});
+          check,
+        });
+      } catch (abort) {
+        const { error, rollback } = abort instanceof ProvisionAbort ? abort : { error: abort, rollback: true };
+        if (rollback) {
+          // Nothing usable was provisioned, so the target must not keep resolving. Drop the
+          // collection only if this call created it, removed the entry it inserted, and no
+          // registration references the collection (read after the delete).
+          const removed = await this.rollbackRegistryEntry(
+            indexName,
+            pin,
+            p0Before ? rollbackRestore(p0Before, { indexName, ...p0Fields }) : null,
+          );
+          if (
+            removed &&
+            collectionCreated &&
+            !(await this.registry()
+              .findOne({ collectionName: targetCollection })
+              .catch(() => true))
+          ) {
+            this.collections.delete(targetCollection);
+            await collection.drop().catch(() => {});
+          }
         }
         throw error;
       }
-      if (vectorIndexCreated) {
-        await this.recordOwnership(indexName, 'vector', indexNameInternal, pin.generation);
-      }
 
-      // Cache the declared filter paths only when this call actually created
-      // the index. An index that already existed may carry a different
-      // declaration; queries hydrate the real one lazily via
-      // getDeclaredFilterPaths().
-      if (vectorIndexCreated) {
+      // Cache the declared filter paths only when this call created the index. An index that
+      // already existed may carry a different declaration; queries hydrate the real one lazily
+      // via getDeclaredFilterPaths().
+      if (vector.outcome === 'owned') {
         this.declaredFilterPaths.set(
           indexName,
           new Set(documentIsEmbedded ? declaredMetadataPaths : [this.documentFieldName, ...declaredMetadataPaths]),
@@ -1763,19 +1943,26 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // createSearchIndex. The registry entry above records its name (managed only), so BYO
       // safety does not depend on this succeeding.
       if (!effectiveIsByo) {
-        const textIndexCreated = await this.createSearchIndexIgnoringExisting(collection, {
-          definition: {
-            mappings: {
-              dynamic: true,
+        try {
+          await this.provisionSearchIndex({
+            indexName,
+            collection,
+            role: 'text',
+            op: 'CREATE_INDEX',
+            // Provision under the PERSISTED name (a prior custom createSearchIndex name is
+            // preserved above); for a fresh managed index this is the default.
+            description: {
+              definition: { mappings: { dynamic: true } },
+              name: textSearchIndexName ?? defaultTextSearchIndex,
+              type: 'search',
             },
-          },
-          // Provision under the PERSISTED name (a prior custom createSearchIndex name is
-          // preserved above); for a fresh managed index this is the default.
-          name: textSearchIndexName ?? defaultTextSearchIndex,
-          type: 'search',
-        });
-        if (textIndexCreated) {
-          await this.recordOwnership(indexName, 'text', textSearchIndexName ?? defaultTextSearchIndex, pin.generation);
+            pin,
+            check,
+          });
+        } catch (abort) {
+          // No rollback after the vector step (I4): a proven vector index stays owned, and the
+          // text name stays recorded, unowned.
+          throw abort instanceof ProvisionAbort ? abort.error : abort;
         }
       }
     } catch (error: any) {
@@ -1791,37 +1978,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         },
         error,
       );
-    }
-  }
-
-  /**
-   * Creates an Atlas Search index, treating IndexAlreadyExists as a no-op so
-   * `createIndex` stays idempotent per index. Returns true when the index was
-   * actually created by this call.
-   */
-  private async createSearchIndexIgnoringExisting(
-    collection: Collection<MongoDBDocument>,
-    description: { definition: Document; name: string; type: 'vectorSearch' | 'search' },
-  ): Promise<boolean> {
-    // The server answers a create matching an existing index's definition with success, so
-    // success alone does not prove this call created it.
-    const existing = await this.listSearchIndexRows(collection, description.name, 'P3a');
-    if (existing.some(idx => idx.status !== 'DELETING' && idx.status !== 'DOES_NOT_EXIST')) return false;
-    try {
-      await this.runSearchIndexCommand({ createSearchIndexes: collection.collectionName, indexes: [description] });
-      return true;
-    } catch (error: any) {
-      if (error?.codeName === 'IndexAlreadyExists') {
-        return false;
-      }
-      // Atlas Local refuses a create racing an identical one with BadValue "duplicate index names":
-      // with the name now listed, a concurrent create won, so attach (§3.1 P5). Any other error may
-      // mean this call's own create landed, so it propagates; Task 4/5's classify takes over.
-      if (error?.code === 2 && /duplicate index name/i.test(String(error?.message))) {
-        const rows = await this.listSearchIndexRows(collection, description.name, 'P5').catch(() => []);
-        if (rows.some(idx => idx.status !== 'DELETING' && idx.status !== 'DOES_NOT_EXIST')) return false;
-      }
-      throw error;
     }
   }
 
@@ -2027,21 +2183,36 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           throw error;
         }
       }
-      await this.assertNoPendingDrop(
-        collectionName,
-        indexName,
-        [name],
-        'CREATE_SEARCH_INDEX',
-        { textSearchIndexName: name },
-        p0!.pin.generation,
-      );
-      await this.testHooks?.beforeSearchIndexProvision?.(indexName);
       this.indexTargets.set(indexName, { ...target, textSearchIndexName: name });
-      const created = await this.createSearchIndexIgnoringExisting(collection, { definition, name, type: 'search' });
-      if (created) {
-        // A proven create is never rolled back (I4), even if recording it fails.
-        provisioned = true;
-        await this.recordOwnership(indexName, 'text', name, p0!.pin.generation);
+      let created: Awaited<ReturnType<MongoDBVector['provisionSearchIndex']>>;
+      try {
+        created = await this.provisionSearchIndex({
+          indexName,
+          collection,
+          role: 'text',
+          op: 'CREATE_SEARCH_INDEX',
+          description: { definition, name, type: 'search' },
+          pin: p0!.pin,
+          check: async () => {
+            await this.assertNoPendingDrop(
+              collectionName,
+              indexName,
+              [name],
+              'CREATE_SEARCH_INDEX',
+              { textSearchIndexName: name },
+              p0!.pin.generation,
+            );
+            await this.testHooks?.beforeSearchIndexProvision?.(indexName);
+          },
+        });
+      } catch (abort) {
+        if (!(abort instanceof ProvisionAbort)) throw abort;
+        // Something may exist now: a proven create is never rolled back (I4).
+        if (!abort.rollback) provisioned = true;
+        throw abort.error;
+      }
+      if (created.outcome === 'owned') {
+        // Recorded with its id by the P7 above.
       } else if ((sameName && previous?.ownsTextIndex) || previous?.retiredTextIndexNames?.includes(name)) {
         // Ours already: either unchanged, or a retired name this rename just reactivated.
         // Recreating our own index with a different `fields` mapping must change the mapping.

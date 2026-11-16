@@ -1,4 +1,5 @@
-import { MongoClient } from 'mongodb';
+import { ConsoleLogger } from '@mastra/core/logger';
+import { MongoClient, MongoNetworkError, MongoServerError } from 'mongodb';
 import type { CommandStartedEvent, Db, Document } from 'mongodb';
 import type { MongoDBVector } from '../';
 
@@ -83,4 +84,62 @@ export function captureCommands(store: MongoDBVector): CommandStartedEvent[] {
   const events: CommandStartedEvent[] = [];
   (store as any).client.on('commandStarted', (e: CommandStartedEvent) => events.push(e));
   return events;
+}
+
+/** The store's `createSearchIndexesCommand` seam: `run` sends the real command. */
+type CreateCommandHook = (command: Document, run: () => Promise<Document>) => Promise<Document>;
+
+/** The id Atlas lists for search index `name` on `coll`, if any. */
+export async function listedId(db: Db, coll: string, name: string): Promise<string | undefined> {
+  const [row] = await db.collection(coll).listSearchIndexes(name).toArray();
+  return (row as { id?: string } | undefined)?.id;
+}
+
+/**
+ * Emulates the cluster's answer to an identical create: the existing index's id. Atlas Local
+ * answers with a fake id, or refuses a racing identical create as a duplicate name.
+ */
+export function clusterCreateMode(db: Db): CreateCommandHook {
+  return async (command, run) => {
+    const name = command.indexes[0].name as string;
+    let reply: Document;
+    try {
+      reply = await run();
+    } catch (error) {
+      if (!(error instanceof MongoServerError && error.code === 2 && /duplicate index name/i.test(error.message))) {
+        throw error;
+      }
+      reply = { ok: 1, indexesCreated: [{ name }] };
+    }
+    const id = await listedId(db, command.createSearchIndexes, name);
+    const created = reply.indexesCreated?.[0];
+    return id && created && created.id !== id ? { ...reply, indexesCreated: [{ ...created, id }] } : reply;
+  };
+}
+
+/** A create whose response is lost: optionally sent for real first. */
+export function unknownCreateMode(opts: { perform: boolean }): CreateCommandHook {
+  return async (_command, run) => {
+    if (opts.perform) await run();
+    throw new MongoNetworkError('simulated lost response');
+  };
+}
+
+/** Records every `warn` and `error` message the store logs from now on. */
+export function captureLogs(store: MongoDBVector): { warn: string[]; error: string[] } {
+  const logs = { warn: [] as string[], error: [] as string[] };
+  class Capture extends ConsoleLogger {
+    warn(message: string) {
+      logs.warn.push(message);
+    }
+    error(message: string) {
+      logs.error.push(message);
+    }
+    // MastraBase installs a child logger; keep recording into the same arrays.
+    child(): ConsoleLogger {
+      return this;
+    }
+  }
+  store.__setLogger(new Capture());
+  return logs;
 }
