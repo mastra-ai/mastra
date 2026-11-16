@@ -34148,6 +34148,12 @@
       "since": "2026-11-14",
       "last_failure": "2026-11-14",
       "reason": "versioning-fail"
+    },
+    "packages/mcp-apps-components/src/__tests__/observability-widget.test.tsx": {
+      "tier": "in",
+      "since": "2026-11-16",
+      "last_failure": "2026-11-16",
+      "reason": "versioning-fail"
     }
   }
 }
