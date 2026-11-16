@@ -98,6 +98,7 @@ export {
   type RegexRedactionDetail,
 } from './regex-filter';
 export { ToolCallFilter } from './tool-call-filter';
+export { PromptCacheProcessor, type PromptCacheProcessorOptions } from './prompt-cache';
 
 export { AgentsMDInjector, type ToolResultReminderOptions, type ReminderFileReader } from '../tool-result-reminder';
 
