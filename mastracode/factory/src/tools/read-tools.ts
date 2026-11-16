@@ -197,9 +197,7 @@ function describeBoards(boards: BoardRegistry): string {
 function resolveBoardId(boards: BoardRegistry, items: readonly Card[], ref: string): string {
   if (boards.has(ref) || items.some(item => boardForWorkItem(item) === ref)) return ref;
   const wanted = boardNameKey(ref);
-  const matches = [...boards.values()].filter(
-    board => board.id.toLowerCase() === wanted || boardNameKey(board.name) === wanted,
-  );
+  const matches = [...boards.values()].filter(board => boardNameKey(board.name) === wanted);
   if (matches.length === 1) return matches[0]!.id;
   if (matches.length > 1) {
     const candidates = matches.map(board => `${board.id} ("${board.name}")`).join(', ');

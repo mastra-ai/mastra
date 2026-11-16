@@ -270,6 +270,19 @@ describe('factory_list_work_items', () => {
       );
     });
 
+    it("matches a name only against names, not another board's id", async () => {
+      const delivery = defineBoard({
+        id: 'release',
+        name: 'Delivery',
+        initialPhase: 'review',
+        phases: { review: { name: 'Review', kind: 'resting' } },
+      });
+      const { run } = setup({ items: rows, boards: boardRegistryOf([openSource, delivery]) });
+      await expect(run('factory_list_work_items', { board: 'Release' })).rejects.toThrow('No board "Release"');
+      const named = await run<ListResult>('factory_list_work_items', { board: 'delivery' });
+      expect(named.items.map(r => r.id)).toEqual(['c']);
+    });
+
     it('refuses a board nothing is called, naming the boards there are', async () => {
       const { run } = setup({ items: rows, boards: boardRegistryOf([openSource, release]) });
       await expect(run('factory_list_work_items', { board: 'Closed source' })).rejects.toThrow(
