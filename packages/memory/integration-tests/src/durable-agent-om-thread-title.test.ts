@@ -1,7 +1,9 @@
 /**
- * GH #30478: a DurableAgent run treated as an observational-memory run (OM set on the Memory
- * instance and on the call) must title the thread, as the regular Agent does. The OM thresholds
- * sit far above the conversation, so the observer never runs and OM only persists the turn.
+ * GH #30478, the issue's case C: a DurableAgent with observational memory enabled on both the
+ * Memory instance and the call's `memory.options` must title the thread, as the regular Agent does.
+ * OM on the instance is what makes OM persist the turn; OM on the call is what makes the durable
+ * run treat itself as an OM run. The OM thresholds sit far above the conversation, so the observer
+ * never runs and OM only persists the turn.
  *
  * Real Memory, real OM, real LibSQL store; only the models are local mocks.
  */
@@ -15,11 +17,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 const usage = { inputTokens: 10, outputTokens: 5, totalTokens: 15 };
 
-function textModel(modelId: string, text: string, onCall?: () => void) {
+function textModel(modelId: string, text: string, onCall?: () => Promise<void> | void) {
   return new MockLanguageModelV2({
     modelId,
     doGenerate: async () => {
-      onCall?.();
+      await onCall?.();
       return {
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -29,7 +31,7 @@ function textModel(modelId: string, text: string, onCall?: () => void) {
       };
     },
     doStream: async () => {
-      onCall?.();
+      await onCall?.();
       return {
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
@@ -46,51 +48,90 @@ function textModel(modelId: string, text: string, onCall?: () => void) {
   });
 }
 
+const threadId = 'durable-om-title-thread';
+const resourceId = 'durable-om-title-user';
+
+type Hook = (memory: Memory) => Promise<void>;
+
+/** Runs one durable turn. Hooks run before the turn and inside the title model call. */
+async function runTurn(hooks: { beforeRun?: Hook; duringTitle?: Hook } = {}) {
+  let titleCalls = 0;
+  const observationalMemory = {
+    model: textModel('om-model', 'unused'),
+    observation: { messageTokens: 100_000 },
+    reflection: { observationTokens: 200_000 },
+  };
+  const storage = new LibSQLStore({ id: 'durable-om-title', url: ':memory:' });
+  const memory: Memory = new Memory({
+    storage,
+    options: {
+      observationalMemory,
+      generateTitle: {
+        model: textModel('title-model', 'Durable OM title', async () => {
+          titleCalls++;
+          await hooks.duringTitle?.(memory);
+        }),
+      },
+    },
+  });
+  const base = new Agent({
+    id: 'durable-om-title-agent',
+    name: 'durable-om-title-agent',
+    instructions: 'You are a test agent.',
+    model: textModel('main-model', 'Hello from the agent.'),
+    memory,
+  });
+  const mastra = new Mastra({ agents: { agent: createDurableAgent({ agent: base }) as any }, storage, logger: false });
+  await hooks.beforeRun?.(memory);
+  try {
+    const res: any = await mastra.getAgent('agent').stream('Hi, please say hello.', {
+      memory: { thread: threadId, resource: resourceId, options: { observationalMemory } },
+    } as any);
+    await (res.output ?? res).text;
+    res.cleanup?.();
+    await vi.waitFor(() => expect(titleCalls).toBe(1));
+    // The title write follows the title model call; give it time to land.
+    await new Promise(resolve => setTimeout(resolve, 300));
+    return { memory, titleCalls };
+  } finally {
+    await mastra.stopWorkers?.();
+  }
+}
+
 describe('DurableAgent observational-memory thread title (#30478)', () => {
   it('titles the thread and keeps the turn messages stored once', async () => {
-    let titleCalls = 0;
-    const observationalMemory = {
-      model: textModel('om-model', 'unused'),
-      observation: { messageTokens: 100_000 },
-      reflection: { observationTokens: 200_000 },
-    };
-    const storage = new LibSQLStore({ id: 'durable-om-title', url: ':memory:' });
-    const memory = new Memory({
-      storage,
-      options: {
-        generateTitle: { model: textModel('title-model', 'Durable OM title', () => titleCalls++) },
-        observationalMemory,
+    const { memory, titleCalls } = await runTurn();
+
+    expect((await memory.getThreadById({ threadId }))?.title).toBe('Durable OM title');
+    expect(titleCalls).toBe(1);
+    const { messages } = await memory.recall({ threadId, resourceId });
+    expect(messages.map((m: any) => m.role)).toEqual(['user', 'assistant']);
+    expect(new Set(messages.map((m: any) => m.id)).size).toBe(messages.length);
+  });
+
+  it('keeps thread metadata written while the title was generating', async () => {
+    const { memory } = await runTurn({
+      beforeRun: async memory => {
+        await memory.createThread({ threadId, resourceId, title: '', metadata: { omCursor: 'cursor-0' } });
+      },
+      // Stands in for OM advancing its cursor in thread metadata mid-run.
+      duringTitle: async memory => {
+        await memory.updateThread({ id: threadId, title: '', metadata: { omCursor: 'cursor-1' } });
       },
     });
-    const base = new Agent({
-      id: 'durable-om-title-agent',
-      name: 'durable-om-title-agent',
-      instructions: 'You are a test agent.',
-      model: textModel('main-model', 'Hello from the agent.'),
-      memory,
+
+    const thread = await memory.getThreadById({ threadId });
+    expect(thread?.title).toBe('Durable OM title');
+    expect(thread?.metadata).toMatchObject({ omCursor: 'cursor-1' });
+  });
+
+  it('does not re-create a thread deleted while the title was generating', async () => {
+    const { memory } = await runTurn({
+      duringTitle: async memory => {
+        await memory.deleteThread(threadId);
+      },
     });
-    const agent = createDurableAgent({ agent: base });
-    const mastra = new Mastra({ agents: { agent: agent as any }, storage, logger: false });
 
-    const threadId = 'durable-om-title-thread';
-    const resourceId = 'durable-om-title-user';
-    try {
-      const res: any = await mastra.getAgent('agent').stream('Hi, please say hello.', {
-        memory: { thread: threadId, resource: resourceId, options: { observationalMemory } },
-      } as any);
-      await (res.output ?? res).text;
-      res.cleanup?.();
-
-      await vi.waitFor(async () => {
-        expect((await memory.getThreadById({ threadId }))?.title).toBe('Durable OM title');
-      });
-      expect(titleCalls).toBe(1);
-
-      const { messages } = await memory.recall({ threadId, resourceId });
-      expect(messages.map(m => m.role)).toEqual(['user', 'assistant']);
-      expect(new Set(messages.map(m => m.id)).size).toBe(messages.length);
-    } finally {
-      await mastra.stopWorkers?.();
-    }
+    expect(await memory.getThreadById({ threadId })).toBeNull();
   });
 });
