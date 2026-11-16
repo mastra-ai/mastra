@@ -69,6 +69,8 @@ export class PineconeFilterTranslator extends BaseFilterTranslator<PineconeVecto
 
     // Process each entry
     const result: Record<string, any> = {};
+    // $all becomes an $and of $in clauses, so it can't share an object with sibling conditions
+    const allConditions: any[] = [];
 
     for (const [key, value] of entries) {
       const newPath = currentPath ? `${currentPath}.${key}` : key;
@@ -81,9 +83,10 @@ export class PineconeFilterTranslator extends BaseFilterTranslator<PineconeVecto
       if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
         // Handle nested $all
         if (Object.keys(value).length === 1 && '$all' in value) {
-          const translated = this.translateNode(value, key);
+          const translated = this.translateNode(value, newPath);
           if (translated.$and) {
-            return translated;
+            allConditions.push(...translated.$and);
+            continue;
           }
         }
 
@@ -101,7 +104,13 @@ export class PineconeFilterTranslator extends BaseFilterTranslator<PineconeVecto
             result[newPath] = normalizedValue;
           } else {
             // For objects without operators, flatten them
-            Object.assign(result, this.translateNode(value, newPath));
+            const flattened = this.translateNode(value, newPath);
+            if (flattened.$and) {
+              // Only an $all inside the nested object produces $and here, since operator objects take the branch above
+              allConditions.push(...flattened.$and);
+            } else {
+              Object.assign(result, flattened);
+            }
           }
         }
       } else {
@@ -109,7 +118,8 @@ export class PineconeFilterTranslator extends BaseFilterTranslator<PineconeVecto
       }
     }
 
-    return result;
+    if (allConditions.length === 0) return result;
+    return { $and: Object.keys(result).length > 0 ? [result, ...allConditions] : allConditions };
   }
 
   private translateOperator(operator: QueryOperator, value: any, currentPath: string = ''): any {
