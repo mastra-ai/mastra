@@ -12,7 +12,10 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { RedisStreamsPubSub } from '../../../../pubsub/redis-streams/src/index.js';
+
 import { defineBoard } from '../boards/index.js';
+import { workBoard } from '../boards/work.js';
 import { MastraFactory } from '../factory.js';
 import { GithubIntegration } from '../integrations/github/integration.js';
 import { mountApiRoutes } from '../routes/test-utils.js';
@@ -89,15 +92,22 @@ function latestRevision(text: string): number {
 }
 
 /** A fake OpenAI model: `decide` picks a tool call for each request, or the model answers "Done.". */
-function fakeModel(requests: string[], decide: (text: string) => ToolCall | undefined) {
+function fakeModel(
+  requests: string[],
+  decide: (text: string, tools: string[]) => ToolCall | undefined,
+  catalogs?: string[][],
+) {
   let calls = 0;
   return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
     if (!url.endsWith('/responses')) throw new Error(`Unexpected external request: ${url}`);
     const body = input instanceof Request ? await input.clone().text() : String(init?.body ?? '');
-    const text = JSON.stringify(JSON.parse(body).input);
+    const parsed = JSON.parse(body);
+    const text = JSON.stringify(parsed.input);
+    const tools: string[] = (parsed.tools ?? []).map((tool: { name: string }) => tool.name);
+    catalogs?.push(tools);
     requests.push(text);
-    const call = decide(text);
+    const call = decide(text, tools);
     if (call) {
       calls += 1;
       const item = {
@@ -163,8 +173,14 @@ function publisher(): (text: string) => ToolCall | undefined {
 }
 
 /** A real Factory on in-memory storage with one linked GitHub repository, driven over HTTP. */
-async function startFactory(board: ReturnType<typeof defineBoard>, landing: string, skills?: InlineSkill[]) {
+async function startFactory(
+  board: ReturnType<typeof defineBoard> | typeof workBoard,
+  landing: string,
+  skills?: InlineSkill[],
+  redisUrl?: string,
+) {
   vi.stubEnv('OPENAI_API_KEY', 'sk-phase-test');
+  const pubsub = redisUrl ? new RedisStreamsPubSub({ url: redisUrl, streamIdleTtlMs: 6 * 60 * 60 * 1000 }) : undefined;
   const storage = new LibSQLFactoryStorage({ id: 'phase-runtime', url: ':memory:' });
   const github = new GithubIntegration({
     appId: '123',
@@ -175,11 +191,12 @@ async function startFactory(board: ReturnType<typeof defineBoard>, landing: stri
   });
   const factory = new MastraFactory({
     storage,
+    pubsub,
     auth: null,
     integrations: [github],
     sandbox: () => new TestSandbox(),
     stateSecret: 'phase-runtime-test-state-secret',
-    boards: [board],
+    boards: board.id === 'work' ? [] : [board],
     ...(skills ? { skills } : {}),
     configVersion: 'phase-runtime-v1',
     secretEncryption: createFactorySecretEncryption({ primary: { id: 'test', key: Buffer.alloc(32, 7) } }),
@@ -189,6 +206,7 @@ async function startFactory(board: ReturnType<typeof defineBoard>, landing: stri
   const close = async () => {
     await mastra.shutdown().catch(() => undefined);
     await factory.close?.().catch(() => undefined);
+    await pubsub?.close();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
   };
@@ -202,8 +220,12 @@ async function startFactory(board: ReturnType<typeof defineBoard>, landing: stri
   await storage
     .getDomain<ModelCredentialsStorage>('model-credentials')
     .setCredential({ orgId: ORG }, 'openai', { type: 'api_key', key: 'sk-phase-test' });
-  const send = (method: string, path: string, body: unknown) =>
-    app.request(path, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const send = (method: string, path: string, body?: unknown) =>
+    app.request(path, {
+      method,
+      headers: { 'content-type': 'application/json' },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
 
   const { project } = await (await send('POST', '/web/factory/projects', { name: 'Phase project' })).json();
   // No project setting starts runs: only the phase's own start rule may.
@@ -243,10 +265,14 @@ async function startFactory(board: ReturnType<typeof defineBoard>, landing: stri
   expect(route.status, await route.clone().text()).toBe(201);
 
   const workItems = storage.getDomain<WorkItemsStorage>('work-items');
-  const card = async (title: string, labels: string[]): Promise<Card> => {
+  const card = async (
+    title: string,
+    labels: string[],
+    sourceType: 'issue' | 'pull-request' = 'issue',
+  ): Promise<Card> => {
     const response = await send('POST', `/web/factory/projects/${project.id}/work-items`, {
       title,
-      externalSource: { integrationId: 'github', type: 'issue', externalId: `phase:${title}` },
+      externalSource: { integrationId: 'github', type: sourceType, externalId: `phase:${title}` },
       metadata: { authorTrusted: true, labels },
     });
     const created = await response.json();
@@ -256,7 +282,7 @@ async function startFactory(board: ReturnType<typeof defineBoard>, landing: stri
   const read = async (item: Card) => (await workItems.get({ orgId: ORG, id: item.id }))!;
   const decisionsFor = async (item: Card) =>
     (await workItems.listDeferredDecisions(ORG, project.id)).filter(record => record.workItemId === item.id);
-  return { project, workItems, card, read, decisionsFor, close };
+  return { project, workItems, card, read, decisionsFor, send, close };
 }
 
 /**
@@ -315,6 +341,195 @@ function builder(): (text: string) => ToolCall | undefined {
 }
 
 describe('board phase fields at runtime', () => {
+  it.each([
+    { publicUrl: '', hasReviewSource: false },
+    { publicUrl: 'https://factory.example.test', hasReviewSource: true },
+  ])(
+    'records a request-changes verdict in a real Work review session with public URL $publicUrl',
+    async ({ publicUrl, hasReviewSource }) => {
+      const requests: string[] = [];
+      const catalogs: string[][] = [];
+      vi.stubEnv('MASTRACODE_PUBLIC_URL', publicUrl);
+      let submitted = false;
+      fakeModel(
+        requests,
+        (text, tools) => {
+          if (!text.includes('factory-review') || !tools.includes('factory_record_review_verdict') || submitted)
+            return undefined;
+          submitted = true;
+          return {
+            name: 'factory_record_review_verdict',
+            args: { verdict: 'request changes', reviewedHeadSha: 'a'.repeat(40), findings: 'Fix the implementation.' },
+          };
+        },
+        catalogs,
+      );
+      const runtime = await startFactory(workBoard, 'pr-review', undefined, process.env.FACTORY_TEST_REDIS_URL);
+      try {
+        const item = await runtime.card('review catalog', [], 'pull-request');
+        await vi.waitFor(async () => expect((await runtime.read(item)).stages).toEqual(['pr-review']), {
+          timeout: 15_000,
+        });
+        const decisions = await runtime.decisionsFor(item);
+        const pending = decisions.find(
+          record => record.decision.type === 'invokeSkill' && record.status === 'proposed',
+        );
+        if (pending) {
+          const approved = await runtime.send(
+            'POST',
+            `/web/factory/projects/${runtime.project.id}/decisions/${pending.id}/approve`,
+          );
+          expect(approved.status, await approved.clone().text()).toBe(200);
+        }
+        await vi.waitFor(async () => expect(requests.some(text => text.includes('factory-review'))).toBe(true), {
+          timeout: 15_000,
+        });
+        expect(catalogs.some(tools => tools.includes('factory_record_review_verdict'))).toBe(true);
+        expect(
+          catalogs.some(
+            (tools, index) =>
+              requests[index]?.includes('factory-review') &&
+              tools.includes('factory_record_review_verdict') &&
+              tools.includes('factory_transition_work_item'),
+          ),
+        ).toBe(true);
+        expect(catalogs.some(tools => tools.includes('factory_review_source'))).toBe(hasReviewSource);
+        await vi.waitFor(
+          async () => {
+            const reviewed = await runtime.read(item);
+            expect(reviewed.stages).toEqual(['pr-review']);
+            expect(reviewed.metadata).toMatchObject({
+              reviewVerdict: 'request changes',
+              reviewedHeadSha: 'a'.repeat(40),
+            });
+          },
+          { timeout: 15_000 },
+        );
+        expect((await runtime.decisionsFor(item)).filter(d => d.decision.type === 'sendMessage')).toEqual([]);
+        await vi.waitFor(
+          async () => {
+            expect((await runtime.decisionsFor(item)).find(d => d.decision.type === 'invokeSkill')?.status).toBe(
+              'succeeded',
+            );
+          },
+          { timeout: 15_000 },
+        );
+      } finally {
+        await runtime.close();
+      }
+    },
+    60_000,
+  );
+
+  it('runs Work planning through a real session with person approval and exposes an incomplete build', async () => {
+    const requests: string[] = [];
+    const catalogs: string[][] = [];
+    const directory = mkdtempSync(join(tmpdir(), 'factory-work-journey-'));
+    const planPath = join(directory, 'plan.md');
+    writeFileSync(planPath, '# Journey plan\n\nBuild and review the change.\n');
+    let submitted = false;
+    let moved = false;
+    fakeModel(
+      requests,
+      (text, tools) => {
+        if (!text.includes('factory-plan')) return undefined;
+        if (!submitted) {
+          if (!tools.includes('submit_plan')) return undefined;
+          submitted = true;
+          return { name: 'submit_plan', args: { path: planPath } };
+        }
+        if (moved || !tools.includes('factory_transition_work_item')) return undefined;
+        moved = true;
+        return {
+          name: 'factory_transition_work_item',
+          args: {
+            stage: 'execute',
+            expectedRevision: latestRevision(text),
+            rationale: 'Approved plan; start building.',
+          },
+        };
+      },
+      catalogs,
+    );
+    const runtime = await startFactory(workBoard, 'intake', undefined, process.env.FACTORY_TEST_REDIS_URL);
+    try {
+      const item = await runtime.card('real work journey', []);
+      expect((await runtime.read(item)).stages).toEqual(['intake']);
+      expect(await runtime.workItems.listRunBindings(ORG, runtime.project.id, item.id)).toEqual([]);
+      const movedToPlanning = await runtime.send(
+        'POST',
+        `/web/factory/projects/${runtime.project.id}/work-items/${item.id}/transition`,
+        {
+          board: 'work',
+          stage: 'planning',
+          expectedRevision: item.revision,
+          requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2',
+          cause: 'board_drag',
+        },
+      );
+      expect(movedToPlanning.status, await movedToPlanning.clone().text()).toBe(200);
+      expect((await movedToPlanning.json()).result).toMatchObject({ status: 'accepted', stage: 'planning' });
+      expect((await runtime.read(item)).stages).toEqual(['planning']);
+      const started = await vi.waitFor(async () => {
+        const decision = (await runtime.decisionsFor(item)).find(record => record.decision.type === 'invokeSkill');
+        expect(decision).toBeDefined();
+        expect(['leased', 'succeeded']).toContain(decision!.status);
+        return decision!;
+      });
+      expect(started.decision).toMatchObject({ type: 'invokeSkill' });
+      await vi.waitFor(async () => expect(requests.some(text => text.includes('factory-plan'))).toBe(true), {
+        timeout: 15_000,
+      });
+      const bindings = await runtime.workItems.listRunBindings(ORG, runtime.project.id, item.id);
+      const sessionId = bindings[0]?.sessionId;
+      await vi.waitFor(
+        async () => {
+          const attention = await (
+            await runtime.send('GET', `/web/factory/projects/${runtime.project.id}/attention`)
+          ).json();
+          expect(attention.items).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({ kind: 'agent-waiting', sessionId, toolName: 'submit_plan' }),
+            ]),
+          );
+        },
+        { timeout: 15_000 },
+      );
+      const parked = await (await runtime.send('GET', `/web/factory/projects/${runtime.project.id}/attention`)).json();
+      const toolCallId = parked.items.find((entry: { sessionId: string }) => entry.sessionId === sessionId).toolCallId;
+      expect((await runtime.read(item)).stages).toEqual(['planning']);
+      const accepted = await runtime.send('POST', `/web/user-sessions/${sessionId}/parked-approval`, {
+        decision: 'approve',
+        toolCallId,
+      });
+      expect(accepted.status, await accepted.clone().text()).toBe(200);
+      await vi.waitFor(
+        async () => {
+          expect((await runtime.read(item)).stages).toEqual(['execute']);
+          expect(requests.some(text => text.includes('factory-build'))).toBe(true);
+          const decisions = (await runtime.decisionsFor(item)).filter(record => record.decision.type === 'invokeSkill');
+          expect(['succeeded', 'superseded']).toContain(decisions[0]?.status);
+          expect(decisions[1]).toMatchObject({ status: 'failed', failureCode: 'run_incomplete' });
+        },
+        { timeout: 15_000 },
+      );
+      const finalCard = await runtime.read(item);
+      expect(finalCard.stageHistory.map(entry => entry.stage)).toEqual(['intake', 'planning', 'execute']);
+      expect(finalCard.metadata?.planApprovedAt).toBeDefined();
+      expect(catalogs[requests.findIndex(text => text.includes('factory-plan'))]).toEqual(
+        expect.arrayContaining(['submit_plan', 'factory_transition_work_item']),
+      );
+      expect(catalogs[requests.findIndex(text => text.includes('factory-build'))]).toContain(
+        'factory_transition_work_item',
+      );
+      const finalBindings = await runtime.workItems.listRunBindings(ORG, runtime.project.id, item.id);
+      expect(finalBindings.some(binding => binding.sessionId === sessionId)).toBe(true);
+      expect(new Set(finalBindings.map(binding => binding.sessionId))).toEqual(new Set([sessionId]));
+    } finally {
+      await runtime.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }, 60_000);
   it('starts a phase only for the cards its condition matches, and the agent moves the card after the exit tool', async () => {
     const requests: string[] = [];
     fakeModel(requests, publisher());

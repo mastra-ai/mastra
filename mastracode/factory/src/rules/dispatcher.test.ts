@@ -3057,7 +3057,7 @@ describe('FactoryDecisionDispatcher', () => {
     ]);
   });
 
-  it('fails a wake dispatch terminally when the terminal event is not observed', async () => {
+  it('reproduces a card stalled in its working phase when the run terminal event is lost', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
     try {
@@ -3116,6 +3116,14 @@ describe('FactoryDecisionDispatcher', () => {
         lastError: expect.stringContaining('terminal event was not observed'),
       });
       expect(getAgentEndListenerCount()).toBe(0);
+      expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['execute']);
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'failed',
+        failureCode: 'run_terminal_event_missing',
+        attempts: 1,
+      });
     } finally {
       vi.useRealTimers();
     }

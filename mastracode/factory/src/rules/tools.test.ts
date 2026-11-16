@@ -756,7 +756,7 @@ describe('factory_transition_work_item', () => {
         expect((await storage.get({ orgId: 'org-1', id }))?.metadata).not.toHaveProperty('reviewVerdict');
       });
 
-      it('grants nothing to a review session in a review phase that does not list the tool', async () => {
+      it('reproduces a review phase that cannot record a verdict when its board omits the capability', async () => {
         const board = defineBoard({
           id: 'release',
           name: 'Release',
@@ -795,7 +795,13 @@ describe('factory_transition_work_item', () => {
           kickoffKey: 'release-1',
           kickoffMessage: null,
         });
-        expect(await build(storage, boards)).not.toHaveProperty('factory_record_review_verdict');
+        const checkingTools = await build(storage, boards);
+        expect(checkingTools).not.toHaveProperty('factory_record_review_verdict');
+        expect(checkingTools).toHaveProperty('factory_transition_work_item');
+        expect((await storage.get({ orgId: 'org-1', id: prepared.item.id }))?.stages).toEqual(['checking']);
+        expect((await storage.get({ orgId: 'org-1', id: prepared.item.id }))?.metadata).not.toHaveProperty(
+          'reviewVerdict',
+        );
 
         await storage.update({
           orgId: 'org-1',
