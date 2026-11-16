@@ -218,6 +218,34 @@ describe('LinearRules', () => {
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 
+  it("runs the renamed issue's card on another board next to the card filed under the new identifier", async () => {
+    const boards = createBoardRegistry({ boards: [createTestBoard()] });
+    const { project, service, workItems } = await setup(undefined, boards);
+    const file = async (identifier: string, board: string, stage: string) =>
+      (
+        await workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: project.id,
+          input: {
+            externalSource: { integrationId: 'linear', type: 'issue', externalId: `linear:${identifier}`, url: issue.url },
+            title: `${identifier}: Fix intake sync`,
+            board,
+            stages: [stage],
+            sessions: {},
+            metadata: { linearIssueId: issue.id },
+          },
+        })
+      ).item;
+    const old = await file('OLD-1', 'release', 'planning');
+    const current = await file(issue.identifier, 'work', 'intake');
+    const evaluate = vi.spyOn(workItems, 'commitRuleEvaluation');
+
+    await service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] });
+
+    expect(evaluate.mock.calls.map(([call]) => call.workItemId).sort()).toEqual([old.id, current.id].sort());
+  });
+
   // A card finished while claims were enforced, the issue moved teams and reopened, and a second
   // live card was filed under the new identifier with the same stable issue id.
   it.each([

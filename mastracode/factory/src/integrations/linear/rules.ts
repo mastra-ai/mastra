@@ -12,6 +12,7 @@ import {
 import type { BoardRegistry } from '../../boards/index.js';
 import { toBoardSource } from '../../boards/project-boards.js';
 import type { ProjectBoardSource } from '../../boards/project-boards.js';
+import { effectiveBoard } from '../../boards/relocate.js';
 import { recordIntakeEvent } from '../../metrics/intake.js';
 import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type { FactoryLinearRuleContext, FactoryRuleDecision } from '../../rules/types.js';
@@ -133,7 +134,17 @@ export class LinearRules {
       const renamed = byIssueId.find(item => !isTerminalWorkItem(this.#boards(input), item)) ?? byIssueId[0];
       const filed = itemsBySourceKey.get(`linear:${issue.identifier}`);
       const renamedId = renamed?.externalSource?.externalId;
-      const cards = filed ?? (renamed ? ((renamedId && itemsBySourceKey.get(renamedId)) || [renamed]) : []);
+      const named = filed ?? (renamed ? ((renamedId && itemsBySourceKey.get(renamedId)) || [renamed]) : []);
+      // A card filed under an older identifier on a board none of those cover is still the
+      // issue's card there; one per board, the live one first.
+      const covered = new Set(named.map(card => effectiveBoard(card)));
+      const cards = [...named];
+      const live = (card: Card) => !isTerminalWorkItem(this.#boards(input), card);
+      for (const card of [...byIssueId.filter(live), ...byIssueId.filter(card => !live(card))]) {
+        if (covered.has(effectiveBoard(card)) || cards.some(held => held.id === card.id)) continue;
+        covered.add(effectiveBoard(card));
+        cards.push(card);
+      }
       if (!cards.length) statuses.push(await this.#ingestIssue(input, issue, undefined));
       // Each board's card runs its own rules for the issue.
       for (const card of cards) {
