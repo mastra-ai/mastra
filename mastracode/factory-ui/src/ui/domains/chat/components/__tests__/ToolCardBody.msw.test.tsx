@@ -18,13 +18,49 @@ describe('Factory tool body', () => {
     });
   });
 
-  describe('when an edit succeeds', () => {
-    it('shows the change without the redundant success result', async () => {
-      renderWithProviders(<ToolCard tool={editTool} />);
+  describe('when a command fails after printing a long output', () => {
+    const lines = Array.from({ length: 300 }, (_, index) => `file-${index}.ts`);
+    const failedCommand = {
+      ...commandTool,
+      status: 'error' as const,
+      result: `${lines.slice(-200).join('\n')}\n\nExit code: 1`,
+      exit: { exitCode: 1 },
+    };
+
+    it.each([
+      ['live, with its output streamed', lines.join('\n')],
+      ['after a reload, with no streamed output', ''],
+    ])('shows how it exited, %s', async (_, output) => {
+      renderWithProviders(<ToolCard tool={{ ...failedCommand, output }} />);
+      await userEvent.click(screen.getByRole('button', { name: /Run/ }));
+
+      expect(screen.getByText(/Exit code: 1/)).toBeVisible();
+    });
+
+    it('keeps the streamed lines its result dropped', async () => {
+      renderWithProviders(<ToolCard tool={{ ...failedCommand, output: lines.join('\n') }} />);
+      await userEvent.click(screen.getByRole('button', { name: /Run/ }));
+
+      expect(screen.getByText(/file-0\.ts/)).toBeVisible();
+    });
+
+    it('keeps escape codes its output spells out as text', async () => {
+      const result = "const clearLine = '\\u001b[2K';\n\nExit code: 1";
+      renderWithProviders(<ToolCard tool={{ ...failedCommand, output: '', result }} />);
+      await userEvent.click(screen.getByRole('button', { name: /Run/ }));
+
+      expect(screen.getByText(/const clearLine = '\\u001b\[2K';/)).toBeVisible();
+    });
+  });
+
+  describe('when an edit succeeds with diagnostics', () => {
+    it('shows what the edit reported beside the change', async () => {
+      const result = 'File updated\n\nLSP Diagnostics:\nerror TS2322 at line 1';
+      renderWithProviders(<ToolCard tool={{ ...editTool, result }} />);
       await userEvent.click(screen.getByRole('button', { name: /Edit/ }));
 
       expect(screen.getByRole('group', { name: 'File change' })).toBeVisible();
-      expect(screen.queryByText('File updated')).not.toBeInTheDocument();
+      expect(screen.getByText(/error TS2322 at line 1/)).toBeVisible();
     });
   });
 
@@ -178,7 +214,7 @@ describe('Factory tool body', () => {
     });
   });
 
-  describe('when a result exceeds the preview limit', () => {
+  describe('when a result is long', () => {
     it('copies the whole result', async () => {
       const user = userEvent.setup();
       renderWithProviders(<ToolCard tool={longResultTool} />);

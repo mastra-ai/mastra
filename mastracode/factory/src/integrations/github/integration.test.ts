@@ -5,6 +5,7 @@ import { fakeRouteAuth } from '../../routes/test-utils.js';
 import { createStateSigner } from '../../state-signing.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { GithubIntegration, normalizePrivateKey } from './integration.js';
+import { openPullRequestLister } from './rules.js';
 
 // Real RSA key so we can prove Node's PEM decoder accepts the normalized
 // output (the failure mode is `error:1E08010C:DECODER routines::unsupported`).
@@ -1030,6 +1031,116 @@ describe('GithubIntegration open issue discovery', () => {
     await github.listOpenIssueStates({ installationId: 7, repository: 'acme/api' });
 
     expect(listForRepo).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe('GithubIntegration open pull request discovery', () => {
+  const openPullRequest = (number: number, draft = false, createdAt = '2026-07-01T00:00:00Z') => ({
+    ...pullRequestData(),
+    number,
+    html_url: `https://github.com/acme/app/pull/${number}`,
+    draft,
+    labels: [{ name: 'bug' }],
+    created_at: createdAt,
+  });
+  const linkedAt = Date.parse('2026-06-01T00:00:00Z');
+  const beforeLink = '2026-05-01T00:00:00Z';
+  const page = (first: number, createdAt?: string) =>
+    Array.from({ length: 30 }, (_, index) => openPullRequest(first + index, false, createdAt));
+
+  it('lists open non-draft pull requests with their author and labels, following pages until a short page', async () => {
+    const github = new GithubIntegration(validConfig());
+    const fullPage = Array.from({ length: 30 }, (_, index) => openPullRequest(index + 1, index === 0));
+    const list = vi
+      .fn()
+      .mockResolvedValueOnce({ data: fullPage })
+      .mockResolvedValueOnce({ data: [openPullRequest(31)] });
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ pulls: { list } } as any);
+
+    const pullRequests = await openPullRequestLister(github.versionControl)({
+      installationId: 7,
+      repository: 'acme/app',
+      createdSince: linkedAt,
+    });
+
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(list).toHaveBeenLastCalledWith({ owner: 'acme', repo: 'app', state: 'open', per_page: 30, page: 2 });
+    expect(pullRequests.map(({ number }) => number)).not.toContain(1);
+    expect(pullRequests).toHaveLength(30);
+    expect(pullRequests.at(-1)).toMatchObject({
+      number: 31,
+      url: 'https://github.com/acme/app/pull/31',
+      state: 'open',
+      draft: false,
+      author: 'ada',
+      labels: ['bug'],
+      headBranch: 'feat/intake',
+      baseBranch: 'main',
+      createdAt: '2026-07-01T00:00:00Z',
+      headSha: 'abc123',
+      updatedAt: '2026-07-02T00:00:00Z',
+    });
+  });
+
+  it('keeps paging past 150 open pull requests opened since the link, stopping at the first page opened entirely before it', async () => {
+    const github = new GithubIntegration(validConfig());
+    const list = vi.fn();
+    for (let index = 0; index < 7; index += 1) list.mockResolvedValueOnce({ data: page(index * 30 + 1) });
+    list.mockResolvedValueOnce({ data: page(211, beforeLink) });
+    // Never reached: the page before it already predates the link.
+    list.mockResolvedValue({ data: page(241) });
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ pulls: { list } } as any);
+
+    const pullRequests = await openPullRequestLister(github.versionControl)({
+      installationId: 7,
+      repository: 'acme/app',
+      createdSince: linkedAt,
+    });
+
+    expect(list).toHaveBeenCalledTimes(8);
+    expect(pullRequests).toHaveLength(210);
+    expect(pullRequests.at(-1)?.number).toBe(210);
+  });
+
+  it('reads on through a page of drafts and a page straddling the link, keeping only what opened since', async () => {
+    const github = new GithubIntegration(validConfig());
+    const drafts = Array.from({ length: 30 }, (_, index) => openPullRequest(index + 1, true));
+    const straddling = [...page(31).slice(0, 10), ...page(41, beforeLink).slice(0, 20)];
+    const list = vi
+      .fn()
+      .mockResolvedValueOnce({ data: drafts })
+      .mockResolvedValueOnce({ data: straddling })
+      .mockResolvedValueOnce({ data: page(61, beforeLink) })
+      .mockResolvedValue({ data: page(91) });
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ pulls: { list } } as any);
+
+    const pullRequests = await openPullRequestLister(github.versionControl)({
+      installationId: 7,
+      repository: 'acme/app',
+      createdSince: linkedAt,
+    });
+
+    expect(list).toHaveBeenCalledTimes(3);
+    expect(pullRequests.map(({ number }) => number)).toEqual(Array.from({ length: 10 }, (_, index) => 31 + index));
+  });
+
+  it('stops after twenty pages when a repository keeps listing pull requests opened since the link', async () => {
+    const github = new GithubIntegration(validConfig());
+    const list = vi.fn();
+    for (let index = 0; index < 25; index += 1) list.mockResolvedValueOnce({ data: page(index * 30 + 1) });
+    list.mockResolvedValue({ data: [] });
+    // Only `pulls.list` is exercised, so the stub stands in for the full client.
+    const octokit = { pulls: { list } } as unknown as ReturnType<GithubIntegration['getInstallationOctokit']>;
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue(octokit);
+
+    const pullRequests = await openPullRequestLister(github.versionControl)({
+      installationId: 7,
+      repository: 'acme/app',
+      createdSince: linkedAt,
+    });
+
+    expect(list).toHaveBeenCalledTimes(20);
+    expect(pullRequests).toHaveLength(600);
   });
 });
 

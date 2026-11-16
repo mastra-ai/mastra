@@ -8,7 +8,6 @@ import CodeMirror from '@uiw/react-codemirror';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
-import { Braces } from 'lucide-react';
 import { forwardRef, useMemo } from 'react';
 import type { HTMLAttributes } from 'react';
 import { codeLanguages } from './code-languages';
@@ -19,6 +18,7 @@ import { variableHighlight } from './variable-highlight-extension';
 import { Button } from '@/ds/components/Button';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { useFieldControlAria } from '@/ds/components/Field/field-control-aria';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
 import { fieldErrorRimWithin, inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import { formatJSON } from '@/lib/formatting';
 import type { JsonSchema } from '@/lib/json-schema';
@@ -125,6 +125,8 @@ const codeEditorVariants = cva(
       variant: {
         default: cn(inputSurfaceAndFocusWithinStyle, 'rounded-md p-1', fieldErrorRimWithin),
         embedded: 'rounded-none border-none bg-transparent p-0',
+        /** Prose edited in place: no frame, no gutter, text flush with the label above it. */
+        inline: 'rounded-none border-none bg-transparent p-0',
       },
     },
     defaultVariants: {
@@ -161,8 +163,15 @@ const editorFocusTheme = Prec.highest(
 
 const editorFocusExtensions: Extension[] = [editorFocusAttributes, editorFocusTheme];
 
+/** Drops the line inset so text lines up with surrounding copy, and keeps three lines to click into while empty. */
+const inlineTheme = EditorView.theme({
+  '.cm-content': { padding: '0', minHeight: '3lh' },
+  '.cm-line': { padding: '0' },
+});
+
 type CodeEditorContentAttributes = {
   'aria-label': string;
+  class: string;
   id?: string;
   'aria-labelledby'?: string;
   'aria-describedby'?: string;
@@ -244,7 +253,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     };
 
     const extensions = useMemo(() => {
-      const contentAttributes: CodeEditorContentAttributes = { 'aria-label': ariaLabel };
+      const contentAttributes: CodeEditorContentAttributes = { 'aria-label': ariaLabel, class: 'zoom-safe-text' };
       if (controlId) contentAttributes.id = controlId;
       if (ariaLabelledBy) contentAttributes['aria-labelledby'] = ariaLabelledBy;
       if (ariaDescribedBy) contentAttributes['aria-describedby'] = ariaDescribedBy;
@@ -253,7 +262,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       const exts: Extension[] = [
         ...editorFocusExtensions,
         EditorView.contentAttributes.of(contentAttributes),
-        codeFoldGutter,
+        variant === 'inline' ? inlineTheme : codeFoldGutter,
       ];
 
       if (lineWrapping) {
@@ -285,6 +294,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       return exts;
     }, [
       extraExtensions,
+      variant,
       language,
       highlightVariables,
       schema,
@@ -309,7 +319,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
                 aria-label="Format JSON"
                 onClick={handleFormat}
               >
-                <Braces />
+                <IconCodeBrackets />
               </Button>
             )}
             {showCopyButton && <CopyButton content={formattedCode} />}

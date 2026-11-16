@@ -184,7 +184,7 @@ const noBarrelImports = selectorRule(() =>
 );
 
 // --- placeholder-text ----------------------------------------------------------------------------------
-// Placeholders read like the system search field on macOS and iOS: "Search agents", "Filter by name". No
+// Placeholders read like the system search field on macOS and iOS: "Search agents", "Search by name". No
 // trailing ellipsis (`…` or `...`): the dimmed text already says the field is empty. Placeholders that give
 // an instruction (start with Search, Filter, Select…) also use sentence case. Example values ("My Agent",
 // "e.g. Production alerts") keep their capitals.

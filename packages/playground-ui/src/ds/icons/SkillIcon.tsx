@@ -1,4 +1,4 @@
-import { Wand2 } from 'lucide-react';
 import React from 'react';
+import { IconMagicWand } from '@/ds/icons/central/IconMagicWand';
 
-export const SkillIcon = (props: React.SVGProps<SVGSVGElement>) => <Wand2 {...props} />;
+export const SkillIcon = (props: React.SVGProps<SVGSVGElement>) => <IconMagicWand {...props} />;

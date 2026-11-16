@@ -1,4 +1,3 @@
-import { CopyIcon, LayersIcon, LayersPlusIcon, PencilIcon, TextCursorInputIcon, Trash2Icon } from 'lucide-react';
 import { Fragment, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { SavedViewNameInput } from './saved-view-name-input';
@@ -11,7 +10,13 @@ import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import type { FilterBarField, FilterBarOperator } from '@/ds/components/FilterBar/types';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/ds/components/HoverCard';
 import { Txt } from '@/ds/components/Txt';
+import { IconInputForm } from '@/ds/icons/central/IconInputForm';
+import { IconLayersThree } from '@/ds/icons/central/IconLayersThree';
+import { IconLayersTwo } from '@/ds/icons/central/IconLayersTwo';
+import { IconPencil } from '@/ds/icons/central/IconPencil';
+import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import { Icon } from '@/ds/icons/Icon';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 import { controlHeight } from '@/ds/primitives/control-size';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
@@ -103,7 +108,7 @@ export function SavedViewTabs<TSettings>({
           disabled={draft !== undefined}
           onClick={() => views.create(newViewSettings)}
         >
-          <LayersPlusIcon />
+          <IconLayersThree />
         </Button>
       )}
     </div>
@@ -122,7 +127,7 @@ function EditingViewTab({
   const [renaming, setRenaming] = useState(false);
   return (
     <span aria-current="true" className={editingTabClass}>
-      <LayersIcon aria-hidden />
+      <IconLayersTwo aria-hidden />
       {renaming ? (
         <SavedViewNameInput
           name={name}
@@ -148,7 +153,7 @@ function EditingViewTab({
             className="-mr-2 size-6"
             onClick={() => setRenaming(true)}
           >
-            <PencilIcon />
+            <IconPencil />
           </Button>
         </>
       )}
@@ -168,7 +173,7 @@ function RenamingViewTab({ name, onCommit }: { name: string; onCommit: (name: st
 function SavedViewTabIcon() {
   return (
     <Icon data-slot="button-icon" size="sm">
-      <LayersIcon aria-hidden />
+      <IconLayersTwo aria-hidden />
     </Icon>
   );
 }
@@ -199,10 +204,10 @@ function SavedViewTab<TSettings>({
   onDelete: () => void;
 }) {
   const actions: ViewAction[] = [
-    { label: 'Edit view', icon: <PencilIcon aria-hidden />, onClick: onEdit },
-    { label: 'Rename', icon: <TextCursorInputIcon aria-hidden />, onClick: onRename },
-    { label: 'Duplicate', icon: <CopyIcon aria-hidden />, onClick: onDuplicate },
-    { label: 'Delete view', icon: <Trash2Icon aria-hidden />, onClick: onDelete, destructive: true },
+    { label: 'Edit view', icon: <IconPencil aria-hidden />, onClick: onEdit },
+    { label: 'Rename', icon: <IconInputForm aria-hidden />, onClick: onRename },
+    { label: 'Duplicate', icon: <IconSquareBehindSquare1 aria-hidden />, onClick: onDuplicate },
+    { label: 'Delete view', icon: <TrashIcon aria-hidden />, onClick: onDelete, destructive: true },
   ];
   const [menuOpen, setMenuOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);

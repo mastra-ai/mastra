@@ -11,8 +11,8 @@ const page = (overrides: Partial<{ total: number; page: number; perPage: number 
 
 describe('writeJson', () => {
   it('writes compact or pretty JSON with a trailing newline', () => {
-    const compactStream = { write: vi.fn() } as any;
-    const prettyStream = { write: vi.fn() } as any;
+    const compactStream = { write: vi.fn(), on: vi.fn() } as any;
+    const prettyStream = { write: vi.fn(), on: vi.fn() } as any;
 
     writeJson({ data: { ok: true } }, false, compactStream);
     writeJson({ data: { ok: true } }, true, prettyStream);

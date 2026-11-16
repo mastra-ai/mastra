@@ -790,6 +790,10 @@ describe('saveScorePayloadSchema', () => {
     expect(() => saveScorePayloadSchema.parse(buildPayload(entityType))).not.toThrow();
   });
 
+  it.each(['SCORER', 'PROCESSOR'])('accepts entityType %s emitted by experiment targets', entityType => {
+    expect(() => saveScorePayloadSchema.parse(buildPayload(entityType))).not.toThrow();
+  });
+
   it('accepts SpanType values forwarded from observability', () => {
     expect(() => saveScorePayloadSchema.parse(buildPayload(SpanType.AGENT_RUN))).not.toThrow();
   });

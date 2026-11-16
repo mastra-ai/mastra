@@ -1,13 +1,12 @@
 {
   "name": "@mastra/core",
-  "version": "1.82.0",
+  "version": "1.84.0-alpha.3",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
     "dist",
-    "LICENSE.md",
     "./**/*.d.ts"
   ],
   "exports": {
@@ -893,11 +892,11 @@
   "dependencies": {
     "@a2a-js/sdk-v0_3": "npm:@a2a-js/sdk@~0.3.14",
     "@a2a-js/sdk-v1": "npm:@a2a-js/sdk@~1.0.1",
-    "@ai-sdk/provider-utils-v6": "npm:@ai-sdk/provider-utils@4.0.63",
-    "@ai-sdk/provider-utils-v7": "npm:@ai-sdk/provider-utils@5.0.72",
+    "@ai-sdk/provider-utils-v6": "npm:@ai-sdk/provider-utils@4.0.66",
+    "@ai-sdk/provider-utils-v7": "npm:@ai-sdk/provider-utils@5.0.81",
     "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.5",
     "@ai-sdk/provider-v6": "npm:@ai-sdk/provider@3.0.19",
-    "@ai-sdk/provider-v7": "npm:@ai-sdk/provider@4.0.35",
+    "@ai-sdk/provider-v7": "npm:@ai-sdk/provider@4.0.38",
     "@isaacs/ttlcache": "^2.1.5",
     "@lukeed/uuid": "^2.0.1",
     "@mastra/schema-compat": "workspace:*",
@@ -923,6 +922,7 @@
     "yaml": "^2.9.1"
   },
   "peerDependencies": {
+    "@json-render/chat": "^0.22.0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
@@ -931,6 +931,7 @@
     "@ai-sdk/anthropic-v6": "npm:@ai-sdk/anthropic@3.0.137",
     "@ai-sdk/anthropic-v7": "npm:@ai-sdk/anthropic@4.0.94",
     "@ai-sdk/azure": "^2.0.146",
+    "@ai-sdk/azure-v6": "npm:@ai-sdk/azure@3.0.147",
     "@ai-sdk/cerebras-v7": "npm:@ai-sdk/cerebras@3.0.82",
     "@ai-sdk/deepinfra-v7": "npm:@ai-sdk/deepinfra@3.0.82",
     "@ai-sdk/deepseek-v7": "npm:@ai-sdk/deepseek@3.0.77",
@@ -966,6 +967,7 @@
     "@internal/test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/voice": "workspace:*",
+    "@json-render/chat": "^0.22.0",
     "@modelcontextprotocol/server": "2.4.0",
     "@openrouter/ai-sdk-provider": "^0.7.5",
     "@openrouter/ai-sdk-provider-v5": "npm:@openrouter/ai-sdk-provider@1.5.4",
@@ -1020,5 +1022,10 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "peerDependenciesMeta": {
+    "@json-render/chat": {
+      "optional": true
+    }
   }
 }

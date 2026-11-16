@@ -2,13 +2,13 @@
  * Types for workflow test factory
  */
 
-import type { Workflow } from '@mastra/core/workflows';
-import type { MastraStorage } from '@mastra/core/storage';
-import type { PubSub } from '@mastra/core/events';
 import type { AgentConfig, PublicStructuredOutputOptions, ToolsInput } from '@mastra/core/agent';
-import type { RequestContext } from '@mastra/core/di';
 import type { DurableAgentStreamOptions } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { RequestContext } from '@mastra/core/di';
+import type { PubSub } from '@mastra/core/events';
+import type { MastraStorage } from '@mastra/core/storage';
+import type { Workflow } from '@mastra/core/workflows';
 
 // ============================================================================
 // Durable Agent Test Types
@@ -370,6 +370,11 @@ export type CreateStepFn = typeof import('@mastra/core/workflows').createStep;
 export type AgentClass = typeof import('@mastra/core/agent').Agent;
 
 /**
+ * Mastra class type for tests that host a workflow on their own Mastra instance
+ */
+export type MastraClass = typeof import('@mastra/core/mastra').Mastra;
+
+/**
  * Function type for creating a workflow
  */
 export type CreateWorkflowFn = typeof import('@mastra/core/workflows').createWorkflow;
@@ -417,6 +422,8 @@ export type WorkflowTestDomain =
 export type SkippableTest =
   // State-related tests (evented engine WIP)
   | 'state'
+  // setState rejecting updates that break stateSchema (the evented engine never validates setState)
+  | 'stateValidation'
   // Error identity preservation (some engines serialize errors)
   | 'errorIdentity'
   // Schema validation throwing errors
@@ -429,6 +436,9 @@ export type SkippableTest =
   | 'schemaNestedValidation'
   // ZodError cause preservation when validation fails
   | 'schemaZodErrorCause'
+  // Known failure, pinned with it.fails instead of skipped: getInitData() returns the
+  // validated input after inputSchema defaults apply (#29424)
+  | 'schemaInitDataDefaultFails'
   // waitForEvent removed error
   | 'schemaWaitForEvent'
   // Abort returning 'canceled' status
@@ -471,6 +481,8 @@ export type SkippableTest =
   | 'getInitData'
   // Deprecated sync getStepResult (throws on storageVersion: 2 runs)
   | 'getStepResultSync'
+  // Reading the sync `state` field (throws on storageVersion: 2 runs)
+  | 'stateSync'
   // Error cause chain preservation (some engines have memoization issues with error cause chains)
   | 'errorCauseChain'
   // Variable resolution error handling (Inngest has race condition with snapshot persistence)
@@ -622,6 +634,8 @@ export type SkippableTest =
   | 'streamingTripwireOutputStream'
   // Streaming detailed event structure (exact event count/structure assertions)
   | 'streamingDetailedEvents'
+  // Exact streamLegacy event sequence for an agent used as a step
+  | 'streamingAgentDetailedEventsLegacy'
   // Streaming suspend/resume with streamLegacy API
   | 'streamingSuspendResumeLegacy'
   // Auto-resume without specifying step parameter (single suspended step)
@@ -697,6 +711,13 @@ export interface WorkflowTestConfig {
     createStep: CreateStepFn;
     createTool?: CreateToolFn;
     Agent?: AgentClass;
+    /**
+     * The Mastra class from the same copy of core as the engine under test. Tests that
+     * host a workflow themselves use this one: a host from another copy of core (source
+     * next to a built `dist`) runs steps with classes the engine's `instanceof` checks
+     * don't recognize.
+     */
+    Mastra?: MastraClass;
   };
 
   /**
@@ -938,6 +959,12 @@ export interface WorkflowCreatorContext {
  * Context passed to domain test creators
  */
 export interface WorkflowTestContext extends WorkflowCreatorContext {
+  /**
+   * Mastra class from the engine factory, for tests that host a workflow themselves
+   * (optional - tests that need it skip when the factory does not provide it)
+   */
+  Mastra?: MastraClass;
+
   /**
    * Execute a workflow and return the result
    */

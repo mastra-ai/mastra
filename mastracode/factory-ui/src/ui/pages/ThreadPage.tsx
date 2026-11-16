@@ -1,31 +1,29 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { MessageSquareOff } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
-import { Navigate, useLocation, useNavigate, useParams } from 'react-router';
+import { Navigate, useNavigate, useParams } from 'react-router';
 
-import { useFactoryQuery } from '../../hooks/useFactories';
 import { useRouteThreadSync } from '../../hooks/useRouteThreadSync';
 import { ChatPageLayout } from '../domains/chat/components/ChatPageLayout';
 import { EmptyThreadState } from '../domains/chat/components/EmptyThreadState';
 import { GoalPanel } from '../domains/chat/components/GoalPanel';
 import { PageTitle } from '../domains/chat/components/PageTitle';
 import { SessionChatSurface } from '../domains/chat/components/SessionChatSurface';
-import { SessionFavicon } from '../domains/chat/components/SessionFavicon';
 import { ThreadRailLayer } from '../domains/chat/components/ThreadRailLayer';
 import { TeammateSessionLine } from '../domains/chat/components/TeammateSessionLine';
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
-import { DraftSessionCreateError } from '../domains/workspaces/services/user-sessions';
-import { opensWithPrompt, useHandoffPrompt } from '../domains/chat/hooks/useHandoffPrompt';
+import { DraftSessionCreateError, isSessionNotFound } from '../domains/workspaces/services/user-sessions';
+import { useHandoffPrompt } from '../domains/chat/hooks/useHandoffPrompt';
 import { failedDraftState } from '../domains/chat/services/handoffFiles';
 import { FactorySessionPage } from '../domains/factory/components/RelatedFactorySessions';
+import { SessionPanelOverview } from '../domains/factory/components/SessionPanelOverview';
+import { SessionPanelSubject } from '../domains/factory/components/SessionPanelSubject';
+import type { WorkspacePanelPage } from '../domains/workspace-viewer/context/WorkspacePanelContext';
 import { WorkspaceFilesProvider } from '../domains/workspace-viewer/context/WorkspaceFilesProvider';
-import { WorkspaceFilesSurface } from '../domains/workspace-viewer/components/WorkspaceFilesSurface';
 import { useThreadWorkspacePath } from '../domains/workspace-viewer/hooks/useThreadWorkspacePath';
 import { useWiderThan } from '../domains/workspace-viewer/hooks/useWiderThan';
 import { chatColumnClass, RAIL_MIN_REM } from '../domains/workspace-viewer/layout';
@@ -34,91 +32,55 @@ import { useRefreshWorkspaceFilesOnToolCalls } from '../domains/workspace-viewer
 import { newUserSessionPath } from '../domains/workspaces/services/factoryPaths';
 
 import '../domains/chat/components/chat-enter.css';
+import { IconChatBubble7Off } from '@mastra/playground-ui/icons/central/IconChatBubble7Off';
 
-const threadShellClass = cn(
-  chatColumnClass,
-  '[--chat-inset-end:var(--workspace-files-inset,0px)] [--chat-gutter:0.25rem]',
-);
+const threadShellClass = cn(chatColumnClass, '[--chat-gutter:0.25rem]');
+
+const SESSION_PANEL: WorkspacePanelPage = {
+  subject: lead => <SessionPanelSubject lead={lead} />,
+  overview: workspace => <SessionPanelOverview workspace={workspace} />,
+};
 
 export function ThreadPage() {
   const { factoryId, threadId } = useParams<{ factoryId: string; threadId?: string }>();
-  const factoryQuery = useFactoryQuery(factoryId);
   const workspace = useThreadWorkspacePath();
-  const location = useLocation();
-  // A thread opened with its first prompt renders while its session is created,
-  // so the prompt shows straight away instead of a loader.
-  const opening = opensWithPrompt(location.state);
-  const resolvingSession = factoryQuery.isPending || (workspace.isPending && !opening);
+
+  if (workspace.error instanceof DraftSessionCreateError) {
+    return (
+      <Navigate
+        replace
+        to={workspace.error.draftPath}
+        state={failedDraftState(workspace.error.draft, workspace.error.message)}
+      />
+    );
+  }
+
+  if (workspace.error && isSessionNotFound(workspace.error)) return <SessionNotFoundMain factoryId={factoryId} />;
 
   return (
-    <>
-      {workspace.error instanceof DraftSessionCreateError ? (
-        <Navigate
-          replace
-          to={workspace.error.draftPath}
-          state={failedDraftState(workspace.error.draft, workspace.error.message)}
-        />
-      ) : workspace.error ? (
-        <SessionUnavailableMain error={workspace.error} factoryId={factoryId} onRetry={workspace.retry} />
-      ) : resolvingSession ? (
-        <ResolvingSessionMain />
-      ) : (
-        <ChatSessionBoundary threadId={threadId}>
-          <PageTitle />
-          <WorkspaceFilesProvider>
-            <ThreadPageMain workspacePath={workspace.workspacePath} threadId={workspace.threadId} />
-          </WorkspaceFilesProvider>
-        </ChatSessionBoundary>
-      )}
-    </>
+    <ChatSessionBoundary threadId={threadId}>
+      <PageTitle />
+      <WorkspaceFilesProvider page={SESSION_PANEL}>
+        <ThreadPageMain workspacePath={workspace.workspacePath} threadId={workspace.threadId} />
+      </WorkspaceFilesProvider>
+    </ChatSessionBoundary>
   );
 }
 
-function ResolvingSessionMain() {
-  return (
-    <ChatPageLayout>
-      <SessionFavicon state="initializing" />
-      <div className="grid min-h-0 place-items-center">
-        <Spinner aria-label="Loading session" className="text-muted-foreground" />
-      </div>
-    </ChatPageLayout>
-  );
-}
-
-function SessionUnavailableMain({
-  error,
-  factoryId,
-  onRetry,
-}: {
-  error: Error;
-  factoryId: string | undefined;
-  onRetry: () => void;
-}) {
+function SessionNotFoundMain({ factoryId }: { factoryId: string | undefined }) {
   const navigate = useNavigate();
-  // The server answers a missing session and a teammate's private one with the same 404.
-  const notFound = (error as { status?: number }).status === 404;
   return (
     <ChatPageLayout>
       <div className="grid min-h-0 place-items-center">
         <EmptyState
           as="h1"
-          iconSlot={<MessageSquareOff />}
-          titleSlot={notFound ? 'Session not found' : 'Could not load this session'}
-          descriptionSlot={
-            notFound
-              ? 'This session does not exist, or it is private to another user.'
-              : `Failed to load the session: ${error.message}`
-          }
+          iconSlot={<IconChatBubble7Off />}
+          titleSlot="Session not found"
+          descriptionSlot="This session does not exist, or it is private to another user."
           actionSlot={
-            notFound ? (
-              factoryId && (
-                <Button variant="primary" onClick={() => void navigate(newUserSessionPath(factoryId))}>
-                  Start a new session
-                </Button>
-              )
-            ) : (
-              <Button variant="primary" onClick={onRetry}>
-                Retry
+            factoryId && (
+              <Button variant="primary" onClick={() => void navigate(newUserSessionPath(factoryId))}>
+                Start a new session
               </Button>
             )
           }
@@ -135,12 +97,6 @@ function ThreadPageMain({
   workspacePath: string | undefined;
   threadId: string | undefined;
 }) {
-  useGlobalShortcuts();
-  useRouteThreadSync();
-  useHandoffPrompt();
-  const railBoxRef = useRef<HTMLDivElement>(null);
-  const { wider: railFits } = useWiderThan(railBoxRef, RAIL_MIN_REM);
-
   return (
     <ThreadSessionEffects workspacePath={workspacePath}>
       <FactorySessionPage>
@@ -148,18 +104,30 @@ function ThreadPageMain({
           secondaryBar={<GoalPanel />}
           emptyState={<EmptyThreadState />}
           composerLabel="Thread composer"
-          composerFooter={<TeammateSessionLine />}
+          composerStatus={<TeammateSessionLine />}
           className={threadShellClass}
-          contentRef={railBoxRef}
-          contentOverlay={railFits ? <ThreadRailLayer /> : undefined}
-          stageSurface={<WorkspaceFilesSurface />}
+          contentOverlay={<ThreadRailSlot />}
         />
       </FactorySessionPage>
     </ThreadSessionEffects>
   );
 }
 
+function ThreadRailSlot() {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const { wider: railFits } = useWiderThan(boxRef, RAIL_MIN_REM);
+
+  return (
+    <div ref={boxRef} className="pointer-events-none absolute inset-0">
+      {railFits && <ThreadRailLayer />}
+    </div>
+  );
+}
+
 function ThreadSessionEffects({ workspacePath, children }: { workspacePath: string | undefined; children: ReactNode }) {
+  useGlobalShortcuts();
+  useRouteThreadSync();
+  useHandoffPrompt();
   const { busy, transcript } = useChatTranscript();
   useInvalidateWorkspaceChangesOnRunCompletion(workspacePath, busy);
   useRefreshWorkspaceFilesOnToolCalls(workspacePath, transcript.entries);

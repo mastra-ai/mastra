@@ -47,7 +47,7 @@ describe('GitcrawlSyncClient review snapshots', () => {
       if (sql.includes('from pull_request_checks')) {
         return { stdout: '[]', stderr: '' };
       }
-      if (sql.includes('from pull_request_review_threads')) {
+      if (sql.includes('as unresolved_count')) {
         return { stdout: JSON.stringify([{ unresolved_count: 0 }]), stderr: '' };
       }
       if (sql.includes('from comments c')) {

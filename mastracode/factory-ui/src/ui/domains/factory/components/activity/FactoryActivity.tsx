@@ -3,20 +3,21 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronDown, ScrollText } from 'lucide-react';
 import { useId, useState } from 'react';
 
 import { traySurface } from '../../../../ui/tray';
 import { usePromptButton } from '../../../chat/hooks/usePromptButton';
 import { SESSION_STATUS_LABELS } from '../../../workspaces/services/sessionRows';
 import { useFactoryActivity } from '../../hooks/useFactoryActivity';
-import { ACTIVITY_PERIOD_LABELS, PERIOD_DAYS } from '../../periodActivity';
+import { ACTIVITY_PERIOD_LABELS, DEFAULT_ACTIVITY_PERIOD, PERIOD_DAYS } from '../../periodActivity';
 import type { ActivityPeriod } from '../../periodActivity';
 import { countsLabel } from './activityFormat';
 import { ActivityChart } from './ActivityChart';
 import { ActivityPeriodMenu } from './ActivityPeriodMenu';
 import { ActivityReveal } from './ActivityReveal';
 import { ActivityTotals } from './ActivityTotals';
+import { IconScript } from '@mastra/playground-ui/icons/central/IconScript';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 
 const RECAPS: Record<ActivityPeriod, { label: string; since: string }> = {
   today: { label: 'Recap today', since: 'today' },
@@ -39,7 +40,7 @@ function RecapButton({ period }: { period: ActivityPeriod }) {
         focusRing,
       )}
     >
-      <ScrollText aria-hidden className="size-3.5" />
+      <IconScript aria-hidden className="size-3.5" />
       {label}
     </button>
   );
@@ -65,7 +66,7 @@ function LiveSessions({ working, waiting }: { working: number; waiting: number }
 }
 
 export function FactoryActivity({ factoryId }: { factoryId: string }) {
-  const [period, setPeriod] = useState<ActivityPeriod>('week');
+  const [period, setPeriod] = useState(DEFAULT_ACTIVITY_PERIOD);
   const [open, setOpen] = useState(false);
   const headingId = useId();
   const chartId = useId();
@@ -98,7 +99,7 @@ export function FactoryActivity({ factoryId }: { factoryId: string }) {
                 <RecapButton period={period} />
               </div>
             )}
-            <ChevronDown
+            <IconChevronDownMedium
               aria-hidden
               className={cn(
                 'text-muted-foreground duration-slow ease-out-custom size-3.5 transition-[rotate,color] group-has-[[aria-controls]:hover]/band:text-foreground motion-reduce:transition-none',

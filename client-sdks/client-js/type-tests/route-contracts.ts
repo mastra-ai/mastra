@@ -404,3 +404,22 @@ type _FeedbackWriteTraceId = Expect<
 type _ScoreWriteTraceId = Expect<
   Equal<Pick<Parameters<MastraClient['createScore']>[0]['score'], 'traceId'>, { traceId: string }>
 >;
+
+type _OptionalWriteMode = Expect<
+  Equal<Parameters<MastraClient['createFeedback']>[0]['contextMode'], 'resolve' | 'provided' | undefined>
+>;
+type _OptionalScoreTimestamp = Expect<
+  Equal<Parameters<MastraClient['createScore']>[0]['score']['timestamp'], string | undefined>
+>;
+type _OptionalFeedbackData = Expect<
+  Equal<undefined extends Awaited<ReturnType<MastraClient['createFeedback']>>['data'] ? true : false, true>
+>;
+type _FeedbackTimestampResponse = Expect<
+  Equal<NonNullable<Awaited<ReturnType<MastraClient['createFeedback']>>['data']>['timestamp'], string>
+>;
+type _ReplacementIdentity = Expect<
+  Equal<
+    Pick<Parameters<MastraClient['replaceFeedback']>[0]['feedback'], 'feedbackId' | 'traceId' | 'timestamp'>,
+    { feedbackId: string; traceId: string; timestamp: string }
+  >
+>;

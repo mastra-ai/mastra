@@ -18,7 +18,7 @@ export function useCloseSettings() {
     void navigate(from ?? (factoryId ? `/factories/${factoryId}` : '/'));
     setOpenMobile(false);
 
-    const focusTargetId = mobileDrawerOpen ? 'mobile-navigation-trigger' : 'user-menu-trigger';
+    const focusTargetId = mobileDrawerOpen ? 'mobile-navigation-trigger' : 'sidebar-settings-link';
     requestAnimationFrame(() => document.getElementById(focusTargetId)?.focus());
   };
 }

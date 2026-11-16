@@ -67,7 +67,7 @@ export function FailureRateCard<V extends string = string>({
       isLoading={isLoading}
       isUpdating={isPlaceholderData}
     >
-      <ChartArea isEmpty={!isLoading && runs === 0} emptyMessage="No agent runs in this range.">
+      <ChartArea isEmpty={!isLoading && runs === 0}>
         <MetricsLineChart
           lineStyle="thin"
           data={data}

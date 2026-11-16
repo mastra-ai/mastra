@@ -1,6 +1,7 @@
 import type { PubSub } from '../../events/pubsub';
 import type { EventCallback } from '../../events/types';
 import type { IMastraLogger } from '../../logger';
+import { waitMs } from '../../utils/test-waits';
 import { assertDrainTimeout } from '../drain-timeout';
 import type { EventRouter, WorkerTransport, WorkerTransportStopOptions } from './transport';
 
@@ -37,7 +38,7 @@ export class PullTransport implements WorkerTransport {
     this.#group = group;
     this.#topic = topic ?? TOPIC_WORKFLOWS;
     this.#logger = logger;
-    this.#drainTimeout = assertDrainTimeout(drainTimeout ?? DEFAULT_DRAIN_TIMEOUT_MS, 'PullTransport');
+    this.#drainTimeout = assertDrainTimeout(drainTimeout ?? waitMs(DEFAULT_DRAIN_TIMEOUT_MS, 50), 'PullTransport');
   }
 
   async start(router: EventRouter): Promise<void> {

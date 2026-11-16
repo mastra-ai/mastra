@@ -1,8 +1,8 @@
-import { ExternalLink } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { Button } from '@/ds/components/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -43,7 +43,7 @@ export function DisabledFeatureButton({ icon, label, tooltipContent, docsHref }:
             )}
           >
             Learn more
-            <ExternalLink className="size-3" />
+            <IconSquareArrowTopRight className="size-3" />
           </a>
         </span>
       </TooltipContent>

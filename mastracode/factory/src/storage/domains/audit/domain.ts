@@ -5,6 +5,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import { getFactoryAuthUser } from '../../../auth.js';
+import { loose } from '../../../routes/route.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../projects/base.js';
 import { auditActionsInNamespaces, isAuditAction, isAuditNamespace } from './actions.js';
@@ -88,10 +89,6 @@ export interface AuditDomainOptions {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_ACTOR_PROFILES = 100;
-
-function loose(c: unknown): Context {
-  return c as Context;
-}
 
 /** The actions a `namespaces=` query names: none when it names only unknown ones, `undefined` when it names nothing. */
 function actionsInRequestedNamespaces(raw: string | undefined): string[] | undefined {

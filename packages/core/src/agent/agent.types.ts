@@ -689,6 +689,12 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    * Signal to abort the streaming operation
    */
   abortSignal?: LoopConfig<OUTPUT>['abortSignal'];
+  /**
+   * @internal The object this run's steps report themselves as running under: the signal the thread runtime prepared
+   * for the run. Carried so the loop can keep step bookkeeping on that object even after `abortSignal` is replaced by
+   * a signal derived from it.
+   */
+  stepOwner?: LoopConfig<OUTPUT>['stepOwner'];
 
   /** Input processors to use for this execution (overrides agent's default) */
   inputProcessors?: InputProcessorOrWorkflow[];

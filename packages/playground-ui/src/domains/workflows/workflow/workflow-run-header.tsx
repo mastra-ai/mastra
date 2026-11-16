@@ -1,5 +1,4 @@
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
-import { Pause, Timer } from 'lucide-react';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import type { WorkflowRunTiming } from '../context/workflow-step-timing';
@@ -9,6 +8,8 @@ import { Badge } from '@/ds/components/Badge';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { RelativeTimestamp } from '@/ds/components/RelativeTimestamp';
 import { Txt } from '@/ds/components/Txt';
+import { IconPause } from '@/ds/icons/central/IconPause';
+import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
 import { useTimeDiff } from '@/hooks/use-time-diff';
 import { formatDuration } from '@/utils/duration';
 
@@ -41,7 +42,7 @@ function RunDuration({ span, spansSuspension }: Omit<WorkflowRunTiming, 'waiting
       className="flex items-center gap-1.5"
       title={spansSuspension ? 'Run duration, including time spent suspended' : 'Run duration'}
     >
-      <Timer aria-hidden className="size-3.5" />
+      <IconStopwatch aria-hidden className="size-3.5" />
       <Txt as="span" variant="meta" font="mono">
         {elapsed}
       </Txt>
@@ -59,7 +60,7 @@ function RunWaiting({ since }: { since: number }) {
       className="flex items-center gap-1.5 text-warning-foreground tabular-nums"
       title="Waiting for input"
     >
-      <Pause aria-hidden className="size-3.5" />
+      <IconPause aria-hidden className="size-3.5" />
       {waiting}
     </Txt>
   );

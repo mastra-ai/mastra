@@ -1,9 +1,9 @@
 import { Button as BaseButton } from '@base-ui/react/button';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
-import { ChevronDown } from 'lucide-react';
 import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { Icon } from '@/ds/icons/Icon';
 import { iconSizeClasses } from '@/ds/icons/icon-size-classes';
 import type { IconSize } from '@/ds/icons/icon-size-classes';
@@ -53,7 +53,7 @@ const LINK_LABEL = cn(
 // eslint-disable-next-line react-refresh/only-export-components -- exported variant helper is part of Button's public API
 export const buttonVariants = cva(
   cn(
-    'inline-flex cursor-pointer items-center justify-center',
+    'inline-flex cursor-pointer items-center justify-center whitespace-nowrap',
     controlStateColorTransition,
     sharedFormElementDisabledStyle,
     'aria-disabled:pointer-events-none aria-disabled:cursor-not-allowed aria-disabled:text-muted-foreground',
@@ -242,7 +242,7 @@ export function ButtonIcon({ size, children }: { size: ButtonSize; children: Rea
  * 1/8em on each side to sit where a regular icon's ink would. Pass it as a Button's `iconEnd`.
  */
 export function TriggerChevron() {
-  return <ChevronDown aria-hidden data-slot="trigger-chevron" className="mx-[-0.125em] shrink-0" />;
+  return <IconChevronDownMedium aria-hidden data-slot="trigger-chevron" className="mx-[-0.125em] shrink-0" />;
 }
 
 /** The trigger chevron in a Button's end slot. */
@@ -413,6 +413,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
         ref,
         ...sharedProps,
         disabled: undefined,
+        type: undefined,
         ...disabledLinkProps,
         className: cn(sharedProps.className, renderedLink.props.className),
         children: content,

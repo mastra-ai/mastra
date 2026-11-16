@@ -1,6 +1,6 @@
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +12,7 @@ import {
   experiment,
   results,
 } from '@/domains/experiments/__tests__/fixtures/experiment-item-route';
+import { useMockIntersectionObserver } from '@/test/intersection-observer';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
@@ -120,6 +121,127 @@ const renderPage = (search = '') => {
 };
 
 describe('Review Queue page', () => {
+  describe('when an experiment has more flagged results than one page', () => {
+    const { intersect } = useMockIntersectionObserver();
+    const flagged = Array.from({ length: 150 }, (_, index) => ({
+      ...results[2],
+      id: `res-flagged-${index}`,
+      itemId: `item-flagged-${index}`,
+      input: { q: `flagged question ${index}` },
+    }));
+
+    it('shows the first page, then loads the rest when the user scrolls to the end', async () => {
+      const requestedPages: string[] = [];
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results`, ({ request }) => {
+          const query = new URL(request.url).searchParams;
+          const status = query.get('status');
+          const page = Number(query.get('page'));
+          const perPage = Number(query.get('perPage'));
+          const list = flagged.filter(r => r.status === status);
+          if (status === 'needs-review') requestedPages.push(String(page));
+          return HttpResponse.json({
+            results: list.slice(page * perPage, (page + 1) * perPage),
+            pagination: { total: list.length, page, perPage, hasMore: (page + 1) * perPage < list.length },
+          });
+        }),
+      );
+      renderPage(`?experiment=${EXPERIMENT_ID}`);
+
+      await screen.findByText(/flagged question 99\b/);
+      expect(screen.queryByText(/flagged question 120\b/)).toBeNull();
+      expect(requestedPages).toEqual(['0']);
+
+      act(() => intersect(true));
+
+      await screen.findByText(/flagged question 120\b/);
+      expect(screen.getByText(/flagged question 0\b/)).toBeTruthy();
+      expect(requestedPages).toEqual(['0', '1']);
+    });
+  });
+
+  describe('when the deep-linked result is on a later page', () => {
+    const { intersect } = useMockIntersectionObserver();
+
+    it('requests each page once while it looks for the result', async () => {
+      const many = Array.from({ length: 300 }, (_, index) => ({
+        ...results[2],
+        id: `res-many-${index}`,
+        itemId: `item-many-${index}`,
+        input: { q: `many question ${index}` },
+      }));
+      const requested: string[] = [];
+      server.use(
+        http.get(
+          `${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results`,
+          async ({ request }) => {
+            const query = new URL(request.url).searchParams;
+            const status = query.get('status');
+            const page = Number(query.get('page'));
+            const perPage = Number(query.get('perPage'));
+            if (status === 'needs-review') requested.push(String(page));
+            await new Promise(resolve => setTimeout(resolve, 30));
+            const list = many.filter(r => r.status === status);
+            return HttpResponse.json({
+              results: list.slice(page * perPage, (page + 1) * perPage),
+              pagination: { total: list.length, page, perPage, hasMore: (page + 1) * perPage < list.length },
+            });
+          },
+        ),
+      );
+      renderPage(`?experiment=${EXPERIMENT_ID}&review=res-many-250`);
+
+      await screen.findByText(/many question 0\b/);
+      act(() => intersect(true));
+
+      await screen.findAllByText(/many question 250\b/, undefined, { timeout: 10_000 });
+      await waitFor(() => expect(requested).toEqual(['0', '1', '2']));
+    });
+  });
+
+  describe('when a tag filter matches no loaded result yet', () => {
+    it('keeps loading until a matching result shows', async () => {
+      const taggedFlagged = {
+        ...results[2],
+        id: 'res-tagged',
+        input: { q: 'tagged flagged question' },
+        tags: ['alpha'],
+      };
+      const completed = Array.from({ length: 150 }, (_, index) => ({
+        ...results[0],
+        id: `res-done-${index}`,
+        itemId: `item-done-${index}`,
+        status: 'complete' as const,
+        input: { q: `done question ${index}` },
+        tags: index >= 100 ? ['alpha'] : [],
+      }));
+      const all = [taggedFlagged, ...completed];
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results`, ({ request }) => {
+          const query = new URL(request.url).searchParams;
+          const status = query.get('status');
+          const page = Number(query.get('page'));
+          const perPage = Number(query.get('perPage'));
+          const list = all.filter(r => r.status === status);
+          return HttpResponse.json({
+            results: list.slice(page * perPage, (page + 1) * perPage),
+            pagination: { total: list.length, page, perPage, hasMore: (page + 1) * perPage < list.length },
+          });
+        }),
+      );
+      renderPage(`?experiment=${EXPERIMENT_ID}`);
+
+      await screen.findByText(/tagged flagged question/);
+      await pickFilter('Tag', 'alpha');
+      await screen.findByRole('group', { name: 'Tag alpha' });
+      await pickFilter('Status', 'Completed');
+
+      await screen.findByText(/done question 120\b/);
+      expect(screen.queryByText('No completed reviews yet')).toBeNull();
+      expect(screen.queryByText(/done question 0\b/)).toBeNull();
+    });
+  });
+
   describe('when no experiment is selected', () => {
     it('lists items awaiting review across every experiment', async () => {
       renderPage();

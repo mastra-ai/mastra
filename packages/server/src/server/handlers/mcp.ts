@@ -841,6 +841,12 @@ export interface MCPTransportOptions {
    * bridge that forwards the principal resolved by `server.auth`.
    */
   setRequestAuth?: SetMcpRequestAuth;
+  /** Check the `Host` and `Origin` headers against `allowedHosts` / `allowedOrigins` (DNS-rebinding protection). */
+  enableDnsRebindingProtection?: boolean;
+  /** Hostnames accepted in the `Host` header. */
+  allowedHosts?: string[];
+  /** Origins accepted in the `Origin` header; requests without one pass. */
+  allowedOrigins?: string[];
 }
 
 /**

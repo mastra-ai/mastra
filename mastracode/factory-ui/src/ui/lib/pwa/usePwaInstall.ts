@@ -1,5 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
+import {
+  captureInstallPrompt,
+  getCapturedInstallPrompt,
+  subscribeToInstallPrompt,
+  takeCapturedInstallPrompt,
+} from './installPromptCapture';
 import { detectIosBrowser } from './platform';
 import {
   getDismissalRemainingMs,
@@ -10,11 +16,7 @@ import {
 } from './persistence';
 import { isRunningStandalone } from './standalone';
 
-/** Non-standard Chromium event; not in lib.dom, so typed locally. */
-export interface BeforeInstallPromptEvent extends Event {
-  prompt(): Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
-}
+export type { BeforeInstallPromptEvent } from './installPromptCapture';
 
 export type PwaInstallState = 'installed' | 'native-prompt-available' | 'manual-install' | 'unavailable';
 
@@ -31,35 +33,34 @@ export interface PwaInstall {
 function computeInitialState(): PwaInstallState {
   if (isRunningStandalone() || isManuallyInstalled()) return 'installed';
   if (detectIosBrowser() !== null) return 'manual-install';
-  // Chromium signals native installability later via `beforeinstallprompt`.
-  return 'unavailable';
+  // Chromium signals native installability via `beforeinstallprompt`, which
+  // may already have been captured before this hook mounted.
+  return getCapturedInstallPrompt() ? 'native-prompt-available' : 'unavailable';
 }
 
 /**
- * Centralizes PWA install state: captures Chromium's `beforeinstallprompt`
- * for a user-gesture-triggered native prompt, falls back to the manual
- * "Add to Home Screen" method on iOS browsers, and tracks dismissal.
+ * Centralizes PWA install state: uses Chromium's `beforeinstallprompt`
+ * (captured app-wide by `captureInstallPrompt`) for a user-gesture-triggered
+ * native prompt, falls back to the manual "Add to Home Screen" method on iOS
+ * browsers, and tracks dismissal.
  */
 export function usePwaInstall(): PwaInstall {
   const [state, setState] = useState<PwaInstallState>(computeInitialState);
   const [dismissed, setDismissed] = useState(wasRecentlyDismissed);
-  const deferredPromptRef = useRef<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
-    const onBeforeInstallPrompt = (event: Event) => {
-      // Suppress Chromium's mini-infobar; we prompt from our own banner.
-      event.preventDefault();
-      deferredPromptRef.current = event as BeforeInstallPromptEvent;
+    captureInstallPrompt();
+    const syncCapturedPrompt = () => {
+      if (!getCapturedInstallPrompt()) return;
       setState(previous => (previous === 'installed' ? previous : 'native-prompt-available'));
     };
-    const onAppInstalled = () => {
-      deferredPromptRef.current = null;
-      setState('installed');
-    };
-    window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt);
+    const onAppInstalled = () => setState('installed');
+    const unsubscribe = subscribeToInstallPrompt(syncCapturedPrompt);
     window.addEventListener('appinstalled', onAppInstalled);
+    // A prompt may have been captured between the first render and this effect.
+    syncCapturedPrompt();
     return () => {
-      window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt);
+      unsubscribe();
       window.removeEventListener('appinstalled', onAppInstalled);
     };
   }, []);
@@ -78,10 +79,9 @@ export function usePwaInstall(): PwaInstall {
       setState('installed');
       return;
     }
-    const deferredPrompt = deferredPromptRef.current;
-    if (!deferredPrompt) return;
     // A BeforeInstallPromptEvent is single-use; consume it either way.
-    deferredPromptRef.current = null;
+    const deferredPrompt = takeCapturedInstallPrompt();
+    if (!deferredPrompt) return;
     await deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
     setState(outcome === 'accepted' ? 'installed' : 'unavailable');

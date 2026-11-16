@@ -148,6 +148,16 @@ class TransformedRequestContext extends RequestContext<Record<string, any>> {
   }
 }
 
+/** Own property descriptors of `target`, with accessors bound to it so they still read it when copied. */
+function bindAccessors(target: object): PropertyDescriptorMap {
+  const descriptors: PropertyDescriptorMap = Object.getOwnPropertyDescriptors(target);
+  for (const descriptor of Object.values(descriptors)) {
+    if (descriptor.get) descriptor.get = descriptor.get.bind(target);
+    if (descriptor.set) descriptor.set = descriptor.set.bind(target);
+  }
+  return descriptors;
+}
+
 /**
  * A type-safe tool that agents and workflows can call to perform specific actions.
  *
@@ -243,13 +253,19 @@ export class Tool<
    * Tool execution function
    * @param inputData - The raw, validated input data
    * @param context - Optional execution context with metadata. `observe` may be omitted;
-   * the runtime provides one (a no-op when no tracing span is active).
+   * the runtime provides one (a no-op when no tracing span is active). When `context` is
+   * omitted (for example when calling a tool directly from a test or script), the tool
+   * receives an empty `requestContext` and the default `observe`, but no `mastra`, writer,
+   * memory, `threadId`, `resourceId`, or `runId`. Pass a context if the tool relies on any
+   * of those.
    * @returns Promise resolving to tool output or a ValidationError if input validation fails
    */
-  execute?: (
-    inputData: TSchemaIn,
-    context: ToolExecuteCallContext<TContext>,
-  ) => Promise<TSchemaOut | ValidationError | void>;
+  execute?: {
+    (inputData: TSchemaIn, context?: ToolExecuteCallContext<TContext>): Promise<TSchemaOut | ValidationError | void>;
+    // Calls always match the signature above. This one is last so that
+    // `Parameters<Tool['execute']>[1]` stays the context type without `undefined`.
+    (inputData: TSchemaIn, context: ToolExecuteCallContext<TContext>): Promise<TSchemaOut | ValidationError | void>;
+  };
 
   /** Whether this tool only displays its call and receives a server acknowledgement. */
   renderOnly?: boolean;
@@ -552,7 +568,8 @@ export class Tool<
             };
           } else if (isWorkflowExecution && !baseContext.workflow) {
             // Reorganize workflow context - nest workflow-specific properties under 'workflow' key
-            const { workflowId, runId, state, setState, suspend, resumeData, suspendPayload, ...rest } = baseContext;
+            const { workflowId, runId, state, setState, updateState, suspend, resumeData, suspendPayload, ...rest } =
+              baseContext;
             organizedContext = {
               ...rest,
               workflow: {
@@ -560,6 +577,7 @@ export class Tool<
                 runId,
                 state,
                 setState,
+                updateState,
                 suspend,
                 resumeData,
                 suspendPayload,
@@ -581,14 +599,23 @@ export class Tool<
                     },
                   }
                 : baseContext.agent,
+              // Copies descriptors, not values: a workflow's `state` may be a getter that throws.
               workflow: baseContext.workflow
-                ? {
-                    ...baseContext.workflow,
-                    suspend: (args: any, suspendOptions?: SuspendOptions) => {
-                      suspendData = args;
-                      return baseContext.workflow?.suspend?.(args, suspendOptions);
+                ? Object.defineProperties(
+                    {},
+                    {
+                      ...bindAccessors(baseContext.workflow),
+                      suspend: {
+                        enumerable: true,
+                        configurable: true,
+                        writable: true,
+                        value: (args: any, suspendOptions?: SuspendOptions) => {
+                          suspendData = args;
+                          return baseContext.workflow?.suspend?.(args, suspendOptions);
+                        },
+                      },
                     },
-                  }
+                  )
                 : baseContext.workflow,
               requestContext: executionRequestContext ?? new RequestContext(),
             };

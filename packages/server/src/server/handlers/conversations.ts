@@ -58,7 +58,7 @@ export const CREATE_CONVERSATION_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Mastra instance is required for conversations' });
       }
 
-      const agent = await getAgentFromSystem({ mastra, agentId: agent_id });
+      const agent = await getAgentFromSystem({ mastra, agentId: agent_id, requestContext });
       const memory = await agent.getMemory({ requestContext });
       if (!memory) {
         throw new HTTPException(400, { message: `Agent "${agent.id}" does not have memory configured` });

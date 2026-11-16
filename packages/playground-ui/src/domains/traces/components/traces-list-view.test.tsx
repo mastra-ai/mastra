@@ -43,8 +43,8 @@ describe('TracesListView horizontal overflow', () => {
     const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
     const viewport = grid?.closest<HTMLElement>('[data-slot="scroll-area-viewport"], [class*="mask-"]');
 
-    expect(viewport?.style.getPropertyValue('--scroll-area-fade-right')).toBe('2rem');
-    expect(viewport?.style.getPropertyValue('--scroll-area-fade-left')).toBe('2rem');
+    expect(viewport?.style.getPropertyValue('--scroll-area-fade-right')).toBe('1.25rem');
+    expect(viewport?.style.getPropertyValue('--scroll-area-fade-left')).toBe('1.25rem');
   });
 });
 

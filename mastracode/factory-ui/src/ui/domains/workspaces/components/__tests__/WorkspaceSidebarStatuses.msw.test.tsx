@@ -1,4 +1,5 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -11,6 +12,7 @@ import type { PullRequestSubscription } from '../../../factory/services/githubSu
 import type { WorkItemSessionRef } from '../../../factory/services/workItems';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { SessionsSection } from '../SessionsSection';
+import { closeSessionProperties, openSessionProperties } from './fixtures/sessionProperties';
 import { LIVE_SESSION, testChatSession } from './fixtures/sessionsSection';
 
 const factoryProjectId = 'factory-project-1';
@@ -103,7 +105,10 @@ function wireWorkItem({
       integrationId: 'github',
       type: sourceType,
       externalId,
-      url: sourceType === 'pull-request' ? `https://github.com/mastra-ai/mastra/pull/${externalId}` : undefined,
+      url:
+        sourceType === 'pull-request'
+          ? `https://github.com/mastra-ai/mastra/pull/${String(metadata.githubPullRequestNumber)}`
+          : undefined,
     },
     parentWorkItemId,
     title,
@@ -127,6 +132,7 @@ function pullRequestSubscription(
     pullRequestNumber,
     status,
     url: `https://github.com/mastra-ai/mastra/pull/${pullRequestNumber}`,
+    updatedAt: '2026-07-22T00:00:00.000Z',
   };
 }
 
@@ -234,7 +240,8 @@ const terminalStatusCases: Array<{
   expectedMerged: boolean;
 }> = [
   { status: 'merged', knownMerged: false, expectedMerged: true },
-  { status: 'open', knownMerged: true, expectedMerged: false },
+  { status: 'open', knownMerged: false, expectedMerged: false },
+  { status: 'open', knownMerged: true, expectedMerged: true },
   { status: 'closed', knownMerged: false, expectedMerged: false },
 ];
 
@@ -304,11 +311,11 @@ describe('Workspace sidebar statuses', () => {
     renderSection();
 
     await screen.findByRole('status', { name: 'Agent working in Implement loader' });
-    expect(screen.queryByRole('img', { name: 'Pull request merged for Implement loader' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'Merged pull request for Implement loader' })).not.toBeInTheDocument();
   });
 
   it.each(terminalStatusCases)(
-    'maps a matching $status subscription to merged=$expectedMerged',
+    'maps a matching $status subscription on a card known merged=$knownMerged to merged=$expectedMerged',
     async ({ status, knownMerged, expectedMerged }) => {
       stubWorkspaceStatuses({
         items: baseItems(knownMerged),
@@ -322,8 +329,12 @@ describe('Workspace sidebar statuses', () => {
       const { client } = renderSection();
       await waitForMutationsIdle(client);
 
-      const workMergedIcon = screen.queryByRole('img', { name: 'Pull request merged for Implement loader' });
-      const reviewMergedIcon = screen.queryByRole('img', { name: 'Pull request merged for Review loader' });
+      const workMergedIcon = screen.queryByRole('img', { name: 'Merged pull request for Implement loader' });
+      // The review card is the pull request, so its leading icon carries the state and the link describes it.
+      const reviewMergedIcon = screen.queryByRole('link', {
+        name: 'Review loader',
+        description: /^Merged pull request/,
+      });
       if (expectedMerged) {
         expect(workMergedIcon).toBeInTheDocument();
         expect(reviewMergedIcon).toBeInTheDocument();
@@ -333,6 +344,23 @@ describe('Workspace sidebar statuses', () => {
       }
     },
   );
+
+  it("trusts a closed live check over the work item's open state", async () => {
+    stubWorkspaceStatuses({
+      items: baseItems(false),
+      activeSessionIds: [],
+      subscriptionsBySession: {
+        'review-thread:review-session': [pullRequestSubscription(202, 'closed')],
+      },
+    });
+
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
+
+    expect(
+      await screen.findByRole('link', { name: 'Review loader', description: /^Closed pull request/ }),
+    ).toBeInTheDocument();
+  });
 
   it.each(newestPullRequestCases)(
     'uses the newest related $newestStatus pull request instead of an older merged one',
@@ -356,7 +384,7 @@ describe('Workspace sidebar statuses', () => {
         parentWorkItemId: workItem.id,
         title: 'Newer review',
         sessions: { review: sessionRef(reviewSession, 'review-thread') },
-        metadata: { githubPullRequestNumber: 202, merged: true },
+        metadata: { githubPullRequestNumber: 202 },
         updatedAt: '2026-07-21T00:00:00.000Z',
       });
       const subscriptions = [pullRequestSubscription(201, 'merged'), pullRequestSubscription(202, newestStatus)];
@@ -372,9 +400,30 @@ describe('Workspace sidebar statuses', () => {
       const { client } = renderSection();
       await waitForMutationsIdle(client);
 
-      const mergedIcon = screen.queryByRole('img', { name: 'Pull request merged for Implement loader' });
+      const mergedIcon = screen.queryByRole('img', { name: 'Merged pull request for Implement loader' });
       if (expectedMerged) expect(mergedIcon).toBeInTheDocument();
       else expect(mergedIcon).not.toBeInTheDocument();
     },
   );
+
+  it("names an issue card's linked pull request on its second line once compact view is off", async () => {
+    const user = userEvent.setup();
+    stubWorkspaceStatuses({
+      items: baseItems(false),
+      activeSessionIds: [],
+      subscriptionsBySession: {
+        'work-thread:work-session': [pullRequestSubscription(202, 'open')],
+        'review-thread:review-session': [pullRequestSubscription(202, 'open')],
+      },
+    });
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
+
+    await openSessionProperties(user);
+    await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Compact view' }));
+    await closeSessionProperties(user);
+
+    const row = screen.getByRole('link', { name: 'Implement loader', description: /^Open pull request #202 / });
+    expect(within(row).getByText('PR mastra-ai/mastra#202')).toBeInTheDocument();
+  });
 });

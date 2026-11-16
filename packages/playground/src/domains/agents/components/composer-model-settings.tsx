@@ -10,11 +10,14 @@ import { Slider } from '@mastra/playground-ui/components/Slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+import { IconCircleInfo } from '@mastra/playground-ui/icons/central/IconCircleInfo';
+import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
+
+import { IconSettingsSliderVer } from '@mastra/playground-ui/icons/central/IconSettingsSliderVer';
 import { useAgent } from '@mastra/react/hooks/agents';
 import { useMemory } from '@mastra/react/hooks/memory';
-import { Info, Sliders, Settings2, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
-
 import { useAgentSettings } from '../context/agent-context';
 import { useSamplingRestriction } from '../hooks/use-sampling-restriction';
 import { AgentAdvancedSettingsBody } from './agent-advanced-settings';
@@ -169,7 +172,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
             tooltip="Model settings"
             data-testid="composer-model-settings-trigger"
           >
-            <Sliders />
+            <IconSettingsSliderVer />
           </Button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-80 p-4">
@@ -248,7 +251,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                   data-testid="sampling-restriction-banner"
                   className="flex items-center gap-2 rounded bg-card px-3 py-2 text-muted-foreground"
                 >
-                  <Info className="h-3.5 w-3.5 shrink-0" />
+                  <IconCircleInfo className="h-3.5 w-3.5 shrink-0" />
                   <Txt as="span" variant="caption">
                     {settings?.modelSettings?.temperature !== undefined
                       ? 'Claude 4.5+ models only accept Temperature OR Top P. Clear Temperature to use Top P.'
@@ -306,7 +309,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
 
               <div className="flex items-center justify-between gap-2 pt-1">
                 <Button
-                  icon={<RotateCcw />}
+                  icon={<IconArrowRotateCounterClockwise />}
                   variant="ghost"
                   size="sm"
                   type="button"
@@ -316,7 +319,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                   Reset
                 </Button>
                 <Button
-                  icon={<Settings2 />}
+                  icon={<IconSettingsSliderHor />}
                   variant="default"
                   size="sm"
                   type="button"

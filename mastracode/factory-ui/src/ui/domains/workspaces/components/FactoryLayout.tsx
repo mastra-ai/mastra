@@ -8,6 +8,7 @@ import { FeedEventsProvider } from '../../factory/context/FeedEventsProvider';
 import { GitHubAppCallbackHandler } from './GitHubAppCallbackHandler';
 import type { FactoryProject } from '../services/github';
 import { SessionRunObserver } from './SessionRunObserver';
+import { hasLinkedRepository } from '../services/factoryRepositories';
 
 const ActiveFactoryContext = createContext<FactoryProject | null>(null);
 
@@ -49,7 +50,7 @@ export function FactoryLayout() {
     <ActiveFactoryContext.Provider value={factory}>
       <GitHubAppCallbackHandler />
       <FeedEventsProvider factoryProjectId={factory.id}>
-        {factory.repositories.length > 0 && <SessionRunObserver factoryId={factory.id} />}
+        {hasLinkedRepository(factory) && <SessionRunObserver factoryId={factory.id} />}
         <Outlet />
       </FeedEventsProvider>
     </ActiveFactoryContext.Provider>

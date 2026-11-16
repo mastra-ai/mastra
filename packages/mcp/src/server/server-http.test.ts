@@ -224,6 +224,57 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
     }
   });
 
+  it('gives tools the request context Mastra server auth resolved, never one the caller sent', async () => {
+    const contextTool = createTool({
+      id: 'contextTool',
+      description: 'Reports the trusted request context',
+      inputSchema: z.object({}),
+      execute: async (_input, { requestContext }) =>
+        JSON.stringify({
+          permissions: requestContext?.get('mastra__userPermissions') ?? null,
+          organizationId: requestContext?.get('organizationId') ?? null,
+        }),
+    });
+    const trusted = new MCPServer({ name: 'Trusted', version: '1.0.0', tools: { contextTool } });
+    const trustedServed = await serveHTTP(trusted, {
+      auth: req => {
+        // A caller-sent claim with the same name must not be read as trusted context.
+        const auth: AuthInfo = {
+          ...authInfo,
+          extra: { organizationId: 'spoofed', 'mastra.mcp.trustedRequestContext': { organizationId: 'spoofed' } },
+        };
+        if (req.headers['x-test-mastra-route']) {
+          Object.defineProperty(auth, Symbol.for('mastra.mcp.trustedRequestContext'), {
+            value: { mastra__userPermissions: ['observability:read'], organizationId: 'org-1' },
+          });
+        }
+        return auth;
+      },
+    });
+    try {
+      const viaRoute = await connectClient(trustedServed.url, {}, { 'x-test-mastra-route': '1' });
+      try {
+        expect(JSON.parse(textOf(await viaRoute.callTool({ name: 'contextTool', arguments: {} })))).toEqual({
+          permissions: ['observability:read'],
+          organizationId: 'org-1',
+        });
+      } finally {
+        await viaRoute.close();
+      }
+      const direct = await connectClient(trustedServed.url);
+      try {
+        expect(JSON.parse(textOf(await direct.callTool({ name: 'contextTool', arguments: {} })))).toEqual({
+          permissions: null,
+          organizationId: null,
+        });
+      } finally {
+        await direct.close();
+      }
+    } finally {
+      await trustedServed.close();
+    }
+  });
+
   it('publishes catalogue changes through subscriptions/listen', async () => {
     const client = await connectClient(served.url);
     const toolChanges: Array<() => void> = [];
@@ -430,6 +481,8 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
         await client.connect(new StreamableHTTPClientTransport(lenientServed.url));
         try {
           expect(client.getServerVersion()?.name).toBe('Lenient');
+          // 2025-era clients (e.g. MCP Inspector) set the session log level because `logging` is advertised.
+          await expect(client.setLoggingLevel('debug')).resolves.toBeDefined();
           const { tools } = await client.listTools();
           expect(tools.map(tool => tool.name)).toContain('echoTool');
           const result = await client.callTool({ name: 'echoTool', arguments: { text: 'hi' } });

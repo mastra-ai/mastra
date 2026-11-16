@@ -119,9 +119,11 @@ async function setup(options: {
     model: options.model as LanguageModelV2,
     tools: options.tools,
   });
+  // The tests count v1 snapshot writes.
   const durableAgent = createDurableAgent({
     agent: baseAgent,
     shouldPersistSnapshot: options.shouldPersistSnapshot,
+    storageVersion: 1,
   });
   const logger = fakeLogger();
   const mastra = new Mastra({

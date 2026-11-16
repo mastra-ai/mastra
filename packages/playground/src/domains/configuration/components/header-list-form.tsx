@@ -2,34 +2,34 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Plus, Trash } from 'lucide-react';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 export type HeaderListFormItem = {
+  /** A stable key for the row; without it rows are keyed by position, so removing one shifts the inputs below it. */
+  id?: number;
   name: string;
   value: string;
 };
 
 export interface HeaderListFormProps {
   headers: Array<HeaderListFormItem>;
-  showHeading?: boolean;
   onAddHeader: (header: HeaderListFormItem) => void;
   onRemoveHeader: (index: number) => void;
 }
 
-export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader, showHeading = true }: HeaderListFormProps) => {
+export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader }: HeaderListFormProps) => {
   return (
     <div className="space-y-4">
-      {showHeading && (
-        <Txt as="h2" variant="body" tone="ink">
-          Headers
-        </Txt>
-      )}
+      <Txt as="h2" variant="body" tone="ink">
+        Headers
+      </Txt>
 
       <div className="space-y-6">
         {headers.length > 0 && (
           <ul className="space-y-4">
             {headers.map((header, index) => (
-              <li key={index}>
+              <li key={header.id ?? index}>
                 <HeaderListFormItem index={index} header={header} onRemove={() => onRemoveHeader(index)} />
               </li>
             ))}
@@ -42,7 +42,7 @@ export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader, showHeadi
             type="button"
             onClick={() => onAddHeader({ name: '', value: '' })}
             size={headers.length === 0 ? 'md' : 'sm'}
-            icon={<Plus />}
+            icon={<IconPlusMedium />}
           >
             {headers.length === 0 ? 'Add header' : 'Add another header'}
           </Button>
@@ -84,7 +84,7 @@ const HeaderListFormItem = ({ index, header, onRemove }: HeaderListFormItemProps
       tooltip="Remove header"
       className="col-start-3 row-start-2"
     >
-      <Trash />
+      <TrashIcon />
     </Button>
   </div>
 );

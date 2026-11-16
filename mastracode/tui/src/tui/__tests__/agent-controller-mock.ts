@@ -55,37 +55,40 @@ export interface MockAgentControllerOptions {
  * suspensions, model, mode, state, displayState, the event bus, and the
  * run-control methods (sendSignal, sendMessage, respondToToolSuspension, …).
  */
-export function createMockSession(opts: MockAgentControllerOptions = {}) {
+export function createMockSession(opts: MockAgentControllerOptions = {}): MockSession {
   const resourceId = opts.resourceId ?? opts.id ?? 'test-controller';
-  let currentThreadId: string | null = opts.threadId ?? null;
+  return deepMerge(mockSessionBase(resourceId, { id: opts.threadId ?? null }), opts.session);
+}
 
-  const base = {
+/** The thread id is shared mutable state so thread lifecycle mocks can move it. */
+function mockSessionBase(resourceId: string, current: { id: string | null }) {
+  return {
     identity: {
       getResourceId: vi.fn(() => resourceId),
       getDefaultResourceId: vi.fn(() => resourceId),
     },
     thread: {
-      getId: vi.fn(() => currentThreadId),
+      getId: vi.fn(() => current.id),
       list: vi.fn(async () => []),
       getById: vi.fn(async () => null),
       messages: vi.fn(async () => []),
       getSetting: vi.fn(async () => undefined),
       setSetting: vi.fn(async () => {}),
       create: vi.fn(async () => {
-        currentThreadId = 'thread-new';
-        return { id: currentThreadId, resourceId, title: 'New thread', createdAt: new Date(), updatedAt: new Date() };
+        current.id = 'thread-new';
+        return { id: current.id, resourceId, title: 'New thread', createdAt: new Date(), updatedAt: new Date() };
       }),
       switch: vi.fn(async ({ threadId }: { threadId: string }) => {
-        currentThreadId = threadId;
+        current.id = threadId;
       }),
       clone: vi.fn(async () => ({ id: 'thread-clone', resourceId })),
       rename: vi.fn(async () => {}),
       delete: vi.fn(async () => {}),
       detachFromCurrent: vi.fn(() => {
-        currentThreadId = null;
+        current.id = null;
       }),
       set: vi.fn(({ threadId }: { threadId: string }) => {
-        currentThreadId = threadId;
+        current.id = threadId;
       }),
     },
     run: {
@@ -120,7 +123,7 @@ export function createMockSession(opts: MockAgentControllerOptions = {}) {
       get: vi.fn(() => ({ isRunning: false })),
     },
     subscribe: vi.fn(() => () => {}),
-    emit: vi.fn(),
+    emit: vi.fn<(...args: unknown[]) => void>(),
 
     // Run-control surface (moved off AgentController onto Session).
     sendMessage: vi.fn(async () => {}),
@@ -132,13 +135,21 @@ export function createMockSession(opts: MockAgentControllerOptions = {}) {
     sendNotificationSignal: vi.fn(async () => ({ accepted: true, runId: 'run-1' })),
     steer: vi.fn(async () => {}),
     followUp: vi.fn(async () => {}),
-    abort: vi.fn(),
+    abort: vi.fn<() => void>(),
     respondToToolSuspension: vi.fn(async () => {}),
     saveSystemReminderMessage: vi.fn(async () => null),
   };
-
-  return deepMerge(base, opts.session);
 }
+
+export type MockSession = ReturnType<typeof mockSessionBase>;
+
+export type MockAgentController = AgentController<Record<string, unknown>> & { session: MockSession };
+
+export type MockState = AnyRecord & {
+  controller: MockAgentController;
+  session: MockSession;
+  local: { controller: MockAgentController; session: MockSession };
+};
 
 /**
  * Build a mock AgentController whose `session` is a {@link createMockSession}. Includes
@@ -146,7 +157,7 @@ export function createMockSession(opts: MockAgentControllerOptions = {}) {
  * catalog, resource ids). Returns the controller; read `controller.session` for the
  * shared session instance.
  */
-export function createMockAgentController(opts: MockAgentControllerOptions = {}) {
+export function createMockAgentController(opts: MockAgentControllerOptions = {}): MockAgentController {
   const session = createMockSession(opts);
 
   const base = {
@@ -166,9 +177,7 @@ export function createMockAgentController(opts: MockAgentControllerOptions = {})
     getObservationalMemoryRecord: vi.fn(async () => null),
   };
 
-  return deepMerge(base, opts.controller) as unknown as AgentController<Record<string, unknown>> & {
-    session: ReturnType<typeof createMockSession>;
-  };
+  return deepMerge(base, opts.controller) as unknown as MockAgentController;
 }
 
 /**
@@ -176,7 +185,7 @@ export function createMockAgentController(opts: MockAgentControllerOptions = {})
  * `controller.session` — matching production wiring. Spread extra fields via
  * `extra`. Cast the result to your context type at the call site.
  */
-export function createMockState(opts: MockAgentControllerOptions & { extra?: AnyRecord } = {}) {
+export function createMockState(opts: MockAgentControllerOptions & { extra?: AnyRecord } = {}): MockState {
   const { extra, ...agentControllerOpts } = opts;
   const controller = createMockAgentController(agentControllerOpts);
   return {

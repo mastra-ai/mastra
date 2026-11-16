@@ -3,7 +3,6 @@ import { cardRuleGroupSchema, evaluateRuleGroup } from '../rules/rule-group.js';
 import type { RuleFacts, RuleGroup } from '../rules/rule-group.js';
 import {
   FACTORY_GITHUB_EVENTS,
-  FACTORY_RULE_SOURCES,
   FACTORY_GITLAB_EVENTS,
   FACTORY_INCIDENTIO_EVENTS,
   FACTORY_JIRA_EVENTS,
@@ -21,8 +20,6 @@ import type {
   FactoryLinearEventName,
   FactoryLinearRuleContext,
   FactoryRuleHandler,
-  FactoryRuleSource,
-  FactoryStageRuleContext,
   FactoryToolResultRuleContext,
 } from '../rules/types.js';
 import {
@@ -33,11 +30,7 @@ import {
   MAX_TOOL_NAME_LENGTH,
   SKILL_NAME_RE,
 } from '../rules/validation.js';
-import { addInstructions, startSkill } from './phase-runner.js';
 import type { BoardTransitionPolicy } from './transition-policy.js';
-
-type BoardPhaseHandlers = Partial<Record<FactoryRuleSource, FactoryRuleHandler<FactoryStageRuleContext>>>;
-type ReadonlyBoardPhaseHandlers = Readonly<BoardPhaseHandlers>;
 
 /** Runs when an agent seated on this board completes the named tool. */
 export type BoardToolResultRuleHandler = FactoryRuleHandler<FactoryToolResultRuleContext>;
@@ -74,23 +67,6 @@ const BOARD_EVENT_NAMES: Readonly<Record<BoardEventIntegration, readonly string[
   incidentio: FACTORY_INCIDENTIO_EVENTS,
 };
 
-type ReadonlyFactoryBoardRules = Readonly<
-  Record<
-    string,
-    Readonly<
-      Partial<
-        Record<
-          FactoryRuleSource,
-          Readonly<{
-            onEnter?: FactoryRuleHandler<FactoryStageRuleContext>;
-            onExit?: FactoryRuleHandler<FactoryStageRuleContext>;
-          }>
-        >
-      >
-    >
-  >
->;
-
 /**
  * What a phase means to the runtime.
  * - `resting`: nobody is seated; a card waits for a person or an event.
@@ -104,12 +80,18 @@ export const FACTORY_AGENT_ID = CODE_AGENT_ID;
 
 /** The session context a working phase runs in when it names none. */
 export const DEFAULT_PHASE_CONTEXT = 'work';
+/**
+ * Seat review runs sit in. Review skills load only in it, it is the only seat granted the verdict
+ * tool, and its sessions check out code the author wrote, so they never trust that checkout's
+ * instruction files. A runner context, not a phase key: any board's phases may run in it.
+ */
+export const REVIEW_CONTEXT = 'review';
 
 /** Who runs a working phase, and with what. */
 export interface BoardPhaseRunner {
   /** Must be `code-agent`, the agent Factory runs; omitted means that agent. */
   readonly agentId?: string;
-  /** Skill started when a card enters the phase from a source with no `onEnter` handler. */
+  /** Skill started when a card enters the phase. Without one, entering the phase starts no run. */
   readonly skill?: string;
   /**
    * The session the phase runs in. Phases naming the same context share one session per card;
@@ -118,6 +100,19 @@ export interface BoardPhaseRunner {
   readonly context?: string;
   /** Appended to every run the phase starts. */
   readonly instructions?: string;
+  /**
+   * Pursue the phase's work as a goal: the run's thread holds `objective` and the agent's goal
+   * judge keeps it working until the objective is met. The judge sees only this text and the
+   * latest messages, so it must say when the work is done.
+   */
+  readonly goal?: BoardPhaseGoal;
+}
+
+/** The objective a phase's runs pursue, judged in-loop until met. */
+export interface BoardPhaseGoal {
+  readonly objective: string;
+  /** Judged turns before the goal pauses for a person; defaults to the agent's setting. */
+  readonly maxRuns?: number;
 }
 
 /**
@@ -135,6 +130,10 @@ export interface BoardPhaseExitTool {
   readonly autoApproveWhen?: RuleGroup;
 }
 
+/** Factory tools a working phase grants the session that works the card there. */
+export const FACTORY_PHASE_TOOLS = ['factory_record_review_verdict', 'factory_review_source'] as const;
+export type FactoryPhaseTool = (typeof FACTORY_PHASE_TOOLS)[number];
+
 type BoardPhaseBase<PhaseId extends string> = {
   readonly name?: string;
   /** @deprecated Use `name`. */
@@ -144,22 +143,30 @@ type BoardPhaseBase<PhaseId extends string> = {
   readonly nextPhases?: readonly PhaseId[];
   /** @deprecated List the phase in `nextPhases`. */
   readonly next?: PhaseId;
-  /** Named moves rules can choose by outcome; each target is also an allowed next phase. */
+  /** @deprecated Ignored apart from its targets, which are allowed next phases; list them in `nextPhases`. */
   readonly outcomes?: Readonly<Record<string, PhaseId>>;
-  readonly onEnter?: ReadonlyBoardPhaseHandlers;
-  readonly onExit?: ReadonlyBoardPhaseHandlers;
+  /** @deprecated Ignored; a phase starts its run from `runner.skill`. */
+  readonly onEnter?: Readonly<Record<string, unknown>>;
+  /** @deprecated Ignored; a phase starts its run from `runner.skill`. */
+  readonly onExit?: Readonly<Record<string, unknown>>;
 };
 
 type WorkingPhaseFields = {
   readonly runner?: BoardPhaseRunner;
   /** @deprecated Use `runner.context`. */
   readonly role?: string;
-  /** Runs start without anyone approving them, even with the project's auto-run off. */
+  /** Runs start without anyone approving them. The board, not a project setting, decides this. */
   readonly autoStart?: boolean;
   /** With `autoStart`, only cards this matches start on their own. */
   readonly autoStartWhen?: RuleGroup;
   /** A bare tool name is shorthand for `{ id }`, with nothing approved on a person's behalf. */
   readonly exitTool?: string | BoardPhaseExitTool;
+  /**
+   * Factory tools the session working the card here gets, on top of the move tool. Only the
+   * session whose context is the phase's `runner.context` gets them, and only while the card
+   * is in this phase.
+   */
+  readonly tools?: readonly FactoryPhaseTool[];
 };
 
 type NonWorkingPhaseFields = {
@@ -168,6 +175,7 @@ type NonWorkingPhaseFields = {
   readonly autoStart?: never;
   readonly autoStartWhen?: never;
   readonly exitTool?: never;
+  readonly tools?: never;
 };
 
 /** A phase as a board declares it. */
@@ -181,13 +189,10 @@ type ResolvedPhaseBase<PhaseId extends string> = {
   /** @deprecated Use `name`; kept equal to it for code written against older Factory versions. */
   readonly title: string;
   readonly description?: string;
-  /** Every phase a card may move to from here, including outcome targets. */
+  /** Every phase a card may move to from here. */
   readonly nextPhases: readonly PhaseId[];
   /** @deprecated Use `nextPhases`; set when the phase declared `next`. */
   readonly next?: PhaseId;
-  readonly outcomes?: Readonly<Record<string, PhaseId>>;
-  readonly onEnter?: ReadonlyBoardPhaseHandlers;
-  readonly onExit?: ReadonlyBoardPhaseHandlers;
 };
 
 /**
@@ -204,6 +209,7 @@ export type BoardPhase<PhaseId extends string> =
       readonly autoStart?: boolean;
       readonly autoStartWhen?: RuleGroup;
       readonly exitTool?: Readonly<{ id: string; autoApprove: boolean; autoApproveWhen?: RuleGroup }>;
+      readonly tools?: readonly FactoryPhaseTool[];
     })
   | (ResolvedPhaseBase<PhaseId> & { readonly kind: 'terminal' });
 
@@ -211,7 +217,8 @@ type ResolvedRunner = Extract<BoardPhase<string>, { kind: 'working' }>['runner']
 type ResolvedExitTool = Extract<BoardPhase<string>, { kind: 'working' }>['exitTool'];
 
 export interface BoardTransition<PhaseId extends string> {
-  readonly outcome: string | null;
+  /** Always null: boards no longer name their moves. */
+  readonly outcome: null;
   readonly to: PhaseId;
 }
 
@@ -230,7 +237,6 @@ export interface BoardDefinition<BoardId extends string, PhaseId extends string>
   readonly initialPhase: PhaseId;
   readonly phases: Readonly<Record<PhaseId, BoardPhase<PhaseId>>>;
   readonly transitions: Readonly<Record<PhaseId, readonly BoardTransition<PhaseId>[]>>;
-  readonly rules: ReadonlyFactoryBoardRules;
   /** Tool-result rules keyed by tool name; empty when the board declares none. */
   readonly tools: BoardToolRules;
   /** Integration event handlers for cards on this board; empty when the board declares none. */
@@ -285,10 +291,25 @@ function validateBoardIdentifier(value: unknown, label: string): void {
 const MAX_NAME_LENGTH = 128;
 const MAX_DESCRIPTION_LENGTH = 2_000;
 const MAX_INSTRUCTIONS_LENGTH = 1_000;
-const RUNNER_KEYS: ReadonlySet<string> = new Set(['agentId', 'skill', 'context', 'instructions']);
+const MAX_GOAL_OBJECTIVE_LENGTH = 2_000;
+const MAX_GOAL_RUNS = 50;
+const RUNNER_KEYS: ReadonlySet<string> = new Set(['agentId', 'skill', 'context', 'instructions', 'goal']);
+const GOAL_KEYS: ReadonlySet<string> = new Set(['objective', 'maxRuns']);
 const EXIT_TOOL_KEYS: ReadonlySet<string> = new Set(['id', 'autoApprove', 'autoApproveWhen']);
-const WORKING_ONLY_FIELDS = ['runner', 'autoStart', 'autoStartWhen', 'exitTool'] as const;
+const WORKING_ONLY_FIELDS = ['runner', 'autoStart', 'autoStartWhen', 'exitTool', 'tools'] as const;
 const MOVE_TOOL = 'factory_transition_work_item';
+
+function resolvePhaseTools(label: string, value: unknown): readonly FactoryPhaseTool[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new BoardDefinitionError(`${label} tools must be a list of Factory tool names.`);
+  for (const tool of value) {
+    if (!(FACTORY_PHASE_TOOLS as readonly unknown[]).includes(tool)) {
+      throw new BoardDefinitionError(`${label} tools: ${String(tool)} is not a Factory phase tool.`);
+    }
+  }
+  const tools = [...new Set(value as FactoryPhaseTool[])];
+  return tools.length ? Object.freeze(tools) : undefined;
+}
 
 /** `name`, falling back to the deprecated `title`; both may be set only to the same text. */
 function resolveName(name: unknown, title: unknown, label: string): string {
@@ -326,7 +347,9 @@ function isContext(value: unknown): value is string {
 function resolveRunner(phaseId: string, phase: BoardPhaseDefinition<string>): ResolvedRunner {
   const runner: unknown = phase.runner ?? {};
   if (!isPlainObject(runner) || Object.keys(runner).some(key => !RUNNER_KEYS.has(key))) {
-    throw new BoardDefinitionError(`Phase "${phaseId}" runner may only set agentId, skill, context and instructions.`);
+    throw new BoardDefinitionError(
+      `Phase "${phaseId}" runner may only set agentId, skill, context, instructions and goal.`,
+    );
   }
   const role: unknown = phase.role;
   if (role !== undefined && runner.context !== undefined && role !== runner.context) {
@@ -352,12 +375,44 @@ function resolveRunner(phaseId: string, phase: BoardPhaseDefinition<string>): Re
     `Phase "${phaseId}" runner.instructions`,
     MAX_INSTRUCTIONS_LENGTH,
   );
+  const goal = resolveGoal(phaseId, runner.goal);
+  if (goal !== undefined && skill === undefined) {
+    throw new BoardDefinitionError(
+      `Phase "${phaseId}" runner.goal needs runner.skill: the skill's run pursues the goal.`,
+    );
+  }
   return Object.freeze({
     agentId,
     context,
     ...(skill !== undefined ? { skill } : {}),
     ...(instructions !== undefined ? { instructions } : {}),
+    ...(goal !== undefined ? { goal } : {}),
   });
+}
+
+function resolveGoal(phaseId: string, value: unknown): BoardPhaseGoal | undefined {
+  if (value === undefined) return undefined;
+  if (!isPlainObject(value) || Object.keys(value).some(key => !GOAL_KEYS.has(key))) {
+    throw new BoardDefinitionError(`Phase "${phaseId}" runner.goal may only set objective and maxRuns.`);
+  }
+  const objective = optionalText(
+    value.objective,
+    `Phase "${phaseId}" runner.goal.objective`,
+    MAX_GOAL_OBJECTIVE_LENGTH,
+  );
+  if (objective === undefined) {
+    throw new BoardDefinitionError(`Phase "${phaseId}" runner.goal must state an objective.`);
+  }
+  const maxRuns = value.maxRuns;
+  if (
+    maxRuns !== undefined &&
+    (typeof maxRuns !== 'number' || !Number.isInteger(maxRuns) || maxRuns < 1 || maxRuns > MAX_GOAL_RUNS)
+  ) {
+    throw new BoardDefinitionError(
+      `Phase "${phaseId}" runner.goal.maxRuns must be a whole number from 1 to ${MAX_GOAL_RUNS}.`,
+    );
+  }
+  return Object.freeze({ objective, ...(maxRuns !== undefined ? { maxRuns } : {}) });
 }
 
 function resolveExitTool(phaseId: string, value: unknown): ResolvedExitTool {
@@ -475,23 +530,6 @@ function validateEventRules(events: unknown): BoardEventRules {
   return Object.freeze(frozen) as BoardEventRules;
 }
 
-/** The phase's `onEnter` handlers, with its runner's skill for other sources and its instructions on every run. */
-function phaseEnterHandlers(
-  declared: ReadonlyBoardPhaseHandlers | undefined,
-  runner: ResolvedRunner,
-): ReadonlyBoardPhaseHandlers | undefined {
-  const handlers: BoardPhaseHandlers = { ...declared };
-  if (runner.skill) {
-    for (const source of FACTORY_RULE_SOURCES) handlers[source] ??= startSkill(runner.skill, runner.context);
-  }
-  if (runner.instructions) {
-    for (const source of Object.keys(handlers) as FactoryRuleSource[]) {
-      handlers[source] = addInstructions(handlers[source]!, runner.instructions);
-    }
-  }
-  return Object.keys(handlers).length > 0 ? handlers : undefined;
-}
-
 const warnedBoards = new Set<string>();
 
 type DeclaredBoard = {
@@ -519,6 +557,18 @@ function deprecatedFields(config: DeclaredBoard): string[] {
     if (phase.role !== undefined && phase.runner?.context === undefined) {
       found.push(`phases.${phaseId}.role → runner.context`);
     }
+    if (phase.outcomes !== undefined) found.push(`phases.${phaseId}.outcomes → nextPhases`);
+  }
+  return found;
+}
+
+/** Fields a board declaration still passes that Factory no longer reads. */
+function ignoredFields(config: DeclaredBoard): string[] {
+  const found: string[] = [];
+  for (const [phaseId, phase] of Object.entries(config.phases)) {
+    for (const field of ['onEnter', 'onExit'] as const) {
+      if (phase[field] !== undefined) found.push(`phases.${phaseId}.${field}`);
+    }
   }
   return found;
 }
@@ -526,12 +576,19 @@ function deprecatedFields(config: DeclaredBoard): string[] {
 function warnDeprecatedFields(config: DeclaredBoard): void {
   if (warnedBoards.has(config.id)) return;
   const found = deprecatedFields(config);
-  if (found.length === 0) return;
+  const ignored = ignoredFields(config);
+  if (found.length === 0 && ignored.length === 0) return;
   warnedBoards.add(config.id);
-  console.warn(
-    `[Mastra Factory] Board "${config.id}" uses deprecated fields: ${found.join(', ')}. ` +
-      'They still work but will be removed in a future release.',
-  );
+  const warnings: string[] = [];
+  if (found.length > 0) {
+    warnings.push(
+      `uses deprecated fields: ${found.join(', ')}. They still work but will be removed in a future release.`,
+    );
+  }
+  if (ignored.length > 0) {
+    warnings.push(`declares ${ignored.join(', ')}, which are ignored; use runner.skill to start a phase's run.`);
+  }
+  console.warn(`[Mastra Factory] Board "${config.id}" ${warnings.join(' It also ')}`);
 }
 
 /** Marks a board an app declared with the deprecated `defineBoard()`; a copy does not carry it. */
@@ -540,9 +597,11 @@ const DEFINED_BOARD = Symbol('DefinedBoard');
 /**
  * Declares a board in code.
  *
- * @deprecated Boards are stored per project; manage them with `/web/factory/projects/:id/boards`
- * (README § Stored boards). Code boards are read-only and served alongside each project's stored
- * boards.
+ * @deprecated Write the board's definition into projects with `factory.upsertBoard()`, or manage
+ * it through the boards API
+ * (`/web/factory/projects/:id/boards`, README "Stored boards"); removal is tracked in
+ * mastra-ai/mastra#28920. A board defined here still works: each project stores it once and is
+ * served from its row, with the code behaviour it declares.
  */
 export function defineBoard<
   const BoardId extends string,
@@ -556,18 +615,44 @@ export function isDefinedBoard(board: object): boolean {
   return DEFINED_BOARD in board;
 }
 
-/** Validates and resolves a board declaration. Factory's own boards use this directly. */
+/** A board declaration as `defineBoard()` takes it, with any phase keys. */
+export type AnyBoardConfig = BoardConfig<string, Record<string, BoardPhaseDefinition<string>>>;
+
+/** The declaration a board was built from, so a stored definition can reuse its code behaviour. */
+const BOARD_DECLARATION = Symbol('BoardDeclaration');
+
+/** On a board built from a stored definition, the code board that gave it its behaviour. */
+const CODE_BOARD = Symbol('CodeBoard');
+
+/** The declaration a board was built from; undefined for an object that was not built as a board. */
+export function declarationOf(board: object): AnyBoardConfig | undefined {
+  return (board as { [BOARD_DECLARATION]?: AnyBoardConfig })[BOARD_DECLARATION];
+}
+
+/** The code board a board takes its behaviour from: itself unless it was built from a stored definition. */
+export function codeBoardOf<Board extends object>(board: Board): Board {
+  return (board as { [CODE_BOARD]?: Board })[CODE_BOARD] ?? board;
+}
+
+/**
+ * Validates and resolves a board declaration. Factory's own boards use this directly. A board
+ * built from a stored definition names the code board whose behaviour it carries.
+ */
 export function compileBoardDefinition<
   const BoardId extends string,
   const Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>,
->(config: BoardConfig<BoardId, Phases>): BoardDefinition<BoardId, keyof Phases & string> {
-  return buildBoard(config, false);
+>(config: BoardConfig<BoardId, Phases>, codeBoard?: object): BoardDefinition<BoardId, keyof Phases & string> {
+  return buildBoard(config, false, codeBoard);
 }
 
 function buildBoard<
   const BoardId extends string,
   const Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>,
->(config: BoardConfig<BoardId, Phases>, defined: boolean): BoardDefinition<BoardId, keyof Phases & string> {
+>(
+  config: BoardConfig<BoardId, Phases>,
+  defined: boolean,
+  codeBoard?: object,
+): BoardDefinition<BoardId, keyof Phases & string> {
   type PhaseId = keyof Phases & string;
   validateBoardIdentifier(config.id, 'Board id');
   const boardName = resolveName(config.name, config.title, `Board "${config.id}"`);
@@ -596,17 +681,16 @@ function buildBoard<
 
   const transitions = Object.fromEntries(
     Object.entries(config.phases).map(([phaseId, phase]) => {
-      if (phase.next !== undefined && phase.outcomes) {
-        throw new BoardDefinitionError(`Phase "${phaseId}" cannot define both next and outcomes.`);
-      }
       if (phase.nextPhases !== undefined && !Array.isArray(phase.nextPhases)) {
         throw new BoardDefinitionError(`Phase "${phaseId}" nextPhases must be a list of phases.`);
       }
-      const targets: BoardTransition<string>[] =
-        phase.next !== undefined
-          ? [Object.freeze({ outcome: null, to: phase.next })]
-          : Object.entries(phase.outcomes ?? {}).map(([outcome, to]) => Object.freeze({ outcome, to }));
-      for (const to of phase.nextPhases ?? []) {
+      const targets: BoardTransition<string>[] = [];
+      // A deprecated `outcomes` map still names moves the board allows.
+      for (const to of [
+        ...(phase.next !== undefined ? [phase.next] : []),
+        ...Object.values(phase.outcomes ?? {}),
+        ...(phase.nextPhases ?? []),
+      ]) {
         if (!targets.some(target => target.to === to)) targets.push(Object.freeze({ outcome: null, to }));
       }
       for (const { to } of targets) {
@@ -635,10 +719,10 @@ function buildBoard<
           throw new BoardDefinitionError(`${label} autoStartWhen needs autoStart.`);
         }
         const exitTool = resolveExitTool(phaseId, working?.exitTool);
+        const tools = resolvePhaseTools(label, working?.tools);
         if (exitTool && nextPhases.length === 0) {
           throw new BoardDefinitionError(`${label} exit tool needs a next phase to move the card to.`);
         }
-        const onEnter = runner ? phaseEnterHandlers(phase.onEnter, runner) : phase.onEnter;
         const name = resolveName(phase.name, phase.title, label);
         const description = optionalText(phase.description, `${label} description`, MAX_DESCRIPTION_LENGTH);
         return [
@@ -650,46 +734,16 @@ function buildBoard<
             kind: phase.kind,
             nextPhases,
             ...(phase.next !== undefined ? { next: phase.next } : {}),
-            ...(phase.outcomes ? { outcomes: Object.freeze({ ...phase.outcomes }) } : {}),
             ...(runner ? { runner, role: runner.context } : {}),
             ...(working?.autoStart ? { autoStart: true } : {}),
             ...(autoStartWhen ? { autoStartWhen } : {}),
             ...(exitTool ? { exitTool } : {}),
-            ...(onEnter ? { onEnter: Object.freeze({ ...onEnter }) } : {}),
-            ...(phase.onExit ? { onExit: Object.freeze({ ...phase.onExit }) } : {}),
+            ...(tools ? { tools } : {}),
           }),
         ];
       }),
     ),
   ) as Readonly<Record<PhaseId, BoardPhase<PhaseId>>>;
-  const rules = Object.freeze(
-    Object.fromEntries(
-      (Object.entries(phases) as [PhaseId, BoardPhase<PhaseId>][]).flatMap(([phaseId, phase]) => {
-        const sources = new Set([...Object.keys(phase.onEnter ?? {}), ...Object.keys(phase.onExit ?? {})]);
-        if (sources.size === 0) return [];
-        return [
-          [
-            phaseId,
-            Object.freeze(
-              Object.fromEntries(
-                [...sources].map(source => [
-                  source,
-                  Object.freeze({
-                    ...(phase.onEnter?.[source as FactoryRuleSource]
-                      ? { onEnter: phase.onEnter[source as FactoryRuleSource] }
-                      : {}),
-                    ...(phase.onExit?.[source as FactoryRuleSource]
-                      ? { onExit: phase.onExit[source as FactoryRuleSource] }
-                      : {}),
-                  }),
-                ]),
-              ),
-            ),
-          ],
-        ];
-      }),
-    ),
-  ) as ReadonlyFactoryBoardRules;
 
   const kinds = new Map<string, BoardPhaseKind>();
   const roles = new Map<string, string>();
@@ -709,12 +763,12 @@ function buildBoard<
     initialPhase: config.initialPhase,
     phases,
     transitions: Object.freeze(transitions),
-    rules: Object.freeze(rules),
     tools,
     events,
     ...(config.transitionPolicy ? { transitionPolicy: config.transitionPolicy } : {}),
     ...(sourceClosed ? { sourceClosed } : {}),
     allowsTransition(from: PhaseId, to: PhaseId) {
+      if (!kinds.has(from) || !kinds.has(to)) return false;
       return from === to || transitions[from]?.some(transition => transition.to === to) === true;
     },
     phaseKind: (phase: string) => kinds.get(phase),
@@ -730,5 +784,7 @@ function buildBoard<
     },
   };
   if (defined) Object.defineProperty(board, DEFINED_BOARD, { value: true });
+  Object.defineProperty(board, BOARD_DECLARATION, { value: config });
+  if (codeBoard) Object.defineProperty(board, CODE_BOARD, { value: codeBoardOf(codeBoard) });
   return Object.freeze(board);
 }

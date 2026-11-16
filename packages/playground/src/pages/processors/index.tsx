@@ -1,7 +1,7 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
@@ -63,7 +63,12 @@ export function Processors() {
         <ActionRow>
           <ActionRow.Start>
             <div className="max-w-120 flex-1">
-              <ListSearch onSearch={setSearch} label="Filter processors" placeholder="Filter by name" />
+              <SearchInput
+                {...listSearchProps}
+                onValueChange={setSearch}
+                label="Search processors"
+                placeholder="Search by name"
+              />
             </div>
           </ActionRow.Start>
         </ActionRow>

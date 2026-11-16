@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.mastra/
+**/cdk.out/
+
+# Secrets & local env — NEVER commit
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+# ...but keep the example templates
+!.env.example
+!**/.env.example
+
+# AgentCore CLI internals, logs, and deploy state — never commit
+**/.cli/*
+
+# Deployment target holds a real AWS account id — keep the example only
+agentcore/aws-targets.json
+!agentcore/aws-targets.example.json
+
+# Logs & OS cruft
+*.log
+.DS_Store

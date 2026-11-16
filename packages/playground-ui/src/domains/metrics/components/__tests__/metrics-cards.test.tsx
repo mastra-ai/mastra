@@ -62,7 +62,7 @@ describe('Metrics cards', () => {
     it('says when a latency view has no runs', async () => {
       expect(await screen.findByText('4.50s')).toBeDefined();
       await pickView('Agent latency', 'Workflow latency');
-      expect(await screen.findByText('No workflow runs in this range.')).toBeDefined();
+      expect(await screen.findByText('No data in this range')).toBeDefined();
     });
 
     it('lists each agent in trace volume and reports which one was clicked', async () => {
@@ -89,11 +89,10 @@ describe('Metrics cards', () => {
       emptyMetrics();
       renderDashboard();
 
-      expect(await screen.findByText('No model calls in this range.')).toBeDefined();
-      expect(screen.getAllByText('No agent runs in this range.')).toHaveLength(3);
+      // Every chart says the same: token usage, runs, failure rate, latency and scores. Tables say what's missing.
+      await waitFor(() => expect(screen.getAllByText('No data in this range')).toHaveLength(5));
       expect(screen.getByText('No runs in this range.')).toBeDefined();
       expect(screen.getByText('No model usage in this range.')).toBeDefined();
-      expect(screen.getByText('No scores in this range.')).toBeDefined();
     });
   });
 
@@ -109,7 +108,7 @@ describe('Metrics cards', () => {
         () => expect(screen.getAllByText("Couldn't load this data. Try again in a moment.")).toHaveLength(7),
         { timeout: 5000 },
       );
-      expect(screen.queryByText('No agent runs in this range.')).toBeNull();
+      expect(screen.queryByText('No data in this range')).toBeNull();
     });
   });
 });

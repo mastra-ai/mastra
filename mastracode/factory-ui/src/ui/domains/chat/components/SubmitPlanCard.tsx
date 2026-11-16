@@ -45,12 +45,17 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
   const path = inline.path;
 
   const workspace = useThreadWorkspacePath();
-  // Absolute artifact paths must be normalized against the authoritative
-  // workspace `.artifacts` root before the file route (which requires a
-  // workspace-relative path) will serve them.
+  // Normalize absolute paths against the server's authoritative workspace or
+  // checkout `.artifacts` root before fetching a workspace-relative file.
   const needsRoot = inline.plan === undefined && Boolean(path?.startsWith('/'));
   const rendered = useWorkspaceRenderedListing(workspace.workspacePath, '.artifacts', { enabled: needsRoot });
-  const readablePath = normalizePlanPath(path, rendered.data?.rootPath);
+  const rootReadablePath = normalizePlanPath(path, rendered.data?.rootPath);
+  const checkout = needsRoot && !rootReadablePath ? path?.match(/\/([^/]+)\/\.artifacts\/[^/]+/)?.[1] : undefined;
+  const checkoutRoot = checkout ? `${checkout}/.artifacts` : undefined;
+  const checkoutRendered = useWorkspaceRenderedListing(workspace.workspacePath, checkoutRoot, {
+    enabled: needsRoot && Boolean(checkoutRoot),
+  });
+  const readablePath = rootReadablePath ?? normalizePlanPath(path, checkoutRendered.data?.rootPath, checkoutRoot);
   const fetchable = inline.plan === undefined && readablePath !== undefined;
   const file = usePlanFile(workspace.workspacePath, readablePath, toolCallId, { enabled: fetchable });
   const fetched = fetchable && file.data?.content !== undefined ? parsePlanMarkdown(file.data.content) : undefined;
@@ -61,9 +66,9 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
     inline.plan === undefined &&
     !fetched &&
     !file.isError &&
-    !rendered.isError &&
     (workspace.isPending ||
       (needsRoot && Boolean(workspace.workspacePath) && rendered.isPending) ||
+      (needsRoot && Boolean(workspace.workspacePath) && Boolean(checkoutRoot) && checkoutRendered.isPending) ||
       (fetchable && Boolean(workspace.workspacePath) && file.isPending));
   const unavailable = inline.plan === undefined && !fetched && !loading;
   // Responding while the plan is still loading would back-fill an empty plan

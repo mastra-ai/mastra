@@ -271,7 +271,7 @@ The runtime environment applies to commands executed through the sandbox rather 
 
 ### `getEnv()`
 
-Returns a copy of the sandbox's current runtime environment; because mutations to the returned object don't change the sandbox, use `setEnv()` for updates.
+Available on `MastraSandbox`, not declared on the `WorkspaceSandbox` interface. Returns a copy of the sandbox's current runtime environment; because mutations to the returned object don't change the sandbox, use `setEnv()` for updates.
 
 ```typescript
 const token = sandbox.getEnv().GH_TOKEN

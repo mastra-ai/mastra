@@ -411,6 +411,97 @@ describe('LibSQLVector local-file concurrency', () => {
   });
 });
 
+describe('LibSQLVector truncation', () => {
+  const indexName = 'truncate_vectors';
+  let tmpDir: string;
+  let vector: LibSQLVector;
+
+  beforeEach(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'libsql-vector-truncate-'));
+    vector = new LibSQLVector({ id: 'truncate-local-file', url: `file:${path.join(tmpDir, 'vectors.db')}` });
+    await vector.createIndex({ indexName, dimension: 3 });
+  });
+
+  afterEach(async () => {
+    await vector.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('can reinsert and retrieve vectors after truncating an indexed table', async () => {
+    await vector.upsert({
+      indexName,
+      ids: ['first', 'second', 'third'],
+      vectors: [
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+      ],
+    });
+    await vector.truncateIndex({ indexName });
+
+    await expect(vector.upsert({ indexName, ids: ['replacement'], vectors: [[1, 1, 0]] })).resolves.toEqual([
+      'replacement',
+    ]);
+    await expect(vector.query({ indexName, queryVector: [1, 1, 0], topK: 10 })).resolves.toMatchObject([
+      { id: 'replacement' },
+    ]);
+  });
+
+  it('supports empty and repeated truncate cycles', async () => {
+    await expect(vector.truncateIndex({ indexName })).resolves.toBeUndefined();
+
+    for (const id of ['first-cycle', 'second-cycle']) {
+      await vector.upsert({ indexName, ids: [id], vectors: [[1, 0, 0]] });
+      await vector.truncateIndex({ indexName });
+      await expect(vector.query({ indexName, queryVector: [1, 0, 0], topK: 10 })).resolves.toEqual([]);
+    }
+
+    await expect(vector.upsert({ indexName, ids: ['final'], vectors: [[0, 1, 0]] })).resolves.toEqual(['final']);
+  });
+
+  it('keeps partial deletion behavior intact', async () => {
+    await vector.upsert({
+      indexName,
+      ids: ['keep', 'remove-by-id', 'remove-by-filter'],
+      vectors: [
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+      ],
+      metadata: [{ group: 'keep' }, { group: 'remove' }, { group: 'remove' }],
+    });
+
+    await vector.deleteVector({ indexName, id: 'remove-by-id' });
+    await vector.deleteVectors({ indexName, filter: { group: { $eq: 'remove' } } });
+
+    await expect(vector.query({ indexName, queryVector: [1, 0, 0], topK: 10 })).resolves.toMatchObject([
+      { id: 'keep' },
+    ]);
+    await expect(vector.upsert({ indexName, ids: ['replacement'], vectors: [[0, 1, 1]] })).resolves.toEqual([
+      'replacement',
+    ]);
+  });
+
+  it('can reinsert and retrieve vectors after truncating an in-memory indexed table', async () => {
+    const memoryVector = new LibSQLVector({ id: 'truncate-memory', url: ':memory:' });
+    try {
+      await memoryVector.createIndex({ indexName: 'memory_vectors', dimension: 3 });
+      await memoryVector.upsert({ indexName: 'memory_vectors', ids: ['first'], vectors: [[1, 0, 0]] });
+
+      await memoryVector.truncateIndex({ indexName: 'memory_vectors' });
+
+      await expect(
+        memoryVector.upsert({ indexName: 'memory_vectors', ids: ['replacement'], vectors: [[1, 1, 0]] }),
+      ).resolves.toEqual(['replacement']);
+      await expect(
+        memoryVector.query({ indexName: 'memory_vectors', queryVector: [1, 1, 0], topK: 10 }),
+      ).resolves.toMatchObject([{ id: 'replacement' }]);
+    } finally {
+      await memoryVector.close();
+    }
+  });
+});
+
 describe('LibSQLVector bare :memory: concurrency', () => {
   // Regression for mastra-ai/mastra#22328: a bare `:memory:` url has a single
   // connection, so interleaved upserts, queries and index reads must queue

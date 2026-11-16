@@ -53,6 +53,71 @@ describe('ProviderList', () => {
     expect(screen.queryByText('Anthropic')).not.toBeInTheDocument();
   });
 
+  it('connects the Mastra Gateway in one click and offers to add credits when the organization has none', async () => {
+    let connected = false;
+    server.use(
+      http.get(PROVIDERS_URL, () =>
+        HttpResponse.json({
+          providers: [
+            connected
+              ? { provider: 'mastra', source: 'stored-user', userCredential: 'api_key', connectWithMastraAccount: true }
+              : { provider: 'mastra', source: 'none', connectWithMastraAccount: true },
+            { provider: 'anthropic', source: 'none', oauth: { supported: true, modes: ['paste-code'] } },
+          ],
+        }),
+      ),
+      http.post(`${PROVIDERS_URL}/mastra/connect`, () => {
+        connected = true;
+        return HttpResponse.json({ ok: true });
+      }),
+      http.get(`${PROVIDERS_URL}/mastra/credits`, () =>
+        HttpResponse.json({
+          remaining: 0,
+          unlimited: false,
+          canAddCredits: true,
+          addCreditsUrl: 'https://projects.mastra.ai/add-credits/org-1',
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    const drawer = await openAddProvider(user);
+    expect(await within(drawer).findByText('Pay with your organization’s Mastra credits ($0.00 left)')).toBeVisible();
+    await user.click(within(drawer).getByRole('button', { name: 'Connect Mastra Gateway' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add provider' })).not.toBeInTheDocument());
+    expect(await screen.findByText('No gateway credits left')).toBeInTheDocument();
+    expect(within(rowFor('mastra')).getByText('Key saved')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Add credits' })).toHaveAttribute(
+      'href',
+      'https://projects.mastra.ai/add-credits/org-1',
+    );
+  });
+
+  it('lets the user remove the Mastra Gateway key Factory created, but not replace it', async () => {
+    stubProviders([
+      { provider: 'mastra', source: 'stored-user', userCredential: 'api_key', connectWithMastraAccount: true },
+    ]);
+    server.use(
+      http.get(`${PROVIDERS_URL}/mastra/credits`, () =>
+        HttpResponse.json({
+          remaining: 5,
+          unlimited: false,
+          canAddCredits: true,
+          addCreditsUrl: 'https://projects.mastra.ai/add-credits/org-1',
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    await user.click(await screen.findByRole('button', { name: 'Mastra Gateway actions' }));
+
+    expect(await screen.findByRole('menuitem', { name: 'Remove key' })).toBeVisible();
+    expect(screen.queryByRole('menuitem', { name: 'Update key' })).not.toBeInTheDocument();
+  });
+
   it('surfaces a provider list error', async () => {
     server.use(http.get(PROVIDERS_URL, () => HttpResponse.json({ error: 'nope' }, { status: 500 })));
 

@@ -45,7 +45,7 @@ Approved plans are also persisted to disk as markdown files so you can archive a
 
 Files are named `<ISO-timestamp>-<slugified-title>.md` and contain the plan title, approval timestamp, and full plan body.
 
-To store plans in a project-local directory instead, set the `MASTRA_PLANS_DIR` environment variable:
+To store approved-plan archives in a different directory, set the `MASTRA_PLANS_DIR` environment variable. It replaces the global archive directory:
 
 ```sh
 export MASTRA_PLANS_DIR=.mastracode/plans
@@ -80,10 +80,8 @@ The agent writes the plan to a Markdown file directly inside the project's plan 
 
 After submission, you can:
 
-- **Approve**: Mastra Code switches to Build mode and begins implementation.
-- **Use as /goal**: Start a goal from the approved plan so Mastra Code keeps executing and checking the plan across turns.
-- **Reject**: Stay in Plan mode.
-- **Request changes**: Provide feedback for the agent to revise the same plan file and resubmit it.
+- **Approve**: Mastra Code switches to Build mode and starts the plan as a [goal](/goals#use-an-approved-plan-as-a-goal), so it keeps executing and checking the plan across turns.
+- **Request changes** (or <kbd>Esc</kbd>): Provide feedback for the agent to revise the same plan file and resubmit it.
 
 ## Explore mode
 
@@ -106,8 +104,8 @@ Each mode has a default model for sessions that start in it. Switching modes kee
 
 | Mode | Default model |
 | - | - |
-| Build | `openai/gpt-5.5` |
-| Plan | `openai/gpt-5.5` |
+| Build | `openai/gpt-5.6-sol` |
+| Plan | `openai/gpt-5.6-sol` |
 | Explore | `openai/gpt-5.4-mini` |
 
 Mode packs can set a different model for each mode.

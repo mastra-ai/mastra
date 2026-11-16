@@ -1,24 +1,53 @@
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  infiniteQueryOptions,
+  queryOptions,
+  skipToken,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { actOnFactoryDecision, fetchFactoryDecisions } from '../ui/domains/factory/services/decisions';
+import { actOnFactoryDecision, fetchFactoryDecisions, fetchRunQueue } from '../ui/domains/factory/services/decisions';
 import type {
   FactoryDecisionAction,
   FactoryDecisionPage,
   FactoryDecisionStatus,
 } from '../ui/domains/factory/services/decisions';
 
-export function useFactoryDecisionStatus(githubProjectId: string | undefined, statuses: FactoryDecisionStatus[]) {
-  const { baseUrl } = useApiConfig();
-  const statusKey = statuses.join(',');
-  return useQuery({
-    queryKey: queryKeys.factoryDecisions(githubProjectId, statusKey),
-    queryFn: () => fetchFactoryDecisions(baseUrl, githubProjectId!, { statuses, limit: 50 }),
-    enabled: Boolean(githubProjectId),
-    refetchInterval: 2_000,
+export function factoryDecisionStatusQueryOptions(
+  baseUrl: string,
+  githubProjectId: string | undefined,
+  statuses: FactoryDecisionStatus[],
+) {
+  return queryOptions({
+    queryKey: queryKeys.factoryDecisions(githubProjectId, statuses.join(',')),
+    queryFn: githubProjectId
+      ? () => fetchFactoryDecisions(baseUrl, githubProjectId, { statuses, limit: 50 })
+      : skipToken,
     staleTime: 1_000,
   });
+}
+
+export function useFactoryDecisionStatus(githubProjectId: string | undefined, statuses: FactoryDecisionStatus[]) {
+  const { baseUrl } = useApiConfig();
+  return useQuery(factoryDecisionStatusQueryOptions(baseUrl, githubProjectId, statuses));
+}
+
+/** Automated runs waiting for a run slot; the feed refreshes it with the board's decisions. */
+export function runQueueQueryOptions(baseUrl: string, githubProjectId: string | undefined) {
+  return queryOptions({
+    queryKey: queryKeys.factoryRunQueue(githubProjectId),
+    queryFn: githubProjectId ? () => fetchRunQueue(baseUrl, githubProjectId) : skipToken,
+    staleTime: 1_000,
+  });
+}
+
+export function useRunQueue(githubProjectId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  return useQuery(runQueueQueryOptions(baseUrl, githubProjectId));
 }
 
 /** Release, turn down, or requeue one queued effect. */
@@ -36,20 +65,33 @@ export function useFactoryDecisionAction(githubProjectId: string | undefined, ac
   });
 }
 
+/** A page of decision history starts before this cursor; the first page has none. */
+type DecisionCursor = string | undefined;
+const FIRST_DECISION_PAGE: DecisionCursor = undefined;
+
+export function factoryDecisionHistoryQueryOptions(
+  baseUrl: string,
+  githubProjectId: string | undefined,
+  statusKey: string,
+  statuses: FactoryDecisionStatus[] | undefined,
+) {
+  return infiniteQueryOptions({
+    queryKey: queryKeys.factoryDecisions(githubProjectId, statusKey),
+    queryFn: githubProjectId
+      ? ({ pageParam }: { pageParam: DecisionCursor }) =>
+          fetchFactoryDecisions(baseUrl, githubProjectId, { statuses, before: pageParam, limit: 25 })
+      : skipToken,
+    initialPageParam: FIRST_DECISION_PAGE,
+    getNextPageParam: (lastPage: FactoryDecisionPage) => lastPage.nextCursor,
+    staleTime: 2_000,
+  });
+}
+
 export function useFactoryDecisionHistory(
   githubProjectId: string | undefined,
   statusKey: string,
   statuses: FactoryDecisionStatus[] | undefined,
 ) {
   const { baseUrl } = useApiConfig();
-  return useInfiniteQuery({
-    queryKey: queryKeys.factoryDecisions(githubProjectId, statusKey),
-    queryFn: ({ pageParam }) =>
-      fetchFactoryDecisions(baseUrl, githubProjectId!, { statuses, before: pageParam, limit: 25 }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage: FactoryDecisionPage) => lastPage.nextCursor,
-    enabled: Boolean(githubProjectId),
-    refetchInterval: 5_000,
-    staleTime: 2_000,
-  });
+  return useInfiniteQuery(factoryDecisionHistoryQueryOptions(baseUrl, githubProjectId, statusKey, statuses));
 }

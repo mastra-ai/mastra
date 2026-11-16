@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { CreateFeedbackBody } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -39,6 +40,69 @@ const submit = (text: string) => {
 afterEach(() => cleanup());
 
 describe('feedback tabs composer', () => {
+  it.each(['trace', 'span'])('keeps the draft and shows a failed %s submission', async scope => {
+    server.use(
+      http.get(FEEDBACK_URL, () => HttpResponse.json(listFeedbackResponse([]))),
+      http.post(FEEDBACK_URL, () => HttpResponse.json({ error: 'Trace not found' }, { status: 404 })),
+    );
+    render(
+      scope === 'span' ? (
+        <SpanFeedbackTab traceId={TRACE_ID} spanId={SPAN_ID} />
+      ) : (
+        <TraceFeedbackTab traceId={TRACE_ID} />
+      ),
+      { wrapper },
+    );
+    submit('Keep this draft');
+    expect((await screen.findByRole('alert')).textContent).toContain('Could not save feedback');
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Leave feedback' }).value).toBe('Keep this draft');
+  });
+
+  it.each(['trace', 'span'])('supports creation without unsupported actions in the %s composer', async scope => {
+    const onPost = vi.fn<(body: unknown) => void>();
+    server.use(
+      http.get(FEEDBACK_URL, () =>
+        HttpResponse.json(scope === 'span' ? spanFeedbackResponse : authoredFeedbackResponse),
+      ),
+      http.post(FEEDBACK_URL, async ({ request }) => {
+        onPost(await request.json());
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    const feedbackOptions = {
+      contextMode: 'resolve',
+      feedbackUserId: null,
+      allowDelete: false,
+      allowReview: false,
+    } as const;
+    render(
+      scope === 'span' ? (
+        <SpanFeedbackTab traceId={TRACE_ID} spanId={SPAN_ID} feedbackOptions={feedbackOptions} />
+      ) : (
+        <TraceFeedbackTab traceId={TRACE_ID} feedbackOptions={feedbackOptions} />
+      ),
+      { wrapper },
+    );
+    await screen.findByText('Needs review');
+    expect(screen.queryByRole('button', { name: 'Feedback actions' })).toBeNull();
+    submit('Platform comment');
+    await waitFor(() =>
+      expect(onPost).toHaveBeenCalledWith({
+        contextMode: 'resolve',
+        feedback: {
+          feedbackId: expect.any(String),
+          timestamp: expect.any(String),
+          traceId: TRACE_ID,
+          ...(scope === 'span' ? { spanId: SPAN_ID } : {}),
+          feedbackType: 'comment',
+          feedbackSource: 'user',
+          feedbackUserId: null,
+          value: 'Platform comment',
+        },
+      }),
+    );
+  });
+
   it('submits span-scoped feedback and refetches the list', async () => {
     const onPost = vi.fn<(body: unknown) => void>();
     const onList = vi.fn();
@@ -82,6 +146,56 @@ describe('feedback tabs composer', () => {
     await waitFor(() => expect(onPost).toHaveBeenCalled());
     expect(onPost.mock.calls[0][0]).toMatchObject({ feedback: { traceId: TRACE_ID, value: 'trace note' } });
     expect(onPost.mock.calls[0][0]).not.toHaveProperty('feedback.spanId');
+  });
+});
+
+describe('feedback tabs pending comment', () => {
+  it.each(['trace', 'span'])(
+    'shows a %s comment the list does not return yet as sending, without actions',
+    async scope => {
+      // The POST is accepted but the list never returns the row (eventually consistent storage).
+      server.use(
+        http.get(FEEDBACK_URL, () => HttpResponse.json(listFeedbackResponse([]))),
+        http.post(FEEDBACK_URL, () => HttpResponse.json({ success: true })),
+      );
+      render(
+        scope === 'span' ? (
+          <SpanFeedbackTab traceId={TRACE_ID} spanId={SPAN_ID} />
+        ) : (
+          <TraceFeedbackTab traceId={TRACE_ID} />
+        ),
+        { wrapper },
+      );
+      await screen.findByText('No feedback yet');
+
+      submit('not stored yet');
+
+      await screen.findByText('not stored yet');
+      expect(screen.getByText('Sending…')).toBeTruthy();
+      expect(screen.queryByText('Needs review')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Feedback actions' })).toBeNull();
+    },
+  );
+
+  it('gives the comment its actions once the list returns it', async () => {
+    let stored: ReturnType<typeof feedbackRecord>[] = [];
+    server.use(
+      http.get(FEEDBACK_URL, () => HttpResponse.json(listFeedbackResponse(stored))),
+      http.post(FEEDBACK_URL, async ({ request }) => {
+        const { feedback } = (await request.json()) as CreateFeedbackBody;
+        stored = [feedbackRecord({ feedbackId: feedback.feedbackId, feedbackType: 'comment', value: 'now stored' })];
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
+    await screen.findByText('No feedback yet');
+
+    submit('now stored');
+
+    // The post-submit refetch returns the stored record, which replaces the pending one.
+    await screen.findByRole('button', { name: 'Feedback actions' });
+    expect(screen.getAllByText('now stored')).toHaveLength(1);
+    expect(screen.queryByText('Sending…')).toBeNull();
   });
 });
 

@@ -73,7 +73,7 @@ export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>
         className={cn(
           'flex h-10 max-w-full min-w-0 items-center overflow-hidden py-1 text-column whitespace-nowrap text-muted-foreground',
           sticky === 'start' && dataListStickyStartStyles,
-          sticky === 'start' && '-mx-3 w-auto max-w-none px-3',
+          sticky === 'start' && '-ml-3 w-auto max-w-none px-3',
           sticky === 'start' && 'z-20',
           canReorder &&
             'cursor-grab active:cursor-grabbing data-drop-target:shadow-[inset_2px_0_0_var(--border-focus)]',

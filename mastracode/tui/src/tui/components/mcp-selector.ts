@@ -8,6 +8,7 @@ import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import type { McpServerStatus, McpSkippedServer } from '@mastra/code-sdk/mcp/types';
 import chalk from 'chalk';
 import { decodePrintableShortcut } from '../key-input.js';
+import { ClickableText } from '../mouse/hit-test.js';
 import { theme, getContrastText } from '../theme.js';
 
 // =============================================================================
@@ -273,7 +274,12 @@ export class McpSelectorComponent extends Box implements Focusable {
       const toolInfo =
         !this._reloading && status.toolCount > 0 ? theme.fg('muted', ` · ${status.toolCount} tools`) : '';
 
-      this.listContainer.addChild(new Text(`${cursor}${icon} ${name} ${transport} ${stateText}${toolInfo}`, 0, 0));
+      const serverIndex = i;
+      this.listContainer.addChild(
+        new ClickableText(`${cursor}${icon} ${name} ${transport} ${stateText}${toolInfo}`, () =>
+          this.clickItem(serverIndex),
+        ),
+      );
 
       // Sub-menu for this server
       if (i === this.selectedIndex && this.subMenuOpen) {
@@ -284,7 +290,10 @@ export class McpSelectorComponent extends Box implements Focusable {
           const actionText = actionSelected
             ? theme.bold(theme.fg('accent', action.label))
             : theme.fg('muted', action.label);
-          this.listContainer.addChild(new Text(`${actionCursor}${actionText}`, 0, 0));
+          const actionIndex = j;
+          this.listContainer.addChild(
+            new ClickableText(`${actionCursor}${actionText}`, () => this.clickAction(actionIndex)),
+          );
         }
       }
     }
@@ -300,7 +309,9 @@ export class McpSelectorComponent extends Box implements Focusable {
         const cursor = isSelected ? theme.fg('accent', '› ') : '  ';
         const name = isSelected ? theme.bold(theme.fg('accent', s.name)) : s.name;
         this.listContainer.addChild(
-          new Text(`${cursor}${theme.fg('warning', '⊘')} ${name} — ${theme.fg('muted', s.reason)}`, 0, 0),
+          new ClickableText(`${cursor}${theme.fg('warning', '⊘')} ${name} — ${theme.fg('muted', s.reason)}`, () =>
+            this.clickItem(idx),
+          ),
         );
       }
     }
@@ -446,6 +457,23 @@ export class McpSelectorComponent extends Box implements Focusable {
     this.subMenuOpen = true;
     this.subMenuIndex = 0;
     this.updateList();
+  }
+
+  /** A click on a server row does what the keyboard would: close any open action menu, move there, press Enter. */
+  private clickItem(index: number): void {
+    if (this._reloading) return;
+    if (this.subMenuOpen) this.handleInput('\x1b');
+    this.selectedIndex = index;
+    this.updateList();
+    this.handleInput('\r');
+  }
+
+  /** A click on an action row moves there and presses Enter. */
+  private clickAction(index: number): void {
+    if (this._reloading || !this.subMenuOpen) return;
+    this.subMenuIndex = index;
+    this.updateList();
+    this.handleInput('\r');
   }
 
   private handleSubMenuInput(data: string, kb: ReturnType<typeof getKeybindings>): void {

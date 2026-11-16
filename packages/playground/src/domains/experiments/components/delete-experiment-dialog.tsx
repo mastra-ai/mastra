@@ -2,9 +2,9 @@
 
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useDatasetMutations } from '@mastra/react/hooks/datasets';
-import { Trash2 } from 'lucide-react';
 
 export interface DeleteExperimentDialogProps {
   open: boolean;
@@ -47,7 +47,7 @@ export function DeleteExperimentDialog({
         </AlertDialog.Header>
         <AlertDialog.Footer>
           <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-          <Button icon={<Trash2 />} variant="primary" onClick={handleDelete} disabled={deleteExperiment.isPending}>
+          <Button icon={<TrashIcon />} variant="primary" onClick={handleDelete} disabled={deleteExperiment.isPending}>
             {deleteExperiment.isPending ? 'Deleting...' : 'Delete'}
           </Button>
         </AlertDialog.Footer>

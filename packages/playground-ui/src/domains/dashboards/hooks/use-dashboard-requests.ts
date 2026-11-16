@@ -4,7 +4,7 @@ import { useQueries, useQueryClient } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useAggregateLimiter } from '../../metrics/hooks/use-aggregate-limiter';
 import type { RequestLimiter } from '../../metrics/lib/request-limiter';
-import type { DashboardAnswer, DashboardRequest } from '../lib/requests';
+import type { DashboardAnswer, DashboardRequest, DashboardResult } from '../lib/requests';
 import { requestKey, sendRequest } from '../lib/requests';
 
 export type DashboardQueryResult = UseQueryResult<DashboardAnswer>;
@@ -59,4 +59,22 @@ export function useDashboardRequests(requests: (DashboardRequest | undefined)[])
   });
   let next = 0;
   return requests.map(request => (request ? results[next++] : undefined));
+}
+
+/** A query result as the plain data `StatelessWidget` renders from. */
+export function toDashboardResult(result: DashboardQueryResult): DashboardResult {
+  const { data, isLoading, isRefetching, isError, error } = result;
+  return { data, isLoading, isRefetching, isError, error: error ?? undefined };
+}
+
+/**
+ * `useDashboardRequests` as plain results, with `retry` refetching the ones that failed. Results line
+ * up with `requests`.
+ */
+export function useDashboardResults(requests: (DashboardRequest | undefined)[]) {
+  const sent = useDashboardRequests(requests);
+  return {
+    results: sent.map(r => (r ? toDashboardResult(r) : undefined)),
+    retry: () => sent.forEach(r => r?.isError && void r.refetch()),
+  };
 }

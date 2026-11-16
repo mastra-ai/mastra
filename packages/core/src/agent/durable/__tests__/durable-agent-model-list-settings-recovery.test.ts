@@ -80,7 +80,11 @@ async function startProcess(kind: AgentKind) {
       },
     },
   });
-  const durableAgent = kind === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
+  // Checkpoints are captured and restored through v1's snapshot writes.
+  const durableAgent =
+    kind === 'durable'
+      ? createDurableAgent({ agent, storageVersion: 1 })
+      : createEventedAgent({ agent, storageVersion: 1 });
   const storage = new InMemoryStore();
   // Before `new Mastra(...)`: the engine resolves during agent registration.
   if (kind === 'evented-fallback') {

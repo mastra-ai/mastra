@@ -136,35 +136,34 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "nex-agi/Nex-N2-Pro": [
+    "meituan-longcat/LongCat-2.0": [
       {
         "type": "budget_tokens",
         "min": 128,
         "max": 32768
       }
     ],
-    "MiniMaxAI/MiniMax-M3": [
+    "zai-org/GLM-5": [
       {
         "type": "budget_tokens",
         "min": 128,
         "max": 32768
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp": [
+    "zai-org/GLM-5.1": [
       {
         "type": "budget_tokens",
         "min": 128,
         "max": 32768
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Pro": [
+    "zai-org/GLM-5.2": [
       {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V3.2": [
+    "zai-org/GLM-5V-Turbo": [
       {
         "type": "toggle"
       },
@@ -174,28 +173,47 @@
         "max": 32768
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "nex-agi/Nex-N2-Pro": [
       {
         "type": "budget_tokens",
         "min": 128,
         "max": 32768
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Pro-0813": [
+    "moonshotai/Kimi-K2.5": [
       {
         "type": "budget_tokens",
         "min": 128,
         "max": 32768
       }
     ],
-    "deepseek-ai/DeepSeek-R1": [
+    "moonshotai/Kimi-K3": [
       {
         "type": "budget_tokens",
         "min": 128,
         "max": 32768
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Flash": [
+    "moonshotai/Kimi-K2.6": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "moonshotai/Kimi-K2.7-Code": [
       {
         "type": "budget_tokens",
         "min": 128,
@@ -206,6 +224,13 @@
       {
         "type": "toggle"
       },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "deepseek-ai/DeepSeek-R1": [
       {
         "type": "budget_tokens",
         "min": 128,
@@ -232,25 +257,35 @@
         "max": 32768
       }
     ],
-    "zai-org/GLM-5.3": [
+    "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
       }
     ],
-    "zai-org/GLM-5.2": [
+    "deepseek-ai/DeepSeek-V4-Flash": [
       {
-        "type": "effort",
-        "values": ["high", "max"]
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
       }
     ],
-    "zai-org/GLM-5.3-Flash": [
+    "deepseek-ai/DeepSeek-V4-Flash-0731": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
       }
     ],
-    "zai-org/GLM-5V-Turbo": [
+    "deepseek-ai/DeepSeek-V4-Pro": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "deepseek-ai/DeepSeek-V3.2": [
       {
         "type": "toggle"
       },
@@ -260,79 +295,14 @@
         "max": 32768
       }
     ],
-    "zai-org/GLM-5.1": [
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
       {
         "type": "budget_tokens",
         "min": 128,
         "max": 32768
       }
     ],
-    "zai-org/GLM-5": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "openai/gpt-oss-120b": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3-14B": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3-32B": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3-VL-32B-Thinking": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3-VL-30B-A3B-Thinking": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3-8B": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3.8-2.4T-A95B": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "meituan-longcat/LongCat-2.0": [
+    "tencent/Hy3": [
       {
         "type": "budget_tokens",
         "min": 128,
@@ -349,35 +319,65 @@
         "max": 32768
       }
     ],
-    "tencent/Hy3": [
+    "openai/gpt-oss-120b": [
       {
         "type": "budget_tokens",
         "min": 128,
         "max": 32768
       }
     ],
-    "moonshotai/Kimi-K2.7-Code": [
+    "Qwen/Qwen3-32B": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "budget_tokens",
         "min": 128,
         "max": 32768
       }
     ],
-    "moonshotai/Kimi-K3": [
+    "Qwen/Qwen3.8-2.4T-A95B": [
       {
         "type": "budget_tokens",
         "min": 128,
         "max": 32768
       }
     ],
-    "moonshotai/Kimi-K2.6": [
+    "Qwen/Qwen3-VL-30B-A3B-Thinking": [
       {
         "type": "budget_tokens",
         "min": 128,
         "max": 32768
       }
     ],
-    "moonshotai/Kimi-K2.5": [
+    "Qwen/Qwen3-VL-32B-Thinking": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3-14B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3-8B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "MiniMaxAI/MiniMax-M3": [
       {
         "type": "budget_tokens",
         "min": 128,

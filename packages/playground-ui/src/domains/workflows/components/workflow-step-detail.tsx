@@ -1,11 +1,11 @@
 import { ReactFlowProvider } from '@xyflow/react';
-import { List, X } from 'lucide-react';
-
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import { WorkflowDataInspector } from '../workflow/data/workflow-data-inspector';
 import { WorkflowNestedGraph } from '../workflow/workflow-nested-graph';
 import { Txt } from '@/ds/components/Txt';
 import { BADGE_COLORS, WorkflowCodeContent } from '@/ds/components/Workflow';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconListBullets } from '@/ds/icons/central/IconListBullets';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 
 export function WorkflowStepDetailContent({ requestContext }: { requestContext: Record<string, any> }) {
@@ -21,7 +21,9 @@ export function WorkflowStepDetailContent({ requestContext }: { requestContext: 
     <div className="flex h-full flex-col" data-testid="workflow-step-detail-panel">
       <div className="flex items-center justify-between border-b border-border bg-sidebar px-4 py-3">
         <div className="flex items-center gap-2">
-          {stepDetail.type === 'map-config' && <List className="size-4" style={{ color: BADGE_COLORS.map }} />}
+          {stepDetail.type === 'map-config' && (
+            <IconListBullets className="size-4" style={{ color: BADGE_COLORS.map }} />
+          )}
           {stepDetail.type === 'nested-graph' && (
             <WorkflowIcon className="size-4" style={{ color: BADGE_COLORS.workflow }} />
           )}
@@ -37,7 +39,7 @@ export function WorkflowStepDetailContent({ requestContext }: { requestContext: 
           </div>
         </div>
         <button onClick={closeStepDetail} className="rounded p-1 hover:bg-fill-subtle" aria-label="Close">
-          <X className="size-4 text-muted-foreground" />
+          <IconCrossMedium className="size-4 text-muted-foreground" />
         </button>
       </div>
 

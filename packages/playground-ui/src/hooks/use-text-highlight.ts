@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { RefCallback } from 'react';
 
 import { useIsomorphicLayoutEffect } from './use-isomorphic-layout-effect';
+import { escapeRegExp } from '@/lib/string';
 import './use-text-highlight.css';
 
 /** Single registry entry, so only one search surface can be highlighted at a time. */
@@ -33,10 +34,6 @@ const INCLUDED_SELECTOR = '[data-highlight]';
  * — it knows why the row survived the filter, this hook only knows the term.
  */
 const INDIRECT_SELECTOR = '[data-highlight-indirect]';
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 /**
  * The first text node the highlighter would paint under `root` for `search`, or `null`.

@@ -13,7 +13,6 @@ interface ToolBlocksExampleProps extends ToolCallGroupStep {
   hideArguments?: boolean;
   commandOnly?: boolean;
   output?: string;
-  maxOutputLength?: number;
   defaultOpen?: boolean;
 }
 
@@ -25,7 +24,6 @@ function ToolBlocksExample({
   commandOnly,
   status,
   output,
-  maxOutputLength,
   defaultOpen,
 }: ToolBlocksExampleProps) {
   const { icon: ToolIcon, label, detail, command } = presentTool(toolName, args);
@@ -44,7 +42,7 @@ function ToolBlocksExample({
         )}
         {output !== undefined && (
           <section aria-label="Tool output">
-            <ToolCallOutput text={output} error={status === 'error'} maxLength={maxOutputLength} />
+            <ToolCallOutput text={output} error={status === 'error'} />
           </section>
         )}
       </ActivityContent>
@@ -67,14 +65,13 @@ const meta = {
     argsText: { description: 'Partial streamed arguments, used before structured args are available.' },
     hideArguments: { description: 'Hides ordinary arguments while keeping edit previews.', control: 'boolean' },
     commandOnly: { description: 'Shows the command line instead of all JSON arguments, as Factory does.' },
-    maxOutputLength: { description: 'Limits the visible preview. Copy always includes the complete output.' },
   },
   parameters: {
     layout: 'fullscreen',
     docs: {
       description: {
         component:
-          '`Activity` composed with the tool blocks from `components/ai/tool-call`, the way Studio and Factory each build a tool line. `ToolBlocksExample` exists only in this story; import `presentTool`, `ToolCallArguments`, `ToolCallCommand`, `ToolCallOutput` and `ToolCallGroup` instead. Apps normalize their tool data and choose which output to show; these blocks own presentation and copying. Factory bounds result previews while copying the full value. Studio keeps complete arguments and results, including successful edit results. Approval actions are also shared; requests and lifecycle stay with each app.',
+          '`Activity` composed with the tool blocks from `components/ai/tool-call`, the way Studio and Factory each build a tool line. `ToolBlocksExample` exists only in this story; import `presentTool`, `ToolCallArguments`, `ToolCallCommand`, `ToolCallOutput` and `ToolCallGroup` instead. Apps normalize their tool data and choose which output to show; these blocks own presentation and copying. Results show in full, including successful edit results, and scroll inside their box. Approval actions are also shared; requests and lifecycle stay with each app.',
       },
     },
   },
@@ -89,12 +86,16 @@ const editArguments = { path: 'src/agent.ts', old_string: 'const count = 1;', ne
 
 export const SuccessfulEditWithResult: Story = {
   args: { toolName: 'edit_file', args: editArguments, output: 'Updated src/agent.ts successfully.' },
-  parameters: { docs: { description: { story: 'Studio retains the full success result alongside the file change.' } } },
+  parameters: {
+    docs: {
+      description: { story: 'A successful edit keeps its result, such as diagnostics, beside the file change.' },
+    },
+  },
 };
 
 export const EditPreviewOnly: Story = {
   args: { toolName: 'edit_file', args: editArguments },
-  parameters: { docs: { description: { story: 'Factory shows the file change without a redundant success result.' } } },
+  parameters: { docs: { description: { story: 'Before its result arrives, an edit shows only the file change.' } } },
 };
 
 export const FailedEdit: Story = {
@@ -151,7 +152,6 @@ export const EmptyArguments: Story = {
 export const LongOutput: Story = {
   args: {
     output: 'A long tool result with the full content available through copy.\n'.repeat(50),
-    maxOutputLength: 800,
   },
   play: async ({ canvasElement, args }) => {
     const user = userEvent.setup();
@@ -159,11 +159,6 @@ export const LongOutput: Story = {
     await user.click(within(output).getByRole('button', { name: 'Copy to clipboard' }));
     await expect(await navigator.clipboard.readText()).toBe(args.output);
   },
-};
-
-export const FullOutput: Story = {
-  args: { ...LongOutput.args, maxOutputLength: undefined },
-  play: LongOutput.play,
 };
 
 const readStep: ToolBlocksExampleProps = {

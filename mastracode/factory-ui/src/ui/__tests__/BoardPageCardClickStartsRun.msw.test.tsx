@@ -9,6 +9,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { workBoardInfo } from '../../../e2e/ui/board-catalog';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
@@ -38,17 +39,6 @@ const issueWorkItem = {
   sessions: {},
   metadata: { number: 7 },
   revision: 1,
-  createdAt: '2026-07-18T00:00:00.000Z',
-  updatedAt: '2026-07-18T00:00:00.000Z',
-};
-
-const logoutIssue = {
-  number: 9,
-  title: 'Crash on logout',
-  url: 'https://github.com/acme/app/issues/9',
-  author: 'octocat',
-  labels: [],
-  comments: 0,
   createdAt: '2026-07-18T00:00:00.000Z',
   updatedAt: '2026-07-18T00:00:00.000Z',
 };
@@ -86,24 +76,6 @@ const gitlabWorkItem = {
   },
 };
 
-const gitlabCandidateIssue = {
-  id: '2',
-  externalId: 'gitlab-issue:encoded-issue-2',
-  identifier: 'acme/app#2',
-  title: 'GitLab candidate issue',
-  url: 'https://gitlab.com/acme/app/-/work_items/2',
-  state: 'opened',
-  stateType: 'unstarted',
-  priority: null,
-  assignee: null,
-  author: 'grace',
-  source: 'acme/app',
-  sourceId: 'gitlab-source-1',
-  labels: [],
-  createdAt: '2026-09-01T00:00:00Z',
-  updatedAt: '2026-09-01T00:00:00Z',
-};
-
 interface TransitionRequest {
   itemId: string;
   body: Record<string, unknown>;
@@ -111,16 +83,13 @@ interface TransitionRequest {
 
 /** Stubs the board's data endpoints and captures everything a card click writes. */
 function stubBoardEndpoints({
-  issues = [] as object[],
   workItems = [issueWorkItem] as object[],
   multiRepository = false,
   mappedLinearRepository = false,
-  linearIssues = [] as object[],
 } = {}) {
   const transitions: TransitionRequest[] = [];
   const patches: Array<{ itemId: string; body: Record<string, unknown> }> = [];
   const created: Array<Record<string, unknown>> = [];
-  const comments: Array<{ itemId: string; body: Record<string, unknown> }> = [];
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -133,7 +102,7 @@ function stubBoardEndpoints({
             id: FACTORY_ID,
             name: 'Acme Factory',
             repositories: [
-              listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' }),
+              listedRepository(REPO_ID, 'acme/app', { branch: 'main' }),
               ...(multiRepository ? [listedRepository('repo-2', 'acme/other', { branch: 'main' })] : []),
             ],
           },
@@ -169,17 +138,8 @@ function stubBoardEndpoints({
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: multiRepository, connected: multiRepository, workspace: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/linear/issues`, () => HttpResponse.json({ issues: linearIssues, nextCursor: null })),
     // The label-filtered (status: auto-triaged) feed stays empty; the plain feed
     // serves the candidate under test.
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) => {
-      const label = new URL(request.url).searchParams.get('label');
-      if (label && label !== 'status: auto-triaged') {
-        return HttpResponse.error();
-      }
-
-      return HttpResponse.json({ issues: label ? [] : issues, nextPage: null });
-    }),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues/:number`, ({ params }) =>
       HttpResponse.json({
         number: Number(params.number),
@@ -214,10 +174,6 @@ function stubBoardEndpoints({
         workItem: { ...issueWorkItem, id: 'item-filed', title: String(body.title), stages: ['intake'] },
       });
     }),
-    http.post(`${TEST_BASE_URL}/web/factory/work-items/:itemId/comments`, async ({ params, request }) => {
-      comments.push({ itemId: String(params.itemId), body: (await request.json()) as Record<string, unknown> });
-      return HttpResponse.json({ comment: { id: 'comment-1' } });
-    }),
     http.patch(`${TEST_BASE_URL}/web/factory/work-items/:itemId`, async ({ params, request }) => {
       const body = (await request.json()) as Record<string, unknown>;
       patches.push({ itemId: String(params.itemId), body });
@@ -249,7 +205,7 @@ function stubBoardEndpoints({
     ),
   );
 
-  return { transitions, patches, created, comments };
+  return { transitions, patches, created };
 }
 
 function renderWorkBoard() {
@@ -290,7 +246,6 @@ describe('Board card buttons move the card', () => {
     await moveFromCardDetails(item.title, 'Investigate');
 
     await waitFor(() => expect(transitions).toHaveLength(1));
-    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
     expect(patches).toHaveLength(0);
     expect(transitions[0]).toMatchObject({ itemId: item.id, body: { stage: 'triage' } });
   });
@@ -309,145 +264,25 @@ describe('Board card buttons move the card', () => {
     expect(transitions[0]?.body).not.toHaveProperty('reenter');
   });
 
-  it('chooses a repository before investigating an unattributed Linear item in a multi-repository factory', async () => {
+  it('moves a card that names no repository in a multi-repository factory with one transition and no repository prompt', async () => {
     const { patches, transitions } = stubBoardEndpoints({
       multiRepository: true,
       workItems: [{ ...linearWorkItem, stages: ['intake'] }],
     });
-    renderWorkBoard();
+    const { client } = renderWorkBoard();
 
     await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
 
-    const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    const user = userEvent.setup();
-    const search = within(dialog).getByRole('searchbox', { name: 'Search repositories' });
-    expect(within(dialog).getByRole('button', { name: /acme\/app/ })).toBeVisible();
-    expect(within(dialog).getByRole('button', { name: /acme\/other/ })).toBeVisible();
-
-    await user.type(search, '  ACME/OTHER  ');
-    await waitFor(() => expect(within(dialog).queryByRole('button', { name: /acme\/app/ })).not.toBeInTheDocument());
-    expect(within(dialog).getByRole('button', { name: /acme\/other/ })).toBeVisible();
-    expect(patches).toHaveLength(0);
-    expect(transitions).toHaveLength(0);
-
-    await user.clear(search);
-    await user.type(search, 'missing');
-    expect(await within(dialog).findByText('No matching repositories')).toBeVisible();
-    expect(within(dialog).queryByRole('button', { name: /acme\/other/ })).not.toBeInTheDocument();
-    await user.clear(search);
-    expect(await within(dialog).findByRole('button', { name: /acme\/app/ })).toBeVisible();
-    const chosenRepository = within(dialog).getByRole('button', { name: /acme\/other/ });
-    chosenRepository.focus();
-    await user.keyboard('{Enter}');
-
     await waitFor(() => expect(transitions).toHaveLength(1));
-    expect(patches).toEqual([
-      { itemId: 'linear-item-1', body: { metadata: { ...linearWorkItem.metadata, repository: 'acme/other' } } },
-    ]);
     expect(transitions[0]).toMatchObject({
       itemId: 'linear-item-1',
-      body: { stage: 'triage', cause: 'card_action', expectedRevision: 5 },
+      body: { stage: 'triage', cause: 'card_action', expectedRevision: 1 },
     });
-  });
-
-  it('patches only the chosen repository when moving a normalized card with stale provider metadata', async () => {
-    const item = {
-      ...linearWorkItem,
-      stages: ['intake'],
-      metadata: {
-        ...linearWorkItem.metadata,
-        labels: ['stale-label'],
-        state: 'closed',
-        githubRepositoryId: 202,
-      },
-      workItem: {
-        ...providerFactsCard.workItem,
-        provider: 'linear',
-        title: linearWorkItem.title,
-        key: 'ENG-42',
-        state: 'open',
-        labels: ['bug'],
-        metadata: linearWorkItem.metadata,
-      },
-    };
-    const { patches, transitions } = stubBoardEndpoints({ multiRepository: true, workItems: [item] });
-    renderWorkBoard();
-
-    await moveFromCardDetails(item.title, 'Investigate');
-    const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    await userEvent.setup().click(within(dialog).getByRole('button', { name: /acme\/other/ }));
-
-    await waitFor(() => expect(transitions).toHaveLength(1));
-    expect(patches).toEqual([{ itemId: item.id, body: { metadata: { repository: 'acme/other' } } }]);
-    expect(transitions[0]).toMatchObject({
-      itemId: item.id,
-      body: { stage: 'triage', cause: 'card_action', expectedRevision: 5 },
-    });
-  });
-
-  it('cancels repository selection without changing a Linear item and resets search on reopening', async () => {
-    const { patches, transitions } = stubBoardEndpoints({
-      multiRepository: true,
-      workItems: [{ ...linearWorkItem, stages: ['intake'] }],
-    });
-    renderWorkBoard();
-    const user = userEvent.setup();
-    await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
-
-    const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    await user.type(within(dialog).getByRole('searchbox', { name: 'Search repositories' }), 'not-linked');
-    expect(await within(dialog).findByText('No matching repositories')).toBeVisible();
-    await user.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument());
-    expect(patches).toHaveLength(0);
-    expect(transitions).toHaveLength(0);
-
-    await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
-    const reopened = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    expect(within(reopened).getByRole('searchbox', { name: 'Search repositories' })).toHaveValue('');
-    expect(within(reopened).getByRole('button', { name: /acme\/app/ })).toBeVisible();
-    expect(within(reopened).getByRole('button', { name: /acme\/other/ })).toBeVisible();
-    expect(patches).toHaveLength(0);
-    expect(transitions).toHaveLength(0);
-  });
-
-  it('chooses a repository before filing and investigating a Linear candidate', async () => {
-    const { created, transitions } = stubBoardEndpoints({
-      multiRepository: true,
-      workItems: [],
-      linearIssues: [
-        {
-          id: 'linear-issue-1',
-          identifier: 'ENG-42',
-          title: 'Fix intake sync',
-          url: 'https://linear.app/acme/issue/ENG-42/fix-intake-sync',
-          state: 'Todo',
-          stateType: 'unstarted',
-          priorityLabel: 'High',
-          assignee: null,
-          team: 'Engineering',
-          sourceId: 'linear-project-1',
-          projectId: 'linear-project-1',
-          labels: [],
-          createdAt: '2026-07-01T00:00:00Z',
-          updatedAt: '2026-07-02T00:00:00Z',
-        },
-      ],
-    });
-    renderWorkBoard();
-
-    await moveFromCardDetails('Fix intake sync', 'Investigate');
-
-    const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    const user = userEvent.setup();
-    await user.type(within(dialog).getByRole('searchbox', { name: 'Search repositories' }), 'OTHER');
-    await waitFor(() => expect(within(dialog).queryByRole('button', { name: /acme\/app/ })).not.toBeInTheDocument());
-    expect(created).toHaveLength(0);
-    expect(transitions).toHaveLength(0);
-    await user.click(within(dialog).getByRole('button', { name: /acme\/other/ }));
-
-    await waitFor(() => expect(transitions).toHaveLength(1));
-    expect(created[0]?.metadata).toMatchObject({ linearProjectId: 'linear-project-1', repository: 'acme/other' });
+    await waitForMutationsIdle(client);
+    expect(transitions).toHaveLength(1);
+    expect(patches).toEqual([]);
+    // The card's own details are the only dialog: nothing asks for a repository.
+    expect(screen.queryAllByRole('dialog', { name: name => name !== 'ENG-42: Fix intake sync' })).toEqual([]);
   });
 
   it('uses the configured Linear project repository without prompting', async () => {
@@ -467,7 +302,6 @@ describe('Board card buttons move the card', () => {
     await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
 
     await waitFor(() => expect(transitions).toHaveLength(1));
-    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
     expect(patches).toHaveLength(0);
   });
 
@@ -493,48 +327,21 @@ describe('Board card buttons move the card', () => {
     expect(screen.queryByRole('menuitem', { name: /hands-off/i })).not.toBeInTheDocument();
   });
 
-  it('files a candidate in Intake, posts its custom prompt as a comment, then moves it', async () => {
-    const { transitions, created, comments } = stubBoardEndpoints({
-      issues: [logoutIssue],
-    });
-    const { client } = renderWorkBoard();
-
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Details for Crash on logout' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Crash on logout' });
-    expect(await within(dialog).findByText('The app crashes when logging out.')).toBeInTheDocument();
-
-    await user.click(within(dialog).getByRole('button', { name: 'Custom prompt…' }));
-    await user.type(await screen.findByRole('textbox', { name: 'Prompt for Crash on logout' }), 'Check the token TTL');
-    await user.click(screen.getByRole('button', { name: 'Run' }));
-
-    await waitFor(() => expect(transitions).toHaveLength(1));
-    await waitForMutationsIdle(client);
-    expect(created).toEqual([expect.objectContaining({ title: 'Crash on logout', stages: ['intake'] })]);
-    expect(comments).toEqual([
-      { itemId: 'item-filed', body: expect.objectContaining({ body: 'Guidance for this run: Check the token TTL' }) },
-    ]);
-    expect(transitions[0]).toMatchObject({ itemId: 'item-filed', body: { stage: 'triage', cause: 'card_action' } });
-  });
-
-  it('reports the guidance that could not be posted, and leaves the card in Intake', async () => {
-    const { transitions } = stubBoardEndpoints({ issues: [logoutIssue] });
+  it("keeps Work's moves against a server older than the board loop", async () => {
+    // A server from before the catalog named each board's loop parts sends no `flow` for Work.
+    const { flow: _flow, ...olderWork } = workBoardInfo;
+    const { transitions } = stubBoardEndpoints({ workItems: [intakeWorkItem] });
     server.use(
-      http.post(`${TEST_BASE_URL}/web/factory/work-items/:itemId/comments`, () =>
-        HttpResponse.json({ error: 'The guidance could not be posted.' }, { status: 500 }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards`, () =>
+        HttpResponse.json({ boards: [olderWork] }),
       ),
     );
     renderWorkBoard();
 
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Details for Crash on logout' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Crash on logout' });
-    await user.click(within(dialog).getByRole('button', { name: 'Custom prompt…' }));
-    await user.type(await screen.findByRole('textbox', { name: 'Prompt for Crash on logout' }), 'Check the token TTL');
-    await user.click(screen.getByRole('button', { name: 'Run' }));
+    await moveFromCardDetails('Fix login bug', 'Investigate');
 
-    expect(await screen.findByText('The guidance could not be posted.')).toBeInTheDocument();
-    expect(transitions).toEqual([]);
+    await waitFor(() => expect(transitions).toHaveLength(1));
+    expect(transitions[0]).toMatchObject({ itemId: 'item-1', body: { board: 'work', stage: 'triage' } });
   });
 
   it('offers no hands-off twin for Prepare approval, whose outcome is a maintainer decision', async () => {
@@ -569,7 +376,7 @@ describe('Board card buttons move the card', () => {
     expect(screen.queryByRole('menuitem', { name: 'Prepare approval' })).not.toBeInTheDocument();
   });
 
-  it('shows GitLab descriptions before and after an issue is added to the board', async () => {
+  it("shows a GitLab card's description in its details", async () => {
     stubBoardEndpoints({ workItems: [gitlabWorkItem] });
     server.use(
       http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
@@ -596,34 +403,20 @@ describe('Board card buttons move the card', () => {
           ],
         }),
       ),
-      http.get(`${TEST_BASE_URL}/web/intake/label-routes`, () => HttpResponse.json({ routes: [] })),
-      http.get(`${TEST_BASE_URL}/web/gitlab/issues`, () =>
-        HttpResponse.json({ issues: [gitlabCandidateIssue], nextCursor: null }),
-      ),
       http.get(`${TEST_BASE_URL}/web/gitlab/issues/:issueId`, ({ params, request }) => {
         expect(new URL(request.url).searchParams.get('factoryProjectId')).toBe(FACTORY_ID);
-        const description =
-          params.issueId === 'gitlab-issue:encoded-issue-1'
-            ? 'Persisted GitLab description.'
-            : 'Candidate GitLab description.';
-        return HttpResponse.json({ description, comments: [] });
+        expect(params.issueId).toBe('gitlab-issue:encoded-issue-1');
+        return HttpResponse.json({ description: 'Persisted GitLab description.', comments: [] });
       }),
     );
 
     renderWorkBoard();
     const user = userEvent.setup();
 
-    const persisted = await screen.findByRole('button', { name: 'Details for GitLab issue added to board' });
-    await screen.findByRole('button', { name: 'Details for GitLab candidate issue' });
-    await user.click(persisted);
+    await user.click(await screen.findByRole('button', { name: 'Details for GitLab issue added to board' }));
 
     const persistedDialog = await screen.findByRole('dialog', { name: 'GitLab issue added to board' });
     expect(await within(persistedDialog).findByText('Persisted GitLab description.')).toBeInTheDocument();
-    await user.click(within(persistedDialog).getByRole('button', { name: 'Collapse GitLab issue added to board' }));
-
-    await user.click(await screen.findByRole('button', { name: 'Details for GitLab candidate issue' }));
-    const candidateDialog = await screen.findByRole('dialog', { name: 'GitLab candidate issue' });
-    expect(await within(candidateDialog).findByText('Candidate GitLab description.')).toBeInTheDocument();
   });
 
   it("shows a Linear card's own description in its details", async () => {
@@ -635,6 +428,18 @@ describe('Board card buttons move the card', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'ENG-42: Fix intake sync' });
     expect(await within(dialog).findByText('The sync runs the wrong way.')).toBeInTheDocument();
+  });
+
+  it("sets the headings of a card's description under the card's title in its details", async () => {
+    stubBoardEndpoints({ workItems: [{ ...linearWorkItem, description: '# Steps\n\nRun the sync twice.' }] });
+    renderWorkBoard();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Details for ENG-42: Fix intake sync' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'ENG-42: Fix intake sync' });
+    expect(within(dialog).getByRole('heading', { level: 3, name: 'ENG-42: Fix intake sync' })).toBeInTheDocument();
+    expect(await within(dialog).findByRole('heading', { level: 4, name: 'Steps' })).toBeInTheDocument();
   });
 
   it('links the card source from the panel header', async () => {

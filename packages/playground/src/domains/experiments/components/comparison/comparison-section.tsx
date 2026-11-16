@@ -2,8 +2,8 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Card } from '@mastra/playground-ui/components/Card';
 import { CollapsibleBox, useCollapsibleBox } from '@mastra/playground-ui/components/CollapsibleBox';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { IconMinimize45 } from '@mastra/playground-ui/icons/central/IconMinimize45';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Minimize2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 /** Spacing between the sections of a comparison cell, shared by every cell so rows line up. */
@@ -78,7 +78,7 @@ export function ComparisonSection({
         )}
         {collapsible && box.isExpanded && box.isClipped && (
           <div className="flex justify-center pt-1">
-            <Button size="sm" variant="ghost" icon={<Minimize2 />} onClick={() => box.setExpanded(false)}>
+            <Button size="sm" variant="ghost" icon={<IconMinimize45 />} onClick={() => box.setExpanded(false)}>
               Collapse
             </Button>
           </div>

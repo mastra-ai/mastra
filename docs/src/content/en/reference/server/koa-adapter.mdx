@@ -115,7 +115,7 @@ app.listen(3000, () => {
     typeDescription:
       '{ setRequestAuth?: (req, requestContext) => void | Promise<void>, serverless?: boolean, sessionIdGenerator?: () => string }',
     description:
-      'MCP transport options, such as `setRequestAuth` to control what tools see as `context.mcp.extra.authInfo`.',
+      'MCP transport options, such as `setRequestAuth` to control what tools see as `context.mcp.extra.authInfo`. Defaults to `server.mcpOptions` from your `Mastra` config.',
     isOptional: true,
   },
 ]}
@@ -159,7 +159,7 @@ const mastra = new Mastra({
 })
 ```
 
-When `init()` is used, a global error-handling middleware is also registered as a safety net. Errors that reach this middleware are emitted via `ctx.app.emit('error', err, ctx)` following the standard Koa convention.
+When `init()` is used, a global error-handling middleware is also registered as a safety net. Errors that reach this middleware are emitted via `ctx.app.emit('error', err, ctx)` following the standard Koa convention. Client errors (4xx) and `501` errors already logged by the route handler are only emitted as `error` events when you register your own `error` listener; otherwise they go to `errorMonitor` listeners only.
 
 ## Protecting raw routes
 

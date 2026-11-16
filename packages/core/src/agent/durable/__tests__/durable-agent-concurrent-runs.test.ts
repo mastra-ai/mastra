@@ -86,7 +86,8 @@ async function startProcess() {
       },
     },
   });
-  const durableAgent = createDurableAgent({ agent });
+  // The test captures and restores runs through v1's snapshot writes.
+  const durableAgent = createDurableAgent({ agent, storageVersion: 1 });
   const mastra = new Mastra({
     agents: { durableAgent },
     storage,

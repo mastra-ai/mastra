@@ -22,10 +22,14 @@ overrides:
   '@mastra/memory': link:../../packages/memory
   '@mastra/client-js': link:../../client-sdks/client-js
   '@mastra/mcp': link:../../packages/mcp
+  '@mastra/mcp-apps-components': link:../../packages/mcp-apps-components
   '@mastra/libsql': link:../../stores/libsql
   '@mastra/observability': link:../../observability/mastra
+  '@mastra/playground-ui': link:../../packages/playground-ui
+  '@mastra/server': link:../../packages/server
   '@mastra/slack': link:../../channels/slack
   '@mastra/evals': link:../../packages/evals
+  '@mastra/json-render': link:../../integrations/json-render
   '@mastra/auth-studio': link:../../auth/studio
   mastra: link:../../packages/cli
   proxy-addr: 2.0.8
@@ -51,7 +55,7 @@ overrides:
   '@opentelemetry/propagator-jaeger@<2.11.0': 2.11.0
   '@ai-sdk/provider-utils@>=3.0.0 <3.0.38': 3.0.38
   jose@>=4.14.0 <6.2.12: 6.2.12
-  better-auth: ^1.7.7
+  better-auth: ^1.7.16
   ioredis@>=5.0.0 <6.0.0: 6.0.0
   zod@>=4.0.0 <4.6.7: 4.6.7
   es-toolkit@<1.52.0: 1.52.0
@@ -60,14 +64,12 @@ overrides:
   jsondiffpatch@<0.7.6: 0.7.6
   '@hono/node-server@<1.19.15': 1.19.15
   '@noble/hashes@>=2.0.0 <2.4.0': 2.4.0
-  undici@<8.12.2: 8.12.2
+  undici@<8.12.4: 8.12.4
   yargs@<18.1.0: 18.2.0
   raw-body@<4.0.0: 4.0.0
   nanoid@<5.1.16: 5.1.16
   '@modelcontextprotocol/sdk>@hono/node-server': 2.1.6
   '@modelcontextprotocol/node>@hono/node-server': 2.1.6
-
-packageExtensionsChecksum: sha256-E1uC6ipRR7MoF7R/5oDB8SEpSulsYWlFaGB0bv3k/Mo=
 
 patchedDependencies:
   body-parser@2.4.0:
@@ -84,6 +86,12 @@ importers:
       '@ai-sdk/provider':
         specifier: ^2.0.0
         version: 2.0.5
+      '@json-render/core':
+        specifier: ^0.22.0
+        version: 0.22.0(zod@4.6.7)
+      '@json-render/react':
+        specifier: ^0.22.0
+        version: 0.22.0(react@19.3.1)(zod@4.6.7)
       '@mastra/auth-auth0':
         specifier: link:../../auth/auth0
         version: link:../../auth/auth0
@@ -126,6 +134,9 @@ importers:
       '@mastra/evals':
         specifier: link:../../packages/evals
         version: link:../../packages/evals
+      '@mastra/json-render':
+        specifier: link:../../integrations/json-render
+        version: link:../../integrations/json-render
       '@mastra/libsql':
         specifier: link:../../stores/libsql
         version: link:../../stores/libsql
@@ -135,12 +146,21 @@ importers:
       '@mastra/mcp':
         specifier: link:../../packages/mcp
         version: link:../../packages/mcp
+      '@mastra/mcp-apps-components':
+        specifier: link:../../packages/mcp-apps-components
+        version: link:../../packages/mcp-apps-components
       '@mastra/memory':
         specifier: link:../../packages/memory
         version: link:../../packages/memory
       '@mastra/observability':
         specifier: link:../../observability/mastra
         version: link:../../observability/mastra
+      '@mastra/playground-ui':
+        specifier: link:../../packages/playground-ui
+        version: link:../../packages/playground-ui
+      '@mastra/server':
+        specifier: link:../../packages/server
+        version: link:../../packages/server
       '@mastra/slack':
         specifier: link:../../channels/slack
         version: link:../../channels/slack
@@ -157,7 +177,7 @@ importers:
         specifier: npm:ai@^5.0.93
         version: ai@5.0.285(zod@4.6.7)
       better-auth:
-        specifier: ^1.7.7
+        specifier: ^1.7.16
         version: 1.7.16(@opentelemetry/api@1.9.0)(react@19.3.1)(vitest@4.1.12(@opentelemetry/api@1.9.0)(@types/node@26.6.6)(msw@2.15.0(@types/node@26.6.6)(typescript@5.9.3))(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)))
       fetch-to-node:
         specifier: ^2.1.0
@@ -513,6 +533,16 @@ packages:
 
   '@jridgewell/sourcemap-codec@1.6.0':
     resolution: {integrity: sha512-T7jf+5zgsZHwNJ4lvQ7/aezbyk0nNX+zJVWpmHA7VYsEx7a7qr5Rg5IbtJFqkgze5Y2sruq1RUY8Q837Od7iFw==}
+
+  '@json-render/core@0.22.0':
+    resolution: {integrity: sha512-BIfJ2V3bLYETetBu2KWoxxRPU5cSAf77dDTBgqaV54kEAfyHta1psPJgNk0fDcB3FCrnCZ5KO/X41VDkrNSYgw==}
+    peerDependencies:
+      zod: 4.6.7
+
+  '@json-render/react@0.22.0':
+    resolution: {integrity: sha512-dUBSPn/OZGJGwYiVUVv6qk14AGvfIutKgw7EKJejof14Ft/UPKsoV7/SkF5xIbGIWcM/vk3U4UnNm3NgPnOSSQ==}
+    peerDependencies:
+      react: ^19.2.3
 
   '@modelcontextprotocol/sdk@1.32.2':
     resolution: {integrity: sha512-SWsVtH/0vULSQStoZ6xxH2K09Li8fXYTMC64ZeogCdpZ3XSi1eCPOByV1OpuJxuI3OcmHhosDWYyii07tpPsLw==}
@@ -1479,6 +1509,7 @@ packages:
 
   tldts-core@7.4.20:
     resolution: {integrity: sha512-C630TWXZCZmLq0F2bW4QqwnaaxCQ/svpAqvJwnC4JvgEM5ohhBnGsEzTLSOXcN+xjz+kEaHS5uoWIw2klnqd0A==}
+    deprecated: Partial release, see https://github.com/remusao/tldts/issues/2735. Use >=7.4.22.
 
   tldts@7.4.19:
     resolution: {integrity: sha512-48dH6aSpQnpbzDUc4vIQZ1VjB8tkK+e8c1yx05/SZK+rkssgjEOlxDd/yU8/a4vGYQ9vRgJr9dwMq9TJ0b3X2Q==}
@@ -1520,8 +1551,8 @@ packages:
   undici-types@8.9.0:
     resolution: {integrity: sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==}
 
-  undici@8.12.2:
-    resolution: {integrity: sha512-XtuDWVdqTLr3NAxm2ly9/hU6kUsJOgGh1RASzMBbsw6aWCOaQzHdW+QQDfdERjfJ2V5vL5pRPa4RetO9UfivDg==}
+  undici@8.12.4:
+    resolution: {integrity: sha512-8Mx+uNKKER2bA4AdtedkqRbwUCIJFr2nJckXRe5yrDqzePqwLP7VNcctN8/XdmDSbF7mS+jJKIszlL+vbam1VA==}
     engines: {node: '>=22.19.0'}
 
   until-async@3.0.2:
@@ -1684,7 +1715,7 @@ snapshots:
       '@ai-sdk/provider': 2.0.5
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.1
-      undici: 8.12.2
+      undici: 8.12.4
       zod: 4.6.7
 
   '@ai-sdk/provider@1.1.3':
@@ -1876,6 +1907,17 @@ snapshots:
       '@types/node': 26.6.6
 
   '@jridgewell/sourcemap-codec@1.6.0': {}
+
+  '@json-render/core@0.22.0(zod@4.6.7)':
+    dependencies:
+      zod: 4.6.7
+
+  '@json-render/react@0.22.0(react@19.3.1)(zod@4.6.7)':
+    dependencies:
+      '@json-render/core': 0.22.0(zod@4.6.7)
+      react: 19.3.1
+    transitivePeerDependencies:
+      - zod
 
   '@modelcontextprotocol/sdk@1.32.2(zod@4.6.7)':
     dependencies:
@@ -2804,7 +2846,7 @@ snapshots:
 
   undici-types@8.9.0: {}
 
-  undici@8.12.2: {}
+  undici@8.12.4: {}
 
   until-async@3.0.2: {}
 

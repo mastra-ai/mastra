@@ -20,7 +20,7 @@ Unlike metrics and scores, feedback is usually supplied by a person or review wo
 
 ## Add feedback
 
-Use `mastra.observability.addFeedback()` when you want to annotate a persisted trace or span from app code. The helper is optional on the observability entrypoint, so check that the active observability implementation supports it. See the [client SDK observability reference](/reference/client-js/observability) for all client methods.
+Use `mastra.observability.addFeedback()` to annotate a trace or span from app code. The helper is optional on the observability entrypoint, so check that the active observability implementation supports it. See the [client SDK observability reference](/reference/client-js/observability) for all client methods.
 
 ```typescript title="src/mastra/feedback.ts"
 if (!mastra.observability.addFeedback) {
@@ -39,9 +39,9 @@ await mastra.observability.addFeedback({
 })
 ```
 
-When you pass only `traceId` and `spanId`, `addFeedback()` rehydrates the target from configured observability storage before emitting the feedback event. Configure [`MastraStorageExporter`](/docs/observability/integrations/exporters/mastra-storage) when feedback is added after the traced execution has finished. If the trace isn't available in storage, Mastra logs a warning and drops the feedback event.
+Feedback goes to each configured exporter that supports it. Each exporter handles its own destination independently. A trace missing from local storage doesn't prevent feedback from reaching Platform or another exporter.
 
-During a live traced execution, you can pass its `correlationContext` to emit feedback without rehydrating the trace from storage. This path is useful when the active request collects feedback before its tracing context ends.
+[`MastraStorageExporter`](/docs/observability/integrations/exporters/mastra-storage) looks up the trace or span in your configured storage before saving feedback. If the target remains unavailable after retries, it logs a warning and skips the local write. Call `mastra.observability.flush()` or `shutdown()` before your process exits to finish pending delivery.
 
 ## Find the trace for a message
 
@@ -189,11 +189,9 @@ The local runtime exposes the list route at `/api/observability/feedback` and an
 
 ## Export feedback to Mastra Platform
 
-[`MastraPlatformExporter`](/reference/observability/tracing/exporters/mastra-platform-exporter) forwards emitted feedback events to Mastra Platform automatically because the hosted query API doesn't provide a creation route.
+[`MastraPlatformExporter`](/reference/observability/tracing/exporters/mastra-platform-exporter) sends feedback to Mastra Platform, which looks up the target trace or span when needed. Local trace storage isn't required. Add `MastraStorageExporter` only if you also want a local copy.
 
-If your application adds feedback after an agent or workflow response using only its `traceId`, configure `MastraStorageExporter` alongside `MastraPlatformExporter`. The storage exporter keeps the trace available for `addFeedback()` to rehydrate, while the Platform exporter forwards the resulting feedback event without adding the trace to the application's local storage.
-
-See [Observability on Mastra Platform](/docs/mastra-platform/observability#store-data-locally) for the combined exporter configuration.
+Studio sends feedback to the backend serving its trace reads. For HTTP creates handled by your OSS server, the server saves feedback locally and notifies configured exporters. Because exporter delivery is asynchronous, a successful HTTP response doesn't guarantee that the record is already visible at a remote destination. Direct storage writes bypass exporters.
 
 ## Export feedback to external platforms
 

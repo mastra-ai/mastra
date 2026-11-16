@@ -139,7 +139,11 @@ async function startProcess(
     },
   });
   const pubsub = engine === 'evented' ? new EventEmitterPubSub() : undefined;
-  const durableAgent = pubsub ? createEventedAgent({ agent, pubsub }) : createDurableAgent({ agent });
+  // The tests read the transcript from the loop run's snapshot and capture checkpoints through v1's
+  // snapshot writes. v2 stores the transcript changes a nested run makes in the nested run.
+  const durableAgent = pubsub
+    ? createEventedAgent({ agent, pubsub, storageVersion: 1 })
+    : createDurableAgent({ agent, storageVersion: 1 });
   const mastra = new Mastra({
     agents: { durableAgent },
     storage,
@@ -176,7 +180,7 @@ async function startColdCacheRun(engine: Engine, failures: number | 'always') {
   const process = await startProcess(history(), {
     engine,
     onLookup: async () => {
-      process.transcripts.releaseMessageListState({ state: undefined, getInitData: () => ({ runId }) });
+      process.transcripts.releaseMessageListState({ getInitData: () => ({ runId }) });
       const memoryStore = (await process.storage.getStore('memory'))!;
       listMessagesById = vi.spyOn(memoryStore, 'listMessagesById');
       const outage = new Error('memory storage down');

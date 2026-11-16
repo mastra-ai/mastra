@@ -125,17 +125,13 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       id: { type: 'uuid-pk' },
       connection_id: { type: 'text' },
       repository_id: { type: 'text' },
-      created_by_user_id: { type: 'text' },
       branch: { type: 'text', nullable: true },
-      sandbox_provider: { type: 'text' },
-      sandbox_workdir: { type: 'text' },
       setup_command: { type: 'text', nullable: true },
       teardown_command: { type: 'text', nullable: true },
       position: { type: 'integer', default: 0 },
       in_environment: { type: 'boolean', default: true },
       last_build_status: { type: 'text', default: 'unbuilt' },
       last_build_error: { type: 'text', nullable: true },
-      last_built_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -290,10 +286,7 @@ export interface ProjectRepository {
   id: string;
   connectionId: string;
   repositoryId: string;
-  createdByUserId: string;
   branch: string | null;
-  sandboxProvider: string;
-  sandboxWorkdir: string;
   setupCommand: string | null;
   teardownCommand: string | null;
   /** 1-based order within the project's environment (display and setup order only). */
@@ -302,7 +295,6 @@ export interface ProjectRepository {
   inEnvironment: boolean;
   lastBuildStatus: ProjectRepositoryBuildStatus;
   lastBuildError: string | null;
-  lastBuiltAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -330,18 +322,13 @@ export interface LinkProjectRepositoryInput {
   orgId: string;
   connectionId: string;
   repositoryId: string;
-  createdByUserId: string;
   branch?: string | null;
-  sandboxProvider: string;
-  sandboxWorkdir: string;
   setupCommand?: string | null;
   teardownCommand?: string | null;
 }
 
 export interface UpdateProjectRepositoryInput {
   branch?: string | null;
-  sandboxProvider?: string;
-  sandboxWorkdir?: string;
   setupCommand?: string | null;
   teardownCommand?: string | null;
   position?: number;
@@ -353,7 +340,6 @@ export interface SetProjectRepositoryBuildStatusInput {
   id: string;
   status: ProjectRepositoryBuildStatus;
   error?: string | null;
-  builtAt?: Date | null;
 }
 
 /**
@@ -458,8 +444,22 @@ export type TransferSourceControlSessionOwnerResult =
   | { status: 'updated'; session: SourceControlSession }
   | { status: 'conflict'; reason: 'stale_owner' | 'branch_owned'; session: SourceControlSession | null };
 
+export interface LinkedRepositoriesChange {
+  integrationId: string;
+  /** False when another replica made the write. */
+  local: boolean;
+}
+
 export interface SourceControlStorageHandle {
   readonly integrationId: string;
+  /**
+   * Fires after the set of repositories linked to projects may have changed
+   * for this integration, on this replica or (once the factory has wired the
+   * event bus) another one. Returns a function that removes the listener.
+   */
+  onLinkedRepositoriesChanged(listener: () => void): () => void;
+  /** False once the factory failed to share these changes between replicas. */
+  linkedRepositoryChangesShared(): boolean;
   readonly installations: {
     list(args: { orgId: string }): Promise<SourceControlInstallation[]>;
     get(args: { orgId: string; id: string }): Promise<SourceControlInstallation | null>;
@@ -639,17 +639,13 @@ interface ProjectRepositoryDbRow extends Record<string, unknown> {
   id: string;
   connection_id: string;
   repository_id: string;
-  created_by_user_id: string;
   branch: string | null;
-  sandbox_provider: string;
-  sandbox_workdir: string;
   setup_command: string | null;
   teardown_command: string | null;
   position: number | null;
   in_environment: boolean | null;
   last_build_status: string | null;
   last_build_error: string | null;
-  last_built_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -728,17 +724,13 @@ function toProjectRepository(row: ProjectRepositoryDbRow): ProjectRepository {
     id: row.id,
     connectionId: row.connection_id,
     repositoryId: row.repository_id,
-    createdByUserId: row.created_by_user_id,
     branch: row.branch,
-    sandboxProvider: row.sandbox_provider,
-    sandboxWorkdir: row.sandbox_workdir,
     setupCommand: row.setup_command,
     teardownCommand: row.teardown_command,
     position: row.position ?? 0,
     inEnvironment: row.in_environment ?? true,
     lastBuildStatus: toBuildStatus(row.last_build_status),
     lastBuildError: row.last_build_error,
-    lastBuiltAt: row.last_built_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -811,8 +803,6 @@ function toSession(row: SessionDbRow): SourceControlSession {
 function projectRepositoryPatch(input: UpdateProjectRepositoryInput): Record<string, unknown> {
   const patch: Record<string, unknown> = { updated_at: new Date() };
   if (input.branch !== undefined) patch.branch = input.branch;
-  if (input.sandboxProvider !== undefined) patch.sandbox_provider = input.sandboxProvider;
-  if (input.sandboxWorkdir !== undefined) patch.sandbox_workdir = input.sandboxWorkdir;
   if (input.setupCommand !== undefined) patch.setup_command = input.setupCommand;
   if (input.teardownCommand !== undefined) patch.teardown_command = input.teardownCommand;
   if (input.position !== undefined) patch.position = input.position;
@@ -821,8 +811,49 @@ function projectRepositoryPatch(input: UpdateProjectRepositoryInput): Record<str
 }
 
 export class SourceControlStorage extends FactoryStorageDomain {
+  readonly #linkedRepositoryListeners = new Set<(change: LinkedRepositoriesChange) => void>();
+  #linkedRepositoryChangesShared = false;
+
   constructor() {
     super('source-control');
+  }
+
+  /**
+   * Fires after a write that can change which repositories are linked to
+   * projects (connections, links, installation moves and removals), so a
+   * reader can keep that set in memory instead of re-reading it on a timer.
+   * Registering a repository does not fire: a provider sync upserts every
+   * repository of an installation, and only a link makes one of them count.
+   * Returns a function that removes the listener.
+   */
+  onLinkedRepositoriesChanged(listener: (change: LinkedRepositoriesChange) => void): () => void {
+    this.#linkedRepositoryListeners.add(listener);
+    return () => this.#linkedRepositoryListeners.delete(listener);
+  }
+
+  /**
+   * Whether changes made on other replicas reach this one's listeners. False
+   * until a subscription to them is in place, so readers re-read the set
+   * rather than keep one that may miss another replica's change.
+   */
+  get linkedRepositoryChangesShared(): boolean {
+    return this.#linkedRepositoryChangesShared;
+  }
+
+  /** Records whether other replicas' changes can be heard, so readers know whether to keep the set. */
+  setLinkedRepositoryChangesShared(shared: boolean): void {
+    this.#linkedRepositoryChangesShared = shared;
+  }
+
+  /** Runs the listeners; `local: false` reports a write another replica announced. */
+  linkedRepositoriesChanged(change: LinkedRepositoriesChange): void {
+    for (const listener of this.#linkedRepositoryListeners) {
+      try {
+        listener(change);
+      } catch (error) {
+        console.error('[factory] linked-repositories listener failed', error instanceof Error ? error.message : error);
+      }
+    }
   }
 
   /** Sessions, across providers and organizations, the memory-resource migration has not finished. */
@@ -1059,6 +1090,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
   forIntegration(integrationId: string): SourceControlStorageHandle {
     if (!integrationId.trim()) throw new Error('[SourceControlStorage] integrationId must not be empty.');
     const db = (): FactoryStorageOps => this.ops;
+    const linkedRepositoriesChanged = (): void => this.linkedRepositoriesChanged({ integrationId, local: true });
 
     const getInstallation = async (args: { orgId: string; id: string }): Promise<SourceControlInstallation | null> => {
       const row = await db().findOne<InstallationDbRow>(INSTALLATIONS, {
@@ -1132,6 +1164,11 @@ export class SourceControlStorage extends FactoryStorageDomain {
 
     return {
       integrationId,
+      onLinkedRepositoriesChanged: listener =>
+        this.onLinkedRepositoriesChanged(change => {
+          if (change.integrationId === integrationId) listener();
+        }),
+      linkedRepositoryChangesShared: () => this.linkedRepositoryChangesShared,
       installations: {
         list: async ({ orgId }) =>
           (
@@ -1170,6 +1207,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
           const installation = await getInstallation({ orgId, id });
           if (!installation) return false;
           await db().deleteMany(INSTALLATIONS, { id, integration_id: integrationId, org_id: orgId });
+          linkedRepositoriesChanged();
           return true;
         },
       },
@@ -1221,6 +1259,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               { installation_id: existing.installationId },
               { installation_id: newInstallationId },
             );
+            linkedRepositoriesChanged();
             // Return the updated repository
             const updated = await getRepository({ orgId, id });
             if (!updated) throw new Error('Repository disappeared after update');
@@ -1342,6 +1381,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               created_by_user_id: input.createdByUserId,
               created_at: new Date(),
             });
+            linkedRepositoriesChanged();
             return toConnection(row);
           } catch (error) {
             if (!(error instanceof UniqueViolationError)) throw error;
@@ -1372,6 +1412,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
           }
           await db().deleteMany(PROJECT_REPOSITORIES, { connection_id: id });
           await db().deleteMany(CONNECTIONS, { id, integration_id: integrationId });
+          linkedRepositoriesChanged();
           return true;
         },
       },
@@ -1493,20 +1534,17 @@ export class SourceControlStorage extends FactoryStorageDomain {
             const row = await db().insertOne<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
               connection_id: input.connectionId,
               repository_id: input.repositoryId,
-              created_by_user_id: input.createdByUserId,
               branch: input.branch ?? null,
-              sandbox_provider: input.sandboxProvider,
-              sandbox_workdir: input.sandboxWorkdir,
               setup_command: input.setupCommand ?? null,
               teardown_command: input.teardownCommand ?? null,
               position,
               in_environment: inEnvironment,
               last_build_status: 'unbuilt',
               last_build_error: null,
-              last_built_at: null,
               created_at: now,
               updated_at: now,
             });
+            linkedRepositoriesChanged();
             return toProjectRepository(row);
           } catch (error) {
             // Match the in-memory handle: return the existing row unchanged on
@@ -1526,7 +1564,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
           await db().updateMany(PROJECT_REPOSITORIES, { id }, projectRepositoryPatch(input));
           return getProjectRepository({ orgId, id });
         },
-        setBuildStatus: async ({ orgId, id, status, error, builtAt }) => {
+        setBuildStatus: async ({ orgId, id, status, error }) => {
           const existing = await getProjectRepository({ orgId, id });
           if (!existing) return null;
           await db().updateMany(
@@ -1535,7 +1573,6 @@ export class SourceControlStorage extends FactoryStorageDomain {
             {
               last_build_status: status,
               last_build_error: error ?? null,
-              last_built_at: builtAt ?? null,
               updated_at: new Date(),
             },
           );
@@ -1550,6 +1587,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
           await db().deleteMany(SESSION_REPOSITORIES, { project_repository_id: id });
           await db().deleteMany(SESSIONS, { project_repository_id: id });
           await db().deleteMany(PROJECT_REPOSITORIES, { id });
+          linkedRepositoriesChanged();
           return true;
         },
       },
