@@ -269,6 +269,23 @@ describe('legacy ownership', () => {
       expect(await regFor(coll)).toEqual([]);
     });
 
+    it('a delete drops its exclusive vector index but keeps a text index a sibling still uses, which the last delete drops', async () => {
+      const { coll, X, Y } = await fixture(
+        { A: 'search', V: 'vectorSearch' },
+        {
+          X: { textSearchIndexName: 'A', ownsTextIndex: true, searchIndexName: 'V', ownsVectorIndex: true },
+          Y: { textSearchIndexName: 'A', ownsTextIndex: false },
+        },
+      );
+      await a.deleteIndex({ indexName: X });
+      expect((await searchIndexNames(db, coll)).sort()).toEqual(['A']);
+      expect(await reg(X)).toBeNull();
+      expect((await reg(Y))?.ownsTextIndex).toBe(true);
+      await a.deleteIndex({ indexName: Y });
+      expect(await searchIndexNames(db, coll)).toEqual([]);
+      expect(await regFor(coll)).toEqual([]);
+    });
+
     it('T14a: a recipient already deleting is skipped, so the index it uses is dropped by the other delete', async () => {
       const { coll, X, Y } = await fixture(
         { A: 'search', V: 'vectorSearch' },

@@ -209,16 +209,16 @@ describe('MongoDBVector Integration Tests', () => {
     // Cleanup any existing collections
     try {
       // deleteIndex refuses unregistered/unowned names, so leftovers from aborted runs are dropped with the raw driver.
+      // Scoped to this suite's own names: other test files share this database and run in parallel.
+      const own = [testIndexName, testIndexName2, emptyIndexName, 'dummy_vector_index'];
       const raw = new MongoClient(uri);
       try {
         const rawDb = raw.db(dbName);
-        for (const c of await rawDb.listCollections({}, { nameOnly: true }).toArray())
-          await rawDb.dropCollection(c.name);
+        for (const name of own) await rawDb.dropCollection(name).catch(() => {});
+        await rawDb.collection('__mastra_vector_indexes__').deleteMany({ _id: { $in: own } as any });
       } finally {
         await raw.close();
       }
-      const deleted = await waitForCondition(async () => (await vectorDB.listIndexes()).length === 0, 30000, 500);
-      if (!deleted) throw new Error('Timed out waiting for collections to be deleted');
     } catch (error) {
       console.error('Failed to delete test collections:', error);
       throw error;
