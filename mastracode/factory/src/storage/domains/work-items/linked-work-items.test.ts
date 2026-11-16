@@ -3,7 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
-import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../test-utils.js';
+import {
+  createFactoryStorageForTests,
+  createIsolatedFactoryPostgresForTests,
+  createLegacyCardTablesForTests,
+} from '../../test-utils.js';
 import { WorkItemAlreadyOnBoardError } from './base.js';
 import type { ExternalWorkItemSource } from './base.js';
 import { backfillSourceLinks } from './source-links.js';
@@ -32,12 +36,14 @@ const pullRequest34: ExternalWorkItemSource = {
 // One external issue can sit on several boards at once: each board gets its own work item and
 // card, all linked to the one source row, and provider facts reach every one of them together.
 describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('an issue on several boards on %s', backend => {
-  async function setup() {
+  async function setup({ upgraded = false } = {}) {
     const storage =
       backend === 'postgres'
         ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
         : new LibSQLFactoryStorage({ id: 'linked-work-items-test', url: ':memory:' });
     if (backend === 'libsql') onTestFinished(() => storage.close());
+    // Only a database an earlier release wrote cards to can hold sources filed before links.
+    if (upgraded) await createLegacyCardTablesForTests(storage);
     const { workItems } = await createFactoryStorageForTests(storage);
     const scope = { orgId: randomUUID(), factoryProjectId: 'project', userId: 'user' };
     const file = async (externalSource: ExternalWorkItemSource, metadata: Record<string, unknown>, board = 'work') =>
@@ -284,7 +290,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('an issue on sev
   });
 
   it('reads cards filed before links existed, and backfills their links with facts once', async () => {
-    const { workItems, scope, file, storage, linkRow } = await setup();
+    const { workItems, scope, file, storage, linkRow } = await setup({ upgraded: true });
     const first = await file(issue12, { state: 'open', labels: ['bug'], author: 'reporter' });
     // Rows an older release wrote: a source and no link.
     await storage.ops.deleteMany(FACTORY_WORK_ITEM_SOURCE_LINKS_SCHEMA.name, { org_id: scope.orgId });
@@ -446,7 +452,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('an issue on sev
       { signal: controller.signal },
     );
 
-    expect(report).toEqual({ links: 1, aborted: true });
+    expect(report).toEqual({ links: 1, dropped: 0, aborted: true });
     expect(await storage.ops.findMany(linksTable, { org_id: scope.orgId })).toHaveLength(1);
   });
 

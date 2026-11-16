@@ -1362,13 +1362,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   #sourceLinksPending = false;
 
   /**
-   * Pending while any link row exists and the resync marker is unset. Decided from the links
-   * themselves: a database with no legacy cards may lack the split state table, so it is
-   * registered here when there are links to bring current.
+   * Pending until the resync marker is set. Only a database with the split state table can hold
+   * links the first rollout wrote: every database created since starts without it and only ever
+   * gets links this release keeps current.
    */
   async #sourceLinkResyncPending(hasSplitState: boolean): Promise<boolean> {
-    if (!(await super.ops.findOne(FACTORY_WORK_ITEM_SOURCE_LINKS_SCHEMA.name, {}))) return false;
-    if (!hasSplitState) await this.ensureCollections([FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA]);
+    if (!hasSplitState) return false;
     return !(await super.ops.findOne(FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA.name, { id: SOURCE_LINKS_MARKER_ID }));
   }
 

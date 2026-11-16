@@ -71,16 +71,13 @@ const issue = (number: number): ExternalWorkItemSource => ({
   url: `https://github.com/acme/app/issues/${number}`,
 });
 
-// Shapes of a database the first rollout of multi-board cards wrote links to, which then ran the
-// release that reverted it for days: an upgraded database (legacy tables, the first rollout's
-// backfill marker set) and one created after the legacy tables stopped being created.
+// A database the first rollout of multi-board cards wrote links to, with its backfill marker set,
+// which then ran the release that reverted it for days. Every such database has the legacy
+// tables: Factory stopped creating them only after the revert.
 describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
   'Factory boot after the multi-board revert on %s',
   backend => {
-    describe.each([
-      { shape: 'an upgraded database with the first marker set', legacy: true },
-      { shape: 'a database without legacy tables', legacy: false },
-    ])('on $shape', ({ legacy }) => {
+    describe('on an upgraded database with the first marker set', () => {
       async function setup() {
         vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
         vi.stubEnv('MASTRA_FACTORY_WORK_ITEM_SPLIT', '');
@@ -88,15 +85,14 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           vi.unstubAllEnvs();
         });
         const open = await database(backend);
-        if (legacy) {
-          const created = open();
-          await createLegacyCardTablesForTests(created);
-          await created.close();
-        }
+        const created = open();
+        await createLegacyCardTablesForTests(created);
+        await created.close();
         const orgId = `org-${randomUUID()}`;
 
         // The first rollout: issue 12 on Work and Release, issue 14 on Work and Security.
         const first = await boot(open);
+        await vi.waitFor(() => expect(first.workItems.sourceLinkBackfillPending).toBe(false), 10_000);
         const project = await first.storage.getDomain<FactoryProjectsStorage>('projects').create({
           orgId,
           userId: USER,
@@ -132,14 +128,14 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           stage: 'triage',
           userId: USER,
         }))!;
-        if (legacy) {
-          await first.storage.ops.upsertOne(FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA.name, ['id'], {
-            id: 'source-links',
-            legacy_updated_at: null,
-            legacy_id: null,
-            completed_at: new Date(),
-          });
-        }
+        // The first rollout recorded its own backfill only.
+        await first.storage.ops.deleteMany(FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA.name, { id: 'source-links-resync' });
+        await first.storage.ops.upsertOne(FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA.name, ['id'], {
+          id: 'source-links',
+          legacy_updated_at: null,
+          legacy_id: null,
+          completed_at: new Date(),
+        });
 
         // The reverted release, as it wrote rows: syncs reach the source row only, and deleting a
         // card removes its board item, work item and owned sources, leaving its links behind.
