@@ -195,7 +195,8 @@ describe('runDurableFinishSideEffects', () => {
     expect(generateThreadTitle).not.toHaveBeenCalled();
   });
 
-  it('skips title generation for an observational-memory run, matching the persistence guard', async () => {
+  // #30478: the OM processor has already persisted the turn, so the run is titled like a regular Agent run.
+  it('generates a title for an observational-memory run without flushing messages', async () => {
     const generateThreadTitle = vi.fn().mockResolvedValue(undefined);
     const flushMessages = vi.fn().mockResolvedValue(undefined);
 
@@ -218,10 +219,8 @@ describe('runDurableFinishSideEffects', () => {
       messageListState: makeMessageListState(),
     });
 
-    // Neither finish-time memory write runs, so the run cannot leave behind a
-    // titled thread that holds no messages.
     expect(flushMessages).not.toHaveBeenCalled();
-    expect(generateThreadTitle).not.toHaveBeenCalled();
+    expect(generateThreadTitle).toHaveBeenCalledTimes(1);
   });
 
   it('still generates a title for an ordinary run', async () => {

@@ -425,14 +425,9 @@ export async function runDurableFinishSideEffects({
   let titleGeneration: Promise<void> | undefined;
   let titleForStream: Promise<string | undefined> | undefined;
 
-  // Same exclusions as the persistence block above: an observational-memory run writes no
-  // messages here, and titling it would create a thread row holding a title and nothing else.
-  if (
-    durableState?.threadId &&
-    durableState?.resourceId &&
-    !durableState.observationalMemory &&
-    !durableState.memoryConfig?.readOnly
-  ) {
+  // Observational-memory runs are titled too, as with the regular Agent: preparation already
+  // created the thread, and the OM processor persists the turn itself.
+  if (durableState?.threadId && durableState?.resourceId && !durableState.memoryConfig?.readOnly) {
     const titleArgs: GenerateThreadTitleArgs = {
       threadId: durableState.threadId,
       resourceId: durableState.resourceId,

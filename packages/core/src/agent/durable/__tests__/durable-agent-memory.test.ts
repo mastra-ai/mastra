@@ -806,5 +806,34 @@ describe('DurableAgent memory edge cases', () => {
       expect(thread?.title).toBe('Existing Title');
       result.cleanup();
     });
+
+    // #30478: the regular Agent titles observational-memory runs; the durable finish step skipped them.
+    it('generates a title for an observational-memory run', async () => {
+      const mockMemory = new MockMemory();
+      mockMemory.getMergedThreadConfig = () => ({ generateTitle: true });
+
+      const baseAgent = new Agent({
+        id: 'title-om-agent',
+        name: 'Title OM Agent',
+        instructions: 'Test durable title generation with observational memory',
+        model: createTextModel('assistant response') as LanguageModelV2,
+        memory: mockMemory,
+      });
+      const generateTitle = vi.spyOn(baseAgent, 'genTitle').mockResolvedValue('OM Thread Title');
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const result = await durableAgent.stream('What is the weather like today?', {
+        memory: {
+          thread: 'thread-title-om',
+          resource: 'resource-title-om',
+          options: { observationalMemory: true },
+        },
+      });
+      for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+      }
+
+      await vi.waitFor(() => expect(generateTitle).toHaveBeenCalledTimes(1));
+      result.cleanup();
+    });
   });
 });
