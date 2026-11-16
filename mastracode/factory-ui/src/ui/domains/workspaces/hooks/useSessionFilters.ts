@@ -1,11 +1,9 @@
+import { sessionRowOwnerSchema } from '@mastra/factory/routes/contracts';
 import { createLocalStorageStore, useLocalStorageStore } from '@mastra/playground-ui/hooks/use-local-storage-store';
 import { z } from 'zod';
 
 import {
-  ALL_SESSION_OWNERS,
   EMPTY_SESSION_FILTERS,
-  MY_SESSIONS,
-  SESSION_OWNER_PREFIX,
   SESSION_STATUS_OPTIONS,
   SESSION_UPDATED_OPTIONS,
   activeSessionFilterCount,
@@ -19,15 +17,7 @@ const optionValue = <T extends string>(options: readonly { value: T }[]) =>
 // An owner who left the factory still parses; the filter then lists nothing until it is reset.
 // Any other owner falls back: the server refuses it and the sidebar would list nothing.
 const sessionFiltersSchema: z.ZodType<SessionFiltersState> = z.object({
-  owner: z
-    .union([
-      z.enum([ALL_SESSION_OWNERS, MY_SESSIONS]),
-      z
-        .string()
-        .regex(new RegExp(`^${SESSION_OWNER_PREFIX}.+$`))
-        .max(512),
-    ])
-    .catch(EMPTY_SESSION_FILTERS.owner),
+  owner: sessionRowOwnerSchema.catch(EMPTY_SESSION_FILTERS.owner),
   status: optionValue<SessionStatusFilter>(SESSION_STATUS_OPTIONS).catch(EMPTY_SESSION_FILTERS.status),
   updated: optionValue<SessionUpdatedFilter>(SESSION_UPDATED_OPTIONS).catch(EMPTY_SESSION_FILTERS.updated),
 });

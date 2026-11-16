@@ -23,13 +23,6 @@ export const SESSION_STATUS_LABELS: Record<SessionActivityStatus, string> = {
   done: 'Done',
 };
 
-function isSessionActivityStatus(value: string): value is SessionActivityStatus {
-  return value in SESSION_STATUS_LABELS;
-}
-
-export const SESSION_ACTIVITY_STATUSES: readonly SessionActivityStatus[] =
-  Object.keys(SESSION_STATUS_LABELS).filter(isSessionActivityStatus);
-
 export interface SessionOwner {
   userId: string;
   name: string;
