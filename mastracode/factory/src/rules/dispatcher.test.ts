@@ -1941,7 +1941,15 @@ describe('FactoryDecisionDispatcher', () => {
         updated_at: created,
       });
       // Every woken run hangs, so each claimed wake keeps its slot for the test.
-      const { controller, session, sendNotificationSignal } = createSession(new Promise<unknown>(() => {}));
+      // The runs end when the test finishes, so the dispatcher can stop before
+      // the storage closes.
+      let releaseRuns!: () => void;
+      const runsHeld = new Promise<void>(resolve => {
+        releaseRuns = resolve;
+      });
+      const { controller, session, sendNotificationSignal, consumeStream } = createSession(
+        runsHeld.then(() => ({ action: 'wake', output: { consumeStream } })),
+      );
       controller.getSession.mockImplementation(async () => session);
       for (let index = 0; index < options.holders; index += 1) {
         await queueWake(
@@ -1966,6 +1974,10 @@ describe('FactoryDecisionDispatcher', () => {
         maxInteractiveInFlight: options.maxInteractiveInFlight,
       });
       dispatcher.start();
+      onTestFinished(async () => {
+        releaseRuns();
+        await dispatcher.stop();
+      });
       const status = async (key: string) =>
         (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(d => d.idempotencyKey === key)?.status;
       // Real time, not fake timers: a claim is a real database round trip on either backend.
@@ -2056,7 +2068,6 @@ describe('FactoryDecisionDispatcher', () => {
       expect(queue.queued.map(run => [run.lane, run.position])).toEqual(
         [1, 2, 3, 4, 5, 6, 7].map(position => ['automated', position]),
       );
-      void dispatcher.stop();
     });
 
     it("keeps a person's replies to the interactive reserve once it is full", async () => {
@@ -2085,11 +2096,10 @@ describe('FactoryDecisionDispatcher', () => {
       expect(queue.queued).toEqual([
         expect.objectContaining({ lane: 'interactive', position: 1, type: 'sendMessage' }),
       ]);
-      void dispatcher.stop();
     });
 
     it('lists a waiting reply on the run queue even behind a full page of automated runs', async () => {
-      const { storage, dispatcher, readQueue } = await saturate({
+      const { storage, readQueue } = await saturate({
         maxInFlight: 1,
         maxInteractiveInFlight: 0,
         holders: 1,
@@ -2118,7 +2128,6 @@ describe('FactoryDecisionDispatcher', () => {
       expect(queue.queued.slice(1).map(run => [run.lane, run.position])).toEqual(
         Array.from({ length: 49 }, (_, index) => ['automated', index + 1]),
       );
-      void dispatcher.stop();
     });
 
     it("lets a person's reply take a free automated slot once the reserve is full, ahead of automated runs", async () => {
@@ -2147,13 +2156,11 @@ describe('FactoryDecisionDispatcher', () => {
 
       expect(await status('automated')).toBe('pending');
       expect(dispatcher.runSlots()).toEqual({ inUse: 1, cap: 1, interactive: { inUse: 1, cap: 1 } });
-      void dispatcher.stop();
     });
 
     it('reserves two interactive slots per server unless configured otherwise', async () => {
       const { dispatcher } = await saturate({ maxInFlight: 1, holders: 0 });
       expect(dispatcher.runSlots().interactive).toEqual({ inUse: 0, cap: 2 });
-      void dispatcher.stop();
     });
   });
 
