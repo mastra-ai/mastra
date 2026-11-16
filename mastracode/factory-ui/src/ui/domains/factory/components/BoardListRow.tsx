@@ -141,7 +141,6 @@ export function BoardListRow({
           </Txt>
         )}
         <span className="col-start-1 row-start-1 flex items-center max-sm:[&_button]:pointer-events-auto max-sm:[&_button]:opacity-100">
-
           <DropdownMenu>
             <DropdownMenu.Trigger
               render={

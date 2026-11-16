@@ -20,7 +20,7 @@ import type { WorkItem, WorkItemSource } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
-import { IconBubbleWide } from '@mastra/playground-ui/icons/central/IconBubbleWide';
+import { IconChatBubble7 } from '@mastra/playground-ui/icons/central/IconChatBubble7';
 import { IconHand5Finger } from '@mastra/playground-ui/icons/central/IconHand5Finger';
 import './card-actions.css';
 
@@ -79,7 +79,7 @@ export const REVEAL_ON_CARD_HOVER =
 
 export function SessionBadge() {
   return (
-    <Badge size="xs" variant="info" emphasis="subtle" icon={<IconBubbleWide aria-hidden />} className="shrink-0">
+    <Badge size="xs" variant="info" emphasis="subtle" icon={<IconChatBubble7 aria-hidden />} className="shrink-0">
       Session
     </Badge>
   );

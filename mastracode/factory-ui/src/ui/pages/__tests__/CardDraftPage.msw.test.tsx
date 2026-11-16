@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -9,7 +9,10 @@ import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createQueryClient } from '../../../query-client';
 import { providerFactsCard } from '../../__tests__/fixtures/providerFactsCard';
-import { environmentPayload, environmentRepository } from '../../domains/settings/components/__tests__/fixtures/environment';
+import {
+  environmentPayload,
+  environmentRepository,
+} from '../../domains/settings/components/__tests__/fixtures/environment';
 import { createAppRoutes } from '../../router';
 import { DRAFT_SESSION_ID, FACTORY_ID, stubDraftRoute } from './fixtures/draftRoute';
 

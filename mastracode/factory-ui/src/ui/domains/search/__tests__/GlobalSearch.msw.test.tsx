@@ -385,7 +385,6 @@ afterEach(() => {
 });
 
 describe('Global search', () => {
-
   it('opens with Mod+K on the labeled, focused command input and hands focus back on close', async () => {
     stubSearchApi();
     const user = userEvent.setup();
@@ -725,7 +724,6 @@ describe('Global search', () => {
     await listed(['Bump the command palette dependencies', 'Palette keyboard traps focus on mobile']);
     expect(within(rail).getByRole('button', { name: /^Work items\s*2$/ })).toBeInTheDocument();
   });
-
 
   it('opens the session a listed card gained since, instead of starting another', async () => {
     const listed = { ...workItems[3], board: 'custom', metadata: { number: 777 } };

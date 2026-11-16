@@ -32,7 +32,6 @@ import { useBoardDecisions } from '../../domains/factory/hooks/useBoardDecisions
 import { useBoardIntakeSetup } from '../../domains/factory/hooks/useBoardIntakeSetup';
 import { useItemSessionStatuses } from '../../domains/factory/hooks/useItemSessionStatuses';
 import { useBoardItems } from '../../domains/factory/hooks/useBoardItems';
-
 import { boardParticipants, boardPersonIdentity, withPeopleUnfolded } from '../../domains/factory/boardPeople';
 import { boardFiltersActive } from '../../domains/factory/boardFilters';
 import { useBoardView } from '../../domains/factory/hooks/useBoardView';
@@ -327,7 +326,6 @@ export function BoardContent({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-
       {mutationError !== undefined && (
         <div className="shrink-0 p-4 pb-0">
           <Notice variant="destructive">
