@@ -1,4 +1,3 @@
-import { BotIcon, CoinsIcon, HashIcon, MessagesSquareIcon } from 'lucide-react';
 import { KpiCard } from '../../../metrics/components/kpi-card';
 import { alertAction } from '../../lib/alert-actions';
 import { FORMATTERS } from '../../lib/format';
@@ -10,8 +9,12 @@ import type { KpisOptions } from './options';
 import { Card } from '@/ds/components/Card';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import { MetricsCardGroup } from '@/ds/components/MetricsCardGroup';
+import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
+import { IconCoins } from '@/ds/icons/central/IconCoins';
+import { IconHashtag } from '@/ds/icons/central/IconHashtag';
+import { IconRobot } from '@/ds/icons/central/IconRobot';
 
-const ICONS = { bot: BotIcon, coins: CoinsIcon, hash: HashIcon, threads: MessagesSquareIcon } as const;
+const ICONS = { bot: IconRobot, coins: IconCoins, hash: IconHashtag, threads: IconChatBubbles } as const;
 
 const change = (pct: number | undefined) => (pct !== undefined && Number.isFinite(pct) ? pct : undefined);
 

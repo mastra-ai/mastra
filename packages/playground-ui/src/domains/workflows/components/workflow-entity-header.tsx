@@ -1,8 +1,10 @@
 import { useWorkflow } from '@mastra/react/hooks/workflows';
-import { CopyIcon, Cpu, Database } from 'lucide-react';
 import { Badge } from '@/ds/components/Badge';
 import { EntityHeader } from '@/ds/components/EntityHeader';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { IconChip } from '@/ds/icons/central/IconChip';
+import { IconServer1 } from '@/ds/icons/central/IconServer1';
+import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { focusRing } from '@/ds/primitives/transitions';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
@@ -31,7 +33,7 @@ export const WorkflowEntityHeader = ({ workflowId, requestContext }: WorkflowEnt
           <Tooltip>
             <TooltipTrigger asChild>
               <button type="button" onClick={handleCopy} className="h-badge-default shrink-0">
-                <Badge icon={<CopyIcon />}>{workflowId}</Badge>
+                <Badge icon={<IconSquareBehindSquare1 />}>{workflowId}</Badge>
               </button>
             </TooltipTrigger>
             <TooltipContent>Copy workflow ID for use in code</TooltipContent>
@@ -42,7 +44,7 @@ export const WorkflowEntityHeader = ({ workflowId, requestContext }: WorkflowEnt
           </Badge>
 
           {workflow?.isProcessorWorkflow && (
-            <Badge icon={<Cpu />} variant="purple">
+            <Badge icon={<IconChip />} variant="purple">
               Processor
             </Badge>
           )}
@@ -56,7 +58,7 @@ export const WorkflowEntityHeader = ({ workflowId, requestContext }: WorkflowEnt
                 aria-label="Dynamic workflow"
                 className={cn('rounded-[7px]', focusRing)}
               >
-                <Badge icon={<Database />} variant="blue">
+                <Badge icon={<IconServer1 />} variant="blue">
                   Dynamic
                 </Badge>
               </TooltipTrigger>

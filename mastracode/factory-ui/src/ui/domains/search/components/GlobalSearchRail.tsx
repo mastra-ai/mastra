@@ -1,7 +1,13 @@
 import { CommandPaletteRail, CommandPaletteScope } from '@mastra/playground-ui/components/CommandPalette';
-import { Factory, GitBranch, GitPullRequest, Route, Search, SquareKanban, Ticket } from 'lucide-react';
+import { Factory } from 'lucide-react';
 
 import type { GlobalSearchScope, GlobalSearchScopeCounts } from '../services/searchScopes';
+import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
+import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
+import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
+import { IconDirection1 } from '@mastra/playground-ui/icons/central/IconDirection1';
+import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
+import { IconTicket } from '@mastra/playground-ui/icons/central/IconTicket';
 
 export function GlobalSearchRail({
   activeScope,
@@ -15,42 +21,42 @@ export function GlobalSearchRail({
   return (
     <CommandPaletteRail aria-label="Search categories">
       <CommandPaletteScope
-        icon={<Search />}
+        icon={<IconMagnifyingGlass />}
         label="All"
         count={counts.all}
         active={activeScope === 'all'}
         onSelect={() => onScopeChange('all')}
       />
       <CommandPaletteScope
-        icon={<Route />}
+        icon={<IconDirection1 />}
         label="Navigation"
         count={counts.navigation}
         active={activeScope === 'navigation'}
         onSelect={() => onScopeChange('navigation')}
       />
       <CommandPaletteScope
-        icon={<SquareKanban />}
+        icon={<IconKanbanView />}
         label="Work sessions"
         count={counts.work}
         active={activeScope === 'work'}
         onSelect={() => onScopeChange('work')}
       />
       <CommandPaletteScope
-        icon={<GitPullRequest />}
+        icon={<IconPullRequest />}
         label="Review sessions"
         count={counts.review}
         active={activeScope === 'review'}
         onSelect={() => onScopeChange('review')}
       />
       <CommandPaletteScope
-        icon={<Ticket />}
+        icon={<IconTicket />}
         label="Work items"
         count={counts.items}
         active={activeScope === 'items'}
         onSelect={() => onScopeChange('items')}
       />
       <CommandPaletteScope
-        icon={<GitBranch />}
+        icon={<IconBranch />}
         label="User sessions"
         count={counts.user}
         active={activeScope === 'user'}

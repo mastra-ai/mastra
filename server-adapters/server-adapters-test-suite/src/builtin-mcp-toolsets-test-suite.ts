@@ -346,6 +346,12 @@ export function createBuiltinMCPToolsetsTestSuite(config: BuiltinMCPToolsetsTest
           `/memory/threads/${thread}/clone?agentId=thread-agent`,
           {},
         ],
+        [
+          'get_working_memory',
+          { agentId: 'thread-agent', threadId: thread },
+          'GET',
+          `/memory/threads/${thread}/working-memory?agentId=thread-agent`,
+        ],
       ];
 
       it.each(cases)("%s %j: the owner's call succeeds, another user's fails with the HTTP status", async (...row) => {
@@ -378,7 +384,7 @@ export function createBuiltinMCPToolsetsTestSuite(config: BuiltinMCPToolsetsTest
         expect(ids(viaHttp.body.threads)).toEqual(['bob-thread']);
       });
 
-      it("save_messages cannot write into another user's thread", async () => {
+      it("does not offer save_messages, and HTTP save still rejects another user's thread", async () => {
         const message = {
           id: 'intruder',
           threadId: thread,
@@ -388,12 +394,11 @@ export function createBuiltinMCPToolsetsTestSuite(config: BuiltinMCPToolsetsTest
           createdAt: new Date().toISOString(),
           content: { format: 2, parts: [{ type: 'text', text: 'hi' }] },
         };
-        const mcp = outcome(await callTool('bob', 'save_messages', { agentId: 'thread-agent', messages: [message] }));
+        expect(Object.keys(await listTools('bob'))).not.toContain('save_messages');
         const viaHttp = await http('bob', 'POST', '/memory/save-messages?agentId=thread-agent', {
           messages: [message],
         });
         expect(viaHttp.status, JSON.stringify(viaHttp.body)).toBe(403);
-        expect(mcp).toBe(viaHttp.status);
       });
     });
 
@@ -511,7 +516,13 @@ export function createBuiltinMCPToolsetsTestSuite(config: BuiltinMCPToolsetsTest
       it('keeps POST-backed observability reads and drops memory writes', async () => {
         const tools = await listTools('alice', { 'x-mcp-readonly': '1' });
         const names = Object.keys(tools);
-        for (const name of ['analyze_metrics', 'analyze_feedback', 'list_threads', 'get_observations']) {
+        for (const name of [
+          'analyze_metrics',
+          'analyze_feedback',
+          'list_threads',
+          'get_observations',
+          'get_working_memory',
+        ]) {
           expect(names).toContain(name);
           expect((tools[name] as any).mcp?.annotations?.readOnlyHint ?? true).toBe(true);
         }

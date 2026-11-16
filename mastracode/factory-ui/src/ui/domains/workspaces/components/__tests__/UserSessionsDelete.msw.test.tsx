@@ -59,7 +59,6 @@ describe('User sessions deletion', () => {
               repositories: [
                 listedRepository(projectRepositoryId, 'octo/hello', {
                   branch: 'main',
-                  sandboxWorkdir: '/workspace/hello',
                 }),
               ],
             },

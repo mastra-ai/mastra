@@ -1,8 +1,8 @@
-import { LockKeyholeIcon } from 'lucide-react';
 import { useId } from 'react';
 import type { ReactNode } from 'react';
 import { Field, FieldDescription, FieldError, FieldLabel, Fieldset, FieldsetLegend } from '@/ds/components/Field';
 import type { FieldProps, FieldsetProps } from '@/ds/components/Field';
+import { IconLock } from '@/ds/icons/central/IconLock';
 import { cn } from '@/lib/utils';
 
 export type SettingsRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orientation'> & {
@@ -39,7 +39,7 @@ export function SettingsRowControl({ viewOnly = false, children }: { viewOnly?: 
   if (!viewOnly) return children;
   return (
     <>
-      <LockKeyholeIcon className="size-4 shrink-0" aria-hidden />
+      <IconLock className="size-4 shrink-0" aria-hidden />
       <span className="sr-only">View only: </span>
       {children}
     </>

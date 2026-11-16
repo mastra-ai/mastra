@@ -1,4 +1,3 @@
-import { ChevronsRightIcon } from 'lucide-react';
 import * as React from 'react';
 import {
   Drawer,
@@ -11,6 +10,7 @@ import {
   DrawerTitle,
   DrawerViewport,
 } from '@/ds/components/Drawer';
+import { IconChevronDoubleRight } from '@/ds/icons/central/IconChevronDoubleRight';
 import { PortalContainerProvider } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -85,7 +85,7 @@ export function SideDialogRoot({
                     )}
                     aria-label="Close"
                   >
-                    <ChevronsRightIcon />
+                    <IconChevronDoubleRight />
                   </button>
                 }
               />

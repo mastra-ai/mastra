@@ -101,6 +101,7 @@ import { assertStoredAgentAccess } from './agent-access';
 import { assertWriteAccess, getCallerAuthorId, matchesAuthorFilter, resolveAuthorFilter } from './authorship';
 import type { OwnedRecord } from './authorship';
 import { handleError } from './error';
+import { isGatewayV2 } from './gateway-memory-client';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import {
   sanitizeBody,
@@ -442,9 +443,10 @@ async function authorizeRunOwner({
 
 /** Whether the agent publishes its runs, so a closed HTTP reader can detach instead of aborting. */
 function hasResumableStreams(agent: Agent): boolean {
-  // Durable wrappers always publish. Check them first: a proxy wrapper (Inngest) forwards
-  // hasResumableStreams() to its wrapped Agent, which may have streams off.
+  // Older Inngest wrappers inherit false from the plain Agent or lack this capability method.
+  // Keep durable execution detached from HTTP cancellation across package-version mismatches.
   if (isDurableAgentLike(agent)) return true;
+
   const resumable = agent as unknown as ResumableStreamsAgent;
   return typeof resumable.hasResumableStreams === 'function' && resumable.hasResumableStreams();
 }
@@ -2055,8 +2057,14 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
     process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS === 'true' || process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS === '1';
   const defaultGatewayIds = new Set<string>(defaultGateways.map(gateway => gateway.id));
 
+  // Consult registered gateway instances too: a user-registered MastraGateway
+  // may carry a v2 key via config.apiKey that env-only checks cannot see.
+  const gatewayV2 = isGatewayV2(mastra);
+
   if (!blockExternalProviders) {
     for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
+      // In v2 the live catalog (via the gateway manager) replaces the static registry entry.
+      if (id === 'mastra' && gatewayV2) continue;
       allProviders[id] = provider;
     }
   }
@@ -3131,9 +3139,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, runId, offset, abortSignal, requestContext }) => {
     try {
-      // Verify agent exists and get its pubsub for stream subscription.
-      // Durable agents have their own CachingPubSub instance separate from mastra.pubsub,
-      // so we must subscribe to the agent's pubsub to receive the correct stream events.
+      // Authorize against the execution's ownership record before subscribing to its stream bus.
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
       const run = await authorizeRunAccess({
         mastra,
@@ -3144,7 +3150,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       });
       if (!run) throw new HTTPException(404, { message: 'Run not found' });
       const durableAgent = isDurableAgentLike(agent) ? (agent as DurableAgentLike) : undefined;
-      // Plain agents with resumable streams publish on their own stream bus.
+      // Inngest still exposes its transport through pubsub rather than the core stream-bus accessor.
       const pubsub = durableAgent?.pubsub ?? getAgentStreamPubSub(agent) ?? mastra.pubsub;
       const topic = AGENT_STREAM_TOPIC(runId);
 

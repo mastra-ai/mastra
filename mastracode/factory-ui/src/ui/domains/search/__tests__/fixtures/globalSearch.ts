@@ -1,5 +1,4 @@
 import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
-import type { GithubIssue, GithubPullRequest } from '../../../factory/services/factory';
 import type { WorkItem } from '../../../factory/services/workItems';
 import type { FactoryProjectPayload } from '../../../workspaces/services/github';
 import type { FactoryUserSession } from '../../../workspaces/services/user-sessions';
@@ -17,16 +16,14 @@ export const factoryProjects: FactoryProjectPayload[] = [
 
 export const factoryRepositories = {
   [ACTIVE_FACTORY_ID]: [
-    listedRepository(FIRST_REPOSITORY_ID, 'mastra-ai/mastra', { branch: 'main', sandboxWorkdir: '/workspaces/mastra' }),
+    listedRepository(FIRST_REPOSITORY_ID, 'mastra-ai/mastra', { branch: 'main' }),
     listedRepository(SECOND_REPOSITORY_ID, 'mastra-ai/docs', {
       branch: 'main',
-      sandboxWorkdir: '/workspaces/mastra-docs',
     }),
   ],
   [OTHER_FACTORY_ID]: [
     listedRepository(OTHER_REPOSITORY_ID, 'other-org/other-repo', {
       branch: 'main',
-      sandboxWorkdir: '/workspaces/other',
     }),
   ],
 };
@@ -176,44 +173,6 @@ export const workItems: WorkItem[] = [
     revision: 1,
     createdAt: '2026-07-29T08:00:00.000Z',
     updatedAt: '2026-07-29T08:30:00.000Z',
-  },
-];
-
-/** Live GitHub intake for `FIRST_REPOSITORY_ID`: what the board's Intake column offers. */
-export const intakePullRequests: GithubPullRequest[] = [
-  {
-    number: 20454,
-    title: 'Harden the review board drop target',
-    url: 'https://github.com/mastra-ai/mastra/pull/20454',
-    author: 'ana',
-    baseBranch: 'main',
-    headBranch: 'fix/review-drop-target',
-    createdAt: '2026-07-30T09:00:00.000Z',
-    updatedAt: '2026-07-30T09:05:00.000Z',
-  },
-  {
-    // Already filed as `work-item-review`; the live feed still lists it, search must not double it.
-    number: 900,
-    title: 'Review command palette PR',
-    url: 'https://github.com/mastra-ai/mastra/pull/900',
-    author: 'ben',
-    baseBranch: 'main',
-    headBranch: 'feat/command-palette',
-    createdAt: '2026-07-29T13:00:00.000Z',
-    updatedAt: '2026-07-29T13:10:00.000Z',
-  },
-];
-
-export const intakeIssues: GithubIssue[] = [
-  {
-    number: 20455,
-    title: 'Rail scopes overflow on narrow viewports',
-    url: 'https://github.com/mastra-ai/mastra/issues/20455',
-    author: 'cleo',
-    labels: [],
-    comments: 0,
-    createdAt: '2026-07-30T08:00:00.000Z',
-    updatedAt: '2026-07-30T08:10:00.000Z',
   },
 ];
 
