@@ -354,7 +354,23 @@ export function createStudioOperationTools(runtime: StudioAgentRuntime) {
           }),
       });
       const envelope = toStandardSchema(
-        reference.extend({ step: z.enum(settings.approvalSteps as [string, ...string[]]), approvalData: durableJson }),
+        reference
+          .extend({ step: z.enum(settings.approvalSteps as [string, ...string[]]), approvalData: durableJson })
+          .superRefine((input, context) => {
+            // Reserve the largest supported run identifier and the fixed SHA-256 digest.
+            const pending = durableJson.safeParse({
+              nativeRunId: 'r'.repeat(identifierSchema.maxLength!),
+              step: input.step,
+              fingerprint: '0'.repeat(64),
+              resumeData: input.approvalData,
+            });
+            if (!pending.success)
+              context.addIssue({
+                code: 'custom',
+                path: ['approvalData'],
+                message: 'Approval data and its metadata must fit the durable JSON limits.',
+              });
+          }),
       );
       const resumeSchema = {
         '~standard': {

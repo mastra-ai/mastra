@@ -1553,6 +1553,33 @@ it('Studio replay reconnect Stop and restart preserve one business operation wit
   ).toMatchObject([{ count: 1 }]);
 }, 240000);
 
+it('Studio approval schemas reserve metadata space at the durable JSON boundary', async () => {
+  const f = await fixture();
+  const application = await studioComposition(f.root, f.boundary.url);
+  cleanups.push(application.close);
+  const resume = application.wrapper.workflowTools('report', { approvalSteps: ['review'] })['report-resume'];
+  const schema = toStandardSchema(resume.inputSchema!);
+  const overhead = Buffer.byteLength(
+    JSON.stringify({
+      nativeRunId: 'r'.repeat(128),
+      step: 'review',
+      fingerprint: '0'.repeat(64),
+      resumeData: { suffix: '' },
+    }),
+  );
+  const available = 16384 - overhead;
+  const accepted = { operationId: 'o'.repeat(36), step: 'review', approvalData: { suffix: 'a'.repeat(available) } };
+  expect(await schema['~standard'].validate(accepted)).toEqual({ value: accepted });
+  for (const suffix of ['a'.repeat(available + 1), 'a'.repeat(16240), '界'.repeat(Math.floor(available / 3) + 1)]) {
+    const rejected = await schema['~standard'].validate({ ...accepted, approvalData: { suffix } });
+    expect(rejected).toHaveProperty('issues');
+    if ('issues' in rejected)
+      expect(rejected.issues).toEqual(expect.arrayContaining([expect.objectContaining({ path: ['approvalData'] })]));
+  }
+  expect(await query(f.root, 'SELECT id FROM billing_studio_operations')).toEqual([]);
+  expect(f.boundary.models).toHaveLength(0);
+});
+
 it('Studio operation schemas reject oversized durable JSON before executing tools and preserve original transform inputs', async () => {
   const f = await fixture();
   const application = await studioComposition(f.root, f.boundary.url);
