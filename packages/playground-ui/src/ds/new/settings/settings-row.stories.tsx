@@ -120,6 +120,25 @@ export const ViewOnly: Story = {
   ),
 };
 
+/**
+ * A setting that is on or off is a `Switch` alone, with no "Enabled" or "Disabled" text beside it. When the viewer
+ * can't change it (or nobody can, e.g. a value set in code), keep the switch and disable it with `viewOnly` on the
+ * row (or `disabled` on the switch) instead of replacing it with text. Text in the control slot is only for a
+ * status the user doesn't set.
+ */
+export const Toggle: Story = {
+  render: () => (
+    <>
+      <SettingsRow label="Notifications" description="Notify when a run finishes">
+        <Switch defaultChecked />
+      </SettingsRow>
+      <SettingsRow label="Tracing" description="Set in code by your Mastra config" viewOnly>
+        <Switch defaultChecked />
+      </SettingsRow>
+    </>
+  ),
+};
+
 export const Destructive: Story = {
   render: () => (
     <SettingsRow label="Leave organization" description="Remove your access to this organization." tone="destructive">

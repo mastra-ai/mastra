@@ -46,7 +46,10 @@ export function SettingsRowControl({ viewOnly = false, children }: { viewOnly?: 
   );
 }
 
-/** One setting: a label, an optional one-line description, and its control. Goes in a `SettingsContainer`. */
+/**
+ * One setting: a label, an optional one-line description, and its control. Goes in a `SettingsContainer`.
+ * An on/off setting is a `Switch` alone, disabled (`viewOnly`) when the viewer can't change it; see the `Toggle` story.
+ */
 export function SettingsRow({
   label,
   description,
