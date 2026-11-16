@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../../../boards/registry.js';
 import type { IntegrationContext } from '../../base.js';
 import { GithubReconcileWorker } from '../../github/reconcile-worker.js';
+import { listPullRequestSubscriptionsForWebhook, subscribeToPullRequest } from '../../github/subscriptions.js';
+import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
 import { startFakePlatform } from '../foundation/test-utils.js';
 import type { FakePlatform } from '../foundation/test-utils.js';
 import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js';
@@ -151,6 +153,7 @@ async function setup(
     projects,
     emitAudit,
     modes,
+    generic,
     /** Installs an app on another account, as its own connection. */
     install: (id: string, integrationId: string, token: string, install: AppInstall) => {
       apps[token] = install;
@@ -331,6 +334,78 @@ describe('GitHub app switch', () => {
     const before = contextReads();
     expect((await githubStatus()).status).toBe(200);
     expect(contextReads()).toBe(before);
+  });
+
+  it('keeps an installation another replica recorded when it picks up a new one', async () => {
+    const { switchApps, status, githubStatus, install, modes } = await setup();
+    expect((await switchApps()).status).toBe(200);
+    expect((await status()).status).toBe(200);
+    // Another replica records an account after this one cached the switched record.
+    const switched = await modes.get('org-1');
+    await modes.saveConnect('org-1', {
+      switchedAt: switched.switchedAt!,
+      installations: [
+        ...(switched.installations ?? []),
+        {
+          accountLogin: 'hooli',
+          installationId: 950,
+          connectionId: 'conn-github-hooli',
+          reviewsConnectionId: 'conn-reviews-hooli',
+        },
+      ],
+    });
+    install('conn-github-globex', FACTORY_GITHUB_PROVIDER_KEY, 'tok-github-globex', {
+      installationId: 910,
+      account: 'globex',
+      repositories: [201],
+    });
+    install('conn-reviews-globex', FACTORY_REVIEWS_GITHUB_PROVIDER_KEY, 'tok-reviews-globex', {
+      installationId: 911,
+      account: 'globex',
+      repositories: [201],
+    });
+
+    expect((await githubStatus()).status).toBe(200);
+
+    expect((await modes.get('org-1')).installations?.map(installation => installation.installationId)).toEqual([
+      900, 950, 910,
+    ]);
+  });
+
+  it('moves open pull request subscriptions to the new installation, so their threads keep waking', async () => {
+    const { switchApps, generic, linked } = await setup();
+    const subscriptions = generic as unknown as GithubSubscriptionStorage;
+    const subscribe = (orgId: string, installationExternalId: string, changeRequestId: string) =>
+      subscribeToPullRequest(
+        {
+          orgId,
+          installationExternalId,
+          projectRepositoryId: linked.link.id,
+          repositoryExternalId: '101',
+          repositorySlug: 'acme/app',
+          changeRequestId,
+          sessionId: `session-${orgId}-${changeRequestId}`,
+          ownerId: 'admin-1',
+          resourceId: 'resource-1',
+          threadId: `thread-${changeRequestId}`,
+          source: 'factory-pr-create',
+        },
+        subscriptions,
+      );
+    await subscribe('org-1', '7', '5');
+    // Another org's subscription on the same legacy installation is theirs to move.
+    await subscribe('org-2', '7', '5');
+
+    expect((await switchApps()).status).toBe(200);
+
+    const target = (installationExternalId: string) =>
+      listPullRequestSubscriptionsForWebhook(
+        { installationExternalId, repositoryExternalId: '101', changeRequestId: '5' },
+        undefined,
+        subscriptions,
+      );
+    expect((await target('900')).map(row => [row.orgId, row.data.installationExternalId])).toEqual([['org-1', '900']]);
+    expect((await target('7')).map(row => row.orgId)).toEqual(['org-2']);
   });
 
   it('lets exactly one of two concurrent switches move the installations', async () => {

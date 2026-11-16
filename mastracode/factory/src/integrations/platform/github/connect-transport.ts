@@ -201,8 +201,7 @@ export class ConnectGithubTransport implements GithubTransport {
     number: number,
     body: { commitTitle?: string; commitMessage?: string; method?: 'merge' | 'squash' | 'rebase' },
   ): Promise<{ merged: boolean; message: string; sha: string | null }> {
-    // Merges carry identity (merged_by, the merge commit's author), so the person's own token is preferred.
-    const raw = await this.#userPreferredWrite(call, 'mergePullRequest', 'default', octokit =>
+    const raw = await this.#write(call, 'mergePullRequest', 'default', octokit =>
       this.#get<{ merged: boolean; message: string; sha?: string | null }>(
         octokit,
         'PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge',
@@ -354,7 +353,7 @@ export class ConnectGithubTransport implements GithubTransport {
     number: number,
     body: { body?: string; commitId?: string; event?: GithubReviewEvent },
   ): Promise<GithubReview> {
-    const raw = await this.#userPreferredWrite(call, 'createReview', 'review', (octokit, attribution) =>
+    const raw = await this.#write(call, 'createReview', 'review', (octokit, attribution) =>
       this.#get<RawReview>(octokit, 'POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews', {
         ...repo(call),
         pull_number: number,
@@ -397,7 +396,7 @@ export class ConnectGithubTransport implements GithubTransport {
   }
 
   async dismissReview(call: GithubCall, number: number, reviewId: number, message: string): Promise<GithubReview> {
-    const raw = await this.#reviewWrite(call, number, reviewId, 'dismissReview', (octokit, attribution) =>
+    const raw = await this.#write(call, 'dismissReview', 'review', (octokit, attribution) =>
       this.#get<RawReview>(octokit, 'PUT /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/dismissals', {
         ...repo(call),
         pull_number: number,
@@ -623,24 +622,6 @@ export class ConnectGithubTransport implements GithubTransport {
   ): Promise<T> {
     const attribution = call.actingUserId ? await this.#attribution(call.actingUserId, call.signal) : undefined;
     return this.#run(operation, tokenClass, call.signal, octokit => fn(octokit, attribution));
-  }
-
-  /**
-   * A write whose identity GitHub records (a review, a merge): as the acting
-   * user when they have their own GitHub token, otherwise as the app naming
-   * them. The legacy platform prefers the person for the same operations.
-   */
-  async #userPreferredWrite<T>(
-    call: GithubCall,
-    operation: string,
-    tokenClass: 'default' | 'review',
-    fn: (octokit: Octokit, attribution: string | undefined) => Promise<T>,
-  ): Promise<T> {
-    if (call.actingUserId) {
-      const done = await this.asUser(call.actingUserId, operation, octokit => fn(octokit, undefined), call.signal);
-      if (done !== null) return done;
-    }
-    return this.#write(call, operation, tokenClass, fn);
   }
 
   /** How a write names the person it was made for: their GitHub login when known, else their Factory id. */

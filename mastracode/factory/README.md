@@ -1234,8 +1234,8 @@ In both modes, a reconcile runs hourly, and so does the sweep for pull requests 
 
 **Acting as a person.** After the switch, a person can connect their own GitHub account in **Settings → Connected accounts**, either through the Mastra Factory app or by pasting a personal access token. A connection takes precedence over a token. As with the Mastra GitHub App:
 
-- reviews, merges and review dismissals a person makes through Factory are made with their own GitHub account when they have connected one, and by the apps otherwise;
-- pull requests, issues and comments are always written by Mastra Factory, starting with `> Opened by @<GitHub login>` (or `@<Factory user id>` without a connected account), and a pull request is assigned to the person who opened it. Factory's own writes never come back to it as a person's.
+- Factory's writes are made by the apps, never as the person: reviews and review dismissals by Mastra Factory Reviews, and pull requests, merges, issues and comments by Mastra Factory. Each starts with `> Opened by @<GitHub login>` (or `@<Factory user id>` without a connected account), and a pull request is assigned to the person who opened it. Factory's own writes never come back to it as a person's, and its verdict reviews stay its own to dismiss.
+- the person's account is used only to change their own pending review, which nobody else can see.
 
 **Sandbox tokens.** After the switch, an agent sandbox gets an installation token scoped to its session's repositories (at most 10) with Factory's usual permission set, minted by the platform. A sandbox never gets a token for the whole installation.
 

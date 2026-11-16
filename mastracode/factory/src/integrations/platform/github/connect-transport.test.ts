@@ -195,8 +195,8 @@ describe('ConnectGithubTransport', () => {
   });
 
   describe('writes made for a person', () => {
-    // Legacy parity: the platform writes as the app naming the person, except where GitHub
-    // records who acted (reviews, merges), which prefer the person's own token.
+    // Legacy parity: the platform writes as the app naming the person. Only a person's own
+    // pending review, which nobody else can see or change, is written with their token.
     it('comments as the app, naming the person by their GitHub login, even when they have their own token', async () => {
       const { github, transport } = await harness({ users: { 'user-1': 'octocat' } });
       answer(github, 'POST', `/repos/${REPO}/issues/7/comments`, request => ({
@@ -213,32 +213,47 @@ describe('ConnectGithubTransport', () => {
       expect(comment.user?.login).toBe('mastra-factory[bot]');
     });
 
-    it('reviews as the person with the PAT they pasted when they have no connection, without attribution', async () => {
-      const { github, transport, tokenClasses } = await harness({ pats: { 'user-3': 'hubot' } });
-      answer(github, 'POST', `/repos/${REPO}/pulls/7/reviews`, () => ({ status: 200, body: rawReview(21, 'hubot') }));
-
-      await transport.createReview({ repository: REPO, actingUserId: 'user-3' }, 7, { body: 'Thanks' });
-
-      const [request] = github.calls(`/repos/${REPO}/pulls/7/reviews`, 'POST');
-      expect(request?.token).toBe('pat-user-3');
-      expect(request?.body).toEqual({ body: 'Thanks' });
-      expect(tokenClasses.at(-1)?.tokenClass).toBe('user');
-      expect(await transport.userLogin('user-3')).toBe('hubot');
-    });
-
-    it('reviews and merges with their end-user connection in preference to a PAT', async () => {
-      const { github, transport } = await harness({ users: { 'user-1': 'octocat' }, pats: { 'user-1': 'octocat' } });
-      answer(github, 'POST', `/repos/${REPO}/pulls/7/reviews`, () => ({ status: 200, body: rawReview(21, 'octocat') }));
+    it('reviews and merges as the apps, naming the person, even when they have their own token', async () => {
+      const { github, transport } = await harness({ users: { 'user-1': 'octocat' }, pats: { 'user-3': 'hubot' } });
+      answer(github, 'POST', `/repos/${REPO}/pulls/7/reviews`, () => ({
+        status: 200,
+        body: rawReview(21, 'mastra-factory-reviews[bot]'),
+      }));
       answer(github, 'PUT', `/repos/${REPO}/pulls/7/merge`, () => ({
         status: 200,
         body: { merged: true, message: 'Merged', sha: 'm1' },
       }));
 
-      await transport.createReview({ repository: REPO, actingUserId: 'user-1' }, 7, { event: 'APPROVE' });
+      // A verdict review must stay Factory's: its stale-review dismissal finds it by author,
+      // and GitHub refuses a person approving their own pull request.
+      await transport.createReview({ repository: REPO, actingUserId: 'user-1' }, 7, {
+        event: 'APPROVE',
+        body: 'Ship it',
+      });
+      await transport.createReview({ repository: REPO, actingUserId: 'user-3' }, 7, { body: 'Thanks' });
       await transport.mergePullRequest({ repository: REPO, actingUserId: 'user-1' }, 7, {});
 
-      expect(github.calls(`/repos/${REPO}/pulls/7/reviews`, 'POST')[0]?.token).toBe('tok-user-1');
-      expect(github.calls(`/repos/${REPO}/pulls/7/merge`, 'PUT')[0]?.token).toBe('tok-user-1');
+      const reviews = github.calls(`/repos/${REPO}/pulls/7/reviews`, 'POST');
+      expect(reviews.map(request => [request.token, (request.body as { body: string }).body])).toEqual([
+        ['tok-reviews', '> Opened by @octocat\n\nShip it'],
+        ['tok-reviews', '> Opened by @hubot\n\nThanks'],
+      ]);
+      expect(github.calls(`/repos/${REPO}/pulls/7/merge`, 'PUT')[0]?.token).toBe('tok-github');
+    });
+
+    it("dismisses another person's submitted review as the Reviews app", async () => {
+      const { github, transport } = await harness({ users: { 'user-1': 'octocat' } });
+      answer(github, 'PUT', `/repos/${REPO}/pulls/7/reviews/31/dismissals`, () => ({
+        status: 200,
+        body: rawReview(31, 'grace', 'DISMISSED'),
+      }));
+
+      const review = await transport.dismissReview({ repository: REPO, actingUserId: 'user-1' }, 7, 31, 'Addressed');
+
+      const [request] = github.calls(`/repos/${REPO}/pulls/7/reviews/31/dismissals`, 'PUT');
+      expect(request?.token).toBe('tok-reviews');
+      expect(request?.body).toEqual({ message: '> Opened by @octocat\n\nAddressed' });
+      expect(review.state).toBe('DISMISSED');
     });
 
     it('reviews as the Reviews app, naming the person, when they have no token of their own', async () => {
