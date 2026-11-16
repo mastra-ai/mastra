@@ -146,7 +146,7 @@ export class FactoryWorkItemStateProcessor implements Processor<'factory-work-it
     if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
       return;
 
-    const contents = renderWorkItem({ item, binding, boards });
+    const contents = renderWorkItem({ item, binding, boards, verdictRecordedThisRun: recordedVerdict(args.steps) });
     const stage = item.stages[0]!;
     return {
       id: STATE_ID,
@@ -161,7 +161,26 @@ export class FactoryWorkItemStateProcessor implements Processor<'factory-work-it
   }
 }
 
-function renderWorkItem(input: { item: Card; binding: FactoryRunBindingRecord; boards: BoardRegistry }): string {
+/**
+ * Whether the run in progress has already recorded a review verdict. Only the steps of this run
+ * count: a later turn (a re-requested review, or a person disputing a finding) starts with none.
+ */
+function recordedVerdict(steps: unknown[]): boolean {
+  return steps.some(step => {
+    const results = (step as { toolResults?: unknown } | null)?.toolResults;
+    return (
+      Array.isArray(results) &&
+      results.some(result => (result as { toolName?: unknown } | null)?.toolName === 'factory_record_review_verdict')
+    );
+  });
+}
+
+function renderWorkItem(input: {
+  item: Card;
+  binding: FactoryRunBindingRecord;
+  boards: BoardRegistry;
+  verdictRecordedThisRun: boolean;
+}): string {
   const { item, binding, boards } = input;
   const metadata = item.metadata ?? {};
   const boardId = boardForWorkItem(item);
@@ -216,7 +235,7 @@ function renderWorkItem(input: { item: Card; binding: FactoryRunBindingRecord; b
     lines.join('\n'),
     sourceText,
     `Factory state:\n${state.map(escapeText).join('\n')}`,
-    reviewBlock(item, binding),
+    reviewBlock(item, input.verdictRecordedThisRun),
   ];
   const findings = text(metadata.selfReviewFindings);
   if (findings) {
@@ -295,24 +314,23 @@ function checkoutHint(card: ReviewCard, change: ReviewedChangeRequest): string {
  * reviewer in the session that recorded the last verdict can take a new pass for a repeat and
  * restate that verdict instead of reviewing what was pushed since.
  *
- * A verdict changes the card, so the reviewer is sent this again in the middle of its own pass.
- * Reading its own verdict as "the previous pass" there would start it on another pass over the
- * same head, and every verdict it records would do the same again.
+ * A verdict changes the card, so the reviewer is sent this again in the middle of the run that
+ * recorded it. Reading its own verdict as "the previous pass" there would start it on another pass
+ * over the same head, and every verdict it records would do the same again. A later run is a new
+ * pass: a re-requested review or a person's reply must be able to end in a different verdict.
  */
 function headLine(
   metadata: Record<string, unknown>,
   reReview: boolean,
-  binding: FactoryRunBindingRecord,
+  verdictRecordedThisRun: boolean,
 ): string | undefined {
   const head = commitSha(metadata.pullRequestHeadSha)?.toLowerCase();
   const reviewed = reReview ? commitSha(metadata.reviewedHeadSha)?.toLowerCase() : undefined;
   const recorded = metadata.reviewVerdict;
-  const reviewedAt = typeof metadata.reviewedAt === 'string' ? Date.parse(metadata.reviewedAt) : Number.NaN;
-  const recordedThisPass = reviewedAt >= binding.createdAt.getTime();
-  if (recordedThisPass && reviewed && (!head || head === reviewed)) {
+  if (verdictRecordedThisRun && reviewed && (!head || head === reviewed)) {
     return (
-      `This review pass is finished: it recorded ${typeof recorded === 'string' ? `"${recorded}"` : 'its verdict'} on \`${reviewed}\`. ` +
-      `Do not record it again. Only if the head has moved past \`${reviewed}\` is there more to review.`
+      `Your verdict for this review pass is recorded: ${typeof recorded === 'string' ? `"${recorded}"` : 'a verdict'} on \`${reviewed}\`. ` +
+      `The pass is complete; do not record the same verdict again. Record another only if the head moved past \`${reviewed}\` or a person asks you to reconsider.`
     );
   }
   const priorPass = recorded === 'approve' || recorded === 'request changes' ? `recorded "${recorded}"` : 'reviewed';
@@ -347,7 +365,7 @@ function headLine(
  * which head the pass covers. Empty for a card with no change request. Not escaped: every value
  * in it is a number, a commit SHA or a validated branch name, and its commands must stay runnable.
  */
-function reviewBlock(item: Card, binding: FactoryRunBindingRecord): string {
+function reviewBlock(item: Card, verdictRecordedThisRun: boolean): string {
   const card: ReviewCard = { ...item, source: workItemBranchSource(item.externalSource) };
   const change = reviewedChangeRequest(card);
   if (!change) return '';
@@ -362,7 +380,7 @@ function reviewBlock(item: Card, binding: FactoryRunBindingRecord): string {
     `Covers: ${noun}${number}${head ? `, head ${head}` : ''}`,
     `Procedure: ${procedure} (${reReview ? 're-review after the verdict recorded on it' : 'first pass on it'})`,
     `Checkout: ${checkoutHint(card, change)}`,
-    headLine(item.metadata ?? {}, reReview, binding),
+    headLine(item.metadata ?? {}, reReview, verdictRecordedThisRun),
   ]
     .filter(Boolean)
     .join('\n');

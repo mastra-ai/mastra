@@ -442,7 +442,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
       expect(new Set([pushed, unmoved, unknownHead, firstPass]).size).toBe(4);
     });
 
-    it('tells the reviewer its pass is finished once it records a verdict, instead of starting another pass', async () => {
+    it('tells the reviewer its pass is complete in the run that recorded the verdict, and only there', async () => {
       const card = await githubCard({ pullRequestHeadSha: NEW });
       expect(card.contents).toContain(`This review pass covers head \`${NEW}\`. Record your verdict for that head.`);
 
@@ -460,16 +460,29 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
         { requestContext: card.context, agent: { toolCallId: 'verdict-1' } },
       );
 
+      const resend = (steps: unknown[]) =>
+        card.processor.computeStateSignal(
+          stateArgs(card.context, {
+            steps,
+            lastSnapshot: { metadata: { state: { cacheKey: card.cacheKey } } },
+            contextWindow: { hasSnapshot: true },
+          }),
+        );
+
       // The verdict changed the card, so the session is sent the card again before its next step.
-      const afterVerdict = await card.processor.computeStateSignal(
-        stateArgs(card.context, {
-          lastSnapshot: { metadata: { state: { cacheKey: card.cacheKey } } },
-          contextWindow: { hasSnapshot: true },
-        }),
-      );
-      expect(afterVerdict?.contents).toContain(`Last PR review: approve on #23029 at ${NEW}`);
-      expect(afterVerdict?.contents).not.toContain('new review pass');
-      expect(afterVerdict?.contents).not.toMatch(/record a verdict/i);
+      const sameRun = await resend([
+        { toolResults: [{ toolCallId: 'verdict-1', toolName: 'factory_record_review_verdict' }] },
+      ]);
+      expect(sameRun?.contents).toContain(`Last PR review: approve on #23029 at ${NEW}`);
+      expect(sameRun?.contents).toContain(`Your verdict for this review pass is recorded: "approve" on \`${NEW}\`.`);
+      expect(sameRun?.contents).not.toContain('new review pass');
+
+      // A later run is a new pass: a re-requested review, or a person disputing a finding, on
+      // the same head must still be able to end in a verdict.
+      const laterRun = await resend([]);
+      expect(laterRun?.contents).toContain('This is a new review pass.');
+      expect(laterRun?.contents).toContain(`record a verdict for \`${NEW}\``);
+      expect(laterRun?.contents).not.toContain('Your verdict for this review pass is recorded');
     });
 
     it('keeps malformed head metadata out of the review guidance', async () => {
