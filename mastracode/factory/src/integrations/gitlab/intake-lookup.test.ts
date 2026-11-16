@@ -75,9 +75,12 @@ async function setup() {
     readWorkItem: async (connectionId, projectId, kind, iid) => {
       reads.push(`${kind} ${connectionId} ${projectId} ${iid}`);
       if (kind === 'issue' && iid === 3) return issue;
+      if (kind === 'issue' && iid === 4) return { ...issue, iid: 4, state: 'closed' };
       if (kind === 'merge_request' && iid === 7) return mergeRequest;
       throw new Error('404 Not Found');
     },
+    // Direct-token mode answers only to its own connection id, not the one the link stored.
+    resolveConnection: async (stored, host) => (stored === 'conn-1' && host === 'gitlab.example.com' ? 'direct-1' : stored),
     getProjectMemberAccessLevel: async (connectionId, projectId, username) => {
       reads.push(`access ${connectionId} ${projectId} ${username}`);
       return username === 'maintainer' ? 30 : 10;
@@ -99,13 +102,16 @@ describe('gitlabIntakeLookup', () => {
         'item.author': 'outsider',
         'item.assignees': ['ana'],
         'item.key': 'acme/platform/api#3',
+        'item.state': 'open',
         'item.trusted': false,
         'source.kind': 'issue',
         'source.provider': 'gitlab',
         'source.repository': 'acme/platform/api',
       }),
     });
-    expect(reads).toEqual(['issue conn-1 55 3', 'access conn-1 55 outsider']);
+    expect(reads).toEqual(['issue direct-1 55 3', 'access direct-1 55 outsider']);
+    const closed = await lookup.lookup(scope, 'https://gitlab.example.com/acme/platform/api/-/issues/4');
+    expect(closed).toMatchObject({ status: 'found', facts: { 'item.state': 'closed' } });
   });
 
   it('reads a merge request with its state and author trust', async () => {

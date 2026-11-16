@@ -17,6 +17,8 @@ export interface GitLabIntakeLookupDeps {
     iid: number,
   ): Promise<GitLabIssue | GitLabMergeRequest>;
   getProjectMemberAccessLevel(connectionId: string, projectId: string, username: string): Promise<number | undefined>;
+  /** The connection to read `host` through: in direct-token mode, the direct one rather than the link's stored id. */
+  resolveConnection(storedConnectionId: string, host: string): Promise<string>;
 }
 
 function usernames(users: ReadonlyArray<{ username?: string }> | undefined): string[] {
@@ -55,7 +57,7 @@ export function gitlabIntakeLookup(deps: GitLabIntakeLookupDeps): IntakeItemLook
         )
         .find(({ repository }) => repository?.slug.toLowerCase() === path);
       if (!linked?.repository) return { status: 'not_linked' };
-      const connectionId = linked.installation.externalId;
+      const connectionId = await deps.resolveConnection(linked.installation.externalId, host);
       const projectId = linked.repository.externalId;
 
       const item = await deps.readWorkItem(connectionId, projectId, kind, iid).catch(() => undefined);
@@ -85,7 +87,12 @@ export function gitlabIntakeLookup(deps: GitLabIntakeLookupDeps): IntakeItemLook
             headBranch: mergeRequest.source_branch,
             baseBranch: mergeRequest.target_branch,
           }
-        : { ...shared, gitlabIssueIid: iid, identifier: `${linked.repository.slug}#${iid}` };
+        : {
+            ...shared,
+            gitlabIssueIid: iid,
+            identifier: `${linked.repository.slug}#${iid}`,
+            state: item.state === 'closed' ? 'closed' : 'open',
+          };
       const sourceKey = mergeRequest
         ? mergeRequestSourceKey(host, Number(projectId), iid)
         : encodeIssueReference({ host, projectId, issueIid: iid });

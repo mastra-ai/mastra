@@ -139,6 +139,7 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
     readWorkItem: (connectionId, projectId, kind, iid) => this.readWorkItem(connectionId, projectId, kind, iid),
     getProjectMemberAccessLevel: (connectionId, projectId, username) =>
       this.getProjectMemberAccessLevel(connectionId, projectId, username),
+    resolveConnection: (storedConnectionId, host) => this.resolveActiveConnectionForHost(storedConnectionId, host),
   });
   readonly versionControl = buildGitLabVersionControl({
     contextForConnection: connection => this.#versionControlContext(connection),
