@@ -869,6 +869,132 @@ describeForAllEngines(
       30_000,
     );
 
+    // Starts the deferred research tool, lets the run finish and release its claim, and holds
+    // the run's memory fence retirement open, as slow storage would, until `finishCleanup`.
+    async function startResearchDuringCleanup(threadId: string) {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      let finishCleanup!: () => void;
+      const cleanupGate = new Promise<void>(resolve => (finishCleanup = resolve));
+      const memory = new MockMemory();
+      const memoryStore = (await memory.storage.getStore('memory'))!;
+      const retireRunFence = memoryStore.retireRunFence.bind(memoryStore);
+      let retiring = false;
+      vi.spyOn(memoryStore, 'retireRunFence').mockImplementation(async fence => {
+        retiring = true;
+        await cleanupGate;
+        return retireRunFence(fence);
+      });
+      const thread = { threadId, resourceId: `${threadId}-user` };
+      const { chunks, mastra, output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Research near',
+        tools: { researchWithApproval: makeSuspendingResearchTool([], undefined, gate) },
+        agentBackgroundTasks: { tools: { researchWithApproval: true } },
+        backgroundTasks: BG_CONFIG,
+        memory,
+        ...thread,
+        stopWhen: stepCountIs(3),
+        collectChunks: true,
+        fixtures: llm =>
+          onReportTurns(llm, 'Research near', {
+            dispatch: {
+              toolCalls: [{ id: 'call-bg-1', name: 'researchWithApproval', arguments: { topic: 'near' } }],
+            },
+            ack: 'Waiting for the analyst.',
+            report: 'The analyst answered.',
+          }),
+      });
+      expect(await output.text).toBe('Waiting for the analyst.');
+      const started = chunks!.find(c => c.type === 'background-task-started') as Chunk & { runId: string };
+      await waitForRunToRelease(mastra, started.runId);
+      await waitFor(
+        async () => retiring,
+        isRetiring => isRetiring,
+      );
+      const workflows = (await mastra.getStorage()!.getStore('workflows'))!;
+      const settledTask = async () =>
+        (await waitFor(
+          () => mastra.backgroundTaskManager!.getTask(started.payload.taskId as string),
+          (t: any) => t?.status !== 'pending' && t?.status !== 'running',
+        )) as any;
+      return { memory, thread, workflows, runId: started.runId, release, finishCleanup, settledTask };
+    }
+
+    // Technical: a finished run releases its claim, then retires its memory fence. Until that
+    // retirement resolves, the execution stays registered in this process, and the late suspend's
+    // check asked it to prove it still held the claim it had just released, so the task failed
+    // with DURABLE_AGENT_EXECUTION_SUPERSEDED though no other execution had claimed the run. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      'parks a deferred tool that asks for input while the finished run is still cleaning up (#30182)',
+      async () => {
+        const run = await startResearchDuringCleanup('bg-suspend-during-cleanup-thread');
+        const released = await run.workflows.getRunOwnership({ runId: run.runId });
+        run.release();
+        try {
+          const parked = await run.settledTask();
+          expect({ status: parked.status, error: parked.error?.message }).toEqual({
+            status: 'suspended',
+            error: undefined,
+          });
+          expect(parked.suspendPayload).toEqual({ awaiting: 'analyst-approval', topic: 'near' });
+          const open = await waitFor(
+            () => storedToolCall(run.memory, run.thread),
+            s => s.suspended?.taskId !== undefined,
+          );
+          expect(open.suspended).toMatchObject({ taskId: parked.id });
+          // Accepting the late suspend left the released claim as it was.
+          const after = await run.workflows.getRunOwnership({ runId: run.runId });
+          expect({ ownerId: after?.ownerId, generation: after?.generation, live: after?.live }).toEqual({
+            ownerId: released?.ownerId,
+            generation: released?.generation,
+            live: false,
+          });
+        } finally {
+          run.finishCleanup();
+        }
+      },
+      30_000,
+    );
+
+    // Technical: the cleanup window above must not let a superseded execution through: once a
+    // successor claims the run, the late suspend still fails without writing. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      "doesn't park a deferred tool that asks for input after another execution took over a run still cleaning up (#30182)",
+      async () => {
+        const run = await startResearchDuringCleanup('bg-suspend-cleanup-takeover-thread');
+        const released = await run.workflows.getRunOwnership({ runId: run.runId });
+        const successor = await run.workflows.claimRunOwnership({
+          runId: run.runId,
+          ownerId: 'successor-execution',
+          leaseMs: 60_000,
+          expectedGeneration: released!.generation,
+        });
+        expect(successor.acquired).toBe(true);
+        run.release();
+        try {
+          const settled = await run.settledTask();
+          expect({ status: settled.status, error: settled.error?.message }).toEqual({
+            status: 'failed',
+            // DURABLE_AGENT_EXECUTION_SUPERSEDED
+            error: expect.stringContaining(`Durable run ${run.runId} lost its execution lease`),
+          });
+          expect(settled.suspendPayload).toBeUndefined();
+          expect((await storedToolCall(run.memory, run.thread)).suspended).toBeUndefined();
+          const after = await run.workflows.getRunOwnership({ runId: run.runId });
+          expect({ ownerId: after?.ownerId, generation: after?.generation, live: after?.live }).toEqual({
+            ownerId: 'successor-execution',
+            generation: successor.record.generation,
+            live: true,
+          });
+        } finally {
+          run.finishCleanup();
+        }
+      },
+      30_000,
+    );
+
     // Technical: same path as above, reached through a deferred sub-agent: when its tool needs
     // approval, the delegation tool suspends the background task with that approval. (#30182)
     it('parks a deferred sub-agent whose tool needs approval after the reply was sent, and resumes it (#30182)', async () => {

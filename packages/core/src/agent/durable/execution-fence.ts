@@ -570,6 +570,8 @@ export class ExecutionFence implements RunFenceScope {
   #renewalInFlight = false;
   #settlement?: Promise<ExecutionSettlement>;
   #settledAs?: ExecutionSettlement;
+  /** Settlement released the claim; cleanup after the release may still be running. */
+  #released = false;
   #resolveSettled!: () => void;
   /** Resolves once {@link settle} has finished and the claim is released or left to its new holder. */
   readonly whenSettled: Promise<void>;
@@ -925,6 +927,19 @@ export class ExecutionFence implements RunFenceScope {
     if (this.generation === undefined) this.#leaseExpiresAt = startedAt + EXECUTION_LEASE_TTL_MS;
   }
 
+  /**
+   * {@link verify} for writes that may land after settlement. Once settlement
+   * released the claim, the write is accepted until another execution claims
+   * the run, as it is after this fence is unregistered.
+   */
+  async verifyNotSuperseded(): Promise<void> {
+    if (!this.#released) return this.verify();
+    const details = this.#details();
+    if (this.#takenOver || (await retryOnce(() => this.#backend.isSuperseded(this.claim), details))) {
+      throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, details);
+    }
+  }
+
   stopHeartbeat(): void {
     if (this.#heartbeat) clearInterval(this.#heartbeat);
     this.#heartbeat = undefined;
@@ -1045,6 +1060,7 @@ export class ExecutionFence implements RunFenceScope {
   async #release(): Promise<void> {
     try {
       await this.#backend.release(this.claim);
+      this.#released = true;
     } catch (error) {
       this.#logger?.warn?.(`[DurableAgent] run ${this.runId}: failed to release the execution claim: ${error}`);
     }
@@ -1315,7 +1331,7 @@ export async function assertExecutionNotSuperseded(args: {
   const local =
     args.mastra?.__getRunScope(args.runId)?.get(DURABLE_PARTICIPANT_FENCES)?.get(claim.executionId) ??
     fencesByExecutionId.get(claim.executionId);
-  if (local) return local.verify();
+  if (local) return local.verifyNotSuperseded();
 
   const backend = await resolveRemoteBackend(args.mastra, args.agentId, args.runId, claim);
   if (!backend) return;
