@@ -205,8 +205,9 @@ test.describe('Factory board virtualization', () => {
             ),
           );
           await page.goto(`/factories/fp-1/work?item=${largeCardId(0)}`);
-          await expect(page.getByRole('article', { name: 'Large task 0', exact: true })).toBeInViewport();
-          await expect(page.getByRole('button', { name: 'Details for Large task 0', exact: true })).toBeFocused();
+          const card = page.getByRole('article', { name: 'Large task 0', exact: true });
+          await expect(card).toBeInViewport();
+          await expect(card.getByRole('link', { name: /Large task 0$/ })).toBeFocused();
           expect(await page.getByTestId('work-item-card').count()).toBeLessThan(40);
         });
       });
@@ -243,30 +244,6 @@ test.describe('Factory board virtualization', () => {
       // Each column listed its newest fifty: the fifty-first of each follows.
       await expect(page.getByRole('article', { name: 'Large task 69', exact: true })).toBeVisible();
       await expect(page.getByRole('article', { name: 'Large task 189', exact: true })).toBeVisible();
-    });
-  });
-
-  test.describe('when a card with open details is sorted out of the rendered range', () => {
-    test.use(viewports[0].use);
-    test('keeps the card mounted so its draft is there when the user scrolls back', async ({ page }) => {
-      await page.goto('/factories/fp-1/work');
-      await page
-        .getByRole('article', { name: 'Large task 1999', exact: true })
-        .getByText('Large task 1999', { exact: true })
-        .click();
-      const details = page.getByRole('dialog', { name: 'Large task 1999' });
-      await details.getByRole('button', { name: 'Add a description', exact: true }).click();
-      await details.getByRole('textbox', { name: 'Description', exact: true }).fill('Keep this draft');
-
-      await page.evaluate(() => {
-        history.pushState(null, '', '?sort=created-oldest');
-        dispatchEvent(new PopStateEvent('popstate'));
-      });
-      await expect(page.getByRole('article', { name: 'Large task 0', exact: true })).toBeVisible();
-      expect(await page.getByTestId('work-item-card').count()).toBeLessThan(40);
-
-      await page.getByRole('article', { name: 'Large task 1999', exact: true }).scrollIntoViewIfNeeded();
-      await expect(details.getByRole('textbox', { name: 'Description', exact: true })).toHaveValue('Keep this draft');
     });
   });
 });

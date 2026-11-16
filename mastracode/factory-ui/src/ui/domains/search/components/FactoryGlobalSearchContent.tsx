@@ -17,9 +17,8 @@ import { BUSY_CARD_MOVE_REFUSAL, boardCardState, canStartRun } from '../../facto
 import { currentItemStage, phaseLabel } from '../../factory/boardStages';
 import { cardMoves } from '../../factory/cardPrimaryAction';
 import { useBoardItems } from '../../factory/hooks/useBoardItems';
-import { useBoardRuns } from '../../factory/hooks/useBoardRuns';
 import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
-import { RepositoryPickerDialog } from '../../factory/components/RepositoryPickerDialog';
+import { cardPath } from '../../workspaces/services/factoryPaths';
 import { useGlobalSearchNavigation } from '../hooks/useGlobalSearchNavigation';
 import { useGlobalSearchSessions } from '../hooks/useGlobalSearchSessions';
 import { useGlobalSearchWorkItems } from '../hooks/useGlobalSearchWorkItems';
@@ -57,7 +56,6 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
     onFailure: toastFailureAfterPaletteCloses,
     items: workItems.loaded,
   });
-  const runs = useBoardRuns({ factoryProjectId: factoryId });
   const { effectByItem } = useItemDecisions(searchableFactoryId);
   const { selectPath } = useGlobalSearchNavigation(closeSearch);
   const [activeScope, setActiveScope] = useState<GlobalSearchScope>('all');
@@ -92,16 +90,6 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
         rightSlot={<Kbd>Esc</Kbd>}
       />
 
-      {runs.repositorySelection && (
-        <RepositoryPickerDialog
-          repositories={runs.repositoryChoices}
-          onClose={runs.closeRepositorySelection}
-          onSelect={async repository => {
-            await runs.selectRepository(repository);
-            closeSearch();
-          }}
-        />
-      )}
       <CommandPaletteBody>
         <GlobalSearchRail activeScope={activeScope} counts={counts} onScopeChange={setActiveScope} />
         <CommandPaletteResults aria-label="Search results" footer={<CommandPaletteFooter label="Factory search" />}>
@@ -127,7 +115,6 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                   decision: effectByItem.get(item.id),
                   moving:
                     movingTo === undefined ? undefined : { stage: movingTo, label: phaseLabel(definition, movingTo) },
-                  preparing: runs.preparingFor(item.id),
                 });
                 if (!canStartRun(owner.kind)) {
                   closeSearch();
@@ -142,14 +129,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                   board.move(item.id, move.stage);
                   return;
                 }
-                void runs
-                  .openOrCreateSession(item)
-                  .then(result => {
-                    if (result !== 'repository-selection-required') closeSearch();
-                  })
-                  .catch(error =>
-                    toast.error(error instanceof Error ? error.message : 'The session could not be started.'),
-                  );
+                selectPath(cardPath(factoryId, item.id, undefined), false);
               }}
             />
           )}

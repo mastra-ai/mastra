@@ -1,6 +1,7 @@
 import { useMatch, useParams } from 'react-router';
 
 import { sessionUnavailableError, useUserSessionQuery } from '../../../../hooks/useWorkspaces';
+import { DraftSessionCreateError } from '../../workspaces/services/user-sessions';
 
 /** Workspace for the current route — user threads have no `sessionId` segment, so resolve from the thread. */
 export function useThreadWorkspacePath() {
@@ -15,6 +16,6 @@ export function useThreadWorkspacePath() {
     workspacePath: unavailable ? undefined : routedSessionId,
     threadId,
     isPending: isUserThreadRoute && session.isPending,
-    error: isUserThreadRoute ? unavailable : undefined,
+    error: isUserThreadRoute || unavailable instanceof DraftSessionCreateError ? unavailable : undefined,
   };
 }

@@ -1,11 +1,4 @@
-/**
- * A card whose latest move sent it back to an earlier phase says so on its
- * face, with why: self-review's findings when self-review asked for changes,
- * else the agent's rationale from the move's audit event. Its details hold the
- * whole reason.
- */
 import { screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -142,26 +135,6 @@ describe('Board card rework reasons', () => {
       'Back from Review: The retry loop never backs off, so a flaky API is hammered.',
     );
     expect(line).toHaveAttribute('title', FINDINGS);
-  });
-
-  it("shows self-review's full findings in the card's details", async () => {
-    stubWorkBoard();
-    const user = userEvent.setup();
-    renderWorkBoard();
-
-    await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
-
-    const details = await screen.findByRole('dialog', { name: 'Fix login bug' });
-    const why = await within(details).findByRole('region', { name: 'Why it moved back' });
-    expect(why).toHaveTextContent('Why it moved back from Review');
-    expect(
-      within(why)
-        .getAllByRole('listitem')
-        .map(item => item.textContent),
-    ).toEqual([
-      'The retry loop never backs off, so a flaky API is hammered.',
-      'loadPage has no test for an empty page.',
-    ]);
   });
 
   it("gives the agent's rationale when it sent a card from Building back to Planning", async () => {

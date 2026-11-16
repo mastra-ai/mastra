@@ -50,16 +50,55 @@ export function cardRepositorySlug(
   return config?.linear.repositoryByLinearProject?.[projectId];
 }
 
+interface CardRepositoryFacts {
+  source: string;
+  metadata?: Record<string, unknown>;
+  workItem?: { metadata: Record<string, unknown> | null };
+}
+
+/** The provider's facts about a card's source outrank what the card stored itself. */
+export function cardSourceMetadata(card: CardRepositoryFacts): Record<string, unknown> {
+  return { ...card.metadata, ...card.workItem?.metadata };
+}
+
+export type CardSessionRepository =
+  | { kind: 'resolved'; repository: LinkedRepositoryPayload }
+  | { kind: 'choose'; choices: LinkedRepositoryPayload[] }
+  | { kind: 'unavailable'; reason: string };
+
+/** Where a card's own session can start: the repository its source names, else the one it could live in. */
+export function cardSessionRepository(
+  repositories: LinkedRepositoryPayload[],
+  card: CardRepositoryFacts,
+  config: IntakeConfig | undefined,
+): CardSessionRepository {
+  const compatible = repositories.filter(repository => repositoryMatchesCardSource(repository, card.source));
+  if (compatible.length === 0) {
+    return { kind: 'unavailable', reason: "No repository matching this card's provider is linked to this Factory." };
+  }
+  const slug = cardRepositorySlug(card.source, cardSourceMetadata(card), config, repositories);
+  if (slug === undefined) {
+    const [only] = compatible;
+    return compatible.length === 1 && only
+      ? { kind: 'resolved', repository: only }
+      : { kind: 'choose', choices: compatible };
+  }
+  const repository = compatible.find(candidate => candidate.slug === slug);
+  if (repository) return { kind: 'resolved', repository };
+  return {
+    kind: 'unavailable',
+    reason: `Repository ${slug} is not linked to this Factory with a provider matching this card.`,
+  };
+}
+
 /** The linked repository a card's source lives in, else the board's primary repository. */
 export function cardProjectRepositoryId<Fallback extends string | undefined>(
   repositories: LinkedRepositoryPayload[],
-  card: {
-    source: string;
-    metadata?: Record<string, unknown>;
-    workItem?: { metadata: Record<string, unknown> | null };
-  },
+  card: CardRepositoryFacts,
   fallback: Fallback,
 ): string | Fallback {
-  const metadata = { ...card.metadata, ...card.workItem?.metadata };
-  return findUniqueRepositoryByProviderId(repositories, card.source, metadata)?.projectRepositoryId ?? fallback;
+  return (
+    findUniqueRepositoryByProviderId(repositories, card.source, cardSourceMetadata(card))?.projectRepositoryId ??
+    fallback
+  );
 }

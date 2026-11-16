@@ -1,10 +1,4 @@
-/**
- * A card keeps one session per context it ran in. Clicking it opens the session
- * of the context its current phase runs in, and its details list every session
- * by context, the current one marked.
- */
-import { screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -109,27 +103,11 @@ function renderWorkBoard() {
 }
 
 describe('Board card sessions by context', () => {
-  it("opens the session of the context its current phase runs in, not the card's first session", async () => {
+  it("links the card to the session of the context its current phase runs in, not the card's first session", async () => {
     stubWorkBoard();
     renderWorkBoard();
 
-    const card = await screen.findByRole('article', { name: 'Fix login bug' });
-    const open = await within(card).findByRole('link', { name: 'Open session' });
+    const open = await screen.findByRole('link', { name: /Fix login bug$/ });
     await waitFor(() => expect(open).toHaveAttribute('href', threadPath(workSession)));
-  });
-
-  it('lists every session the card holds by context in its details, the current one first', async () => {
-    stubWorkBoard();
-    const user = userEvent.setup();
-    renderWorkBoard();
-
-    await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
-
-    const details = await screen.findByRole('dialog', { name: 'Fix login bug' });
-    const sessions = await within(details).findByRole('region', { name: 'Sessions' });
-    const links = within(sessions).getAllByRole('link');
-    expect(links.map(link => link.textContent)).toEqual(['Workcurrent', 'Triage']);
-    expect(links[0]).toHaveAttribute('href', threadPath(workSession));
-    expect(links[1]).toHaveAttribute('href', threadPath(triageSession));
   });
 });

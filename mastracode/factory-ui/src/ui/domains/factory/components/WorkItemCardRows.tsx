@@ -1,6 +1,5 @@
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -20,40 +19,42 @@ import { workItemMeta } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
-import { CardActions, CardStatus, MetadataLabels, SourceTitle, WorkItemSourceIcon } from './BoardCardParts';
+import {
+  CardActions,
+  CardStatus,
+  MetadataLabels,
+  SessionBadge,
+  SourceTitle,
+  WorkItemSourceIcon,
+} from './BoardCardParts';
 import { WorkItemActivity } from './WorkItemActivity';
 import { SourceStateBadge } from './SourceStateBadge';
+import { WorkItemUpstreamLinks } from './WorkItemUpstreamLinks';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-// The card and its open copy render these same rows, so opening moves none of them.
 export function WorkItemCardRows({
   item,
   columnStage,
-  titleId,
   relatedLinks,
   activity,
   actors,
   status,
   actions,
-  beforeStart,
+  hasSession,
   controls,
-  open,
   rework,
 }: {
   item: WorkItem;
   columnStage: BoardStageId;
-  titleId?: string;
   relatedLinks: ReactNode;
   activity: WorkItemActivityData;
   actors: Record<string, AuditActorProfile>;
   status: BoardCardStatus;
   /** Bottom left, the likeliest first. */
   actions: CardAction[];
-  beforeStart?: () => void;
-  /** The top-right group: the card's menu, or the copy's link, collapse and menu. */
+  hasSession: boolean;
+  /** The top-right group: the card's menu. */
   controls: ReactNode;
-  /** The copy: its labelled source link and two controls to clear. */
-  open: boolean;
   rework?: ReworkReason;
 }) {
   const board = boardOf(useBoardCatalog(item.githubProjectId).data, item);
@@ -65,7 +66,7 @@ export function WorkItemCardRows({
     <>
       <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5">{controls}</div>
       <div className="flex min-w-0 flex-col gap-1.5">
-        <div className={cn('flex min-w-0 items-center gap-1.5', open ? 'pr-44' : 'pr-16')}>
+        <div className="flex min-w-0 items-center gap-1.5 pr-8">
           <Txt as="span" variant="meta" tone="faint" className="min-w-0 truncate">
             <Metadata singleLine>
               {workItemMeta(item, repository).map((part, index, parts) => (
@@ -83,12 +84,15 @@ export function WorkItemCardRows({
         <div className="flex min-w-0 items-center gap-1.5">
           <WorkItemSourceIcon item={item} />
           <Txt as="span" variant="card-title-tight" tone="ink" className="min-w-0 flex-1 truncate">
-            <SourceTitle source={item.source} title={item.title} id={titleId} />
+            <SourceTitle source={item.source} title={item.title} />
           </Txt>
         </div>
       </div>
-      <SourceStateBadge item={item} className="self-start" />
-      <MetadataLabels metadata={sourceMetadata(item)} />
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5 empty:hidden">
+        <WorkItemUpstreamLinks item={item} />
+        <SourceStateBadge item={item} />
+        <MetadataLabels metadata={sourceMetadata(item)} className="max-w-full min-w-0" />
+      </div>
       {otherStages.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           {otherStages.map(stage => (
@@ -104,16 +108,16 @@ export function WorkItemCardRows({
           ))}
         </div>
       )}
-      {(status.kind !== 'idle' || verdict || rework) && (
+      {(status.kind !== 'idle' || hasSession || verdict || rework) && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
           <CardStatus status={status} />
+          {hasSession && <SessionBadge />}
           {verdict && <ReviewVerdictBadge verdict={verdict} />}
           {rework && <ReworkLine rework={rework} />}
         </div>
       )}
       <CardActions
         actions={actions}
-        beforeStart={beforeStart}
         trailing={<WorkItemActivity activity={activity} actors={actors} board={board} />}
       />
     </>

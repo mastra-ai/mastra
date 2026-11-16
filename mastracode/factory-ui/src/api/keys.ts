@@ -101,6 +101,8 @@ export const queryKeys = {
   // Under the board's key: whatever refreshes or rewrites the board's cards reaches these too.
   sessionWorkItems: (factoryProjectId: string | undefined, sessionId: string | undefined) =>
     [...queryKeys.workItems(factoryProjectId), 'session', sessionId ?? null] as const,
+  workItem: (factoryProjectId: string | undefined, workItemId: string | undefined) =>
+    [...queryKeys.workItems(factoryProjectId), 'card', workItemId ?? null] as const,
   workItemsWithSessions: (factoryProjectId: string | undefined) =>
     [...queryKeys.workItems(factoryProjectId), 'sessions'] as const,
   unstartedWorkItems: (factoryProjectId: string | undefined, search: string) =>

@@ -205,7 +205,6 @@ describe('status row', () => {
 
 describe('what a card shows', () => {
   const run = { label: 'Review', start: () => {} };
-  const session = { label: 'Open session', href: '/session' };
   const retry = { label: 'Retry', start: () => {} };
 
   interface ShownCard {
@@ -217,12 +216,7 @@ describe('what a card shows', () => {
   function shown(input: BoardCardStateInput): ShownCard {
     const state = boardCardState(input);
     const retryOffered = state.status.kind === 'error' && state.status.retryDecisionId !== undefined;
-    const actions = cardActions({
-      state,
-      session: input.sessionStatus === undefined ? undefined : session,
-      retry: retryOffered ? retry : undefined,
-      run,
-    });
+    const actions = cardActions({ state, retry: retryOffered ? retry : undefined, run });
     return {
       row: state.status.kind === 'idle' ? undefined : state.status.label,
       wick: state.wick,
@@ -240,7 +234,7 @@ describe('what a card shows', () => {
     [
       'your move on a card with a live session',
       { moving: { stage: 'review', label: 'Reviewing' }, sessionStatus: 'working' },
-      { row: 'Moving to Reviewing…', wick: 'working', buttons: ['Open session'] },
+      { row: 'Moving to Reviewing…', wick: 'working', buttons: ['Moving… (disabled)'] },
     ],
     [
       'your retry before the failure refreshes',
@@ -280,12 +274,12 @@ describe('what a card shows', () => {
     [
       'a live run',
       { decision: decision({ status: 'leased' }), sessionStatus: 'working' },
-      { row: undefined, wick: 'working', buttons: ['Open session'] },
+      { row: undefined, wick: 'working', buttons: [] },
     ],
     [
       'a parked session with a run queued behind it',
       { decision: decision({ status: 'pending' }), sessionStatus: 'ready' },
-      { row: 'Starting an automated run…', wick: 'ready', buttons: ['Open session'] },
+      { row: 'Starting an automated run…', wick: 'ready', buttons: [] },
     ],
   ])('%s', (_, input, expected) => {
     expect(shown(input)).toEqual(expected);

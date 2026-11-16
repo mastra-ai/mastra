@@ -21,7 +21,7 @@ import {
 import type { ComposerInputProps } from '@mastra/playground-ui/components/Composer';
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useEffectEvent, useState } from 'react';
+import { useContext, useEffect, useEffectEvent, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { useMatch, useNavigate, useParams } from 'react-router';
 
@@ -34,6 +34,7 @@ import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAge
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import type { PendingImage } from '../context/ComposerImagesContext';
 import { useChatConnection } from '../context/useChatConnection';
+import { DraftSessionStartContext } from '../context/DraftSessionStartContext';
 import { useChatModels } from '../context/useChatModels';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
@@ -78,6 +79,8 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
   const { factoryId } = useParams<{ factoryId: string }>();
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
   const onUserDraft = useMatch('/factories/:factoryId/user/new/:draftSessionId') !== null;
+  const draftStart = useContext(DraftSessionStartContext);
+  const onDraft = onUserDraft || draftStart !== null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
@@ -110,10 +113,15 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
 
   const preparingThreadId = usePreparingThreadId();
   const liveRun = phase === 'working' && !preparingThreadId && sessionEnabled;
-  const createSessionFromDraft = useCreateUserSessionFromDraft();
-  const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
+  const createUserSessionFromDraft = useCreateUserSessionFromDraft();
+  const createSessionFromDraft = draftStart?.start ?? createUserSessionFromDraft;
+  const blocked = draftStart
+    ? !draftStart.ready
+    : onUserDraft
+      ? !factorySessionState
+      : status !== 'ready' && !preparingThreadId;
   // A draft send waits for a model still loading, so only a model that failed to load holds it back.
-  const draftModelFailed = onUserDraft && modelError !== undefined;
+  const draftModelFailed = onDraft && modelError !== undefined;
   const [heldDraftText, setHeldDraftText] = useState<string>();
   const startingDraft = heldDraftText !== undefined;
   const attachDisabled = blocked || chatPreparing || planFeedback.pending || startingDraft;
@@ -137,7 +145,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
   const shownText = preview?.text ?? draft;
   const hasSubmittableDraft =
     shownText.trim().length > 0 || annotations.length > 0 || (images.length > 0 && draftImagesCanBeSent);
-  // Typing never waits on the connection: a reconnect only holds back sending.
+  // Typing never waits on the connection or a card's repository choice: those only hold back sending.
   const textareaDisabled = (startingDraft || planFeedback.isSubmitting || (onUserDraft && blocked)) && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
@@ -147,7 +155,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
       : 'Ask Mastra Code';
   const placeholder = initializingPlaceholder ?? normalPlaceholder;
   const sendTitle = sendTitleFor({
-    waitsOnConnection: connectionLost && !onUserDraft && blocked,
+    waitsOnConnection: connectionLost && !onDraft && blocked,
     chatPreparing,
     startingDraft,
     dictating,
@@ -221,7 +229,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
   };
 
   const submitInput = (text: string) => {
-    if (onUserDraft && modelLoading && !isSlashCommand(text)) {
+    if (onDraft && modelLoading && !isSlashCommand(text)) {
       setHeldDraftText(text);
       return;
     }
@@ -278,7 +286,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
       setImages([]);
       return;
     }
-    if (onUserDraft && isSlashCommand(text)) {
+    if (onDraft && isSlashCommand(text)) {
       if (commandRequiresReadySession(commands, text)) {
         updateDraft(text);
         pushNotice('This command needs a session. Send a prompt to create one first.');
@@ -287,7 +295,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
       }
       return;
     }
-    if (onUserDraft) {
+    if (onDraft) {
       try {
         await withPendingImages(async files => createSessionFromDraft({ prompt: message, files }));
       } catch (error) {

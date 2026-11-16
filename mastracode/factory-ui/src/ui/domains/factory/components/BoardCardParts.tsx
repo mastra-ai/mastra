@@ -1,6 +1,6 @@
 import { cardChangeRequest } from '@mastra/factory/work-items/change-requests';
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
@@ -8,7 +8,6 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
-import { Link } from 'react-router';
 
 import type { BoardCardStatus } from '../boardCardState';
 import { SOURCE_LABELS, cardLabels, metadataLabelColors } from '../boardItems';
@@ -21,8 +20,9 @@ import type { WorkItem, WorkItemSource } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
-import { IconExpand45 } from '@mastra/playground-ui/icons/central/IconExpand45';
+import { IconBubbleWide } from '@mastra/playground-ui/icons/central/IconBubbleWide';
 import { IconHand5Finger } from '@mastra/playground-ui/icons/central/IconHand5Finger';
+import './card-actions.css';
 
 export function SourceTitle({ source, title, id }: { source: WorkItemSource; title: string; id?: string }) {
   return (
@@ -70,26 +70,18 @@ export function BoardTooltipDelay({ children }: { children: ReactNode }) {
 }
 
 /**
- * Card chrome a hover can reveal: the click affordance and the actions menu.
- * Gated on `pointer-fine` because a touch screen has no hover to reveal it
- * with, and stays up while its menu is open.
+ * Card chrome a hover can reveal: the actions menu. Gated on `pointer-fine`
+ * because a touch screen has no hover to reveal it with, and stays up while
+ * its menu is open.
  */
 export const REVEAL_ON_CARD_HOVER =
   'transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100 pointer-fine:aria-expanded:opacity-100';
 
-// A mouse twin of the card's own details button, which keeps the keyboard and screen-reader path.
-export function CardDetailsHint({ onOpen }: { onOpen: () => void }) {
+export function SessionBadge() {
   return (
-    <button
-      type="button"
-      aria-hidden
-      tabIndex={-1}
-      draggable={false}
-      onClick={onOpen}
-      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), REVEAL_ON_CARD_HOVER)}
-    >
-      <IconExpand45 size={13} aria-hidden />
-    </button>
+    <Badge size="xs" variant="info" emphasis="subtle" icon={<IconBubbleWide aria-hidden />} className="shrink-0">
+      Session
+    </Badge>
   );
 }
 
@@ -168,12 +160,12 @@ function labelDotClass(label: string): string {
   return 'bg-muted-foreground';
 }
 
-export function MetadataLabels({ metadata }: { metadata: Record<string, unknown> }) {
+export function MetadataLabels({ metadata, className }: { metadata: Record<string, unknown>; className?: string }) {
   const displayLabels = cardLabels(metadata);
   if (displayLabels.length === 0) return null;
   const colors = metadataLabelColors(metadata);
   return (
-    <ScrollArea orientation="horizontal" revealScrollbarOnHover={false} aria-label="Labels">
+    <ScrollArea orientation="horizontal" revealScrollbarOnHover={false} aria-label="Labels" className={className}>
       <div className="flex items-center gap-1.5">
         {displayLabels.map(label => (
           <Txt
@@ -198,13 +190,10 @@ export function MetadataLabels({ metadata }: { metadata: Record<string, unknown>
 }
 export function CardActions({
   actions,
-  beforeStart,
   trailing,
   children,
 }: {
   actions: CardAction[];
-  /** Runs before any button's `start`: the open copy hands back to the board with it. */
-  beforeStart?: () => void;
   trailing?: ReactNode;
   children?: ReactNode;
 }) {
@@ -214,7 +203,7 @@ export function CardActions({
     <div className="mt-auto flex items-center justify-between gap-2">
       <div className="board-card-actions relative z-10 flex min-w-0">
         {actions.map(action => (
-          <CardActionButton key={action.label} action={action} main={action === main} beforeStart={beforeStart} />
+          <CardActionButton key={action.label} action={action} main={action === main} />
         ))}
         {children}
       </div>
@@ -228,46 +217,18 @@ function pillVariant(action: CardAction, main: boolean) {
   return main && action.urgent && !action.disabled ? 'primary' : 'ghost';
 }
 
-function CardActionButton({
-  action,
-  main,
-  beforeStart,
-}: {
-  action: CardAction;
-  main: boolean;
-  beforeStart?: () => void;
-}) {
-  const variant = pillVariant(action, main);
+function CardActionButton({ action, main }: { action: CardAction; main: boolean }) {
   // The lead action keeps its label whole; a narrow column eats into the ones behind it.
   const width = main ? 'shrink-0' : 'min-w-0';
-  // Both through Button, so the two pills can never differ by a class.
-  if ('href' in action) {
-    return (
-      <Button
-        as={Link}
-        to={action.href}
-        draggable={false}
-        variant={variant}
-        size="sm"
-        aria-label={action.ariaLabel}
-        className={width}
-      >
-        <span className="truncate">{action.label}</span>
-      </Button>
-    );
-  }
   return (
     <Button
       type="button"
-      variant={variant}
+      variant={pillVariant(action, main)}
       size="sm"
       aria-label={action.ariaLabel}
       disabled={action.disabled}
       className={width}
-      onClick={() => {
-        beforeStart?.();
-        action.start();
-      }}
+      onClick={() => action.start()}
     >
       <span className="truncate">{action.label}</span>
     </Button>

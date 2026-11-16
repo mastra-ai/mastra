@@ -5,20 +5,21 @@ import { ContextMenu } from '@mastra/playground-ui/components/ContextMenu';
 import { DataList } from '@mastra/playground-ui/components/DataList';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import type { MouseEvent, ReactNode, RefCallback } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
+import { Link, useNavigate } from 'react-router';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { setDragPayload } from '../boardDrag';
 import type { DragPayload } from '../boardDrag';
 import { BOARD_LIST_ROW_LAYOUT_CLASS } from '../boardLayout';
 import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
-import { IconExpand45 } from '@mastra/playground-ui/icons/central/IconExpand45';
 
 const stopRowClick = (event: MouseEvent) => event.stopPropagation();
 
-// The row's details and actions buttons swap in for its timestamp on a mouse hover, keyboard focus anywhere in the
-// row, an open menu, or the selected row; touch always shows them.
+// The row's actions button swaps in for its timestamp on a mouse hover, keyboard focus anywhere in the row, or an
+// open menu; touch always shows it.
 const REVEAL_ROW_CONTROLS =
   'pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-hover/data-list-row:pointer-events-auto pointer-fine:group-hover/data-list-row:opacity-100 pointer-fine:group-has-[:focus-visible]/data-list-row:pointer-events-auto pointer-fine:group-has-[:focus-visible]/data-list-row:opacity-100 pointer-fine:group-has-[[aria-expanded=true]]/row-end:pointer-events-auto pointer-fine:group-has-[[aria-expanded=true]]/row-end:opacity-100';
 const HIDE_WHILE_ROW_CONTROLS_SHOW =
@@ -45,10 +46,8 @@ type BoardListRowCells = {
 export function BoardListRow({
   testId,
   title,
-  cardRef,
-  detailsRef,
-  expanded,
-  onToggleDetails,
+  href,
+  linkRef,
   dragPayload,
   busy = false,
   locked = false,
@@ -60,10 +59,8 @@ export function BoardListRow({
 }: {
   testId: 'work-item-card' | 'candidate-card';
   title: string;
-  cardRef: RefCallback<HTMLElement>;
-  detailsRef?: (element: HTMLElement | null) => void;
-  expanded: boolean;
-  onToggleDetails: () => void;
+  href: string;
+  linkRef?: (element: HTMLElement | null) => void;
   dragPayload?: DragPayload;
   busy?: boolean;
   locked?: boolean;
@@ -73,6 +70,7 @@ export function BoardListRow({
   createdAt?: string;
   cells: BoardListRowCells;
 }) {
+  const navigate = useNavigate();
   const rowCells = (
     <>
       <DataList.Cell className="empty:before:content-none max-sm:col-start-1 max-sm:row-start-1">
@@ -83,10 +81,18 @@ export function BoardListRow({
       </DataList.Cell>
       <DataList.Cell className="text-foreground @container flex gap-3 overflow-visible empty:before:content-none max-sm:contents">
         <span className="flex min-w-0 shrink items-center gap-3 max-sm:col-start-2 max-sm:row-start-1">
-          <span className="min-w-0 truncate">{cells.title}</span>
+          <Link
+            ref={linkRef}
+            to={href}
+            draggable={false}
+            onClick={stopRowClick}
+            className={cn('min-w-0 truncate rounded-sm', focusRing)}
+          >
+            {cells.title}
+          </Link>
           <span
             onClick={stopRowClick}
-            className="flex max-w-[min(14rem,30%)] min-w-0 shrink-[100] items-center gap-2 empty:hidden max-sm:hidden @max-[28rem]:hidden [&>*]:min-w-0"
+            className="flex max-w-[min(14rem,30cqi)] min-w-0 shrink-[100] items-center gap-2 empty:hidden max-sm:hidden @max-[28rem]:hidden [&>*]:min-w-0"
           >
             {cells.links}
           </span>
@@ -122,7 +128,7 @@ export function BoardListRow({
       >
         {cells.activity}
       </DataList.Cell>
-      <DataList.Cell className="group/row-end justify-items-end overflow-visible empty:before:content-none max-sm:col-start-3 max-sm:row-start-1">
+      <DataList.Cell className="group/row-end justify-items-start overflow-visible empty:before:content-none max-sm:col-start-3 max-sm:row-start-1">
         {createdAt && (
           <Txt
             as="span"
@@ -137,22 +143,6 @@ export function BoardListRow({
           </Txt>
         )}
         <span className="col-start-1 row-start-1 flex items-center max-sm:[&_button]:pointer-events-auto max-sm:[&_button]:opacity-100">
-          <Button
-            ref={detailsRef}
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            draggable={false}
-            aria-label={`Details for ${title}`}
-            aria-expanded={expanded}
-            onClick={event => {
-              stopRowClick(event);
-              onToggleDetails();
-            }}
-            className={REVEAL_ROW_CONTROLS}
-          >
-            <IconExpand45 size={13} aria-hidden />
-          </Button>
           <DropdownMenu>
             <DropdownMenu.Trigger
               render={
@@ -181,19 +171,17 @@ export function BoardListRow({
 
   const row = (
     <DataList.RowWrapper
-      ref={cardRef}
       role="article"
       aria-label={title}
       data-testid={testId}
       data-highlighted={highlighted || undefined}
-      data-featured={expanded || undefined}
       aria-busy={busy || locked || undefined}
       tabIndex={-1}
       draggable={dragPayload !== undefined}
       onDragStart={event => {
         if (dragPayload) setDragPayload(event, dragPayload);
       }}
-      onSelectRow={onToggleDetails}
+      onSelectRow={() => void navigate(href)}
       className={cn(
         'group',
         BOARD_LIST_ROW_LAYOUT_CLASS,

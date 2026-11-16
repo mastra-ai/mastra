@@ -3,7 +3,7 @@ import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 
-import { composerColumnClass, reservedSpaceClass } from '../../workspace-viewer/layout';
+import { chatColumnClass, composerColumnClass, reservedSpaceClass } from '../../workspace-viewer/layout';
 import { ActivityLine } from './ActivityLine';
 import { chatHeaderRoomPx } from './chatPageHeader';
 import { ComposerPanel } from './ComposerPanel';
@@ -25,7 +25,6 @@ interface SessionChatSurfaceProps {
   composerLabel: string;
   /** Leads the status row above the composer. */
   composerStatus?: ReactNode;
-  className?: string;
   contentOverlay?: ReactNode;
 }
 
@@ -34,7 +33,6 @@ export function SessionChatSurface({
   emptyState,
   composerLabel,
   composerStatus,
-  className,
   contentOverlay,
 }: SessionChatSurfaceProps) {
   const { busy, loadMore, transcript } = useChatTranscript();
@@ -43,7 +41,7 @@ export function SessionChatSurface({
 
   return (
     <ChatShell
-      className={cn('chat-surface-enter flex-1', className)}
+      className={cn('chat-surface-enter flex-1 [--chat-gutter:0.25rem]', chatColumnClass)}
       scroller={{
         autoScroll: true,
         defaultScrollPosition: busy ? 'end' : 'last-anchor',

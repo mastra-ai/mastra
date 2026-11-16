@@ -5,7 +5,6 @@ import { cardChangeRequest } from '@mastra/factory/work-items/change-requests';
 import type { BoardCardState, BoardCardStatus } from './boardCardState';
 import { allowsMove, boardLoop, phaseKindOf } from './boardFlow';
 import type { BoardInfo, BoardLoop } from './boardFlow';
-import { itemSessionSpec } from './boardItems';
 import { changeRequestStatus, isOpenChangeRequest } from './changeRequestState';
 import { cardHasPullRequest, isPullRequestSource } from './services/workItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
@@ -176,9 +175,7 @@ export function cardPrimaryAction({
   resumeStage,
   nextPhase,
   waiting,
-  hasSession,
   onApproveProposal,
-  onCreateSession,
   onMove,
 }: {
   item: WorkItem;
@@ -193,14 +190,12 @@ export function cardPrimaryAction({
   nextPhase?: { id: string; label: string };
   /** The card's own parked run, read from its status so the button says what the badge says. */
   waiting?: { label: string; decisionId: string };
-  hasSession: boolean;
   onApproveProposal: (decisionId: string) => void;
-  onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
   onMove: (toStage: string) => void;
 }): CardPrimaryAction | undefined {
   const [accept] = triageDecisions(board);
   if (columnStage !== undefined && accept !== undefined && awaitsTriageDecision(item, columnStage, board)) {
-    // One word on the pill so it sits beside "Open session"; the menu spells out the alternatives.
+    // One word on the pill; the menu spells out the alternatives.
     return { label: 'Accept', ariaLabel: accept.label, start: () => onMove(accept.stage) };
   }
   if (waiting !== undefined) {
@@ -213,25 +208,12 @@ export function cardPrimaryAction({
     return { label: move.label, start: () => onMove(move.stage) };
   }
   // A board without a loop runs its phases' own steps, so the button advances the card rather than starting one.
-  if (nextPhase !== undefined) {
-    return { label: `Move to ${nextPhase.label}`, start: () => onMove(nextPhase.id) };
-  }
-  // Every lane this card offers is already its own, so opening its session is the action.
-  if (hasSession) return undefined;
-  return {
-    label: 'Start session',
-    start: () => onCreateSession(itemSessionSpec(item)),
-  };
+  return nextPhase === undefined
+    ? undefined
+    : { label: `Move to ${nextPhase.label}`, start: () => onMove(nextPhase.id) };
 }
 
-export type CardAction = { label: string; ariaLabel?: string; disabled?: boolean; urgent?: boolean } & (
-  | { href: string }
-  | { start: () => void }
-);
-
-export function sessionLink(href: string | undefined): CardAction | undefined {
-  return href === undefined ? undefined : { label: 'Open session', href };
-}
+export type CardAction = CardPrimaryAction & { disabled?: boolean; urgent?: boolean };
 
 export function retryButton({
   decisionId,
@@ -247,34 +229,31 @@ export function retryButton({
 /** The card's buttons, the likeliest next click first; `urgent` marks the one the card waits on a person for. */
 export function cardActions({
   state,
-  session,
   retry,
   run,
 }: {
   state: BoardCardState;
-  session?: CardAction;
   retry?: CardPrimaryAction;
   run?: CardPrimaryAction;
 }): CardAction[] {
   const { owner } = state;
-  if (owner.kind === 'free') return freeCardActions(state.status, { session, retry, run });
-  if (session !== undefined) return [session];
+  if (owner.kind === 'free') return freeCardActions(state.status, { retry, run });
   if (owner.kind === 'session' || run === undefined) return [];
   return [{ label: owner.progressLabel, start: run.start, disabled: true }];
 }
 
 function freeCardActions(
   status: BoardCardStatus,
-  { session, retry, run }: { session?: CardAction; retry?: CardPrimaryAction; run?: CardPrimaryAction },
+  { retry, run }: { retry?: CardPrimaryAction; run?: CardPrimaryAction },
 ): CardAction[] {
   const namedRun =
     run !== undefined && status.kind === 'waiting'
       ? { ...run, ariaLabel: `Start suggested run: ${status.label}` }
       : run;
-  const main = retry ?? namedRun ?? session;
+  const main = retry ?? namedRun;
   if (main === undefined) return [];
   const awaitsPerson = status.kind === 'waiting' || status.kind === 'held';
   const isUrgent = (action: CardAction) => action === retry || (awaitsPerson && action === namedRun);
-  const rest = [session, namedRun].filter(action => action !== undefined).filter(action => action !== main);
+  const rest = namedRun !== undefined && namedRun !== main ? [namedRun] : [];
   return [main, ...rest].map(action => ({ ...action, urgent: isUrgent(action) }));
 }

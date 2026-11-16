@@ -265,19 +265,6 @@ describe('Factory board list layout', () => {
     return { row, transitions };
   };
 
-  it('opens a row from its expand button and from a click anywhere on the row', async () => {
-    const { row } = await openListBoard();
-    const user = userEvent.setup();
-
-    await user.click(within(row).getByRole('button', { name: 'Details for Moved recently' }));
-    expect(await screen.findByRole('dialog', { name: 'Moved recently' })).toBeInTheDocument();
-    await user.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Moved recently' })).not.toBeInTheDocument());
-
-    await user.click(within(row).getByText('Moved recently'));
-    expect(await screen.findByRole('dialog', { name: 'Moved recently' })).toBeInTheDocument();
-  });
-
   it('moves a row into another stage when it is dropped on a collapsed group', async () => {
     const { row, transitions } = await openListBoard();
     const user = userEvent.setup();

@@ -7,14 +7,12 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { isStubbedProjectRead } from '../../../../../e2e/ui/board-reads';
-import { listedRepository } from '../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../e2e/ui/msw-server';
-import { releaseBoard, workBoardInfo } from '../../../../../e2e/ui/board-catalog';
+import { workBoardInfo } from '../../../../../e2e/ui/board-catalog';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import { createQueryClient } from '../../../../query-client';
 import type { GithubIssue, GithubPullRequest } from '../../factory/services/factory';
 import type { WorkItem } from '../../factory/services/workItems';
-import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { createAppRoutes } from '../../../router';
 import {
@@ -48,7 +46,6 @@ const THREAD_IDS_THE_CHAT_MUST_LIST_TO_STAY_MOUNTED = [
 interface SearchRequestState {
   abortRequests: number;
   createSessionRequests: number;
-  sessionsCreatedFor: string[];
   created: Record<string, unknown>[];
   transitions: Array<{ itemId: string; body: Record<string, unknown> }>;
   intakeRequests: number;
@@ -58,7 +55,6 @@ interface SearchRequestState {
 }
 
 interface StubSearchOptions {
-  activeRepositories?: LinkedRepositoryPayload[];
   activeFactoryHasRepositories?: boolean;
   failSessionAttempts?: number;
   /** How many reads of the cards holding a session fail before one answers. */
@@ -92,16 +88,7 @@ function projectListResponse(repositories: Record<string, ProjectListRepository[
 }
 
 function activeFactoryRepositories(options: StubSearchOptions): ProjectListRepository[] {
-  if (options.activeFactoryHasRepositories === false) return [];
-  if (!options.activeRepositories) return factoryRepositories[ACTIVE_FACTORY_ID];
-  return options.activeRepositories.map(repository =>
-    listedRepository(repository.projectRepositoryId, repository.slug, {
-      integrationId: repository.provider ?? 'github',
-      externalId: repository.externalId ?? null,
-      branch: 'main',
-      sandboxWorkdir: '/repo',
-    }),
-  );
+  return options.activeFactoryHasRepositories === false ? [] : factoryRepositories[ACTIVE_FACTORY_ID];
 }
 
 const noFeedStream = http.get(
@@ -113,7 +100,6 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
   const state: SearchRequestState = {
     abortRequests: 0,
     createSessionRequests: 0,
-    sessionsCreatedFor: [],
     created: [],
     transitions: [],
     intakeRequests: 0,
@@ -212,7 +198,6 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
       `${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`,
       async ({ request, params }) => {
         state.createSessionRequests += 1;
-        state.sessionsCreatedFor.push(String(params.projectRepositoryId));
         const body = (await request.json()) as { branch?: string };
         return HttpResponse.json({
           session: {
@@ -408,87 +393,6 @@ afterEach(() => {
 });
 
 describe('Global search', () => {
-  describe.each(['board', 'search'] as const)('%s entry point', entryPoint => {
-    describe.each(['github', 'gitlab'] as const)('%s source-provider repository choices', provider => {
-      it.each([0, 1, 2])('offers usable choices with %s matching repositories', async count => {
-        const sourceRepositories: LinkedRepositoryPayload[] = Array.from({ length: count }, (_, index) => ({
-          projectRepositoryId: `${provider}-repo-${index}`,
-          provider,
-          externalId: String(index),
-          slug: `${provider}-org/repo-${index}`,
-        }));
-        const otherProvider = provider === 'github' ? 'gitlab' : 'github';
-        const otherRepository: LinkedRepositoryPayload = {
-          projectRepositoryId: 'other-provider-repo',
-          provider: otherProvider,
-          slug: 'other-provider/repo',
-        };
-        const item: WorkItem = {
-          ...workItems[3],
-          source: provider === 'github' ? 'github-issue' : 'gitlab-issue',
-          board: 'release',
-          stages: ['shipped'],
-          metadata: {},
-        };
-        const requests = stubSearchApi({
-          workItems: [item],
-          activeRepositories: [otherRepository, ...sourceRepositories],
-        });
-        const patches: unknown[] = [];
-        const starts: unknown[] = [];
-        server.use(
-          http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
-          http.get(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/boards`, () =>
-            HttpResponse.json({ boards: [releaseBoard] }),
-          ),
-          http.get(`${TEST_BASE_URL}/web/gitlab/issues`, () => HttpResponse.json({ issues: [], nextCursor: null })),
-          http.get(`${TEST_BASE_URL}/web/gitlab/projects/:projectRepositoryId/prs`, () =>
-            HttpResponse.json({ pullRequests: [], nextPage: null }),
-          ),
-          http.patch(`${TEST_BASE_URL}/web/factory/work-items/${item.id}`, async ({ request }) => {
-            patches.push(await request.json());
-            return HttpResponse.json({ workItem: toWireWorkItem(item) });
-          }),
-          http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
-            starts.push(await request.json());
-            return HttpResponse.json({ prepared: { threadId: 'thread-search' } });
-          }),
-        );
-        const user = userEvent.setup();
-        renderSearchRoute(entryPoint === 'board' ? `/factories/${ACTIVE_FACTORY_ID}/boards/release` : undefined);
-        const search = entryPoint === 'search' ? await openWithShortcut() : undefined;
-        const results = search ? within(search) : screen;
-        if (search) await user.click(await results.findByText(item.title));
-        else await user.click(await screen.findByRole('button', { name: 'Start session' }));
-
-        if (count === 0) {
-          expect(
-            await screen.findByText("No repository matching this card's provider is linked to this Factory."),
-          ).toBeInTheDocument();
-          expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
-          expect(requests.createSessionRequests).toBe(0);
-          expect(patches).toEqual([]);
-          expect(starts).toEqual([]);
-          return;
-        }
-        if (count > 1) {
-          const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
-          expect(within(picker).queryByRole('button', { name: /other-provider\/repo/ })).not.toBeInTheDocument();
-          expect(within(picker).getAllByRole('button', { name: new RegExp(`${provider}-org/repo-`) })).toHaveLength(
-            count,
-          );
-          expect(requests.createSessionRequests).toBe(0);
-          await user.click(within(picker).getByRole('button', { name: new RegExp(`${provider}-org/repo-0`) }));
-        }
-        await waitFor(() => expect(starts).toHaveLength(1));
-        expect(requests.sessionsCreatedFor).toEqual([`${provider}-repo-0`]);
-        expect(patches).toEqual([{ metadata: { repository: `${provider}-org/repo-0` } }]);
-        expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
-        if (search) await waitFor(() => expect(search).not.toBeInTheDocument());
-      });
-    });
-  });
-
   it('opens with Mod+K on the labeled, focused command input and hands focus back on close', async () => {
     stubSearchApi();
     const user = userEvent.setup();
@@ -825,40 +729,6 @@ describe('Global search', () => {
     expect(within(rail).getByRole('button', { name: /^Work items\s*2$/ })).toBeInTheDocument();
   });
 
-  it('keeps search open while choosing a repository for an unattributed work item', async () => {
-    const item = {
-      ...workItems[3],
-      board: 'custom',
-      metadata: { number: 777 },
-    };
-    const requests = stubSearchApi({ workItems: [item] });
-    const patches: unknown[] = [];
-    const starts: unknown[] = [];
-    server.use(
-      http.patch(`${TEST_BASE_URL}/web/factory/work-items/${item.id}`, async ({ request }) => {
-        patches.push(await request.json());
-        return HttpResponse.json({ workItem: toWireWorkItem(item) });
-      }),
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
-        starts.push(await request.json());
-        return HttpResponse.json({ threadId: 'thread-search' });
-      }),
-    );
-    const user = userEvent.setup();
-    renderSearchRoute();
-    const search = await openWithShortcut();
-    await user.click(await within(search).findByText(item.title));
-
-    const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    expect(search).toBeInTheDocument();
-    expect(requests.createSessionRequests).toBe(0);
-    expect(patches).toHaveLength(0);
-    await user.click(within(picker).getByRole('button', { name: /mastra-ai\/docs/ }));
-    await waitFor(() => expect(patches).toEqual([{ metadata: { number: 777, repository: 'mastra-ai/docs' } }]));
-    await waitFor(() => expect(starts).toHaveLength(1));
-    await waitFor(() => expect(search).not.toBeInTheDocument());
-  });
-
   it('opens the session a listed card gained since, instead of starting another', async () => {
     const listed = { ...workItems[3], board: 'custom', metadata: { number: 777 } };
     const cards = [listed];
@@ -886,22 +756,15 @@ describe('Global search', () => {
     expect(requests.createSessionRequests).toBe(0);
   });
 
-  it('starts a session on a listed card that a later update pushed out of the search', async () => {
+  it('opens the draft of a listed card that a later update pushed out of the search', async () => {
     const cards: WorkItem[] = Array.from({ length: 21 }, (_, index) => ({
       ...unstartedCard(`backlog-${index}`, `Backlog chore ${index}`, `2026-07-${String(index + 1).padStart(2, '0')}`),
       board: 'custom',
       metadata: { repository: 'mastra-ai/mastra' },
     }));
-    stubSearchApi({ workItems: cards });
-    const starts: unknown[] = [];
-    server.use(
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
-        starts.push(await request.json());
-        return HttpResponse.json({ threadId: 'thread-search' });
-      }),
-    );
+    const requests = stubSearchApi({ workItems: cards });
     const user = userEvent.setup();
-    renderSearchRoute();
+    const { router } = renderSearchRoute();
     const search = await openWithShortcut();
     // The last of the 20 the search lists.
     const row = await within(search).findByText('Backlog chore 1');
@@ -910,37 +773,26 @@ describe('Global search', () => {
     cards[0] = { ...cards[0], updatedAt: '2026-08-01T10:00:00.000Z' };
     await user.click(row);
 
-    await waitFor(() =>
-      expect(starts).toEqual([expect.objectContaining({ workItem: expect.objectContaining({ id: 'backlog-1' }) })]),
-    );
-    expect(screen.queryByText(/no longer exists/)).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Backlog chore 1' })).toBeInTheDocument();
+    expect(router.state.location.pathname).toMatch(new RegExp(`^/factories/${ACTIVE_FACTORY_ID}/cards/backlog-1/new/`));
+    expect(requests.createSessionRequests).toBe(0);
   });
 
   // Technical: a server older than `workItemId` ignores it and sends the whole board, which holds the card.
-  it('starts a session on the card clicked when the server sends the whole board whatever is asked', async () => {
+  it('opens the draft of the card clicked when the server sends the whole board whatever is asked', async () => {
     const cards: WorkItem[] = ['first', 'second', 'third'].map((name, index) => ({
       ...unstartedCard(`backlog-${name}`, `Backlog chore ${name}`, `2026-07-0${3 - index}`),
       board: 'custom',
       metadata: { repository: 'mastra-ai/mastra' },
     }));
     stubSearchApi({ workItems: cards, serverNarrowsBySessionOnly: true });
-    const starts: unknown[] = [];
-    server.use(
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
-        starts.push(await request.json());
-        return HttpResponse.json({ threadId: 'thread-search' });
-      }),
-    );
     const user = userEvent.setup();
     renderSearchRoute();
     const search = await openWithShortcut();
 
     await user.click(await within(search).findByText('Backlog chore third'));
 
-    await waitFor(() =>
-      expect(starts).toEqual([expect.objectContaining({ workItem: expect.objectContaining({ id: 'backlog-third' }) })]),
-    );
-    expect(screen.queryByText(/no longer exists/)).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Backlog chore third' })).toBeInTheDocument();
   });
 
   it('says a listed card was deleted since, and starts nothing on it', async () => {
@@ -1223,41 +1075,6 @@ describe('Global search', () => {
     expect(requests.transitions).toHaveLength(1);
     releaseTransition();
     await waitForMutationsIdle(client);
-  });
-
-  it('refuses to open a second session while the session chosen through the repository picker is still starting', async () => {
-    const item = { ...workItems[3], board: 'custom', metadata: { number: 777 } };
-    stubSearchApi({ workItems: [item] });
-    const starts: unknown[] = [];
-    let releaseStart = () => {};
-    const startGate = new Promise<void>(resolve => {
-      releaseStart = resolve;
-    });
-    server.use(
-      http.patch(`${TEST_BASE_URL}/web/factory/work-items/${item.id}`, () =>
-        HttpResponse.json({ workItem: toWireWorkItem(item) }),
-      ),
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
-        starts.push(await request.json());
-        await startGate;
-        return HttpResponse.json({ threadId: 'thread-search' });
-      }),
-    );
-    const user = userEvent.setup();
-    const { client } = renderSearchRoute();
-    const search = await openWithShortcut();
-    await user.click(await within(search).findByText(item.title));
-    const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    await user.click(within(picker).getByRole('button', { name: /mastra-ai\/docs/ }));
-    await waitFor(() => expect(starts).toHaveLength(1));
-
-    await user.click(within(search).getByText(item.title));
-
-    expect(await screen.findByText("Another run can't start while this card is busy.")).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
-    releaseStart();
-    await waitForMutationsIdle(client);
-    expect(starts).toHaveLength(1);
   });
 
   it('scopes results to board cards with no session', async () => {

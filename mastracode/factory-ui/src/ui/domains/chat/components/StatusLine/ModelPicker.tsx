@@ -42,13 +42,12 @@ const withinProvider = (provider: string, modelId: string) =>
   modelId.startsWith(`${provider}/`) ? modelId.slice(provider.length + 1) : modelId;
 
 function canSwitchModel({
-  kind,
   draftSessionId,
   sessionEnabled,
   modelLockedReason,
-}: Pick<ChatSessionContextApi, 'kind' | 'draftSessionId' | 'sessionEnabled' | 'modelLockedReason'>): boolean {
+}: Pick<ChatSessionContextApi, 'draftSessionId' | 'sessionEnabled' | 'modelLockedReason'>): boolean {
   if (modelLockedReason) return false;
-  if (kind === 'user' && draftSessionId) return true;
+  if (draftSessionId) return true;
   return sessionEnabled;
 }
 

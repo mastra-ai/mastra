@@ -65,7 +65,7 @@ export async function listUserSessions(
 }
 
 export type CreateUserSessionOptions = (
-  | { branch: string; baseBranch?: string; sessionId?: never; title?: never }
+  | { branch: string; baseBranch?: string; sessionId?: string; title?: never }
   | { sessionId: string; title: string; branch?: never; baseBranch?: never }
 ) & {
   /** Defaults to `org`. A session someone opens for themselves with New session is created `private`. */

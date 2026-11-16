@@ -140,22 +140,19 @@ function heldCards(client: QueryClient, factoryProjectId: string, versions: Read
  * body it would send for each; only the cards the tab does not hold at that version are
  * downloaded, by id. The first read of a board holds none, so it asks for the bodies with the
  * listing. A card the read leaves equal stays the object held, so nothing showing it renders
- * again, and a read that changes nothing answers the snapshot held. `openCard` is asked for in
- * place of the card the view names: the answer says which phases hold it, however deep.
+ * again, and a read that changes nothing answers the snapshot held.
  */
 async function readBoardPhases(
   baseUrl: string,
   factoryProjectId: string,
   request: BoardPhasesRequest,
-  openCard: string | undefined,
   signal: AbortSignal,
   client: QueryClient,
 ): Promise<BoardPhasesSnapshot> {
   const boardHeld = client
     .getQueriesData<BoardPhasesSnapshot>({ queryKey: queryKeys.boardPhases(factoryProjectId, request.board) })
     .some(([, snapshot]) => snapshot !== undefined);
-  const asked = openCard ? { ...request, item: openCard } : request;
-  const answer = await fetchBoardPhases(baseUrl, factoryProjectId, asked, !boardHeld, signal);
+  const answer = await fetchBoardPhases(baseUrl, factoryProjectId, request, !boardHeld, signal);
   const named = [
     ...answer.phases.flatMap(phase => phase.cards),
     ...(answer.item ? [answer.item] : []),
@@ -210,22 +207,16 @@ async function readBoardPhases(
   return { ...sharedListing, workItems: sameCards ? previousCards : workItems };
 }
 
-/**
- * One view of a board: its phases, and the cards they list. `openCard` is the card whose details
- * the page holds open: every read asks for it, so a refresh or a new order never takes it off the
- * page, however deep its phase holds it. It stays out of the key, because the view is the same
- * with a card open: opening or closing one reads nothing.
- */
+/** One view of a board: its phases, and the cards they list. */
 export function boardPhasesQueryOptions(
   baseUrl: string,
   factoryProjectId: string | undefined,
   request: BoardPhasesRequest,
-  openCard?: string,
 ) {
   return queryOptions({
     queryKey: queryKeys.boardPhasesView(factoryProjectId, request),
     queryFn: factoryProjectId
-      ? ({ signal, client }) => readBoardPhases(baseUrl, factoryProjectId, request, openCard, signal, client)
+      ? ({ signal, client }) => readBoardPhases(baseUrl, factoryProjectId, request, signal, client)
       : skipToken,
     // The feed provider refreshes this. A hidden tab holds no stream and polls nothing, so refresh immediately on return.
     refetchOnWindowFocus: true,
@@ -292,32 +283,32 @@ export function useSessionWorkItemsQuery(factoryProjectId: string | undefined, s
   });
 }
 
+/** One card by id, for a page that shows it off the board. */
+export function workItemQueryOptions(baseUrl: string, factoryProjectId: string, workItemId: string) {
+  return queryOptions({
+    queryKey: queryKeys.workItem(factoryProjectId, workItemId),
+    queryFn: ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal, { workItemId: [workItemId] }),
+    // Refreshed with the board, by the feed provider and on return to a hidden tab.
+    refetchOnWindowFocus: true,
+    select: (board: BoardSnapshot) => board.workItems.find(card => card.id === workItemId) ?? null,
+  });
+}
+
+export function useWorkItemQuery(factoryProjectId: string, workItemId: string) {
+  const { baseUrl } = useApiConfig();
+  return useQuery(workItemQueryOptions(baseUrl, factoryProjectId, workItemId));
+}
+
 export function useSessionCardsQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery(sessionCardsQueryOptions(baseUrl, factoryProjectId));
 }
 
-/**
- * One view of a board. Changing the view keeps the phases shown until the new ones answer. A view
- * the tab read while `openCard` was closed may hold it below what its phases list: that read is
- * not shown over the open card. The view is read for the card instead, and the card stays on the
- * page until the answer says where it is.
- */
-export function useBoardPhasesQuery(
-  factoryProjectId: string | undefined,
-  request: BoardPhasesRequest,
-  openCard?: string,
-) {
+/** One view of a board. Changing the view keeps the phases shown until the new ones answer. */
+export function useBoardPhasesQuery(factoryProjectId: string | undefined, request: BoardPhasesRequest) {
   const { baseUrl } = useApiConfig();
-  const held = useQueryClient().getQueryData<BoardPhasesSnapshot>(queryKeys.boardPhasesView(factoryProjectId, request));
-  const heldWithoutOpenCard = openCard !== undefined && held?.workItems.every(card => card.id !== openCard);
   return useQuery({
-    ...boardPhasesQueryOptions(
-      baseUrl,
-      factoryProjectId,
-      heldWithoutOpenCard ? { ...request, item: openCard } : request,
-      openCard,
-    ),
+    ...boardPhasesQueryOptions(baseUrl, factoryProjectId, request),
     placeholderData: keepPreviousData,
   });
 }

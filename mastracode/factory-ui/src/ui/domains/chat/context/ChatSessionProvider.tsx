@@ -49,7 +49,7 @@ export function ChatSessionConfigProvider({
   const location = useLocation();
   const { baseUrl } = useApiConfig();
   const factoryQuery = useFactoryQuery(factoryId);
-  const isUserDraft = userScoped && Boolean(draftSessionId);
+  const isDraft = Boolean(draftSessionId);
   const sessionQuery = useUserSessionQuery(userScoped ? threadId : sessionId);
   const factory = factoryQuery.data;
   const storedSession = sessionQuery.data;
@@ -91,7 +91,7 @@ export function ChatSessionConfigProvider({
   // added router dependency.
   const entryParams = new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search);
   const addressOverride = userScoped ? null : (entryParams.get('sessionId') ?? entryParams.get('resourceId'));
-  const routedSessionId = userScoped ? (draftSessionId ?? threadId) : (storedSession?.sessionId ?? sessionId);
+  const routedSessionId = draftSessionId ?? (userScoped ? threadId : (storedSession?.sessionId ?? sessionId));
   const chatSessionId = addressOverride ?? routedSessionId ?? factory?.id;
   const resourceId =
     addressOverride ?? (inSession ? (storedSession?.resourceId ?? storedSession?.userId) : factory?.id);
@@ -122,7 +122,7 @@ export function ChatSessionConfigProvider({
   // so a denied/missing session cannot keep the preparing loader up forever.
   // A thread opened with its first prompt is mid-create: it shows that prompt,
   // not the preparing steps, and sends it once the session exists.
-  const openingWithPrompt = userScoped && opensWithPrompt(location.state);
+  const openingWithPrompt = opensWithPrompt(location.state);
   const sandboxPreparing = resolvingSession && !addressOverride && !openingWithPrompt;
   // Outside a session the factory resource is addressable straight away (its id
   // is the factory project id); inside one it becomes addressable as soon as
@@ -131,7 +131,7 @@ export function ChatSessionConfigProvider({
     userScoped || !inSession
       ? Boolean(chatSessionId)
       : Boolean(addressOverride) || (Boolean(storedSession) && !resolvingSession);
-  const resourceEnabled = !isUserDraft && resourceAddressable;
+  const resourceEnabled = !isDraft && resourceAddressable;
   const value = {
     sessionId: chatSessionId ?? '',
     resourceId: resourceId ?? '',
@@ -151,7 +151,7 @@ export function ChatSessionConfigProvider({
       : undefined,
     sessionThreadId: storedSession?.sessionId ?? undefined,
     workspacePending: storedSession !== undefined && !storedSession.materializedAt,
-    draftSessionId: isUserDraft ? draftSessionId : undefined,
+    draftSessionId,
     factorySessionState:
       factory && repository
         ? {

@@ -1,9 +1,5 @@
 import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
-import {
-  cardContextSessions,
-  cardThreadSession,
-  itemThreadSession,
-} from '@mastra/factory/work-items/card-context-sessions';
+import { cardThreadSession, itemThreadSession } from '@mastra/factory/work-items/card-context-sessions';
 import { ActivityWick } from '@mastra/playground-ui/components/Activity';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
@@ -12,25 +8,15 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { BOARD_CARD_LAYOUT_CLASS } from '../boardLayout';
 import type { ReactElement } from 'react';
 
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { boardCardState } from '../boardCardState';
+import { cardPath, threadPath } from '../../workspaces/services/factoryPaths';
 import { setDragPayload } from '../boardDrag';
 import type { DragPayload } from '../boardDrag';
 import { reworkReason } from '../reworkReason';
 import type { BoardLayout } from '../boardLayout';
-import { boardLoop } from '../boardFlow';
 import { itemBoard } from '../boardStages';
-import {
-  awaitsTriageDecision,
-  cardActions,
-  cardMoves,
-  cardPrimaryAction,
-  resumeStage,
-  retryButton,
-  sessionLink,
-} from '../cardPrimaryAction';
-import { useCardMorph } from '../hooks/useCardMorph';
+import { cardControls } from '../cardControls';
 import { useBoardRepository } from '../hooks/useBoardRepository';
 import type { AuditEventPage } from '../services/audit';
 import type { FactoryDecisionSummary } from '../services/decisions';
@@ -38,11 +24,9 @@ import { relationshipPath } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
-import { nextBoardPhase, primaryCardMove, proposedCardRun, movingCardStatus } from '../workItemCardPresentation';
-import { CardDetailsHint, REVEAL_ON_CARD_HOVER } from './BoardCardParts';
+import { REVEAL_ON_CARD_HOVER } from './BoardCardParts';
 import { RelatedWorkItemLink } from './RelatedWorkItemLink';
 import { WorkItemCardRows } from './WorkItemCardRows';
-import { WorkItemDetailsPanel } from './WorkItemDetailsPanel';
 import { WorkItemListRow } from './WorkItemListRow';
 import type { WorkItemMenuProps } from './WorkItemMenuItems';
 import { WorkItemMenuItems } from './WorkItemMenuItems';
@@ -54,9 +38,7 @@ export function WorkItemCard({
   highlighted,
   columnStage,
   relatedItems,
-  projectRepositoryId,
   activityPage,
-  preparing,
   evaluatingStage,
   transitionReason,
   decision,
@@ -68,7 +50,6 @@ export function WorkItemCard({
   onDismissProposal,
   onRetryDecision,
   sessionStatus,
-  onCreateSession,
   onMove,
   onRemove,
   layout,
@@ -80,11 +61,7 @@ export function WorkItemCard({
   columnStage: BoardStageId;
   /** Cards linked to this one, resolved once for the whole board. */
   relatedItems: WorkItem[];
-  /** Repository id resolving GitHub descriptions in the detail panel. */
-  projectRepositoryId: string;
   activityPage?: AuditEventPage;
-  /** Status text while a session start is resolving, before its mutation starts. */
-  preparing?: string;
   /** Destination stage of an in-flight transition; undefined = not moving. */
   evaluatingStage?: string;
   transitionReason?: string;
@@ -100,68 +77,41 @@ export function WorkItemCard({
   onRetryDecision: (decisionId: string) => void;
   /** Live status of the card's bound sessions, resolved once for the whole board. */
   sessionStatus?: SessionRowStatus;
-  /** Fallback when the card offers no lane: open a session on it (no run). */
-  onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
   layout: BoardLayout;
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
-  const morph = useCardMorph();
   const catalog = useBoardCatalog(item.githubProjectId);
   const repository = useBoardRepository(item.githubProjectId);
   const boardId = itemBoard(item);
   const definition = catalog.data?.find(board => board.id === boardId);
-  // A board without a pull request loop advances cards through its own phases instead.
-  const custom = boardLoop(definition) === undefined;
-
-  const startingLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
-  const sessions = item.sessions;
-  const moves = cardMoves(item, columnStage, definition);
-  const primaryMove = primaryCardMove(moves, columnStage, { sessions, stageHistory: item.stageHistory });
-  const threadSession = cardThreadSession(item, definition?.phases, columnStage);
-  const contextSessions = cardContextSessions(item, definition?.phases, columnStage);
-  const rework = definition ? reworkReason(item, definition.phases, activityPage?.events) : undefined;
-  const nextPhase = nextBoardPhase(definition, columnStage);
-  const sessionHref =
-    threadSession === undefined
-      ? undefined
-      : `/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`;
-  const proposedRun = proposedCardRun(proposal, custom, definition, moves, primaryMove);
-  const proposedRunLabel = proposedRun?.label;
-
-  const activity = workItemActivity(item, activityPage);
-  const state = boardCardState({
-    proposal: proposedRun,
-    moving: movingCardStatus(evaluatingStage, definition),
-    preparing: startingLabel,
-    retryRequested: decision !== undefined && retryingDecisionId === decision.id,
+  const { moves, proposedRunLabel, state, actions } = cardControls({
+    item,
+    definition,
+    columnStage,
+    evaluatingStage,
+    transitionReason,
     decision,
     queuePosition,
-    transitionReason,
+    proposal,
+    approvingDecisionId,
+    retryingDecisionId,
     sessionStatus,
-    held: awaitsTriageDecision(item, columnStage, definition),
+    onApproveProposal,
+    onRetryDecision,
+    onMove,
   });
+  const href = cardPath(factoryId, item.id, cardThreadSession(item, definition?.phases, columnStage));
+  const rework = definition ? reworkReason(item, definition.phases, activityPage?.events) : undefined;
+  const activity = workItemActivity(item, activityPage);
   const { status, owner, wick } = state;
+  const hasSession = Object.keys(item.sessions).length > 0;
   const lockedByYou = owner.kind === 'you';
   const busy = lockedByYou || owner.kind === 'automation';
   const dragPayload: DragPayload | undefined = lockedByYou
     ? undefined
     : { kind: 'work-item', id: item.id, fromStage: columnStage, ownerKind: owner.kind };
-  const retryDecisionId = status.kind === 'error' ? status.retryDecisionId : undefined;
-  const primaryAction = cardPrimaryAction({
-    item,
-    board: definition,
-    columnStage,
-    move: primaryMove,
-    resumeStage: resumeStage(columnStage, { sessions, stageHistory: item.stageHistory }, definition),
-    nextPhase: custom ? nextPhase : undefined,
-    waiting: status.kind === 'waiting' ? status : undefined,
-    hasSession: threadSession !== undefined,
-    onApproveProposal,
-    onCreateSession,
-    onMove,
-  });
 
   const menu: WorkItemMenuProps = {
     item,
@@ -177,36 +127,13 @@ export function WorkItemCard({
     onRemove,
   };
 
-  // Acting collapses the panel first, so the result lands on the card it came from.
-  // Dismissing a suggested run is the one entry that leaves it open.
-  const panelMenu: WorkItemMenuProps = {
-    ...menu,
-    onApproveProposal: decisionId => {
-      morph.closeDetails();
-      onApproveProposal(decisionId);
-    },
-    onMove: toStage => {
-      morph.closeDetails();
-      onMove(toStage);
-    },
-    onRemove: () => {
-      morph.closeDetails();
-      onRemove();
-    },
-  };
-
   const relatedLink = (related: WorkItem): ReactElement => {
     const relatedSession = itemThreadSession(related.sessions);
     const link = { item: related, contextRepository: repository };
 
     if (relatedSession !== undefined) {
       return (
-        <RelatedWorkItemLink
-          key={related.id}
-          {...link}
-          href={`/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`}
-          kind="session"
-        />
+        <RelatedWorkItemLink key={related.id} {...link} href={threadPath(factoryId, relatedSession)} kind="session" />
       );
     }
 
@@ -218,127 +145,90 @@ export function WorkItemCard({
   };
   const relatedLinks = relatedItems.map(relatedLink);
 
-  // A held card's decision, like a parked suggestion, is the person's to
-  // release, so it stays on the card beside a finished triage session.
-  const actions = cardActions({
-    state,
-    session: sessionLink(sessionHref),
-    retry: retryButton({ decisionId: retryDecisionId, onRetry: onRetryDecision }),
-    run: primaryAction,
-  });
-
-  const detailsPanel = (
-    <WorkItemDetailsPanel
-      item={item}
-      columnStage={columnStage}
-      projectRepositoryId={projectRepositoryId}
-      activityPage={activityPage}
-      contextSessions={contextSessions}
-      rework={rework}
-      morph={morph}
-      relatedLinks={relatedLinks}
-      status={status}
-      actions={actions}
-      menu={<WorkItemMenuItems {...panelMenu} />}
-      layout={layout}
-    />
-  );
-
   if (layout === 'list') {
     return (
-      <>
-        <WorkItemListRow
-          item={item}
-          columnStage={columnStage}
-          morph={morph}
-          deepLinkRef={deepLinkRef}
-          highlighted={highlighted}
-          activityStatus={wick}
-          relatedLinks={relatedLinks}
-          locked={lockedByYou}
-          busy={busy}
-          dragPayload={dragPayload}
-          activity={activity}
-          actors={activityPage?.actors ?? {}}
-          status={status}
-          actions={actions}
-          menu={<WorkItemMenuItems {...menu} />}
-          rework={rework}
-        />
-        {detailsPanel}
-      </>
+      <WorkItemListRow
+        item={item}
+        href={href}
+        columnStage={columnStage}
+        deepLinkRef={deepLinkRef}
+        highlighted={highlighted}
+        activityStatus={wick}
+        hasSession={hasSession}
+        relatedLinks={relatedLinks}
+        locked={lockedByYou}
+        busy={busy}
+        dragPayload={dragPayload}
+        activity={activity}
+        actors={activityPage?.actors ?? {}}
+        status={status}
+        actions={actions}
+        menu={<WorkItemMenuItems {...menu} />}
+        rework={rework}
+      />
     );
   }
 
   return (
-    <>
-      <article
-        ref={morph.cardRef}
-        draggable={dragPayload !== undefined}
-        aria-label={item.title}
-        aria-busy={busy || undefined}
-        data-testid="work-item-card"
-        data-related={relatedItems.length > 0 ? 'true' : undefined}
-        data-highlighted={highlighted || undefined}
-        onDragStart={event => {
-          if (dragPayload) setDragPayload(event, dragPayload);
-        }}
-        className={cn(
-          BOARD_CARD_LAYOUT_CLASS,
-          'group outline-none transition-colors hover:bg-fill-hover',
-          // `content-visibility` clips at the padding box, which the wick's ring has to reach past.
-          wick ? 'border-transparent' : '[content-visibility:auto] [contain-intrinsic-size:auto_9rem]',
-          lockedByYou ? 'cursor-wait opacity-70' : 'cursor-grab active:cursor-grabbing',
-          highlighted && 'border-warning-edge bg-warning-subtle ring-1 ring-warning-edge',
-        )}
-      >
-        {wick && <ActivityWick status={wick} />}
-        <button
-          ref={deepLinkRef}
-          type="button"
-          draggable={false}
-          aria-label={`Details for ${item.title}`}
-          aria-expanded={morph.open}
-          className={`rounded-card absolute inset-0 cursor-pointer ${focusRingInset}`}
-          onClick={morph.openDetails}
-        />
-        <WorkItemCardRows
-          item={item}
-          columnStage={columnStage}
-          relatedLinks={relatedLinks}
-          activity={activity}
-          actors={activityPage?.actors ?? {}}
-          status={status}
-          actions={actions}
-          open={false}
-          rework={rework}
-          controls={
-            <>
-              <CardDetailsHint onOpen={morph.openDetails} />
-              <DropdownMenu>
-                <DropdownMenu.Trigger
-                  render={
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      disabled={lockedByYou}
-                      aria-label={`Actions for ${item.title}`}
-                      className={REVEAL_ON_CARD_HOVER}
-                    >
-                      <IconDotGrid1x3Vertical size={13} aria-hidden />
-                    </Button>
-                  }
-                />
-                <DropdownMenu.Content align="end" className="min-w-44">
-                  <WorkItemMenuItems {...menu} />
-                </DropdownMenu.Content>
-              </DropdownMenu>
-            </>
-          }
-        />
-      </article>
-      {detailsPanel}
-    </>
+    <article
+      draggable={dragPayload !== undefined}
+      aria-label={item.title}
+      aria-busy={busy || undefined}
+      data-testid="work-item-card"
+      data-related={relatedItems.length > 0 ? 'true' : undefined}
+      data-highlighted={highlighted || undefined}
+      onDragStart={event => {
+        if (dragPayload) setDragPayload(event, dragPayload);
+      }}
+      className={cn(
+        BOARD_CARD_LAYOUT_CLASS,
+        'group outline-none transition-colors hover:bg-fill-hover',
+        // `content-visibility` clips at the padding box, which the wick's ring has to reach past.
+        wick ? 'border-transparent' : '[content-visibility:auto] [contain-intrinsic-size:auto_9rem]',
+        lockedByYou ? 'cursor-wait opacity-70' : 'cursor-grab active:cursor-grabbing',
+        highlighted && 'border-warning-edge bg-warning-subtle ring-1 ring-warning-edge',
+      )}
+    >
+      {wick && <ActivityWick status={wick} />}
+      <Link
+        ref={deepLinkRef}
+        to={href}
+        draggable={false}
+        aria-label={`Open ${item.title}`}
+        className={`rounded-card absolute inset-0 cursor-pointer ${focusRingInset}`}
+      />
+      <WorkItemCardRows
+        item={item}
+        columnStage={columnStage}
+        relatedLinks={relatedLinks}
+        activity={activity}
+        actors={activityPage?.actors ?? {}}
+        status={status}
+        actions={actions}
+        hasSession={hasSession}
+        rework={rework}
+        controls={
+          <DropdownMenu>
+            <DropdownMenu.Trigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={lockedByYou}
+                  aria-label={`Actions for ${item.title}`}
+                  className={REVEAL_ON_CARD_HOVER}
+                >
+                  <IconDotGrid1x3Vertical size={13} aria-hidden />
+                </Button>
+              }
+            />
+            <DropdownMenu.Content align="end" className="min-w-44">
+              <WorkItemMenuItems {...menu} />
+            </DropdownMenu.Content>
+          </DropdownMenu>
+        }
+      />
+    </article>
   );
 }

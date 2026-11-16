@@ -24,6 +24,7 @@ import {
   boardPhasesQueryOptions,
   workItemActivityQueryOptions,
   workItemFilterOptionsQueryOptions,
+  workItemQueryOptions,
   workItemStartersQueryOptions,
 } from '../hooks/useWorkItems';
 import { boardPhasesRequest } from './domains/factory/boardPhasesRequest';
@@ -185,6 +186,17 @@ export const prefetchDraft: Prefetch = (services, args) => {
   const { queryClient, api } = services;
   void queryClient.query(workItemStartersQueryOptions(api.baseUrl, factoryId)).catch(noop);
   void queryClient.query(workItemActivityQueryOptions(api.baseUrl, factoryId, DEFAULT_ACTIVITY_PERIOD)).catch(noop);
+};
+
+/** A card's draft offers the card's own actions under the composer. */
+export const prefetchCardDraft: Prefetch = (services, args) => {
+  prefetchComposer(services, args);
+  const { factoryId, workItemId } = args.params;
+  if (!factoryId || !workItemId) return;
+  const { queryClient, api } = services;
+  void queryClient.query(workItemQueryOptions(api.baseUrl, factoryId, workItemId)).catch(noop);
+  void queryClient.query(boardCatalogQueryOptions(api.client, factoryId)).catch(noop);
+  void queryClient.query(boardDecisionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
 };
 
 export const prefetchRuleDecisions: Prefetch = ({ queryClient, api }, { params, request }) => {

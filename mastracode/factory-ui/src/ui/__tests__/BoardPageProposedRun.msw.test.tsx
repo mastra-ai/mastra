@@ -1,8 +1,3 @@
-/**
- * With automatic runs off, the run a rule wanted to start waits on its card.
- * Clicking the card must release that exact proposal — not start a rival run
- * beside it — and the card menu must let someone turn it down instead.
- */
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -19,8 +14,6 @@ const REPO_ID = 'repo-1';
 const ITEM_ID = 'item-1';
 const DECISION_ID = 'decision-1';
 
-// Wire shape as served by /web/factory/*/work-items: the client derives
-// `source`/`url` from `externalSource` (see fromWireWorkItem).
 const workItem = {
   id: ITEM_ID,
   orgId: 'org-1',
@@ -85,10 +78,6 @@ const userSession = {
   updatedAt: '2026-08-10T00:00:00.000Z',
 };
 
-/**
- * An approved plan transitions the card to Building and writes the `work`
- * session ref itself — no run ever started, but the slot looks used.
- */
 const buildingWorkItem = {
   ...workItem,
   stages: ['execute'],
@@ -98,10 +87,6 @@ const buildingWorkItem = {
   },
 };
 
-/**
- * Triage looked at this card and sent it back to Intake, and a plan run was
- * parked on it, but moving the card on is a person's call.
- */
 const heldWorkItem = {
   ...workItem,
   stages: ['intake'],
@@ -115,7 +100,6 @@ const heldWorkItem = {
   },
 };
 
-/** A Review card whose pull request has since closed: its parked run is moot. */
 const closedPullRequestWorkItem = {
   ...workItem,
   externalSource: { ...workItem.externalSource, type: 'pull-request', externalId: 'github-pr:1' },
@@ -241,7 +225,7 @@ describe('Board card with a proposed run', () => {
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
     await waitForMutationsIdle(client);
     expect(card).toHaveAttribute('data-highlighted', 'true');
-    await waitFor(() => expect(within(card).getByRole('button', { name: 'Details for Fix login bug' })).toHaveFocus());
+    await waitFor(() => expect(within(card).getByRole('link', { name: /Fix login bug$/ })).toHaveFocus());
   });
 
   it('highlights a targeted Linear intake card in the unified feed', async () => {
@@ -288,17 +272,16 @@ describe('Board card with a proposed run', () => {
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
     await waitForMutationsIdle(client);
     expect(card).toHaveAttribute('data-highlighted', 'true');
-    await waitFor(() => expect(within(card).getByRole('button', { name: 'Details for Fix login bug' })).toHaveFocus());
+    await waitFor(() => expect(within(card).getByRole('link', { name: /Fix login bug$/ })).toHaveFocus());
   });
 
-  it('releases the proposal instead of starting a second run from the card details', async () => {
+  it("releases the proposal from the card's suggested run instead of starting a second run", async () => {
     const { settled, transitions } = stubBoardEndpoints();
     const user = userEvent.setup();
     renderWorkBoard();
 
-    await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
-    await user.click(within(dialog).getByRole('button', { name: 'Start suggested run: Investigate' }));
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    await user.click(await within(card).findByRole('button', { name: 'Start suggested run: Investigate' }));
 
     await waitFor(() => expect(settled).toEqual(['approve']));
     expect(transitions).toEqual([]);
@@ -322,7 +305,6 @@ describe('Board card with a proposed run', () => {
     const user = userEvent.setup();
     renderWorkBoard();
 
-    // The menu stays reachable on a card with a live session, so a parked run never needs the details to be released.
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
     await user.click(within(card).getByRole('button', { name: 'Actions for Fix login bug' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Start suggested run' }));
@@ -336,13 +318,11 @@ describe('Board card with a proposed run', () => {
     const user = userEvent.setup();
     renderWorkBoard();
 
-    // With no status badge, the highlighted action is what keeps the parked run
-    // from reading as a plain link to the card's session.
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
     const release = await within(card).findByRole('button', { name: 'Start suggested run: Plan' });
     expect(within(card).queryByText(/^Suggested:/)).toBeNull();
     expect(release).toHaveAttribute('data-variant', 'primary');
-    expect(within(card).getByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'ghost');
+    expect(within(card).getByText('Session')).toBeInTheDocument();
 
     await user.click(release);
 
@@ -355,8 +335,6 @@ describe('Board card with a proposed run', () => {
     const user = userEvent.setup();
     renderWorkBoard();
 
-    // Triage left the card for a person, so the card leads with that decision
-    // and keeps the parked run out of reach until it is made.
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
     expect(await within(card).findByText('Held for your go-ahead')).toBeVisible();
     expect(within(card).queryByText('Suggested: Investigate')).not.toBeInTheDocument();
