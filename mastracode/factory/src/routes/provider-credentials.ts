@@ -67,7 +67,8 @@ export function credentialLabel(provider: string, credentialType: CredentialReco
 }
 
 export type CredentialContext =
-  { mode: 'local' } | { mode: 'tenant'; storage: ModelCredentialsStorage; orgId: string; userId: string };
+  | { mode: 'local' }
+  | { mode: 'tenant'; storage: ModelCredentialsStorage; orgId: string; userId: string };
 
 /**
  * The tenant credentials domain, when registered and ready. `undefined` means
