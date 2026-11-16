@@ -1180,6 +1180,189 @@ describe('storage-backed ExecutionFence', () => {
     await next.settle(async () => {});
   });
 
+  // A worker abandoning a delivery releases the claim; when that release fails, the delivery is retried and can later
+  // suspend the run normally. The failed abandoned release released nothing, so it must not take the grace the
+  // suspension's release gives a participant whose renewal was in flight. `none` is the control without it. (#30206)
+  it.each(['none', 'rejects', 'returns false'] as const)(
+    'gives a participant its grace when the run suspends after an earlier abandoned release of its claim (%s) (#30206)',
+    async abandonedRelease => {
+      vi.useFakeTimers();
+      const { storage, workflowsStore } = await stores();
+      const mastra = new Mastra({ storage, logger: false });
+      const coordinator = await storageClaim(workflowsStore, 'run-1');
+      coordinator.stopHeartbeat();
+      const participant = await ExecutionFence.follow(mastra, 'run-1', coordinator.claim);
+      if (!participant) throw new Error('expected a participant fence for the claim');
+      const lost = vi.fn();
+      participant.onLost(lost);
+      const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+      let deliver!: () => void;
+      const delivery = new Promise<void>(resolve => (deliver = resolve));
+      let renewed: boolean | undefined;
+      vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementationOnce(async args => {
+        await delivery;
+        const result = await renew(args);
+        renewed = result.renewed;
+        return result;
+      });
+
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+      if (abandonedRelease !== 'none') {
+        const release = vi.spyOn(workflowsStore, 'releaseRunOwnership');
+        if (abandonedRelease === 'rejects') release.mockRejectedValueOnce(new Error('store unavailable'));
+        else release.mockResolvedValueOnce(false);
+        const released = ExecutionFence.releaseSharedClaim(mastra, 'run-1', coordinator.claim, 'abandoned');
+        if (abandonedRelease === 'rejects') await expect(released).rejects.toThrow('store unavailable');
+        else await released;
+      }
+      expect(await coordinator.settle(async () => {})).toBe('owned');
+      expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
+        ownerId: coordinator.executionId,
+        generation: coordinator.generation,
+        leaseExpiresAt: null,
+      });
+      deliver();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(renewed).toBe(false);
+      expect(participant.isLost()).toBe(false);
+      expect(lost).not.toHaveBeenCalled();
+
+      // The participant never settled, so its next renewal still reports the loss.
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+      expect(lost).toHaveBeenCalledWith(expect.objectContaining({ id: EXECUTION_SUPERSEDED_ERROR_ID }));
+    },
+  );
+
+  // A confirmed abandoned release leaves nothing to settle the run, so a participant's failed renewal is the loss even
+  // when its response arrives before the release's own. (#30206)
+  it('marks a participant lost at once when an abandoned release answers after its failed renewal (#30206)', async () => {
+    vi.useFakeTimers();
+    const { storage, workflowsStore } = await stores();
+    const mastra = new Mastra({ storage, logger: false });
+    const coordinator = await storageClaim(workflowsStore, 'run-1');
+    coordinator.stopHeartbeat();
+    const participant = await ExecutionFence.follow(mastra, 'run-1', coordinator.claim);
+    if (!participant) throw new Error('expected a participant fence for the claim');
+    const lost = vi.fn();
+    participant.onLost(lost);
+    const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+    let deliverRenewal!: () => void;
+    const renewalDelivery = new Promise<void>(resolve => (deliverRenewal = resolve));
+    vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementationOnce(async args => {
+      await renewalDelivery;
+      return renew(args);
+    });
+    const release = workflowsStore.releaseRunOwnership.bind(workflowsStore);
+    let releasedAtStore!: () => void;
+    const atStore = new Promise<void>(resolve => (releasedAtStore = resolve));
+    let deliverRelease!: () => void;
+    const releaseDelivery = new Promise<void>(resolve => (deliverRelease = resolve));
+    vi.spyOn(workflowsStore, 'releaseRunOwnership').mockImplementationOnce(async fence => {
+      const released = await release(fence);
+      releasedAtStore();
+      await releaseDelivery;
+      return released;
+    });
+
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    const abandoned = ExecutionFence.releaseSharedClaim(mastra, 'run-1', coordinator.claim, 'abandoned');
+    await atStore;
+    deliverRenewal();
+    await vi.advanceTimersByTimeAsync(0);
+    deliverRelease();
+    await abandoned;
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(lost).toHaveBeenCalledWith(expect.objectContaining({ id: EXECUTION_SUPERSEDED_ERROR_ID }));
+  });
+
+  // A sibling's release that never answers must not stall this fence's heartbeat: a renewal that came back renewed
+  // shows the claim is still held, so the lease is extended at once and the fence keeps renewing. (#30206)
+  it('keeps renewing a participant whose claim has a release in flight that never answers (#30206)', async () => {
+    vi.useFakeTimers();
+    const { storage, workflowsStore } = await stores();
+    const mastra = new Mastra({ storage, logger: false });
+    const coordinator = await storageClaim(workflowsStore, 'run-1');
+    coordinator.stopHeartbeat();
+    const participant = await ExecutionFence.follow(mastra, 'run-1', coordinator.claim);
+    if (!participant) throw new Error('expected a participant fence for the claim');
+    const lost = vi.fn();
+    participant.onLost(lost);
+    const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+    let deliver!: () => void;
+    const delivery = new Promise<void>(resolve => (deliver = resolve));
+    let renewed: boolean | undefined;
+    vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementationOnce(async args => {
+      await delivery;
+      const result = await renew(args);
+      renewed = result.renewed;
+      return result;
+    });
+
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    vi.spyOn(workflowsStore, 'releaseRunOwnership').mockImplementationOnce(() => new Promise<boolean>(() => {}));
+    void ExecutionFence.releaseSharedClaim(mastra, 'run-1', coordinator.claim, 'settled');
+    deliver();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(renewed).toBe(true);
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS * 3);
+
+    expect(participant.isLost()).toBe(false);
+    expect(lost).not.toHaveBeenCalled();
+    expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
+      ownerId: coordinator.executionId,
+      generation: coordinator.generation,
+      live: true,
+    });
+    expect(await participant.settle(async () => {})).toBe('owned');
+  });
+
+  // The same hung release must not hide a takeover: the failed renewal waits at most one renewal interval for the
+  // release to answer, then reports the loss as a takeover. (#30206)
+  it('reports a takeover within a renewal interval while a release of the claim never answers (#30206)', async () => {
+    vi.useFakeTimers();
+    const { storage, workflowsStore } = await stores();
+    const mastra = new Mastra({ storage, logger: false });
+    const coordinator = await storageClaim(workflowsStore, 'run-1');
+    coordinator.stopHeartbeat();
+    const participant = await ExecutionFence.follow(mastra, 'run-1', coordinator.claim);
+    if (!participant) throw new Error('expected a participant fence for the claim');
+    const lost = vi.fn();
+    participant.onLost(lost);
+
+    vi.spyOn(workflowsStore, 'releaseRunOwnership').mockImplementationOnce(() => new Promise<boolean>(() => {}));
+    void ExecutionFence.releaseSharedClaim(mastra, 'run-1', coordinator.claim, 'settled');
+    const successor = await storageClaim(workflowsStore, 'run-1', 'takeover');
+    // One interval brings the failed renewal, the next one bounds the wait for the release.
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS * 2);
+
+    expect(lost).toHaveBeenCalledWith(expect.objectContaining({ id: EXECUTION_SUPERSEDED_ERROR_ID }));
+    await successor.settle(async () => {});
+  });
+
+  // The error path of the same late renewal: one sent before settle() released the claim that fails with a backend
+  // error only past the lease deadline. Before #30206 it marked the settled fence lost. (#30206)
+  it('ignores a renewal that throws past the lease deadline after the execution settled and released (#30206)', async () => {
+    vi.useFakeTimers();
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    let fail!: (error: Error) => void;
+    const blocked = new Promise<never>((_, reject) => (fail = reject));
+    vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementation(async () => blocked);
+
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    expect(await fence.settle(async () => {})).toBe('owned');
+    const lost = vi.fn();
+    fence.onLost(lost);
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS);
+    fail(new Error('connection terminated'));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(fence.isLost()).toBe(false);
+    expect(lost).not.toHaveBeenCalled();
+  });
+
   it('a released claim can be acquired again under the next generation', async () => {
     const { workflowsStore } = await stores();
     const first = await storageClaim(workflowsStore, 'run-1');
