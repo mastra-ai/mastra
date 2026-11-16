@@ -10,6 +10,7 @@ import type { SessionRowsRequest, SessionRowWire } from '../../api/types';
 import type { WorkItem } from '../../ui/domains/factory/services/workItems';
 import { useFactoryDecisionAction } from '../useFactoryDecisions';
 import { useSessionRowsQuery } from '../useSessionRows';
+import { removeCachedSession, updateCachedSessionTitle } from '../useWorkspaces';
 import { useDeleteWorkItemMutation, useTransitionWorkItemMutation, useUpdateWorkItemMutation } from '../useWorkItems';
 
 const PROJECT_ID = 'fp-1';
@@ -133,9 +134,9 @@ describe('useSessionRowsQuery', () => {
     },
     {
       change: 'its card deleted',
-      read: row => row?.itemId,
-      before: CARD_ID,
-      after: undefined,
+      read: row => row && { sessionId: row.session.sessionId, itemId: row.itemId },
+      before: { sessionId: SESSION_ID, itemId: CARD_ID },
+      after: { sessionId: SESSION_ID, itemId: undefined },
       useWrite: () => {
         const remove = useDeleteWorkItemMutation(PROJECT_ID);
         return () => remove.mutateAsync(CARD_ID);
@@ -161,12 +162,55 @@ describe('useSessionRowsQuery', () => {
         write: useWrite(),
       }));
       const row = () => read(result.current.rows.shown?.groups[0]?.rows[0]);
-      await waitFor(() => expect(row()).toBe(before));
+      await waitFor(() => expect(row()).toEqual(before));
 
       await result.current.write();
       await waitForMutationsIdle(client);
 
-      await waitFor(() => expect(row()).toBe(after));
+      await waitFor(() => expect(row()).toEqual(after));
     },
   );
+
+  it.each([
+    { edit: 'renamed', next: 'loading' },
+    { edit: 'renamed', next: 'failed' },
+    { edit: 'deleted', next: 'loading' },
+    { edit: 'deleted', next: 'failed' },
+  ] as const)('shows a session $edit while the rows of a new sort are $next', async ({ edit, next }) => {
+    serveProject({});
+    let releaseNextRead = () => {};
+    const nextRead = new Promise<void>(resolve => {
+      releaseNextRead = resolve;
+    });
+    let nextRequested = false;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/session-rows`, async ({ request }) => {
+        if (new URL(request.url).searchParams.get('sort') !== 'updated') return undefined;
+        nextRequested = true;
+        if (next === 'failed') return HttpResponse.json({ error: 'Service unavailable' }, { status: 503 });
+        await nextRead;
+        return undefined;
+      }),
+    );
+    const { result, client, rerender } = renderHookWithProviders(
+      ({ request }: { request: SessionRowsRequest }) => {
+        const { read, shown } = useSessionRowsQuery(PROJECT_ID, request);
+        return { shown, failed: read.isError };
+      },
+      { initialProps: { request: VIEW } },
+    );
+    const shownRows = () => result.current.shown?.groups.flatMap(group => group.rows) ?? [];
+    await waitFor(() => expect(shownRows().map(row => row.session.title)).toEqual(['Build fix login']));
+
+    rerender({ request: { ...VIEW, sort: 'updated' } });
+    await waitFor(() => expect(nextRequested).toBe(true));
+    if (next === 'failed') await waitFor(() => expect(result.current.failed).toBe(true));
+    if (edit === 'renamed') await updateCachedSessionTitle(client, PROJECT_ID, SESSION_ID, 'Fix sign-in');
+    else removeCachedSession(client, PROJECT_ID, SESSION_ID);
+
+    await waitFor(() =>
+      expect(shownRows().map(row => row.session.title)).toEqual(edit === 'renamed' ? ['Fix sign-in'] : []),
+    );
+    releaseNextRead();
+  });
 });

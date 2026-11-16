@@ -1,4 +1,4 @@
-import { queryOptions, skipToken, useQuery } from '@tanstack/react-query';
+import { hashKey, queryOptions, skipToken, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { useApiConfig } from '../api/config';
@@ -34,12 +34,16 @@ export function sessionActivityQueryOptions(baseUrl: string, factoryProjectId: s
 
 export function useSessionRowsQuery(factoryProjectId: string | undefined, request: SessionRowsRequest) {
   const { baseUrl } = useApiConfig();
-  const read = useQuery(sessionRowsQueryOptions(baseUrl, factoryProjectId, request));
-  const layout = { factoryProjectId, groupBy: request.groupBy };
-  const [lastRead, setLastRead] = useState({ ...layout, rows: read.data });
-  if (read.data && read.data !== lastRead.rows) setLastRead({ ...layout, rows: read.data });
-  const sameLayout = lastRead.factoryProjectId === factoryProjectId && lastRead.groupBy === request.groupBy;
-  return { read, shown: read.data ?? (sameLayout ? lastRead.rows : undefined) };
+  const options = sessionRowsQueryOptions(baseUrl, factoryProjectId, request);
+  const read = useQuery(options);
+  const [lastRead, setLastRead] = useState({ factoryProjectId, request });
+  const retainedOptions = sessionRowsQueryOptions(baseUrl, lastRead.factoryProjectId, lastRead.request);
+  if (read.data && hashKey(options.queryKey) !== hashKey(retainedOptions.queryKey)) {
+    setLastRead({ factoryProjectId, request });
+  }
+  const retained = useQuery({ ...retainedOptions, enabled: false });
+  const sameLayout = lastRead.factoryProjectId === factoryProjectId && lastRead.request.groupBy === request.groupBy;
+  return { read, shown: read.data ?? (sameLayout ? retained.data : undefined) };
 }
 
 export function useSessionActivityQuery(factoryProjectId: string | undefined) {
