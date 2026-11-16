@@ -1,0 +1,97 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { TooltipProvider } from '../Tooltip';
+import { CopyField } from './copy-field';
+
+const ORG_ID = 'org_01KJGEY548CS1D3VYS5YY27PGS';
+const CHAR_WIDTH = 8;
+
+/** jsdom has no layout: give every box a width, `CHAR_WIDTH` per character, and the field `room` px. */
+function layoutWith(room: number) {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    const width = this.classList.contains('grid') ? room : (this.textContent ?? '').length * CHAR_WIDTH;
+    return { width, height: 20, top: 0, left: 0, right: width, bottom: 20, x: 0, y: 0, toJSON() {} };
+  });
+}
+
+function renderField() {
+  return render(
+    <TooltipProvider>
+      <CopyField value={ORG_ID} label="organization ID" />
+    </TooltipProvider>,
+  );
+}
+
+beforeEach(() => {
+  Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+});
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+describe('CopyField', () => {
+  describe('when the value fits', () => {
+    it('shows it whole, named by its label', () => {
+      layoutWith(400);
+      renderField();
+
+      expect(screen.getByRole('group', { name: 'organization ID' }).textContent).toContain(ORG_ID);
+      expect(screen.queryByText(/…/)).toBeNull();
+    });
+  });
+
+  describe('when the value is too long for the field', () => {
+    it('keeps its start and its last six characters around an ellipsis, filling the room', () => {
+      layoutWith(20 * CHAR_WIDTH);
+      renderField();
+
+      // 20 characters of room: 13 from the start, the ellipsis, and the 6-character tail.
+      expect(screen.getByText('org_01KJGEY54…Y27PGS')).toBeTruthy();
+    });
+
+    it('still gives screen readers the whole value', () => {
+      layoutWith(20 * CHAR_WIDTH);
+      renderField();
+
+      expect(screen.getByRole('group', { name: 'organization ID' }).textContent).toContain(ORG_ID);
+    });
+
+    it('copies the whole value, not the ellipsis, when someone selects the text and copies it', () => {
+      layoutWith(20 * CHAR_WIDTH);
+      renderField();
+      const setData = vi.fn();
+
+      fireEvent.copy(screen.getByText('org_01KJGEY54…Y27PGS'), { clipboardData: { setData } });
+
+      expect(setData).toHaveBeenCalledWith('text/plain', ORG_ID);
+    });
+  });
+
+  describe('when someone presses the copy button', () => {
+    it('copies the whole value and shows it was copied in place, without a toast', async () => {
+      layoutWith(20 * CHAR_WIDTH);
+      renderField();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Copy organization ID' }));
+
+      await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(ORG_ID));
+      expect(await screen.findByRole('button', { name: 'Copied!' })).toBeTruthy();
+      expect(document.querySelector('[data-sonner-toast]')).toBeNull();
+    });
+  });
+
+  it('disables its copy button with the field', () => {
+    layoutWith(400);
+    render(
+      <TooltipProvider>
+        <CopyField value={ORG_ID} label="organization ID" disabled />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Copy organization ID' }).disabled).toBe(true);
+  });
+});

@@ -34,9 +34,9 @@ describe('AccountSettingsSection', () => {
       expect(await screen.findByText('Dev')).toBeInTheDocument();
       expect(screen.getByText('dev@mastra.ai')).toBeInTheDocument();
       expect(screen.getByText('WorkOS')).toBeInTheDocument();
-      expect(screen.getByRole('textbox', { name: 'account ID' })).toHaveValue('user-1');
+      expect(screen.getByRole('group', { name: 'account ID' })).toHaveTextContent('user-1');
       expect(screen.getByRole('button', { name: 'Copy account ID' })).toBeInTheDocument();
-      expect(screen.getByRole('textbox', { name: 'organization ID' })).toHaveValue('org-1');
+      expect(screen.getByRole('group', { name: 'organization ID' })).toHaveTextContent('org-1');
       expect(screen.getByRole('button', { name: 'Copy organization ID' })).toBeInTheDocument();
     });
 

@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { CopyInput } from '@mastra/playground-ui/components/CopyInput';
+import { CopyField } from '@mastra/playground-ui/components/CopyField';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useApiConfig } from '../../../../api/config';
@@ -88,12 +88,12 @@ export function AccountSettingsSection() {
           </SettingsRow>
           {user?.userId && (
             <SettingsRow label="Account ID" description="Useful when contacting support.">
-              <CopyInput value={user.userId} label="account ID" />
+              <CopyField value={user.userId} label="account ID" />
             </SettingsRow>
           )}
           {user?.organizationId && (
             <SettingsRow label="Organization ID" description="The organization that owns this Factory.">
-              <CopyInput value={user.organizationId} label="organization ID" />
+              <CopyField value={user.organizationId} label="organization ID" />
             </SettingsRow>
           )}
         </SettingsContainer>
