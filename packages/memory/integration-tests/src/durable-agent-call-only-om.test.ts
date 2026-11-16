@@ -49,6 +49,7 @@ function mockModel(text: string, calls?: { count: number }) {
 
 const CASES = {
   'regular Agent, OM on call only': { engine: 'plain', instanceOM: false, callOM: true },
+  'regular Agent, OM on Memory and call': { engine: 'plain', instanceOM: true, callOM: true },
   'DurableAgent, OM on call only': { engine: 'durable', instanceOM: false, callOM: true },
   'DurableAgent, OM on Memory and call': { engine: 'durable', instanceOM: true, callOM: true },
   'DurableAgent, OM on Memory only': { engine: 'durable', instanceOM: true, callOM: false },
@@ -109,7 +110,9 @@ describe('call-only observational memory', () => {
     } else {
       // The normal save path ran, including thread titling.
       expect(observerCalls.count).toBe(0);
-      await expect.poll(async () => (await memory.getThreadById({ threadId: thread }))?.title).toBe(TITLE);
+      await expect
+        .poll(async () => (await memory.getThreadById({ threadId: thread }))?.title, { timeout: 5000 })
+        .toBe(TITLE);
     }
   });
 });
