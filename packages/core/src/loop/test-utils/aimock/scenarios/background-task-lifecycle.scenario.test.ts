@@ -1,8 +1,12 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { createOpenAI } from '@ai-sdk/openai-v5';
-import { it, expect, vi } from 'vitest';
+import { it, expect, onTestFinished, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../../../agent';
+import { agentThreadStreamRuntime } from '../../../../agent/thread-stream-runtime';
 import { MockMemory } from '../../../../memory/mock';
 import { RequestContext } from '../../../../request-context';
 import { createTool } from '../../../../tools';
@@ -15,6 +19,8 @@ import {
   isDurableEngineVariant,
 } from '../aimock-scenario';
 import { BackgroundTaskManager } from '../../../../background-tasks/manager';
+import type { PubSub } from '../../../../events/pubsub';
+import { UnixSocketPubSub } from '../../../../events/unix-socket-pubsub';
 import type { Mastra } from '../../../../mastra';
 import { SCENARIO_MODEL_ID } from '../types';
 
@@ -870,21 +876,41 @@ describeForAllEngines(
     );
 
     // Starts the deferred research tool, lets the run finish and release its claim, and holds
-    // the run's memory fence retirement open, as slow storage would, until `finishCleanup`.
-    async function startResearchDuringCleanup(threadId: string) {
+    // one cleanup step after the release open, as slow storage would, until `finishCleanup`:
+    // retiring the run's memory fence, or releasing the thread's lease (evented, with a shared
+    // `pubsub`). `cleanedUp` resolves once the held step has finished.
+    async function startResearchDuringCleanup(
+      threadId: string,
+      { hold = 'memory-fence', pubsub }: { hold?: 'memory-fence' | 'thread-lease'; pubsub?: PubSub } = {},
+    ) {
       let release!: () => void;
       const gate = new Promise<void>(resolve => (release = resolve));
       let finishCleanup!: () => void;
       const cleanupGate = new Promise<void>(resolve => (finishCleanup = resolve));
+      let signalCleanedUp!: () => void;
+      const cleanedUp = new Promise<void>(resolve => (signalCleanedUp = resolve));
       const memory = new MockMemory();
       const memoryStore = (await memory.storage.getStore('memory'))!;
-      const retireRunFence = memoryStore.retireRunFence.bind(memoryStore);
       let retiring = false;
-      vi.spyOn(memoryStore, 'retireRunFence').mockImplementation(async fence => {
+      const holdOpen = async <T>(step: () => Promise<T>): Promise<T> => {
         retiring = true;
         await cleanupGate;
-        return retireRunFence(fence);
-      });
+        try {
+          return await step();
+        } finally {
+          signalCleanedUp();
+        }
+      };
+      if (hold === 'memory-fence') {
+        const retireRunFence = memoryStore.retireRunFence.bind(memoryStore);
+        vi.spyOn(memoryStore, 'retireRunFence').mockImplementation(fence => holdOpen(() => retireRunFence(fence)));
+      } else {
+        const releaseLease = agentThreadStreamRuntime.releaseDurableThreadLease.bind(agentThreadStreamRuntime);
+        const spy = vi
+          .spyOn(agentThreadStreamRuntime, 'releaseDurableThreadLease')
+          .mockImplementation((...args) => holdOpen(() => releaseLease(...args)));
+        onTestFinished(() => spy.mockRestore());
+      }
       const thread = { threadId, resourceId: `${threadId}-user` };
       const { chunks, mastra, output } = await runLoopScenario({
         engine,
@@ -895,6 +921,7 @@ describeForAllEngines(
         backgroundTasks: BG_CONFIG,
         memory,
         ...thread,
+        ...(pubsub ? { pubsub } : {}),
         stopWhen: stepCountIs(3),
         collectChunks: true,
         fixtures: llm =>
@@ -919,7 +946,17 @@ describeForAllEngines(
           () => mastra.backgroundTaskManager!.getTask(started.payload.taskId as string),
           (t: any) => t?.status !== 'pending' && t?.status !== 'running',
         )) as any;
-      return { memory, thread, workflows, runId: started.runId, release, finishCleanup, settledTask };
+      return {
+        memory,
+        memoryStore,
+        thread,
+        workflows,
+        runId: started.runId,
+        release,
+        finishCleanup,
+        cleanedUp,
+        settledTask,
+      };
     }
 
     // Technical: a finished run releases its claim, then retires its memory fence. Until that
@@ -990,6 +1027,115 @@ describeForAllEngines(
           });
         } finally {
           run.finishCleanup();
+        }
+      },
+      30_000,
+    );
+
+    // Technical: the late suspend's ownership check passes while no successor exists, but its
+    // memory save can reach storage later. A finished run stops fencing its own writes once it
+    // settles, so the save went through unfenced: a successor that claimed the run and raised the
+    // memory fence in between found the old execution's suspension in memory and the task parked.
+    // The save now carries the finished run's claim, and storage rejects it. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      "doesn't park a deferred tool whose suspension reaches storage after another execution took over (#30182)",
+      async () => {
+        const run = await startResearchDuringCleanup('bg-suspend-slow-save-takeover-thread');
+        let signalSaveStarted!: () => void;
+        const saveStarted = new Promise<void>(resolve => (signalSaveStarted = resolve));
+        let finishSave!: () => void;
+        const saveGate = new Promise<void>(resolve => (finishSave = resolve));
+        const saveMessages = run.memoryStore.saveMessages.bind(run.memoryStore);
+        vi.spyOn(run.memoryStore, 'saveMessages').mockImplementation(async args => {
+          signalSaveStarted();
+          await saveGate;
+          return saveMessages(args);
+        });
+        try {
+          run.release();
+          // The suspension passed its ownership check; its save is on the way to storage.
+          await saveStarted;
+          // The finished run completes its cleanup. Then a successor claims the run and raises
+          // the memory fence, as recovery or a new turn does before it touches memory.
+          run.finishCleanup();
+          await run.cleanedUp;
+          const released = await run.workflows.getRunOwnership({ runId: run.runId });
+          const successor = await run.workflows.claimRunOwnership({
+            runId: run.runId,
+            ownerId: 'successor-execution',
+            leaseMs: 60_000,
+            expectedGeneration: released!.generation,
+          });
+          expect(successor.acquired).toBe(true);
+          const successorFence = {
+            runId: run.runId,
+            generation: successor.record!.generation,
+            ownerId: successor.record!.ownerId,
+          };
+          expect(await run.memoryStore.raiseRunFence(successorFence)).toBe(true);
+          finishSave();
+
+          const settled = await run.settledTask();
+          expect({ status: settled.status, error: settled.error?.message }).toEqual({
+            status: 'failed',
+            // STORAGE_RUN_FENCE_CONFLICT
+            error: expect.stringContaining("is no longer the run's current claim"),
+          });
+          expect(settled.suspendPayload).toBeUndefined();
+          expect((await storedToolCall(run.memory, run.thread)).suspended).toBeUndefined();
+          const after = await run.workflows.getRunOwnership({ runId: run.runId });
+          expect({ ownerId: after?.ownerId, generation: after?.generation, live: after?.live }).toEqual({
+            ownerId: 'successor-execution',
+            generation: successor.record!.generation,
+            live: true,
+          });
+        } finally {
+          finishSave();
+          run.finishCleanup();
+        }
+      },
+      30_000,
+    );
+
+    // Technical: on a shared transport, an evented run's worker releases the run's claim, then
+    // the thread's lease, and only then stops its participant fence. Until the lease release
+    // returns, that fence stays registered, and the late suspend's check asked it to prove it
+    // still held the claim it had just released, so the task failed with
+    // DURABLE_AGENT_EXECUTION_SUPERSEDED though nobody took over. (#30182)
+    it.runIf(engine === 'evented')(
+      'parks a deferred tool that asks for input while a shared evented run is still releasing its thread (#30182)',
+      async () => {
+        const directory = await mkdtemp(join(tmpdir(), 'mastra-30182-'));
+        const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+        const run = await startResearchDuringCleanup('bg-suspend-during-lease-release-thread', {
+          hold: 'thread-lease',
+          pubsub,
+        });
+        const released = await run.workflows.getRunOwnership({ runId: run.runId });
+        run.release();
+        try {
+          const parked = await run.settledTask();
+          expect({ status: parked.status, error: parked.error?.message }).toEqual({
+            status: 'suspended',
+            error: undefined,
+          });
+          expect(parked.suspendPayload).toEqual({ awaiting: 'analyst-approval', topic: 'near' });
+          const open = await waitFor(
+            () => storedToolCall(run.memory, run.thread),
+            s => s.suspended?.taskId !== undefined,
+          );
+          expect(open.suspended).toMatchObject({ taskId: parked.id });
+          const after = await run.workflows.getRunOwnership({ runId: run.runId });
+          expect({ ownerId: after?.ownerId, generation: after?.generation, live: after?.live }).toEqual({
+            ownerId: released?.ownerId,
+            generation: released?.generation,
+            live: false,
+          });
+        } finally {
+          run.finishCleanup();
+          await run.cleanedUp;
+          await pubsub.close();
+          await rm(directory, { recursive: true, force: true });
         }
       },
       30_000,

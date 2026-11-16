@@ -38,7 +38,7 @@ import { MASTRA_DURABLE_EXECUTIONS_KEY } from '../request-context-snapshot';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { ExecutionOwnershipGuard } from './execution-ownership-guard';
-import { runInRunFenceScope } from './run-fence-scope';
+import { currentRunFenceScope, runInRunFenceScope } from './run-fence-scope';
 import { getRunRegistryEntry } from './run-registry';
 
 /** Execution lease timing follows the agent thread lease (`MASTRA_AGENT_THREAD_LEASE_TTL_MS`). */
@@ -692,7 +692,12 @@ export class ExecutionFence implements RunFenceScope {
   static async releaseSharedClaim(mastra: Mastra, runId: string, claim: DurableExecutionClaim): Promise<void> {
     if (!claim.agentId) return;
     const backend = await resolveRemoteBackend(mastra, claim.agentId, runId, claim);
-    await backend?.release(claim);
+    if (!backend) return;
+    await backend.release(claim);
+    // This worker's participant fence stays registered until its cleanup stops it. Late writes
+    // checked against it meanwhile get the post-release rule of {@link verifyNotSuperseded}.
+    const participant = mastra.__getRunScope(runId)?.get(DURABLE_PARTICIPANT_FENCES)?.get(claim.executionId);
+    if (participant) participant.#released = true;
   }
 
   /** Join an existing claim without acquiring ownership or advancing its generation. */
@@ -1339,6 +1344,41 @@ export async function assertExecutionNotSuperseded(args: {
   if (await retryOnce(() => backend.isSuperseded(claim), details)) {
     throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, details);
   }
+}
+
+/**
+ * Run `fn` with its writes to `memoryStore` carrying the memory fence of the
+ * claim `requestContext` holds for `runId`, also once that execution settled
+ * and stopped fencing its own writes. For writes that may land after the run
+ * finished, such as a background task's suspension: an ownership check before
+ * the write can't see a successor that claims the run while the write is on
+ * its way, but storage rejects the write once that successor raised the memory
+ * fence. Runs `fn` unchanged when the claim never raised memory (lease-backed
+ * claims, memory stores without run fencing). Other writes keep the fence of
+ * the enclosing scope.
+ */
+export async function runFencedToClaim<T>(
+  args: {
+    requestContext: RequestContext | undefined;
+    runId: string;
+    /** Resolves the memory store the claim raised; called only when it raised one. */
+    memoryStore: () => Promise<object | undefined>;
+  },
+  fn: () => Promise<T>,
+): Promise<T> {
+  const fence = getRunFence(args.requestContext, args.runId, 'memory');
+  const memoryStore = fence && (await args.memoryStore());
+  if (!fence || !memoryStore) return fn();
+  const outer = currentRunFenceScope();
+  return runInRunFenceScope(
+    {
+      fenceFor: (store, runId) => (store === memoryStore ? fence : outer?.fenceFor(store, runId)),
+      onConflict: conflict => outer?.onConflict?.(conflict),
+      coverNestedRun: (parentRunId, nestedRunId) => outer?.coverNestedRun?.(parentRunId, nestedRunId),
+      generationFor: runId => outer?.generationFor?.(runId),
+    },
+    fn,
+  );
 }
 
 const OWNERSHIP_GUARD = Symbol('durable-execution-ownership-guard');

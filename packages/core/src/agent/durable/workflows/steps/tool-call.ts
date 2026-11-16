@@ -70,6 +70,7 @@ import {
   assertExecutionOwned,
   getExecutionOwnershipGuard,
   isExecutionFenceError,
+  runFencedToClaim,
 } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { clearResumeInFlight, getRunRegistryEntry, globalRunRegistry, markRunActive } from '../../run-registry';
@@ -1852,7 +1853,13 @@ export function createDurableToolCallStep() {
                     // suspension state (#23739) — never the model-authored one.
                     suspendedToolRunId: taskContext?.suspendedToolRunId,
                     suspend: async (data?: unknown, options?: SuspendOptions) => {
-                      await suspendToolCall(data, options, assertNotSuperseded);
+                      // The run may have settled and stopped fencing its writes. The suspension's
+                      // memory save carries the run's claim, so storage rejects it once a successor
+                      // raised the memory fence, even when it lands after the ownership check (#30182).
+                      await runFencedToClaim(
+                        { requestContext, runId, memoryStore: async () => memory?.storage.getStore('memory') },
+                        () => suspendToolCall(data, options, assertNotSuperseded),
+                      );
                       return taskContext?.suspend?.(data, options);
                     },
                     outputWriter: async (chunk: any) => {

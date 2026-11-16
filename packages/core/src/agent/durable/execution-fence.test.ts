@@ -1194,6 +1194,102 @@ describe('storage-backed ExecutionFence', () => {
   });
 });
 
+// A background task can write after its run settled: `verifyNotSuperseded` is the check for those
+// writes. Before settlement releases the claim it is `verify`; after, it only refuses once another
+// execution claimed the run (#30182).
+describe.each([
+  {
+    backend: 'storage',
+    async setup() {
+      const storage = new InMemoryStore();
+      const workflowsStore = (await storage.getStore('workflows')) as WorkflowsStorage;
+      const fence = await ExecutionFence.claim({
+        leaseProvider: NoopLeaseProvider,
+        workflowsStore,
+        agentId,
+        runId: 'run-1',
+        mode: 'acquire',
+      });
+      const own = { runId: 'run-1', generation: fence.generation!, ownerId: fence.executionId };
+      return {
+        fence,
+        dropClaim: async () => void (await workflowsStore.releaseRunOwnership(own)),
+        claimSuccessor: async () =>
+          void (await workflowsStore.claimRunOwnership({ runId: 'run-1', ownerId: 'successor', leaseMs: 60_000 })),
+        takeOver: async () =>
+          void (await workflowsStore.claimRunOwnership({
+            runId: 'run-1',
+            ownerId: 'successor',
+            leaseMs: 60_000,
+            force: true,
+          })),
+        failNextRelease: () =>
+          vi.spyOn(workflowsStore, 'releaseRunOwnership').mockRejectedValueOnce(new Error('store down')),
+      };
+    },
+  },
+  {
+    backend: 'lease',
+    async setup() {
+      const pubsub = new EventEmitterPubSub();
+      const fence = await claim(pubsub, 'run-1');
+      return {
+        fence,
+        dropClaim: () => pubsub.releaseLease(key('run-1'), fence.executionId),
+        claimSuccessor: async () => void (await pubsub.acquireLease(key('run-1'), 'successor', EXECUTION_LEASE_TTL_MS)),
+        takeOver: async () =>
+          void (await pubsub.transferLease(key('run-1'), fence.executionId, 'successor', EXECUTION_LEASE_TTL_MS)),
+        failNextRelease: () => vi.spyOn(pubsub, 'releaseLease').mockRejectedValueOnce(new Error('redis down')),
+      };
+    },
+  },
+])('ExecutionFence.verifyNotSuperseded ($backend)', ({ setup }) => {
+  it('before settlement, is verify: passes while owned, and refuses a claim that is gone though nobody took it', async () => {
+    const { fence, dropClaim } = await setup();
+    await expect(fence.verifyNotSuperseded()).resolves.toBeUndefined();
+
+    await dropClaim();
+    await expect(fence.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+    expect(fence.isLost()).toBe(true);
+  });
+
+  it('after settlement released the claim, passes while no other execution claimed the run', async () => {
+    const { fence } = await setup();
+    expect(await fence.settle(async () => {})).toBe('owned');
+
+    await expect(fence.verify()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+    await expect(fence.verifyNotSuperseded()).resolves.toBeUndefined();
+  });
+
+  it('after settlement released the claim, refuses once another execution claimed the run', async () => {
+    const { fence, claimSuccessor } = await setup();
+    expect(await fence.settle(async () => {})).toBe('owned');
+
+    await claimSuccessor();
+    await expect(fence.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+  });
+
+  it('stays strict when settlement failed to release the claim', async () => {
+    const { fence, dropClaim, failNextRelease } = await setup();
+    failNextRelease();
+    expect(await fence.settle(async () => {})).toBe('owned');
+    // The claim is still held, so the check passes as verify would.
+    await expect(fence.verifyNotSuperseded()).resolves.toBeUndefined();
+
+    // The unreleased claim lapses with nobody taking the run: verify's rule, not the post-release one.
+    await dropClaim();
+    await expect(fence.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+  });
+
+  it('refuses after settling as superseded', async () => {
+    const { fence, takeOver } = await setup();
+    await takeOver();
+    expect(await fence.settle(async () => {})).toBe('superseded');
+
+    await expect(fence.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+  });
+});
+
 describe('execution claim carrier', () => {
   it('round-trips the claim and drops malformed entries', () => {
     const requestContext = new RequestContext();
