@@ -29,6 +29,10 @@ import { MockStore } from '../../../storage/mock';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
+import { DurableAgent } from '../durable-agent';
+import { EventedAgent } from '../evented-agent';
+import type { ExecutionFence } from '../execution-fence';
+import type { DurableAgenticWorkflowInput } from '../types';
 
 /**
  * Installs a capturing logger that survives Mastra's `__setLogger`, which would
@@ -53,6 +57,79 @@ function buildEventedAgent(id: string) {
     }),
   });
 }
+
+describe('Durable workflow subclass dispatch', () => {
+  it.each([
+    ['durable-default', DurableAgent, 'default', 'success'],
+    ['durable-evented', DurableAgent, 'evented', 'success'],
+    ['evented-default', EventedAgent, 'default', undefined],
+    ['evented-evented', EventedAgent, 'evented', undefined],
+  ] as const)(
+    'preserves %s subclass super calls and late workflow patches',
+    async (kind, Base, strategy, expectedStatus) => {
+      class CustomAgent extends Base {
+        executionStatuses: (string | undefined)[] = [];
+        settledRuns: string[] = [];
+        deletedRuns: string[] = [];
+
+        protected override async settleExecution(
+          runId: string,
+          fence: ExecutionFence | undefined,
+          outcome: { status?: string; error?: Error },
+        ): Promise<void> {
+          await super.settleExecution(runId, fence, outcome);
+          this.settledRuns.push(runId);
+        }
+
+        protected override async deleteRunSnapshots(runId: string): Promise<void> {
+          await super.deleteRunSnapshots(runId);
+          this.deletedRuns.push(runId);
+        }
+
+        protected override get workflowEngine(): 'default' | 'evented' {
+          return strategy;
+        }
+
+        protected override async executeWorkflow(runId: string, input: DurableAgenticWorkflowInput) {
+          const result = await super.executeWorkflow(runId, input);
+          this.executionStatuses.push(result?.status);
+          return result;
+        }
+      }
+
+      const agent = new CustomAgent({
+        agent: new Agent({
+          id: `subclass-${kind}`,
+          name: `subclass-${kind}`,
+          instructions: 'Say hello',
+          model: createTextStreamModel('hello'),
+        }),
+      });
+      const storage = new MockStore();
+      vi.spyOn(storage.stores.workflows, 'supportsConcurrentUpdates').mockReturnValue(false);
+      const mastra = new Mastra({ storage, agents: { agent }, logger: false });
+      // Registration has already created the workflow. Execution must still call
+      // the current Agent method rather than retain an earlier bound function.
+      const getWorkflow = vi.spyOn(agent, 'getWorkflow');
+      try {
+        const { output, cleanup } = await agent.stream('Hi');
+        try {
+          await output.consumeStream();
+          expect(await output.text).toBe('hello');
+        } finally {
+          await cleanup();
+        }
+        await expect.poll(() => agent.executionStatuses).toEqual([expectedStatus]);
+        await expect.poll(() => agent.settledRuns).toHaveLength(1);
+        expect(agent.deletedRuns).toEqual(agent.settledRuns);
+        expect(getWorkflow).toHaveBeenCalled();
+      } finally {
+        getWorkflow.mockRestore();
+        await mastra.shutdown();
+      }
+    },
+  );
+});
 
 describe('EventedAgent on storage without atomic concurrent updates', () => {
   it.each(['sync', 'async'] as const)(
