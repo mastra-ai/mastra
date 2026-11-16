@@ -251,7 +251,7 @@ export function knowledgePagesResetMessage(reason: string): string {
  */
 export class KnowledgeInvalidCursorError extends Error {
   constructor(readonly cursor: string) {
-    super(`Invalid Knowledge cursor: ${cursor}`);
+    super('Invalid Knowledge cursor: this store did not issue it');
     this.name = 'KnowledgeInvalidCursorError';
   }
 }
