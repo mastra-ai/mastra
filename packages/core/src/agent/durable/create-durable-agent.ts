@@ -105,6 +105,12 @@ export interface CreateDurableAgentOptions<
  * execution to an agent. The `durable` option on `AgentConfig` only configures
  * resumable streams and never wraps the agent.
  *
+ * Wrapping does not change the wrapped Agent's direct runs, including runs already
+ * in flight. Without explicit stream settings, the wrapper shares the Agent's
+ * stream bus; pubsub, cache, cleanupTimeoutMs, and shouldCache overrides apply
+ * only to the wrapper's runs. Evented wrapper runs use Mastra's shared run log
+ * without changing the wrapped Agent's native stream routing.
+ *
  * @param options - Configuration options
  * @returns A DurableAgent instance
  *
