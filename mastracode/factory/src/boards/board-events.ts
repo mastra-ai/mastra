@@ -23,21 +23,31 @@ export const STATUS_EVENTS = [
 export type StatusEvent = (typeof STATUS_EVENTS)[number];
 
 /**
- * Old names, read as the new ones. Stored routes are never rewritten, so reading them stays
- * permanent; the API accepts the old name as input for one release only.
+ * The event routes placed new cards on before issues and pull requests had events of their own: an
+ * issue or a pull request with no card opened. It never fires and never moves a card. A stored
+ * route naming it, or naming no event, keeps filing both for good, and the API keeps accepting and
+ * returning it, so editing such a route never narrows it.
  */
-const LEGACY_STATUS_EVENTS: Readonly<Record<string, StatusEvent>> = { 'work_item.created': 'work_item.opened' };
+export const LEGACY_ARRIVAL_EVENT = 'work_item.created';
 
-/** The event's current name: `work_item.created` reads as `work_item.opened`; anything else is unchanged. */
-export function canonicalStatusEvent(name: StatusEvent): StatusEvent;
-export function canonicalStatusEvent(name: string): string;
-export function canonicalStatusEvent(name: string): string {
-  return LEGACY_STATUS_EVENTS[name] ?? name;
+/** What a route's `on` may name: the status events, and the legacy arrival event. */
+export const ROUTE_EVENTS = [...STATUS_EVENTS, LEGACY_ARRIVAL_EVENT] as const;
+export type RouteEvent = (typeof ROUTE_EVENTS)[number];
+
+/** What an arrival is: an issue (any provider's work item) or a pull request with no card. */
+export type ArrivalKind = 'issue' | 'pull_request';
+
+/** The kind of an arrival, read from its `source.kind` fact. */
+export function arrivalKind(facts: Record<string, unknown>): ArrivalKind {
+  return facts['source.kind'] === 'pull_request' ? 'pull_request' : 'issue';
 }
 
-/** Whether `name` is a status event under its current or legacy name. */
-export function isStatusEventName(name: string): boolean {
-  return isStatusEvent(canonicalStatusEvent(name));
+/** The arrivals a route's `on` files: issues on `work_item.opened`, pull requests on `pull_request.opened`, both on `work_item.created`. */
+export function arrivalKinds(on: readonly string[]): Set<ArrivalKind> {
+  const kinds = new Set<ArrivalKind>();
+  if (on.includes('work_item.opened') || on.includes(LEGACY_ARRIVAL_EVENT)) kinds.add('issue');
+  if (on.includes('pull_request.opened') || on.includes(LEGACY_ARRIVAL_EVENT)) kinds.add('pull_request');
+  return kinds;
 }
 
 /** Labels or assignees an update added and removed. */
@@ -195,8 +205,8 @@ export function closeReason(canceled: boolean): CloseReason {
   return canceled ? 'canceled' : 'completed';
 }
 
-/** What a route without `on` handles: placing new cards, as routes always have. */
-export const DEFAULT_ROUTE_EVENTS: readonly StatusEvent[] = ['work_item.opened'];
+/** What a route without `on` handles: placing new cards, issues and pull requests alike, as routes always have. */
+export const DEFAULT_ROUTE_EVENTS: readonly RouteEvent[] = [LEGACY_ARRIVAL_EVENT];
 
 /** What an update changed: only update events carry these. */
 export const CHANGE_RULE_FIELDS = [
@@ -254,6 +264,15 @@ function isStatusEvent(value: string): value is StatusEvent {
   return (STATUS_EVENTS as readonly string[]).includes(value);
 }
 
+function isRouteEvent(value: string): value is RouteEvent {
+  return (ROUTE_EVENTS as readonly string[]).includes(value);
+}
+
+/** Events that only file new cards, so carry no event facts: `pull_request.opened` also moves cards. */
+function onlyFilesNewCards(event: string): boolean {
+  return event === 'work_item.opened' || event === LEGACY_ARRIVAL_EVENT;
+}
+
 function namesField(group: RuleGroup, fields: readonly string[]): boolean {
   return group.conditions.some(condition =>
     'conditions' in condition ? namesField(condition, fields) : fields.includes(condition.field),
@@ -268,18 +287,17 @@ function namesField(group: RuleGroup, fields: readonly string[]): boolean {
  */
 export function routeEventsProblem(on: readonly string[], when: RuleGroup | null): string | null {
   if (on.length === 0) return '`on` must name at least one event.';
-  on = on.map(canonicalStatusEvent);
   if (new Set(on).size !== on.length) return '`on` may name each event only once.';
   for (const event of on) {
     if ((ACTIVITY_EVENTS as readonly string[]).includes(event)) {
       return `"${event}" is activity, not a status change: it notifies the card's session and can't move a card, so a route can't name it.`;
     }
-    if (!isStatusEvent(event)) return `"${event}" is not a board event; use one of ${STATUS_EVENTS.join(', ')}.`;
+    if (!isRouteEvent(event)) return `"${event}" is not a board event; use one of ${STATUS_EVENTS.join(', ')}.`;
   }
-  if (when && on.every(event => event === 'work_item.opened') && namesField(when, EVENT_RULE_FIELDS)) {
+  if (when && on.every(onlyFilesNewCards) && namesField(when, EVENT_RULE_FIELDS)) {
     return '`event.*` filters only apply to routes that handle an event besides work_item.opened.';
   }
-  if (when && on.every(event => event === 'work_item.opened') && namesField(when, CARD_MOVE_RULE_FIELDS)) {
+  if (when && on.every(onlyFilesNewCards) && namesField(when, CARD_MOVE_RULE_FIELDS)) {
     return '`card.phase` only applies to routes that move an existing card: a new item has no card yet.';
   }
   if (when && !on.some(isUpdateEvent) && namesField(when, CHANGE_RULE_FIELDS)) {

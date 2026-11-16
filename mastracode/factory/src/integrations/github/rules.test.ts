@@ -4313,7 +4313,7 @@ describe('GithubRules issue labels', () => {
     };
   }
 
-  it("hands a pull request's label and assignee changes to its own card as work_item.updated", async () => {
+  it("hands a pull request's label and assignee changes to its own card as pull_request.updated", async () => {
     const { service, workItems, project } = await setupRoutes();
     const own = (
       await workItems.upsert({
@@ -4355,8 +4355,9 @@ describe('GithubRules issue labels', () => {
       .filter(entry => entry.decision.type === 'routeEvent')
       .map(entry => entry.decision.event);
     expect(events).toEqual([
-      { type: 'work_item.updated', labels: { added: ['ready'], removed: [] } },
-      { type: 'work_item.updated', assignees: { added: [], removed: ['ada'] } },
+      // A pull request's own events are pull_request.*, whether it has a card of its own or not.
+      { type: 'pull_request.updated', labels: { added: ['ready'], removed: [] } },
+      { type: 'pull_request.updated', assignees: { added: [], removed: ['ada'] } },
     ]);
   });
 
@@ -4381,7 +4382,7 @@ describe('GithubRules issue labels', () => {
     expect(update?.decision.event).toEqual({ type: 'pull_request.updated', labels: { added: ['ready'], removed: [] } });
   });
 
-  async function notRoutedIssue() {
+  async function notRoutedIssue(kind: 'issue' | 'pull_request' = 'issue') {
     const base = await setup('write');
     const scope = { orgId: 'org-1', factoryProjectId: base.project.id };
     for (const route of (await base.boards.listIntakeRoutes(scope)).reverse()) {
@@ -4391,6 +4392,7 @@ describe('GithubRules issue labels', () => {
       scope,
       {
         name: 'Ship',
+        on: [kind === 'issue' ? 'work_item.opened' : 'pull_request.opened'],
         when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'ship' }] },
         target: { boardKey: 'work', phaseKey: null },
       },
@@ -4417,7 +4419,7 @@ describe('GithubRules issue labels', () => {
       ownerId: 'not-routed-labels',
     });
 
-    await service.ingest(issueOpened('opened-unmatched'));
+    await service.ingest(kind === 'issue' ? issueOpened('opened-unmatched') : pullRequest('opened', 'opened-unmatched'));
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
     expect(await base.workItems.list(scope)).toEqual([]);
     expect((await base.boards.listNotRouted(scope)).notRouted).toHaveLength(1);
@@ -4432,6 +4434,31 @@ describe('GithubRules issue labels', () => {
     const cards = await base.workItems.list(scope);
     expect(cards.map(card => ({ board: card.board, labels: card.workItem.metadata?.labels }))).toEqual([
       { board: 'work', labels: ['ship'] },
+    ]);
+    expect((await base.boards.listNotRouted(scope)).notRouted).toEqual([]);
+  });
+
+  it('files a pull request no board took once it is labelled to match a board, through the Not routed records', async () => {
+    const { base, scope, service, dispatcher } = await notRoutedIssue('pull_request');
+    const opened = pullRequest('opened', 'pr-labelled-ship');
+    const labelled = (state: 'open' | 'closed', deliveryId: string) => ({
+      ...opened,
+      deliveryId,
+      payload: {
+        ...opened.payload,
+        action: 'labeled',
+        label: { name: 'ship' },
+        pull_request: { ...opened.payload.pull_request, state, labels: [{ name: 'ship' }] },
+      },
+    });
+    // A closed pull request stays unfiled.
+    await expect(service.ingest(labelled('closed', 'pr-labelled-closed'))).resolves.toEqual({ status: 'ignored' });
+    await service.ingest(labelled('open', 'pr-labelled-ship'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
+
+    const cards = await base.workItems.list(scope);
+    expect(cards.map(card => ({ board: card.board, source: card.externalSource?.type }))).toEqual([
+      { board: 'work', source: 'pull-request' },
     ]);
     expect((await base.boards.listNotRouted(scope)).notRouted).toEqual([]);
   });
@@ -4463,6 +4490,51 @@ describe('GithubRules issue labels', () => {
     await expect(service.ingest(reopened)).resolves.toEqual({ status: 'committed' });
     const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', board: 'work', stage: 'intake' });
+  });
+
+  it('files a reopened pull request with no card the way a new one is filed', async () => {
+    const { service, workItems, project } = await setupRoutes();
+    const opened = pullRequest('opened', 'pr-opened');
+    await service.ingest(opened);
+    const [filed] = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(filed?.decision).toMatchObject({ type: 'upsertLinkedWorkItem' });
+
+    const reopened = pullRequest('opened', 'pr-reopened-no-card');
+    (reopened.payload as Record<string, unknown>).action = 'reopened';
+    await expect(service.ingest(reopened)).resolves.toEqual({ status: 'committed' });
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toHaveLength(2);
+    expect(decisions[1]?.decision).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      board: (filed?.decision as { board?: string }).board,
+      stage: (filed?.decision as { stage?: string }).stage,
+    });
+  });
+
+  it('leaves a reopened pull request that has a card to that card\'s routes', async () => {
+    const { service, workItems, project } = await setupRoutes();
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['canceled'],
+        sessions: {},
+        metadata: { number: 17 },
+      },
+    });
+    const reopened = pullRequest('opened', 'pr-reopened-card');
+    (reopened.payload as Record<string, unknown>).action = 'reopened';
+    await service.ingest(reopened);
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.map(entry => entry.decision.type)).not.toContain('upsertLinkedWorkItem');
   });
 
   it('drops a label delivery older than the last one applied, so a late add never undoes a removal', async () => {
@@ -6905,7 +6977,25 @@ describe('GithubRules board events', () => {
   });
 
   it('reports a reopened pull request as pull_request.reopened', async () => {
-    const { seen, service } = await recording();
+    const { seen, service, workItems, project } = await recording();
+    // With no card, a reopened pull request is filed like a new one instead.
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['canceled'],
+        sessions: {},
+        metadata: { number: 17 },
+      },
+    });
     const delivery = pullRequest('opened', 'board-event-pr-reopened');
     await service.ingest({ ...delivery, payload: { ...delivery.payload, action: 'reopened' } });
     expect(seen).toEqual([{ event: 'pullRequestReopened', boardEvent: { type: 'pull_request.reopened' } }]);
@@ -6977,7 +7067,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub close an
     };
   }
 
-  async function harness(input: { board?: string; stages: string[]; rules?: GithubRuleOverrides }) {
+  async function harness(input: { board?: string; stages: string[]; rules?: GithubRuleOverrides; pullRequest?: true }) {
     const seeded = await setup(
       'write',
       input.rules,
@@ -7013,15 +7103,29 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub close an
         input: {
           ...(input.board ? { board: input.board } : {}),
           stages: input.stages,
-          title: 'Issue 42',
-          sessions: {},
-          metadata: {},
-          externalSource: {
-            integrationId: 'github',
-            type: 'issue',
-            externalId: 'github-issue:42',
-            url: 'https://github.com/acme/repo/issues/42',
-          },
+          ...(input.pullRequest
+            ? {
+                title: 'PR 17',
+                sessions: {},
+                metadata: { number: 17, state: 'open' },
+                externalSource: {
+                  integrationId: 'github',
+                  type: 'pull-request',
+                  externalId: 'github-pr:17',
+                  url: 'https://github.com/acme/repo/pull/17',
+                },
+              }
+            : {
+                title: 'Issue 42',
+                sessions: {},
+                metadata: {},
+                externalSource: {
+                  integrationId: 'github',
+                  type: 'issue',
+                  externalId: 'github-issue:42',
+                  url: 'https://github.com/acme/repo/issues/42',
+                },
+              }),
         },
       })
     ).item;
@@ -7080,6 +7184,21 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub close an
     ]);
     // A replayed delivery moves nothing twice.
     expect((await deliver(issueClosed('routes-completed', 'completed'))).revision).toBe(closed.revision);
+  });
+
+  it("never moves a pull request's own card by a work_item.closed route: its close is pull_request.closed", async () => {
+    const { deliver, route, storedBoards, scope } = await harness({ stages: ['pr-review'], pullRequest: true });
+    const issueClose = await route('Closed issues go to Done');
+    await storedBoards.updateIntakeRoute(
+      scope,
+      issueClose.id,
+      { when: null, target: { boardKey: 'work', phaseKey: 'planning' } },
+      { expectedRevision: issueClose.revision, actor: 'admin' },
+    );
+    const card = await deliver(pullRequest('closed', 'pr-closed-routes') as ReturnType<typeof issueClosed>);
+    // It closes as a pull request does, as on main: no issue route ever moved it.
+    expect(card.stages).toEqual(['canceled']);
+    expect(card.stageHistory.map(entry => entry.by)).not.toContain(`intake-route:${issueClose.id}`);
   });
 
   it('moves a closed card where an edited close route now points', async () => {

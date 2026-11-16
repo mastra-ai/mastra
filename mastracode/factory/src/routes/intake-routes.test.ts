@@ -19,6 +19,7 @@ import {
   CATCH_ALL_INTAKE_ROUTE,
   CLOSES_ISSUE_INTAKE_ROUTE,
   DEFAULT_INTAKE_ROUTE,
+  OUTSIDE_PULL_REQUEST_INTAKE_ROUTE,
   PULL_REQUEST_INTAKE_ROUTE,
   StoredBoardsStorage,
 } from '../storage/domains/boards/base.js';
@@ -176,12 +177,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
 
   it('lists the default routes a new project starts with, and lets an admin edit them like any other', async () => {
     const { base, replicaA } = await setup({ seeded: true });
-    const [closesIssue, route, pullRequests, ...rest] = await list(replicaA.send, base, MEMBER);
+    const [closesIssue, route, outsidePullRequests, pullRequests, ...rest] = await list(replicaA.send, base, MEMBER);
     const events = rest.slice(0, -1);
     // Whatever no other route takes lands on Work's first phase, as it did before routes existed.
     expect(rest.at(-1)).toMatchObject({
       name: CATCH_ALL_INTAKE_ROUTE.name,
-      position: 11,
+      position: 12,
       on: ['work_item.opened'],
       when: null,
       target: { boardKey: 'work', phaseKey: 'intake' },
@@ -214,14 +215,27 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(closesIssue).toMatchObject({
       name: CLOSES_ISSUE_INTAKE_ROUTE.name,
       position: 0,
+      on: ['pull_request.opened'],
       when: CLOSES_ISSUE_INTAKE_ROUTE.when,
       target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: true },
       createdBy: 'factory',
       problems: [],
     });
+    // Pull requests with no card arrive on `pull_request.opened`: outside authors' wait in Intake.
+    expect(outsidePullRequests).toMatchObject({
+      name: OUTSIDE_PULL_REQUEST_INTAKE_ROUTE.name,
+      position: 2,
+      on: ['pull_request.opened'],
+      when: OUTSIDE_PULL_REQUEST_INTAKE_ROUTE.when,
+      target: { boardKey: 'work', phaseKey: 'intake' },
+      createdBy: 'factory',
+      problems: [],
+    });
     expect(pullRequests).toMatchObject({
       name: PULL_REQUEST_INTAKE_ROUTE.name,
-      position: 2,
+      position: 3,
+      on: ['pull_request.opened'],
+      when: null,
       target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false },
       createdBy: 'factory',
       problems: [],
@@ -230,6 +244,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       name: DEFAULT_INTAKE_ROUTE.name,
       enabled: true,
       position: 1,
+      on: ['work_item.opened'],
       when: DEFAULT_INTAKE_ROUTE.when,
       target: { boardKey: 'work', phaseKey: 'intake' },
       createdBy: 'factory',
@@ -441,7 +456,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     });
     const route = created.body.intakeRoute as Route;
     const bare = (await replicaA.send('POST', base, { name: 'New cards', target: WORK })).body.intakeRoute;
-    expect(bare).toMatchObject({ on: ['work_item.opened'] });
+    // A route naming no event files issues and pull requests with no card, as routes always did.
+    expect(bare).toMatchObject({ on: ['work_item.created'] });
 
     const reopened = await replicaA.send('PATCH', `${base}/${route.id}`, {
       on: ['work_item.reopened'],
@@ -511,7 +527,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       }),
     ).toMatchObject(refused);
     const created = await replicaA.send('POST', base, { name: 'Joins', target: joins });
-    expect(created).toMatchObject({ status: 201, body: { intakeRoute: { on: ['work_item.opened'], problems: [] } } });
+    expect(created).toMatchObject({ status: 201, body: { intakeRoute: { on: ['work_item.created'], problems: [] } } });
+    expect(
+      await replicaA.send('POST', base, { name: 'Issues join', on: ['work_item.opened'], target: joins }),
+    ).toMatchObject(refused);
+    expect(
+      await replicaA.send('POST', base, { name: 'Pull requests join', on: ['pull_request.opened'], target: joins }),
+    ).toMatchObject({ status: 201 });
     const route = created.body.intakeRoute as Route;
     expect(
       await replicaA.send('PATCH', `${base}/${route.id}`, {

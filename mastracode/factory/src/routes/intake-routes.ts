@@ -14,7 +14,7 @@ import type { Context } from 'hono';
 import type { z } from 'zod';
 import { DEFAULT_ROUTE_EVENTS } from '../boards/board-events.js';
 
-import type { StatusEvent } from '../boards/board-events.js';
+import type { RouteEvent } from '../boards/board-events.js';
 import {
   arrivalRuleFacts,
   compareIntakeOrder,
@@ -149,7 +149,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
     scope: Resolved,
     route: {
       target: { boardKey: string; phaseKey?: string | null; joinClosedIssue?: boolean };
-      on: readonly StatusEvent[];
+      on: readonly RouteEvent[];
     },
   ) {
     const problem = intakeTargetProblem(await this.#registry(scope), route);

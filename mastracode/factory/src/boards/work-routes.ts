@@ -4,12 +4,13 @@ import type { StoredIntakeRouteInput } from '../storage/domains/boards/base.js';
 // they are stored routes like any other, which admins edit, retarget or delete.
 
 /**
- * The route every project starts with: a GitHub or GitLab card whose author is outside the
+ * The route every project starts with: a GitHub or GitLab issue whose author is outside the
  * write-access circle lands in Work › Intake, where nothing starts until a person moves it.
  * It is a stored route like any other, so admins can see, edit, disable or delete it.
  */
 export const DEFAULT_INTAKE_ROUTE: StoredIntakeRouteInput = {
   name: 'Outside authors wait in Intake',
+  on: ['work_item.opened'],
   when: {
     operator: 'AND',
     conditions: [
@@ -21,12 +22,34 @@ export const DEFAULT_INTAKE_ROUTE: StoredIntakeRouteInput = {
 };
 
 /**
- * Pull requests are reviewed in Work › Review. It comes after `DEFAULT_INTAKE_ROUTE`, so a
- * pull request from outside the write-access circle still waits in Intake for a person.
+ * A GitHub or GitLab pull request with no card, from outside the write-access circle, waits in
+ * Work › Intake for a person. It names `source.kind` so that, as a `pull_request.opened` card move,
+ * it never sends an outside author's issue card back to Intake when its session opens a pull request.
+ */
+export const OUTSIDE_PULL_REQUEST_INTAKE_ROUTE: StoredIntakeRouteInput = {
+  name: 'Pull requests from outside authors wait in Intake',
+  on: ['pull_request.opened'],
+  when: {
+    operator: 'AND',
+    conditions: [
+      { field: 'source.integration', operator: 'in', value: ['github', 'gitlab'] },
+      { field: 'source.kind', operator: 'equals', value: 'pull_request' },
+      { field: 'author.trusted', operator: 'equals', value: false },
+    ],
+  },
+  target: { boardKey: 'work', phaseKey: 'intake' },
+};
+
+/**
+ * Pull requests with no card are reviewed in Work › Review. It comes after
+ * `OUTSIDE_PULL_REQUEST_INTAKE_ROUTE`, so a pull request from outside the write-access circle
+ * still waits in Intake. As a card move it sends an issue card whose pull request opens to Review,
+ * where the pull request rules send it anyway.
  */
 export const PULL_REQUEST_INTAKE_ROUTE: StoredIntakeRouteInput = {
   name: 'Pull requests go to Review',
-  when: { operator: 'AND', conditions: [{ field: 'source.kind', operator: 'equals', value: 'pull_request' }] },
+  on: ['pull_request.opened'],
+  when: null,
   target: { boardKey: 'work', phaseKey: 'pr-review' },
 };
 
@@ -104,6 +127,7 @@ export const PULL_REQUEST_REVIEW_REQUESTED_ROUTE: StoredIntakeRouteInput = {
  */
 export const CLOSES_ISSUE_INTAKE_ROUTE: StoredIntakeRouteInput = {
   name: 'Pull requests that close a waiting issue join its card',
+  on: ['pull_request.opened'],
   when: {
     operator: 'AND',
     conditions: [
@@ -118,11 +142,13 @@ export const CLOSES_ISSUE_INTAKE_ROUTE: StoredIntakeRouteInput = {
 };
 
 /**
- * Every new card no route before it placed lands in Work › Intake. It is the project's default
- * board as a stored route: point it at another board to send new cards there instead.
+ * Every new issue no route before it placed lands in Work › Intake (`PULL_REQUEST_INTAKE_ROUTE`
+ * takes every pull request). It is the project's default board as a stored route: point it at
+ * another board to send new issues there instead.
  */
 export const CATCH_ALL_INTAKE_ROUTE: StoredIntakeRouteInput = {
   name: 'Everything else goes to Work › Intake',
+  on: ['work_item.opened'],
   when: null,
   target: { boardKey: 'work', phaseKey: 'intake' },
 };
@@ -131,11 +157,19 @@ export const CATCH_ALL_INTAKE_ROUTE: StoredIntakeRouteInput = {
  * The routes Factory adds to a project, in order, each under a key that never changes. A project
  * gets each one once: a new project gets them all, a project set up earlier gets a route added
  * since at the end of its list (or at the start, for a `first` one), and a route an admin deleted
- * stays deleted. The catch-all stays last: a default added after it would never place a new card.
+ * stays deleted. A `newProjectsOnly` one counts as added to a project set up earlier without being
+ * added: its stored routes already decide what it would. The catch-all stays last: a default added
+ * after it would never place a new card.
  */
-export const DEFAULT_INTAKE_ROUTES: readonly { key: string; route: StoredIntakeRouteInput; first?: true }[] = [
+export const DEFAULT_INTAKE_ROUTES: readonly {
+  key: string;
+  route: StoredIntakeRouteInput;
+  first?: true;
+  newProjectsOnly?: true;
+}[] = [
   { key: 'closes-issue', route: CLOSES_ISSUE_INTAKE_ROUTE, first: true },
   { key: 'outside-authors', route: DEFAULT_INTAKE_ROUTE },
+  { key: 'outside-author-pull-requests', route: OUTSIDE_PULL_REQUEST_INTAKE_ROUTE, newProjectsOnly: true },
   { key: 'pull-requests', route: PULL_REQUEST_INTAKE_ROUTE },
   { key: 'closed-completed', route: CLOSED_COMPLETED_ROUTE },
   { key: 'closed-canceled', route: CLOSED_CANCELED_ROUTE },

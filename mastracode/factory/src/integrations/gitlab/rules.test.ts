@@ -1875,7 +1875,7 @@ describe('GitLab merge request changes on a card the merge request only shares a
     expect(updates).toEqual([]);
   });
 
-  it("still hands the merge request's own card its change as work_item.updated", async () => {
+  it("still hands the merge request's own card its change as pull_request.updated", async () => {
     const { seeded, project, service } = await setup();
     const card = (
       await seeded.workItems.upsert({
@@ -1912,7 +1912,7 @@ describe('GitLab merge request changes on a card the merge request only shares a
       .map(record => record.decision)
       .flatMap(decision => (decision.type === 'routeEvent' ? [decision.event] : []))
       .filter(event => event.type.endsWith('.updated'));
-    expect(events).toEqual([{ type: 'work_item.updated', labels: { added: ['ship'], removed: [] } }]);
+    expect(events).toEqual([{ type: 'pull_request.updated', labels: { added: ['ship'], removed: [] } }]);
   });
 });
 
@@ -1966,6 +1966,54 @@ describe('GitLab updates to an issue intake turned away', () => {
   });
 });
 
+describe('GitLab updates to a merge request intake turned away', () => {
+  function relabelled(deliveryId: string, state = 'opened') {
+    const delivery = mergeRequestOpened(deliveryId);
+    return {
+      ...delivery,
+      payload: {
+        ...delivery.payload,
+        object_attributes: { ...delivery.payload.object_attributes, action: 'update', state },
+        changes: { labels: { previous: [], current: [{ title: 'ship' }] } },
+      },
+    };
+  }
+
+  it('runs intake again when a merge request with no card that intake turned away changes labels', async () => {
+    const notRouted = { isNotRouted: vi.fn(async () => true) };
+    const { seeded, project, service } = await setup({ notRouted });
+    await service.ingest(relabelled('mr-label-not-routed'));
+
+    const decisions = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.map(entry => entry.decision)).toEqual([
+      expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'gitlab-pr' }),
+    ]);
+    const [intake] = decisions.map(entry => entry.decision as { sourceKey?: string });
+    expect(notRouted.isNotRouted).toHaveBeenCalledWith({ orgId: 'org-1', factoryProjectId: project.id }, intake?.sourceKey);
+  });
+
+  it('files a merge request reopened with no card the way a new one is filed', async () => {
+    const { seeded, project, service } = await setup();
+    const delivery = mergeRequestOpened('mr-reopened-no-card');
+    await service.ingest({
+      ...delivery,
+      payload: { ...delivery.payload, object_attributes: { ...delivery.payload.object_attributes, action: 'reopen' } },
+    });
+    expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).map(entry => entry.decision)).toEqual([
+      expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'gitlab-pr' }),
+    ]);
+  });
+
+  it('files no card for a closed merge request, or one intake never turned away', async () => {
+    const notRouted = { isNotRouted: vi.fn(async (_scope: unknown, _key: string) => true) };
+    const { seeded, project, service } = await setup({ notRouted });
+    await service.ingest(relabelled('mr-label-closed', 'closed'));
+    notRouted.isNotRouted.mockResolvedValue(false);
+    await service.ingest(relabelled('mr-label-never-seen'));
+    expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+  });
+});
+
 describe('GitLab update events', () => {
   const issueCard = { source: 'gitlab-issue' } as never;
   const mergeRequestCard = { source: 'gitlab-pr' } as never;
@@ -1993,10 +2041,10 @@ describe('GitLab update events', () => {
     ).toBeUndefined();
   });
 
-  it("reports a merge request's change as the card's own update on its card, a pull request update on an issue card", () => {
+  it("reports a merge request's change as a pull request update, on its own card or an issue card", () => {
     const changes = { labels: { previous: [], current: [{ title: 'ready' }] } };
     expect(updateEventFor({ event: 'mergeRequestUpdated', item: mergeRequestCard }, changes)?.type).toBe(
-      'work_item.updated',
+      'pull_request.updated',
     );
     expect(updateEventFor({ event: 'mergeRequestUpdated', item: issueCard }, changes)?.type).toBe(
       'pull_request.updated',

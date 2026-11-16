@@ -184,18 +184,15 @@ export function boardEventFor(context: Pick<FactoryGitLabRuleContext, 'event'>):
 
 /**
  * The label or assignee change an issue or merge request update reports, from the hook's
- * `changes`. A merge request that is the card's own source reports `work_item.updated`; one
- * attached to an issue card reports `pull_request.updated`. Other edits report nothing.
+ * `changes`: `work_item.updated` for an issue, `pull_request.updated` for a merge request, on its
+ * own card or the issue card it is attached to. Other edits report nothing.
  */
 export function updateEventFor(
   context: Pick<FactoryGitLabRuleContext, 'event' | 'item'>,
   changes: Record<string, unknown> | undefined,
 ): BoardEventFacts | undefined {
   if (!context.item || (context.event !== 'issueUpdated' && context.event !== 'mergeRequestUpdated')) return undefined;
-  const type =
-    context.event === 'mergeRequestUpdated' && context.item.source !== 'gitlab-pr'
-      ? 'pull_request.updated'
-      : 'work_item.updated';
+  const type = context.event === 'mergeRequestUpdated' ? 'pull_request.updated' : 'work_item.updated';
   const labels = object(changes?.labels);
   const assignees = object(changes?.assignees);
   return updateEventFacts(type, {
@@ -490,6 +487,29 @@ export class GitLabRules {
       mergeRequestKey && !reviewItem
         ? own(items.find(item => carriesAttachedMergeRequest(item, mergeRequestKey)))
         : undefined;
+    // A merge request intake turned away (Not routed) changed labels or assignees: run intake again.
+    if (
+      event === 'mergeRequestUpdated' &&
+      !reviewItem &&
+      !attachedItem &&
+      mergeRequestKey &&
+      string(mergeRequest?.state) === 'opened' &&
+      (changes?.labels !== undefined || changes?.assignees !== undefined) &&
+      (await this.options.notRouted?.isNotRouted(
+        { orgId: target.target.orgId, factoryProjectId: target.target.factoryProjectId },
+        mergeRequestKey,
+      ))
+    ) {
+      return this.#ingestProject(
+        { ...parsed, deliveryId: `${parsed.deliveryId}:intake` },
+        'mergeRequestOpened',
+        projectId,
+        projectPath,
+        host,
+        username,
+        target,
+      );
+    }
     const headBranch = string(mergeRequest?.source_branch) ?? '';
     // A card whose session builds on the merge request's branch, in this project.
     const buildsOnBranch = (item: Card) =>
@@ -1061,7 +1081,7 @@ export class GitLabRules {
     // The item's current labels and assignees go on its own card in the same write as the update,
     // so routes reading `item.labels` or `item.assignees` see them; a redelivery writes nothing.
     const lists =
-      update?.type === 'work_item.updated' && input.item
+      update && input.item && (update.type === 'work_item.updated' || context.item?.source === 'gitlab-pr')
         ? currentLists(input.item, input.parsed.payload)
         : undefined;
     const committed = await this.options.storage.commitRuleEvaluation({

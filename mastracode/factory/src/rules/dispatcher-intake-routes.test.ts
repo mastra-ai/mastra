@@ -375,7 +375,7 @@ describe('intake routes placing linked cards', () => {
     }
   });
 
-  it('sends the issues and pull requests no other route takes to the board an admin points the catch-all at', async () => {
+  it('sends the issues and pull requests no other route takes to the board an admin points the catch-alls at', async () => {
     const { boards, scope, deliver } = await setup({ withDefaultRoute: true });
     await boards.create(scope, docsBoard, 'admin');
     const routes = await boards.listIntakeRoutes(scope);
@@ -387,10 +387,11 @@ describe('intake routes placing linked cards', () => {
       { target: { boardKey: 'docs' } },
       { expectedRevision: catchAll.revision, actor: 'admin' },
     );
+    // Pull requests arrive on their own event, so their catch-all is the pull request route.
     await boards.updateIntakeRoute(
       scope,
       pullRequests.id,
-      { enabled: false },
+      { target: { boardKey: 'docs' } },
       { expectedRevision: pullRequests.revision, actor: 'admin' },
     );
 
@@ -402,7 +403,9 @@ describe('intake routes placing linked cards', () => {
       // The integration's rule files on Work; the catch-all decides.
       const card = await deliver({ ...arrival, board: 'work', stage: 'intake' });
       expect(placed(card), arrival.sourceKey).toEqual({ board: 'docs', stages: ['inbox'] });
-      expect(card?.metadata).toMatchObject({ intakeRouteId: catchAll.id });
+      expect(card?.metadata).toMatchObject({
+        intakeRouteId: arrival.source === 'github-pr' ? pullRequests.id : catchAll.id,
+      });
     }
     // Outside authors still meet their own route first.
     const outside = await deliver({ sourceKey: 'github-issue:4', metadata: { authorTrusted: false } });

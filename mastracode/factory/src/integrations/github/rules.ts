@@ -777,15 +777,15 @@ export class GithubRules {
 
   /**
    * A label or assignee added to or removed from a pull request, handed to the routes of the card it
-   * belongs to: `work_item.updated` on the pull request's own card, `pull_request.updated` on the
-   * issue card it is attached to. GitHub names the one label or assignee that changed.
+   * belongs to as `pull_request.updated`, on the pull request's own card or the issue card it is
+   * attached to. GitHub names the one label or assignee that changed.
    */
   async #pullRequestUpdate(
     parsed: ParsedGithubWebhook,
     repositoryId: number,
     repositoryName: string,
     project: ExternalRepositoryProjectTarget,
-  ): Promise<{ status: 'ignored' | 'committed' }> {
+  ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const pullRequestNumber = number(object(parsed.payload.pull_request)?.number);
     if (!pullRequestNumber) return { status: 'ignored' };
     const action = string(parsed.payload.action);
@@ -804,8 +804,10 @@ export class GithubRules {
       undefined,
       null,
     );
-    const ownCard = item?.externalSource?.type === 'pull-request';
-    if (!item || (!ownCard && !attachedPullRequestSource(item, repositoryId, repositoryName, pullRequestNumber))) {
+    // A pull request intake turned away arrives again, now that it may match a board's rule.
+    if (!item) return this.#intakeIfNotRouted(parsed, repositoryId, repositoryName, project, pullRequestNumber, 'pull-request');
+    const ownCard = item.externalSource?.type === 'pull-request';
+    if (!ownCard && !attachedPullRequestSource(item, repositoryId, repositoryName, pullRequestNumber)) {
       return { status: 'ignored' };
     }
     const labelChange = action === 'labeled' || action === 'unlabeled';
@@ -839,7 +841,7 @@ export class GithubRules {
       repositoryName,
       project,
       item,
-      updateEventFacts('work_item.updated', {
+      updateEventFacts('pull_request.updated', {
         labels: listChange(before.labels, after.labels),
         assignees: listChange(before.assignees, after.assignees),
       }),
@@ -890,23 +892,26 @@ export class GithubRules {
     repositoryId: number,
     repositoryName: string,
     project: ExternalRepositoryProjectTarget,
-    issueNumber: number,
+    itemNumber: number,
+    kind: 'issue' | 'pull-request' = 'issue',
   ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const installationId = number(object(parsed.payload.installation)?.id);
     const login = string(object(parsed.payload.sender)?.login);
     const scope = { orgId: project.orgId, factoryProjectId: project.factoryProjectId };
+    const item = object(kind === 'issue' ? parsed.payload.issue : parsed.payload.pull_request);
     if (
       !installationId ||
       !login ||
-      // A closed issue's Not routed record stays until it's filed; a label on it never files it.
-      string(object(parsed.payload.issue)?.state) !== 'open' ||
-      // Intake records a card-less issue under the key its rule files it with (see `githubSourceKey`).
-      !(await this.options.notRouted?.isNotRouted(scope, legacySourceKey(repositoryId, 'issue', issueNumber)))
+      // A closed item's Not routed record stays until it's filed; a label on it never files it.
+      string(item?.state) !== 'open' ||
+      // Intake records a card-less item under the key its rule files it with (see `githubSourceKey`).
+      !(await this.options.notRouted?.isNotRouted(scope, legacySourceKey(repositoryId, kind, itemNumber)))
     ) {
       return { status: 'ignored' };
     }
     const intake = { ...parsed, deliveryId: `${parsed.deliveryId}:intake`, payload: { ...parsed.payload, action: 'opened' } };
-    return this.#ingestProject(intake, 'issueOpened', installationId, repositoryId, repositoryName, login, project);
+    const event = kind === 'issue' ? 'issueOpened' : 'pullRequestOpened';
+    return this.#ingestProject(intake, event, installationId, repositoryId, repositoryName, login, project);
   }
 
   async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
@@ -1079,6 +1084,11 @@ export class GithubRules {
       )
         ? undefined
         : resolvedItem;
+    // A pull request reopened with no card arrives again, as an issue reopened with no card does.
+    if (event === 'pullRequestReopened' && !resolvedItem && string(pullRequest?.state) === 'open') {
+      const arrival = { ...parsed, deliveryId: `${parsed.deliveryId}:intake`, payload: { ...parsed.payload, action: 'opened' } };
+      return this.#ingestProject(arrival, 'pullRequestOpened', installationId, repositoryId, repositoryName, login, project);
+    }
     const intake = intakeTarget(this.#boards(project));
     const actor = await githubActor(this.options.github, {
       installationId,

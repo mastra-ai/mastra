@@ -2,11 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { intakeRouteInputSchema } from '../routes/contracts.js';
 import {
-  canonicalStatusEvent,
   combineChanges,
   eventMovesCard,
   INTAKE_ROUTE_RULE_FIELDS,
-  isStatusEventName,
+  LEGACY_ARRIVAL_EVENT,
   LEGACY_RULE_FIELDS,
   PICKER_RULE_FIELDS,
   routeEventsProblem,
@@ -18,7 +17,7 @@ const when = (field: string, operator = 'contains', value: unknown = 'ship') =>
   ({ operator: 'AND', conditions: [{ field, operator, value }] }) as never;
 
 describe('board event names', () => {
-  it('lists the eleven events, with work_item.created renamed to work_item.opened', () => {
+  it('lists the eleven events: issues are work_item.*, pull requests pull_request.*', () => {
     expect(STATUS_EVENTS).toEqual([
       'work_item.opened',
       'work_item.reopened',
@@ -34,24 +33,27 @@ describe('board event names', () => {
     ]);
   });
 
-  it('reads the old name as the new one', () => {
-    expect(canonicalStatusEvent('work_item.created')).toBe('work_item.opened');
-    expect(canonicalStatusEvent('work_item.closed')).toBe('work_item.closed');
-    expect(isStatusEventName('work_item.created')).toBe(true);
+  it('keeps work_item.created a route event of its own, never an alias of work_item.opened', () => {
+    expect(LEGACY_ARRIVAL_EVENT).toBe('work_item.created');
+    expect(STATUS_EVENTS).not.toContain('work_item.created');
+    expect(routeEventsProblem(['work_item.created'], null)).toBeNull();
+    // An old route also filing pull requests sits next to a new one filing issues only.
+    expect(routeEventsProblem(['work_item.created', 'work_item.opened'], null)).toBeNull();
+    expect(routeEventsProblem(['work_item.created'], when('card.phase', 'equals', 'triage'))).toMatch(/card.phase/);
   });
 
-  it('accepts both names in the API for one release and stores the new one', () => {
+  it('accepts work_item.created in the API and keeps it, so editing an old route never narrows it to issues', () => {
     const parsed = intakeRouteInputSchema.parse({
       name: 'Old',
       target: { boardKey: 'work' },
       on: ['work_item.created'],
     });
-    expect(parsed.on).toEqual(['work_item.opened']);
+    expect(parsed.on).toEqual(['work_item.created']);
     expect(() =>
       intakeRouteInputSchema.parse({
         name: 'Twice',
         target: { boardKey: 'work' },
-        on: ['work_item.created', 'work_item.opened'],
+        on: ['work_item.created', 'work_item.created'],
       }),
     ).toThrow(/only once/);
   });

@@ -3459,7 +3459,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     "pull_request.synchronized",
                     "pull_request.review_requested",
                     "pull_request.merged",
-                    "pull_request.closed"
+                    "pull_request.closed",
+                    "work_item.created"
                   ]
                 }
               },
@@ -3786,7 +3787,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "pull_request.synchronized",
                   "pull_request.review_requested",
                   "pull_request.merged",
-                  "pull_request.closed"
+                  "pull_request.closed",
+                  "work_item.created"
                 ]
               }
             },
@@ -7224,7 +7226,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "pull_request.synchronized",
             "pull_request.review_requested",
             "pull_request.merged",
-            "pull_request.closed"
+            "pull_request.closed",
+            "work_item.created"
           ]
         },
         "__schema14": {
@@ -7324,7 +7327,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "pull_request.synchronized",
                   "pull_request.review_requested",
                   "pull_request.merged",
-                  "pull_request.closed"
+                  "pull_request.closed",
+                  "work_item.created"
                 ]
               }
             },
@@ -9791,7 +9795,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "pull_request.synchronized",
             "pull_request.review_requested",
             "pull_request.merged",
-            "pull_request.closed"
+            "pull_request.closed",
+            "work_item.created"
           ]
         }
       }
@@ -9886,7 +9891,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "pull_request.synchronized",
                   "pull_request.review_requested",
                   "pull_request.merged",
-                  "pull_request.closed"
+                  "pull_request.closed",
+                  "work_item.created"
                 ]
               }
             },
@@ -10236,7 +10242,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     "pull_request.synchronized",
                     "pull_request.review_requested",
                     "pull_request.merged",
-                    "pull_request.closed"
+                    "pull_request.closed",
+                    "work_item.created"
                   ]
                 }
               },

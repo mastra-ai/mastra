@@ -130,6 +130,25 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake order on
     expect((await boards.readIntakeOrder(scope)).boardKeys).toEqual(['ship', 'docs', 'work', 'ops']);
   });
 
+  it('counts a board as ending in a catch-all only once its unconditional rules take issues and pull requests', async () => {
+    const { boards, scope } = await setup(['ship', 'work']);
+    await boards.createIntakeRoute(scope, labelled('ship', 'ship'), 'admin');
+    await boards.createIntakeRoute(scope, { ...catchAll('work'), on: ['work_item.opened'] }, 'admin');
+    expect((await boards.readIntakeOrder(scope)).boardKeys).toEqual(['ship', 'work']);
+    // Pull requests still fall through Work, so a new board goes last.
+    await boards.create(scope, board('docs'), 'admin');
+    expect((await boards.readIntakeOrder(scope)).boardKeys).toEqual(['ship', 'work', 'docs']);
+
+    await boards.createIntakeRoute(
+      scope,
+      { name: 'work pull requests', target: { boardKey: 'work' }, when: null, on: ['pull_request.opened'] },
+      'admin',
+    );
+    expect((await boards.readIntakeOrder(scope)).boardKeys).toEqual(['ship', 'work', 'docs']);
+    await boards.create(scope, board('ops'), 'admin');
+    expect((await boards.readIntakeOrder(scope)).boardKeys).toEqual(['ship', 'ops', 'work', 'docs']);
+  });
+
   it('keeps a code board where the order put it when the caller names it', async () => {
     const { boards, scope } = await setup(['work', 'ship']);
     const registry = ['work', 'ship', 'desk'];

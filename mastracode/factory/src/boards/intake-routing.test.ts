@@ -10,7 +10,9 @@ import {
   intakeEvaluatorFrom,
   intakeTargetProblem,
   resolveIntake,
+  resolveEventRoute,
   resolveIntakePlacement,
+  routesHandleEvent,
 } from './intake-routing.js';
 import { boardRegistryOf, createBoardRegistry } from './registry.js';
 import { createTestBoard, createTriageWorkRegistry } from './test-utils.js';
@@ -29,7 +31,8 @@ function route(overrides: Partial<Parameters<typeof resolveIntakePlacement>[0][n
     enabled: true,
     when: null,
     target: { boardKey: 'work', phaseKey: 'triage' },
-    on: ['work_item.opened'],
+    // Files issues and pull requests alike, as stored routes always have.
+    on: ['work_item.created'],
     ...overrides,
   } as Parameters<typeof resolveIntakePlacement>[0][number];
 }
@@ -116,6 +119,42 @@ describe('resolveIntake', () => {
       registry: twoBoards,
     });
     expect(resolution).toMatchObject({ outcome: 'placed', board: 'work', routeId: 'all' });
+  });
+
+  it('files an issue by its `work_item.opened` rules and a pull request with no card by its `pull_request.opened` rules', () => {
+    const routes = [
+      route({ id: 'issues', target: { boardKey: 'ship', phaseKey: null }, on: ['work_item.opened'] }),
+      route({ id: 'pull-requests', target: { boardKey: 'work', phaseKey: null }, on: ['pull_request.opened'] }),
+    ];
+    const order = ['ship', 'work'];
+    expect(both(routes, order, issue())).toEqual([
+      expect.objectContaining({ outcome: 'placed', board: 'ship', routeId: 'issues' }),
+      expect.objectContaining({ outcome: 'placed', board: 'ship', routeId: 'issues' }),
+    ]);
+    expect(both(routes, order, pullRequest)).toEqual([
+      expect.objectContaining({ outcome: 'placed', board: 'work', routeId: 'pull-requests' }),
+      expect.objectContaining({ outcome: 'placed', board: 'work', routeId: 'pull-requests' }),
+    ]);
+    // Only the issue rule: a pull request is Not routed, never filed by it.
+    expect(
+      resolveIntake({
+        evaluator: 'intake-order',
+        routes: [routes[0]!],
+        order,
+        facts: pullRequest,
+        registry: twoBoards,
+      }),
+    ).toMatchObject({ outcome: 'not_routed' });
+  });
+
+  it('keeps a stored `work_item.created` rule filing issues and pull requests with no card alike', () => {
+    const routes = [route({ id: 'legacy', target: { boardKey: 'ship', phaseKey: null }, on: ['work_item.created'] })];
+    for (const facts of [issue(), pullRequest]) {
+      expect(both(routes, ['ship', 'work'], facts)).toEqual([
+        expect.objectContaining({ outcome: 'placed', board: 'ship', routeId: 'legacy' }),
+        expect.objectContaining({ outcome: 'placed', board: 'ship', routeId: 'legacy' }),
+      ]);
+    }
   });
 
   it('forces the evaluator from the option first, then a valid FACTORY_INTAKE_EVALUATOR, else none', () => {
@@ -292,5 +331,39 @@ describe('intakeTargetProblem', () => {
     // The board and phase must still exist.
     expect(intakeTargetProblem(registry, closes('work', 'gone'))).toMatchObject({ code: 'unknown_phase' });
     expect(intakeTargetProblem(registry, closes('gone', 'done'))).toMatchObject({ code: 'unknown_board' });
+  });
+});
+
+describe('arrival events', () => {
+  it('checks a pull_request.opened or work_item.created rule’s phase as one that files new cards', () => {
+    for (const on of [['pull_request.opened'], ['work_item.created']]) {
+      expect(intakeTargetProblem(registry, { target: { boardKey: 'work', phaseKey: 'done' }, on })).toMatchObject({
+        code: 'terminal_phase',
+      });
+    }
+  });
+
+  it('lets a join rule run on pull_request.opened or the legacy work_item.created, never on issues', () => {
+    const join = (on: string[]) => ({ target: { boardKey: 'work', phaseKey: null, joinClosedIssue: true }, on });
+    expect(intakeTargetProblem(registry, join(['pull_request.opened']))).toBeUndefined();
+    expect(intakeTargetProblem(registry, join(['work_item.created']))).toBeUndefined();
+    expect(intakeTargetProblem(registry, join(['work_item.opened']))).toMatchObject({ code: 'join_on_event' });
+  });
+
+  it('never moves an existing card by a legacy work_item.created rule', () => {
+    const board = registry.get('work')!;
+    const legacy = route({ id: 'legacy', on: ['work_item.created'], target: { boardKey: 'work', phaseKey: 'triage' } });
+    const opened = route({
+      id: 'opened',
+      on: ['pull_request.opened'],
+      target: { boardKey: 'work', phaseKey: 'triage' },
+    });
+    expect(resolveEventRoute([legacy], { type: 'pull_request.opened' }, issue(), board)).toBeUndefined();
+    expect(routesHandleEvent([legacy], { type: 'pull_request.opened' }, board)).toBe(false);
+    // A pull_request.opened rule is still a card move for the issue card whose pull request opened.
+    expect(resolveEventRoute([legacy, opened], { type: 'pull_request.opened' }, issue(), board)).toEqual({
+      phase: 'triage',
+      routeId: 'opened',
+    });
   });
 });

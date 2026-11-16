@@ -4,7 +4,9 @@
 
 Board routes can now move cards when labels or assignees change, and when a pull request is reopened.
 
-**New events** — `work_item.updated` fires when an item's labels or assignees change; `pull_request.updated` fires for a pull request attached to a card; `pull_request.reopened` moves a card only where a route names it. The event `work_item.created` is now `work_item.opened`; stored routes using the old name keep working, and API requests may send the old name for one release.
+**Two event families** — `work_item.*` events are about issues; every pull or merge request event is `pull_request.*`. A route on `work_item.opened` files new issues, and a route on `pull_request.opened` files new pull requests with no card (and moves an issue's card when its pull request opens). `work_item.created` keeps its meaning: it files new issues and new pull requests alike, so existing routes, and routes created without `on`, behave as before. New projects get their pull request routes on `pull_request.opened`.
+
+**New events** — `work_item.updated` fires when an issue's labels or assignees change, and `pull_request.updated` when a pull request's do, on its own card or an issue card it is attached to; `pull_request.reopened` moves a card only where a route names it. A reopened pull request with no card is filed like a new one, and a pull request no board took (Not routed) is filed once a label or assignee change makes a board's rule match.
 
 **New filters** — `event.labels.added`, `event.labels.removed`, `event.assignees.added`, `event.assignees.removed`, `card.phase`, `item.hasPullRequest` and `item.hasIssue`.
 

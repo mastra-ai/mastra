@@ -3,12 +3,7 @@ import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { validateSkillContent } from '@mastra/core/skills';
 import { z } from 'zod';
 
-import {
-  canonicalStatusEvent,
-  INTAKE_ROUTE_RULE_FIELDS,
-  routeEventsProblem,
-  STATUS_EVENTS,
-} from '../boards/board-events.js';
+import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem, ROUTE_EVENTS } from '../boards/board-events.js';
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
 import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
@@ -131,17 +126,12 @@ const intakeRouteFields = {
   /** Where matching cards land. */
   target: intakeRouteTargetSchema,
   /**
-   * The status events the route handles. `work_item.opened` places new cards; the others move
-   * existing ones. `work_item.created`, its old name, is accepted for one release and saved as
-   * `work_item.opened`.
+   * The events the route handles. `work_item.opened` files new issues and `pull_request.opened` new
+   * pull requests with no card (and moves the card of an issue whose pull request opens); the others
+   * move existing cards. `work_item.created`, the legacy event, files both and is kept as written.
    */
   on: z
-    .array(
-      z.preprocess(
-        event => (typeof event === 'string' ? canonicalStatusEvent(event) : event),
-        z.enum(STATUS_EVENTS, { error: issue => routeEventsProblem([String(issue.input)], null) ?? undefined }),
-      ),
-    )
+    .array(z.enum(ROUTE_EVENTS, { error: issue => routeEventsProblem([String(issue.input)], null) ?? undefined }))
     .superRefine((on, ctx) => {
       const problem = routeEventsProblem(on, null);
       if (problem) ctx.addIssue({ code: 'custom', message: problem });
@@ -196,7 +186,7 @@ const intakeRouteSchema = z.object({
   position: z.number().int(),
   when: intakeRouteWhenSchema.nullable(),
   target: z.object({ boardKey: z.string(), phaseKey: z.string().nullable(), joinClosedIssue: z.boolean() }),
-  on: z.array(z.enum(STATUS_EVENTS)),
+  on: z.array(z.enum(ROUTE_EVENTS)),
   /** Send it back as `expectedRevision` when editing or deleting. */
   revision: z.number().int(),
   createdBy: z.string(),
