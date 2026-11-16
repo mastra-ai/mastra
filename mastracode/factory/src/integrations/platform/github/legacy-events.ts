@@ -64,7 +64,7 @@ export function legacyGithubTopicSubscription(config: LegacyGithubTopicConfig): 
         remember(handled, parsed.deliveryId);
         return;
       }
-      await deliverGithubEvent(config.delivery, accepted, logger);
+      await deliverGithubEvent(config.delivery, accepted.event, accepted.orgIds, logger);
       remember(handled, parsed.deliveryId);
     },
   };
@@ -81,38 +81,46 @@ export function parseLegacyGithubTopicEvent(event: TopicEvent): ParsedGithubWebh
 }
 
 /**
- * The event as Factory should handle it, or null when it isn't Factory's. A
- * legacy event for an org that switched before the event was published is
- * dropped: the `connect` topic delivers that org's events. One published
- * before the switch still runs, attributed to the `factory-github`
- * installation its repository was re-pointed to.
+ * The event as Factory should handle it and the orgs it is for, or null when
+ * it isn't Factory's. A legacy event for an org that switched before the event
+ * was published is dropped: the `connect` topic delivers that org's events.
+ * One published before the switch still runs, attributed to the
+ * `factory-github` installation its repository was re-pointed to.
  */
 async function acceptLegacyGithubEvent(
   config: Pick<LegacyGithubTopicConfig, 'repositories' | 'modes'>,
   event: ParsedGithubWebhook,
   timestamp: number,
-): Promise<ParsedGithubWebhook | null> {
+): Promise<{ event: ParsedGithubWebhook; orgIds: string[] } | null> {
   const repositoryId = githubEventRepositoryId(event);
   const installationId = githubEventInstallationId(event);
   if (repositoryId === undefined || installationId === undefined) return null;
   const links = await config.repositories.forRepository(repositoryId);
 
+  const legacy = new Set<string>();
   for (const link of links.filter(link => link.installationId === installationId)) {
     for (const orgId of link.orgIds) {
       const record = await config.modes.get(orgId);
-      if (record.mode === 'legacy' || (record.switchedAt !== undefined && timestamp < record.switchedAt)) return event;
+      if (record.mode === 'legacy' || (record.switchedAt !== undefined && timestamp < record.switchedAt)) {
+        legacy.add(orgId);
+      }
     }
   }
+  if (legacy.size > 0) return { event, orgIds: [...legacy] };
   for (const link of links.filter(link => link.installationId !== installationId)) {
+    const repointed = new Set<string>();
     for (const orgId of link.orgIds) {
       const record = await config.modes.get(orgId);
       if (record.mode !== 'connect' || record.switchedAt === undefined || timestamp >= record.switchedAt) continue;
-      const repointed = record.installations?.some(
+      const moved = record.installations?.some(
         installation =>
           installation.installationId === link.installationId &&
           installation.legacyInstallationIds?.includes(installationId) === true,
       );
-      if (repointed) return withGithubEventInstallation(event, link.installationId);
+      if (moved) repointed.add(orgId);
+    }
+    if (repointed.size > 0) {
+      return { event: withGithubEventInstallation(event, link.installationId), orgIds: [...repointed] };
     }
   }
   return null;

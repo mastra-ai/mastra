@@ -36,7 +36,7 @@ async function setup(
 ) {
   const platform: FakePlatform = await startFakePlatform();
   const github = await startFakeGithub();
-  const apps = {
+  const apps: Record<string, AppInstall | null> = {
     'tok-github':
       options.github === undefined
         ? { installationId: 900, account: 'acme', repositories: [101, 102] }
@@ -57,7 +57,7 @@ async function setup(
   addApp('conn-reviews', FACTORY_REVIEWS_GITHUB_PROVIDER_KEY, 'tok-reviews', apps['tok-reviews']);
   github.route = request => {
     if (request.method !== 'GET' || request.path !== '/installation/repositories') return undefined;
-    const app = apps[request.token as keyof typeof apps];
+    const app = apps[request.token ?? ''];
     if (!app) return { status: 401, body: { message: 'Bad credentials' } };
     return {
       status: 200,
@@ -151,6 +151,11 @@ async function setup(
     projects,
     emitAudit,
     modes,
+    /** Installs an app on another account, as its own connection. */
+    install: (id: string, integrationId: string, token: string, install: AppInstall) => {
+      apps[token] = install;
+      addApp(id, integrationId, token, install);
+    },
     status: () => app.request('/web/integrations/platform/github/switch'),
     githubStatus: () => app.request('/web/github/status'),
     switchApps: () => app.request('/web/integrations/platform/github/switch', { method: 'POST' }),
@@ -287,6 +292,45 @@ describe('GitHub app switch', () => {
     });
     expect(await sourceControl.installations.list({ orgId: 'org-1' })).toMatchObject([{ externalId: '900' }]);
     expect(platform.requests.some(request => request.path.startsWith('/v1/server/github'))).toBe(false);
+  });
+
+  it('picks up the accounts both apps are installed on after the switch, like the legacy app does', async () => {
+    const { switchApps, githubStatus, install, modes, platform } = await setup();
+    expect((await switchApps()).status).toBe(200);
+    install('conn-github-globex', FACTORY_GITHUB_PROVIDER_KEY, 'tok-github-globex', {
+      installationId: 910,
+      account: 'globex',
+      repositories: [201],
+    });
+    install('conn-reviews-globex', FACTORY_REVIEWS_GITHUB_PROVIDER_KEY, 'tok-reviews-globex', {
+      installationId: 911,
+      account: 'globex',
+      repositories: [201],
+    });
+    // Only one app on initech: not usable until the Reviews app is installed there too.
+    install('conn-github-initech', FACTORY_GITHUB_PROVIDER_KEY, 'tok-github-initech', {
+      installationId: 920,
+      account: 'initech',
+      repositories: [301],
+    });
+
+    const response = await githubStatus();
+    expect(response.status).toBe(200);
+    expect((await response.json()).installations).toMatchObject([
+      { installationId: 900, accountLogin: 'acme' },
+      { installationId: 910, accountLogin: 'globex' },
+    ]);
+    expect((await modes.get('org-1')).installations).toMatchObject([
+      { installationId: 900, connectionId: 'conn-github', reviewsConnectionId: 'conn-reviews' },
+      { installationId: 910, connectionId: 'conn-github-globex', reviewsConnectionId: 'conn-reviews-globex' },
+    ]);
+    await expect(modes.orgsForInstallation(910)).resolves.toEqual(['org-1']);
+
+    // The apps are re-read at most every few minutes, not on every status check.
+    const contextReads = () => platform.requests.filter(request => request.path.endsWith('/context')).length;
+    const before = contextReads();
+    expect((await githubStatus()).status).toBe(200);
+    expect(contextReads()).toBe(before);
   });
 
   it('lets exactly one of two concurrent switches move the installations', async () => {

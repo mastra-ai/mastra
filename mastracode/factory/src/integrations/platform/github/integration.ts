@@ -256,7 +256,12 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
   readonly #linkedRepositories = new LinkedGithubRepositories(() => ({
     listConfiguredExternalKeys: () => this.storage.projectRepositories.listConfiguredExternalKeys(),
     listByExternalRepository: args => this.storage.projectRepositories.listByExternalRepository(args),
-    onLinkedRepositoriesChanged: listener => this.storage.onLinkedRepositoriesChanged(listener),
+    // A switch re-points links on whichever replica ran it; its broadcast also retires that org's cached mode here.
+    onLinkedRepositoriesChanged: listener =>
+      this.storage.onLinkedRepositoriesChanged(() => {
+        this.#modes.invalidate();
+        listener();
+      }),
     linkedRepositoryChangesShared: () => this.storage.linkedRepositoryChangesShared(),
   }));
   /** installationId → cached repository listing (TTL-bounded). */
@@ -1107,6 +1112,19 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     return result.installations.some(installation => installation.usable && !installation.suspendedAt);
   }
 
+  /** The org's mode, with a switched org's newly installed accounts recorded; never fails over a refresh. */
+  async #refreshedMode(orgId: string): Promise<PlatformGithubModeRecord> {
+    try {
+      return await this.#switch.refresh(orgId);
+    } catch (error) {
+      logPlatformWarn("Platform GitHub: could not refresh a switched org's installations", {
+        orgId,
+        error: platformErrorMessage(error),
+      });
+      return this.#modes.get(orgId);
+    }
+  }
+
   async #syncInstallations(
     orgId: string,
     userId: string,
@@ -1115,8 +1133,9 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     hiddenPersonalInstallReason?: PlatformHiddenPersonalInstallReason;
   }> {
     // A switched org's installations are the Mastra Factory apps'; listing the
-    // legacy app here would re-create the rows the switch moved.
-    const record = this.#integrationStorage ? await this.#modes.get(orgId) : undefined;
+    // legacy app here would re-create the rows the switch moved. Like the
+    // legacy listing, it picks up the accounts both apps were installed on since.
+    const record = this.#integrationStorage ? await this.#refreshedMode(orgId) : undefined;
     const result =
       record?.mode === 'connect'
         ? { installations: await this.#sourceInstallations(orgId), hiddenPersonalInstallReason: undefined }
