@@ -8,7 +8,7 @@ import { useIntakeSelection } from '../hooks/useIntakeSelection';
 import { IntakeProviderCard, toggleSource } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { groupJiraProjectsBySite } from './intakeSourceGroups';
-import { JiraRoutedSourcePicker } from './jira/JiraRoutedSourcePicker';
+import { LabelRoutedSourcePicker } from './label-routing/LabelRoutedSourcePicker';
 import {
   AddPlatformAccountButton,
   PlatformConnectButton,
@@ -16,6 +16,8 @@ import {
 } from './PlatformProviderConnections';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+
+const JIRA_ROUTING_TERMS = { integrationId: 'jira', provider: 'Jira', source: 'project', items: 'issues' };
 
 export function JiraIntakeSection({
   config,
@@ -79,8 +81,9 @@ export function JiraIntakeSection({
       }
     >
       {configured && !authError && (
-        <JiraRoutedSourcePicker
+        <LabelRoutedSourcePicker
           factories={factories}
+          terms={JIRA_ROUTING_TERMS}
           label="Jira projects"
           addLabel="Add project"
           itemIcon={<SettingsIntegrationIcon provider="jira" />}

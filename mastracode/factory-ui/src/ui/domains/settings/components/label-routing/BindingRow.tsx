@@ -4,18 +4,18 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
 import type { IntakeSourceBinding } from '../../../factory/services/intake';
-import { JiraLabelEditor } from './JiraLabelEditor';
+import { LabelEditor } from './LabelEditor';
 import { RoutingNote } from './RoutingNote';
 import { routingGap } from './routing';
+import { capitalized, useRoutingTerms } from './terms';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 
-const ALL_ISSUES = 'all';
+const ALL_ITEMS = 'all';
 const LABELLED = 'labelled';
-const LABELLED_TEXT = 'Only issues labelled…';
 
-/** One factory a Jira project feeds: which issues it takes, and removing it. */
-export function JiraBindingRow({
-  project,
+/** One factory a source feeds: which of its items it takes, and removing it. */
+export function BindingRow({
+  source,
   factory,
   binding,
   othersTakeLabels,
@@ -24,7 +24,7 @@ export function JiraBindingRow({
   onTakeAllIssues,
   onRemove,
 }: {
-  project: string;
+  source: string;
   factory: string;
   binding: IntakeSourceBinding;
   othersTakeLabels: boolean;
@@ -33,11 +33,13 @@ export function JiraBindingRow({
   onTakeAllIssues: () => void;
   onRemove: () => void;
 }) {
+  const terms = useRoutingTerms();
   const labels = binding.labels ?? [];
   // Picking "Only issues labelled…" saves nothing until the first label: an empty filter is not a binding.
   const [picked, setPicked] = useState(labels.length > 0);
   const labelled = picked || labels.length > 0;
-  const allIssuesText = othersTakeLabels ? 'All other issues' : 'All issues';
+  const allItemsText = othersTakeLabels ? `All other ${terms.items}` : `All ${terms.items}`;
+  const labelledText = `Only ${terms.items} labelled…`;
 
   const pickFilter = (value: string) => {
     if (value === LABELLED) {
@@ -54,34 +56,34 @@ export function JiraBindingRow({
         <Txt as="span" variant="caption" className="min-w-24 wrap-anywhere">
           {factory}
         </Txt>
-        <Select value={labelled ? LABELLED : ALL_ISSUES} onValueChange={pickFilter}>
+        <Select value={labelled ? LABELLED : ALL_ITEMS} onValueChange={pickFilter}>
           <SelectTrigger
             size="sm"
-            aria-label={`Issues from ${project} for ${factory}`}
+            aria-label={`${capitalized(terms.items)} from ${source} for ${factory}`}
             className="w-auto max-w-full min-w-0"
           >
             <Txt as="span" variant="caption">
-              {labelled ? LABELLED_TEXT : allIssuesText}
+              {labelled ? labelledText : allItemsText}
             </Txt>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ALL_ISSUES}>{allIssuesText}</SelectItem>
-            <SelectItem value={LABELLED}>{LABELLED_TEXT}</SelectItem>
+            <SelectItem value={ALL_ITEMS}>{allItemsText}</SelectItem>
+            <SelectItem value={LABELLED}>{labelledText}</SelectItem>
           </SelectContent>
         </Select>
         <Button
           size="icon-sm"
           variant="ghost"
           tooltip={`Remove ${factory}`}
-          aria-label={`Remove ${factory} from ${project}`}
+          aria-label={`Remove ${factory} from ${source}`}
           onClick={onRemove}
           className="ml-auto"
         >
           <IconCrossMedium />
         </Button>
       </div>
-      {labelled && <JiraLabelEditor factory={factory} labels={labels} onChange={onLabelsChange} />}
-      <RoutingNote error={error} hint={routingGap({ labelled, labels })} />
+      {labelled && <LabelEditor factory={factory} labels={labels} onChange={onLabelsChange} />}
+      <RoutingNote error={error} hint={routingGap({ labelled, labels }, terms)} />
     </li>
   );
 }

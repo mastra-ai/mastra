@@ -4,10 +4,11 @@ import { useState } from 'react';
 
 import { RoutingNote } from './RoutingNote';
 import { newLabels, parseLabels } from './routing';
+import { useRoutingTerms } from './terms';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 
 /** A labelled factory's labels as chips, plus a field adding more. */
-export function JiraLabelEditor({
+export function LabelEditor({
   factory,
   labels,
   onChange,
@@ -16,11 +17,12 @@ export function JiraLabelEditor({
   labels: string[];
   onChange: (labels: string[]) => void;
 }) {
+  const terms = useRoutingTerms();
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string>();
 
   const commitDraft = () => {
-    const parsed = parseLabels(draft);
+    const parsed = parseLabels(draft, terms);
     if ('error' in parsed) {
       setError(parsed.error);
       return;

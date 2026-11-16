@@ -2,26 +2,26 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playgr
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
-import { NewJiraFactoryFields } from './NewJiraFactoryFields';
-import type { NewJiraRoute } from './NewJiraFactoryFields';
+import { NewFactoryFields } from './NewFactoryFields';
+import type { NewRoute } from './NewFactoryFields';
 import type { Factory } from './routing';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
-/** Routes a Jira project to one more factory, with the labels it starts with. */
-export function AddJiraFactory({
-  project,
+/** Routes a source to one more factory, with the labels it starts with. */
+export function AddFactory({
+  source,
   unbound,
   anotherTakesAll,
   errors,
   adding,
   onAdd,
 }: {
-  project: string;
+  source: string;
   unbound: Factory[];
   anotherTakesAll: boolean;
   errors: Record<string, string>;
   adding: boolean;
-  onAdd: (route: NewJiraRoute, onAdded: () => void) => void;
+  onAdd: (route: NewRoute, onAdded: () => void) => void;
 }) {
   const [factoryProjectId, setFactoryProjectId] = useState<string>();
   const factory = unbound.find(candidate => candidate.id === factoryProjectId);
@@ -29,7 +29,7 @@ export function AddJiraFactory({
   return (
     <li className="flex flex-col gap-1">
       <Select value={factory?.id ?? ''} disabled={adding} onValueChange={setFactoryProjectId}>
-        <SelectTrigger size="sm" aria-label={`Factory to add for ${project}`} className="w-fit max-w-full min-w-0">
+        <SelectTrigger size="sm" aria-label={`Factory to add for ${source}`} className="w-fit max-w-full min-w-0">
           <Txt as="span" variant="caption" className="flex items-center gap-1">
             {factory ? (
               factory.name
@@ -50,7 +50,7 @@ export function AddJiraFactory({
         </SelectContent>
       </Select>
       {factory && (
-        <NewJiraFactoryFields
+        <NewFactoryFields
           key={factory.id}
           factory={factory}
           anotherTakesAll={anotherTakesAll}
