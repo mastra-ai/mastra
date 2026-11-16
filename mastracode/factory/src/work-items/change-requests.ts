@@ -26,8 +26,7 @@ export function pullRequestSourceNumber(source: Pick<WorkItemSourceRow, 'metadat
 }
 
 export function isOpenPullRequestSource(source: Pick<WorkItemSourceRow, 'state' | 'metadata'>): boolean {
-  const state = source.state ?? source.metadata?.state;
-  return state !== 'closed' && state !== 'merged' && source.metadata?.merged !== true;
+  return !isSettledChangeRequest(reportedStatus(source.state, source.metadata ?? {}));
 }
 
 /**
