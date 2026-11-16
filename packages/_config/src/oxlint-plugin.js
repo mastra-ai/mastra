@@ -342,6 +342,7 @@ const properNouns = [
   'Studio',
   'Trace Intelligence',
   'Factory',
+  'Platform',
   'MastraCode',
   'GitHub',
   'GitLab',

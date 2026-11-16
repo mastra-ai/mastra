@@ -59,9 +59,7 @@ export function ConnectToolsSection() {
         </SettingsContainer>
       ) : query.data.connections.length === 0 ? (
         <SettingsContainer>
-          <SettingsEmptyRow action={<ManageLink projectId={query.data.projectId} />}>
-            No connections are attached to this Factory's project yet.
-          </SettingsEmptyRow>
+          <SettingsEmptyRow action={<ManageLink projectId={query.data.projectId} />}>No connections</SettingsEmptyRow>
         </SettingsContainer>
       ) : (
         <SettingsContainer>
@@ -93,7 +91,7 @@ function ManageLink({ projectId }: { projectId: string }) {
   const href = platformProjectConnectUrl(projectId, auth.data?.user?.organizationId);
   return (
     <Button size="sm" iconEnd={<IconSquareArrowTopRight />} render={<a href={href} target="_blank" rel="noreferrer" />}>
-      Manage in Mastra Platform
+      Manage in Platform
     </Button>
   );
 }
