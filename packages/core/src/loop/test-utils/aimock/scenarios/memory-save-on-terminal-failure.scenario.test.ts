@@ -1664,6 +1664,111 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     TEST_TIMEOUT_MS,
   );
 
+  // The default for a rejected tool result is the rollback: a `processToolResult` abort that does not
+  // ask to keep the turn leaves nothing of it in the thread, exactly as an output processor abort does.
+  // A client-executed tool reaches the hook through the tool-call step, not the stream, so this is the
+  // route where the durable engines used to save the turn regardless of the aborter's choice.
+  // Same engines as the keep tests above: the in-process engines save nothing on this path, so they
+  // have no turn to roll back.
+  itKeptTurnEngine(
+    'rolls the turn back when a processToolResult hook rejects a client tool result',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-tool-result-default-${engine}`;
+      let blocked = 0;
+      const rejector: Processor = {
+        id: 'rejecting-tool-result',
+        processToolResult: ({ abort }) => {
+          blocked++;
+          abort('Rejected by policy');
+        },
+      };
+
+      const { output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Look the card up, then answer.',
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        agentOutputProcessors: [rejector],
+        stopWhen: stepCountIs(5),
+        tools: { echoTool },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+          );
+          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Continued after the rejection.' });
+        },
+      });
+
+      expect(blocked).toBe(1);
+      expect(output.tripwire).toMatchObject({ reason: 'Rejected by policy' });
+
+      // Absence can't be polled for; give a late write time to land.
+      await new Promise(resolve => setTimeout(resolve, 1_000));
+      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+      expect(messages.map(message => message.role)).toEqual(['user']);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // The same route when the aborter asks for the turn: the choice decides what memory does with it, and
+  // the rejected result stays out either way.
+  itKeptTurnEngine(
+    'keeps the turn when a processToolResult hook opts in with persist: partial',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-tool-result-client-partial-${engine}`;
+      let blocked = 0;
+      const rejector: Processor = {
+        id: 'rejecting-tool-result',
+        processToolResult: ({ abort }) => {
+          blocked++;
+          abort('Rejected by policy', { persist: 'partial' });
+        },
+      };
+
+      const { output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Look the card up, then answer.',
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        agentOutputProcessors: [rejector],
+        stopWhen: stepCountIs(5),
+        tools: { echoTool },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+          );
+          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Continued after the rejection.' });
+        },
+      });
+
+      expect(blocked).toBe(1);
+      expect(output.tripwire).toMatchObject({ reason: 'Rejected by policy', persist: 'partial' });
+
+      const { messages } = await vi.waitFor(
+        async () => {
+          const recalled = await memory.recall({ threadId, resourceId: RESOURCE });
+          expect(recalled.messages.map(message => message.role)).toContain('assistant');
+          return recalled;
+        },
+        { timeout: 5_000, interval: 100 },
+      );
+      const saved = JSON.stringify(messages);
+      expect(saved).toContain('call_echo');
+      expect(saved).toContain('Continued after the rejection.');
+      // The blocked result was never committed, so the call it belonged to is still waiting.
+      expect(toolResultIds(messages)).toEqual([]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   // A stream processor can stop a reply that has already streamed text. The text accepted before the
   // trip belongs to the turn, and the aborter's choice decides whether memory keeps it.
   // Same engines as the rejected tool result above: the in-process engines save nothing on this bail.

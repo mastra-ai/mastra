@@ -210,6 +210,10 @@ export function createBaseIterationStateUpdate(
     accumulatedUsage: newUsage,
     usageAggregationVersion: signalPreempted ? currentState.usageAggregationVersion : 1,
     lastStepResult,
+    // A blocked tool result ends the turn for memory even though the loop keeps its own
+    // continuation decision, so the tripwire carrying the hook's `persist` has to survive the
+    // iterations that follow it and reach finalization.
+    toolResultTripwire: executionOutput.stepResult.toolResultTripwire ?? currentState.toolResultTripwire,
     deferredStepFinishChunk: executionOutput.deferredStepFinishChunk,
     backgroundTaskPending: executionOutput.backgroundTaskPending,
     delegationBailed: executionOutput.delegationBailed,

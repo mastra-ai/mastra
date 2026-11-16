@@ -2575,23 +2575,29 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       processorId: r.processorId,
                       metadata: r.tripwireOptions?.metadata,
                     });
-                    await emitChunkEvent(
-                      pubsub,
-                      runId,
-                      {
-                        type: 'tripwire',
+                    // A tool-result tripwire already stopped this attempt, and the bail below
+                    // publishes its chunk. A consumer ends on the first tripwire chunk it sees,
+                    // so publishing this one first would show the held part's reason and persist
+                    // while the run keeps or rolls back by the tool-result tripwire's choice.
+                    if (!toolResultTripwire) {
+                      await emitChunkEvent(
+                        pubsub,
                         runId,
-                        from: ChunkFrom.AGENT,
-                        payload: {
-                          reason: r.reason || 'Output processor blocked content',
-                          retry: r.tripwireOptions?.retry,
-                          metadata: r.tripwireOptions?.metadata,
-                          processorId: r.processorId,
-                          persist: r.tripwireOptions?.persist,
+                        {
+                          type: 'tripwire',
+                          runId,
+                          from: ChunkFrom.AGENT,
+                          payload: {
+                            reason: r.reason || 'Output processor blocked content',
+                            retry: r.tripwireOptions?.retry,
+                            metadata: r.tripwireOptions?.metadata,
+                            processorId: r.processorId,
+                            persist: r.tripwireOptions?.persist,
+                          },
                         },
-                      },
-                      true,
-                    );
+                        true,
+                      );
+                    }
                     break;
                   }
                   if (r.part == null) continue;

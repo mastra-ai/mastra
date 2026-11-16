@@ -18,7 +18,7 @@ import {
   resolveProcessorWriterMessageId,
 } from '../../../stream/base/output';
 import { createOutputHandler } from '../../../stream/base/output-format-handlers';
-import type { ChunkType } from '../../../stream/types';
+import type { ChunkType, StepTripwireData } from '../../../stream/types';
 import type { Agent } from '../../agent';
 import { convertMessages, coreContentToString, MessageList } from '../../message-list';
 import type { SerializedMessageListState } from '../../message-list/state';
@@ -54,6 +54,13 @@ export interface DurableFinishSideEffectsOptions {
    * the run, so `initData.messageId` can name an earlier reply. Defaults to that id.
    */
   messageId?: string;
+  /**
+   * Set when a `processToolResult` hook rejected a tool result. Unlike the `tripwire` this function
+   * returns, it is not how the run ended: the loop keeps its own continuation decision for a
+   * blocked result, and the rejected value never reaches the transcript. It only carries the hook's
+   * `persist`, which decides here whether the turn is rolled back or kept.
+   */
+  toolResultTripwire?: StepTripwireData;
 }
 
 export interface DurableFinishSideEffectsResult {
@@ -141,6 +148,7 @@ export async function runDurableFinishSideEffects({
   tracingContext,
   logger,
   outputResult,
+  toolResultTripwire,
   messageId = initData.messageId,
 }: DurableFinishSideEffectsOptions): Promise<DurableFinishSideEffectsResult> {
   const effectiveLogger = logger ?? mastra?.getLogger?.() ?? noopLogger;
@@ -421,6 +429,33 @@ export async function runDurableFinishSideEffects({
       // its final write and skips that flush, so its failure must propagate here.
       if (durableState?.observationalMemory) throw error;
     }
+  }
+
+  // A `processToolResult` hook can reject a result while the loop carries on, so the rejection
+  // arrives here as a carried tripwire rather than as this run's outcome. The turn is still whole
+  // at this point, so apply the hook's policy the way the `processOutputResult` branch above does:
+  // anything but `'partial'` removes the response messages the run already saved. The save below
+  // skips them, since output processors marked them persisted.
+  if (toolResultTripwire && toolResultTripwire.persist !== 'partial') {
+    await undoSavedResponseMessages({
+      memory: registryEntry?.memory ?? rebuiltMemory,
+      threadId: durableState?.threadId,
+      memoryConfig: durableState?.memoryConfig,
+      messageList,
+      saveQueueManager: registryEntry?.saveQueueManager ?? rebuiltSaveQueueManager,
+      logger: effectiveLogger,
+      runId,
+    });
+    // Return before the save below, which would write the rolled-back reply straight back — the
+    // same reason the `processOutputResult` branch above returns instead of falling through. Only
+    // memory drops the turn; the text the caller already streamed is unchanged.
+    const rolledBackText = resolveOutputText(messageList);
+    return {
+      messageListState: messageList.serialize(),
+      outputText: rolledBackText,
+      outputTextChanged: rolledBackText !== outputTextBeforeProcessing,
+      outputResultChunks,
+    };
   }
 
   // SaveQueueManager may reclassify flushed response messages as persisted
