@@ -297,7 +297,31 @@ describe('LibSQL background-task write-lock regression', () => {
   // unserialized UPDATE waits out the busy timeout behind the open transaction,
   // fails with SQLITE_BUSY, and arms the pool reset, which then stalls or
   // closes the transactions still in flight.
-  it('keeps task updates and deletes that race interactive workflow transactions', async () => {
+  type TasksStore = NonNullable<LibSQLStore['stores']['backgroundTasks']>;
+  const taskWrites: {
+    name: string;
+    write: (tasks: TasksStore, id: string) => Promise<unknown>;
+    check: (tasks: TasksStore, id: string) => Promise<void>;
+  }[] = [
+    {
+      name: 'updateTask',
+      write: (tasks, id) =>
+        tasks.updateTask(id, { status: 'failed', completedAt: new Date() }, { expectedStatus: 'running' }),
+      check: async (tasks, id) => expect((await tasks.getTask(id))?.status).toBe('failed'),
+    },
+    {
+      name: 'deleteTask',
+      write: (tasks, id) => tasks.deleteTask(id),
+      check: async (tasks, id) => expect(await tasks.getTask(id)).toBeNull(),
+    },
+    {
+      name: 'deleteTasks',
+      write: (tasks, id) => tasks.deleteTasks({ runId: `run-${id}` }),
+      check: async (tasks, id) => expect(await tasks.getTask(id)).toBeNull(),
+    },
+  ];
+
+  it.each(taskWrites)('keeps $name writes that race interactive workflow transactions', async ({ write, check }) => {
     store = new LibSQLStore({ id: 'bg-lock-regression', url: `file:${path.join(tmpDir, 'bg-race.db')}` });
     const tasks = store.stores.backgroundTasks!;
     const workflows = store.stores.workflows!;
@@ -337,18 +361,16 @@ describe('LibSQL background-task write-lock regression', () => {
       });
     }
 
-    // Each run is deleted in its own interactive transaction while the manager
-    // marks the tasks failed one after another, so updates land inside open transactions.
+    // Each run is deleted in its own interactive transaction while the task
+    // writes go out one after another, so they land inside open transactions.
     const deletes = Promise.all(ids.map(id => workflows.deleteWorkflowRunById({ runId: `run-${id}`, workflowName })));
-    const updates = (async () => {
-      for (const id of ids) {
-        await tasks.updateTask(id, { status: 'failed', completedAt: new Date() }, { expectedStatus: 'running' });
-      }
+    const writes = (async () => {
+      for (const id of ids) await write(tasks, id);
     })();
-    await Promise.all([deletes, updates]);
+    await Promise.all([deletes, writes]);
 
     for (const id of ids) {
-      expect((await tasks.getTask(id))?.status).toBe('failed');
+      await check(tasks, id);
       expect(await workflows.getWorkflowRunById({ runId: `run-${id}`, workflowName })).toBeNull();
     }
   });
