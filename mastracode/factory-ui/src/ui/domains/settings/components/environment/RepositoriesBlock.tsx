@@ -8,7 +8,6 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { SettingsItem, SettingsItemIcon, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
 import { IconDotGrid2x3 } from '@mastra/playground-ui/icons/central/IconDotGrid2x3';
 import { useId, useState } from 'react';
 
@@ -21,6 +20,7 @@ import { CommittedInput } from './CommittedInput';
 import type { SaveEnvironment } from './CommittedInput';
 import { IconBrokenChainLink3 } from '@mastra/playground-ui/icons/central/IconBrokenChainLink3';
 import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 
 // Number every link 1..n (dead links last) and send only ids + positions so concurrent edits survive.
 export function reorderPatch(ordered: FactoryEnvironmentRepository[]): FactoryEnvironmentRepositoryPatch[] {
@@ -234,7 +234,7 @@ function RepositoryRow({
             <span className="min-w-0 truncate" title={label}>
               {label}
             </span>
-            <IconChevronBottom aria-hidden className={cn('size-4 shrink-0', expanded && 'rotate-180')} />
+            <IconChevronDownMedium aria-hidden className={cn('size-4 shrink-0', expanded && 'rotate-180')} />
           </button>
         }
         description={repository.inEnvironment ? undefined : 'Skipped'}

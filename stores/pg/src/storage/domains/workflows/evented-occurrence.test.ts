@@ -5,17 +5,37 @@ import { z } from 'zod';
 import { PostgresStore } from '../..';
 import { Mastra } from '../../../../../../packages/core/src/mastra';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../../../../packages/core/src/request-context';
-import { createStep, createWorkflow } from '../../../../../../packages/core/src/workflows/evented';
+import type { WorkflowOptions, WorkflowRunState } from '../../../../../../packages/core/src/workflows';
+import {
+  createStep,
+  createWorkflow as createEventedWorkflow,
+} from '../../../../../../packages/core/src/workflows/evented';
 import { RedeliveryDriver } from '../../../../../../packages/core/src/workflows/evented/test-utils/redelivery-driver';
 import { connectionString, TEST_CONFIG } from '../../test-utils';
 
-describe('Postgres evented occurrence replay', () => {
-  const schemaName = `evented_guard_${Date.now()}`;
+describe.each([1, 2] as const)('Postgres evented occurrence replay on storage v%i', storageVersion => {
+  const schemaName = `evented_guard_v${storageVersion}_${Date.now()}`;
   const storage = new PostgresStore({ ...TEST_CONFIG, id: 'evented-guard', schemaName });
+  const createWorkflow = ((params: Parameters<typeof createEventedWorkflow>[0]) => {
+    const options: WorkflowOptions<any> = { ...params.options, storageVersion };
+    return createEventedWorkflow({ ...params, options });
+  }) as typeof createEventedWorkflow;
+  // Storage v1 keeps the run's state under `context.__state`, v2 as the snapshot's `value`.
+  const stateOf = (snapshot: WorkflowRunState | null | undefined) =>
+    storageVersion === 1 ? snapshot?.context.__state : snapshot?.value;
   beforeAll(() => storage.init());
   afterAll(async () => {
-    await storage.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-    await storage.close();
+    try {
+      // A v2 run must never fall back to the v1 snapshot table.
+      if (storageVersion === 2) {
+        expect(await storage.db.one(`SELECT count(*)::int AS n FROM "${schemaName}".mastra_workflow_snapshot`)).toEqual(
+          { n: 0 },
+        );
+      }
+    } finally {
+      await storage.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+      await storage.close();
+    }
   });
 
   it.each([false, true])(
@@ -170,7 +190,7 @@ describe('Postgres evented occurrence replay', () => {
         const snapshot = await store!.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
         expect(snapshot?.context[body.id]).toMatchObject({ status: 'success', output: { n: 1 } });
         expect(snapshot?.requestContext).not.toHaveProperty(MASTRA_AUTH_TOKEN_KEY);
-        expect(snapshot?.context.__state).toEqual({ n: 1 });
+        expect(stateOf(snapshot)).toEqual({ n: 1 });
         expect(calls).toEqual([1]);
         const original =
           bodyKind === 'nested-completion'
@@ -193,55 +213,59 @@ describe('Postgres evented occurrence replay', () => {
     20_000,
   );
 
-  it('finishes a loop when an older worker leaves saved rows without occurrence metadata', async () => {
-    const driver = new RedeliveryDriver();
-    const schema = z.object({ n: z.number() });
-    const calls: number[] = [];
-    const body = createStep({
-      id: 'increment',
-      inputSchema: schema,
-      outputSchema: schema,
-      execute: async ({ inputData }) => {
-        calls.push(inputData.n + 1);
-        return { n: inputData.n + 1 };
-      },
-    });
-    const workflow = createWorkflow({ id: `legacy-loop-${randomUUID()}`, inputSchema: schema, outputSchema: schema })
-      .dountil(body, async ({ inputData }) => inputData.n === 3)
-      .commit();
-    const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { workflow } });
-    const publish = driver.pubsub.publish.bind(driver.pubsub);
-    let legacyWrite = false;
-    const olderWorker = vi.spyOn(driver.pubsub, 'publish').mockImplementation(async (topic, event, options) => {
-      if (
-        !legacyWrite &&
-        topic === 'workflows' &&
-        event.type === 'workflow.step.run' &&
-        event.data.prevResult?.output?.n === 1
-      ) {
-        const store = await storage.getStore('workflows');
-        const snapshot = await store!.loadWorkflowSnapshot({ workflowName: workflow.id, runId: event.runId });
-        expect(snapshot?.context[body.id]).toMatchObject({ status: 'success', output: { n: 1 } });
-        for (const result of Object.values(snapshot!.context)) {
-          if (result?.metadata) delete result.metadata.startedBy;
+  // Older workers only write storage v1, so only a v1 run can be left without occurrence metadata.
+  it.skipIf(storageVersion === 2)(
+    'finishes a loop when an older worker leaves saved rows without occurrence metadata',
+    async () => {
+      const driver = new RedeliveryDriver();
+      const schema = z.object({ n: z.number() });
+      const calls: number[] = [];
+      const body = createStep({
+        id: 'increment',
+        inputSchema: schema,
+        outputSchema: schema,
+        execute: async ({ inputData }) => {
+          calls.push(inputData.n + 1);
+          return { n: inputData.n + 1 };
+        },
+      });
+      const workflow = createWorkflow({ id: `legacy-loop-${randomUUID()}`, inputSchema: schema, outputSchema: schema })
+        .dountil(body, async ({ inputData }) => inputData.n === 3)
+        .commit();
+      const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { workflow } });
+      const publish = driver.pubsub.publish.bind(driver.pubsub);
+      let legacyWrite = false;
+      const olderWorker = vi.spyOn(driver.pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+        if (
+          !legacyWrite &&
+          topic === 'workflows' &&
+          event.type === 'workflow.step.run' &&
+          event.data.prevResult?.output?.n === 1
+        ) {
+          const store = await storage.getStore('workflows');
+          const snapshot = await store!.loadWorkflowSnapshot({ workflowName: workflow.id, runId: event.runId });
+          expect(snapshot?.context[body.id]).toMatchObject({ status: 'success', output: { n: 1 } });
+          for (const result of Object.values(snapshot!.context)) {
+            if (result?.metadata) delete result.metadata.startedBy;
+          }
+          await store!.persistWorkflowSnapshot({ workflowName: workflow.id, runId: event.runId, snapshot: snapshot! });
+          legacyWrite = true;
         }
-        await store!.persistWorkflowSnapshot({ workflowName: workflow.id, runId: event.runId, snapshot: snapshot! });
-        legacyWrite = true;
+        return publish(topic, event, options);
+      });
+      await mastra.startWorkers();
+      try {
+        const run = await workflow.createRun();
+        expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'success', result: { n: 3 } });
+        expect(legacyWrite).toBe(true);
+        expect(calls).toEqual([1, 2, 3]);
+      } finally {
+        olderWorker.mockRestore();
+        await mastra.stopWorkers();
+        driver.dispose();
       }
-      return publish(topic, event, options);
-    });
-    await mastra.startWorkers();
-    try {
-      const run = await workflow.createRun();
-      expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'success', result: { n: 3 } });
-      expect(legacyWrite).toBe(true);
-      expect(calls).toEqual([1, 2, 3]);
-    } finally {
-      olderWorker.mockRestore();
-      await mastra.stopWorkers();
-      driver.dispose();
-    }
-  });
+    },
+  );
 
   it('continues with committed loop state when a slower duplicate loses completion', async () => {
     const driver = new RedeliveryDriver();
@@ -256,14 +280,14 @@ describe('Postgres evented occurrence replay', () => {
       id: 'body',
       inputSchema: schema,
       outputSchema: schema,
-      execute: async ({ inputData, state, setState }) => {
+      execute: async ({ inputData, getState, setState }) => {
         executions++;
         if (executions === 1) {
           await blocked;
           await setState({ n: 999 });
           return { n: 999 };
         }
-        states.push(state);
+        states.push(await getState());
         await setState({ n: inputData.n + 1 });
         return { n: inputData.n + 1 };
       },
@@ -346,12 +370,17 @@ describe('Postgres evented occurrence replay', () => {
     }
   }, 8_000);
 
-  it.each([
-    ['run', false],
-    ['end', false],
-    ['run', true],
-    ['end', true],
-  ] as const)(
+  // Storage v2 doesn't prune snapshots, so its runs only cover the unpruned cases.
+  it.each(
+    (
+      [
+        ['run', false],
+        ['end', false],
+        ['run', true],
+        ['end', true],
+      ] as const
+    ).filter(([, prune]) => storageVersion === 1 || !prune),
+  )(
     'continues a saved linear result after reclaiming step.%s with pruning %s',
     async (delivery, prune) => {
       const driver = new RedeliveryDriver();
@@ -376,11 +405,11 @@ describe('Postgres evented occurrence replay', () => {
         id: 'second',
         inputSchema: schema,
         outputSchema: schema,
-        execute: async ({ inputData, requestContext, state }) => {
+        execute: async ({ inputData, requestContext, getState }) => {
           calls.push('second');
           expect(requestContext.get('committed')).toBe(true);
           expect(requestContext.get(MASTRA_AUTH_TOKEN_KEY)).toBe('live-recovery-token');
-          expect(state).toEqual({ n: 1 });
+          expect(await getState()).toEqual({ n: 1 });
           await secondGate;
           return { n: inputData.n + 1 };
         },
@@ -492,7 +521,9 @@ describe('Postgres evented occurrence replay', () => {
         ['parallel', true],
         ['conditional', true],
       ] as const
-    ).flatMap(([boundary, replay]) => [[boundary, replay, true] as const, [boundary, replay, false] as const]),
+    )
+      .flatMap(([boundary, replay]) => [[boundary, replay, true] as const, [boundary, replay, false] as const])
+      .filter(([, , prune]) => storageVersion === 1 || !prune),
   )(
     'retires results at a %s boundary with continuation replay %s and pruning %s',
     async (boundary, replay, prune) => {
@@ -563,18 +594,27 @@ describe('Postgres evented occurrence replay', () => {
               : builder.then(second).then(third).commit();
       const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { [workflow.id]: workflow } });
       const store = (await storage.getStore('workflows'))!;
-      const persist = store.persistWorkflowSnapshot.bind(store);
+      // The terminal handoff rewrites the whole run: a v1 snapshot or a v2 checkpoint.
       let terminalWriteFailed = false;
+      const failTerminalWrite = (status: string) => {
+        if (terminalWriteFailed || status !== 'success') return false;
+        terminalWriteFailed = true;
+        return true;
+      };
+      const persist = store.persistWorkflowSnapshot.bind(store);
+      const checkpoint = store.writeWorkflowRunCheckpoint.bind(store);
       const failedPrune =
-        boundary === 'terminal' && replay
-          ? vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async args => {
-              if (!terminalWriteFailed && args.snapshot.status === 'success') {
-                terminalWriteFailed = true;
-                throw new Error('Terminal prune write interrupted');
-              }
-              return persist(args);
-            })
-          : undefined;
+        boundary !== 'terminal' || !replay
+          ? undefined
+          : storageVersion === 1
+            ? vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async args => {
+                if (failTerminalWrite(args.snapshot.status)) throw new Error('Terminal prune write interrupted');
+                return persist(args);
+              })
+            : vi.spyOn(store, 'writeWorkflowRunCheckpoint').mockImplementation(async args => {
+                if (failTerminalWrite(args.header.status)) throw new Error('Terminal checkpoint write interrupted');
+                return checkpoint(args);
+              });
       const publish = driver.pubsub.publish.bind(driver.pubsub);
       const interrupted = replay
         ? vi.spyOn(driver.pubsub, 'publish').mockImplementation(async (topic, event, options) => {
@@ -662,6 +702,20 @@ describe('Postgres evented occurrence replay', () => {
     const readPool = new Pool({ connectionString, max: 1 });
     const replicaStorage = new PostgresStore({ ...TEST_CONFIG, id: 'lagging-reader', schemaName, readPool });
     await replicaStorage.init();
+    const staleStatus = async (runId: string) => {
+      if (storageVersion === 1) {
+        const { rows } = await readPool.query(
+          `SELECT snapshot FROM "${schemaName}".mastra_workflow_snapshot WHERE run_id = $1`,
+          [runId],
+        );
+        return rows[0].snapshot.status;
+      }
+      const { rows } = await readPool.query(
+        `SELECT status FROM "${schemaName}".mastra_workflow_runs WHERE run_id = $1`,
+        [runId],
+      );
+      return rows[0].status;
+    };
     const driver = new RedeliveryDriver();
     const schema = z.object({ n: z.number() });
     const step = createStep({
@@ -671,29 +725,29 @@ describe('Postgres evented occurrence replay', () => {
       execute: async ({ runId }) => {
         // Keep a real PostgreSQL read view behind the primary's terminal commit.
         await readPool.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const stale = await readPool.query(
-          `SELECT snapshot FROM "${schemaName}".mastra_workflow_snapshot WHERE run_id = $1`,
-          [runId],
-        );
-        expect(stale.rows[0].snapshot.status).toBe('running');
+        expect(await staleStatus(runId)).toBe('running');
         return { n: 1 };
       },
     });
+    // Storage v2 doesn't prune snapshots, so its terminal result keeps the step output.
     const workflow = createWorkflow({
       id: `replica-prune-${randomUUID()}`,
       inputSchema: schema,
       outputSchema: schema,
-      options: {
-        pruneSnapshot: ({ snapshot }) => ({
-          ...snapshot,
-          context: Object.fromEntries(
-            Object.entries(snapshot.context).map(([id, result]) => [
-              id,
-              result?.status === 'success' ? { ...result, output: {} } : result,
-            ]),
-          ),
-        }),
-      },
+      options:
+        storageVersion === 1
+          ? {
+              pruneSnapshot: ({ snapshot }) => ({
+                ...snapshot,
+                context: Object.fromEntries(
+                  Object.entries(snapshot.context).map(([id, result]) => [
+                    id,
+                    result?.status === 'success' ? { ...result, output: {} } : result,
+                  ]),
+                ),
+              }),
+            }
+          : undefined,
     })
       .then(step)
       .commit();
@@ -716,13 +770,14 @@ describe('Postgres evented occurrence replay', () => {
       expect(completed).toMatchObject({
         status: 'success',
         result: { output: { n: 1 } },
-        context: { finish: { output: {}, metadata: { __continuationStarted: true } } },
+        context: {
+          finish: {
+            output: storageVersion === 1 ? {} : { n: 1 },
+            metadata: { __continuationStarted: true },
+          },
+        },
       });
-      const stale = await readPool.query(
-        `SELECT snapshot FROM "${schemaName}".mastra_workflow_snapshot WHERE run_id = $1`,
-        [run.runId],
-      );
-      expect(stale.rows[0].snapshot.status).toBe('running');
+      expect(await staleStatus(run.runId)).toBe('running');
       await readPool.query('ROLLBACK');
       expect(await store.getWorkflowRunById({ workflowName: workflow.id, runId: run.runId })).toMatchObject({
         resourceId: 'replica-owner',
@@ -889,15 +944,20 @@ describe('Postgres evented occurrence replay', () => {
         expect(calls).toBe(1);
         interrupted.mockRestore();
         const original = structuredClone(driver.stepRuns({ spec: '0', runId: run.runId })[0]!);
-        expect(original.data.stepResults.increment?.metadata?.startedBy).not.toBe(original.id);
+        // Storage v2 events don't carry step results: each dispatch loads them from the stored run.
+        if (storageVersion === 1) {
+          expect(original.data.stepResults.increment?.metadata?.startedBy).not.toBe(original.id);
+        }
         const leaseKey = `workflow-step-run:${run.runId}:${original.id}`;
         await driver.pubsub.releaseLease(leaseKey, (await driver.pubsub.getLeaseOwner(leaseKey))!);
         await driver.redeliverEvent(original);
-        const retry = driver.stepRuns({ spec: '0', runId: run.runId }).at(-1)!;
-        expect(retry.data.stepResults.increment).toMatchObject({
-          status: 'failed',
-          metadata: { startedBy: original.id },
-        });
+        if (storageVersion === 1) {
+          const retry = driver.stepRuns({ spec: '0', runId: run.runId }).at(-1)!;
+          expect(retry.data.stepResults.increment).toMatchObject({
+            status: 'failed',
+            metadata: { startedBy: original.id },
+          });
+        }
         expect(await result).toMatchObject({ status: 'success', result: { n: 1 } });
         expect(calls).toBe(2);
       } finally {
@@ -960,7 +1020,7 @@ describe('Postgres evented occurrence replay', () => {
       const store = await storage.getStore('workflows');
       const load = () => store!.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
       const before = await load();
-      expect(before?.context.__state).toEqual({ n: 3 });
+      expect(stateOf(before)).toEqual({ n: 3 });
       const completion = driver.events.find(event => event.type === 'workflow.step.end');
       expect(completion).toBeDefined();
       expect(calls).toEqual([1, 2, 3]);

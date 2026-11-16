@@ -16,8 +16,8 @@ import { ActivityChart } from './ActivityChart';
 import { ActivityPeriodMenu } from './ActivityPeriodMenu';
 import { ActivityReveal } from './ActivityReveal';
 import { ActivityTotals } from './ActivityTotals';
-import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
 import { IconScript } from '@mastra/playground-ui/icons/central/IconScript';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 
 const RECAPS: Record<ActivityPeriod, { label: string; since: string }> = {
   today: { label: 'Recap today', since: 'today' },
@@ -99,7 +99,7 @@ export function FactoryActivity({ factoryId }: { factoryId: string }) {
                 <RecapButton period={period} />
               </div>
             )}
-            <IconChevronBottom
+            <IconChevronDownMedium
               aria-hidden
               className={cn(
                 'text-muted-foreground duration-slow ease-out-custom size-3.5 transition-[rotate,color] group-has-[[aria-controls]:hover]/band:text-foreground motion-reduce:transition-none',

@@ -24,7 +24,7 @@ import { AddPhaseButton } from './AddPhaseButton';
 import { NewCardsHere } from './NewCardsHere';
 import { PhaseConfig } from './PhaseConfig';
 import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
-import { IconChevronRight } from '@mastra/playground-ui/icons/central/IconChevronRight';
+import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
 
 const RULE_FIELDS: RuleField[] = ['autoStartWhen', 'autoApproveWhen'];
 
@@ -181,7 +181,7 @@ export function BoardConfigEditor({
                       <Txt as="span" variant="label" className="min-w-0 flex-1 truncate">
                         {candidate.name}
                       </Txt>
-                      <IconChevronRight className="text-muted-foreground size-4" aria-hidden />
+                      <IconChevronRightMedium className="text-muted-foreground size-4" aria-hidden />
                     </Link>
                   </li>
                 ))}
@@ -201,7 +201,7 @@ export function BoardConfigEditor({
                 <Txt as="span" variant="label" className="min-w-0 flex-1 truncate">
                   Skills
                 </Txt>
-                <IconChevronRight className="text-muted-foreground size-4" aria-hidden />
+                <IconChevronRightMedium className="text-muted-foreground size-4" aria-hidden />
               </Link>
             </SettingsContainer>
           </SettingsSubsection>

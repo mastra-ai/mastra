@@ -4,7 +4,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowBoxLeft } from '@mastra/playground-ui/icons/central/IconArrowBoxLeft';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconLoadingCircle } from '@mastra/playground-ui/icons/central/IconLoadingCircle';
-import { IconSettingsGear1 } from '@mastra/playground-ui/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@mastra/playground-ui/icons/central/IconSettingsGear5';
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import type { AuthenticatedUser, CurrentUser } from '@mastra/react/hooks/auth';
 import { useState } from 'react';
@@ -123,7 +123,7 @@ export function UserMenu({ user }: UserMenuProps) {
             variant="ghost"
             className="w-full justify-start"
             onClick={() => setOpen(false)}
-            icon={<IconSettingsGear1 />}
+            icon={<IconSettingsGear5 />}
           >
             Settings
           </Button>
