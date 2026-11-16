@@ -145,6 +145,18 @@ describe.each([
     });
   });
 
+  // The default template lifetime is 5 minutes, shorter than a 15-minute idle
+  // window, so clone() raises the lifetime to the idle window.
+  it('a default-template clone with idleTimeoutMinutes: 15 gets a 15m lifetime and idle timeout', async () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec' });
+    const clone = template.clone({ id: 'x', idleTimeoutMinutes: 15 });
+
+    await clone._start();
+
+    const [request] = createRequests();
+    expect(request).toMatchObject({ definition: { name: 'x', timeoutSecs: 900, idleTimeoutSecs: 900 } });
+  });
+
   it('a sandbox with no idle timeout asks Modal for none', async () => {
     const sandbox = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', timeoutMs: 60 * 60_000 });
 
