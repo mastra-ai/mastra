@@ -12,6 +12,7 @@ import { describe, expect, it, onTestFinished } from 'vitest';
 import { createBoardRegistry } from '../boards/index.js';
 import { ProjectBoardCache } from '../boards/project-boards.js';
 import { workSeedWithSelfReview } from '../boards/work-migrations.js';
+import { createFactoryTransitionTools } from '../rules/tools.js';
 import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../storage/test-utils.js';
 import { FactoryWorkItemStateProcessor } from './work-item-state-processor.js';
@@ -277,8 +278,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
         await workItems.attachSource({ orgId: 'org-1', id: item.id, ...attached });
       }
       const processor = new FactoryWorkItemStateProcessor({ storage: workItems, boards: createBoardRegistry() });
-      const signal = await processor.computeStateSignal(stateArgs(requestContext(project.id)));
-      return { item, contents: signal!.contents };
+      const context = requestContext(project.id);
+      const signal = await processor.computeStateSignal(stateArgs(context));
+      return { item, contents: signal!.contents, cacheKey: signal!.cacheKey, processor, workItems, context };
     }
 
     const pullRequest23029: ExternalWorkItemSource = {
@@ -438,6 +440,36 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
       const firstPass = (await githubCard({ pullRequestHeadSha: NEW })).contents;
       expect(firstPass).toContain(`This review pass covers head \`${NEW}\`. Record your verdict for that head.`);
       expect(new Set([pushed, unmoved, unknownHead, firstPass]).size).toBe(4);
+    });
+
+    it('tells the reviewer its pass is finished once it records a verdict, instead of starting another pass', async () => {
+      const card = await githubCard({ pullRequestHeadSha: NEW });
+      expect(card.contents).toContain(`This review pass covers head \`${NEW}\`. Record your verdict for that head.`);
+
+      const tools = await createFactoryTransitionTools({
+        requestContext: card.context,
+        storage: card.workItems,
+        transitionService: { transition: async () => ({ status: 'rejected' }) } as never,
+        boards: createBoardRegistry(),
+      });
+      const verdictTool = tools.factory_record_review_verdict as unknown as {
+        execute: (input: unknown, context: unknown) => Promise<unknown>;
+      };
+      await verdictTool.execute(
+        { verdict: 'approve', reviewedHeadSha: NEW },
+        { requestContext: card.context, agent: { toolCallId: 'verdict-1' } },
+      );
+
+      // The verdict changed the card, so the session is sent the card again before its next step.
+      const afterVerdict = await card.processor.computeStateSignal(
+        stateArgs(card.context, {
+          lastSnapshot: { metadata: { state: { cacheKey: card.cacheKey } } },
+          contextWindow: { hasSnapshot: true },
+        }),
+      );
+      expect(afterVerdict?.contents).toContain(`Last PR review: approve on #23029 at ${NEW}`);
+      expect(afterVerdict?.contents).not.toContain('new review pass');
+      expect(afterVerdict?.contents).not.toMatch(/record a verdict/i);
     });
 
     it('keeps malformed head metadata out of the review guidance', async () => {

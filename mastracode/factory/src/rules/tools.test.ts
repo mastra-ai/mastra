@@ -833,6 +833,32 @@ describe('factory_transition_work_item', () => {
       });
     });
 
+    it('leaves the card untouched when the pass that recorded a verdict records the same one again', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const id = await reviewingItem(storage);
+      const context = requestContext();
+      const tools = await createFactoryTransitionTools({
+        requestContext: context,
+        storage,
+        transitionService: { transition: vi.fn() } as never,
+      });
+      const tool = tools.factory_record_review_verdict as ExecutableTool;
+      const head = 'abc1234def000000000000000000000000000000';
+
+      const first = await execute(tool, context, { verdict: 'approve', reviewedHeadSha: head });
+      const recorded = await storage.get({ orgId: 'org-1', id });
+      await expect(
+        execute(tool, context, { verdict: 'approve', reviewedHeadSha: head }, 'tool-call-2'),
+      ).resolves.toEqual(first);
+      expect((await storage.get({ orgId: 'org-1', id }))?.revision).toBe(recorded?.revision);
+
+      // A different verdict, or another head, is new information and is written.
+      await execute(tool, context, { verdict: 'request changes', reviewedHeadSha: head }, 'tool-call-3');
+      const changed = await storage.get({ orgId: 'org-1', id });
+      expect(changed?.revision).toBeGreaterThan(recorded!.revision);
+      expect(changed?.metadata).toMatchObject({ reviewVerdict: 'request changes' });
+    });
+
     it('mirrors the verdict onto the Work item that authored the pull request', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const id = await reviewingItem(storage);

@@ -216,7 +216,7 @@ function renderWorkItem(input: { item: Card; binding: FactoryRunBindingRecord; b
     lines.join('\n'),
     sourceText,
     `Factory state:\n${state.map(escapeText).join('\n')}`,
-    reviewBlock(item),
+    reviewBlock(item, binding),
   ];
   const findings = text(metadata.selfReviewFindings);
   if (findings) {
@@ -294,11 +294,27 @@ function checkoutHint(card: ReviewCard, change: ReviewedChangeRequest): string {
  * Names the head this pass covers. Without it every pass on a pull request reads the same, so a
  * reviewer in the session that recorded the last verdict can take a new pass for a repeat and
  * restate that verdict instead of reviewing what was pushed since.
+ *
+ * A verdict changes the card, so the reviewer is sent this again in the middle of its own pass.
+ * Reading its own verdict as "the previous pass" there would start it on another pass over the
+ * same head, and every verdict it records would do the same again.
  */
-function headLine(metadata: Record<string, unknown>, reReview: boolean): string | undefined {
+function headLine(
+  metadata: Record<string, unknown>,
+  reReview: boolean,
+  binding: FactoryRunBindingRecord,
+): string | undefined {
   const head = commitSha(metadata.pullRequestHeadSha)?.toLowerCase();
   const reviewed = reReview ? commitSha(metadata.reviewedHeadSha)?.toLowerCase() : undefined;
   const recorded = metadata.reviewVerdict;
+  const reviewedAt = typeof metadata.reviewedAt === 'string' ? Date.parse(metadata.reviewedAt) : Number.NaN;
+  const recordedThisPass = reviewedAt >= binding.createdAt.getTime();
+  if (recordedThisPass && reviewed && (!head || head === reviewed)) {
+    return (
+      `This review pass is finished: it recorded ${typeof recorded === 'string' ? `"${recorded}"` : 'its verdict'} on \`${reviewed}\`. ` +
+      `Do not record it again. Only if the head has moved past \`${reviewed}\` is there more to review.`
+    );
+  }
   const priorPass = recorded === 'approve' || recorded === 'request changes' ? `recorded "${recorded}"` : 'reviewed';
   if (head && reviewed && head !== reviewed) {
     return (
@@ -331,7 +347,7 @@ function headLine(metadata: Record<string, unknown>, reReview: boolean): string 
  * which head the pass covers. Empty for a card with no change request. Not escaped: every value
  * in it is a number, a commit SHA or a validated branch name, and its commands must stay runnable.
  */
-function reviewBlock(item: Card): string {
+function reviewBlock(item: Card, binding: FactoryRunBindingRecord): string {
   const card: ReviewCard = { ...item, source: workItemBranchSource(item.externalSource) };
   const change = reviewedChangeRequest(card);
   if (!change) return '';
@@ -346,7 +362,7 @@ function reviewBlock(item: Card): string {
     `Covers: ${noun}${number}${head ? `, head ${head}` : ''}`,
     `Procedure: ${procedure} (${reReview ? 're-review after the verdict recorded on it' : 'first pass on it'})`,
     `Checkout: ${checkoutHint(card, change)}`,
-    headLine(item.metadata ?? {}, reReview),
+    headLine(item.metadata ?? {}, reReview, binding),
   ]
     .filter(Boolean)
     .join('\n');
