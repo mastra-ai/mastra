@@ -174,6 +174,38 @@ describe('LinearRules', () => {
     expect((await workItems.get({ orgId: 'org-1', id: card.id }))!.stages).toEqual(['done']);
   });
 
+  it('ignores a sighting older than the last one, so the change it predates is never reported again', async () => {
+    const { project, service, workItems } = await setup();
+    const scope = { orgId: 'org-1', factoryProjectId: project.id };
+    const card = (
+      await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          title: issue.title,
+          stages: ['planning'],
+          sessions: {},
+          externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42', url: issue.url },
+          metadata: { linearIssueId: issue.id, labels: ['bug'], assignee: 'ada', linearAssignee: 'ada' },
+        },
+      })
+    ).item;
+    const sync = (updatedAt: string, labels: string[]) =>
+      service.ingest({ ...scope, userId: 'user-1', issues: [{ ...issue, labels, updatedAt }] });
+    await sync('2026-07-02T00:00:00Z', ['bug']);
+    await sync('2026-07-04T00:00:00Z', ['bug', 'ship']);
+    // A replay of an earlier sighting arrives late.
+    await sync('2026-07-02T00:00:00Z', ['bug']);
+    await sync('2026-07-05T00:00:00Z', ['bug', 'ship']);
+
+    const updates = (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: card.id }))
+      .filter(record => record.decision.type === 'routeEvent')
+      .map(record => record.decision.event);
+    expect(updates).toEqual([{ type: 'work_item.updated', labels: { added: ['ship'], removed: [] } }]);
+    expect((await workItems.get({ orgId: 'org-1', id: card.id }))!.workItem.labels).toEqual(['bug', 'ship']);
+  });
+
   it('hands a change over on the next sync when queueing it failed, rather than recording it as seen', async () => {
     const { project, service, workItems } = await setup();
     const scope = { orgId: 'org-1', factoryProjectId: project.id };

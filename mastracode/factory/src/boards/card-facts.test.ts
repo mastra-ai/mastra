@@ -245,6 +245,12 @@ describe('item.hasPullRequest and item.hasIssue', () => {
     });
   });
 
+  it("says no pull request for a pull request's own card, filed or still arriving: it is the pull request", () => {
+    expect(cardRuleFacts(card('github pull request', [openPullRequest]))['item.hasPullRequest']).toBe(false);
+    const arriving = { title: 'Fix', externalSource: SOURCES['github pull request']!, metadata: {} };
+    expect(cardRuleFacts(arriving)['item.hasPullRequest']).toBe(false);
+  });
+
   it('says no issue for a pull request on its own card, yes once it links one', () => {
     expect(cardRuleFacts(card('github pull request', [openPullRequest]))['item.hasIssue']).toBe(false);
     expect(

@@ -1689,6 +1689,129 @@ describe("GitLab changes Factory's own connection makes", () => {
   });
 });
 
+describe('GitLab label and assignee changes on a card', () => {
+  it("records the issue's current labels and assignees on its card, so routes reading them see the change", async () => {
+    const { seeded, project, service } = await setup();
+    const card = (
+      await seeded.workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'gitlab',
+            type: 'issue',
+            externalId: encodeIssueReference({ host: 'gitlab.example.com', projectId: PROJECT_ID, issueIid: 42 }),
+            url: 'https://gitlab.example.com/acme/app/-/issues/42',
+          },
+          title: 'Issue 42',
+          board: 'work',
+          stages: ['execute'],
+          sessions: {},
+          metadata: { labels: ['bug'], assignees: ['grace'] },
+        },
+      })
+    ).item;
+    const delivery = issueOpened('relabel');
+    await service.ingest({
+      ...delivery,
+      payload: {
+        ...delivery.payload,
+        object_attributes: { ...delivery.payload.object_attributes, action: 'update' },
+        changes: {
+          labels: { previous: [{ title: 'bug' }], current: [{ title: 'bug' }, { title: 'ship' }] },
+          assignees: { previous: [{ username: 'grace' }], current: [] },
+        },
+      },
+    });
+
+    const stored = (await seeded.workItems.get({ orgId: 'org-1', id: card.id }))!;
+    expect(stored.workItem.labels).toEqual(['bug', 'ship']);
+    expect(stored.workItem.metadata?.assignees).toEqual([]);
+  });
+});
+
+describe('GitLab merge request changes on a card the merge request only shares a branch with', () => {
+  it("sends no pull_request.updated to the card whose session builds on the merge request's branch", async () => {
+    const { seeded, project, service } = await setup();
+    const card = (
+      await seeded.workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'gitlab',
+            type: 'issue',
+            externalId: encodeIssueReference({ host: 'gitlab.example.com', projectId: PROJECT_ID, issueIid: 42 }),
+            url: 'https://gitlab.example.com/acme/app/-/issues/42',
+          },
+          title: 'Issue 42',
+          board: 'work',
+          stages: ['execute'],
+          sessions: { work: { sessionId: 'work-session', threadId: 'work-thread', branch: 'feature-17' } },
+          metadata: {},
+        },
+      })
+    ).item;
+    // Neither filed nor attached: another merge request that happens to use the card's branch name.
+    const delivery = mergeRequestOpened('outsider-relabel', 'outsider');
+    await service.ingest({
+      ...delivery,
+      payload: {
+        ...delivery.payload,
+        object_attributes: { ...delivery.payload.object_attributes, action: 'update' },
+        changes: { labels: { previous: [], current: [{ title: 'ship' }] } },
+      },
+    });
+
+    const updates = (await seeded.workItems.listDeferredDecisions('org-1', project.id, { workItemId: card.id }))
+      .map(record => record.decision)
+      .filter(decision => decision.type === 'routeEvent' && decision.event.type === 'pull_request.updated');
+    expect(updates).toEqual([]);
+  });
+
+  it("still hands the merge request's own card its change as work_item.updated", async () => {
+    const { seeded, project, service } = await setup();
+    const card = (
+      await seeded.workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'gitlab',
+            type: 'pull-request',
+            externalId: `gitlab-pr:${Buffer.from(
+              JSON.stringify({ version: 1, host: 'gitlab.example.com', projectId: 101, mergeRequestIid: 17 }),
+            ).toString('base64url')}`,
+          },
+          title: 'MR 17',
+          board: 'review',
+          stages: ['done'],
+          sessions: {},
+          metadata: { authorTrusted: true },
+        },
+      })
+    ).item;
+    const delivery = mergeRequestOpened('own-relabel');
+    await service.ingest({
+      ...delivery,
+      payload: {
+        ...delivery.payload,
+        object_attributes: { ...delivery.payload.object_attributes, action: 'update' },
+        changes: { labels: { previous: [], current: [{ title: 'ship' }] } },
+      },
+    });
+
+    const events = (await seeded.workItems.listDeferredDecisions('org-1', project.id, { workItemId: card.id }))
+      .map(record => record.decision)
+      .flatMap(decision => (decision.type === 'routeEvent' ? [decision.event] : []))
+      .filter(event => event.type.endsWith('.updated'));
+    expect(events).toEqual([{ type: 'work_item.updated', labels: { added: ['ship'], removed: [] } }]);
+  });
+});
+
 describe('GitLab updates to an issue intake turned away', () => {
   function labelled(deliveryId: string, changes: Record<string, unknown>) {
     const delivery = issueOpened(deliveryId);

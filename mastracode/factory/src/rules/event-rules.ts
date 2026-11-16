@@ -202,13 +202,18 @@ const OBSERVED_ITEM_METADATA_KEY = 'observedItem';
 
 function observedItem(
   item: Pick<Card, 'metadata' | 'workItem'>,
-): { labels: string[]; assignees: string[] } | undefined {
+): { labels: string[]; assignees: string[]; observedAt: number | undefined } | undefined {
   const value = item.metadata?.[OBSERVED_ITEM_METADATA_KEY] ?? item.workItem.metadata?.[OBSERVED_ITEM_METADATA_KEY];
   if (!value || typeof value !== 'object') return undefined;
   const list = (entry: unknown) =>
     Array.isArray(entry) ? entry.filter((name): name is string => typeof name === 'string') : [];
   const record = value as Record<string, unknown>;
-  return { labels: list(record.labels), assignees: list(record.assignees) };
+  const observedAt = typeof record.observedAt === 'string' ? Date.parse(record.observedAt) : Number.NaN;
+  return {
+    labels: list(record.labels),
+    assignees: list(record.assignees),
+    observedAt: Number.isNaN(observedAt) ? undefined : observedAt,
+  };
 }
 
 /**
@@ -230,12 +235,17 @@ export async function commitObservedChange(
     actor: Record<string, unknown>;
     labels: readonly string[];
     assignee: string | null;
+    /** When the provider last changed the item, as it reported it: older sightings are ignored. */
+    observedAt: string;
     /** Provider-specific metadata to record next to the labels and assignees. */
     metadata?: Record<string, unknown>;
   },
 ): Promise<CardUpdateStatus> {
   const assignees = input.assignee ? [input.assignee] : [];
   const seen = observedItem(input.item);
+  // A late or replayed sighting older than the one recorded would report its change in reverse.
+  const observedAt = Date.parse(input.observedAt);
+  if (seen?.observedAt !== undefined && observedAt < seen.observedAt) return 'unchanged';
   const change = seen && {
     labels: listChange(seen.labels, input.labels),
     assignees: listChange(seen.assignees, assignees),
@@ -269,7 +279,7 @@ export async function commitObservedChange(
           labels: [...input.labels],
           assignees,
           assignee: input.assignee,
-          [OBSERVED_ITEM_METADATA_KEY]: { labels: [...input.labels], assignees },
+          [OBSERVED_ITEM_METADATA_KEY]: { labels: [...input.labels], assignees, observedAt: input.observedAt },
         },
       },
     });

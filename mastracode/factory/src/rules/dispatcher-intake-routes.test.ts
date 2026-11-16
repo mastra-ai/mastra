@@ -1197,6 +1197,34 @@ describe('intake routes moving existing cards when labels or assignees change', 
     expect(await routeDecisions(card.id)).toEqual(['superseded', 'superseded', 'succeeded']);
   });
 
+  it('waits for an earlier update still moving the card, even after its lease was renewed', async () => {
+    const { card, commitUpdate, dispatcher, workItems, routeDecisions } = await shipRoute();
+
+    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:10:00Z');
+    // Another worker claimed the first update before the second existed, and is still on it.
+    const [claimed] = await workItems.claimDeferredDecisions({
+      ownerId: 'other-worker',
+      now: new Date('2030-01-01T00:10:06Z'),
+      leaseExpiresAt: new Date('2030-01-01T00:11:00Z'),
+      limit: 10,
+    });
+    expect(claimed?.workItemId).toBe(card.id);
+    await commitUpdate(card.id, labels(['bug']), '2030-01-01T00:10:07Z');
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2030-01-01T00:10:08Z') });
+    try {
+      await workItems.renewDeferredDecisionLease(
+        { id: claimed!.id, orgId: 'org-1', factoryProjectId: card.factoryProjectId, ownerId: 'other-worker' },
+        new Date('2030-01-01T00:12:00Z'),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:20Z'));
+    // Folding now would hand `ship` to the card a second time.
+    expect(await routeDecisions(card.id)).toEqual(['leased', 'pending']);
+  });
+
   it('moves nothing when the burst nets out: a label added then removed is no change', async () => {
     const { card, commitUpdate, dispatcher, workItems, routeDecisions } = await shipRoute();
 
@@ -1218,6 +1246,23 @@ describe('intake routes moving existing cards when labels or assignees change', 
 
     await commitUpdate(card.id, labels(['bug']), '2030-01-01T00:20:00Z');
     await dispatcher.runOnce(new Date('2030-01-01T00:20:10Z'));
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['intake'] });
+  });
+
+  it("doesn't count again a change whose move committed but whose decision never finished", async () => {
+    const { card, commitUpdate, dispatcher, workItems, putAt } = await shipRoute();
+
+    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:10:00Z');
+    const complete = vi
+      .spyOn(workItems, 'completeDeferredDecision')
+      .mockRejectedValueOnce(new Error('connection lost'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:10Z'));
+    complete.mockRestore();
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['done'] });
+    await putAt(card.id, 'intake');
+
+    await commitUpdate(card.id, labels(['bug']), '2030-01-01T00:20:00Z');
+    await dispatcher.runOnce(new Date('2030-01-01T00:30:00Z'));
     expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['intake'] });
   });
 

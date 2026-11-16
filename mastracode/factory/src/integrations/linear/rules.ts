@@ -270,6 +270,7 @@ export class LinearRules {
         actor,
         labels: issue.labels,
         assignee: issue.assignee,
+        observedAt: issue.updatedAt,
         metadata: { linearAssignee: issue.assignee },
       });
     }

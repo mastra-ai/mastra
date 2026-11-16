@@ -712,6 +712,7 @@ export class GitLabRules {
           item,
           ...(pullRequestHome ? { pullRequestHome } : {}),
           ingressIdentity: `gitlab:${projectId}:${parsed.deliveryId}${index ? `:${item?.id ?? index}` : ''}`,
+          ownsMergeRequest: item !== undefined && item.id === ownItem?.id,
           // A merge request opening concerns two cards: its own card,
           // which the integration handler files against the authoring item,
           // and that authoring item, which its board may react to. The second
@@ -867,6 +868,11 @@ export class GitLabRules {
       pullRequestHome?: FactoryPullRequestHome;
       ingressIdentity: string;
       mergeRequestOpenedScope?: 'intake' | 'board';
+      /**
+       * Whether `item` is the merge request's own card or the card it is attached to. A card that
+       * only shares the merge request's branch never hears of its label or assignee changes.
+       */
+      ownsMergeRequest?: boolean;
     },
     attempt = 1,
   ): Promise<{ status: IngressStatus }> {
@@ -1040,7 +1046,9 @@ export class GitLabRules {
     }
     // A label or assignee change goes to the card's routes whatever else the delivery decided.
     const update =
-      !ownedByDeployment && outcome.status === 'accepted'
+      !ownedByDeployment &&
+      outcome.status === 'accepted' &&
+      (input.event !== 'mergeRequestUpdated' || input.ownsMergeRequest)
         ? updateEventFor(context, object(input.parsed.payload.changes))
         : undefined;
     if (update) {
@@ -1071,7 +1079,35 @@ export class GitLabRules {
       if (input.item && !fresh) return { status: 'missing' };
       return this.#evaluate({ ...input, item: fresh ?? undefined }, attempt + 1);
     }
+    if (update?.type === 'work_item.updated' && input.item && committed.status !== 'missing') {
+      await this.#recordCurrentLists(input.item, object(input.parsed.payload.changes));
+    }
     return { status: committed.status };
+  }
+
+  /**
+   * Writes an item's current labels and assignees to its own card once its update is queued, so
+   * routes reading `item.labels` or `item.assignees` see them. A lost race leaves them for the
+   * next hook: the update itself is already queued.
+   */
+  async #recordCurrentLists(item: Card, changes: Record<string, unknown> | undefined): Promise<void> {
+    const labels = object(changes?.labels);
+    const assignees = object(changes?.assignees);
+    try {
+      await this.options.storage.syncCard({
+        orgId: item.orgId,
+        id: item.id,
+        userId: 'factory-rule-dispatcher',
+        patch: {
+          metadata: {
+            ...(labels ? { labels: labelNames(labels.current) } : {}),
+            ...(assignees ? { assignees: usernames(assignees.current) } : {}),
+          },
+        },
+      });
+    } catch (error) {
+      if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+    }
   }
 }
 

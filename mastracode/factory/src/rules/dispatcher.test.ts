@@ -3279,7 +3279,7 @@ describe('FactoryDecisionDispatcher', () => {
   });
 
   describe("label changes while the card's run is in flight", () => {
-    async function runningCard(phaseKey = 'done') {
+    async function runningCard(phaseKey = 'done', { ledger = true } = {}) {
       const seed = await createFactoryStorageForTests();
       const storage = seed.workItems;
       const item = await createItem(storage);
@@ -3308,22 +3308,25 @@ describe('FactoryDecisionDispatcher', () => {
         'admin',
       );
       const { controller, session, emitAgentEnd } = createSession(undefined, { streamActive: true });
+      // Without a ledger entry: a run the dispatcher didn't record, as one a person starts in the session.
       await session.thread.setSetting({
         key: FACTORY_OPEN_RUNS_SETTING,
-        value: [
-          {
-            kickoffId: 'running-kickoff',
-            bindingId: binding.id,
-            role: binding.role,
-            startedBy: 'factory-rule-dispatcher',
-            orgId: binding.orgId,
-            factoryProjectId: binding.factoryProjectId,
-            workItemId: binding.workItemId,
-            sessionId: binding.sessionId,
-            threadId: binding.threadId,
-            branch: binding.branch,
-          },
-        ],
+        value: ledger
+          ? [
+              {
+                kickoffId: 'running-kickoff',
+                bindingId: binding.id,
+                role: binding.role,
+                startedBy: 'factory-rule-dispatcher',
+                orgId: binding.orgId,
+                factoryProjectId: binding.factoryProjectId,
+                workItemId: binding.workItemId,
+                sessionId: binding.sessionId,
+                threadId: binding.threadId,
+                branch: binding.branch,
+              },
+            ]
+          : [],
       });
       controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: binding.threadId }]);
       observeSessionRunEnd(session, { audit: seed.audit });
@@ -3393,6 +3396,23 @@ describe('FactoryDecisionDispatcher', () => {
 
       expect(await stages()).toEqual(['done']);
       expect(await updates()).toEqual(['superseded', 'superseded', 'superseded', 'superseded', 'succeeded']);
+    });
+
+    it("holds the session's own change for a run the open-run ledger never recorded", async () => {
+      const { dispatcher, controller, emitAgentEnd, update, stages, updates } = await runningCard('done', {
+        ledger: false,
+      });
+      const before = await stages();
+
+      await update(['ship'], [], '2030-01-01T00:00:00Z', true);
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+      expect(await stages()).toEqual(before);
+      expect(await updates()).toEqual(['pending']);
+
+      controller.listActiveThreadRuns.mockReturnValue([]);
+      emitAgentEnd('complete');
+      await dispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
+      expect(await stages()).toEqual(['done']);
     });
 
     it("routes a person's change during the run without waiting for it, about five seconds later", async () => {

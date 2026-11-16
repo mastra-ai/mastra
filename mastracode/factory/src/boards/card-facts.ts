@@ -45,6 +45,13 @@ export function cardRuleFacts(
   const providerMetadata = stored?.metadata ?? normalized?.metadata ?? null;
   const repository = adapter?.repository?.({ key, metadata: providerMetadata }) ?? null;
   const sources = item.workItem?.sources ?? [];
+  // A pull request's own card is the pull request: only one attached alongside its own source counts.
+  const ownPullRequest = source?.type === 'pull-request';
+  const attachedOpenPullRequest =
+    (typeof pointer === 'number' && !ownPullRequest) ||
+    (ownPullRequest
+      ? newestOpenPullRequestNumber({ workItem: { sources: sources.slice(1) } }) !== null
+      : pullRequest !== null);
   // A pull request linked to an issue: the card holds both a pull request and an issue source.
   const linksIssue =
     pullRequestSources({ workItem: item.workItem ?? null }).length > 0 &&
@@ -59,7 +66,7 @@ export function cardRuleFacts(
     'author.trusted': authorTrusted(item.metadata),
     // The open change request: the one Factory opened for the card, else its own or an attached open one.
     ...(pullRequest !== null ? { 'item.pullRequest': pullRequest } : {}),
-    'item.hasPullRequest': pullRequest !== null,
+    'item.hasPullRequest': attachedOpenPullRequest,
     'item.hasIssue': linksIssue,
     ...(source
       ? {

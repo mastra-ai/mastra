@@ -257,6 +257,7 @@ export class JiraRules {
         actor,
         labels: issue.labels,
         assignee: issue.assignee,
+        observedAt: issue.updatedAt,
       });
     }
     return committed.status;

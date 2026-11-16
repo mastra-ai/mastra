@@ -2599,10 +2599,23 @@ export class FactoryDecisionDispatcher {
       throw new FactoryDecisionSuperseded();
     }
     const earlier = group.slice(0, index);
-    const since = earlier.slice(earlier.findLastIndex(other => other.status === 'succeeded') + 1);
-    // An older one claimed before this one existed may be moving the card right now; one claimed
-    // since sees this one and gives way.
-    if (since.some(other => other.status === 'leased' && other.updatedAt.getTime() < record.createdAt.getTime())) {
+    // The group last moved the card at the newest one that succeeded, or whose move committed even
+    // though its decision never finished (it is left to retry): its change is already applied.
+    let last = earlier.findLastIndex(other => other.status === 'succeeded');
+    for (let at = earlier.length - 1; at > last; at--) {
+      const identity = `event-route:${earlier[at]!.idempotencyKey}`;
+      if (await this.#storage.getTransitionResultByIngress(record.orgId, record.factoryProjectId, identity)) {
+        last = at;
+        break;
+      }
+    }
+    const since = earlier.slice(last + 1);
+    // An older one still leased may be moving the card right now, so wait for it. One claimed in
+    // the same batch as this one (same owner, same lease, before any renewal) sees this one and
+    // gives way. Lease renewal rewrites `updatedAt`, so it can't tell when the older one was claimed.
+    const sameClaim = (other: FactoryDeferredDecisionRecord) =>
+      other.leaseOwner === record.leaseOwner && other.leaseExpiresAt?.getTime() === record.leaseExpiresAt?.getTime();
+    if (since.some(other => other.status === 'leased' && !sameClaim(other))) {
       throw new FactoryDecisionPostponed();
     }
     const quietAt = record.createdAt.getTime() + UPDATE_BURST_MS;
@@ -2909,8 +2922,8 @@ export class FactoryDecisionDispatcher {
    */
   async #hasRunInFlight(session: BoundDispatcherSession, binding: FactoryRunBindingRecord): Promise<boolean> {
     const open = (await listThreadOpenRuns(session, binding.threadId)).filter(entry => entry.bindingId === binding.id);
-    if (open.length === 0) return false;
     if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) return true;
+    // A run with no ledger entry (one the dispatcher didn't record) is still live here.
     return this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
   }
 
