@@ -28,7 +28,7 @@ import packageJson from '../../package.json';
 
 import { MongoDBFilterTranslator } from './filter';
 import type { MongoDBFieldCondition, MongoDBVectorFilter } from './filter';
-import { planDeleteCleanup } from './ownership';
+import { idFor, planDeleteCleanup } from './ownership';
 import type { DeleteCleanupPlan } from './ownership';
 import {
   CREATE_TIMEOUT_MS,
@@ -520,6 +520,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     beforeAtlasCreate?: (indexName: string, name: string) => Promise<void>;
     /** Called after the create returned or failed. May throw. */
     afterAtlasCreate?: (indexName: string, name: string) => Promise<void>;
+    /** Called right before every search-index drop, which is by `id`. */
+    beforeSearchIndexDrop?: (collectionName: string, name: string, id: string) => Promise<void>;
   };
   /**
    * Name of the mastra-owned collection that durably records the logical-index → target
@@ -768,6 +770,48 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     } catch (err: any) {
       if (err?.codeName === 'NamespaceNotFound' || err?.code === 26) return [];
       throw err;
+    }
+  }
+
+  /** The id of the live row listed for `name`; a dying row is present but not ours (§3.1), so it counts as none. */
+  private async liveIdOf(collection: Collection<MongoDBDocument>, name: string): Promise<string | undefined> {
+    return (await this.listSearchIndexRows(collection, name, 'delete')).find(isLiveRow)?.id;
+  }
+
+  /**
+   * §2.3 refresh-time TOFU (Q5): for each owned name with no `indexIds` entry, list it and record the
+   * observed id. Filtered on `generation`, the name still owned and no entry yet, so concurrent
+   * refreshes record it once. Best effort: delete-time TOFU (§3.7) covers a name it misses.
+   */
+  private async tofuIndexIds(
+    indexName: string,
+    generation: string,
+    names: { role: 'vector' | 'text'; name: string }[],
+    collection: Collection<MongoDBDocument>,
+  ): Promise<void> {
+    try {
+      const entry = await this.readRegistryEntry(indexName);
+      if (!entry || entry.generation !== generation) return;
+      for (const { role, name } of names) {
+        const nameField = role === 'vector' ? 'searchIndexName' : 'textSearchIndexName';
+        const ownsField = role === 'vector' ? 'ownsVectorIndex' : 'ownsTextIndex';
+        if (entry[nameField] !== name || entry[ownsField] !== true || idFor(entry, name)) continue;
+        const id = await this.liveIdOf(collection, name);
+        if (!id) continue;
+        await this.registry().updateOne(
+          {
+            _id: indexName,
+            generation,
+            deleting: { $ne: true },
+            [nameField]: name,
+            [ownsField]: true,
+            indexIds: { $not: { $elemMatch: { name } } },
+          },
+          [{ $set: { indexIds: indexIdsWith(name, id), ...mutationFields() } }],
+        );
+      }
+    } catch (error) {
+      this.logger.warn(`could not record the listed search index ids of index "${indexName}": ${error}`);
     }
   }
 
@@ -1127,7 +1171,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // Evidence for I11b only (Atlas can't be read inside the transaction): each candidate's listed id.
       const observed: Record<string, string | undefined> = {};
       for (const name of collection ? recordedDropSet(entry) : [])
-        observed[name] = (await this.listSearchIndexRows(collection!, name, 'delete'))[0]?.id;
+        observed[name] = await this.liveIdOf(collection!, name);
       let attempt = 0;
       work = await this.runDeleteTransaction(indexName, async session => {
         attempt++;
@@ -1143,7 +1187,17 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         await this.testHooks?.insideDeleteTransaction?.(indexName, attempt);
         const plan = planDeleteCleanup(own, siblings, observed);
         const { drop } = plan;
-        await this.applyCleanupWrites(indexName, own.collectionName, plan, session);
+        if (!(await this.applyCleanupWrites(indexName, own.collectionName, plan, session))) {
+          // Only a deployment without transactions sees this; there the plan's earlier writes stay,
+          // and the retry plans from them.
+          throw new MastraError({
+            id: createVectorErrorId('MONGODB', 'DELETE_INDEX', 'CONFLICT'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName },
+            text: `Registrations using the search indexes of index "${indexName}" changed while deleteIndex ran, so nothing was dropped. Retry deleteIndex({ indexName: "${indexName}" }).`,
+          });
+        }
         // Every concurrent delete transaction on this collection writes these documents, so they conflict.
         await registry.updateMany(live, { $inc: { rev: 1 } }, { session });
         if (!drop.length) {
@@ -1177,10 +1231,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     for (const name of drop) {
       await this.testHooks?.beforeDeleteDrop?.(indexName, name);
       // Another call finished this attempt, and the name may have been reused since: leave it.
-      if (!(await registry.findOne({ _id: indexName, deleting: true, deleteToken }))) return;
+      const current = await registry.findOne({ _id: indexName, deleting: true, deleteToken });
+      if (!current) return;
       const outcome = await this.handOverPendingDrop(entry.collectionName, indexName, deleteToken, name);
       if (outcome === 'gone') return;
-      if (outcome === 'drop' && collection) await this.dropSearchIndexIgnoringMissing(collection, name);
+      if (outcome === 'drop' && collection)
+        await this.dropRecordedOrListed(entry.collectionName, name, idFor(current, name));
     }
     await this.testHooks?.beforeDeleteFinalize?.(indexName);
     // Matches nothing when another call already finished this attempt; that is success too.
@@ -1190,7 +1246,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   /**
    * Write a delete plan's transfers (the owns flag, plus the id when the plan carries one) and id
    * rewrites, and log its kept names. False when a recipient no longer uses the name it was planned
-   * for, which only a deployment without transactions can see.
+   * for, or an owner no longer owns the name it was to rewrite, which only a deployment without
+   * transactions can see.
    */
   private async applyCleanupWrites(
     indexName: string,
@@ -1209,7 +1266,22 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       if (moved.matchedCount === 0) return false;
     }
     for (const r of plan.rewrites) {
-      await registry.updateOne({ _id: r.toId }, [{ $set: { indexIds: indexIdsWith(r.name, r.id) } }], { session });
+      const rewritten = await registry.updateOne(
+        {
+          _id: r.toId,
+          deleting: { $ne: true },
+          // Still owned by the entry; otherwise its id is no longer this plan's to set.
+          $or: [
+            { searchIndexName: r.name, ownsVectorIndex: true },
+            { textSearchIndexName: r.name, ownsTextIndex: true },
+            { retiredTextIndexNames: r.name },
+            { retiredVectorIndexNames: r.name },
+          ],
+        },
+        [{ $set: { indexIds: indexIdsWith(r.name, r.id) } }],
+        { session },
+      );
+      if (rewritten.matchedCount === 0) return false;
     }
     for (const name of plan.kept) {
       this.logger.warn(
@@ -1252,9 +1324,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       if (!(await registry.findOne(users))) return 'drop';
       await this.testHooks?.beforeDeleteHandover?.(indexName, name);
       // A fresh listing right before the transfer, evidence for I11b only.
-      const observed = {
-        [name]: (await this.listSearchIndexRows(this.db.collection(collectionName), name, 'delete'))[0]?.id,
-      };
+      const observed = { [name]: await this.liveIdOf(this.db.collection(collectionName), name) };
       const outcome = await this.runDeleteTransaction(indexName, async session => {
         const own = await registry.findOne({ _id: indexName, deleting: true, deleteToken }, { session });
         if (!own) return 'gone' as const;
@@ -1864,6 +1934,15 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
             : `Index "${indexName}" was registered or removed concurrently by another call while this one ran. Nothing was changed. Retry createIndex.`,
         });
       }
+      await this.tofuIndexIds(
+        indexName,
+        pin.generation,
+        [
+          { role: 'vector', name: targetSearchIndex },
+          ...(textSearchIndexName ? [{ role: 'text' as const, name: textSearchIndexName }] : []),
+        ],
+        collection,
+      );
       this.indexTargets.set(indexName, {
         collectionName: targetCollection,
         searchIndexName: targetSearchIndex,
@@ -2029,19 +2108,16 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   }
 
   /**
-   * Drop an Atlas Search index, treating "index not found" as a no-op so deleteIndex is
-   * retry-safe: an index a prior (interrupted) delete already removed does not fail the retry
-   * that still needs to clear the registry entry.
+   * The only search-index drop (I1): by `id`, so only that incarnation goes. `IndexNotFound` and
+   * `NamespaceNotFound` mean it is already gone (with its collection, for the latter), which
+   * counts as done, so a retried delete still clears its registry entry.
    */
-  private async dropSearchIndexIgnoringMissing(collection: Collection<MongoDBDocument>, name: string): Promise<void> {
+  private async dropSearchIndexById(collectionName: string, name: string, id: string): Promise<void> {
+    await this.testHooks?.beforeSearchIndexDrop?.(collectionName, name, id);
     try {
-      await this.runSearchIndexCommand({ dropSearchIndex: collection.collectionName, name });
+      await this.runSearchIndexCommand({ dropSearchIndex: collectionName, id });
     } catch (err: any) {
       const code = err?.codeName ?? err?.code;
-      // NamespaceNotFound: the caller's BYO collection was dropped externally — its search
-      // indexes are gone with it. getCollection(..., false) still returns a handle for a
-      // missing collection, so this is reachable; treating it as success lets deleteIndex
-      // proceed to clear the (now stale) registry entry instead of stranding it forever.
       const missing =
         code === 'IndexNotFound' ||
         code === 'SearchIndexNotFound' ||
@@ -2050,6 +2126,16 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         code === 26;
       if (!missing) throw err;
     }
+  }
+
+  /**
+   * Drop `name` by its recorded `id`. A legacy name with none is listed and dropped by the observed
+   * id (§3.7, delete-time TOFU); absent means done. Residual X2: an external drop and recreate
+   * before this listing makes the observed id the stranger's.
+   */
+  private async dropRecordedOrListed(collectionName: string, name: string, id: string | undefined): Promise<void> {
+    id ??= await this.liveIdOf(this.db.collection(collectionName), name);
+    if (id) await this.dropSearchIndexById(collectionName, name, id);
   }
 
   /** Atlas Search reads a dotted mapping key as a literal field name, so nested paths need `document` mappings. */
@@ -2230,6 +2316,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           throw error;
         }
       }
+      await this.tofuIndexIds(indexName, p0!.pin.generation, [{ role: 'text', name }], collection);
       this.indexTargets.set(indexName, { ...target, textSearchIndexName: name });
       let created: Awaited<ReturnType<MongoDBVector['provisionSearchIndex']>>;
       try {
@@ -2258,13 +2345,24 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         if (!abort.rollback) provisioned = true;
         throw abort.error;
       }
+      // Ours already: either unchanged, or a retired name this rename just reactivated.
+      const ours = (sameName && previous?.ownsTextIndex) || previous?.retiredTextIndexNames?.includes(name);
+      const listedId = created.outcome === 'attached' ? created.row?.id : undefined;
+      const recordedId = ours
+        ? (await this.readRegistryEntry(indexName))?.indexIds?.find(e => e.name === name)?.id
+        : undefined;
       if (created.outcome === 'owned') {
         // Recorded with its id by the P7 above.
-      } else if ((sameName && previous?.ownsTextIndex) || previous?.retiredTextIndexNames?.includes(name)) {
-        // Ours already: either unchanged, or a retired name this rename just reactivated.
-        // Recreating our own index with a different `fields` mapping must change the mapping.
-        await this.runSearchIndexCommand({ updateSearchIndex: collection.collectionName, name, definition });
+      } else if (listedId && listedId === recordedId) {
+        // The incarnation we recorded (§3.2): recreating it with a different `fields` mapping must
+        // change the mapping, by id.
+        await this.runSearchIndexCommand({ updateSearchIndex: collection.collectionName, id: listedId, definition });
       } else {
+        if (ours) {
+          this.logger.warn(
+            `search index "${name}" on "${collectionName}" is listed with id ${listedId} but recorded with ${recordedId ?? 'no id'}; treated as not created by Mastra and not modified`,
+          );
+        }
         // Someone else's index: attach to it as-is, and refuse if it maps different fields.
         const [existing] = await this.listSearchIndexRows(collection, name, 'P1');
         if (!searchDefinitionsEquivalent(existing?.latestDefinition, definition)) {

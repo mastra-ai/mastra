@@ -1798,28 +1798,32 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const v = makeVector();
       stubDb(v);
       // The index is listed before the create, so it is attached and updated, not created.
+      const expectedName = 'ops_idx_search_fields_index';
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({
-        listSearchIndexes: listing('ops_idx_search_fields_index'),
+        listSearchIndexes: (name: string) => ({
+          toArray: async () => (name === expectedName ? [{ name, id: 'r1', status: 'READY' }] : []),
+        }),
       });
-      // Only a text index this registration created may be updated in place.
+      // Only a text index this registration created, at the incarnation it recorded, may be updated in place.
       stubRegistered(v, {
         idx: {
           collectionName: 'ops',
           searchIndexName: 'ops_vec',
           isByo: true,
-          textSearchIndexName: 'ops_idx_search_fields_index',
+          textSearchIndexName: expectedName,
           ownsTextIndex: true,
+          indexIds: [{ name: expectedName, id: 'r1' }],
         },
       });
       vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(P0);
 
       await v.createSearchIndex({ indexName: 'idx', fields: ['note', 'title'] });
 
-      // Since the index already existed, the mapping is updated in place (not silently skipped).
-      const expectedName = 'ops_idx_search_fields_index';
+      // Since the index already existed, the mapping is updated in place (not silently skipped), by id (I1).
       const updates = commandOf(v).mock.calls.filter(([cmd]: any[]) => 'updateSearchIndex' in cmd);
       expect(updates).toHaveLength(1);
-      expect(updates[0][0].name).toBe(expectedName);
+      expect(updates[0][0].id).toBe('r1');
+      expect(updates[0][0]).not.toHaveProperty('name');
       const def = updates[0][0].definition;
       expect(def.mappings.dynamic).toBe(false);
       expect(Object.keys(def.mappings.fields).sort()).toEqual(['note', 'title']);

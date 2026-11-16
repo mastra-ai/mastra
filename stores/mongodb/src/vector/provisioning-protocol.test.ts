@@ -1,7 +1,7 @@
 import { createVectorErrorId } from '@mastra/core/storage';
 import { MongoNetworkError, MongoServerError, ObjectId } from 'mongodb';
 import type { CommandStartedEvent, Db, Document, MongoClient, MongoClientOptions } from 'mongodb';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ATLAS_LOCAL_URI,
   DB_NAME,
@@ -22,10 +22,34 @@ import {
   unknownCreateMode,
   waitFor,
   dropCollectionWithSearchIndexes,
+  hooks,
+  installInvariantChecker,
+  recordDrops,
 } from './__fixtures__/atlas-local';
 import { MongoDBVector } from './';
 
 vi.setConfig({ testTimeout: 300000, hookTimeout: 300000 });
+
+type Checker = ReturnType<typeof installInvariantChecker>;
+type CleanOpts = Parameters<Checker['assertClean']>[1];
+
+/**
+ * Run the invariant checker after every test of the enclosing describe, on the collections the
+ * test added to `colls`. A test states what it leaves unrecorded in the returned `clean.opts`.
+ */
+function checkEachTest(colls: string[], checker: () => Checker) {
+  const clean: { opts: CleanOpts } = { opts: {} };
+  let first = 0;
+  beforeEach(() => {
+    first = colls.length;
+    clean.opts = {};
+  });
+  afterEach(async () => {
+    checker().restoreHooks();
+    await checker().assertClean(colls.slice(first), clean.opts);
+  });
+  return clean;
+}
 
 const SEARCH_INDEX_COMMANDS = ['createSearchIndexes', 'dropSearchIndex', 'updateSearchIndex'];
 const READS = ['find', 'aggregate', 'count', 'distinct'];
@@ -75,6 +99,7 @@ describe('provisioning protocol', () => {
         options: { readPreference: 'secondaryPreferred', monitorCommands: true, ...readOptions },
       });
       await store.connect();
+      const checker = installInvariantChecker(db, [store]);
       const byo = uniqueName('secpref_byo');
       const legacy = uniqueName('secpref_legacy');
       try {
@@ -137,6 +162,7 @@ describe('provisioning protocol', () => {
         }
         expect(searchIndexCommands.length).toBeGreaterThan(0);
         expect(listings.length).toBeGreaterThan(0);
+        await checker.assertClean([byo, legacy]);
       } finally {
         await store.disconnect();
         await dropCollectionWithSearchIndexes(db, byo).catch(() => {});
@@ -148,6 +174,7 @@ describe('provisioning protocol', () => {
   describe('generation', () => {
     let a: MongoDBVector;
     let b: MongoDBVector;
+    let checker: Checker;
     const colls: string[] = [];
     const entry = (name: string) => db.collection(REGISTRY).findOne({ _id: name as any });
 
@@ -156,7 +183,9 @@ describe('provisioning protocol', () => {
       b = new MongoDBVector({ uri: ATLAS_LOCAL_URI, dbName: DB_NAME, id: 'gen-b' });
       await a.connect();
       await b.connect();
+      checker = installInvariantChecker(db, [a, b]);
     });
+    const clean = checkEachTest(colls, () => checker);
 
     afterAll(async () => {
       for (const c of colls) {
@@ -206,14 +235,13 @@ describe('provisioning protocol', () => {
         if (++arrived === 5) all.resolve();
         await all.promise;
       };
-      (a as any).testHooks = { beforePendingDropCheck: hook };
-      (b as any).testHooks = { beforePendingDropCheck: hook };
+      hooks(a, { beforePendingDropCheck: hook });
+      hooks(b, { beforePendingDropCheck: hook });
       try {
         const create = (s: MongoDBVector) => s.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
         await Promise.all([create(a), create(b), create(a), create(b), create(a)]);
       } finally {
-        (a as any).testHooks = undefined;
-        (b as any).testHooks = undefined;
+        checker.restoreHooks();
       }
       const docs = await db
         .collection(REGISTRY)
@@ -228,7 +256,7 @@ describe('provisioning protocol', () => {
     it('P-MIXED: an old-code delete and recreate during provisioning refuses with the generation CONFLICT', async () => {
       const coll = await byoColl('pmix');
       const p = pause();
-      (a as any).testHooks = { beforePendingDropCheck: p.hook };
+      hooks(a, { beforePendingDropCheck: p.hook });
       try {
         const create = a.createIndex({ indexName: coll, dimension: 4, collectionName: coll }).catch(e => e);
         await reached(p);
@@ -257,7 +285,7 @@ describe('provisioning protocol', () => {
         expect(await entry(coll)).toEqual(oldShaped);
       } finally {
         p.release.resolve();
-        (a as any).testHooks = undefined;
+        checker.restoreHooks();
       }
     });
 
@@ -275,20 +303,20 @@ describe('provisioning protocol', () => {
         };
         let afterWrite: Document | null = null;
         await sample();
-        (a as any).testHooks = {
+        hooks(a, {
           beforeSearchIndexProvision: async () => {
             await sample();
             await concurrent();
             afterWrite = await sample();
             throw new Error('provision failed');
           },
-        };
+        });
         try {
           await expect(a.createSearchIndex({ indexName: coll, searchIndexName: 'B' })).rejects.toThrow(
             'provision failed',
           );
         } finally {
-          (a as any).testHooks = undefined;
+          checker.restoreHooks();
         }
         const after = await sample();
         for (let i = 1; i < revs.length; i++) expect(revs[i]).toBeGreaterThanOrEqual(revs[i - 1]!);
@@ -351,12 +379,12 @@ describe('provisioning protocol', () => {
        */
       async function failAfterInterleavedWrite(coll: string, params: Document, between: () => Promise<unknown>) {
         const p = pause();
-        (a as any).testHooks = {
+        hooks(a, {
           afterCreateIndexRead: p.hook,
           beforePendingDropCheck: async () => {
             throw new Error('provision failed');
           },
-        };
+        });
         try {
           const call = a.createIndex({ indexName: coll, dimension: 4, collectionName: coll, ...params }).catch(e => e);
           await reached(p);
@@ -365,7 +393,7 @@ describe('provisioning protocol', () => {
           return await call;
         } finally {
           p.release.resolve();
-          (a as any).testHooks = undefined;
+          checker.restoreHooks();
         }
       }
 
@@ -417,17 +445,17 @@ describe('provisioning protocol', () => {
     // The seam sends the real create, so a live row exists, then reports `error` instead of the reply.
     async function createWithRefusal(error: MongoServerError) {
       const coll = await byoColl('refuse');
-      (a as any).testHooks = {
+      hooks(a, {
         createSearchIndexesCommand: async (_cmd: Document, run: () => Promise<Document>) => {
           await run();
           throw error;
         },
-      };
+      });
       try {
         const result = await a.createIndex({ indexName: coll, dimension: 4, collectionName: coll }).catch(e => e);
         return { coll, result };
       } finally {
-        (a as any).testHooks = undefined;
+        checker.restoreHooks();
       }
     }
 
@@ -442,6 +470,8 @@ describe('provisioning protocol', () => {
       expect(result).toBeUndefined();
       expect((await entry(coll))?.ownsVectorIndex).not.toBe(true);
       expect(await searchIndexNames(db, coll)).toEqual([`${coll}_vector_index`]);
+      // The seam's real create stands in for the winning racer's; nothing records it here.
+      clean.opts = { expectedLeaks: [`${coll}_vector_index`] };
     });
 
     it('attaches as uncertain, never owning, when a create errors in a way its own create may have landed', async () => {
@@ -453,11 +483,14 @@ describe('provisioning protocol', () => {
       expect(result).toBeUndefined();
       expect(logs.warn.some(m => m.includes('may have been created by Mastra'))).toBe(true);
       expect((await entry(coll))?.ownsVectorIndex).not.toBe(true);
+      // S2 has no journal: an uncertain index stays unrecorded.
+      clean.opts = { expectedLeaks: [`${coll}_vector_index`] };
     });
   });
   describe('provisioning with ids (S2)', () => {
     let a: MongoDBVector;
     let b: MongoDBVector;
+    let checker: Checker;
     const colls: string[] = [];
     const entry = (name: string) => db.collection(REGISTRY).findOne({ _id: name as any });
     const vectorDefinition = {
@@ -473,7 +506,9 @@ describe('provisioning protocol', () => {
       b = new MongoDBVector({ uri: ATLAS_LOCAL_URI, dbName: DB_NAME, id: 'ids-b' });
       await a.connect();
       await b.connect();
+      checker = installInvariantChecker(db, [a, b]);
     });
+    const clean = checkEachTest(colls, () => checker);
 
     afterAll(async () => {
       for (const c of colls) {
@@ -491,13 +526,13 @@ describe('provisioning protocol', () => {
       return coll;
     }
 
-    /** Run `fn` with `hooks` set on `stores`, clearing them afterwards. */
-    async function withHooks<T>(stores: MongoDBVector[], hooks: Document, fn: () => Promise<T>): Promise<T> {
-      for (const s of stores) (s as any).testHooks = hooks;
+    /** Run `fn` with `extra` merged into the hooks of `stores`, then back to the checker's alone. */
+    async function withHooks<T>(stores: MongoDBVector[], extra: Document, fn: () => Promise<T>): Promise<T> {
+      for (const s of stores) hooks(s, extra);
       try {
         return await fn();
       } finally {
-        for (const s of stores) (s as any).testHooks = undefined;
+        checker.restoreHooks();
       }
     }
 
@@ -596,6 +631,7 @@ describe('provisioning protocol', () => {
       expect(e?.ownsVectorIndex).not.toBe(true);
       expect(e?.indexIds ?? []).toEqual([]);
       expect(logs.warn.some(m => m.includes(vec) && m.includes(OLD))).toBe(true);
+      clean.opts = { userIndexes: [vec] };
     });
 
     it('P-PARTIAL: a failed companion text create keeps the proven vector index owned', async () => {
@@ -655,6 +691,7 @@ describe('provisioning protocol', () => {
         );
         expect((await entry(coll))?.ownsVectorIndex).not.toBe(true);
         expect(logs.warn.some(m => m.includes('may have been created by Mastra'))).toBe(true);
+        clean.opts = { expectedLeaks: [`${coll}_vector_index`] };
       });
     });
 
@@ -761,6 +798,140 @@ describe('provisioning protocol', () => {
         await a.deleteIndex({ indexName: `${coll}_b` });
 
         expect(await listedId(db, coll, 'N')).toBe(x);
+        clean.opts = { userIndexes: ['N'] };
+      });
+
+      it('INV: the checker reports an unrecorded index and a drop of a referenced name', async () => {
+        const coll = await byoColl('inv');
+        await createRawSearchIndex(db, coll, 'A', textDefinition, 'search');
+        await expect(checker.assertClean([coll])).rejects.toThrow(/search index "A" .* is held by no record/);
+        await seedUser(coll, 'x', { textSearchIndexName: 'A' });
+        await (a as any).dropSearchIndexById(coll, 'A', await listedId(db, coll, 'A'));
+        expect(checker.violations).toHaveLength(1);
+        checker.violations.length = 0;
+      });
+
+      it('P-DEL-ID: a delete drops the incarnation it recorded, never a stranger recreated under the name', async () => {
+        const coll = await byoColl('pdelid');
+        await createRawSearchIndex(db, coll, 'N', textDefinition, 'search');
+        const r = await listedId(db, coll, 'N');
+        await seedUser(coll, 'a', { textSearchIndexName: 'N', ownsTextIndex: true, indexIds: [{ name: 'N', id: r }] });
+        const { drops } = recordDrops(a);
+        const p = pause();
+        hooks(a, { beforeDeleteDrop: p.hook });
+        const del = a.deleteIndex({ indexName: `${coll}_a` }).catch(e => e);
+        try {
+          await reached(p);
+          // An external drop of R, then an external create of X under the same name.
+          await db.command({ dropSearchIndex: coll, id: r }, { readPreference: 'primary' });
+          await waitFor(async () => (await listedId(db, coll, 'N')) === undefined);
+          await createRawSearchIndex(db, coll, 'N', textDefinition, 'search');
+        } finally {
+          p.release.resolve();
+        }
+        expect(await del).toBeUndefined();
+        const x = await listedId(db, coll, 'N');
+        expect(x).toBeDefined();
+        expect(x).not.toBe(r);
+        expect(drops).toEqual([{ collectionName: coll, name: 'N', id: r }]);
+        expect(await entry(`${coll}_a`)).toBeNull();
+        clean.opts = { userIndexes: ['N'] };
+      });
+
+      it('P-BACKFILL-ids: refreshes record a legacy name its listed id once; an unrefreshed one is dropped by the id listed then', async () => {
+        const coll = await byoColl('pbfid');
+        await createRawSearchIndex(db, coll, 'N', textDefinition, 'search');
+        await createRawSearchIndex(db, coll, 'M', textDefinition, 'search');
+        const n = await listedId(db, coll, 'N');
+        const m = await listedId(db, coll, 'M');
+        // Legacy entries: owned text names, no generation, no indexIds.
+        await seedUser(coll, 'x', { textSearchIndexName: 'N', ownsTextIndex: true });
+        await seedUser(coll, 'y', { textSearchIndexName: 'M', ownsTextIndex: true });
+        const results = await Promise.allSettled(
+          [a, b].map(s => s.createSearchIndex({ indexName: `${coll}_x`, searchIndexName: 'N' })),
+        );
+        // Same-name refreshes compare-and-set on the entry they read: a loser refuses with a retryable CONFLICT.
+        expect(results.some(r => r.status === 'fulfilled')).toBe(true);
+        for (const r of results)
+          if (r.status === 'rejected')
+            expect(r.reason?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'));
+        expect((await entry(`${coll}_x`))?.indexIds).toEqual([{ name: 'N', id: n }]);
+
+        const { drops } = recordDrops(a);
+        await a.deleteIndex({ indexName: `${coll}_y` });
+        expect(drops).toEqual([{ collectionName: coll, name: 'M', id: m }]);
+        expect(await listedId(db, coll, 'N')).toBe(n);
+      });
+
+      it('R7a: without transactions, a recipient that stops using the name makes the delete refuse instead of orphaning it', async () => {
+        const coll = await byoColl('r7a');
+        await createRawSearchIndex(db, coll, 'A', textDefinition, 'search');
+        const r = await listedId(db, coll, 'A');
+        await seedUser(coll, 'x', { textSearchIndexName: 'A', ownsTextIndex: true, indexIds: [{ name: 'A', id: r }] });
+        await seedUser(coll, 'y', { textSearchIndexName: 'A' });
+        const err = await withHooks(
+          [a],
+          {
+            probeTransactions: async () => false,
+            // The recipient moves to another name between the delete's read and its transfer.
+            insideDeleteTransaction: async () => {
+              await db
+                .collection(REGISTRY)
+                .updateOne({ _id: `${coll}_y` as any }, { $set: { textSearchIndexName: 'B' } });
+            },
+          },
+          () => a.deleteIndex({ indexName: `${coll}_x` }).catch(e => e),
+        );
+        expect(err?.id).toBe(createVectorErrorId('MONGODB', 'DELETE_INDEX', 'CONFLICT'));
+        const x = await entry(`${coll}_x`);
+        expect(x).toMatchObject({ ownsTextIndex: true, indexIds: [{ name: 'A', id: r }] });
+        expect(x?.deleting).toBeUndefined();
+        // The retry finds no user any more and drops A by its recorded id.
+        await a.deleteIndex({ indexName: `${coll}_x` });
+        await waitFor(async () => (await listedId(db, coll, 'A')) === undefined);
+      });
+
+      it('R7b: a dying row at the delete pre-list confirms nothing, so the name is not handed over', async () => {
+        const coll = await byoColl('r7b');
+        await createRawSearchIndex(db, coll, 'A', textDefinition, 'search');
+        const r = await listedId(db, coll, 'A');
+        await seedUser(coll, 'x', { textSearchIndexName: 'A', ownsTextIndex: true, indexIds: [{ name: 'A', id: r }] });
+        await seedUser(coll, 'y', { textSearchIndexName: 'A' });
+        await withHooks(
+          [a],
+          {
+            listSearchIndexesStub: (name: string, phase: string) =>
+              phase === 'delete' ? [{ name, id: r, status: 'DELETING' }] : undefined,
+          },
+          () => a.deleteIndex({ indexName: `${coll}_x` }),
+        );
+        expect(await entry(`${coll}_x`)).toBeNull();
+        const y = await entry(`${coll}_y`);
+        expect(y?.ownsTextIndex).not.toBe(true);
+        expect(y?.indexIds).toBeUndefined();
+        expect(await listedId(db, coll, 'A')).toBe(r);
+        // Kept and logged: neither dropped nor handed over.
+        clean.opts = { expectedLeaks: ['A'] };
+      });
+
+      it('R7c: an id rewrite misses an entry that is deleting or no longer owns the name', async () => {
+        const coll = await byoColl('r7c');
+        const deleting = { textSearchIndexName: 'A', ownsTextIndex: true, deleting: true };
+        await seedUser(coll, 'd', { ...deleting, indexIds: [{ name: 'A', id: STALE }] });
+        await seedUser(coll, 'u', { textSearchIndexName: 'A', indexIds: [{ name: 'A', id: STALE }] });
+        for (const key of ['d', 'u']) {
+          const toId = `${coll}_${key}`;
+          const before = await entry(toId);
+          const plan = {
+            drop: [],
+            transfers: [],
+            released: [],
+            kept: [],
+            rewrites: [{ toId, name: 'A', id: '1'.repeat(24) }],
+          };
+          expect(await (a as any).applyCleanupWrites('other', coll, plan)).toBe(false);
+          expect(await entry(toId)).toEqual(before);
+        }
       });
     });
   });

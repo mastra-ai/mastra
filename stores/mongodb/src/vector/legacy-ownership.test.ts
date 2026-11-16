@@ -15,6 +15,9 @@ import {
   uniqueName,
   waitFor,
   dropCollectionWithSearchIndexes,
+  hooks,
+  listedId,
+  recordDrops,
 } from './__fixtures__/atlas-local';
 import { MongoDBVector } from './';
 
@@ -373,17 +376,19 @@ describe('legacy ownership', () => {
 
     it('T14e: a failed drop keeps the recorded responsibility, blocks re-creation, and a retry finishes', async () => {
       const { coll, Y } = await fixture({ A: 'search' }, { Y: { textSearchIndexName: 'A', ownsTextIndex: true } });
-      (a as any).testHooks = {
+      const A = await listedId(db, coll, 'A');
+      hooks(a, {
         beforeDeleteDrop: async () => {
           throw new Error('drop failed');
         },
-      };
+      });
+      const { drops } = recordDrops(a);
       const err = await a.deleteIndex({ indexName: Y }).catch(e => e);
       expect(err.id).toBe(errId('FAILED'));
       expect(err.category).toBe('THIRD_PARTY');
       expect(await reg(Y)).toMatchObject({ deleting: true, textSearchIndexName: 'A', ownsTextIndex: true });
       expect(await searchIndexNames(db, coll)).toEqual(['A']);
-      (a as any).testHooks = undefined;
+      hooks(a, { beforeDeleteDrop: undefined });
       const createErr = await a.createSearchIndex({ indexName: Y }).catch(e => e);
       expect(createErr.id).toBe(createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'INDEX_DELETING'));
       expect(createErr.category).toBe('USER');
@@ -391,6 +396,8 @@ describe('legacy ownership', () => {
       await a.deleteIndex({ indexName: Y });
       expect(await searchIndexNames(db, coll)).toEqual([]);
       expect(await regFor(coll)).toEqual([]);
+      // No recorded id: dropped by the id listed for the name (§3.7).
+      expect(drops).toEqual([{ collectionName: coll, name: 'A', id: A }]);
     });
 
     it('T14f: a failed transaction capability check changes nothing', async () => {
@@ -413,8 +420,11 @@ describe('legacy ownership', () => {
         { A: 'search', C: 'search' },
         { X: { textSearchIndexName: 'A', ownsTextIndex: true } },
       );
+      const ids = { A: await listedId(db, coll, 'A'), C: await listedId(db, coll, 'C') };
+      const dropsA = recordDrops(a).drops;
+      const dropsB = recordDrops(b).drops;
       const p1 = pause();
-      (a as any).testHooks = { beforeDeleteFinalize: p1.hook };
+      hooks(a, { beforeDeleteFinalize: p1.hook });
       const call1 = a.deleteIndex({ indexName: X });
       await reached(p1);
       const t1 = (await reg(X))?.deleteToken;
@@ -433,7 +443,7 @@ describe('legacy ownership', () => {
         ownsTextIndex: true,
       });
       const p3 = pause();
-      (b as any).testHooks = { beforeDeleteFinalize: p3.hook };
+      hooks(b, { beforeDeleteFinalize: p3.hook });
       const call3 = b.deleteIndex({ indexName: X });
       await reached(p3);
       const t2 = (await reg(X))?.deleteToken;
@@ -446,12 +456,17 @@ describe('legacy ownership', () => {
       await call3;
       expect(await searchIndexNames(db, coll)).toEqual([]);
       expect(await regFor(coll)).toEqual([]);
+      expect(dropsA).toEqual([{ collectionName: coll, name: 'A', id: ids.A }]);
+      expect(dropsB).toEqual([{ collectionName: coll, name: 'C', id: ids.C }]);
     });
 
     it('T14i (before drops): a stale call does not drop the indexes of a recreated registration', async () => {
       const { coll, X } = await fixture({ A: 'search' }, { X: { textSearchIndexName: 'A', ownsTextIndex: true } });
+      const A = await listedId(db, coll, 'A');
+      const dropsA = recordDrops(a).drops;
+      const dropsB = recordDrops(b).drops;
       const p1 = pause();
-      (a as any).testHooks = { beforeDeleteDrop: p1.hook };
+      hooks(a, { beforeDeleteDrop: p1.hook });
       const call1 = a.deleteIndex({ indexName: X });
       await reached(p1);
       await b.deleteIndex({ indexName: X });
@@ -473,6 +488,8 @@ describe('legacy ownership', () => {
       expect(await searchIndexNames(db, coll)).toEqual(['A']);
       expect(await reg(X)).toMatchObject({ textSearchIndexName: 'A', ownsTextIndex: true });
       expect((await reg(X))?.deleting).toBeUndefined();
+      expect(dropsA).toEqual([]);
+      expect(dropsB).toEqual([{ collectionName: coll, name: 'A', id: A }]);
     });
 
     describe('T14j: commit outcomes', () => {
@@ -484,67 +501,77 @@ describe('legacy ownership', () => {
 
       it('lost ack with a drop set: OUTCOME_UNKNOWN, nothing dropped, and a retry finishes', async () => {
         const { coll, X } = await fixture({ A: 'search' }, { X: { textSearchIndexName: 'A', ownsTextIndex: true } });
-        (a as any).testHooks = {
+        const A = await listedId(db, coll, 'A');
+        const { drops } = recordDrops(a);
+        hooks(a, {
           afterDeleteCommit: async () => {
             throw lostAck();
           },
-        };
+        });
         const err = await a.deleteIndex({ indexName: X }).catch(e => e);
         expect(err.id).toBe(errId('OUTCOME_UNKNOWN'));
         expect(err.category).toBe('THIRD_PARTY');
         expect(await searchIndexNames(db, coll)).toEqual(['A']);
         expect(await reg(X)).toMatchObject({ deleting: true, deleteToken: expect.any(String) });
-        (a as any).testHooks = undefined;
+        hooks(a, { afterDeleteCommit: undefined });
         await a.deleteIndex({ indexName: X });
         expect(await searchIndexNames(db, coll)).toEqual([]);
         expect(await regFor(coll)).toEqual([]);
+        expect(drops).toEqual([{ collectionName: coll, name: 'A', id: A }]);
       });
 
       it('lost ack after handing everything off: OUTCOME_UNKNOWN, entry gone, retry is not found, recipient owns', async () => {
         const { coll, X, Y } = await handoff();
-        (a as any).testHooks = {
+        const { drops } = recordDrops(a);
+        hooks(a, {
           afterDeleteCommit: async () => {
             throw lostAck();
           },
-        };
+        });
         const err = await a.deleteIndex({ indexName: X }).catch(e => e);
         expect(err.id).toBe(errId('OUTCOME_UNKNOWN'));
         expect(await reg(X)).toBeNull();
-        (a as any).testHooks = undefined;
+        hooks(a, { afterDeleteCommit: undefined });
         const retry = await a.deleteIndex({ indexName: X }).catch(e => e);
         expect(retry.id).toBe(errId('NOT_REGISTERED'));
         expect((await reg(Y))?.ownsTextIndex).toBe(true);
         expect(await searchIndexNames(db, coll)).toEqual(['A']);
+        expect(drops).toEqual([]);
       });
 
       it('an unlabelled failure after commit is still OUTCOME_UNKNOWN, and a retry finishes', async () => {
         const { coll, X } = await fixture({ A: 'search' }, { X: { textSearchIndexName: 'A', ownsTextIndex: true } });
-        (a as any).testHooks = {
+        const A = await listedId(db, coll, 'A');
+        const { drops } = recordDrops(a);
+        hooks(a, {
           afterDeleteCommit: async () => {
             throw new Error('app crash');
           },
-        };
+        });
         const err = await a.deleteIndex({ indexName: X }).catch(e => e);
         expect(err.id).toBe(errId('OUTCOME_UNKNOWN'));
         expect(await searchIndexNames(db, coll)).toEqual(['A']);
-        (a as any).testHooks = undefined;
+        hooks(a, { afterDeleteCommit: undefined });
         await a.deleteIndex({ indexName: X });
         expect(await searchIndexNames(db, coll)).toEqual([]);
         expect(await regFor(coll)).toEqual([]);
+        expect(drops).toEqual([{ collectionName: coll, name: 'A', id: A }]);
       });
 
       it('an abort before commit is FAILED and leaves every registration unchanged', async () => {
         const { coll, X } = await t14();
         const before = await regFor(coll);
-        (a as any).testHooks = {
+        const { drops } = recordDrops(a);
+        hooks(a, {
           insideDeleteTransaction: async () => {
             throw new Error('abort');
           },
-        };
+        });
         const err = await a.deleteIndex({ indexName: X }).catch(e => e);
         expect(err.id).toBe(errId('FAILED'));
         expect(await regFor(coll)).toEqual(before);
         expect((await searchIndexNames(db, coll)).sort()).toEqual(['A', 'B']);
+        expect(drops).toEqual([]);
       });
     });
 
