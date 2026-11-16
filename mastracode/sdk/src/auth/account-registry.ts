@@ -20,27 +20,6 @@
  * creation order. No imports: this module is safe to load in a browser.
  */
 
-export type PoolAccountType = 'oauth' | 'api-key';
-
-export type PoolAccountStatus = 'ok' | 'cooldown' | 'auth-failed';
-
-/** What a UI or API may show about a pool account. Never carries token material. */
-export interface PoolAccountSummary {
-  /** `${providerId}:${uuid}` */
-  id: string;
-  providerId: string;
-  type: PoolAccountType;
-  label: string;
-  active: boolean;
-  /** Switch order within the pool: lower is tried first; ties break by `createdAt`. */
-  priority: number;
-  status: PoolAccountStatus;
-  /** Epoch ms when a cooldown ends; set only while `status` is `cooldown`. */
-  cooldownUntil?: number;
-  /** Epoch ms the account was added; breaks priority ties. */
-  createdAt: number;
-}
-
 /** The fields the pool rules read from an entry. Stores carry their own extra fields. */
 export interface PoolEntry {
   id: string;

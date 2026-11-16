@@ -196,21 +196,23 @@ export class AuthStorage {
    * Before any of that, entries without a switch priority (written before
    * priorities existed, or by an older build) get one past the pool's
    * highest, in insertion order — so existing pools keep rotating in the
-   * order they always did.
+   * order they always did. That backfill is in memory only and never by
+   * itself triggers a save: it is recomputed identically on every load, so a
+   * plain read never rewrites a file other processes share. Priorities reach
+   * disk with the next real write.
    */
   private migrate(): void {
     let changed = false;
 
-    const registeredProviders = new Set<string>();
+    const pooledProviders = new Set<string>();
     for (const key of Object.keys(this.data)) {
       if (!key.startsWith('accounts:')) continue;
       const providerId = key.slice('accounts:'.length).split(':')[0];
-      if (providerId) registeredProviders.add(providerId);
+      if (providerId) pooledProviders.add(providerId);
     }
-    for (const providerId of registeredProviders) {
+    for (const providerId of pooledProviders) {
       for (const entry of backfillPriorities(this.registryEntriesInInsertionOrder(providerId))) {
         this.data[this.accountKeyFor(entry.id)] = entry;
-        changed = true;
       }
     }
 
@@ -256,6 +258,12 @@ export class AuthStorage {
 
     // Case 4: registry entries without a legacy slot (the slot loop above
     // only ever sees providers that still have one).
+    const registeredProviders = new Set<string>();
+    for (const key of Object.keys(this.data)) {
+      if (!key.startsWith('accounts:')) continue;
+      const providerId = key.slice('accounts:'.length).split(':')[0];
+      if (providerId) registeredProviders.add(providerId);
+    }
     for (const providerId of registeredProviders) {
       if (this.data[providerId]?.type === 'oauth') continue;
       const entries = this.accountEntries(providerId);

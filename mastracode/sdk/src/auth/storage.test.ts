@@ -482,11 +482,100 @@ describe('AuthStorage multi-account registry', () => {
       [personal.id, 1],
       [spare.id, 2],
     ]);
-    const onDisk = readAuthJson(authPath);
-    expect(onDisk[`accounts:${spare.id}`]).toMatchObject({ priority: 2 });
+    // The backfill is in memory; loading leaves the file alone.
+    expect(readAuthJson(authPath)[`accounts:${spare.id}`]).not.toHaveProperty('priority');
     // Rotation is unchanged by the migration.
     expect(storage.activateAccount(PROVIDER)?.id).toBe(personal.id);
     expect(storage.activateAccount(PROVIDER)?.id).toBe(spare.id);
+    // A real mutation persists the backfilled priorities.
+    expect(readAuthJson(authPath)[`accounts:${spare.id}`]).toMatchObject({ priority: 2 });
+  });
+
+  it('does not rewrite a legacy-format auth.json on load or on reads', async () => {
+    const work = accountRecord('r1', 'a1', { active: true, label: 'Work' });
+    const personal = accountRecord('r2', 'a2', { label: 'Personal' });
+    const { authPath } = makeStorage();
+    writeFileSync(
+      authPath,
+      JSON.stringify(
+        {
+          [PROVIDER]: oauthCred('r1', 'a1'),
+          [`accounts:${work.id}`]: work,
+          [`accounts:${personal.id}`]: personal,
+        },
+        null,
+        2,
+      ),
+    );
+    const before = readFileSync(authPath, 'utf-8');
+
+    const storage = new AuthStorage(authPath);
+    expect(storage.listAccounts(PROVIDER).map(entry => entry.priority)).toEqual([0, 1]);
+    expect(storage.isLoggedIn(PROVIDER)).toBe(true);
+    expect(storage.getActiveAccount(PROVIDER)?.id).toBe(work.id);
+    expect(await storage.getOAuthCredential(PROVIDER)).toMatchObject({ refresh: 'r1' });
+    await storage.getApiKey(PROVIDER);
+    storage.reload();
+    new AuthStorage(authPath).listAccounts(PROVIDER);
+
+    expect(readFileSync(authPath, 'utf-8')).toBe(before);
+  });
+
+  it('keeps auth.json readable by builds that predate priorities, after load and after a mutation', () => {
+    // Exact copy of the record guard from builds before `priority` existed.
+    function isPrePriorityAccountRecord(value: unknown): boolean {
+      if (!value || typeof value !== 'object') return false;
+      const v = value as Partial<OAuthAccountRecord>;
+      return (
+        v.type === 'oauth-account' &&
+        typeof v.id === 'string' &&
+        typeof v.label === 'string' &&
+        typeof v.addedAt === 'string' &&
+        typeof v.active === 'boolean' &&
+        typeof v.refresh === 'string' &&
+        typeof v.access === 'string' &&
+        typeof v.expires === 'number'
+      );
+    }
+    function readAsPrePriorityBuild(authPath: string) {
+      const data = readAuthJson(authPath) as Record<string, { type?: string; refresh?: string } | undefined>;
+      const accountKeys = Object.keys(data).filter(key => key.startsWith(`accounts:${PROVIDER}:`));
+      const records = accountKeys.map(key => data[key]).filter(isPrePriorityAccountRecord) as OAuthAccountRecord[];
+      return {
+        accountKeys,
+        records,
+        // The pre-priority isLoggedIn(): a legacy `oauth` slot for the provider.
+        isLoggedIn: data[PROVIDER]?.type === 'oauth',
+        slotRefresh: data[PROVIDER]?.refresh,
+      };
+    }
+
+    const work = accountRecord('r1', 'a1', { active: true, label: 'Work' });
+    const personal = accountRecord('r2', 'a2', { label: 'Personal' });
+    const spare = accountRecord('r3', 'a3', { label: 'Spare' });
+    const { storage, authPath } = makeStorage({
+      [PROVIDER]: oauthCred('r1', 'a1'),
+      [`accounts:${work.id}`]: work,
+      [`accounts:${personal.id}`]: personal,
+      [`accounts:${spare.id}`]: spare,
+    });
+
+    const afterLoad = readAsPrePriorityBuild(authPath);
+    expect(afterLoad.records.map(record => record.id)).toEqual([work.id, personal.id, spare.id]);
+    expect(afterLoad.records).toHaveLength(afterLoad.accountKeys.length);
+    expect(afterLoad.isLoggedIn).toBe(true);
+    expect(afterLoad.slotRefresh).toBe('r1');
+
+    // Persist priorities through a real mutation, then read as an older build.
+    storage.reorderAccounts(PROVIDER, [spare.id, work.id, personal.id]);
+    storage.activateAccount(PROVIDER, personal.id);
+    const afterMutation = readAsPrePriorityBuild(authPath);
+    expect(afterMutation.records.map(record => record.id).sort()).toEqual([work.id, personal.id, spare.id].sort());
+    expect(afterMutation.records).toHaveLength(afterMutation.accountKeys.length);
+    expect(afterMutation.records.every(record => typeof record.priority === 'number')).toBe(true);
+    expect(afterMutation.records.filter(record => record.active).map(record => record.id)).toEqual([personal.id]);
+    expect(afterMutation.isLoggedIn).toBe(true);
+    expect(afterMutation.slotRefresh).toBe('r2');
   });
 
   it('backfills only the entries missing a priority, after the existing ones', () => {
