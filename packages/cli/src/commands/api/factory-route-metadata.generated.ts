@@ -400,6 +400,23 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /web/factory/projects/:id/intake/skipped": {
+    "contractKey": "intakeSkippedList",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/intake/skipped",
+    "description": "How often each card-move rule was skipped in the last 30 days, with its newest skip",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "skipped"
+    }
+  },
   "GET /web/factory/projects/:id/metrics": {
     "contractKey": "metricsGet",
     "method": "GET",
@@ -4263,6 +4280,122 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "notRouted",
         "nextCursor",
         "canEdit"
+      ]
+    }
+  },
+  "GET /web/factory/projects/:id/intake/skipped": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "skipped": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "routeId": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "latest": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "placed",
+                      "not_routed",
+                      "rule_skipped"
+                    ]
+                  },
+                  "evaluator": {
+                    "type": "string",
+                    "enum": [
+                      "route-list",
+                      "intake-order"
+                    ]
+                  },
+                  "boardKey": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "routeId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "reason": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "sourceKey": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "decidedAt": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "outcome",
+                  "evaluator",
+                  "boardKey",
+                  "routeId",
+                  "reason",
+                  "sourceKey",
+                  "title",
+                  "url",
+                  "decidedAt"
+                ]
+              }
+            },
+            "required": [
+              "routeId",
+              "count",
+              "latest"
+            ]
+          }
+        }
+      },
+      "required": [
+        "skipped"
       ]
     }
   },
@@ -13125,6 +13258,7 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "intakeRouteGet": "GET /web/factory/projects/:id/intake-routes/:routeId",
   "intakeRouteReroutePreview": "GET /web/factory/projects/:id/intake-routes/reroute",
   "intakeNotRoutedList": "GET /web/factory/projects/:id/intake/not-routed",
+  "intakeSkippedList": "GET /web/factory/projects/:id/intake/skipped",
   "metricsGet": "GET /web/factory/projects/:id/metrics",
   "runQueue": "GET /web/factory/projects/:id/run-queue",
   "projectSandboxEnvsList": "GET /web/factory/projects/:id/sandbox-envs",
