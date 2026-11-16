@@ -11,11 +11,11 @@ We built this template to provide a starting point for billing in Mastra, with c
 ## Prerequisites
 
 - **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` in `.env` for the bundled Image Assistant and Image Generation examples.
-- Optional **[Autumn credentials](https://app.useautumn.com)**: configure `AUTUMN_SECRET_KEY`, trusted customer/feature bindings, and JWT identity as described in the [Autumn guide](docs/autumn.md). The default local provider needs no Autumn credentials.
+- Optional **[Autumn credentials](https://app.useautumn.com)**: configure `AUTUMN_SECRET_KEY`, trusted customer/feature bindings, and JWT identity as described in the [Autumn guide](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/docs/autumn.md). The default local provider needs no Autumn credentials.
 - **Node.js 22+ or 24+** on **macOS, Linux** or Windows. On Windows, use WSL2 or a Linux container and keep private state on its Linux filesystem.
 - `BILLING_STUDIO_ENABLED=true` is the default in `.env.example`, enabling the Image Assistant and billing Playground tools. Set it to `false` in `.env` to disable them. Local setup creates the credential used to authenticate in Studio.
 
-For the **Autumn sandbox experience in production mode**, follow the [Autumn integration guide](docs/autumn.md#test-autumn-sandbox-in-studio) instead of the local quickstart below. It covers account, plan and credit setup, JWT provisioning and renewal, and testing in Studio. `BILLING_MODE=production` enables verified JWT identity; the Autumn sandbox key keeps billing in sandbox.
+For the **Autumn sandbox experience in production mode**, follow the [Autumn integration guide](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/docs/autumn.md#test-autumn-sandbox-in-studio) instead of the local quickstart below. It covers account, plan and credit setup, JWT provisioning and renewal, and testing in Studio. `BILLING_MODE=production` enables verified JWT identity; the Autumn sandbox key keeps billing in sandbox.
 
 ## Quickstart 🚀
 
@@ -45,16 +45,10 @@ Generated PNGs are stored privately in `data/private-images/` under the project 
 ## Customization
 
 - Open the project in your coding agent and ask: “Replace the image examples with a paid research agent and an approval-based report workflow. Keep configurable credit policies and charge only for successful work. Explore the code and propose a plan before making changes.”
-- Configure providers, meters, plans, and per-resource policies in [src/mastra/index.ts](src/mastra/index.ts). Opt into billing with `billing.agent(...)` and `billing.workflow(...)`, and keep other resources in the normal Mastra constructor. Follow the billing guide to [connect your own agents and workflows](docs/billing.md#configure-the-application) and [invoke billed resources](docs/billing.md#invoke-billed-resources), or the [Autumn guide](docs/autumn.md#configuration) to bind provider customers and credits. The [Studio guide](docs/studio.md#compose-your-own-conversation-agent) shows how to expose your resources through a conversation agent.
-
-## Documentation
-
-- [Billing guide](docs/billing.md): policies, subscription-only access and external API calls.
-- [Studio guide](docs/studio.md): authenticated chat, approval, downloads and denial tests.
-- [Autumn guide](docs/autumn.md): sandbox setup, real identities and provider bindings.
+- Configure providers, meters, plans, and per-resource policies in [src/mastra/index.ts](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/mastra/index.ts). Opt into billing with `billing.agent(...)` and `billing.workflow(...)`, and keep other resources in the normal Mastra constructor. Follow the billing guide to [connect your own agents and workflows](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/docs/billing.md#configure-the-application) and [invoke billed resources](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/docs/billing.md#invoke-billed-resources), or the [Autumn guide](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/docs/autumn.md#configuration) to bind provider customers and credits. The [Studio guide](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/docs/studio.md#compose-your-own-conversation-agent) shows how to expose your resources through a conversation agent.
 
 ## About Mastra templates
 
 This is an official Mastra template. Official templates live in the [Mastra monorepo](https://github.com/mastra-ai/mastra/tree/main/templates/template-agent-workflow-billing) and are synchronized to standalone repositories.
 
-[Want to contribute?](https://github.com/mastra-ai/mastra/blob/main/CONTRIBUTING.md)
+[Want to contribute?](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/CONTRIBUTING.md)
