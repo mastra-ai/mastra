@@ -13,18 +13,21 @@ export function eventRouteIngress(idempotencyKey: string): string {
   return `event-route:${idempotencyKey}`;
 }
 
-/** A card's update decisions that fold together with `decision`: same event, same pull request, same session origin, oldest first. */
+/** Whether stored decision `stored` folds with update `decision`: same event, same pull request, same session origin. */
+export function foldsWith(stored: unknown, decision: UpdateDecision): boolean {
+  const candidate = stored as { type?: unknown; event?: BoardEventFacts; fromCardSession?: unknown };
+  return (
+    candidate.type === 'routeEvent' &&
+    candidate.event?.type === decision.event.type &&
+    candidate.event.pullRequest === decision.event.pullRequest &&
+    (candidate.fromCardSession === true) === (decision.fromCardSession === true)
+  );
+}
+
+/** A card's update decisions that fold together with `decision` ({@link foldsWith}), oldest first. */
 export function updateGroup<T extends UpdateRecord>(records: readonly T[], decision: UpdateDecision): T[] {
   return records
-    .filter(other => {
-      const candidate = other.decision as { type?: unknown; event?: BoardEventFacts; fromCardSession?: unknown };
-      return (
-        candidate.type === 'routeEvent' &&
-        candidate.event?.type === decision.event.type &&
-        candidate.event.pullRequest === decision.event.pullRequest &&
-        (candidate.fromCardSession === true) === (decision.fromCardSession === true)
-      );
-    })
+    .filter(other => foldsWith(other.decision, decision))
     .toSorted((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
 }
 

@@ -1613,6 +1613,42 @@ describe('intake routes moving existing cards when labels or assignees change', 
     expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['intake'] });
   });
 
+  it("replays two linked pull requests' label changes apart, as dispatch does, never netting one against the other", async () => {
+    const { card, commitUpdate, dispatcher, workItems, boards, scope, route } = await shipRoute();
+    const shipping = await route({
+      name: 'Pull request shipping',
+      on: ['pull_request.updated'],
+      when: ADDED('ship'),
+      target: { boardKey: 'work', phaseKey: 'done' },
+    });
+    const prUpdate = (pullRequest: string, added: string[], removed: string[]) => ({
+      type: 'pull_request.updated' as const,
+      pullRequest,
+      pullRequestTrusted: true,
+      labels: { added, removed },
+    });
+    // Folded together these net out to nothing; apart, the first pull request's change moves the card.
+    await commitUpdate(card.id, prUpdate('github:1:pull-request:8', ['ship'], []), '2030-01-01T00:10:00Z');
+    await commitUpdate(card.id, prUpdate('github:1:pull-request:9', [], ['ship']), '2030-01-01T00:10:01Z');
+
+    const { IntakeCheck } = await import('../routes/intake-check.js');
+    const registry = (
+      await new ProjectBoardCache({ codeRegistry: createTriageWorkRegistry(), storage: boards, recheckMs: 0 }).describe(
+        scope,
+      )
+    ).registry;
+    const { moves } = await new IntakeCheck({ storage: boards, workItems }).test(scope, registry, { itemId: card.id });
+    expect(moves.map(move => [move.event.pullRequest, move.outcome, move.to?.phase ?? null])).toEqual([
+      ['github:1:pull-request:9', 'stays', null],
+      ['github:1:pull-request:8', 'moves', 'done'],
+    ]);
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:30:00Z'));
+    const moved = await workItems.get({ orgId: 'org-1', id: card.id });
+    expect(moved).toMatchObject({ stages: ['done'] });
+    expect(moved!.stageHistory.at(-1)).toMatchObject({ by: `intake-route:${shipping.id}` });
+  });
+
   it('moves only from the phase a card.phase filter names', async () => {
     const { card, commitUpdate, dispatcher, workItems, putAt } = await shipRoute({ from: 'triage' });
 

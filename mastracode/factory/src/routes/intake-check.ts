@@ -29,6 +29,7 @@ import type { FactoryCommitDecision } from '../rules/types.js';
 import {
   eventRouteIngress,
   FOLDABLE_UPDATE_STATUSES,
+  foldsWith,
   foldUpdate,
   updateGroup,
   updateSuperseded,
@@ -231,12 +232,11 @@ export class IntakeCheck {
           eventRouteIngress(other.idempotencyKey),
         ),
       );
-    // Each update's fold group, built once rather than per record.
-    const groups = new Map<string, typeof records>();
+    // Each update's fold group, built once rather than per record: the first group it folds with.
+    const groups: (typeof records)[] = [];
     const groupOf = (decision: Extract<FactoryCommitDecision, { type: 'routeEvent' }>) => {
-      const key = `${decision.event.type}:${decision.event.pullRequest ?? ''}:${decision.fromCardSession === true}`;
-      let group = groups.get(key);
-      if (!group) groups.set(key, (group = updateGroup(records, decision)));
+      let group = groups.find(members => foldsWith(members[0]!.decision, decision));
+      if (!group) groups.push((group = updateGroup(records, decision)));
       return group;
     };
     // Which events to show is decided from the records alone, so only those shown are folded:
