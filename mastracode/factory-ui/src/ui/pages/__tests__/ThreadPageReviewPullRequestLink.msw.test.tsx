@@ -8,8 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { listedRepository } from '../../../../e2e/ui/factory-projects';
 import { server } from '../../../../e2e/ui/msw-server';
-import { findPageHeader, renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { findPageHeader, renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { sessionCardsWhileBoardLoads } from '../../../../e2e/ui/session-cards';
+import { queryKeys } from '../../../api/keys';
 import { createQueryClient } from '../../../query-client';
 import type { PullRequestSubscription } from '../../domains/factory/services/githubSubscriptions';
 import { createAppRoutes } from '../../router';
@@ -519,38 +520,64 @@ describe('ThreadPage pull request link placement', () => {
       expect(within(panel).queryByRole('link', { name: 'Open PR #5' })).not.toBeInTheDocument();
     });
 
+    const relatedSession = { ...workspaceSession, id: 'related-row', sessionId: 'related-session' };
+    const relatedSessionPath = `/factories/${FACTORY_ID}/workspaces/related-session/threads/related-thread`;
+    const relatedBoardPath = `/factories/${FACTORY_ID}/work`;
+
+    function stubRelatedCard(answer: () => Response) {
+      const card = issueCard();
+      const followUp = {
+        ...issueCard(null),
+        id: 'related-item',
+        parentWorkItemId: card.id,
+        title: 'Follow-up work',
+        metadata: { number: 8 },
+        sessions: { work: { ...sessionRef, sessionId: 'related-session', threadId: 'related-thread' } },
+      };
+      stubThreadRoute([card, followUp], []);
+      server.use(http.get(`${TEST_BASE_URL}/web/user-sessions/related-session`, answer));
+    }
+
+    const relatedCardLink = (panel: HTMLElement) =>
+      within(panel).getByRole('link', { name: /^Open .*: Follow-up work, Building$/ });
+
     it.each([true, false])(
       'links a separate card to its live session when live=%s, or to its board otherwise',
       async live => {
-        const card = issueCard();
-        const relatedSession = { ...workspaceSession, id: 'related-row', sessionId: 'related-session' };
-        const followUp = {
-          ...issueCard(null),
-          id: 'related-item',
-          parentWorkItemId: card.id,
-          title: 'Follow-up work',
-          metadata: { number: 8 },
-          sessions: { work: { ...sessionRef, sessionId: 'related-session', threadId: 'related-thread' } },
-        };
-        stubThreadRoute([card, followUp], []);
-        server.use(
-          http.get(`${TEST_BASE_URL}/web/user-sessions/related-session`, () =>
-            live
-              ? HttpResponse.json({ session: relatedSession })
-              : HttpResponse.json({ error: 'Session not found' }, { status: 404 }),
-          ),
+        stubRelatedCard(() =>
+          live
+            ? HttpResponse.json({ session: relatedSession })
+            : HttpResponse.json({ error: 'Session not found' }, { status: 404 }),
         );
         renderThreadRoute();
 
         const panel = await findSessionPanel();
-        expect(await within(panel).findByRole('link', { name: /^Open .*: Follow-up work, Building$/ })).toHaveAttribute(
-          'href',
-          live
-            ? `/factories/${FACTORY_ID}/workspaces/related-session/threads/related-thread`
-            : `/factories/${FACTORY_ID}/work`,
+        await waitFor(() =>
+          expect(relatedCardLink(panel)).toHaveAttribute('href', live ? relatedSessionPath : relatedBoardPath),
         );
       },
     );
+
+    it.each([
+      { status: 404, outcome: 'links the card to its board', href: relatedBoardPath },
+      { status: 503, outcome: 'keeps the session link', href: relatedSessionPath },
+    ])('when a related session that loaded answers $status on a later read, $outcome', async ({ status, href }) => {
+      let failure: number | undefined;
+      stubRelatedCard(() =>
+        failure === undefined
+          ? HttpResponse.json({ session: relatedSession })
+          : HttpResponse.json({ error: 'Session read failed' }, { status: failure }),
+      );
+      const { client } = renderThreadRoute();
+      const panel = await findSessionPanel();
+      await waitFor(() => expect(relatedCardLink(panel)).toHaveAttribute('href', relatedSessionPath));
+
+      failure = status;
+      await client.refetchQueries({ queryKey: queryKeys.userSession('related-session') });
+      await waitForMutationsIdle(client);
+
+      expect(relatedCardLink(panel)).toHaveAttribute('href', href);
+    });
 
     it('links a Linear issue by its identifier', async () => {
       const url = 'https://linear.app/acme/issue/ENG-123/fix-sandbox-setup';
