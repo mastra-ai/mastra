@@ -489,7 +489,7 @@ describe('PlatformLinearIntegration', () => {
         (await seed.workItems.listDeferredDecisions('org-1', factoryProject.id)).map(
           record => (record.decision as { sourceKey?: string }).sourceKey,
         );
-      return { seed, factoryProject, integration, runtime, filed };
+      return { seed, integration, runtime, filed };
     }
 
     it('files it from the reconcile sweep with no board open', async () => {
@@ -501,35 +501,6 @@ describe('PlatformLinearIntegration', () => {
 
       await expect(reconcile?.()).resolves.toMatchObject({ observed: 1, failed: 0 });
       expect(await filed()).toEqual(['linear:ENG-42']);
-    });
-
-    it('does not file it when someone views the board', async () => {
-      const { seed, factoryProject, integration, runtime, filed } = await firstSight();
-      const sourceControl = seed.sourceControl.forIntegration('linear');
-      const context: IntegrationContext = {
-        auth: fakeAuth(),
-        baseUrl: 'https://factory.example',
-        stateSigner: createStateSigner('test-secret'),
-        storage: {
-          generic: seed.integrations.forIntegration('linear'),
-          sourceControl,
-          sourceControls: [sourceControl],
-          projects: seed.projects,
-          intake: seed.intake,
-          memorySettings: seed.memorySettings,
-          modelDefaults: seed.modelDefaults,
-          channelIdentity: seed.channelIdentity,
-        },
-        runtime,
-      };
-      const app = new Hono();
-      mountApiRoutes(app, integration.routes(context));
-
-      const res = await app.request(`/web/linear/issues?factoryProjectId=${factoryProject.id}`);
-
-      expect(res.status).toBe(200);
-      expect((await res.json()).issues).toMatchObject([{ identifier: 'ENG-42' }]);
-      expect(await filed()).toEqual([]);
     });
   });
 
@@ -1339,7 +1310,6 @@ describe('PlatformLinearIntegration', () => {
         '/web/linear/status',
         '/web/linear/projects',
         '/web/linear/teams',
-        '/web/linear/issues',
       ]),
     );
     expect(routes.some(route => route.path === '/auth/linear/callback')).toBe(false);
@@ -1453,9 +1423,14 @@ describe('PlatformLinearIntegration', () => {
       if ('handler' in route) app.on(route.method, route.path, route.handler as never);
     }
 
-    const response = await app.request(`/web/linear/issues?factoryProjectId=${projectRecord.id}`);
+    const detail = await app.request(`/web/linear/issues/ENG-42?factoryProjectId=${projectRecord.id}`);
 
-    expect(response.status).toBe(200);
+    expect(detail.status).toBe(200);
+    await expect(detail.json()).resolves.toMatchObject({
+      identifier: 'ENG-42',
+      title: 'Fix intake',
+      description: 'Issue body',
+    });
     expect(onEvent).not.toHaveBeenCalled();
     await expect(attachLinearIssueReconciler(integration, context)?.()).resolves.toMatchObject({
       observed: 1,
@@ -1468,13 +1443,6 @@ describe('PlatformLinearIntegration', () => {
         issue: expect.objectContaining({ id: 'issue-1', identifier: 'ENG-42' }),
       }),
     );
-    const detail = await app.request(`/web/linear/issues/ENG-42?factoryProjectId=${projectRecord.id}`);
-    expect(detail.status).toBe(200);
-    await expect(detail.json()).resolves.toMatchObject({
-      identifier: 'ENG-42',
-      title: 'Fix intake',
-      description: 'Issue body',
-    });
   });
 
   it('defaults the integrations API URL and requires a platform credential', () => {

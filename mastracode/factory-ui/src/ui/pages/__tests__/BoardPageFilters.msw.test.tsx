@@ -16,7 +16,6 @@ import {
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
 import type { WorkItem } from '../../domains/factory/services/workItems';
-import type { GithubIssue, GithubPullRequest } from '../../domains/factory/services/factory';
 import { FactoryLayout } from '../../domains/workspaces/components/FactoryLayout';
 import { OverlaysProvider } from '../../lib/overlays';
 import { WorkBoardPage } from '../BoardPage';
@@ -45,40 +44,12 @@ const workItem = (id: string, card: 'issue' | 'pull-request', metadata: Record<s
   updatedAt: now,
 });
 
-const issue = (number: number, labels: string[], author: string): GithubIssue => ({
-  number,
-  title: `Issue ${number}`,
-  url: `https://github.com/acme/app/issues/${number}`,
-  author,
-  labels,
-  comments: 0,
-  createdAt: now,
-  updatedAt: now,
-});
-const pull = (
-  number: number,
-  author: string,
-  requestedReviewers: string[],
-  labels: string[] = [],
-): GithubPullRequest => ({
-  number,
-  title: `Pull ${number}`,
-  url: `https://github.com/acme/app/pull/${number}`,
-  author,
-  requestedReviewers,
-  labels,
-  baseBranch: 'main',
-  headBranch: 'feature',
-  createdAt: now,
-  updatedAt: now,
-});
-
 function Location() {
   const location = useLocation();
   return <output data-testid="board-url">{location.search}</output>;
 }
 
-function renderBoard(initialSearch = '', issues = [issue(10, ['bug'], 'alice'), issue(11, ['other'], 'bob')]) {
+function renderBoard(initialSearch = '') {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({
@@ -122,19 +93,6 @@ function renderBoard(initialSearch = '', issues = [issue(10, ['bug'], 'alice'), 
     http.get(`${TEST_BASE_URL}/web/linear/status`, () => HttpResponse.json({ connected: false })),
     http.get(`${TEST_BASE_URL}/web/incidentio/status`, () => HttpResponse.json({ connected: false })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions: [] })),
-    // The auto-triaged lane refetches issues by label; keep it empty so candidates aren't duplicated.
-    http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, ({ request }) =>
-      HttpResponse.json({
-        issues: new URL(request.url).searchParams.has('label') ? [] : issues,
-        nextPage: null,
-      }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/prs`, () =>
-      HttpResponse.json({
-        pullRequests: [pull(20, 'alice', [], ['needs-review']), pull(21, 'bob', ['alice'])],
-        nextPage: null,
-      }),
-    ),
   );
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/factory-1/work${initialSearch}`]}>
@@ -292,12 +250,8 @@ describe('BoardPage filters', () => {
   });
 
   it('searches a long list of people and keeps picked people on top', async () => {
-    const authors = ['carol', 'dave', 'erin', 'frank', 'grace', 'heidi', 'ivan', 'judy'];
     const user = userEvent.setup();
-    const { client } = renderBoard(
-      '?author=github%3Ajudy',
-      authors.map((author, index) => issue(30 + index, [], author)),
-    );
+    const { client } = renderBoard('?author=github%3Ajudy');
     await waitFor(() => expect(candidateTitles()).toEqual(['Issue 37']));
     await waitForMutationsIdle(client);
     await openPropertySubmenu(user, MENU, 'Author');
