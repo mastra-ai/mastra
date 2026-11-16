@@ -11,6 +11,7 @@ import {
   seedCollection,
   uniqueName,
   waitFor,
+  dropCollectionWithSearchIndexes,
 } from './__fixtures__/atlas-local';
 import { MongoDBVector } from './';
 
@@ -34,7 +35,7 @@ describe('upgrade regressions: foreign full-text index reuse', () => {
   afterEach(async () => {
     for (const n of created.splice(0)) {
       await db.collection(REGISTRY).deleteOne({ _id: n as any });
-      await db.dropCollection(n).catch(() => {});
+      await dropCollectionWithSearchIndexes(db, n).catch(() => {});
     }
   });
 
@@ -114,7 +115,7 @@ describe('upgrade regressions: renamed full-text index cleanup', () => {
       expect(names).not.toContain('b_fts');
     } finally {
       await db.collection(REGISTRY).deleteOne({ _id: indexName as any });
-      await db.dropCollection(coll).catch(() => {});
+      await dropCollectionWithSearchIndexes(db, coll).catch(() => {});
       await store.disconnect();
       await client.close();
     }

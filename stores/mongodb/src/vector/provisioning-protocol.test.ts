@@ -20,6 +20,7 @@ import {
   seedRegistry,
   uniqueName,
   unknownCreateMode,
+  dropCollectionWithSearchIndexes,
 } from './__fixtures__/atlas-local';
 import { MongoDBVector } from './';
 
@@ -137,8 +138,8 @@ describe('provisioning protocol', () => {
         expect(listings.length).toBeGreaterThan(0);
       } finally {
         await store.disconnect();
-        await db.dropCollection(byo).catch(() => {});
-        await db.dropCollection(legacy).catch(() => {});
+        await dropCollectionWithSearchIndexes(db, byo).catch(() => {});
+        await dropCollectionWithSearchIndexes(db, legacy).catch(() => {});
       }
     });
   });
@@ -159,7 +160,7 @@ describe('provisioning protocol', () => {
     afterAll(async () => {
       for (const c of colls) {
         await db.collection(REGISTRY).deleteOne({ _id: c as any });
-        await db.dropCollection(c).catch(() => {});
+        await dropCollectionWithSearchIndexes(db, c).catch(() => {});
       }
       await a.disconnect();
       await b.disconnect();
@@ -476,7 +477,7 @@ describe('provisioning protocol', () => {
     afterAll(async () => {
       for (const c of colls) {
         await db.collection(REGISTRY).deleteOne({ _id: c as any });
-        await db.dropCollection(c).catch(() => {});
+        await dropCollectionWithSearchIndexes(db, c).catch(() => {});
       }
       await a.disconnect();
       await b.disconnect();
@@ -529,8 +530,10 @@ describe('provisioning protocol', () => {
             }
           } finally {
             for (const g of gates) g.resolve();
+            // Settle every call even when the barrier failed, so none rejects unhandled.
+            const settled = await Promise.allSettled(calls);
+            for (const r of settled) if (r.status === 'rejected') throw r.reason;
           }
-          await Promise.all(calls);
         });
         const docs = await db
           .collection(REGISTRY)

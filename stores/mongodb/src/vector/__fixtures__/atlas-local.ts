@@ -1,6 +1,6 @@
 import { ConsoleLogger } from '@mastra/core/logger';
-import { MongoClient, MongoNetworkError, MongoServerError } from 'mongodb';
-import type { CommandStartedEvent, Db, Document } from 'mongodb';
+import { MongoClient, MongoNetworkError, MongoServerError, ReadPreference } from 'mongodb';
+import type { CommandStartedEvent, Db, Document, ListSearchIndexesOptions } from 'mongodb';
 import type { MongoDBVector } from '../';
 
 export const ATLAS_LOCAL_URI =
@@ -142,4 +142,29 @@ export function captureLogs(store: MongoDBVector): { warn: string[]; error: stri
   }
   store.__setLogger(new Capture());
   return logs;
+}
+
+/**
+ * Drop a collection after dropping its search indexes by id and waiting until none is listed.
+ * Atlas Local keeps the indexes of a collection dropped with them as DOES_NOT_EXIST rows, which
+ * come back when a collection of that name is recreated and then block createIndex (stuck row).
+ */
+export async function dropCollectionWithSearchIndexes(db: Db, name: string): Promise<void> {
+  const list = () =>
+    db
+      .collection(name)
+      .listSearchIndexes({
+        readPreference: ReadPreference.primary,
+        readConcern: { level: 'local' },
+      } as ListSearchIndexesOptions)
+      .toArray()
+      .then(rows => rows as Document[])
+      .catch(() => [] as Document[]);
+  for (const row of await list()) {
+    await db.command({ dropSearchIndex: name, id: row.id }, { readPreference: 'primary' }).catch(err => {
+      if (err?.code !== 26 && err?.code !== 27) throw err;
+    });
+  }
+  for (let i = 0; i < 60 && (await list()).length; i++) await new Promise(r => setTimeout(r, 250));
+  await db.dropCollection(name);
 }

@@ -1,6 +1,7 @@
 import { createVectorTestSuite } from '@internal/storage-test-utils';
 import { Collection, MongoClient, MongoServerError, ObjectId } from 'mongodb';
 import { vi, describe, it, expect, beforeAll, beforeEach, afterAll, test } from 'vitest';
+import { dropCollectionWithSearchIndexes } from './__fixtures__/atlas-local';
 import { MongoDBVector } from './';
 import type { MongoDBCreateIndexParams } from './';
 
@@ -287,7 +288,7 @@ describe('MongoDBVector Integration Tests', () => {
       const raw = new MongoClient(uri);
       try {
         const rawDb = raw.db(dbName);
-        for (const name of own) await rawDb.dropCollection(name).catch(() => {});
+        for (const name of own) await dropCollectionWithSearchIndexes(rawDb, name).catch(() => {});
         await rawDb.collection('__mastra_vector_indexes__').deleteMany({ _id: { $in: own } as any });
       } finally {
         await raw.close();
@@ -1054,10 +1055,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
 
     afterAll(async () => {
       // Drop the operational collection we created, then disconnect.
-      await byoVector['db']
-        .collection(opsCol)
-        .drop()
-        .catch(() => {});
+      await dropCollectionWithSearchIndexes(byoVector['db'], opsCol).catch(() => {});
       await byoVector.disconnect();
     });
 
@@ -1171,10 +1169,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
     });
 
     afterAll(async () => {
-      await searchVector['db']
-        .collection(searchCol)
-        .drop()
-        .catch(() => {});
+      await dropCollectionWithSearchIndexes(searchVector['db'], searchCol).catch(() => {});
       await searchVector['db']
         .collection('__mastra_vector_indexes__')
         .deleteOne({ _id: idxName as any })
@@ -1976,10 +1971,7 @@ describe('MongoDBVector BYO durability across instances', () => {
   }, 500000);
 
   afterAll(async () => {
-    await creator['db']
-      .collection(opsCol)
-      .drop()
-      .catch(() => {});
+    await dropCollectionWithSearchIndexes(creator['db'], opsCol).catch(() => {});
     // Clean up the registry entry in case a test path left one behind.
     await creator['db']
       .collection('__mastra_vector_indexes__')
@@ -2052,10 +2044,7 @@ describe('MongoDBVector listIndexes logical names', () => {
   afterAll(async () => {
     await store.deleteIndex({ indexName: managedIdx }).catch(() => {});
     await store.deleteIndex({ indexName: byoIdx }).catch(() => {});
-    await store['db']
-      .collection(opsCol)
-      .drop()
-      .catch(() => {});
+    await dropCollectionWithSearchIndexes(store['db'], opsCol).catch(() => {});
     await store.disconnect();
   });
 
@@ -2097,10 +2086,7 @@ describe('MongoDBVector document-mode clean projection', () => {
 
   afterAll(async () => {
     await store.deleteIndex({ indexName: idxName }).catch(() => {});
-    await store['db']
-      .collection(opsCol)
-      .drop()
-      .catch(() => {});
+    await dropCollectionWithSearchIndexes(store['db'], opsCol).catch(() => {});
     await store.disconnect();
   });
 
@@ -2203,10 +2189,7 @@ describe('MongoDBVector BYO ObjectId _ids (round4-fix2)', () => {
   }, 500000);
 
   afterAll(async () => {
-    await store['db']
-      .collection(opsCol)
-      .drop()
-      .catch(() => {});
+    await dropCollectionWithSearchIndexes(store['db'], opsCol).catch(() => {});
     await store['db']
       .collection('__mastra_vector_indexes__')
       .deleteOne({ _id: idxName as any })
@@ -2295,10 +2278,7 @@ describe('MongoDBVector describeIndex embedded-only count (round4-fix8)', () => 
   }, 500000);
 
   afterAll(async () => {
-    await store['db']
-      .collection(opsCol)
-      .drop()
-      .catch(() => {});
+    await dropCollectionWithSearchIndexes(store['db'], opsCol).catch(() => {});
     await store['db']
       .collection('__mastra_vector_indexes__')
       .deleteOne({ _id: idxName as any })
@@ -3527,10 +3507,7 @@ describe('MongoDBVector SDAP hardening', () => {
   afterAll(async () => {
     await v.deleteIndex({ indexName: byoIdx }).catch(() => {});
     await v.deleteIndex({ indexName: managedIdx }).catch(() => {});
-    await v['db']
-      .collection(opsCol)
-      .drop()
-      .catch(() => {});
+    await dropCollectionWithSearchIndexes(v['db'], opsCol).catch(() => {});
     await v.disconnect();
   });
 
@@ -3603,10 +3580,7 @@ describe('MongoDBVector SDAP hardening', () => {
       expect(error.details).toMatchObject({ indexName: 'sdap_missing', collectionName: 'sdap_other' });
     } finally {
       await v.deleteIndex({ indexName: 'sdap_missing' }).catch(() => {});
-      await v['db']
-        .collection('sdap_other')
-        .drop()
-        .catch(() => {});
+      await dropCollectionWithSearchIndexes(v['db'], 'sdap_other').catch(() => {});
     }
   });
 });
@@ -3636,10 +3610,7 @@ describe('MongoDBVector index ownership', () => {
 
   beforeEach(async () => {
     for (const name of [col, managed, failing]) {
-      await v['db']
-        .collection(name)
-        .drop()
-        .catch(() => {});
+      await dropCollectionWithSearchIndexes(v['db'], name).catch(() => {});
     }
     await registry().deleteMany({ _id: { $in: ['own_byo', managed, failing] as any[] } });
     await v['db'].collection(col).insertOne({ _id: 'a', embedding: [1, 0, 0, 0], note: 'n' } as any);
@@ -3649,10 +3620,7 @@ describe('MongoDBVector index ownership', () => {
 
   afterAll(async () => {
     for (const name of [col, managed, failing]) {
-      await v['db']
-        .collection(name)
-        .drop()
-        .catch(() => {});
+      await dropCollectionWithSearchIndexes(v['db'], name).catch(() => {});
     }
     await registry().deleteMany({ _id: { $in: ['own_byo', managed, failing] as any[] } });
     await v.disconnect();
@@ -3832,10 +3800,7 @@ describe('MongoDBVector pre-filter bounds', () => {
 
   afterAll(async () => {
     await v.deleteIndex({ indexName: idx }).catch(() => {});
-    await v['db']
-      .collection(col)
-      .drop()
-      .catch(() => {});
+    await dropCollectionWithSearchIndexes(v['db'], col).catch(() => {});
     await v.disconnect();
   });
 
@@ -3930,10 +3895,7 @@ describe('MongoDBVector ownership review regressions', () => {
 
   afterAll(async () => {
     for (const name of created) {
-      await v['db']
-        .collection(name)
-        .drop()
-        .catch(() => {});
+      await dropCollectionWithSearchIndexes(v['db'], name).catch(() => {});
       await v['db']
         .collection('__mastra_vector_indexes__')
         .deleteOne({ _id: name as any })
@@ -4060,11 +4022,7 @@ async function waitUntilSearchable(store: MongoDBVector, indexName: string, vect
 
 async function cleanUp(store: MongoDBVector, indexName: string, byo: boolean) {
   await store.deleteIndex({ indexName }).catch(() => {});
-  if (byo)
-    await store['db']
-      .collection(`${indexName}_source`)
-      .drop()
-      .catch(() => {});
+  if (byo) await dropCollectionWithSearchIndexes(store['db'], `${indexName}_source`).catch(() => {});
   await store.disconnect();
 }
 

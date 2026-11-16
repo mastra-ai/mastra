@@ -824,7 +824,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * The id guard (I11b) requires the name's `indexIds` entry to be absent, `id`, or the R′ read
    * just before; a newer R′ (another call's later create) is kept and logged. No upsert, so a
    * deleted entry stays deleted. Bumps `rev` and sets a fresh `claimToken`, so a concurrent
-   * call's rollback never restores a snapshot from before this flag.
+   * call's rollback never restores a snapshot from before this flag. Returns the id recorded
+   * for the name (`id`, or the newer R′ kept), or undefined when the write missed.
    */
   private async recordOwnership(
     indexName: string,
@@ -832,7 +833,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     name: string,
     generation: string,
     id: string,
-  ): Promise<boolean> {
+  ): Promise<string | undefined> {
     const registry = this.registry();
     const recorded = (await registry.findOne({ _id: indexName }))?.indexIds?.find(e => e.name === name)?.id;
     let keep = id;
@@ -873,7 +874,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         },
       ],
     );
-    return written.matchedCount === 1;
+    return written.matchedCount === 1 ? keep : undefined;
   }
 
   /**
@@ -929,7 +930,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const [row] = await this.listSearchIndexRows(collection, name, 'P5').catch(() => []);
       const verdict = classify(p4, row, creatingAt);
       if (verdict.kind === 'proven') {
-        if (!(await this.recordOwnership(indexName, role, name, pin.generation, verdict.id))) {
+        const recorded = await this.recordOwnership(indexName, role, name, pin.generation, verdict.id);
+        if (!recorded) {
           throw new ProvisionAbort(
             new MastraError({
               id: createVectorErrorId('MONGODB', op, 'CONFLICT'),
@@ -941,7 +943,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
             false,
           );
         }
-        return { outcome: 'owned', id: verdict.id };
+        return { outcome: 'owned', id: recorded };
       }
       if (row && !isLiveRow(row)) throw new ProvisionAbort(stuck(row), true);
       switch (verdict.kind) {
@@ -977,6 +979,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           // Atlas Local refuses a create racing an identical one as a duplicate name: the listed
           // row is the winner's, never this call's, so attach (I6).
           if (error?.code === 2 && /duplicate index name/i.test(String(error?.message)) && isLiveRow(row)) {
+            // debug, not warn: the expected outcome of identical concurrent calls, nothing to act on.
+            this.logger.debug(
+              `search index "${name}" on "${collectionName}": a concurrent identical create won (id ${row!.id}); attached, not recorded as created by this call`,
+            );
             return { outcome: 'attached', row };
           }
           throw new ProvisionAbort(error, true);

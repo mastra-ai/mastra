@@ -14,6 +14,7 @@ import {
   seedRegistry,
   uniqueName,
   waitFor,
+  dropCollectionWithSearchIndexes,
 } from './__fixtures__/atlas-local';
 import { MongoDBVector } from './';
 
@@ -51,7 +52,7 @@ describe('legacy ownership', () => {
     expect(await db.listCollections({ name: X }).hasNext()).toBe(true);
     expect(await searchIndexNames(db, X)).toContain(`${X}_vector_index`);
 
-    await db.dropCollection(X);
+    await dropCollectionWithSearchIndexes(db, X);
   });
 
   describe('foreign full-text index reuse', () => {
@@ -63,7 +64,7 @@ describe('legacy ownership', () => {
     afterEach(async () => {
       for (const n of created.splice(0)) {
         await db.collection(REGISTRY).deleteOne({ _id: n as any });
-        await db.dropCollection(n).catch(() => {});
+        await dropCollectionWithSearchIndexes(db, n).catch(() => {});
       }
     });
 
@@ -183,7 +184,7 @@ describe('legacy ownership', () => {
       (b as any).testHooks = undefined;
       for (const c of colls.splice(0)) {
         await db.collection(REGISTRY).deleteMany({ collectionName: c });
-        await db.dropCollection(c).catch(() => {});
+        await dropCollectionWithSearchIndexes(db, c).catch(() => {});
       }
     });
 
@@ -633,7 +634,7 @@ describe('legacy ownership', () => {
 
     it('RF2: a BYO collection dropped externally still lets deleteIndex clear the entry', async () => {
       const { coll, X } = await fixture({ A: 'search' }, { X: { textSearchIndexName: 'A', ownsTextIndex: true } });
-      await db.dropCollection(coll);
+      await dropCollectionWithSearchIndexes(db, coll);
       await a.deleteIndex({ indexName: X });
       expect(await reg(X)).toBeNull();
     });
@@ -883,7 +884,7 @@ describe('legacy ownership', () => {
 
       it('a managed delete whose collection was already dropped externally still clears the entry', async () => {
         const { coll } = await managed(true);
-        await db.dropCollection(coll);
+        await dropCollectionWithSearchIndexes(db, coll);
         await a.deleteIndex({ indexName: coll });
         expect(await reg(coll)).toBeNull();
       });
@@ -1070,7 +1071,7 @@ describe('legacy ownership', () => {
 
       it('T14i-M (createIndex): a deleting managed entry refuses before recreating its dropped collection', async () => {
         const { coll } = await managed(true, { deleting: true, deleteToken: 't' });
-        await db.dropCollection(coll);
+        await dropCollectionWithSearchIndexes(db, coll);
         const err = await a.createIndex({ indexName: coll, dimension: 4 }).catch(e => e);
         expect(err.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'INDEX_DELETING'));
         expect(await exists(coll)).toBe(false);
@@ -1545,7 +1546,7 @@ describe('legacy ownership', () => {
       (other as any).testHooks = undefined;
       for (const n of names.splice(0)) {
         await db.collection(REGISTRY).deleteMany({ $or: [{ _id: n as any }, { collectionName: n }] });
-        await db.dropCollection(n).catch(() => {});
+        await dropCollectionWithSearchIndexes(db, n).catch(() => {});
       }
     });
 
