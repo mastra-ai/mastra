@@ -21,7 +21,8 @@ vi.mock('./resolve-project.js', () => ({
 
 const mockFetchEnvironmentList = vi.fn();
 
-vi.mock('./platform-api.js', () => ({
+vi.mock('./platform-api.js', async importOriginal => ({
+  ...(await importOriginal<typeof import('./platform-api.js')>()),
   fetchEnvironmentList: mockFetchEnvironmentList,
 }));
 
@@ -162,6 +163,35 @@ describe('envVarsPullAction', () => {
     expect(content).toContain('# TURSO_AUTH_TOKEN');
     expect(content).not.toMatch(/^TURSO_DATABASE_URL=/m);
     expect(content).not.toMatch(/^TURSO_AUTH_TOKEN=/m);
+    spy.mockRestore();
+  });
+
+  it('lists write-only secrets as comments instead of writing the placeholder', async () => {
+    mockFetchEnvironmentList.mockResolvedValue({
+      environments: [
+        environment({
+          envVars: { LOG_LEVEL: 'debug', OPENAI_API_KEY: '__mastra_secret__', REDIS_URL: '__mastra_secret__' },
+          envVarKinds: { LOG_LEVEL: 'config', OPENAI_API_KEY: 'secret', REDIS_URL: 'secret' },
+          secretsWriteOnly: true,
+        }),
+      ],
+    });
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    const { envVarsPullAction } = await import('./vars.js');
+    await envVarsPullAction(undefined, {});
+
+    const [, content] = mockWriteFile.mock.calls[0]!;
+    expect(content).toContain('LOG_LEVEL="debug"');
+    expect(content).not.toContain('__mastra_secret__');
+    expect(content).toContain('# OPENAI_API_KEY');
+    expect(content).toContain('# REDIS_URL');
+    expect(content).not.toMatch(/^OPENAI_API_KEY=/m);
+    expect(content).not.toMatch(/^REDIS_URL=/m);
+    const output = spy.mock.calls.map(c => String(c[0])).join('\n');
+    expect(output).toContain('Pulled 1 variable(s)');
+    expect(output).toContain('2 secret name(s) listed as comments');
+    expect(output).not.toContain('__mastra_secret__');
     spy.mockRestore();
   });
 

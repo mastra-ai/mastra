@@ -8,7 +8,7 @@ import { getServerProjectEnv } from '../server/platform-api.js';
 import { wrapAction } from '../utils.js';
 import { serializeEnvFile } from './env-file.js';
 import type { Environment } from './platform-api.js';
-import { fetchEnvironmentList } from './platform-api.js';
+import { fetchEnvironmentList, isSecretPlaceholder } from './platform-api.js';
 import { resolveProject } from './resolve-project.js';
 
 /** Register the `mastra env vars ...` subcommands on the given `env` command. */
@@ -70,7 +70,8 @@ function pickEnvironment(environments: Environment[], envArg: string | undefined
  *   project row, so that is what gets pulled. Environment rows exist but
  *   nothing reads their vars.
  *
- * Managed vars (platform-injected secrets) are listed as comments, names only.
+ * Managed vars (platform-injected secrets) and write-only secrets are listed
+ * as comments, names only.
  */
 export async function envVarsPullAction(
   envArg: string | undefined,
@@ -83,12 +84,22 @@ export async function envVarsPullAction(
   const { environments, envVarsAuthority } = await fetchEnvironmentList(token, orgId, project.id);
   const environment = pickEnvironment(environments, envArg);
 
-  const vars =
+  const pulled =
     envVarsAuthority === 'project' ? await getServerProjectEnv(token, orgId, project.id) : (environment.envVars ?? {});
+
+  // Write-only secrets come back as a placeholder, not their value. Writing
+  // the placeholder would make the next deploy upload it as the real value.
+  const vars: Record<string, string> = {};
+  const secretVarNames: string[] = [];
+  for (const [name, value] of Object.entries(pulled)) {
+    if (isSecretPlaceholder(value)) secretVarNames.push(name);
+    else vars[name] = value;
+  }
 
   const { content, written, skipped } = serializeEnvFile(vars, {
     header: `Pulled from Mastra environment ${environment.slug} — do not edit manually`,
     managedVarNames: environment.managedEnvVarNames,
+    secretVarNames,
   });
 
   const target = options.output ?? '.env';
@@ -107,11 +118,16 @@ export async function envVarsPullAction(
   }
   await chmod(outputPath, 0o600);
 
-  if (written === 0) {
+  if (written === 0 && secretVarNames.length === 0) {
     console.info(`\n  No env vars set on ${environment.slug}. Wrote empty ${target}.\n`);
   } else {
     console.info(
       `\n  Pulled ${written} variable(s) from ${environment.slug} to ${target}.${skipped > 0 ? ` Skipped ${skipped} unsafe key(s).` : ''}\n`,
+    );
+  }
+  if (secretVarNames.length > 0) {
+    console.info(
+      `  ${secretVarNames.length} secret name(s) listed as comments — secrets are write-only and delivered at boot.\n`,
     );
   }
   const managedCount = environment.managedEnvVarNames?.length ?? 0;

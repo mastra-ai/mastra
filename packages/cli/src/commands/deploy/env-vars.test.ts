@@ -28,4 +28,12 @@ describe('getOverwrittenEnvKeys', () => {
     const incoming = { B_KEY: '2', A_KEY: '2', C_KEY: '2' };
     expect(getOverwrittenEnvKeys(existing, incoming)).toEqual(['A_KEY', 'B_KEY', 'C_KEY']);
   });
+
+  it('ignores write-only secrets whose stored value is hidden', () => {
+    expect(getOverwrittenEnvKeys({ API_KEY: '__mastra_secret__' }, { API_KEY: 'new-value' })).toEqual([]);
+  });
+
+  it('ignores incoming placeholders, which keep the stored value', () => {
+    expect(getOverwrittenEnvKeys({ API_KEY: 'stored' }, { API_KEY: '__mastra_secret__' })).toEqual([]);
+  });
 });
