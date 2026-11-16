@@ -126,8 +126,10 @@ const stubRegistered = (v: MongoDBVector, entries: Record<string, object>) =>
     .spyOn(v as any, 'readRegistryEntry')
     .mockImplementation(async (name: any) => (entries[name] ? { _id: name, indexName: name, ...entries[name] } : null));
 
-// What a mocked P0 registry write returns.
-const P0 = { generation: 'g0', claimToken: 'c0', rev: 1 };
+// What a mocked P0 registry write returns: its pin, and the pre-image of the entry it updated.
+const P0 = { pin: { generation: 'g0', claimToken: 'c0', rev: 1 }, before: { _id: 'x', generation: 'g0', rev: 0 } };
+// What a mocked P0 `findOneAndUpdate` (pre-image with result metadata) returns.
+const P0_RAW = { value: { generation: 'g0', rev: 0 }, lastErrorObject: { updatedExisting: true } };
 
 // Mocked collections that hold no Atlas Search indexes yet.
 const noSearchIndexes = () => ({ toArray: async () => [] });
@@ -177,7 +179,7 @@ const stubDb = (v: MongoDBVector) => {
       },
       findOneAndUpdate: async ({ _id }: { _id: string }, update: any) => {
         Object.assign(written, literalsOf(update));
-        return { _id, ...written, generation: 'g0', rev: 1, claimToken: 'c0' };
+        return { ...P0_RAW, value: { _id, ...P0_RAW.value } };
       },
     }),
   };
@@ -2372,7 +2374,9 @@ describe('MongoDBVector registry claim', () => {
     await registry.deleteOne({ _id: claimIdx });
     await registry.insertOne({ _id: claimIdx, indexName: claimIdx, collectionName: claimIdx, dimension: 4 });
 
-    await expect(write({ collectionName: claimIdx, dimension: 4 }, claimFor())).resolves.toMatchObject({ rev: 1 });
+    await expect(write({ collectionName: claimIdx, dimension: 4 }, claimFor())).resolves.toMatchObject({
+      pin: { rev: 1 },
+    });
   });
 
   it('rejects an autoEmbed claim over a client-side entry', async () => {
@@ -2698,7 +2702,7 @@ describe('MongoDBVector autoEmbed', () => {
           textSearchIndexName: 'movies_search_index',
           generation: 'g0',
         }),
-        findOneAndUpdate: vi.fn().mockResolvedValue({ _id: 'movies', generation: 'g0', rev: 1, claimToken: 'c0' }),
+        findOneAndUpdate: vi.fn().mockResolvedValue(P0_RAW),
         updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
         find: () => ({ toArray: async () => [] }),
       };
@@ -2733,7 +2737,7 @@ describe('MongoDBVector autoEmbed', () => {
           textSearchIndexName: 'movies_search_index',
           generation: 'g0',
         }),
-        findOneAndUpdate: vi.fn().mockResolvedValue({ _id: 'movies', generation: 'g0', rev: 1, claimToken: 'c0' }),
+        findOneAndUpdate: vi.fn().mockResolvedValue(P0_RAW),
         updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
         find: () => ({ toArray: async () => [] }),
       };
@@ -3775,9 +3779,7 @@ describe('MongoDBVector index ownership', () => {
     }
 
     const after = await registry().findOne({ _id: 'own_byo' as any });
-    for (const f of ['textSearchIndexName', 'ownsTextIndex', 'retiredTextIndexNames', 'generation'])
-      expect(after?.[f], f).toEqual(before?.[f]);
-    expect(after?.rev).toBe(before!.rev + 2);
+    expect(after).toEqual({ ...before, rev: before!.rev + 2, claimToken: after?.claimToken });
     expect(after?.claimToken).not.toBe(before?.claimToken);
     // The in-process cache does not serve the failed target either.
     expect((await (v as any).resolveIndexTarget('own_byo')).textSearchIndexName).toBe('own_text');

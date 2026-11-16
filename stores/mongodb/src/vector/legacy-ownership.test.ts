@@ -1117,10 +1117,8 @@ describe('legacy ownership', () => {
           };
           await expect(a.createSearchIndex({ indexName: coll, searchIndexName: 'B' })).rejects.toThrow();
           const after = await entry(coll);
-          for (const f of ['textSearchIndexName', 'ownsTextIndex', 'retiredTextIndexNames', 'generation'])
-            expect(after?.[f], f).toEqual(before?.[f]);
           // The rename's write and the rollback each bump rev; neither lowers it (I4).
-          expect(after?.rev).toBe(before!.rev + 2);
+          expect(after).toEqual({ ...before, rev: before!.rev + 2, claimToken: after?.claimToken });
           expect(after?.claimToken).not.toBe(before?.claimToken);
         });
 

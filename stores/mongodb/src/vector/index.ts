@@ -363,9 +363,9 @@ interface RegistryDoc extends IndexTarget {
 }
 
 /** Pipeline `$set` fields every mutating registry write carries: backfilled generation, `rev + 1`, a fresh token. */
-function mutationFields(claimToken: string = uuidv4()): Document {
+function mutationFields(claimToken: string = uuidv4(), generation: string = uuidv4()): Document {
   return {
-    generation: { $ifNull: ['$generation', { $literal: uuidv4() }] },
+    generation: { $ifNull: ['$generation', { $literal: generation }] },
     rev: { $add: [{ $ifNull: ['$rev', 0] }, 1] },
     claimToken: { $literal: claimToken },
   };
@@ -376,9 +376,10 @@ function literals(fields: Document): Document {
   return Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, { $literal: v }]));
 }
 
-/** The pin a pipeline write returned, or null when it matched nothing. */
-function pinOf(doc: Document | null): P0Pin | null {
-  return doc ? { generation: doc.generation, claimToken: doc.claimToken, rev: doc.rev } : null;
+/** What a P0 write left (`pin`) and the document it overwrote (`before`; null when it inserted). */
+interface P0Result {
+  pin: P0Pin;
+  before: RegistryDoc | null;
 }
 
 /** Names a `deleting` entry is still responsible for dropping (its drop set, as rewritten by T1). */
@@ -747,14 +748,37 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     entry: Partial<RegistryDoc>,
     claim?: Document,
     upsert = true,
-  ): Promise<P0Pin | null> {
-    const { claimToken, ...fields } = entry;
-    const doc = await this.registry().findOneAndUpdate(
+  ): Promise<P0Result | null> {
+    const { claimToken = uuidv4(), ...fields } = entry;
+    return this.p0Write(
       { _id: indexName, ...claim },
-      [{ $set: { ...literals({ indexName, ...fields }), ...mutationFields(claimToken) } }],
-      { upsert, returnDocument: 'after' },
+      mutation => [{ $set: { ...literals({ indexName, ...fields }), ...mutation } }],
+      claimToken,
+      upsert,
     );
-    return pinOf(doc);
+  }
+
+  /**
+   * A P0 write. It returns the document as it was before the write, so a rollback restores what
+   * this write overwrote (not what the call read earlier) and removes the entry only when this
+   * write inserted it (I4). The pin is derived from that pre-image: the same `$ifNull` generation
+   * and `rev + 1` the pipeline computes. Null when nothing matched and nothing was inserted.
+   */
+  private async p0Write(
+    filter: Document,
+    update: (mutation: Document) => Document[],
+    claimToken: string,
+    upsert: boolean,
+  ): Promise<P0Result | null> {
+    const generation = uuidv4();
+    const result = await this.registry().findOneAndUpdate(filter, update(mutationFields(claimToken, generation)), {
+      upsert,
+      returnDocument: 'before',
+      includeResultMetadata: true,
+    });
+    const before = result.value;
+    if (!before && !result.lastErrorObject?.upserted) return null;
+    return { before, pin: { generation: before?.generation ?? generation, claimToken, rev: (before?.rev ?? 0) + 1 } };
   }
 
   /**
@@ -1577,9 +1601,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         ...(existingEntry && !sameVectorIndex ? { ownsVectorIndex: false } : {}),
       };
       let pin: P0Pin;
+      let p0Before: RegistryDoc | null;
       try {
-        // Upsert, so a pin always comes back.
-        pin = (await this.writeRegistryEntry(indexName, { ...p0Fields, claimToken }, registryClaim))!;
+        // Upsert, so a result always comes back.
+        ({ pin, before: p0Before } = (await this.writeRegistryEntry(
+          indexName,
+          { ...p0Fields, claimToken },
+          registryClaim,
+        ))!);
       } catch (error: any) {
         if (error?.code !== 11000) throw error;
         const winner = await this.readRegistryEntry(indexName);
@@ -1699,7 +1728,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         const removed = await this.rollbackRegistryEntry(
           indexName,
           pin,
-          existingEntry ? rollbackRestore(existingEntry, { indexName, ...p0Fields }) : null,
+          p0Before ? rollbackRestore(p0Before, { indexName, ...p0Fields }) : null,
         );
         if (
           removed &&
@@ -1895,7 +1924,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     const claimToken = uuidv4();
     const textFields = { textSearchIndexName: name, ...(sameName ? {} : { ownsTextIndex: false }) };
     let provisioned = false;
-    let pin: P0Pin | null = null;
+    let p0: P0Result | null = null;
+    // The fields P0 writes besides the protocol fields; a rollback restores exactly these (I4).
+    let written: Document = textFields;
     try {
       const collection = await this.getCollection(collectionName);
       const definition = fields?.length
@@ -1921,7 +1952,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         // One $set stage: every expression reads the pre-write document, so retiring the old
         // name, reactivating a retired one and the ownership flag change atomically.
         const retired = { $ifNull: ['$retiredTextIndexNames', []] };
-        const rename = [
+        const rename = (mutation: Document) => [
           {
             $set: {
               retiredTextIndexNames: {
@@ -1948,13 +1979,13 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
               },
               ownsTextIndex: { $cond: [{ $in: [{ $literal: name }, retired] }, true, false] },
               textSearchIndexName: { $literal: name },
-              ...mutationFields(claimToken),
+              ...mutation,
             },
           },
         ];
-        // Compare-and-set on the document this call read: a write by another call since (a rename,
-        // a createIndex refresh, a delete) fails the filter, so `previous` is exactly the document
-        // replaced, and the rollback below restores it without erasing anyone else's write.
+        // Compare-and-set on the document this call read: a rename, a createIndex refresh or a
+        // delete by another call since fails the filter. A rollback restores the pre-image P0
+        // returns, not `previous`, so a write the filter lets through (a claim) is kept too.
         // Equality-to-null matches a missing field and one the driver stored as null.
         const observed: Document = {
           _id: indexName,
@@ -1962,30 +1993,31 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           textSearchIndexName: previous.textSearchIndexName ?? null,
           deleting: { $ne: true },
         };
-        pin = pinOf(
-          await this.registry().findOneAndUpdate(
-            observed,
-            sameName ? [{ $set: { ...literals(textFields), ...mutationFields(claimToken) } }] : rename,
-            { returnDocument: 'after' },
-          ),
+        written = sameName ? textFields : { ...textFields, retiredTextIndexNames: null };
+        p0 = await this.p0Write(
+          observed,
+          sameName ? mutation => [{ $set: { ...literals(textFields), ...mutation } }] : rename,
+          claimToken,
+          false,
         );
-        if (!pin) {
+        if (!p0) {
           const current = await this.readRegistryEntry(indexName);
           this.assertNotDeleting(current, 'CREATE_SEARCH_INDEX');
           throw concurrentConflict(current ? 'changed' : 'removed');
         }
       } else {
+        written = {
+          indexName,
+          collectionName: target.collectionName,
+          searchIndexName: target.searchIndexName,
+          isByo: target.isByo,
+          allowWrites: target.allowWrites,
+          ...textFields,
+        };
         try {
-          pin = await this.writeRegistryEntry(
+          p0 = await this.writeRegistryEntry(
             indexName,
-            {
-              collectionName: target.collectionName,
-              searchIndexName: target.searchIndexName,
-              isByo: target.isByo,
-              allowWrites: target.allowWrites,
-              ...textFields,
-              claimToken,
-            },
+            { ...written, claimToken },
             // Nothing was registered when this call read the entry: one written since (a claim,
             // a createIndex) carries a claimToken, so the insert hits 11000 instead of overwriting it.
             { claimToken: { $exists: false } },
@@ -2001,7 +2033,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         [name],
         'CREATE_SEARCH_INDEX',
         { textSearchIndexName: name },
-        pin!.generation,
+        p0!.pin.generation,
       );
       await this.testHooks?.beforeSearchIndexProvision?.(indexName);
       this.indexTargets.set(indexName, { ...target, textSearchIndexName: name });
@@ -2009,7 +2041,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       if (created) {
         // A proven create is never rolled back (I4), even if recording it fails.
         provisioned = true;
-        await this.recordOwnership(indexName, 'text', name, pin!.generation);
+        await this.recordOwnership(indexName, 'text', name, p0!.pin.generation);
       } else if ((sameName && previous?.ownsTextIndex) || previous?.retiredTextIndexNames?.includes(name)) {
         // Ours already: either unchanged, or a retired name this rename just reactivated.
         // Recreating our own index with a different `fields` mapping must change the mapping.
@@ -2036,10 +2068,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         await this.waitForSearchIndexReady({ indexName });
       }
     } catch (error: any) {
-      if (!provisioned && pin) {
-        // The fields P0 wrote: the text-index fields, plus the retired list on a rename.
-        const written = sameName ? textFields : { ...textFields, retiredTextIndexNames: null };
-        await this.rollbackRegistryEntry(indexName, pin, previous ? rollbackRestore(previous, written) : null);
+      if (!provisioned && p0) {
+        await this.rollbackRegistryEntry(indexName, p0.pin, p0.before ? rollbackRestore(p0.before, written) : null);
       }
       if (error instanceof MastraError) throw error;
       throw new MastraError(

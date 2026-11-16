@@ -338,6 +338,74 @@ describe('provisioning protocol', () => {
         expect(after).toEqual({ ...legacy, generation: afterWrite?.generation, rev: 2, claimToken: after?.claimToken });
         expect(after?.claimToken).not.toBe(afterWrite?.claimToken);
       });
+
+      /**
+       * a's createIndex parks right after reading the entry, `between` runs, then a's P0 writes and
+       * its pre-provision check fails, so a rolls back. Returns a's error.
+       */
+      async function failAfterInterleavedWrite(coll: string, params: Document, between: () => Promise<unknown>) {
+        const p = pause();
+        (a as any).testHooks = {
+          afterCreateIndexRead: p.hook,
+          beforePendingDropCheck: async () => {
+            throw new Error('provision failed');
+          },
+        };
+        try {
+          const call = a.createIndex({ indexName: coll, dimension: 4, collectionName: coll, ...params }).catch(e => e);
+          await reached(p);
+          await between();
+          p.release.resolve();
+          return await call;
+        } finally {
+          p.release.resolve();
+          (a as any).testHooks = undefined;
+        }
+      }
+
+      it('(iv) a refresh and its P7 landing between the read and P0 survive the rollback', async () => {
+        const coll = await byoColl('prb4');
+        await a.createIndex({ indexName: coll, dimension: 4, collectionName: coll, searchIndexName: 'V0' });
+        let afterB: Document | null = null;
+        const err = await failAfterInterleavedWrite(coll, { searchIndexName: 'V1' }, async () => {
+          await b.createIndex({ indexName: coll, dimension: 4, collectionName: coll, searchIndexName: 'V1' });
+          afterB = await entry(coll);
+        });
+        expect(err?.message).toMatch(/provision failed/);
+        expect(afterB).toMatchObject({ searchIndexName: 'V1', ownsVectorIndex: true });
+        const after = await entry(coll);
+        // a's P0 and its rollback each bump rev; the rollback restores what P0 overwrote: b's write.
+        expect(after).toEqual({ ...afterB!, rev: afterB!.rev + 2, claimToken: after?.claimToken });
+        expect(after?.claimToken).not.toBe(afterB!.claimToken);
+      });
+
+      it('(v) an old-code entry written between the read and P0 is restored, not deleted', async () => {
+        const coll = await byoColl('prb5');
+        const legacy = {
+          _id: coll,
+          indexName: coll,
+          collectionName: coll,
+          searchIndexName: `${coll}_vector_index`,
+          isByo: true,
+          allowWrites: false,
+          dimension: 4,
+          metric: 'cosine',
+        };
+        const err = await failAfterInterleavedWrite(coll, {}, () => seedRegistry(db, legacy));
+        expect(err?.message).toMatch(/provision failed/);
+        const after = await entry(coll);
+        expect(typeof after?.generation).toBe('string');
+        expect(after).toEqual({ ...legacy, generation: after?.generation, rev: 2, claimToken: after?.claimToken });
+      });
+
+      it('(vi) an entry P0 re-inserted after a delete is removed by the rollback', async () => {
+        const coll = await byoColl('prb6');
+        await a.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
+        const err = await failAfterInterleavedWrite(coll, {}, () => b.deleteIndex({ indexName: coll }));
+        expect(err?.message).toMatch(/provision failed/);
+        expect(await entry(coll)).toBeNull();
+        expect(await searchIndexNames(db, coll)).toEqual([]);
+      });
     });
 
     // The seam sends the real create, so a live row exists, then reports `error` instead of the reply.
