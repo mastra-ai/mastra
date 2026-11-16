@@ -1,5 +1,5 @@
 import { Mastra } from '@mastra/core/mastra';
-import { createStudioBillingWrapper } from '../studio-with-billing/index.js';
+import { createStudioBillingWrapper } from '../studio-billing/index.js';
 import { createImageAssistantAgent } from './agents/image-assistant.js';
 import { createBilling } from '../billing/integration.js';
 import { localDemoAccounts } from '../billing/providers/local/accounts.js';
@@ -7,7 +7,7 @@ import { registerApplicationShutdown } from '../billing/lifecycle.js';
 import { ImageService } from '../images/service.js';
 import { createImageAgent } from './agents/image-agent.js';
 import { createImageKit } from './workflows/image-kit.js';
-import { imageAdapters } from './image-adapters.js';
+import { imageAdapters } from '../images/image-adapters.js';
 
 const billing = createBilling({
   provider: process.env.BILLING_PROVIDER ?? 'local',

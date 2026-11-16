@@ -1,4 +1,4 @@
-import { imageAdapters } from '../../src/mastra/image-adapters.js';
+import { imageAdapters } from '../../src/images/image-adapters.js';
 import { imagePolicies } from './image-configuration.js';
 import { createImageAgent } from '../../src/mastra/agents/image-agent.js';
 import { createImageKit } from '../../src/mastra/workflows/image-kit.js';

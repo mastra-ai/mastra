@@ -32,7 +32,7 @@ import { z } from 'zod';
 import { createBilling } from '../../src/billing/integration.js';
 import { localDemoAccounts } from '../../src/billing/providers/local/accounts.js';
 import { createBillingApp } from '../../src/billing/server/routes.js';
-import { createStudioBillingWrapper } from '../../src/studio-with-billing/index.js';
+import { createStudioBillingWrapper } from '../../src/studio-billing/index.js';
 import { createImageAssistantAgent } from '../../src/mastra/agents/image-assistant.js';
 import { billingSocket } from './http.js';
 

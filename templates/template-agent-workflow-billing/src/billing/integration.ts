@@ -26,8 +26,8 @@ import { createBillingServer } from './server/boundary.js';
 import { ExecutionArtifacts } from './storage/artifacts.js';
 import { validateConfigurationFiles } from './configuration/files.js';
 import { ConversationStorage } from './storage/conversations.js';
-import { protectConversationMemory, studioChatFailure } from '../studio-with-billing/studio-chat-proxy.js';
-import type { StudioServerWrapper } from '../studio-with-billing/studio-wrapper-contracts.js';
+import { protectConversationMemory, studioChatFailure } from '../studio-billing/studio-chat-proxy.js';
+import type { StudioServerWrapper } from '../studio-billing/studio-wrapper-contracts.js';
 import { Lifecycle } from './lifecycle.js';
 
 type ConfigurationInput = z.input<typeof billingConfigurationSchema>;

@@ -1,7 +1,7 @@
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { configuredOrganizations } from '../../src/billing/configuration/environment.js';
 import { studioComposition } from '../support/studio-composition.js';
-import { createStudioBillingWrapper } from '../../src/studio-with-billing/index.js';
+import { createStudioBillingWrapper } from '../../src/studio-billing/index.js';
 import { createBilling } from '../../src/billing/integration.js';
 import { imageConfiguration } from '../support/image-configuration.js';
 import { readConfigurationFile } from '../../src/billing/configuration/files.js';

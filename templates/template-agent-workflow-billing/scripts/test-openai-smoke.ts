@@ -1,6 +1,6 @@
 import { createBillingApplication } from '../src/billing/application.js';
 import { createImageAgent } from '../src/mastra/agents/image-agent.js';
-import { imageAdapters } from '../src/mastra/image-adapters.js';
+import { imageAdapters } from '../src/images/image-adapters.js';
 import { ImageService } from '../src/images/service.js';
 import { ExecutionArtifacts } from '../src/billing/storage/artifacts.js';
 import { billingConfigurationSchema } from '../src/billing/configuration/policy.js';

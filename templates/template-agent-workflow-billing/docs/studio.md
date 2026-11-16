@@ -75,7 +75,7 @@ import { z } from 'zod';
 import { createBilling } from '../billing/integration.js';
 import { localDemoAccounts } from '../billing/providers/local/accounts.js';
 import { registerApplicationShutdown } from '../billing/lifecycle.js';
-import { createStudioBillingWrapper } from '../studio-with-billing/index.js';
+import { createStudioBillingWrapper } from '../studio-billing/index.js';
 
 const billing = createBilling({
   provider: process.env.BILLING_PROVIDER ?? 'local',
