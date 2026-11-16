@@ -240,7 +240,7 @@ describe('ModalSandbox lifecycle', () => {
     );
   });
 
-  it('shuts down after idleTimeoutMs of inactivity while timeoutMs stays the hard limit (#30369)', async () => {
+  it('forwards idleTimeoutMs and timeoutMs to Modal as separate settings (#30369)', async () => {
     const sandbox = new ModalSandbox({ timeoutMs: 60 * 60_000, idleTimeoutMs: 120_000 });
     await sandbox._start();
 
