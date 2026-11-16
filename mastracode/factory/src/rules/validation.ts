@@ -107,7 +107,11 @@ function boardIdentifier(value: unknown, label: string): string {
 
 function boardEvent(value: unknown, label: string): BoardEventFacts {
   if (!isPlainObject(value)) throw new FactoryRuleValidationError(`${label} event must be an object.`);
-  assertExactKeys(value, ['type', 'reason', 'labels', 'assignees', 'pullRequestTrusted', 'closedIssue'], `${label} event`);
+  assertExactKeys(
+    value,
+    ['type', 'reason', 'labels', 'assignees', 'pullRequestTrusted', 'closedIssue'],
+    `${label} event`,
+  );
   const type = enumValue(value.type, STATUS_EVENTS, `${label} event type`);
   const reason =
     value.reason === undefined ? undefined : enumValue(value.reason, CLOSE_REASONS, `${label} event reason`);
