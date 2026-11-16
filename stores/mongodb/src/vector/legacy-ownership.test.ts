@@ -818,11 +818,21 @@ describe('legacy ownership', () => {
         const before = await reg(Y);
         const err = await b.createSearchIndex({ indexName: Y, searchIndexName: 'A' }).catch(e => e);
         expect(err.id).toBe(deleting('CREATE_SEARCH_INDEX'));
-        expect(await reg(Y)).toEqual(before);
+        // The rollback restores the fields the call wrote; it keeps the generation its write
+        // backfilled, bumps rev past that write and sets a fresh claimToken (I4).
+        const restored = await reg(Y);
+        expect(typeof restored?.generation).toBe('string');
+        expect(restored?.claimToken).not.toBe(before?.claimToken);
+        expect(restored).toEqual({
+          ...before,
+          generation: restored?.generation,
+          rev: (before?.rev ?? 0) + 2,
+          claimToken: restored?.claimToken,
+        });
         del.release.resolve();
         await deleteX;
         expect(await searchIndexNames(db, coll)).toEqual([]);
-        expect(await regFor(coll)).toEqual([before]);
+        expect(await regFor(coll)).toEqual([restored]);
       });
     });
 
@@ -1096,7 +1106,7 @@ describe('legacy ownership', () => {
           expect(names).not.toContain('B');
         });
 
-        it('T13-rollback: a failed rename restores the registry doc exactly', async () => {
+        it('T13-rollback: a failed rename restores the renamed fields and bumps rev', async () => {
           const coll = await byo();
           await a.createSearchIndex({ indexName: coll, searchIndexName: 'A' });
           const before = await entry(coll);
@@ -1106,7 +1116,12 @@ describe('legacy ownership', () => {
             },
           };
           await expect(a.createSearchIndex({ indexName: coll, searchIndexName: 'B' })).rejects.toThrow();
-          expect(await entry(coll)).toEqual(before);
+          const after = await entry(coll);
+          for (const f of ['textSearchIndexName', 'ownsTextIndex', 'retiredTextIndexNames', 'generation'])
+            expect(after?.[f], f).toEqual(before?.[f]);
+          // The rename's write and the rollback each bump rev; neither lowers it (I4).
+          expect(after?.rev).toBe(before!.rev + 2);
+          expect(after?.claimToken).not.toBe(before?.claimToken);
         });
 
         it('a rollback after a delete transaction committed leaves the delete state intact', async () => {
@@ -1370,7 +1385,7 @@ describe('legacy ownership', () => {
             return coll;
           };
 
-          it('R1: a createIndex whose vector index name another call changed refuses with CONFLICT and creates nothing', async () => {
+          it('P-R1: a createIndex whose vector index name another call changed refuses with CONFLICT and creates nothing', async () => {
             const coll = await seeded('r1');
             const p = held();
             (a as any).testHooks = { beforePendingDropCheck: p.hook };
@@ -1378,17 +1393,26 @@ describe('legacy ownership', () => {
               .createIndex({ indexName: coll, dimension: 4, collectionName: coll, searchIndexName: 'V1' })
               .catch(e => e);
             await reached(p);
+            // Nothing was registered before a started, so the generation to keep is the one a's write created.
+            const generation = (await entry(coll))?.generation;
+            expect(typeof generation).toBe('string');
             await b.createIndex({ indexName: coll, dimension: 4, collectionName: coll, searchIndexName: 'V2' });
+            const afterB = await entry(coll);
+            expect(afterB?.generation).toBe(generation);
             p.release.resolve();
             const err = await first;
             expect(await searchIndexNames(db, coll)).toEqual(['V2']);
             expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
             expect(err.category).toBe('USER');
             expect(err.message).toMatch(/searchIndexName "V2" instead of "V1"/);
-            expect(await entry(coll)).toMatchObject({ searchIndexName: 'V2', ownsVectorIndex: true });
+            expect(await entry(coll)).toMatchObject({
+              searchIndexName: 'V2',
+              ownsVectorIndex: true,
+              generation: afterB?.generation,
+            });
           });
 
-          it('R2: a refresh whose registration was deleted and recreated on another collection refuses with CONFLICT', async () => {
+          it('P-R2: a refresh whose registration was deleted and recreated on another collection refuses with CONFLICT', async () => {
             const coll = await byo();
             const other = await seeded('r2y');
             const p = held();
@@ -1397,28 +1421,38 @@ describe('legacy ownership', () => {
             await reached(p);
             await b.deleteIndex({ indexName: coll });
             await b.createIndex({ indexName: coll, dimension: 4, collectionName: other });
+            const afterB = await entry(coll);
+            expect(typeof afterB?.generation).toBe('string');
             p.release.resolve();
             const err = await refresh;
             expect(await searchIndexNames(db, coll)).toEqual([]);
             expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
             expect(err.message).toMatch(new RegExp(`collectionName "${other}" instead of "${coll}"`));
-            expect(await entry(coll)).toMatchObject({ collectionName: other, ownsVectorIndex: true });
+            expect(await entry(coll)).toMatchObject({
+              collectionName: other,
+              ownsVectorIndex: true,
+              generation: afterB?.generation,
+            });
           });
 
-          it('R3: a createSearchIndex whose text index another call renamed refuses with CONFLICT and creates nothing', async () => {
+          it('P-R3: a createSearchIndex whose text index another call renamed refuses with CONFLICT and creates nothing', async () => {
             const coll = await byo();
+            const generation = (await entry(coll))?.generation;
+            expect(typeof generation).toBe('string');
             const p = held();
             (a as any).testHooks = { beforePendingDropCheck: p.hook };
             const first = a.createSearchIndex({ indexName: coll, searchIndexName: 'N1' }).catch(e => e);
             await reached(p);
             await b.createSearchIndex({ indexName: coll, searchIndexName: 'N2' });
+            const afterB = await entry(coll);
+            expect(afterB?.generation).toBe(generation);
             p.release.resolve();
             const err = await first;
             expect((await searchIndexNames(db, coll)).sort()).toEqual(['N2', `${coll}_vector_index`]);
             expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'));
             expect(err.message).toMatch(/textSearchIndexName "N2" instead of "N1"/);
             const e = await entry(coll);
-            expect(e).toMatchObject({ textSearchIndexName: 'N2', ownsTextIndex: true });
+            expect(e).toMatchObject({ textSearchIndexName: 'N2', ownsTextIndex: true, generation: afterB?.generation });
             expect(e?.retiredTextIndexNames ?? []).toEqual([]);
           });
 
@@ -1452,18 +1486,14 @@ describe('legacy ownership', () => {
             }
           });
 
-          // Documented limitation, not a fix: the check compares targets, and the registry has no
-          // stable registration identity, so a delete followed by a recreate with the same target looks
-          // unchanged. The stale refresh provisions the index; its ownership write misses the new
-          // registration's claimToken, and the new registration finds the index already there, so the
-          // index Mastra created stays recorded but not owned and deleteIndex leaves it behind.
-          it('known limit: a refresh racing a delete and an identical recreate leaves the index it creates recorded but not owned', async () => {
+          // A delete followed by an identical recreate leaves the same target under a new generation,
+          // so the stale refresh's check refuses instead of provisioning for a registration it never wrote.
+          it('P-SAME-pre: a refresh paused before its check, racing a delete and an identical recreate, refuses with CONFLICT and the recreate owns its index', async () => {
             const coll = await byo();
-            const vector = `${coll}_vector_index`;
             const pa = held();
             const pb = held();
             (a as any).testHooks = { beforePendingDropCheck: pa.hook };
-            const refresh = a.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
+            const refresh = a.createIndex({ indexName: coll, dimension: 4, collectionName: coll }).catch(e => e);
             await reached(pa);
             await b.deleteIndex({ indexName: coll });
             expect(await searchIndexNames(db, coll)).toEqual([]);
@@ -1471,17 +1501,16 @@ describe('legacy ownership', () => {
             const recreate = b.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
             await reached(pb);
             pa.release.resolve();
-            await refresh;
+            const err = await refresh;
+            expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+            expect(err.message).toMatch(/removed or recreated by another call/);
             pb.release.resolve();
             await recreate;
-            expect(await searchIndexNames(db, coll)).toEqual([vector]);
             const e = await entry(coll);
-            expect(e).toMatchObject({ collectionName: coll, searchIndexName: vector });
-            expect(e?.ownsVectorIndex).not.toBe(true);
+            expect(e?.ownsVectorIndex).toBe(true);
             (b as any).testHooks = undefined;
             await b.deleteIndex({ indexName: coll });
-            expect(await entry(coll)).toBeNull();
-            expect(await searchIndexNames(db, coll)).toEqual([vector]);
+            expect(await searchIndexNames(db, coll)).toEqual([]);
           });
         });
       });

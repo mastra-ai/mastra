@@ -9,7 +9,9 @@ import {
   captureCommands,
   createRawSearchIndex,
   deferred,
+  pause,
   rawClient,
+  reached,
   searchIndexNames,
   seedCollection,
   seedRegistry,
@@ -215,6 +217,127 @@ describe('provisioning protocol', () => {
       expect(typeof docs[0]?.generation).toBe('string');
       expect(docs[0]?.ownsVectorIndex).toBe(true);
       expect(await searchIndexNames(db, coll)).toEqual([`${coll}_vector_index`]);
+    });
+
+    it('P-MIXED: an old-code delete and recreate during provisioning refuses with the generation CONFLICT', async () => {
+      const coll = await byoColl('pmix');
+      const p = pause();
+      (a as any).testHooks = { beforePendingDropCheck: p.hook };
+      try {
+        const create = a.createIndex({ indexName: coll, dimension: 4, collectionName: coll }).catch(e => e);
+        await reached(p);
+        const written = await entry(coll);
+        // What an old instance's delete and identical recreate leave: same target, no generation, no rev.
+        await db.collection(REGISTRY).deleteOne({ _id: coll as any });
+        const oldShaped = {
+          _id: coll,
+          indexName: coll,
+          collectionName: coll,
+          searchIndexName: written?.searchIndexName,
+          isByo: true,
+          allowWrites: false,
+          dimension: 4,
+          metric: 'cosine',
+        };
+        await seedRegistry(db, oldShaped);
+        p.release.resolve();
+        const err = await create;
+        expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+        expect(err?.message).toBe(
+          `Index "${coll}" was removed or recreated by another call while this one ran, so nothing was provisioned. Retry.`,
+        );
+        expect(await searchIndexNames(db, coll)).toEqual([]);
+        // The rollback is pinned on this call's generation, so the old instance's entry is untouched.
+        expect(await entry(coll)).toEqual(oldShaped);
+      } finally {
+        p.release.resolve();
+        (a as any).testHooks = undefined;
+      }
+    });
+
+    describe('P-ROLLBACK', () => {
+      /**
+       * a's rename to B fails after its P0 write; just before, `concurrent` writes to the entry.
+       * Returns the entry right after that write, the entry after a's failure, and the sampled revs.
+       */
+      async function failRenameAfter(coll: string, concurrent: () => Promise<unknown>) {
+        const revs: number[] = [];
+        const sample = async () => {
+          const e = await entry(coll);
+          revs.push(e?.rev ?? 0);
+          return e;
+        };
+        let afterWrite: Document | null = null;
+        await sample();
+        (a as any).testHooks = {
+          beforeSearchIndexProvision: async () => {
+            await sample();
+            await concurrent();
+            afterWrite = await sample();
+            throw new Error('provision failed');
+          },
+        };
+        try {
+          await expect(a.createSearchIndex({ indexName: coll, searchIndexName: 'B' })).rejects.toThrow(
+            'provision failed',
+          );
+        } finally {
+          (a as any).testHooks = undefined;
+        }
+        const after = await sample();
+        for (let i = 1; i < revs.length; i++) expect(revs[i]).toBeGreaterThanOrEqual(revs[i - 1]!);
+        return { afterWrite: afterWrite as Document | null, after };
+      }
+
+      it('(i) a refresh after P0 survives the rollback', async () => {
+        const coll = await byoColl('prb1');
+        await a.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
+        await a.createSearchIndex({ indexName: coll, searchIndexName: 'A' });
+        const { afterWrite, after } = await failRenameAfter(coll, () =>
+          b.createSearchIndex({ indexName: coll, searchIndexName: 'B' }),
+        );
+        expect(afterWrite).toMatchObject({ textSearchIndexName: 'B', ownsTextIndex: true });
+        expect(after).toEqual(afterWrite);
+      });
+
+      it('(ii) a createIndex refresh and its P7 survive the rollback', async () => {
+        const coll = await byoColl('prb2');
+        // A legacy BYO entry whose vector index does not exist yet, so b's refresh creates it and records it (P7).
+        await seedRegistry(db, {
+          _id: coll,
+          indexName: coll,
+          collectionName: coll,
+          searchIndexName: `${coll}_vector_index`,
+          isByo: true,
+          allowWrites: false,
+          dimension: 4,
+          metric: 'cosine',
+        });
+        const { afterWrite, after } = await failRenameAfter(coll, () =>
+          b.createIndex({ indexName: coll, dimension: 4, collectionName: coll }),
+        );
+        expect(afterWrite).toMatchObject({ ownsVectorIndex: true, textSearchIndexName: 'B' });
+        expect(after).toEqual(afterWrite);
+      });
+
+      it('(iii) a rollback with no concurrent write restores the written fields and keeps a backfilled generation', async () => {
+        const coll = await byoColl('prb3');
+        const legacy = {
+          _id: coll,
+          indexName: coll,
+          collectionName: coll,
+          searchIndexName: `${coll}_vector_index`,
+          isByo: true,
+          allowWrites: false,
+          dimension: 4,
+          metric: 'cosine',
+        };
+        await seedRegistry(db, legacy);
+        const { afterWrite, after } = await failRenameAfter(coll, async () => {});
+        expect(typeof afterWrite?.generation).toBe('string');
+        expect(after).toEqual({ ...legacy, generation: afterWrite?.generation, rev: 2, claimToken: after?.claimToken });
+        expect(after?.claimToken).not.toBe(afterWrite?.claimToken);
+      });
     });
 
     // The seam sends the real create, so a live row exists, then reports `error` instead of the reply.

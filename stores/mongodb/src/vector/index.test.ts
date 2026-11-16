@@ -2696,6 +2696,7 @@ describe('MongoDBVector autoEmbed', () => {
           collectionName: 'movies',
           searchIndexName: 'movies_vector_index',
           textSearchIndexName: 'movies_search_index',
+          generation: 'g0',
         }),
         findOneAndUpdate: vi.fn().mockResolvedValue({ _id: 'movies', generation: 'g0', rev: 1, claimToken: 'c0' }),
         updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
@@ -2730,6 +2731,7 @@ describe('MongoDBVector autoEmbed', () => {
           collectionName: 'movies',
           searchIndexName: 'movies_vector_index',
           textSearchIndexName: 'movies_search_index',
+          generation: 'g0',
         }),
         findOneAndUpdate: vi.fn().mockResolvedValue({ _id: 'movies', generation: 'g0', rev: 1, claimToken: 'c0' }),
         updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
@@ -3772,7 +3774,11 @@ describe('MongoDBVector index ownership', () => {
       (v as any).testHooks = undefined;
     }
 
-    expect(await registry().findOne({ _id: 'own_byo' as any })).toEqual(before);
+    const after = await registry().findOne({ _id: 'own_byo' as any });
+    for (const f of ['textSearchIndexName', 'ownsTextIndex', 'retiredTextIndexNames', 'generation'])
+      expect(after?.[f], f).toEqual(before?.[f]);
+    expect(after?.rev).toBe(before!.rev + 2);
+    expect(after?.claimToken).not.toBe(before?.claimToken);
     // The in-process cache does not serve the failed target either.
     expect((await (v as any).resolveIndexTarget('own_byo')).textSearchIndexName).toBe('own_text');
 
