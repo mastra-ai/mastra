@@ -63,6 +63,7 @@ describe('GitLab listed merge requests through rules ingress', () => {
     vi.spyOn(gitlab, 'getProjectMemberAccessLevel').mockResolvedValue(10);
     vi.spyOn(gitlab, 'getWorkItemAuthorUsername').mockResolvedValue('maintainer');
     vi.spyOn(gitlab, 'resolveActiveConnectionForHost').mockResolvedValue('direct');
+    vi.spyOn(gitlab, 'getCurrentUsername').mockResolvedValue('factory-bot');
     const sweep = attachGitLabDiscovery(gitlab, {
       storage: { projects: seeded.projects, sourceControl, intake: seeded.intake },
       runtime: { configVersion: 'list-ingestion-test-v1', workItems: seeded.workItems, boards: createBoardRegistry() },

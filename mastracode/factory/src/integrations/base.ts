@@ -27,10 +27,12 @@ import type { MastraWorker } from '@mastra/core/worker';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
 import type { BoardRegistry } from '../boards/index.js';
+import type { IntakeItemLookup } from '../boards/intake-lookup.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
+import type { NotRoutedLookup } from '../rules/event-rules.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
@@ -173,6 +175,11 @@ export interface IntegrationContext {
      * Absent where no sweep runs (route contexts, tests).
      */
     keptCards?: CardSource;
+    /**
+     * Which items intake turned away (Not routed), so a label or assignee change to one runs intake
+     * again. Absent where the boards domain isn't available.
+     */
+    notRouted?: NotRoutedLookup;
   };
   /** System hooks integrations may invoke. */
   hooks?: IntegrationHooks;
@@ -225,6 +232,8 @@ export interface FactoryIntegration {
   readonly additionalIntakes?: ReadonlyArray<{ id: string; intake: Pick<Intake, 'listSources' | 'listItems'> }>;
   /** Repository, installation, and pull-request capability. */
   readonly versionControl?: VersionControl;
+  /** Reads one item by URL from a source linked to a project, for the intake tester. */
+  readonly intakeLookup?: IntakeItemLookup;
   /** Whether at least one account is connected, for the dev-server startup summary. */
   hasActiveConnections?(): Promise<boolean>;
   /**
