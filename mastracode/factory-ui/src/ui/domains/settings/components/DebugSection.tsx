@@ -1,7 +1,7 @@
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsRow, SettingsSkeleton, SettingsValue } from '@mastra/playground-ui/new/settings';
 
 import { useServerVersions } from '../../../../hooks/useServerVersions';
 import type { ServerVersions } from '../../../../hooks/useServerVersions';
@@ -11,14 +11,6 @@ import { RetryRow } from './common/ConnectionStateRows';
 /** Plain-text version list, for pasting into an issue or a session. */
 export function formatVersions({ packages, nodeVersion }: ServerVersions): string {
   return [...packages.map(({ name, version }) => `${name}@${version}`), `node@${nodeVersion}`].join('\n');
-}
-
-function VersionValue({ children }: { children: string }) {
-  return (
-    <Txt tone="muted" as="span" variant="caption" font="mono" className="truncate tabular-nums">
-      {children}
-    </Txt>
-  );
 }
 
 export function DebugSection() {
@@ -60,11 +52,11 @@ export function DebugSection() {
           <SettingsContainer>
             {query.data.packages.map(({ name, version }) => (
               <SettingsRow key={name} label={name}>
-                <VersionValue>{version}</VersionValue>
+                <SettingsValue mono>{version}</SettingsValue>
               </SettingsRow>
             ))}
             <SettingsRow label="Node.js">
-              <VersionValue>{query.data.nodeVersion}</VersionValue>
+              <SettingsValue mono>{query.data.nodeVersion}</SettingsValue>
             </SettingsRow>
           </SettingsContainer>
         </>

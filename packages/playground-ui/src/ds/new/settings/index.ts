@@ -13,3 +13,4 @@ export {
 } from './settings-list';
 export { SettingsFieldsetRow, SettingsRow, type SettingsFieldsetRowProps, type SettingsRowProps } from './settings-row';
 export { SettingsSkeleton, type SettingsSkeletonProps } from './settings-skeleton';
+export { SettingsValue, type SettingsValueProps } from './settings-value';

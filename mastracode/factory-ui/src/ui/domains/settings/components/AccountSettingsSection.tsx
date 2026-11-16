@@ -1,11 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CopyField } from '@mastra/playground-ui/components/CopyField';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useApiConfig } from '../../../../api/config';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { clearMastraCodeStorage, redirectToLogout } from '../../auth/services/auth';
-import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsRow, SettingsSkeleton, SettingsValue } from '@mastra/playground-ui/new/settings';
 
 import { SettingsSubsection } from './SettingsSubsection';
 import { IconArrowBoxLeft } from '@mastra/playground-ui/icons/central/IconArrowBoxLeft';
@@ -24,14 +23,6 @@ function authProviderLabel(provider: string | undefined): string {
       .split('-')
       .map(part => part.charAt(0).toUpperCase() + part.slice(1))
       .join(' ')
-  );
-}
-
-function AccountValue({ children }: { children: string }) {
-  return (
-    <Txt tone="muted" as="span" variant="caption" className="truncate">
-      {children}
-    </Txt>
   );
 }
 
@@ -78,13 +69,13 @@ export function AccountSettingsSection() {
       >
         <SettingsContainer>
           <SettingsRow label="Name" description="From your sign-in provider.">
-            <AccountValue>{user?.name ?? 'Not provided'}</AccountValue>
+            <SettingsValue>{user?.name ?? 'Not provided'}</SettingsValue>
           </SettingsRow>
           <SettingsRow label="Email" description="From your sign-in provider.">
-            <AccountValue>{user?.email ?? 'Not provided'}</AccountValue>
+            <SettingsValue>{user?.email ?? 'Not provided'}</SettingsValue>
           </SettingsRow>
           <SettingsRow label="Authentication" description="How you signed in.">
-            <AccountValue>{authProviderLabel(state.provider)}</AccountValue>
+            <SettingsValue>{authProviderLabel(state.provider)}</SettingsValue>
           </SettingsRow>
           {user?.userId && (
             <SettingsRow label="Account ID" description="Useful when contacting support.">
