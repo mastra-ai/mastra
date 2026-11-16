@@ -495,6 +495,22 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         row.updatedAt = new Date();
       }
     },
+    approveFollowUp: async ({ sessionId, userId }: { sessionId: string; userId: string }): Promise<void> => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (row) {
+        row.followUpApprovedBy = userId;
+        row.followUpApprovedAt = new Date();
+        row.followUpUsedAt = null;
+        row.updatedAt = new Date();
+      }
+    },
+    setFollowUpUsed: async ({ sessionId, used }: { sessionId: string; used: boolean }): Promise<boolean> => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (!row?.followUpApprovedAt || (row.followUpUsedAt !== null) === used) return false;
+      row.followUpUsedAt = used ? new Date() : null;
+      row.updatedAt = new Date();
+      return true;
+    },
     setVisibility: async ({
       sessionId,
       visibility,
@@ -559,6 +575,9 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         originSessionId: origin?.sessionId ?? null,
         originThreadId: origin?.threadId ?? null,
         originMutedAt: null,
+        followUpApprovedBy: null,
+        followUpApprovedAt: null,
+        followUpUsedAt: null,
         sandboxId: null,
         sandboxWorkdir: null,
         materializedAt: null,

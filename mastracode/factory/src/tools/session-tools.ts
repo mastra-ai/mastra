@@ -1,3 +1,4 @@
+import type { NotificationRecord } from '@mastra/core/notifications';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
@@ -39,7 +40,7 @@ import type { FactoryMessaging } from './messaging-tools.js';
 import { findWorkItem, workItemNotFound, workItemRefSchema } from './read-tools.js';
 import { heartbeatOpenRunUntilEnd } from './run-watch.js';
 import type { FactoryToolScope } from './scope.js';
-import { sessionModel } from './side-sessions.js';
+import { listSessionNotifications, newestNotification, sessionModel } from './side-sessions.js';
 
 const TITLE_LENGTH = 120;
 
@@ -47,7 +48,10 @@ const TITLE_LENGTH = 120;
 export const FACTORY_TOOLS_OWNER_ID = `factory-tools:${globalThis.crypto.randomUUID()}`;
 
 export interface FactorySessionToolDependencies {
-  sessions: Pick<SourceControlSessionLookup, 'getBySessionId' | 'getSourceControlBySessionId'>;
+  sessions: Pick<
+    SourceControlSessionLookup,
+    'getBySessionId' | 'getSourceControlBySessionId' | 'listByOrigin' | 'approveFollowUp' | 'setFollowUpUsed'
+  >;
   sessionModel: {
     projects: FactoryProjectsStorage;
     modelDefaults: ModelDefaultsStorage;
@@ -87,6 +91,18 @@ export interface FactorySessionToolDependencies {
 
 const LISTED_MODELS = 8;
 
+/** How long a person's approval of follow-up work waits for the side session to report. */
+export const FOLLOW_UP_APPROVAL_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * How long after the side session's handoff report its approval can start a role. The turn that report woke
+ * files the card and starts it right away; a later turn (a schedule, a webhook) shouldn't inherit the approval.
+ */
+export const FOLLOW_UP_HANDOFF_WINDOW_MS = 30 * 60 * 1000;
+
+/** Notifications read on the thread to check that nothing woke it after the handoff report. */
+export const FOLLOW_UP_NOTIFICATION_SCAN = 100;
+
 function ambiguousRepository(candidates: readonly string[]): string {
   return `This item has several repositories (${candidates.join(', ')}); v1 can't choose one.`;
 }
@@ -102,6 +118,20 @@ function startErrorMessage(error: unknown): string | null {
 function workItemLabel(item: Card): string {
   const number = workItemNumber(item);
   return number === null ? `"${item.title}"` : `#${number}`;
+}
+
+/** Why a role start without a person was refused, and what to tell them: the card is filed but has no run. */
+function notStartedError(label: string, reason: string): string {
+  return [
+    `${label} is filed but nothing was started on it: nobody signed in started this turn, and ${reason}.`,
+    `Tell the person the card is waiting, link it, and ask them to say "start" on it in their chat; don't report the work as started.`,
+  ].join(' ');
+}
+
+/** A side session's handoff: a plain report or a `done`, not a progress, blocked or failed update. */
+function isHandoffReport(record: Pick<NotificationRecord, 'kind' | 'attributes'>): boolean {
+  if (record.kind === 'report' || record.kind === 'done') return true;
+  return record.kind === 'reply' && record.attributes?.status === 'done';
 }
 
 function titleFrom(prompt: string): string {
@@ -229,6 +259,8 @@ export function createFactorySessionTools(
       'Use it for self-contained investigations; when the result should land as a pull request, file a work item instead.',
       'With `workItem` and `role` it starts that role on the work item instead, without moving the card, and this session follows the item.',
       "A role that already has a session on the item (current or past) can't be started again from here: message that session with factory_signal_session, or ask the person to start it from a signed-in chat.",
+      'Starting a role records a run as the person, so it needs a turn the person started, or their approval given ahead: when the person asks for work that a side session should look into first, start that side session with `approvedFollowUp: true`.',
+      'In the turn its final report (done) wakes, within 30 minutes, this session may file one work item and start one role on it without asking the person again. Any other notification reaching this session after the report, a later turn, or a card filed before the report ends that: ask the person instead.',
     ].join(' '),
     inputSchema: z
       .object({
@@ -245,21 +277,36 @@ export function createFactorySessionTools(
           ),
         workItem: workItemRefSchema.optional(),
         role: z.string().trim().min(1).max(64).optional(),
+        approvedFollowUp: z
+          .boolean()
+          .optional()
+          .describe(
+            'Side sessions only. True when the person in this turn already asked for the work this side session leads to, so that when it reports you may file one work item and start one role on it without asking again. Only in a turn the person started.',
+          ),
       })
       .strict()
       .refine(input => input.role === undefined || input.workItem !== undefined, {
         message: 'Pass workItem together with role.',
         path: ['role'],
+      })
+      .refine(input => input.approvedFollowUp === undefined || input.workItem === undefined, {
+        message: 'approvedFollowUp is for side sessions; leave it out with workItem.',
+        path: ['approvedFollowUp'],
       }),
-    execute: async ({ prompt, title, model, workItem, role }) => {
+    execute: async ({ prompt, title, model, workItem, role, approvedFollowUp }) => {
       if (workItem !== undefined) {
-        // A role start records a run as the person, so it waits for a turn the person started.
-        if (!scope.interactive) {
-          throw new Error(
-            'Starting a role on a work item needs a person in this turn; start a side session, or ask the person to ask for it in a signed-in chat.',
-          );
-        }
-        return startWorkItemRole({ prompt, title, workItem, role });
+        // A role start records a run as the person, so it waits for a turn the person started,
+        // or uses the approval they gave ahead for a side session this one started.
+        if (scope.interactive) return startWorkItemRole({ prompt, title, workItem, role });
+        const item = await findWorkItem(deps.workItems, scope, workItem);
+        if (!item) throw workItemNotFound(workItem);
+        const grantSessionId = await followUpGrantFor(item);
+        return startWorkItemRole({ prompt, title, workItem, role, grantSessionId });
+      }
+      if (approvedFollowUp && !scope.interactive) {
+        throw new Error(
+          'Only the person can approve follow-up work, and nobody signed in started this turn; leave approvedFollowUp out.',
+        );
       }
 
       const parent = await deps.sessions.getBySessionId(scope.sessionId);
@@ -305,6 +352,7 @@ export function createFactorySessionTools(
         visibility: parent.visibility,
         origin: { sessionId: scope.sessionId, threadId: scope.threadId },
       });
+      if (approvedFollowUp) await deps.sessions.approveFollowUp({ sessionId: ensured.sessionId, userId: scope.userId });
       const resolvedModel = await resolveFactorySessionModel({
         ...deps.sessionModel,
         factoryProjectId: scope.factoryProjectId,
@@ -375,11 +423,14 @@ export function createFactorySessionTools(
     title,
     workItem,
     role,
+    grantSessionId,
   }: {
     prompt: string;
     title?: string;
     workItem: string;
     role?: string;
+    /** The side session whose follow-up approval this start uses, when no person started the turn. */
+    grantSessionId?: string;
   }) {
     if (!role) throw new Error('Pass the role to start on the work item.');
     const coordinator = deps.startCoordinator();
@@ -452,6 +503,17 @@ export function createFactorySessionTools(
       reason: 'started',
     });
 
+    // Used after every check, so a refused start leaves the approval for a corrected one.
+    if (grantSessionId && !(await deps.sessions.setFollowUpUsed({ sessionId: grantSessionId, used: true }))) {
+      if (!alreadyFollowing) {
+        await deps.workItems.unsubscribeFromWorkItem({
+          orgId: scope.orgId,
+          workItemId: item.id,
+          sessionId: scope.sessionId,
+        });
+      }
+      throw new Error(notStartedError(label, 'its approval was just used by another start'));
+    }
     const startedAt = new Date();
     let prepared;
     try {
@@ -479,6 +541,7 @@ export function createFactorySessionTools(
         },
       });
     } catch (error) {
+      if (grantSessionId) await deps.sessions.setFollowUpUsed({ sessionId: grantSessionId, used: false });
       if (!alreadyFollowing) {
         await deps.workItems.unsubscribeFromWorkItem({
           orgId: scope.orgId,
@@ -569,6 +632,116 @@ export function createFactorySessionTools(
       bindingId: prepared.bindingId,
       ...(replaced ? { replacedSessionId: replaced.sessionId } : {}),
     };
+  }
+
+  /**
+   * The side session whose unused follow-up approval covers a role start on `item` in a turn nobody signed in
+   * started: approved by this caller within the TTL, with `item` filed by this session after that side session reported.
+   * The start must run in the turn that report woke: nothing else may have reached the thread since the report
+   * (a webhook, a peer's signal, a rule notice all arrive as notifications), and the report must be recent.
+   */
+  async function followUpGrantFor(item: Card): Promise<string> {
+    const label = workItemLabel(item);
+    const approved = (
+      await deps.sessions.listByOrigin({ orgId: scope.orgId, originSessionId: scope.sessionId })
+    ).flatMap(row =>
+      row.factoryProjectId === scope.factoryProjectId &&
+      row.followUpApprovedAt &&
+      row.followUpApprovedBy === scope.userId
+        ? [{ sessionId: row.sessionId, approvedAt: row.followUpApprovedAt, usedAt: row.followUpUsedAt }]
+        : [],
+    );
+    if (approved.length === 0) {
+      throw new Error(notStartedError(label, 'the person approved no follow-up work for a side session of this one'));
+    }
+    const filed = (
+      await deps.workItems.listSessionSubscriptions({
+        orgId: scope.orgId,
+        factoryProjectId: scope.factoryProjectId,
+        sessionId: scope.sessionId,
+      })
+    ).find(subscription => subscription.workItemId === item.id && subscription.reason === 'created');
+    // Order against the card's own filing time; the subscription is written after it and only attributes the card.
+    const after = filed ? approved.filter(grant => item.createdAt >= grant.approvedAt) : [];
+    if (after.length === 0) {
+      throw new Error(
+        notStartedError(
+          label,
+          "this session didn't file it after the person approved follow-up work, so that approval doesn't cover it",
+        ),
+      );
+    }
+    // The approval covers the work the side session's report leads to: the report must land between the
+    // approval and the filing, so a card filed on some other turn before the handoff can't spend it.
+    const notifications = (await deps.messaging())?.notifications ?? null;
+    const reports = await listSessionNotifications(notifications, scope.threadId);
+    const handoffs = after.flatMap(grant => {
+      const report = newestNotification(
+        reports,
+        record =>
+          record.attributes?.['from-session'] === grant.sessionId &&
+          isHandoffReport(record) &&
+          record.createdAt >= grant.approvedAt &&
+          record.createdAt <= item.createdAt,
+      );
+      return report ? [{ ...grant, report }] : [];
+    });
+    const covering = handoffs.filter(grant => !grant.usedAt);
+    if (handoffs.length === 0) {
+      throw new Error(
+        notStartedError(
+          label,
+          "the approved side session hadn't reported back when this session filed it, so the approval doesn't cover it",
+        ),
+      );
+    }
+    if (covering.length === 0) throw new Error(notStartedError(label, 'its approval was already used to start a role'));
+    const now = Date.now();
+    const fresh = covering
+      .filter(grant => now - grant.approvedAt.getTime() <= FOLLOW_UP_APPROVAL_TTL_MS)
+      .sort((left, right) => right.report.createdAt.getTime() - left.report.createdAt.getTime());
+    if (fresh.length === 0) throw new Error(notStartedError(label, 'its approval expired'));
+    const latest = fresh.find(grant => now - grant.report.createdAt.getTime() <= FOLLOW_UP_HANDOFF_WINDOW_MS);
+    if (!latest) {
+      throw new Error(
+        notStartedError(label, "the side session's report came too long ago for this turn to be the one it woke"),
+      );
+    }
+    // Anything that reached the thread after the report woke a turn of its own, or will; that turn didn't come
+    // from the report, and this one can't tell them apart, so the approval stays for the person. A record that
+    // coalesced a later event keeps its first createdAt, so its updatedAt stands in for that event.
+    const recent = notifications
+      ? await notifications.listNotifications({ threadId: scope.threadId, limit: FOLLOW_UP_NOTIFICATION_SCAN })
+      : [];
+    const since = recent.find(
+      record =>
+        record.id !== latest.report.id &&
+        (record.createdAt > latest.report.createdAt ||
+          ((record.coalescedCount ?? 1) > 1 && record.updatedAt > latest.report.createdAt)),
+    );
+    // The list is newest-updated first and can't page, so a full scan that never reaches back to the report may
+    // have cut off a later arrival; refuse rather than guess.
+    if (
+      !since &&
+      recent.length >= FOLLOW_UP_NOTIFICATION_SCAN &&
+      recent[recent.length - 1]!.updatedAt > latest.report.createdAt
+    ) {
+      throw new Error(
+        notStartedError(
+          label,
+          "too many notifications reached this session after the side session's report to tell whether this turn is the one it woke",
+        ),
+      );
+    }
+    if (since) {
+      throw new Error(
+        notStartedError(
+          label,
+          `a ${since.source} notification reached this session after the side session's report, so this turn may not be the one the report woke`,
+        ),
+      );
+    }
+    return latest.sessionId;
   }
 
   async function resolveRepository(sourceControl: SourceControlStorageHandle, item: Card): Promise<string> {
