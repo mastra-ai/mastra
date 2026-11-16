@@ -100,8 +100,7 @@ function parseRepositoryLinkInput(value: unknown): {
     maxLength: MAX_REPOSITORY_COMMAND_LENGTH,
     nullable: true,
   });
-  if (branch === false || setupCommand === false || teardownCommand === false)
-    return null;
+  if (branch === false || setupCommand === false || teardownCommand === false) return null;
   return {
     ...(repositoryId ? { repositoryId } : {}),
     ...(repository ? { repository } : {}),
@@ -124,12 +123,7 @@ function parseRepositoryUpdateInput(value: unknown): UpdateProjectRepositoryInpu
     maxLength: MAX_REPOSITORY_COMMAND_LENGTH,
     nullable: true,
   });
-  if (
-    branch === false ||
-    setupCommand === false ||
-    teardownCommand === false
-  )
-    return null;
+  if (branch === false || setupCommand === false || teardownCommand === false) return null;
   if (branch !== undefined) patch.branch = branch;
   if (setupCommand !== undefined) patch.setupCommand = setupCommand;
   if (teardownCommand !== undefined) patch.teardownCommand = teardownCommand;
