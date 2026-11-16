@@ -35,6 +35,29 @@ function createInMemoryStorage(): InMemoryMemory {
   return new InMemoryMemory({ db: new InMemoryDB() });
 }
 
+// A state signal on another lane: `stateId` picks it.
+function createStateSignal(id: string, stateId: string, text: string, createdAt = new Date()): MastraDBMessage {
+  return {
+    id,
+    role: 'signal',
+    type: stateId,
+    createdAt,
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text }],
+      metadata: {
+        signal: {
+          id,
+          type: 'state',
+          tagName: stateId,
+          createdAt: createdAt.toISOString(),
+          metadata: { state: { id: stateId, cacheKey: `${stateId}-cache-key`, mode: 'snapshot' } },
+        },
+      },
+    },
+  };
+}
+
 function createTestMessage(
   content: string,
   role: 'user' | 'assistant' = 'user',
@@ -3597,6 +3620,23 @@ describe('getOtherThreadsContext()', () => {
     expect(result).not.toContain('responseFormat: format-a; format-b');
   });
 
+  it("should exclude OM's own state signals from other-thread context but keep other state lanes", async () => {
+    const om = createOM(storage, { scope: 'resource' });
+    await storage.saveMessages({
+      messages: [
+        { ...createTestMessage('Sibling user message', 'user', 'thread-b-user'), threadId: threadB },
+        { ...createStateSignal('thread-b-om', 'observational-memory', 'OM current task: ship it'), threadId: threadB },
+        { ...createStateSignal('thread-b-browser', 'browser', 'Browser on example.com'), threadId: threadB },
+      ],
+    });
+
+    const result = await om.getOtherThreadsContext(resourceId, threadA);
+
+    expect(result).toContain('Sibling user message');
+    expect(result).toContain('Browser on example.com');
+    expect(result).not.toContain('OM current task: ship it');
+  });
+
   it('falls back to the OM record lastObservedAt when sibling thread metadata is missing', async () => {
     const om = createOM(storage, { scope: 'resource' });
     const record = await om.getOrCreateRecord(threadA, resourceId);
@@ -4020,6 +4060,37 @@ describe('getUnobservedMessages filtering', () => {
     const unobserved = om.getUnobservedMessages(messages, record);
 
     expect(unobserved.map(message => message.id)).toEqual(['user-1', 'notification-signal']);
+  });
+
+  // OM sends its extracted values as this lane; observing it would feed the Observer its own output.
+  it("should exclude OM's own state signals but keep other state lanes", async () => {
+    const om = createOM(storage);
+    const record = await om.getOrCreateRecord(threadId);
+    const messages = [
+      createTestMessage('User message', 'user', 'user-1'),
+      createStateSignal('om-signal', 'observational-memory', 'OM current task: ship it'),
+      createStateSignal('browser-signal', 'browser', 'Browser on example.com'),
+    ];
+
+    const unobserved = om.getUnobservedMessages(messages, record);
+
+    expect(unobserved.map(message => message.id)).toEqual(['user-1', 'browser-signal']);
+  });
+
+  it("should exclude OM's own state signals when loading messages from storage", async () => {
+    const om = createOM(storage);
+    const base = Date.now() - 10_000;
+    await storage.saveMessages({
+      messages: [
+        { ...createTestMessage('User message', 'user', 'stored-user-1', new Date(base)), threadId },
+        { ...createStateSignal('stored-om', 'observational-memory', 'OM task', new Date(base + 1000)), threadId },
+        { ...createStateSignal('stored-browser', 'browser', 'Browser', new Date(base + 2000)), threadId },
+      ],
+    });
+
+    const loaded = await (om as any).loadMessagesFromStorage(threadId, undefined);
+
+    expect(loaded.map((message: MastraDBMessage) => message.id)).toEqual(['stored-user-1', 'stored-browser']);
   });
 
   it('should exclude working memory state signals when loading messages from storage', async () => {

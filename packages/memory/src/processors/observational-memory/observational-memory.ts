@@ -49,15 +49,17 @@ export function getLatestStepParts(parts: MastraDBMessage['content']['parts']): 
   return parts;
 }
 
+const OM_OWNED_STATE_IDS = new Set<unknown>([WORKING_MEMORY_STATE_ID, OBSERVATIONAL_MEMORY_STATE_ID]);
+
 /**
- * Returns true for persisted Working Memory state signals (`role: 'signal'`,
- * `signal.type: 'state'`, `state.id: 'working-memory'`). OM must not observe these:
- * they mirror memory OM itself manages, and re-observing them creates a self-feedback
- * loop that can overwrite stored working memory (#21961). Only the working-memory lane
- * is filtered — other state lanes are outside OM's write path, so re-observing them
- * cannot corrupt OM-managed state; excluding them broadly is a separate decision.
+ * Returns true for persisted state signals (`role: 'signal'`, `signal.type: 'state'`) on a lane that mirrors
+ * state OM itself manages: working memory and OM's own extracted values. OM must not observe these, since
+ * re-observing them is a self-feedback loop that can overwrite stored working memory (#21961) or feed the
+ * Observer its own output. Other state lanes are outside OM's write path, so they stay observable;
+ * excluding them broadly is a separate decision.
+ * @internal
  */
-function isWorkingMemoryStateSignal(message: MastraDBMessage): boolean {
+export function isOMOwnedStateSignal(message: MastraDBMessage): boolean {
   if (message.role !== 'signal') return false;
 
   const signal = message.content.metadata?.signal;
@@ -76,7 +78,7 @@ function isWorkingMemoryStateSignal(message: MastraDBMessage): boolean {
     !!state &&
     typeof state === 'object' &&
     !Array.isArray(state) &&
-    (state as Record<string, unknown>).id === WORKING_MEMORY_STATE_ID
+    OM_OWNED_STATE_IDS.has((state as Record<string, unknown>).id)
   );
 }
 
@@ -337,6 +339,7 @@ import type { CompressionLevel } from './reflector-agent';
 import { isReflectionApplied, ReflectorRunner } from './reflector-runner';
 import { isOmReproCaptureEnabled, writeObserverExchangeReproCapture } from './repro-capture';
 import { RETRY_CONFIG } from './retry';
+import { OBSERVATIONAL_MEMORY_STATE_ID } from './state-processor';
 import {
   calculateDynamicThreshold,
   calculateProjectedMessageRemoval,
@@ -426,6 +429,8 @@ export class ObservationalMemory {
   readonly scope: 'resource' | 'thread';
   /** Whether retrieval-mode observation groups are enabled. */
   readonly retrieval: boolean;
+  /** Whether extracted values reach the agent as a state signal instead of system-prompt sections. */
+  readonly stateSignals: boolean;
   /** Scope the recall tool was registered with — controls which retrieval instructions are injected. */
   readonly retrievalScope: 'thread' | 'resource';
   /** Application-provided guidance appended after the native retrieval instructions. */
@@ -615,6 +620,7 @@ export class ObservationalMemory {
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
     this.retrieval = Boolean(config.retrieval);
+    this.stateSignals = config.stateSignals ?? false;
     this.retrievalScope = typeof config.retrieval === 'object' ? (config.retrieval.scope ?? 'resource') : 'resource';
     this.retrievalInstructions = typeof config.retrieval === 'object' ? config.retrieval.instructions : undefined;
     this.retrievalSearch = typeof config.retrieval === 'object' && Boolean(config.retrieval.vector);
@@ -1843,7 +1849,7 @@ export class ObservationalMemory {
     const result: MastraDBMessage[] = [];
 
     for (const msg of allMessages) {
-      if (msg.role === 'system' || isWorkingMemoryStateSignal(msg)) {
+      if (msg.role === 'system' || isOMOwnedStateSignal(msg)) {
         continue;
       }
 
@@ -2122,23 +2128,31 @@ export class ObservationalMemory {
       messages.push(`<observations>\n${chunk}\n</observations>`);
     }
 
-    // Dynamically inject current-task from thread metadata (not stored in observations)
+    messages.push(...this.formatExtractedContextSections(currentTask, suggestedResponse, extractedValues));
+
+    return messages;
+  }
+
+  /** The current-task, suggested-response and custom extractor sections, read from thread metadata. */
+  private formatExtractedContextSections(
+    currentTask?: string,
+    suggestedResponse?: string,
+    extractedValues?: Record<string, unknown>,
+  ): string[] {
+    const sections: string[] = [];
     if (currentTask) {
-      messages.push(`<current-task>\n${currentTask}\n</current-task>`);
+      sections.push(`<current-task>\n${currentTask}\n</current-task>`);
     }
-
     if (suggestedResponse) {
-      messages.push(`<suggested-response>\n${suggestedResponse}\n</suggested-response>`);
+      sections.push(`<suggested-response>\n${suggestedResponse}\n</suggested-response>`);
     }
-
-    messages.push(
+    sections.push(
       ...buildExtractedValueContextSections(
         [...this.observationConfig.extractors, ...this.reflectionConfig.extractors],
         extractedValues,
       ),
     );
-
-    return messages;
+    return sections;
   }
 
   private splitObservationContextChunks(observations: string): string[] {
@@ -2292,10 +2306,10 @@ export class ObservationalMemory {
       });
     }
 
-    // Exclude working-memory state signals so storage-loaded paths (e.g. observe()
+    // Exclude OM-owned state signals so storage-loaded paths (e.g. observe()
     // without explicit messages, buffering token counts) never re-observe stored
     // working memory (#21961).
-    return result.messages.filter(msg => msg.role !== 'system' && !isWorkingMemoryStateSignal(msg));
+    return result.messages.filter(msg => msg.role !== 'system' && !isOMOwnedStateSignal(msg));
   }
 
   /**
@@ -3091,6 +3105,8 @@ ${formattedMessages}
     record?: ObservationalMemoryRecord | null;
     unobservedContextBlocks?: string;
     currentDate?: Date;
+    /** Leave out the extracted-value sections, which the agent then receives as a state signal. */
+    omitExtractedValues?: boolean;
   }): Promise<string[] | undefined> {
     const { threadId, resourceId, unobservedContextBlocks } = opts;
     // null means the read-only caller already checked storage; do not create a record.
@@ -3111,30 +3127,52 @@ ${formattedMessages}
       return undefined;
     }
 
-    // Read thread metadata for continuation hints. A persisted hint is only injected while a
-    // pipeline can still produce it — once observation and reflection both disable a section,
-    // a stale value stored by an earlier configuration must not keep steering the actor.
-    const thread = await this.storage.getThreadById({ threadId });
-    const omMetadata = getThreadOMMetadata(thread?.metadata);
-    const activeExtractors = [...this.observationConfig.extractors, ...this.reflectionConfig.extractors];
-    const currentTask = activeExtractors.some(extractor => extractor.slug === 'current-task')
-      ? omMetadata?.currentTask
-      : undefined;
-    const suggestedResponse = activeExtractors.some(extractor => extractor.slug === 'suggested-response')
-      ? omMetadata?.suggestedResponse
-      : undefined;
+    const extracted = opts.omitExtractedValues ? undefined : await this.readExtractedValues(threadId);
     const currentDate = opts.currentDate ?? new Date();
 
     return this.formatObservationsForContext(
       record.activeObservations,
-      currentTask,
-      suggestedResponse,
-      omMetadata?.extracted,
+      extracted?.currentTask,
+      extracted?.suggestedResponse,
+      extracted?.extracted,
       unobservedContextBlocks,
       currentDate,
       this.retrieval,
       record.observedTimezone,
     );
+  }
+
+  /**
+   * The extracted-value sections (current task, suggested response and custom extractors) for a thread,
+   * as one string: the contents of the state signal the agent receives when `stateSignals` is on.
+   * Empty when the thread has none.
+   * @internal
+   */
+  async buildExtractedValueStateContents(threadId: string): Promise<string> {
+    const { currentTask, suggestedResponse, extracted } = await this.readExtractedValues(threadId);
+    return this.formatExtractedContextSections(currentTask, suggestedResponse, extracted).join('\n\n');
+  }
+
+  // A persisted hint is only injected while a pipeline can still produce it — once observation and
+  // reflection both disable a section, a stale value stored by an earlier configuration must not keep
+  // steering the actor.
+  private async readExtractedValues(threadId: string): Promise<{
+    currentTask?: string;
+    suggestedResponse?: string;
+    extracted?: Record<string, unknown>;
+  }> {
+    const thread = await this.storage.getThreadById({ threadId });
+    const omMetadata = getThreadOMMetadata(thread?.metadata);
+    const activeExtractors = [...this.observationConfig.extractors, ...this.reflectionConfig.extractors];
+    return {
+      currentTask: activeExtractors.some(extractor => extractor.slug === 'current-task')
+        ? omMetadata?.currentTask
+        : undefined,
+      suggestedResponse: activeExtractors.some(extractor => extractor.slug === 'suggested-response')
+        ? omMetadata?.suggestedResponse
+        : undefined,
+      extracted: omMetadata?.extracted,
+    };
   }
 
   /**
@@ -3168,7 +3206,7 @@ ${formattedMessages}
       });
 
       const filtered = result.messages.filter(
-        message => !this.observedMessageIds.has(message.id) && !isWorkingMemoryStateSignal(message),
+        message => !this.observedMessageIds.has(message.id) && !isOMOwnedStateSignal(message),
       );
 
       if (filtered.length > 0) {
