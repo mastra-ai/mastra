@@ -1,6 +1,7 @@
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { AgentThreadStreamRuntime } from '../../../../agent/thread-stream-runtime';
+import type { PubSub } from '../../../../events/pubsub';
 import { MockMemory } from '../../../../memory';
 import type { MastraModelOutput } from '../../../../stream/base/output';
 import type { ChunkType } from '../../../../stream/types';
@@ -151,6 +152,9 @@ describeForAllEngines(
       expect(text.length).toBeGreaterThan(0);
     });
 
+    /** The user's follow-up in the #30190 cases: the answer the suspended tool is waiting for. */
+    const FOLLOW_UP = 'The user is Dero Israel';
+
     /**
      * Studio's flow for #30190: the first message streams on a new thread and the tool
      * suspends; the follow-up goes through `sendMessage` on the same thread.
@@ -165,20 +169,26 @@ describeForAllEngines(
      *   channel or schedule in another process does.
      * - `sibling` has the model call a second, slow tool alongside the one that suspends; it runs
      *   until the test releases it.
+     * - `firstMessageAutoResume` sets `autoResumeSuspendedTools` on the first message's stream call,
+     *   overriding the agent's default (on).
      */
     async function createStudioThread({
       suspendsIn,
       release = Promise.resolve(),
       replyFrom = 'same-runtime',
       sibling,
+      firstMessageAutoResume,
     }: {
       suspendsIn: 'tool' | 'workflow';
       release?: Promise<void>;
       replyFrom?: 'same-runtime' | 'other-runtime' | 'claimed-owner';
       sibling?: { release: Promise<void> };
+      firstMessageAutoResume?: boolean;
     }) {
       const seen = {
         entered: false,
+        /** The tool's suspend() call has returned. */
+        suspended: false,
         resumedWith: undefined as string | undefined,
         preflightRuns: 0,
         resumes: 0,
@@ -191,7 +201,7 @@ describeForAllEngines(
       const requestsWithReply = () =>
         getMock()
           .getRequests()
-          .filter(request => JSON.stringify(request.body.messages).includes('The user is Dero Israel')).length;
+          .filter(request => JSON.stringify(request.body.messages).includes(FOLLOW_UP)).length;
       const slowTool = createTool({
         id: 'slow',
         description: 'Takes a while',
@@ -216,7 +226,9 @@ describeForAllEngines(
           if (!context?.agent?.resumeData) {
             seen.entered = true;
             await release;
-            return context?.agent?.suspend({ message: 'Which user should I find?' });
+            const suspended = await context?.agent?.suspend({ message: 'Which user should I find?' });
+            seen.suspended = true;
+            return suspended;
           }
           seen.resumes++;
           seen.resumedWith = context.agent.resumeData.name;
@@ -268,6 +280,19 @@ describeForAllEngines(
         defaultOptions: { autoResumeSuspendedTools: true },
         engine,
       });
+      // The thread runtime publishes `run-suspended` once the run has parked.
+      const published = vi.spyOn(shared.mastra.pubsub as PubSub, 'publish');
+      onTestFinished(() => published.mockRestore());
+      const waitForParked = () =>
+        vi.waitFor(
+          () =>
+            expect(
+              published.mock.calls.some(
+                ([, event]) => (event.data as { type?: string } | undefined)?.type === 'run-suspended',
+              ),
+            ).toBe(true),
+          { timeout: 5_000 },
+        );
       const threadId = globalThis.crypto.randomUUID();
       const resourceId = globalThis.crypto.randomUUID();
       // The model calls a workflow tool by its registered name, with the input under `inputData`.
@@ -313,6 +338,7 @@ describeForAllEngines(
             });
           },
           collectChunks: true,
+          ...(firstMessageAutoResume !== undefined ? { autoResumeSuspendedTools: firstMessageAutoResume } : {}),
         });
       const sendFollowUp = async () => {
         if (replyFrom === 'claimed-owner') {
@@ -320,42 +346,67 @@ describeForAllEngines(
           onTestFinished(() => claim.unsubscribe());
           return otherRuntime.sendSignal(
             shared.agent,
-            { type: 'user-message', contents: 'The user is Dero Israel' },
+            { type: 'user-message', contents: FOLLOW_UP },
             { resourceId, threadId, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
             shared.mastra.pubsub,
           ).accepted;
         }
-        if (!otherView) return shared.agent.sendMessage('The user is Dero Israel', { resourceId, threadId }).accepted;
+        if (!otherView) return shared.agent.sendMessage(FOLLOW_UP, { resourceId, threadId }).accepted;
         // The other runtime only sees the run through the thread's pubsub.
         const runId = await vi.waitFor(() => {
           const active = otherView.activeRunId();
           if (active === null) throw new Error('The other runtime has not seen the run on the thread yet');
           return active;
         });
-        return otherRuntime.sendMessage(
-          shared.agent,
-          'The user is Dero Israel',
-          { resourceId, threadId, runId },
-          shared.mastra.pubsub,
-        ).accepted;
+        return otherRuntime.sendMessage(shared.agent, FOLLOW_UP, { resourceId, threadId, runId }, shared.mastra.pubsub)
+          .accepted;
       };
-      const threadAfterReply = async () => {
+      /**
+       * Waits for the final answer to land, then checks the reply ran exactly one turn: the thread holds the
+       * reply once and the final answer once, the tool or workflow resumed once, and the model got three
+       * requests. Those are the first message's request and the reply turn's two (the re-call that resumes
+       * the tool, then the final answer); only the reply turn's two carry the reply.
+       */
+      const expectReplyHandledOnce = async () => {
         const deadline = Date.now() + 10_000;
         let { messages } = await memory.recall({ threadId, resourceId });
-        while (!JSON.stringify(messages).includes('FINAL_REPLY') && Date.now() < deadline) {
+        while (!messages.some(m => textOf(m).includes('FINAL_REPLY')) && Date.now() < deadline) {
           await new Promise(resolve => setTimeout(resolve, 50));
           ({ messages } = await memory.recall({ threadId, resourceId }));
         }
-        return JSON.stringify(messages);
+        // The reply is stored as the user-message signal that carried it.
+        expect(messages.filter(m => textOf(m).includes(FOLLOW_UP))).toHaveLength(1);
+        expect(
+          messages.filter(m => m.role === 'assistant' && textOf(m).includes('FINAL_REPLY Dero Israel')),
+        ).toHaveLength(1);
+        expect(seen.resumedWith).toBe('Dero Israel');
+        expect(seen.resumes).toBe(1);
+        expect(requestsWithReply()).toBe(2);
+        expect(llm.getRequests()).toHaveLength(3);
       };
-      return { seen, llm, firstMessage, sendFollowUp, threadAfterReply };
+      return {
+        seen,
+        llm,
+        shared,
+        threadId,
+        resourceId,
+        firstMessage,
+        sendFollowUp,
+        waitForParked,
+        requestsWithReply,
+        expectReplyHandledOnce,
+      };
     }
+
+    /** The text of a stored message's text parts. */
+    const textOf = (message: { content: { parts?: Array<{ type: string; text?: string }> } }) =>
+      (message.content.parts ?? []).map(part => (part.type === 'text' ? part.text : '')).join('');
 
     // Technical: the runtime treated the run parked on the tool's suspend() as the thread's
     // active run and queued the follow-up onto it, answering `deliver`; a parked run never
     // drains its queue, so no next turn ran and auto-resume never fired. (#30190)
     it('auto-resumes a suspended tool when the follow-up arrives through sendMessage, as Studio sends it (#30190)', async () => {
-      const { seen, llm, firstMessage, sendFollowUp, threadAfterReply } = await createStudioThread({
+      const { llm, firstMessage, sendFollowUp, expectReplyHandledOnce } = await createStudioThread({
         suspendsIn: 'tool',
       });
 
@@ -363,21 +414,18 @@ describeForAllEngines(
       expect(first.chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
       await sendFollowUp();
 
-      // The follow-up is saved to the thread, the suspended tool resumes with the user's
-      // answer, and the final reply lands in the same thread.
-      const thread = await threadAfterReply();
-      expect(thread).toContain('The user is Dero Israel');
-      expect(seen.resumedWith).toBe('Dero Israel');
-      expect(thread).toContain('FINAL_REPLY Dero Israel');
+      // The follow-up is saved to the thread once, the suspended tool resumes once with the
+      // user's answer, and the final reply lands in the same thread once.
+      await expectReplyHandledOnce();
       // The model saw the follow-up in the turn that resumed the tool.
-      expect(JSON.stringify(llm.getRequests().at(-2)?.body.messages)).toContain('The user is Dero Israel');
+      expect(JSON.stringify(llm.getRequests().at(-2)?.body.messages)).toContain(FOLLOW_UP);
     });
 
     // Technical: a follow-up sent while the tool is still running is queued for the run's next
     // step, but the run then parks on suspend() and never takes another step. (#30190)
     it('auto-resumes with a follow-up sent while the tool was still running, once the tool suspends (#30190)', async () => {
       let releaseTool!: () => void;
-      const { seen, firstMessage, sendFollowUp, threadAfterReply } = await createStudioThread({
+      const { seen, firstMessage, sendFollowUp, expectReplyHandledOnce } = await createStudioThread({
         suspendsIn: 'tool',
         release: new Promise<void>(resolve => (releaseTool = resolve)),
       });
@@ -388,10 +436,7 @@ describeForAllEngines(
       releaseTool();
       expect((await first).chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
 
-      const thread = await threadAfterReply();
-      expect(thread).toContain('The user is Dero Israel');
-      expect(seen.resumedWith).toBe('Dero Israel');
-      expect(thread).toContain('FINAL_REPLY Dero Israel');
+      await expectReplyHandledOnce();
     });
 
     // Technical: a step that raises a suspension ends its segment while a sibling tool call of
@@ -400,7 +445,7 @@ describeForAllEngines(
     // run's steps settle. (#30190)
     it('starts the reply turn only after a sibling tool call of the suspended step has finished (#30190)', async () => {
       let releaseSibling!: () => void;
-      const { seen, firstMessage, sendFollowUp, threadAfterReply } = await createStudioThread({
+      const { seen, firstMessage, sendFollowUp, waitForParked, expectReplyHandledOnce } = await createStudioThread({
         suspendsIn: 'tool',
         sibling: { release: new Promise<void>(resolve => (releaseSibling = resolve)) },
       });
@@ -410,20 +455,44 @@ describeForAllEngines(
         expect(seen.entered).toBe(true);
         expect(seen.siblingStarted).toBe(true);
       });
-      // Let the suspension land while the sibling still runs.
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // The suspension is raised while the sibling still runs. Evented and Inngest park the run right
+      // then; normal and durable keep the step open until the sibling settles, so there the reply is
+      // queued onto the working run and the release runs once it parks.
+      await vi.waitFor(() => expect(seen.suspended).toBe(true));
+      if (engine === 'evented' || engine === 'inngest') await waitForParked();
+      expect(seen.siblingFinished).toBe(false);
       await sendFollowUp();
       // Long enough for a turn the reply started to reach the model.
       await new Promise(resolve => setTimeout(resolve, 300));
       releaseSibling();
       expect((await first).chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
 
-      const thread = await threadAfterReply();
+      await expectReplyHandledOnce();
       expect(seen.siblingFinished).toBe(true);
       expect(seen.replyRequestsWhileSiblingRan).toBe(0);
-      expect(thread).toContain('The user is Dero Israel');
-      expect(seen.resumedWith).toBe('Dero Israel');
-      expect(thread).toContain('FINAL_REPLY Dero Israel');
+    });
+
+    // Technical: the #30190 release reads `autoResumeSuspendedTools` from the run's own call
+    // options before the agent's default. A call that turned auto-resume off keeps the old
+    // behavior: the follow-up stays queued on the parked run until an explicit resume. (#30190)
+    it('keeps a follow-up queued on the paused run when the first call turned auto-resume off (#30190)', async () => {
+      const { seen, shared, threadId, resourceId, firstMessage, requestsWithReply } = await createStudioThread({
+        suspendsIn: 'tool',
+        firstMessageAutoResume: false,
+      });
+
+      const first = await firstMessage();
+      expect(first.chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
+      const runId = first.output.runId;
+      const view = await shared.agent.subscribeToThread({ resourceId, threadId });
+      onTestFinished(() => view.unsubscribe());
+
+      await shared.agent.sendMessage(FOLLOW_UP, { resourceId, threadId }).accepted;
+      // Long enough for a turn the follow-up started to reach the model.
+      await new Promise(resolve => setTimeout(resolve, 500));
+      expect(requestsWithReply()).toBe(0);
+      expect(view.activeRunId()).toBe(runId);
+      expect(seen.resumes).toBe(0);
     });
 
     // Technical: the #30190 fix lets a follow-up start the next turn once an auto-resume run has
@@ -504,8 +573,6 @@ describeForAllEngines(
 
       // Then the follow-up is handled exactly once: one model request carries it, after the
       // approved tool's result, and the thread holds it and its answer once each.
-      const textOf = (message: { content: { parts?: Array<{ type: string; text?: string }> } }) =>
-        (message.content.parts ?? []).map(part => (part.type === 'text' ? part.text : '')).join('');
       const deadline = Date.now() + 10_000;
       let { messages } = await memory.recall({ threadId, resourceId });
       while (!messages.some(m => textOf(m).includes('FOLLOWUP_REPLY')) && Date.now() < deadline) {
@@ -528,8 +595,6 @@ describeForAllEngines(
 
     /** The issue's case: the same workflow run resumes once, and the step before the suspension is not rerun. */
     const expectWorkflowResumedOnce = (seen: Awaited<ReturnType<typeof createStudioThread>>['seen']) => {
-      expect(seen.resumedWith).toBe('Dero Israel');
-      expect(seen.resumes).toBe(1);
       expect(seen.preflightRuns).toBe(1);
       expect(seen.workflowRunIds).toHaveLength(2);
       expect(seen.workflowRunIds[1]).toBe(seen.workflowRunIds[0]);
@@ -537,7 +602,7 @@ describeForAllEngines(
 
     // Technical: as above, with a workflow used as a tool whose step calls suspend(). (#30190)
     it('resumes a suspended workflow tool when the reply arrives through sendMessage after it paused (#30190)', async () => {
-      const { seen, firstMessage, sendFollowUp, threadAfterReply } = await createStudioThread({
+      const { seen, firstMessage, sendFollowUp, expectReplyHandledOnce } = await createStudioThread({
         suspendsIn: 'workflow',
       });
 
@@ -545,9 +610,7 @@ describeForAllEngines(
       expect(first.chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
       await sendFollowUp();
 
-      const thread = await threadAfterReply();
-      expect(thread).toContain('The user is Dero Israel');
-      expect(thread).toContain('FINAL_REPLY Dero Israel');
+      await expectReplyHandledOnce();
       expectWorkflowResumedOnce(seen);
     });
 
@@ -555,7 +618,7 @@ describeForAllEngines(
     // parks on the step's suspend() with the reply still queued. (#30190)
     it('resumes a suspended workflow tool when the reply was sent while the workflow was still running (#30190)', async () => {
       let releaseStep!: () => void;
-      const { seen, firstMessage, sendFollowUp, threadAfterReply } = await createStudioThread({
+      const { seen, firstMessage, sendFollowUp, expectReplyHandledOnce } = await createStudioThread({
         suspendsIn: 'workflow',
         release: new Promise<void>(resolve => (releaseStep = resolve)),
       });
@@ -566,9 +629,7 @@ describeForAllEngines(
       releaseStep();
       expect((await first).chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
 
-      const thread = await threadAfterReply();
-      expect(thread).toContain('The user is Dero Israel');
-      expect(thread).toContain('FINAL_REPLY Dero Israel');
+      await expectReplyHandledOnce();
       expectWorkflowResumedOnce(seen);
     });
 
@@ -578,7 +639,7 @@ describeForAllEngines(
     // Technical: the claimed owner hands input from a sender that cannot see its run to that
     // run through `#queueForActiveRun`, which queued it onto the parked run. (#30190)
     it('resumes a suspended workflow tool when the reply reaches the claimed thread owner from another runtime (#30190)', async () => {
-      const { seen, firstMessage, sendFollowUp, threadAfterReply } = await createStudioThread({
+      const { seen, firstMessage, sendFollowUp, expectReplyHandledOnce } = await createStudioThread({
         suspendsIn: 'workflow',
         replyFrom: 'claimed-owner',
       });
@@ -587,14 +648,12 @@ describeForAllEngines(
       expect(first.chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
       await sendFollowUp();
 
-      const thread = await threadAfterReply();
-      expect(thread).toContain('The user is Dero Israel');
-      expect(thread).toContain('FINAL_REPLY Dero Israel');
+      await expectReplyHandledOnce();
       expectWorkflowResumedOnce(seen);
     });
 
     it('resumes a suspended workflow tool when the reply is sent from another runtime on the thread (#30190)', async () => {
-      const { seen, firstMessage, sendFollowUp, threadAfterReply } = await createStudioThread({
+      const { seen, firstMessage, sendFollowUp, expectReplyHandledOnce } = await createStudioThread({
         suspendsIn: 'workflow',
         replyFrom: 'other-runtime',
       });
@@ -603,9 +662,7 @@ describeForAllEngines(
       expect(first.chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
       await sendFollowUp();
 
-      const thread = await threadAfterReply();
-      expect(thread).toContain('The user is Dero Israel');
-      expect(thread).toContain('FINAL_REPLY Dero Israel');
+      await expectReplyHandledOnce();
       expectWorkflowResumedOnce(seen);
     });
 

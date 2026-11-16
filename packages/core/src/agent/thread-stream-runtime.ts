@@ -2220,7 +2220,11 @@ export class AgentThreadStreamRuntime {
         this.#notifyPendingSignals(state, key, signal);
         // Input from another process can be the answer a run parked here is waiting for.
         const record = state.threadRunsById.get(runId);
-        if (record) void this.#startQueuedTurnAfterParkedRun(state, pubsub, key, record).catch(() => {});
+        if (record) {
+          void this.#startQueuedTurnAfterParkedRun(state, pubsub, key, record).catch(error =>
+            this.#logParkedRunReleaseFailure(record, error),
+          );
+        }
       } else if (data?.type === 'user-message-presentation') {
         const { chunk } = data;
         if (chunk.type === 'data-user-message-pending' && chunk.data.metadata?.status === 'pending') {
@@ -4427,6 +4431,19 @@ export class AgentThreadStreamRuntime {
   }
 
   /**
+   * The message that triggered the release was already answered `deliver`, so a failure here would otherwise
+   * leave it queued on the parked run with no trace.
+   */
+  #logParkedRunReleaseFailure(record: AgentThreadRunRecord<any>, error: unknown): void {
+    record.agent.__getLogger?.()?.error('Could not start the queued turn for a run parked on a suspended tool', {
+      runId: record.runId,
+      threadId: record.threadId,
+      resourceId: record.resourceId,
+      error,
+    });
+  }
+
+  /**
    * The objects the steps of a run register under while they run: the abort signal of its prepared run or current
    * segment, and a durable run's registry entry.
    */
@@ -4780,7 +4797,9 @@ export class AgentThreadStreamRuntime {
       sourceId: this.#getSourceId(),
     });
     this.#watchThreadRunCompletion(state, pubsub, key, record);
-    void this.#startQueuedTurnAfterParkedRun(state, pubsub, key, record).catch(() => {});
+    void this.#startQueuedTurnAfterParkedRun(state, pubsub, key, record).catch(error =>
+      this.#logParkedRunReleaseFailure(record, error),
+    );
   }
 
   #publishPendingUserMessage(
@@ -5463,7 +5482,9 @@ export class AgentThreadStreamRuntime {
       streamId: record.streamId,
     });
     // A message queued while the run was still working starts the next turn now.
-    void this.#startQueuedTurnAfterParkedRun(this.#getState(pubsub), pubsub, key, record).catch(() => {});
+    void this.#startQueuedTurnAfterParkedRun(this.#getState(pubsub), pubsub, key, record).catch(error =>
+      this.#logParkedRunReleaseFailure(record, error),
+    );
   }
 
   #watchThreadRunCompletion(

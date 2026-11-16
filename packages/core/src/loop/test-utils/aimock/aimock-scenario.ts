@@ -367,6 +367,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     outputProcessors,
     maxProcessorRetries,
     requireToolApproval,
+    autoResumeSuspendedTools,
     closeOnSuspend,
     inputProcessors,
     prepareStep,
@@ -514,6 +515,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(outputProcessors ? { outputProcessors } : {}),
     ...(maxProcessorRetries !== undefined ? { maxProcessorRetries } : {}),
     ...(requireToolApproval !== undefined ? { requireToolApproval } : {}),
+    ...(autoResumeSuspendedTools !== undefined ? { autoResumeSuspendedTools } : {}),
     ...(closeOnSuspend !== undefined && isDurable ? { closeOnSuspend } : {}),
     ...(inputProcessors && !isDurable ? { inputProcessors } : {}),
     // Pass the scenario's error processors at call time so they form the complete list. Without

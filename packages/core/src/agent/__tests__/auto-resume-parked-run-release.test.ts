@@ -121,48 +121,52 @@ describeForAllEngines('auto-resume: a parked run released for a queued message',
       if (engine === 'fs') mastra.__registerFsAgents({ agent });
       const registered = mastra.getAgent('agent');
       const view = await registered.subscribeToThread({ resourceId: RESOURCE, threadId });
-
-      const first = await registered.stream('two questions', {
-        memory: { thread: threadId, resource: RESOURCE },
-        requestContext: firstRunContext,
-      });
-      await first.consumeStream();
-      expect(first.status).toBe('suspended');
-      const runId = first.runId;
-      expect(view.activeRunId()).toBe(runId);
-
-      // The reply is queued onto the parked run and waits on the run's default options.
-      firstRunContext.set('autoResume', true);
-      await registered.sendMessage(REPLY, { resourceId: RESOURCE, threadId }).accepted;
-      await vi.waitFor(() => expect(defaultsHeld).toBeGreaterThan(0));
-
-      // Meanwhile one of the two suspended calls resumes; the run stays parked on the other.
-      const resumed = await registered.resumeStream(
-        { answer: 'a' },
-        {
-          runId,
-          toolCallId: 'call_a',
+      try {
+        const first = await registered.stream('two questions', {
           memory: { thread: threadId, resource: RESOURCE },
-          requestContext: new RequestContext([['autoResume', true]]),
-        },
-      );
-      void resumed.consumeStream().catch(() => undefined);
-      await vi.waitFor(() => expect(seen.resumedCallRunning).toBe(true));
+          requestContext: firstRunContext,
+        });
+        await first.consumeStream();
+        expect(first.status).toBe('suspended');
+        const runId = first.runId;
+        expect(view.activeRunId()).toBe(runId);
 
-      releaseDefaults();
-      // Long enough for a reply turn that took the thread to reach the model.
-      await new Promise(resolve => setTimeout(resolve, 300));
-      // The resumed segment still holds the thread.
-      expect(view.activeRunId()).toBe(runId);
-      releaseResumedCall();
+        // The reply is queued onto the parked run and waits on the run's default options.
+        firstRunContext.set('autoResume', true);
+        await registered.sendMessage(REPLY, { resourceId: RESOURCE, threadId }).accepted;
+        await vi.waitFor(() => expect(defaultsHeld).toBeGreaterThan(0));
 
-      await vi.waitFor(() => expect(seen.resumedCallRunning).toBe(false), { timeout: 5_000 });
-      expect(seen.replyRequestsWhileResumedCallRan).toBe(0);
-      // Once the resumed segment parks again on call_b, the reply starts the next turn.
-      await vi.waitFor(() => expect(replyRequests()).toBeGreaterThan(0), { timeout: 5_000 });
+        // Meanwhile one of the two suspended calls resumes; the run stays parked on the other.
+        const resumed = await registered.resumeStream(
+          { answer: 'a' },
+          {
+            runId,
+            toolCallId: 'call_a',
+            memory: { thread: threadId, resource: RESOURCE },
+            requestContext: new RequestContext([['autoResume', true]]),
+          },
+        );
+        void resumed.consumeStream().catch(() => undefined);
+        await vi.waitFor(() => expect(seen.resumedCallRunning).toBe(true));
 
-      view.unsubscribe();
-      await mastra.shutdown({ drainTimeout: 200 });
+        releaseDefaults();
+        // Long enough for a reply turn that took the thread to reach the model.
+        await new Promise(resolve => setTimeout(resolve, 300));
+        // The resumed segment still holds the thread.
+        expect(view.activeRunId()).toBe(runId);
+        releaseResumedCall();
+
+        await vi.waitFor(() => expect(seen.resumedCallRunning).toBe(false), { timeout: 5_000 });
+        expect(seen.replyRequestsWhileResumedCallRan).toBe(0);
+        // Once the resumed segment parks again on call_b, the reply starts the next turn.
+        await vi.waitFor(() => expect(replyRequests()).toBeGreaterThan(0), { timeout: 5_000 });
+      } finally {
+        // A failed assertion must not leave the resumed call blocked or the run's Mastra instance running.
+        releaseDefaults();
+        releaseResumedCall();
+        view.unsubscribe();
+        await mastra.shutdown({ drainTimeout: 200 });
+      }
     },
     20_000,
   );
