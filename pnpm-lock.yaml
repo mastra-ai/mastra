@@ -1078,8 +1078,8 @@ importers:
   browser/firecrawl:
     dependencies:
       firecrawl:
-        specifier: ^4.51.0
-        version: 4.51.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
+        specifier: ^4.54.0
+        version: 4.54.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -25382,8 +25382,8 @@ packages:
     resolution: {integrity: sha512-DElmgmaH9aPXu2dWXGQiDoan33UfTnbfAAKaue4fwEZxmpdaNrTk5DmuFn+vVDki2KZ6TiaC0IHRWcEzcDxB3Q==}
     engines: {node: '>=22'}
 
-  firecrawl@4.51.0:
-    resolution: {integrity: sha512-QHYNtPAOuyR3/JaA1aI1lrB6VSfzDnfBUGMdXS7Qvqcs5Vxlye1zepShq5KN8iEaTlc+gAoYrSKxxNPxHyzh1w==}
+  firecrawl@4.54.0:
+    resolution: {integrity: sha512-r5Jc8ustGrZJQ+plOFJ+X9c7KHXHCMUqoH0j8oWpfeYHoiuZDctXq0U4nx0JnscHGCfIyFd9aj8BJ5B2CKbpFQ==}
     engines: {node: '>=18.0.0'}
 
   flat-cache@6.1.23:
@@ -49504,12 +49504,11 @@ snapshots:
       - '@firebase/app-compat'
       - supports-color
 
-  firecrawl@4.51.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2):
+  firecrawl@4.54.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2):
     dependencies:
       axios: 1.20.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
-      typescript-event-target: 1.1.2
-      zod: 3.25.76
-      zod-to-json-schema: 3.25.2(zod@3.25.76)
+      zod: 4.6.7
+      zod-to-json-schema: 3.25.2(zod@4.6.7)
     transitivePeerDependencies:
       - debug
       - supports-color
