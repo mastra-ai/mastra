@@ -51,12 +51,16 @@ export function cardRuleFacts(
       : working && openPullRequestSource(working)
         ? (pullRequestSourceNumber(working) ?? null)
         : null;
+  // A pointer the card has no source for is the pull request its session opened: Factory's own.
+  const sessionOpened = typeof pointer === 'number' && (!working || pullRequestSourceNumber(working) !== pointer);
   const pullRequestTrusted =
     source?.type === 'pull-request'
       ? authorTrusted(item.metadata)
-      : working
-        ? trustedPullRequestSource(item, working)
-        : undefined;
+      : sessionOpened
+        ? true
+        : working
+          ? trustedPullRequestSource(item, working)
+          : undefined;
   const author = source
     ? ((stored ?? normalized)?.author ?? null)
     : typeof metadata.author === 'string'

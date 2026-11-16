@@ -234,6 +234,16 @@ describe('item.pullRequest', () => {
     expect(none).not.toHaveProperty('pullRequest.trusted');
     expect(none['item.hasPullRequest']).toBe(false);
   });
+
+  const outsider18 = { ...pullRequest(18, 'open'), provider: 'github', externalId: 'github-pr:18' };
+  it.each([
+    ['no pull request linked', [], {}],
+    ["an outsider's linked", [outsider18], { untrustedPullRequests: ['github:github-pr:18'] }],
+    ['a trusted one linked', [pullRequest(18, 'open')], {}],
+  ])("trusts the pull request the card's session opened, with %s", (_, sources, metadata) => {
+    const facts = cardRuleFacts(issueCard(sources as never, { ...metadata, openPullRequestNumber: 21 }));
+    expect(facts).toMatchObject({ 'item.pullRequest': 21, 'pullRequest.trusted': true, 'item.hasPullRequest': true });
+  });
 });
 
 describe('item.hasPullRequest and item.hasIssue', () => {
