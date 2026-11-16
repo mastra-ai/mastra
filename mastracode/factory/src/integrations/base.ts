@@ -31,6 +31,7 @@ import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
+import type { NotRoutedLookup } from '../rules/event-rules.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
@@ -173,6 +174,11 @@ export interface IntegrationContext {
      * Absent where no sweep runs (route contexts, tests).
      */
     keptCards?: CardSource;
+    /**
+     * Which items intake turned away (Not routed), so a label or assignee change to one runs intake
+     * again. Absent where the boards domain isn't available.
+     */
+    notRouted?: NotRoutedLookup;
   };
   /** System hooks integrations may invoke. */
   hooks?: IntegrationHooks;

@@ -2,7 +2,7 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { boardRegistryOf, createBoardRegistry, defineBoard } from '../../boards/index.js';
-import { toBoardSource } from '../../boards/project-boards.js';
+import { ProjectBoardCache, toBoardSource } from '../../boards/project-boards.js';
 import { reviewBoard } from '../../boards/review.js';
 import { autoStartingBoards, createTestBoard, createTriageWorkRegistry, selfReviewWorkBoard } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
@@ -4361,23 +4361,55 @@ describe('GithubRules issue labels', () => {
     expect(update?.decision.event).toEqual({ type: 'pull_request.updated', labels: { added: ['ready'], removed: [] } });
   });
 
-  it('runs intake again when an issue intake turned away (Not routed) is labelled, and only then', async () => {
-    const notRouted = { isNotRouted: vi.fn(async (_scope: unknown, key: string) => key === 'github-issue:42') };
-    const { service, workItems, project } = await setupRoutes({ notRouted });
-    await service.ingest(issueLabels('labeled', ['ship'], 'not-routed-label'));
-
-    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
-    expect(decisions.map(entry => entry.decision)).toEqual([
-      expect.objectContaining({
-        type: 'upsertLinkedWorkItem',
-        board: 'work',
-        metadata: expect.objectContaining({ githubIssueNumber: 42, labels: ['ship'] }),
-      }),
-    ]);
-    expect(notRouted.isNotRouted).toHaveBeenCalledWith(
-      { orgId: 'org-1', factoryProjectId: project.id },
-      'github-issue:42',
+  it('files an issue no board took once it is labelled to match a board, through the Not routed records', async () => {
+    const base = await setup('write');
+    const scope = { orgId: 'org-1', factoryProjectId: base.project.id };
+    for (const route of (await base.boards.listIntakeRoutes(scope)).reverse()) {
+      await base.boards.deleteIntakeRoute(scope, route.id, { expectedRevision: route.revision });
+    }
+    await base.boards.createIntakeRoute(
+      scope,
+      {
+        name: 'Ship',
+        when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'ship' }] },
+        target: { boardKey: 'work', phaseKey: null },
+      },
+      'admin',
     );
+    const boards = new ProjectBoardCache({ codeRegistry: createTriageWorkRegistry(), storage: base.boards, recheckMs: 0 });
+    const service = new GithubRules({
+      github: base.github,
+      sourceControl: base.sourceControl,
+      integrationStorage: base.integrationStorage,
+      projects: base.projects,
+      storage: base.workItems,
+      boards,
+      configVersion: 'factory-config-v1',
+      notRouted: base.boards,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: {} as never,
+      storage: base.workItems,
+      boards,
+      transitionService: new FactoryTransitionService({ storage: base.workItems, boards, configVersion: 'factory-config-v1' }),
+      intakeRoutes: base.boards,
+      intakeEvaluator: 'intake-order',
+      ownerId: 'not-routed-labels',
+    });
+
+    await service.ingest(issueOpened('opened-unmatched'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+    expect(await base.workItems.list(scope)).toEqual([]);
+    expect((await base.boards.listNotRouted(scope)).notRouted).toHaveLength(1);
+
+    await service.ingest(issueLabels('labeled', ['ship'], 'labelled-ship'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
+
+    const cards = await base.workItems.list(scope);
+    expect(cards.map(card => ({ board: card.board, labels: card.workItem.metadata?.labels }))).toEqual([
+      { board: 'work', labels: ['ship'] },
+    ]);
+    expect((await base.boards.listNotRouted(scope)).notRouted).toEqual([]);
   });
 
   it('leaves a labelled issue with no card alone when intake never turned it away', async () => {

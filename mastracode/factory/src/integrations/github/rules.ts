@@ -847,7 +847,8 @@ export class GithubRules {
     if (
       !installationId ||
       !login ||
-      !(await this.options.notRouted?.isNotRouted(scope, canonicalSourceKey('issue', issueNumber)))
+      // Intake records a card-less issue under the key its rule files it with (see `githubSourceKey`).
+      !(await this.options.notRouted?.isNotRouted(scope, legacySourceKey(repositoryId, 'issue', issueNumber)))
     ) {
       return { status: 'ignored' };
     }
@@ -2593,6 +2594,7 @@ export function githubRulesOptions(
     storage: context.runtime.workItems,
     configVersion: context.runtime.configVersion,
     boards: context.runtime.boards,
+    ...(context.runtime.notRouted ? { notRouted: context.runtime.notRouted } : {}),
     ...(context.hooks?.onRepositoryPush ? { onRepositoryPush: context.hooks.onRepositoryPush } : {}),
   };
 }

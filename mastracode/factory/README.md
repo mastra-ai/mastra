@@ -1069,7 +1069,7 @@ A deployment that answers an event itself keeps routes out of it: a handler or `
 - A combined update carries the net change: adding `bug` and removing it again is no change, and nothing fires.
 - An update never cancels a close or reopen, nor is cancelled by one.
 - A rule moving a card changes the card, not the source, so it never produces an update. Factory's own status labels (`status: needs approval`, `status: auto-triaged`) are bookkeeping in the same way: adding or removing them never counts as a change, whoever does it.
-- An update to an item with no card runs intake only when intake turned the item away (Not routed). GitHub and GitLab ask a Not routed lookup, and do nothing until one is connected to the Not routed records. Linear, Jira and incident.io already run intake for an item with no card on every sync that sees it change.
+- An update to an item with no card runs intake only when intake turned the item away (Not routed). GitHub and GitLab check the item's Not routed record: an issue no board took that is later labelled to match a board's rule lands on that board, and its record is resolved. Linear, Jira and incident.io already run intake for an item with no card on every sync that sees it change.
 
 | Provider    | `work_item.updated`                                                          | `pull_request.updated` | Held for the card's run                       |
 | ----------- | ---------------------------------------------------------------------------- | ---------------------- | --------------------------------------------- |

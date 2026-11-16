@@ -1661,9 +1661,11 @@ describe('GitLab updates to an issue intake turned away', () => {
     expect(decisions.map(entry => entry.decision)).toEqual([
       expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'gitlab-issue', board: 'work' }),
     ]);
+    // Asked under the key intake files (and so records Not routed) the issue with.
+    const [intake] = decisions.map(entry => entry.decision as { sourceKey?: string });
     expect(notRouted.isNotRouted).toHaveBeenCalledWith(
       { orgId: 'org-1', factoryProjectId: project.id },
-      encodeIssueReference({ host: 'gitlab.example.com', projectId: PROJECT_ID, issueIid: 42 }),
+      intake?.sourceKey,
     );
   });
 

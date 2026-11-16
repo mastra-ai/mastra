@@ -949,6 +949,17 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     };
   }
 
+  /** Whether intake turned the source away (Not routed) and nobody has filed it since. */
+  async isNotRouted(scope: StoredBoardScope, sourceKey: string): Promise<boolean> {
+    const row = await this.ops.findOne<IntakeDecisionRow>(INTAKE_DECISIONS, {
+      ...scopeWhere(scope),
+      outcome: 'not_routed',
+      source_key: sourceKey,
+      resolved_at: null,
+    });
+    return row !== null;
+  }
+
   /** Marks the Not routed rows for a source resolved once a card is filed for it. Returns how many. */
   async resolveNotRouted(scope: StoredBoardScope, sourceKey: string, by: string, now = new Date()): Promise<number> {
     return this.ops.updateMany(

@@ -1070,6 +1070,7 @@ export function attachGitLabRules(
     intake: context.storage.intake,
     configVersion: context.runtime.configVersion,
     boards: context.runtime.boards,
+    ...(context.runtime.notRouted ? { notRouted: context.runtime.notRouted } : {}),
   });
   return event => rules.ingest(event);
 }
