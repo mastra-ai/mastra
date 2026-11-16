@@ -559,6 +559,39 @@ describe('billed Mastra runtime', () => {
     await expect(run.status(runtime.billingContext)).rejects.toMatchObject({ code: 'unauthenticated' });
   });
 
+  it.each(['suspended', 'completed'] as const)(
+    'late start failures preserve a committed %s workflow and its saved result',
+    async status => {
+      const { runtime, observer } = await fixture();
+      const run = await runtime.billing
+        .workflow('report')
+        .createRun({ billing: runtime.billingContext, idempotencyKey: 'late-start-failure' });
+      await run.start({ billing: runtime.billingContext, idempotencyKey: 'start', inputData: { count: 0 } });
+      if (status === 'completed')
+        await run.resume({
+          billing: runtime.billingContext,
+          idempotencyKey: 'resume',
+          step: 'approval',
+          resumeData: { approved: true },
+        });
+      const committed = await runtime.workflowStorage.current(run.executionId);
+      expect(committed.status).toBe(status);
+      expect(committed.result).not.toBeNull();
+      if (status === 'suspended') expect(committed.expiresAt).toBeGreaterThan(Date.now());
+      await runtime.workflowStorage.transition(run.executionId, committed.version, 'uncertain');
+      expect(await runtime.workflowStorage.current(run.executionId)).toEqual(committed);
+      const persisted = (
+        await observer.execute({
+          sql: 'SELECT status, result, expires_at FROM billing_workflow_runs WHERE id = ?',
+          args: [run.executionId],
+        })
+      ).rows[0];
+      expect(persisted.status).toBe(status);
+      expect(persisted.result).not.toBeNull();
+      expect((await run.status(runtime.billingContext)).result).toMatchObject({ status });
+    },
+  );
+
   it('suspension expiry and resume race cannot double release or charge', async () => {
     const { runtime, model, observer, database } = await fixture({
       configure: configuration => {

@@ -352,10 +352,11 @@ export class WorkflowStorage {
     });
   }
 
+  /** Record a start failure only while its claimed version remains running. */
   transition(id: string, version: number, status: WorkflowStatus, result: Json | null = null) {
     return this.database.write(async transaction => {
       await transaction.execute({
-        sql: 'UPDATE billing_workflow_runs SET status = ?, result = ?, owner = NULL, expires_at = NULL WHERE id = ? AND version = ?',
+        sql: "UPDATE billing_workflow_runs SET status = ?, result = ?, owner = NULL, expires_at = NULL WHERE id = ? AND version = ? AND status = 'running'",
         args: [status, result === null ? null : JSON.stringify(result), id, version],
       });
       return this.find(transaction, id);
