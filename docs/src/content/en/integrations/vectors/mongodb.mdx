@@ -365,7 +365,7 @@ await store.createSearchIndex({
 })
 ```
 
-The field-mapped index name includes the logical `indexName`, so two logical indexes on the same collection get distinct text indexes. Calling `createSearchIndex()` again for the _same_ logical index with different `fields` updates the existing text index definition in place if Mastra created it. You don't need to drop it first. Mastra never changes a full-text index it didn't create: an existing index with the requested name is reused when it maps the same fields, and `createSearchIndex()` throws a `CONFLICT` error otherwise.
+The field-mapped index name includes the logical `indexName`, so two logical indexes on the same collection get distinct text indexes. Calling `createSearchIndex()` again for the _same_ logical index with different `fields` updates the existing text index definition in place if Mastra created it. You don't need to drop it first. Mastra never changes a full-text index it didn't create: an existing index with the requested name is reused only when its whole definition is equivalent to the one requested: field types, analyzers (including the root `analyzer` and `searchAnalyzer`), nested fields, `storedSource` and synonyms. Defaults that Atlas echoes back, such as `indexOptions: 'offsets'`, `store: true`, `norms: 'include'` and an empty `fields`, count as equivalent. Otherwise `createSearchIndex()` throws a `CONFLICT` error. When the registration predates ownership records, the message suggests [`claimLegacyIndex()`](#claimlegacyindex).
 
 ### `waitForSearchIndexReady()`
 
@@ -782,10 +782,21 @@ On an `autoEmbed` index, `dimension` is read from the index definition and repor
 
 Deletes a vector index. Mastra records which search indexes and collections it created, and drops only those:
 
-- **Managed index** (created without `collectionName`): drops the collection and all its data. If a collection with that name already existed when `createIndex()` ran, Mastra keeps it and drops only the search indexes it created. Managed indexes registered by earlier versions still drop their collection.
+- **Managed index** (created without `collectionName`): drops the collection and all its data. If a collection with that name already existed when `createIndex()` ran, Mastra keeps it and drops only the search indexes it created. Managed indexes created before `@mastra/mongodb@1.15.0`, or registered by 1.15 through 1.27 without an ownership record, aren't dropped until you call [`claimLegacyIndex()`](#claimlegacyindex) for them.
 - **Bring-your-own index** (created with `collectionName`): drops the vector and full-text indexes Mastra created. The collection and its documents are kept.
 
-Mastra keeps any search index that existed before `createIndex()` or `createSearchIndex()` ran, that another logical index still uses, or that an earlier version registered. Drop those yourself if you no longer need them. Pointing an index at a different `searchIndexName` counts as a new index that Mastra doesn't own unless that call creates it. `deleteIndex()` throws for a name with no registration and drops nothing.
+Mastra keeps any search index that existed before `createIndex()` or `createSearchIndex()` ran, that another logical index still uses, or that an earlier version registered. Drop those yourself if you no longer need them. Pointing an index at a different `searchIndexName` counts as a new index that Mastra doesn't own unless that call creates it. When one logical index is deleted and another registration still uses a search index, Mastra keeps that index and passes cleanup responsibility to the other registration. The last registration to be deleted drops it. Renaming a text index with `createSearchIndex()` keeps responsibility for the old index Mastra created, and Mastra drops it when the logical index is deleted, not at rename time.
+
+`deleteIndex()` throws these errors:
+
+- `NOT_REGISTERED`: the name has no registration, and nothing is dropped. If the collection predates `@mastra/mongodb@1.15.0`, call `claimLegacyIndex()` first.
+- `OWNERSHIP_UNKNOWN`: a managed index registered by 1.15 through 1.27 has no ownership record. Call `claimLegacyIndex()` first.
+- `IN_USE`: another registration still uses the managed collection. Mastra checks this again when you retry a stalled delete.
+- `INDEX_DELETING`: a previous delete was left half-finished. Retry `deleteIndex()`. `createIndex()`, `createSearchIndex()` and `claimLegacyIndex()` raise this error too while a delete is half-finished.
+- `CAPABILITY_CHECK_FAILED`: the check for transaction support failed. Nothing changed, so retry.
+- `OUTCOME_UNKNOWN`: MongoDB couldn't confirm whether the delete committed. Retry. If the retry throws `NOT_REGISTERED`, the delete completed.
+
+Concurrent deletes of indexes that share a collection are coordinated with transactions on Atlas, Atlas Local and replica sets. On a standalone server they aren't, so don't delete sibling indexes at the same time there.
 
 If `createIndex()` fails to create the vector index, or `createSearchIndex()` the full-text index, Mastra removes or restores the registration that call wrote.
 
@@ -801,9 +812,53 @@ The BYO classification is recorded durably when the index is created, so it's ap
 ]}
 />
 
+### `claimLegacyIndex()`
+
+Records that Mastra created a managed index's collection and its recorded search indexes, so later calls to `deleteIndex()` and `createSearchIndex()` can manage them. Use it for managed indexes created before `@mastra/mongodb@1.15.0`, which have no registration, and for managed indexes registered by 1.15 through 1.27, which have no ownership record.
+
+:::warning
+
+After a claim, `deleteIndex()` drops the collection and all its data. Claim an index only when Mastra did create the collection. The claim itself drops nothing.
+
+:::
+
+```typescript
+await store.claimLegacyIndex({ indexName: 'movies' })
+```
+
+Calling it again for a claimed index does nothing. It never overwrites another registration.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Logical name of the managed index to claim',
+  },
+]}
+/>
+
+`claimLegacyIndex()` throws these errors:
+
+- `BYO`: the index is bring-your-own. Mastra keeps those collections, so there's nothing to claim.
+- `CONFLICT`: another registration already uses the name for something else.
+- `IN_USE`: another registration uses the same collection.
+- `NOT_FOUND`: the collection or its search indexes don't exist.
+- `INDEX_DELETING`: a delete of this index is half-finished. Retry `deleteIndex()`.
+- `FAILED`: any other failure.
+
+### Upgrading from versions before this release
+
+Call `claimLegacyIndex()` once for each of these indexes:
+
+- Managed collections created before `@mastra/mongodb@1.15.0`, if you want to delete them with `deleteIndex()`.
+- Managed indexes registered by 1.15 through 1.27 that you want to delete, or whose text mappings you want to change with `createSearchIndex()`.
+
+Indexes you only query, upsert into or list need no claim. Mastra refuses to delete or rewrite what it can't prove it created, so it asks you to confirm instead of guessing.
+
 ### `listIndexes()`
 
-Lists the **logical** Mastra index names (the `indexName` values passed to `createIndex`), not physical collection names. For a bring-your-own index whose data lives in an operational collection, the logical index name is returned instead of the physical collection name. The value can be passed straight back into `deleteIndex()` / `describeIndex()`. Managed indexes created before durable metadata was introduced are still discovered via their `${name}_vector_index` search index. The internal registry collection is never listed.
+Lists the **logical** Mastra index names (the `indexName` values passed to `createIndex`), not physical collection names. For a bring-your-own index whose data lives in an operational collection, the logical index name is returned instead of the physical collection name. The value can be passed straight back into `describeIndex()`, and into `deleteIndex()` for indexes Mastra has ownership records for. A legacy managed index needs [`claimLegacyIndex()`](#claimlegacyindex) first. Managed indexes created before durable metadata was introduced are still discovered via their `${name}_vector_index` search index. The internal registry collection is never listed.
 
 Returns: `Promise<string[]>`
 
@@ -1097,27 +1152,16 @@ The diagram shows what `MongoDBVector` reads, writes, and drops in a bring-your-
   <summary>Text version of the diagram</summary>
 
   ```mermaid
-  ---
-  title: Bring-your-own collection with MongoDBVector
-  ---
-  graph LR
-  app["Mastra app<br/>Agents, RAG, Memory"]
-  store["MongoDBVector<br/>@mastra/mongodb"]
-  subgraph atlas[MongoDB Atlas]
-    registry[("__mastra_vector_indexes__<br/>Target, allowWrites, ownership")]
-    subgraph yours[Your collection]
-      docs[("Operational documents<br/>Read-only by default, never dropped")]
-      owned["Search indexes Mastra created<br/>Dropped by deleteIndex"]
-      existing["Search indexes that already existed<br/>Reused, never changed or dropped"]
-    end
-  end
-  voyage["Voyage AI<br/>Automated Embedding, optional"]
-  app --> store
-  store -->|records and resolves| registry
-  store -->|queries| docs
-  store -->|creates and drops| owned
-  store -.->|reuses| existing
-  docs -.->|text to embed| voyage
+  flowchart LR
+    accTitle: Bring-your-own collection with MongoDBVector
+    accDescr: MongoDBVector records each index in a registry, queries your documents, creates and drops only the search indexes it created, and reuses search indexes that already existed. Document text can go to Voyage AI.
+    app(["mastra app<br/>agents, rag, memory"]) --> store(["MongoDBVector<br/>@mastra/mongodb"])
+    store -- createIndex --> registry@{ shape: cyl, label: "__mastra_vector<br/>_indexes__" }
+    store -- query --> docs@{ shape: cyl, label: "operational<br/>documents" }
+    store -- createSearchIndex --> owned(["search indexes<br/>mastra created"])
+    store -. reuses .-> existing(["search indexes<br/>that existed"])
+    owned -- deleteIndex --> gone(("dropped"))
+    docs -. autoEmbed .-> voyage(["voyage ai"])
   ```
 </details>
 
