@@ -632,5 +632,157 @@ describe('legacy ownership', () => {
       expect(await regFor(coll)).toEqual([]);
       expect(await searchIndexNames(db, coll)).toEqual([]);
     });
+
+    // Managed deletes drop the whole collection, so they need recorded ownership and no other user.
+    describe('managed collection deletes', () => {
+      const docs = () => [{ title: 'a' }, { title: 'b' }, { title: 'c' }];
+      const exists = (c: string) => db.listCollections({ name: c }).hasNext();
+
+      /** A managed collection with 3 documents and its registration seeded directly. */
+      async function managed(owns: boolean | 'unknown' = true, extra: Document = {}) {
+        const coll = uniqueName('mgd');
+        colls.push(coll);
+        await seedCollection(db, coll, docs());
+        const entry = {
+          _id: coll,
+          indexName: coll,
+          collectionName: coll,
+          searchIndexName: `${coll}_vector_index`,
+          isByo: false,
+          allowWrites: true,
+          ownsVectorIndex: true,
+          ...(owns === 'unknown' ? {} : { ownsCollection: owns }),
+          ...extra,
+        };
+        await seedRegistry(db, entry);
+        return { coll, entry };
+      }
+
+      it('T13a-1: a flagless managed entry refuses with OWNERSHIP_UNKNOWN and drops nothing', async () => {
+        const { coll, entry } = await managed('unknown');
+        const err = await a.deleteIndex({ indexName: coll }).catch(e => e);
+        expect(err.id).toBe(errId('OWNERSHIP_UNKNOWN'));
+        expect(err.category).toBe('USER');
+        expect(err.message).toMatch(/claimLegacyIndex/);
+        expect(await exists(coll)).toBe(true);
+        expect(await db.collection(coll).countDocuments()).toBe(3);
+        expect(await reg(coll)).toEqual(entry);
+      });
+
+      it('T16: a managed delete refuses with IN_USE while a BYO index uses its collection', async () => {
+        const { coll, entry } = await managed();
+        await seedRegistry(db, {
+          _id: `${coll}_byo`,
+          indexName: `${coll}_byo`,
+          collectionName: coll,
+          searchIndexName: `${coll}_byo_vec`,
+          isByo: true,
+          allowWrites: false,
+          ownsVectorIndex: false,
+        });
+        const err = await a.deleteIndex({ indexName: coll }).catch(e => e);
+        expect(err.id).toBe(errId('IN_USE'));
+        expect(err.category).toBe('USER');
+        expect(await exists(coll)).toBe(true);
+        expect(await db.collection(coll).countDocuments()).toBe(3);
+        expect(await reg(coll)).toEqual(entry);
+      });
+
+      it('T14g: two claimed managed entries on one collection each refuse with IN_USE', async () => {
+        const { coll } = await managed();
+        const second = `${coll}_2`;
+        await seedRegistry(db, {
+          _id: second,
+          indexName: second,
+          collectionName: coll,
+          searchIndexName: `${second}_vector_index`,
+          isByo: false,
+          allowWrites: true,
+          ownsVectorIndex: true,
+          ownsCollection: true,
+        });
+        for (const indexName of [coll, second]) {
+          await expect(a.deleteIndex({ indexName })).rejects.toMatchObject({ id: errId('IN_USE') });
+        }
+        expect(await exists(coll)).toBe(true);
+        expect(await regFor(coll)).toHaveLength(2);
+      });
+
+      it('T14i-M (stale finalization): a stale call leaves a recreated managed registration alone', async () => {
+        const { coll, entry } = await managed();
+        const p1 = pause();
+        (a as any).testHooks = { beforeDeleteFinalize: p1.hook };
+        const call1 = a.deleteIndex({ indexName: coll });
+        await reached(p1);
+        const t1 = (await reg(coll))?.deleteToken;
+        expect(t1).toEqual(expect.any(String));
+        await b.deleteIndex({ indexName: coll }); // call 2 resumes with t1 and finishes
+        expect(await exists(coll)).toBe(false);
+        expect(await reg(coll)).toBeNull();
+        await seedCollection(db, coll, docs());
+        await seedRegistry(db, entry);
+        const p3 = pause();
+        (b as any).testHooks = { afterDeleteStep1: p3.hook };
+        const call3 = b.deleteIndex({ indexName: coll });
+        await reached(p3);
+        const t2 = (await reg(coll))?.deleteToken;
+        expect(t2).toEqual(expect.any(String));
+        expect(t2).not.toBe(t1);
+        p1.release.resolve();
+        await call1;
+        expect(await reg(coll)).toMatchObject({ deleting: true, deleteToken: t2 });
+        expect(await db.collection(coll).countDocuments()).toBe(3);
+        p3.release.resolve();
+        await call3;
+        expect(await exists(coll)).toBe(false);
+        expect(await reg(coll)).toBeNull();
+      });
+
+      it('T14i-M (stale physical drop): a stale call does not drop a recreated managed collection', async () => {
+        const { coll, entry } = await managed();
+        const p1 = pause();
+        (a as any).testHooks = { beforeDeleteDrop: p1.hook };
+        const call1 = a.deleteIndex({ indexName: coll });
+        await reached(p1);
+        await b.deleteIndex({ indexName: coll });
+        expect(await exists(coll)).toBe(false);
+        await seedCollection(db, coll, docs());
+        await seedRegistry(db, entry);
+        p1.release.resolve();
+        await call1;
+        expect(await db.collection(coll).countDocuments()).toBe(3);
+        expect(await reg(coll)).toEqual(entry);
+      });
+
+      it('T14i-M (resume): a deleting managed entry finishes with its stored token', async () => {
+        const { coll } = await managed(true, { deleting: true, deleteToken: 't' });
+        let seen: string | undefined;
+        (a as any).testHooks = {
+          beforeDeleteDrop: async () => {
+            seen = (await reg(coll))?.deleteToken;
+          },
+        };
+        await a.deleteIndex({ indexName: coll });
+        expect(seen).toBe('t');
+        expect(await exists(coll)).toBe(false);
+        expect(await reg(coll)).toBeNull();
+      });
+
+      it('T14i-M (createIndex): a deleting managed entry refuses before recreating its dropped collection', async () => {
+        const { coll } = await managed(true, { deleting: true, deleteToken: 't' });
+        await db.dropCollection(coll);
+        const err = await a.createIndex({ indexName: coll, dimension: 4 }).catch(e => e);
+        expect(err.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'INDEX_DELETING'));
+        expect(await exists(coll)).toBe(false);
+      });
+
+      it('T18: a managed createSearchIndex still provisions the dynamic default index', async () => {
+        const coll = uniqueName('mgd');
+        colls.push(coll);
+        await a.createIndex({ indexName: coll, dimension: 4 });
+        await a.createSearchIndex({ indexName: coll, fields: ['title'] });
+        expect(await searchIndexNames(db, coll)).toContain(`${coll}_search_index`);
+      });
+    });
   });
 });

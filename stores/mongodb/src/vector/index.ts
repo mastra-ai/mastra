@@ -325,7 +325,7 @@ interface IndexTarget {
    * Ownership of the physical resources, recorded only when this store created them.
    * deleteIndex drops only what is owned. A missing flag (entries written before ownership
    * was recorded) means unknown, and unknown search indexes are kept. A managed entry
-   * without `ownsCollection` keeps the legacy behavior of dropping its collection.
+   * without `ownsCollection` refuses deleteIndex until claimLegacyIndex records ownership.
    */
   ownsVectorIndex?: boolean;
   ownsTextIndex?: boolean;
@@ -697,12 +697,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     return false;
   }
 
-  /** Remove a logical-index target from the durable registry (called by deleteIndex). */
-  private async deleteRegistryEntry(indexName: string): Promise<void> {
-    const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
-    await registry.deleteOne({ _id: indexName });
-  }
-
   /** Refuse to reuse an entry whose deletion has started; only finishing the delete clears it. */
   private assertNotDeleting(
     entry: RegistryDoc | null,
@@ -847,6 +841,64 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       if (!(await registry.findOne({ _id: indexName, deleting: true, deleteToken }))) return;
       if (collection) await this.dropSearchIndexIgnoringMissing(collection, name);
     }
+    await this.testHooks?.beforeDeleteFinalize?.(indexName);
+    // Matches nothing when another call already finished this attempt; that is success too.
+    await registry.deleteOne({ _id: indexName, deleting: true, deleteToken });
+  }
+
+  /**
+   * Delete a managed registration with recorded ownership (`ownsCollection: true`) by dropping
+   * its collection, which removes every search index on it. Refuses with `IN_USE` while any other
+   * registration points at the collection. Same token protocol as `deleteKeepCollection`.
+   */
+  private async deleteManagedCollection(entry: RegistryDoc): Promise<void> {
+    const indexName = entry._id;
+    const collectionName = entry.collectionName;
+    const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
+    let deleteToken = entry.deleting ? entry.deleteToken : undefined;
+    if (!deleteToken) {
+      let attempt = 0;
+      const work = await this.runDeleteTransaction(indexName, async session => {
+        attempt++;
+        const own = await registry.findOne({ _id: indexName }, { session });
+        // Missing, or recreated as something else since our first read: not ours to touch.
+        if (!own || own.collectionName !== collectionName || own.isByo || own.ownsCollection !== true)
+          return 'gone' as const;
+        if (own.deleting && own.deleteToken) return { deleteToken: own.deleteToken };
+        const others = await registry.find({ collectionName, _id: { $ne: indexName } }, { session }).toArray();
+        await this.testHooks?.insideDeleteTransaction?.(indexName, attempt);
+        if (others.length) {
+          throw new MastraError({
+            id: createVectorErrorId('MONGODB', 'DELETE_INDEX', 'IN_USE'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName, collectionName, usedBy: others.map(o => o._id).join(', ') },
+            text: `Collection "${collectionName}" of index "${indexName}" is still used by ${others.map(o => `"${o._id}"`).join(', ')}. Nothing was dropped. Delete those indexes first.`,
+          });
+        }
+        const token = uuidv4();
+        await registry.updateOne(
+          { _id: indexName },
+          { $set: { deleting: true, deleteToken: token }, $inc: { rev: 1 } },
+          { session },
+        );
+        return { deleteToken: token };
+      });
+      if (work === 'gone') return;
+      deleteToken = work.deleteToken;
+    }
+
+    await this.testHooks?.afterDeleteStep1?.(indexName);
+    await this.testHooks?.beforeDeleteDrop?.(indexName, collectionName);
+    // Another call finished this attempt, and the collection may have been recreated since: leave it.
+    if (!(await registry.findOne({ _id: indexName, deleting: true, deleteToken }))) return;
+    try {
+      await this.db.collection(collectionName).drop();
+    } catch (err: any) {
+      const code = err?.codeName ?? err?.code;
+      if (code !== 'NamespaceNotFound' && code !== 26) throw err;
+    }
+    this.collections.delete(collectionName);
     await this.testHooks?.beforeDeleteFinalize?.(indexName);
     // Matches nothing when another call already finished this attempt; that is success too.
     await registry.deleteOne({ _id: indexName, deleting: true, deleteToken });
@@ -1086,6 +1138,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     let collection;
     let collectionCreated = false;
     try {
+      // Read before creating anything, so refusing a deleting entry has no side effects.
+      const existingEntry = await this.readRegistryEntry(indexName);
+      this.assertNotDeleting(existingEntry, 'CREATE_INDEX');
       // Check if collection exists
       const collectionExists = await this.db.listCollections({ name: targetCollection }).hasNext();
       if (!collectionExists) {
@@ -1109,8 +1164,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // DIFFERENT physical collection, refuse rather than silently orphan the old collection's
       // search index (and its registry-less data). Idempotent re-createIndex against the same
       // collection is allowed (refreshes the entry).
-      const existingEntry = await this.readRegistryEntry(indexName);
-      this.assertNotDeleting(existingEntry, 'CREATE_INDEX');
       if (existingEntry && existingEntry.collectionName !== targetCollection) {
         throw new MastraError({
           id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'),
@@ -2566,8 +2619,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
     // `isByo` is read from the registry (captured at createIndex time), NOT inferred from
     // names: a BYO index may reuse its indexName as the collectionName, so name equality
-    // cannot distinguish managed from BYO. Managed indexes drop the collection; BYO indexes
-    // drop only the search index so the caller's operational collection/data is preserved.
+    // cannot distinguish managed from BYO. Managed indexes with recorded ownership drop the
+    // collection; BYO indexes drop only search indexes so the caller's data is preserved.
     // Decide from the registry, not the in-process cache, which another process can make stale.
     this.indexTargets.delete(indexName);
     try {
@@ -2583,38 +2636,31 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         this.indexTargets.delete(indexName);
         return;
       }
-      const { collectionName, registered } = await this.resolveIndexTarget(indexName);
-      const collection = await this.getCollection(collectionName, false);
-      if (collection) {
-        // Fail closed: nothing records that this store created an unregistered collection, and an
-        // `${indexName}_vector_index` on it may be a caller's index left behind by a BYO delete.
-        if (!registered) {
+      if (entry) {
+        // Only a recorded `ownsCollection: true` proves this store created the collection.
+        if (entry.ownsCollection !== true) {
           throw new MastraError({
-            id: createVectorErrorId('MONGODB', 'DELETE_INDEX', 'NOT_REGISTERED'),
+            id: createVectorErrorId('MONGODB', 'DELETE_INDEX', 'OWNERSHIP_UNKNOWN'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
-            details: { indexName, collectionName },
-            text: `Index "${indexName}" is not registered, so this store cannot verify that it created collection "${collectionName}". Nothing was dropped. If Mastra created it before the registry existed, call claimLegacyIndex({ indexName }) first.`,
+            details: { indexName, collectionName: entry.collectionName },
+            text: `Index "${indexName}" was registered by an earlier version that did not record whether this store created collection "${entry.collectionName}". Nothing was dropped. If Mastra created it, call claimLegacyIndex({ indexName: "${indexName}" }) first.`,
           });
         }
-        // Retry-safe (FIX 4): a managed collection already dropped by a prior (partially
-        // failed) deleteIndex must not block the retry from clearing the registry entry.
-        try {
-          await collection.drop();
-        } catch (err: any) {
-          const code = err?.codeName ?? err?.code;
-          if (code !== 'NamespaceNotFound' && code !== 26) throw err;
-        }
-        this.collections.delete(collectionName);
+        await this.deleteManagedCollection(entry);
         this.declaredFilterPaths.delete(indexName);
         this.indexTargets.delete(indexName);
-        // Remove the durable registry entry LAST so a fresh process no longer resolves this
-        // index. Because the physical drop above is idempotent, a retry after an interrupted
-        // delete still reaches this line and stops the stranded entry from being listed.
-        await this.deleteRegistryEntry(indexName);
-      } else {
-        throw new Error(`Index (Collection) "${indexName}" does not exist`);
+        return;
       }
+      // Fail closed: nothing records that this store created an unregistered collection, and an
+      // `${indexName}_vector_index` on it may be a caller's index left behind by a BYO delete.
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'DELETE_INDEX', 'NOT_REGISTERED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName, collectionName: indexName },
+        text: `Index "${indexName}" is not registered, so this store cannot verify that it created collection "${indexName}". Nothing was dropped. If Mastra created it before the registry existed, call claimLegacyIndex({ indexName }) first.`,
+      });
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
