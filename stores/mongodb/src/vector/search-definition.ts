@@ -24,6 +24,7 @@ function normalizeMapping(m: unknown): unknown {
   }
   if (m.type === 'document' && m.dynamic === undefined) out.dynamic = false;
   if (isObj(m.fields)) out.fields = normalizeFields(m.fields);
+  if (isObj(out.fields) && !Object.keys(out.fields).length) delete out.fields; // Atlas echoes `fields: {}`
   return canon(out);
 }
 
@@ -51,6 +52,7 @@ export function normalizeSearchDefinition(def: Document | undefined): unknown {
     const m: Document = { ...def.mappings };
     if (m.dynamic === undefined) m.dynamic = false;
     if (isObj(m.fields)) m.fields = normalizeFields(m.fields);
+    if (isObj(m.fields) && !Object.keys(m.fields).length) delete m.fields; // Atlas echoes `fields: {}`
     out.mappings = m;
   }
   return canon(out);

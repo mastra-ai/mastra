@@ -107,6 +107,14 @@ describe('legacy ownership', () => {
       await t12(coll, indexName);
     });
 
+    it('T12-dynamic: a foreign dynamic index echoed with fields:{} is reused by a no-fields attach', async () => {
+      const { coll, indexName } = await setup({ mappings: { dynamic: true } }, true);
+      await store.createSearchIndex({ indexName, searchIndexName: 'docs_fts' });
+      const reg = await db.collection(REGISTRY).findOne({ _id: indexName as any });
+      expect(reg?.ownsTextIndex).not.toBe(true);
+      expect(await searchIndexNames(db, coll)).toContain('docs_fts');
+    });
+
     it('RF1 (T1): comparison works while the foreign index is still PENDING/BUILDING', async ctx => {
       const { coll, indexName } = await setup(titleDef, false);
       await statusOrSkip(ctx, coll);

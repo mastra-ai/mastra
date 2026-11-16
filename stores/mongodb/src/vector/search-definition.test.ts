@@ -53,4 +53,16 @@ describe('searchDefinitionsEquivalent', () => {
   it('multiple mappings per field vs one is a mismatch', () => {
     expect(eq(def({ a: [str, { type: 'token' }] }), def({ a: [str] }))).toBe(false);
   });
+  it('empty fields equals omitted fields at root and in a document mapping', () => {
+    expect(eq({ mappings: { dynamic: true, fields: {} } }, { mappings: { dynamic: true } })).toBe(true);
+    expect(eq(def({ m: { type: 'document', fields: {} } }), def({ m: { type: 'document' } }))).toBe(true);
+    expect(eq({ mappings: { dynamic: true, fields: { a: str } } }, { mappings: { dynamic: true } })).toBe(false);
+  });
+  it('omitted string defaults equal the Atlas-echoed ones; a non-default is a mismatch', () => {
+    const explicit = { type: 'string', indexOptions: 'offsets', store: true, norms: 'include' };
+    expect(eq(def({ a: str }), def({ a: explicit }))).toBe(true);
+    expect(eq(def({ a: str }), def({ a: { ...explicit, store: false } }))).toBe(false);
+    expect(eq(def({ a: str }), def({ a: { ...explicit, norms: 'omit' } }))).toBe(false);
+    expect(eq(def({ a: str }), def({ a: { ...explicit, indexOptions: 'docs' } }))).toBe(false);
+  });
 });
