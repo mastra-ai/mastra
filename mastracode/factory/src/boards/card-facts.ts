@@ -65,7 +65,9 @@ export function cardRuleFacts(
   const attachedOpenPullRequest =
     (typeof pointer === 'number' && !ownPullRequest) ||
     (ownPullRequest
-      ? newestOpenPullRequestNumber({ workItem: { sources: sources.slice(1) } }) !== null
+      ? pullRequestSources({ workItem: { sources: sources.slice(1) } }).some(
+          entry => openPullRequestSource(entry) && pullRequestSourceNumber(entry) !== undefined,
+        )
       : pullRequest !== null);
   // A pull request linked to an issue: the card holds both a pull request and an issue source.
   const linksIssue =
