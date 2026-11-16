@@ -6,8 +6,8 @@ import { Button } from '@/ds/components/Button';
 import { FieldItem, FieldLabel } from '@/ds/components/Field';
 import type { FieldLabelProps } from '@/ds/components/Field';
 import { Txt } from '@/ds/components/Txt';
-import { IconBubbleQuestion } from '@/ds/icons/central/IconBubbleQuestion';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconQuestionmarkCircle } from '@/ds/icons/central/IconQuestionmarkCircle';
 import { Icon } from '@/ds/icons/Icon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
@@ -23,7 +23,7 @@ export const AskUserContainer = ({ className, ...props }: ComponentProps<'div'>)
 export const AskUserLabel = ({ children = 'Question', className, ...props }: ComponentProps<'div'>) => (
   <div data-slot="ask-user-label" className={cn('flex min-h-10 items-center gap-2 px-4 pt-3', className)} {...props}>
     <Icon size="xs" className="text-muted-foreground">
-      <IconBubbleQuestion />
+      <IconQuestionmarkCircle />
     </Icon>
     <Txt as="span" variant="caption" tone="muted">
       {children}
@@ -38,7 +38,7 @@ export const AskUserBody = ({ className, ...props }: ComponentProps<'div'>) => (
 const AskUserQuestionTitle = ({ children }: { children: ReactNode }) => (
   <span className="flex items-start gap-2">
     <Icon size="xs" className={cn('mt-1 shrink-0', 'text-muted-foreground')} aria-hidden>
-      <IconBubbleQuestion />
+      <IconQuestionmarkCircle />
     </Icon>
     <span className="min-w-0">{children}</span>
   </span>

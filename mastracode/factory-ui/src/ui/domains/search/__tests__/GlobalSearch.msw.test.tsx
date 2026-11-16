@@ -7,12 +7,12 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { isStubbedProjectRead } from '../../../../../e2e/ui/board-reads';
 import { listedRepository } from '../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { recordProviderListRequests } from '../../../../../e2e/ui/provider-list-requests';
 import { releaseBoard, workBoardInfo } from '../../../../../e2e/ui/board-catalog';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../e2e/ui/render';
-import { workspacesQueryOptions } from '../../../../hooks/useWorkspaces';
 import { createQueryClient } from '../../../../query-client';
 import type { WorkItem } from '../../factory/services/workItems';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
@@ -151,10 +151,13 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/work-items`, ({ params, request }) => {
       const query = new URL(request.url).searchParams;
-      state.workItemQueries.push(query.toString());
-      if (options.failWorkItems) return HttpResponse.json({ error: 'work items unavailable' }, { status: 500 });
+      const appRead = !isStubbedProjectRead(request);
+      if (appRead) state.workItemQueries.push(query.toString());
+      if (appRead && options.failWorkItems) {
+        return HttpResponse.json({ error: 'work items unavailable' }, { status: 500 });
+      }
       const sessionCardReads = state.workItemQueries.filter(asked => asked === 'scope=sessions').length;
-      if (query.get('scope') === 'sessions' && sessionCardReads <= (options.failSessionCardAttempts ?? 0)) {
+      if (appRead && query.get('scope') === 'sessions' && sessionCardReads <= (options.failSessionCardAttempts ?? 0)) {
         return HttpResponse.json({ error: 'work items unavailable' }, { status: 500 });
       }
       const cards = String(params.factoryProjectId) === ACTIVE_FACTORY_ID ? (options.workItems ?? workItems) : [];
@@ -180,13 +183,15 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/sessions`, async ({ params, request }) => {
       const factoryProjectId = String(params.factoryProjectId);
-      state.sessionRequests[factoryProjectId] = (state.sessionRequests[factoryProjectId] ?? 0) + 1;
-      if (options.sessionsGate) {
-        request.signal.addEventListener('abort', () => options.onSessionsAbort?.(), { once: true });
-        await options.sessionsGate;
-      }
-      if (state.sessionRequests[factoryProjectId] <= (options.failSessionAttempts ?? 0)) {
-        return HttpResponse.json({ error: 'sessions unavailable' }, { status: 500 });
+      if (!isStubbedProjectRead(request)) {
+        state.sessionRequests[factoryProjectId] = (state.sessionRequests[factoryProjectId] ?? 0) + 1;
+        if (options.sessionsGate) {
+          request.signal.addEventListener('abort', () => options.onSessionsAbort?.(), { once: true });
+          await options.sessionsGate;
+        }
+        if (state.sessionRequests[factoryProjectId] <= (options.failSessionAttempts ?? 0)) {
+          return HttpResponse.json({ error: 'sessions unavailable' }, { status: 500 });
+        }
       }
       const repositoryIds =
         factoryProjectId === ACTIVE_FACTORY_ID ? [FIRST_REPOSITORY_ID, SECOND_REPOSITORY_ID] : [OTHER_REPOSITORY_ID];
@@ -656,19 +661,15 @@ describe('Global search', () => {
     expect(within(dialog).queryByText('not filed')).not.toBeInTheDocument();
   });
 
-  it('opens on warm sessions without refetching them, and reads the cards in parts instead of the board', async () => {
+  it('reads its sessions and the cards holding them once when it opens, never the board', async () => {
     const requests = stubSearchApi();
-    const { client } = renderSearchRoute();
-
-    await client.query(workspacesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID));
-    expect(requests.sessionRequests).toEqual({ [ACTIVE_FACTORY_ID]: 1 });
+    renderSearchRoute();
 
     await openWithShortcut();
     await screen.findByText('Review command palette PR');
     await screen.findByText('Bump the command palette dependencies');
 
     expect(requests.sessionRequests).toEqual({ [ACTIVE_FACTORY_ID]: 1 });
-    // The sidebar already read the cards holding a session: the palette shares that read.
     expect(requests.workItemQueries.toSorted()).toEqual(['scope=sessions', 'started=false&q=']);
   });
 
@@ -951,17 +952,17 @@ describe('Global search', () => {
   });
 
   it('reports a session failure while retaining navigation and Factories, then recovers on retry', async () => {
-    const requests = stubSearchApi({ failSessionAttempts: 2 });
+    const requests = stubSearchApi({ failSessionAttempts: 1 });
     const user = userEvent.setup();
     renderSearchRoute();
     const dialog = await openWithShortcut();
 
     expect(await screen.findByText('Sessions could not be loaded.')).toBeInTheDocument();
     expect(within(dialog).getByText('Mastra Factory')).toBeInTheDocument();
-    expect(requests.sessionRequests[ACTIVE_FACTORY_ID]).toBe(2);
+    expect(requests.sessionRequests[ACTIVE_FACTORY_ID]).toBe(1);
 
     await user.click(screen.getByRole('button', { name: /Retry/ }));
-    await waitFor(() => expect(requests.sessionRequests[ACTIVE_FACTORY_ID]).toBe(3));
+    await waitFor(() => expect(requests.sessionRequests[ACTIVE_FACTORY_ID]).toBe(2));
     expect(await screen.findByText('Review command palette PR')).toBeInTheDocument();
     expect(screen.queryByText('Sessions could not be loaded.')).not.toBeInTheDocument();
   });
@@ -1318,7 +1319,7 @@ describe('Global search', () => {
     expect(requests.providerListRequests).toEqual([]);
   });
 
-  it('keeps the sessions request alive when the notification observer also consumes it', async () => {
+  it('cancels its read of the sessions when the dialog closes, as nothing else on the page reads them', async () => {
     let releaseSessions = () => {};
     const sessionsGate = new Promise<void>(resolve => {
       releaseSessions = resolve;
@@ -1331,8 +1332,7 @@ describe('Global search', () => {
     await openWithShortcut();
     await waitFor(() => expect(requests.sessionRequests[ACTIVE_FACTORY_ID]).toBe(1));
     await user.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(onAbort).not.toHaveBeenCalled();
+    await waitFor(() => expect(onAbort).toHaveBeenCalledOnce());
     releaseSessions();
   });
 

@@ -14,7 +14,7 @@ export function ProviderLogo({ logoUrl }: ProviderLogoProps) {
       {logoUrl && failedSrc !== logoUrl ? (
         <img src={logoUrl} alt="" className="size-full object-contain" onError={() => setFailedSrc(logoUrl)} />
       ) : (
-        <IconBlocks aria-hidden className="size-4 text-muted-foreground" />
+        <IconBlocks aria-hidden className="size-icon-md text-muted-foreground" />
       )}
     </span>
   );

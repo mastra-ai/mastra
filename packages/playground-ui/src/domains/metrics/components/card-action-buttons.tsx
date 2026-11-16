@@ -1,6 +1,6 @@
 import { MetricsCard, onCardHover } from '../../../ds/components/MetricsCard';
 import { TraceIcon } from '../../../ds/icons/TraceIcon';
-import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
+import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
 import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
 import { LogsIcon } from '@/ds/icons/LogsIcon';
 
@@ -53,7 +53,7 @@ export function OpenInSpansButton({ onClick }: CardActionButtonProps) {
 export function OpenInThreadsButton({ onClick }: CardActionButtonProps) {
   return (
     <MetricsCard.Action label="View in threads" className={onCardHover} onClick={onClick}>
-      <IconBubbleText />
+      <IconChatBubbles />
     </MetricsCard.Action>
   );
 }

@@ -1,3 +1,4 @@
+import { cardChangeRequest } from '@mastra/factory/work-items/change-requests';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -6,7 +7,7 @@ import { Link } from 'react-router';
 import type { InstalledBoardInfo } from '../../../../api/types';
 import { boardOf } from '../boardFlow';
 import { currentItemStage, phaseLabel } from '../boardStages';
-import { cardChangeRequest, changeRequestStatus, changeRequestStatusLabel } from '../changeRequestState';
+import { changeRequestStatus, changeRequestStatusLabel } from '../changeRequestState';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
 import { relatedCardName, relationshipPath, workItemReference } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';

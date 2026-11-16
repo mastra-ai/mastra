@@ -99,7 +99,7 @@ export function MemoryStudioPanel({
           <IconArrowLeft />
         </Button>
         <span className="flex min-w-0 items-center gap-1.5 text-foreground">
-          <MemoryIcon className="size-4 shrink-0" />
+          <MemoryIcon className="size-icon-md shrink-0" />
           <Txt as="span" variant="column">
             Observational memory
           </Txt>

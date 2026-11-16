@@ -16,7 +16,7 @@ import {
 import { IconDirection1 } from '@/ds/icons/central/IconDirection1';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { IconRobot } from '@/ds/icons/central/IconRobot';
-import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
 
 const meta = {
   title: 'Composite/CommandPalette',
@@ -87,7 +87,7 @@ function CommandPaletteExample() {
                   value="overview application navigation"
                 />
                 <CommandPaletteItem
-                  icon={<IconSettingsGear1 />}
+                  icon={<IconSettingsGear5 />}
                   title="Settings"
                   subtitle="Application navigation"
                   path="/settings"

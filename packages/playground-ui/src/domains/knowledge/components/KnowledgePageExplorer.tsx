@@ -633,7 +633,7 @@ function MentionPopup({
           className="rounded p-0.5 text-muted-foreground hover:bg-fill hover:text-foreground"
           onClick={onClose}
         >
-          <IconCrossMedium size={14} aria-hidden />
+          <IconCrossMedium className="size-icon-sm" aria-hidden />
         </button>
       </div>
       <div className="min-h-0 overflow-y-auto">

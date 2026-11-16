@@ -102,7 +102,10 @@ export function ConnectedProviderRow({
   };
 
   const brandIcon = (
-    <ProviderBrandIcon provider={provider.provider} fallback={<IconBox className="text-muted-foreground size-4" />} />
+    <ProviderBrandIcon
+      provider={provider.provider}
+      fallback={<IconBox className="text-muted-foreground size-icon-md" />}
+    />
   );
   const statusText = <Status presentation={pending ?? status} />;
   const menu = credential ? (

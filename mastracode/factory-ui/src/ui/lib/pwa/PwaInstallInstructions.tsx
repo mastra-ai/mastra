@@ -26,7 +26,7 @@ function shareStep(browser: IosBrowser): { icon: ReactNode; label: ReactNode } {
   switch (browser) {
     case 'chrome':
       return {
-        icon: <IconShareOs className="size-4" aria-hidden="true" />,
+        icon: <IconShareOs className="size-icon-md" aria-hidden="true" />,
         label: (
           <>
             Tap the{' '}
@@ -41,7 +41,7 @@ function shareStep(browser: IosBrowser): { icon: ReactNode; label: ReactNode } {
     case 'edge':
     case 'opera':
       return {
-        icon: <IconBarsThree className="size-4" aria-hidden="true" />,
+        icon: <IconBarsThree className="size-icon-md" aria-hidden="true" />,
         label: (
           <>
             Open the browser menu and tap{' '}
@@ -53,7 +53,7 @@ function shareStep(browser: IosBrowser): { icon: ReactNode; label: ReactNode } {
       };
     case 'safari':
       return {
-        icon: <IconShareOs className="size-4" aria-hidden="true" />,
+        icon: <IconShareOs className="size-icon-md" aria-hidden="true" />,
         label: (
           <>
             Tap the{' '}
@@ -69,7 +69,7 @@ function shareStep(browser: IosBrowser): { icon: ReactNode; label: ReactNode } {
 
 const commonSteps: Array<{ icon: ReactNode; label: ReactNode }> = [
   {
-    icon: <IconSquarePlus className="size-4" aria-hidden="true" />,
+    icon: <IconSquarePlus className="size-icon-md" aria-hidden="true" />,
     label: (
       <>
         Scroll down and tap{' '}
@@ -80,7 +80,7 @@ const commonSteps: Array<{ icon: ReactNode; label: ReactNode }> = [
     ),
   },
   {
-    icon: <IconPhone className="size-4" aria-hidden="true" />,
+    icon: <IconPhone className="size-icon-md" aria-hidden="true" />,
     label: (
       <>
         Tap{' '}
@@ -102,7 +102,7 @@ export function PwaInstallInstructions({ open, onOpenChange }: PwaInstallInstruc
         <DrawerHeader>
           <div className="flex items-center gap-3">
             <div className="border-border bg-fill text-foreground flex size-10 shrink-0 items-center justify-center rounded-lg border">
-              <IconPhone className="size-5" aria-hidden="true" />
+              <IconPhone className="size-icon-lg" aria-hidden="true" />
             </div>
             <div className="min-w-0">
               <DrawerTitle>Install this app</DrawerTitle>

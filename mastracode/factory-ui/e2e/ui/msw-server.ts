@@ -3,6 +3,7 @@ import { setupServer } from 'msw/node';
 
 import { builtinBoardCatalog } from './board-catalog';
 import { boardReadHandlers } from './board-reads';
+import { sessionReadHandlers } from './session-reads';
 
 /**
  * Shared MSW server for the jsdom web-ui test suite. The global setup
@@ -71,6 +72,8 @@ export const server = setupServer(
   // What a test stubs here is the project's cards: the board's paged reads are answered from it.
   http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),
   ...boardReadHandlers,
+  http.get('*/web/factory/projects/:id/sessions', () => HttpResponse.json({ sessions: [] })),
+  ...sessionReadHandlers,
   // Ambient empty board for the draft page's starters and activity; their tests override these with `server.use(...)`.
   http.get('*/web/factory/projects/:id/work-items/starters', () =>
     HttpResponse.json({

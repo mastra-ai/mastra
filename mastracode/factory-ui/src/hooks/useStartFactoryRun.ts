@@ -7,6 +7,7 @@ import { queryKeys } from '../api/keys';
 import { AGENT_CONTROLLER_ID } from '../ui/domains/chat/services/constants';
 import { createUserSession } from '../ui/domains/workspaces/services/user-sessions';
 import { useFactoryQuery } from './useFactories';
+import { invalidateSessionQueries } from './useWorkspaces';
 import { useCardRepositorySlug } from '../ui/domains/factory/hooks/useCardRepositorySlug';
 import { repositoryMatchesCardSource } from '../ui/domains/factory/boardRepository';
 import { startFactoryRun, updateWorkItem } from '../ui/domains/factory/services/workItems';
@@ -119,7 +120,7 @@ export function useStartFactoryRun() {
         // The session was just minted. Without this the sidebar keeps serving
         // its cached list and it only appears once some later navigation
         // happens to refetch it.
-        queryClient.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) }),
+        invalidateSessionQueries(queryClient, factoryId),
       ]);
       return { factoryId, sessionId, threadId: prepared.threadId, threadTitle };
     },

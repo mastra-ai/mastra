@@ -372,7 +372,7 @@ export function KnowledgePageDetail({
               {kind}
             </Badge>
             {pin ? (
-              <Badge variant="warning" size="sm" icon={<IconPin size={10} aria-hidden />}>
+              <Badge variant="warning" size="sm" icon={<IconPin aria-hidden />}>
                 {pin.audience.length > 0 ? `Pinned for ${pin.audience.join(', ')}` : 'Pinned'}
               </Badge>
             ) : null}

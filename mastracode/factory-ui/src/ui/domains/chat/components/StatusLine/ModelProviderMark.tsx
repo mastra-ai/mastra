@@ -16,7 +16,7 @@ export function ModelProviderMark({
   if (!shownProvider) return null;
   return (
     <span className="relative flex shrink-0">
-      <ProviderBrandIcon provider={shownProvider} fallback={<IconKey2 className="size-3.5" />} />
+      <ProviderBrandIcon provider={shownProvider} fallback={<IconKey2 className="size-icon-sm" />} />
       {credential ? (
         <span className="absolute -right-1.5 -bottom-1.5 scale-75">
           <HolderBadge holder={credential.holder} />

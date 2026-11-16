@@ -30,9 +30,8 @@ import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 import { IconAgents } from '@/ds/icons/central/IconAgents';
 import { IconBox } from '@/ds/icons/central/IconBox';
 import { IconBranch } from '@/ds/icons/central/IconBranch';
-import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
-import { IconBubbleWide } from '@/ds/icons/central/IconBubbleWide';
 import { IconBuildings } from '@/ds/icons/central/IconBuildings';
+import { IconChatBubble7 } from '@/ds/icons/central/IconChatBubble7';
 import { IconChip } from '@/ds/icons/central/IconChip';
 import { IconCloud } from '@/ds/icons/central/IconCloud';
 import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
@@ -54,7 +53,7 @@ import { IconSignalTower } from '@/ds/icons/central/IconSignalTower';
 import { IconStar } from '@/ds/icons/central/IconStar';
 import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
 import { IconTag } from '@/ds/icons/central/IconTag';
-import { IconThumbsUp } from '@/ds/icons/central/IconThumbsUp';
+import { IconThumbUpSimple } from '@/ds/icons/central/IconThumbUpSimple';
 import { IconUser } from '@/ds/icons/central/IconUser';
 
 export type {
@@ -387,7 +386,7 @@ const TRACE_FILTER_BAR_FIELD_ICONS: Record<string, LucideIcon> = {
   environment: IconGlobe,
   traceId: IconAgents,
   runId: IconPlay,
-  threadId: IconBubbleWide,
+  threadId: IconChatBubble7,
   sessionId: IconLayersTwo,
   requestId: IconSignalTower,
   resourceId: IconHashtag,
@@ -407,9 +406,9 @@ const TRACE_FILTER_BAR_FIELD_ICONS: Record<string, LucideIcon> = {
   'spans.error': IconExclamationTriangle,
   'scores.scorerId': IconGauge,
   'scores.score': IconPercent,
-  'feedback.feedbackType': IconThumbsUp,
+  'feedback.feedbackType': IconThumbUpSimple,
   'feedback.value': IconStar,
-  'feedback.comment': IconBubbleText,
+  'feedback.comment': IconChatBubble7,
 };
 
 /** Which optional trace query fields the server declares support for. */

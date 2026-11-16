@@ -60,7 +60,7 @@ export const AgentProfileAvatar = ({ disabled = false }: AgentProfileAvatarProps
               textColor={avatarTextColor}
             />
             <span className="absolute inset-0 flex items-center justify-center rounded-full bg-muted opacity-0 transition-opacity">
-              <IconPlusMedium className="h-5 w-5 text-foreground" />
+              <IconPlusMedium className="size-icon-lg text-foreground" />
             </span>
           </button>
           <input

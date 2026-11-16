@@ -20,7 +20,7 @@ function GroupDragPreview({ label, visible }: { label: string; visible: boolean 
   return (
     <div className={cn(overlaySurfaceStyle, 'text-foreground/90 flex items-center rounded-lg')}>
       <span className={cn(DRAG_HANDLE_CLASS, 'cursor-grabbing')}>
-        <IconDotGrid2x3 size={14} aria-hidden />
+        <IconDotGrid2x3 className="size-icon-sm" aria-hidden />
       </span>
       <div className={cn(menuItemClass, 'flex-1')}>
         <span>{label}</span>
@@ -97,7 +97,7 @@ export function SessionGroupMenu({
                         onClick={event => event.stopPropagation()}
                         onPointerDown={event => event.stopPropagation()}
                       >
-                        <IconDotGrid2x3 size={14} aria-hidden />
+                        <IconDotGrid2x3 className="size-icon-sm" aria-hidden />
                       </span>
                       <DropdownMenu.CheckboxItem
                         className="flex-1"
