@@ -20,6 +20,7 @@ import { KnowledgeTooltip } from './KnowledgeTooltip';
 
 import { Badge } from '@/ds/components/Badge';
 import { Breadcrumb, Crumb } from '@/ds/components/Breadcrumb';
+import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Metadata } from '@/ds/components/Metadata';
 import { RelativeTimestamp } from '@/ds/components/RelativeTimestamp';
@@ -376,22 +377,27 @@ export function KnowledgePageDetail({
                 {pin.audience.length > 0 ? `Pinned for ${pin.audience.join(', ')}` : 'Pinned'}
               </Badge>
             ) : null}
-            <Txt as="span" variant="caption" tone="muted" data-testid="knowledge-page-version">
-              <Metadata>
-                {page.isScope ? null : <Metadata.Item>In {scope ? scopeTitle(scope) : page.scopeId}</Metadata.Item>}
-                {compact ? <Metadata.Item>v{page.version}</Metadata.Item> : null}
-                <Metadata.Item>
-                  Updated{' '}
-                  <RelativeTimestamp value={page.updatedAt} label={`Updated by ${authorName(page.updatedBy.author)}`} />
-                </Metadata.Item>
-              </Metadata>
-            </Txt>
+            {compact ? (
+              <Txt as="span" variant="caption" tone="muted" data-testid="knowledge-page-version">
+                <Metadata>
+                  {page.isScope ? null : <Metadata.Item>In {scope ? scopeTitle(scope) : page.scopeId}</Metadata.Item>}
+                  <Metadata.Item>v{page.version}</Metadata.Item>
+                  <Metadata.Item>
+                    Updated{' '}
+                    <RelativeTimestamp
+                      value={page.updatedAt}
+                      label={`Updated by ${authorName(page.updatedBy.author)}`}
+                    />
+                  </Metadata.Item>
+                </Metadata>
+              </Txt>
+            ) : null}
           </div>
         </div>
       </header>
 
-      <div className={`flex flex-col gap-8 ${compact ? 'p-4' : 'p-6'} @4xl:flex-row`}>
-        <div className="flex min-w-0 flex-col gap-8 @4xl:flex-1">
+      <div className={`flex flex-col gap-8 ${compact ? 'p-4' : 'p-6'} @3xl:flex-row`}>
+        <div className="flex min-w-0 flex-col gap-8 @3xl:flex-1">
           {page.body ? (
             <div data-testid="knowledge-page-body" className="max-w-3xl">
               <BodyLinks.Provider value={bodyLinks}>
@@ -436,7 +442,32 @@ export function KnowledgePageDetail({
           ) : null}
         </div>
 
-        <aside className="flex min-w-0 flex-col divide-y divide-border border-t border-border *:py-6 *:last:pb-0 @4xl:w-72 @4xl:shrink-0 @4xl:border-t-0 @4xl:border-l @4xl:pl-8 @4xl:*:first:pt-0">
+        <aside className="flex min-w-0 flex-col divide-y divide-border border-t border-border *:py-6 *:last:pb-0 @3xl:w-72 @3xl:shrink-0 @3xl:border-t-0 @3xl:border-l @3xl:pl-8 @3xl:*:first:pt-0">
+          {compact ? null : (
+            <KnowledgeDetailSection label="Details">
+              <DataKeysAndValues>
+                {page.isScope ? null : (
+                  <>
+                    <DataKeysAndValues.Key>Scope</DataKeysAndValues.Key>
+                    <DataKeysAndValues.Value>{scope ? scopeTitle(scope) : page.scopeId}</DataKeysAndValues.Value>
+                  </>
+                )}
+                <DataKeysAndValues.Key>Updated</DataKeysAndValues.Key>
+                <DataKeysAndValues.Value>
+                  <RelativeTimestamp value={page.updatedAt} />
+                </DataKeysAndValues.Value>
+                <DataKeysAndValues.Key>By</DataKeysAndValues.Key>
+                <DataKeysAndValues.Value>{authorName(page.updatedBy.author)}</DataKeysAndValues.Value>
+                <DataKeysAndValues.Key>Created</DataKeysAndValues.Key>
+                <DataKeysAndValues.Value>
+                  <RelativeTimestamp value={page.createdAt} />
+                </DataKeysAndValues.Value>
+                <DataKeysAndValues.Key>Version</DataKeysAndValues.Key>
+                <DataKeysAndValues.Value>v{page.version}</DataKeysAndValues.Value>
+              </DataKeysAndValues>
+            </KnowledgeDetailSection>
+          )}
+
           {childPages}
 
           {mentionedBy.length > 0 ? (
