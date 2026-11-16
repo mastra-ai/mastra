@@ -455,7 +455,7 @@ describe('IntakeRoutesSection', () => {
     // Routes that only move cards already on a board are on that board's Card moves page.
     expect(routeNames()).toEqual(
       [RETIRED_JOIN_ROUTE, ...DEFAULT_INTAKE_ROUTES]
-        .filter(({ route }) => placesNewCards({ on: route.on ?? ['work_item.created'] }))
+        .filter(({ route }) => placesNewCards({ on: [...(route.on ?? ['work_item.created'])] }))
         .map(({ route }) => route.name),
     );
     expect(routeNames()).not.toContain('Closed issues go to Done');

@@ -301,7 +301,7 @@ describe('intake routes placing linked cards', () => {
       const commit = seeded.workItems.commitRuleEvaluation.bind(seeded.workItems);
       let raced = false;
       vi.spyOn(seeded.workItems, 'commitRuleEvaluation').mockImplementation(async input => {
-        if (input.ingress.triggerType === 'pull_request.linked' && !raced) {
+        if (input.ingress.identity.startsWith('decision:linked-pull-request:') && !raced) {
           raced = true;
           await seeded.putAt(issue.id, 'planning');
         }
