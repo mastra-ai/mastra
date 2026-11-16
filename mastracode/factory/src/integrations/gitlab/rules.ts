@@ -535,12 +535,15 @@ export class GitLabRules {
       );
     }
     const headBranch = string(mergeRequest?.source_branch) ?? '';
+    // A branch name alone is not proof: a fork can reuse it. Factory pushes to this project only.
+    const sourceProjectId = number(mergeRequest?.source_project_id);
+    const fromThisProject = sourceProjectId === undefined || sourceProjectId === projectId;
     // A card whose session builds on the merge request's branch, in this project.
     const buildsOnBranch = (item: Card) =>
       item.externalSource?.type !== 'pull-request' &&
       !cardInOtherGitLabProject(item, host, projectId) &&
       Object.values(item.sessions).some(session => session.branch === headBranch);
-    const authoringItem = headBranch ? own(items.find(buildsOnBranch)) : undefined;
+    const authoringItem = headBranch && fromThisProject ? own(items.find(buildsOnBranch)) : undefined;
     const actorTrusted = await this.#trusted(connectionIds, String(projectId), username);
     const eventUserId = number(object(parsed.payload.user)?.id) ?? number(parsed.payload.user_id);
     const resolveAuthor = async (
@@ -599,13 +602,9 @@ export class GitLabRules {
       !isTerminalWorkItem(this.#boards(card), card);
     let home: { card: Card; reason: FactoryPullRequestHome['reason'] } | undefined;
     if (event === 'mergeRequestOpened' && mergeRequestKey && !reviewItem && !attachedItem) {
-      // A branch name alone is not proof: a fork can reuse it. The Factory's own merge requests come
-      // from this project under a trusted account.
-      const sourceProjectId = number(mergeRequest?.source_project_id);
-      const fromThisProject = sourceProjectId === undefined || sourceProjectId === projectId;
+      // The Factory's own merge requests come under a trusted account.
       if (
         authoringItem &&
-        fromThisProject &&
         (actorTrusted || mergeRequestAuthorTrusted) &&
         eligibleHome(authoringItem) &&
         cardBoardFlow(this.#boards(authoringItem), authoringItem).pullRequestReview !== undefined

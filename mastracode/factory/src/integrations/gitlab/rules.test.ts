@@ -1939,6 +1939,35 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect((await h.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
     });
 
+    it("treats an outsider's fork merge request from a card's session branch as the outsider's, not Factory's", async () => {
+      const h = await harness(10);
+      const issue = await h.issueCard('intake');
+      const branch = 'factory/gitlab-issue-42';
+      await h.seeded.workItems.update({
+        orgId: 'org-1',
+        factoryProjectId: h.project.id,
+        userId: 'user-1',
+        id: issue.id,
+        patch: { sessions: { work: { sessionId: 'sess-work', threadId: 'thread-work', branch, startedBy: 'user-1' } } },
+      });
+      const delivery = mergeRequest(17, 'Closes #42', { author: 'external-author', sourceBranch: branch });
+
+      // A fork's branch can carry any name, including the one the card's session pushes.
+      await h.ingest({
+        ...delivery,
+        payload: { ...delivery.payload, object_attributes: { ...delivery.payload.object_attributes, source_project_id: 999 } },
+      } as never);
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(1);
+      expect(cards[0]).toMatchObject({ id: issue.id, stages: ['intake'] });
+      expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
+      expect(cards[0]!.metadata.untrustedPullRequests).toHaveLength(1);
+      expect(
+        (await h.decisions()).filter(entry => ['invokeSkill', 'sendMessage'].includes(entry.decision.type)),
+      ).toEqual([]);
+    });
+
     it("starts nothing on the issue's card when an outsider pushes to their linked merge request in PR review", async () => {
       const h = await harness(10);
       const issue = await h.issueCard('pr-review');
