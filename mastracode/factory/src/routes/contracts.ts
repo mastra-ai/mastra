@@ -333,6 +333,8 @@ const intakeDraftBoardSchema = z
                 phaseKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH).nullable().optional(),
                 /** On a card-move rule: the board the card moves to; unset keeps it on this board. */
                 moveToBoardKey: intakeRouteTargetSchema.shape.moveToBoardKey,
+                /** On a pull request rule: join the card of the issue it closes, as the saved rule does. */
+                joinClosedIssue: z.boolean().optional(),
               })
               .strict(),
             on: intakeRouteFields.on.optional(),

@@ -10780,6 +10780,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       "type": "null"
                     }
                   ]
+                },
+                "joinClosedIssue": {
+                  "type": "boolean"
                 }
               },
               "additionalProperties": false
@@ -11398,6 +11401,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       "type": "null"
                     }
                   ]
+                },
+                "joinClosedIssue": {
+                  "type": "boolean"
                 }
               },
               "additionalProperties": false

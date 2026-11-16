@@ -2155,6 +2155,7 @@ describe('the intake tester and dry run answer what filing and dispatch do', () 
     rules?: Record<string, Outcome>;
     failed?: Record<string, unknown[]>;
     maxReads?: number;
+    maxDispatchReads?: number;
   }[] = [
     {
       name: 'a label added moves the card to the board its rule names, beating a later match',
@@ -2207,6 +2208,8 @@ describe('the intake tester and dry run answer what filing and dispatch do', () 
       pending: Array.from({ length: 30 }, (_, n) => update([`label-${n}`])),
       outcome: 'stays',
       maxReads: 30,
+      // Dispatch, too: the 29 older updates give way to the newest without reading anything.
+      maxDispatchReads: 30,
     },
     {
       name: 'a burst that ends where it started moves nothing',
@@ -2287,7 +2290,19 @@ describe('the intake tester and dry run answer what filing and dispatch do', () 
       expect(replay!.rules.find(rule => rule.name === name)).toMatchObject({ failed });
     }
 
+    const dispatchReads = vi.spyOn(seeded.workItems, 'getTransitionResultByIngress');
     await seeded.retry();
+    // Dispatch claims a few decisions per run: run until the burst is drained.
+    for (let run = 0; row.maxDispatchReads && run < 20; run++) {
+      const queued = await seeded.workItems.listDeferredDecisions('org-1', seeded.scope.factoryProjectId, {
+        workItemId: delivered.id,
+        statuses: ['pending', 'retry'],
+      });
+      if (queued.length === 0) break;
+      await seeded.retry();
+    }
+    if (row.maxDispatchReads) expect(dispatchReads.mock.calls.length).toBeLessThanOrEqual(row.maxDispatchReads);
+    dispatchReads.mockRestore();
     const after = (await seeded.workItems.get({ orgId: 'org-1', id: delivered.id }))!;
     const landed =
       replay!.outcome === 'moves'

@@ -2739,20 +2739,28 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   async listDeferredDecisions(
     orgId: string,
     factoryProjectId: string,
-    filter: { statuses?: readonly string[]; workItemId?: string } = {},
+    /** `newest`: only that many of the most recent, still oldest first. */
+    filter: { statuses?: readonly string[]; workItemId?: string; newest?: number } = {},
   ): Promise<FactoryDeferredDecisionRecord[]> {
-    return (
-      await this.#db.findMany<GovernanceDbRow>(
-        'factory_deferred_decisions',
-        {
-          org_id: orgId,
-          factory_project_id: factoryProjectId,
-          ...(filter.statuses ? { status: { in: [...filter.statuses] } } : {}),
-          ...(filter.workItemId ? { work_item_id: filter.workItemId } : {}),
-        },
-        { orderBy: [['created_at', 'asc']] },
-      )
-    ).map(toDeferredDecision);
+    const rows = await this.#db.findMany<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      {
+        org_id: orgId,
+        factory_project_id: factoryProjectId,
+        ...(filter.statuses ? { status: { in: [...filter.statuses] } } : {}),
+        ...(filter.workItemId ? { work_item_id: filter.workItemId } : {}),
+      },
+      filter.newest === undefined
+        ? { orderBy: [['created_at', 'asc']] }
+        : {
+            orderBy: [
+              ['created_at', 'desc'],
+              ['id', 'desc'],
+            ],
+            limit: filter.newest,
+          },
+    );
+    return (filter.newest === undefined ? rows : rows.toReversed()).map(toDeferredDecision);
   }
 
   async listDecisionsForEvaluations(

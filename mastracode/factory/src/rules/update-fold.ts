@@ -36,7 +36,7 @@ export function updateSuperseded(group: readonly Pick<UpdateRecord, 'id' | 'stat
 
 /**
  * How the dispatcher folds update `id` of its group: `superseded` when a newer update not given up
- * on carries this one's change (it folded it, or will); `since` the earlier updates after the last
+ * on carries this one's change (it folded it, or will), and then nothing else is read; `since` the earlier updates after the last
  * one that moved the card; `event` the net change of the foldable ones and this one, undefined when
  * it nets out to nothing. The group last moved the card at the newest update that succeeded, or
  * whose move committed (`moveCommitted`) even though its decision never finished: its change is
@@ -50,7 +50,8 @@ export async function foldUpdate<T extends UpdateRecord>(
   const index = group.findIndex(other => other.id === id);
   const own = group[index];
   if (!own) throw new Error(`Update ${id} is not in its group.`);
-  const superseded = updateSuperseded(group, id);
+  // A newer update carries this one's change, so nothing here acts: skip the reads below.
+  if (updateSuperseded(group, id)) return { superseded: true, since: [], event: undefined };
   const earlier = group.slice(0, index);
   let last = earlier.findLastIndex(other => other.status === 'succeeded');
   for (let at = earlier.length - 1; at > last; at--) {
@@ -66,5 +67,5 @@ export async function foldUpdate<T extends UpdateRecord>(
       .map(other => (other.decision as unknown as UpdateDecision).event),
     (own.decision as unknown as UpdateDecision).event,
   ]);
-  return { superseded, since, event };
+  return { superseded: false, since, event };
 }

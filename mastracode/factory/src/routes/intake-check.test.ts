@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
 import { Hono } from 'hono';
-import { describe, expect, it, onTestFinished } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type { IntakeItemLookup } from '../boards/intake-lookup.js';
 import { ProjectBoardCache } from '../boards/project-boards.js';
@@ -13,6 +13,7 @@ import { AuditDomain } from '../storage/domains/audit/domain.js';
 import { StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { CARD_HISTORY } from './intake-check.js';
 import { IntakeRouteRoutes } from './intake-routes.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
@@ -240,6 +241,29 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake dry run 
     expect(await snapshot()).toEqual(before);
   });
 
+  it("previews a board's saved rules sent back unchanged as no change, a rule joining closed issues included", async () => {
+    const { send, domains, scope, workAll } = await setup();
+    const joining = await domains.boards.createIntakeRoute(
+      scope,
+      {
+        name: 'Closes an issue',
+        on: ['pull_request.opened'],
+        when: null,
+        target: { boardKey: 'work', joinClosedIssue: true },
+      },
+      ADMIN,
+    );
+    const asDraft = (route: typeof joining) => ({
+      id: route.id,
+      name: route.name,
+      when: route.when,
+      on: route.on,
+      target: { phaseKey: route.target.phaseKey, joinClosedIssue: route.target.joinClosedIssue },
+    });
+    const draft = { boards: [{ boardKey: 'work', routes: [asDraft(joining), asDraft(workAll)] }] };
+    expect(await send('/intake/dry-run', draft)).toMatchObject({ status: 200, body: { changed: 0 } });
+  });
+
   it('says which evaluator files the project, so a route-list project knows these answers are intake order', async () => {
     const { send, docsCard } = await setup({ evaluator: 'route-list' });
     expect((await send('/intake/dry-run', {}, MEMBER)).body.evaluator).toBe('route-list');
@@ -302,9 +326,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake dry run 
       metadata: { githubPullRequestNumber: 8, state: 'open' },
     });
     const event = { type: 'work_item.updated', labels: { added: ['docs'], removed: [] } };
-    expect(await send('/intake/test', { url: 'https://github.com/acme/app/pull/8', event })).toMatchObject({
-      body: { item: { kind: 'card', id: docsCard.id }, current: { boardKey: 'work' }, moves: [{ decisionId: null }] },
-    });
+    // Any URL naming the same item finds its card: a tab of the pull request, a query, other case.
+    for (const url of ['https://github.com/acme/app/pull/8', 'https://www.GitHub.com/Acme/App/pull/8/files?w=1#top']) {
+      expect(await send('/intake/test', { url, event })).toMatchObject({
+        body: { item: { kind: 'card', id: docsCard.id }, current: { boardKey: 'work' }, moves: [{ decisionId: null }] },
+      });
+    }
     expect(lookups).toEqual([]);
 
     // A Not routed item may have been labelled or reopened since: its URL reads the provider again.
@@ -320,5 +347,36 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake dry run 
       /joins? .*card/,
     );
     expect(lookups).toHaveLength(3);
+  });
+
+  it("reads only a card's newest decisions, however long its history, to replay its recent events", async () => {
+    const { send, docsCard, domains, scope } = await setup();
+    for (let n = 0; n < CARD_HISTORY + 5; n++) {
+      const { revision } = (await domains.workItems.get({ orgId: scope.orgId, id: docsCard.id }))!;
+      await domains.workItems.commitRuleEvaluation({
+        ...scope,
+        workItemId: docsCard.id,
+        ingress: { identity: `history-${n}` },
+        configVersion: 'test',
+        expectedRevision: revision,
+        actor: { type: 'system', id: 'rules' },
+        outcome: { status: 'accepted' },
+        decisions: [
+          {
+            type: 'routeEvent',
+            idempotencyKey: `history-${n}`,
+            event: { type: n % 2 ? 'work_item.closed' : 'work_item.reopened' },
+          },
+        ],
+        causalChain: [],
+        now: new Date(Date.UTC(2030, 0, 1, 0, 0, 0, n)),
+      });
+    }
+    const listed = vi.spyOn(domains.workItems, 'listDeferredDecisions');
+    const { body } = await send('/intake/test', { itemId: docsCard.id }, MEMBER);
+    expect(body.moves).toHaveLength(10);
+    expect(body.moves[0].at).toBe(new Date(Date.UTC(2030, 0, 1, 0, 0, 0, CARD_HISTORY + 4)).toISOString());
+    const rows = await Promise.all(listed.mock.results.map(result => result.value));
+    expect(rows.map(read => read.length)).toEqual([CARD_HISTORY]);
   });
 });

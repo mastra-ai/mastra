@@ -50,6 +50,8 @@ type LinkedDecision = Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkIt
 
 /** How many of a card's newest status events the tester replays. */
 export const RECENT_CARD_EVENTS = 10;
+/** How many of a card's newest decisions the tester reads to find and fold its recent events. */
+export const CARD_HISTORY = 200;
 
 /** How far back the live counts read the decision log. */
 export const INTAKE_FILED_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
@@ -107,7 +109,7 @@ export class IntakeCheck {
         target: {
           boardKey: board.boardKey,
           phaseKey: route.target.phaseKey ?? null,
-          joinClosedIssue: false,
+          joinClosedIssue: route.target.joinClosedIssue ?? false,
           moveToBoardKey: route.target.moveToBoardKey ?? null,
         },
         on: route.on ?? [...DEFAULT_ROUTE_EVENTS],
@@ -216,7 +218,9 @@ export class IntakeCheck {
     card: Card,
     tried: BoardEventFacts | undefined,
   ) {
+    // Bounded: an update burst longer than this folds from the part read, where dispatch folds all of it.
     const records = await this.deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, {
+      newest: CARD_HISTORY,
       workItemId: card.id,
     });
     const moveCommitted = async (other: (typeof records)[number]) =>
@@ -227,10 +231,18 @@ export class IntakeCheck {
           eventRouteIngress(other.idempotencyKey),
         ),
       );
+    // Each update's fold group, built once rather than per record.
+    const groups = new Map<string, typeof records>();
+    const groupOf = (decision: Extract<FactoryCommitDecision, { type: 'routeEvent' }>) => {
+      const key = `${decision.event.type}:${decision.fromCardSession === true}`;
+      let group = groups.get(key);
+      if (!group) groups.set(key, (group = updateGroup(records, decision)));
+      return group;
+    };
     // Which events to show is decided from the records alone, so only those shown are folded:
     // folding reads storage for each earlier update of a burst.
     const shown = records
-      .flatMap(record => {
+      .flatMap((record): { record: typeof record; decision: FactoryCommitDecision }[] => {
         // Stored decisions are JSON; these two kinds are the ones that carry a status event.
         const decision = record.decision as unknown as FactoryCommitDecision;
         if (decision.type === 'transition' && decision.event) return [{ record, decision }];
@@ -238,10 +250,7 @@ export class IntakeCheck {
         if (!isUpdateEvent(decision.event.type)) return [{ record, decision }];
         // Updates replay as the dispatcher acts on them: folded into the newest of a burst.
         if (record.status === 'superseded') return [];
-        if (
-          FOLDABLE_UPDATE_STATUSES.has(record.status) &&
-          updateSuperseded(updateGroup(records, decision), record.id)
-        ) {
+        if (FOLDABLE_UPDATE_STATUSES.has(record.status) && updateSuperseded(groupOf(decision), record.id)) {
           return [];
         }
         return [{ record, decision }];
@@ -254,7 +263,7 @@ export class IntakeCheck {
           decision,
         }): Promise<{ record: typeof record; event: BoardEventFacts | undefined; fallback?: { stage: string } }> => {
           if (decision.type === 'routeEvent' && isUpdateEvent(decision.event.type)) {
-            const fold = await foldUpdate(updateGroup(records, decision), record.id, moveCommitted);
+            const fold = await foldUpdate(groupOf(decision), record.id, moveCommitted);
             return { record, event: fold.event };
           }
           if (decision.type === 'routeEvent') return { record, event: decision.event };
@@ -407,7 +416,18 @@ function fromCard(card: Card) {
   };
 }
 
+// An issue, pull request or merge request URL: host, repository path, kind and number; a tab after it is ignored.
+const ITEM_URL =
+  /^https?:\/\/(?:www\.)?([^/]+)\/(.+?)\/(-\/)?(issues|pull|pulls|merge_requests|work_items)\/(\d+)(?:[/?#]|$)/i;
+
+/** Whether two URLs name the same item. GitHub numbers issues and pull requests together; GitLab doesn't. */
 function sameUrl(left: string, right: string): boolean {
-  const normalize = (url: string) => url.trim().replace(/\/+$/, '').toLowerCase();
-  return normalize(left) === normalize(right);
+  const identity = (url: string) => {
+    const match = ITEM_URL.exec(url.trim());
+    if (!match) return url.trim().replace(/\/+$/, '').toLowerCase();
+    const [, host, path, gitlab, kind, number] = match;
+    const family = !gitlab ? 'item' : kind!.toLowerCase() === 'merge_requests' ? 'merge_request' : 'issue';
+    return `${host!.toLowerCase()}/${path!.toLowerCase()}/${family}/${number}`;
+  };
+  return identity(left) === identity(right);
 }
