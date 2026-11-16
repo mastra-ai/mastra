@@ -1,4 +1,5 @@
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { toStandardSchema } from '@mastra/core/schema';
 import { configuredOrganizations } from '../../src/billing/configuration/environment.js';
 import { studioComposition } from '../support/studio-composition.js';
 import { createStudioBillingWrapper } from '../../src/studio-billing/index.js';
@@ -1551,6 +1552,41 @@ it('Studio replay reconnect Stop and restart preserve one business operation wit
     ]),
   ).toMatchObject([{ count: 1 }]);
 }, 240000);
+
+it('Studio operation schemas reject oversized durable JSON before executing tools and preserve original transform inputs', async () => {
+  const f = await fixture();
+  const application = await studioComposition(f.root, f.boundary.url);
+  cleanups.push(application.close);
+  const workflows = application.wrapper.workflowTools('report', { approvalSteps: ['review'] });
+  const long = '界'.repeat(6000);
+  const cases = [
+    [
+      application.wrapper.agentTool('analysis'),
+      { action: 'execute', prompt: long, operationId: null },
+      { action: 'execute', prompt: 'hello', operationId: null },
+    ],
+    [workflows['report-start'], { value: long }, { value: 'hello' }],
+    [
+      workflows['report-resume'],
+      { operationId: 'saved', step: 'review', approvalData: { suffix: long } },
+      { operationId: 'saved', step: 'review', approvalData: { suffix: 'hello' } },
+    ],
+  ] as const;
+  for (const [tool, oversized, original] of cases) {
+    const schema = toStandardSchema(tool.inputSchema!);
+    expect(await schema['~standard'].validate(oversized)).toHaveProperty('issues');
+    expect(await schema['~standard'].validate(original)).toEqual({ value: original });
+  }
+  const agentSchema = toStandardSchema(application.wrapper.agentTool('analysis').inputSchema!);
+  const sdkInput = { action: 'execute', prompt: 'hello', operationId: undefined };
+  expect(await agentSchema['~standard'].validate(sdkInput)).toEqual({ value: sdkInput });
+  const invalidPrompt = await agentSchema['~standard'].validate({ ...sdkInput, prompt: null });
+  expect(invalidPrompt).toHaveProperty('issues');
+  if ('issues' in invalidPrompt)
+    expect(invalidPrompt.issues?.map(issue => issue.message)).toContain('Execution requires a prompt.');
+  expect(await query(f.root, 'SELECT id FROM billing_studio_operations')).toEqual([]);
+  expect(f.boundary.models).toHaveLength(0);
+});
 
 it('Studio wrapper composition preserves public SDK results middleware and existing application surfaces', async () => {
   const f = await fixture();

@@ -4,7 +4,7 @@ import { createTool } from '@mastra/core/tools';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { z } from 'zod';
 import { BillingError, identifierSchema } from '../billing/contracts/core.js';
-import { boundedJson, fingerprint } from '../billing/runtime/accounting.js';
+import { boundedJson, boundedJsonSchema, fingerprint } from '../billing/runtime/accounting.js';
 import type { Json } from '../billing/runtime/accounting.js';
 import type { ConversationOperation } from '../billing/storage/conversations.js';
 import { outsideParentExecution } from '../billing/runtime/invocation-context.js';
@@ -12,14 +12,29 @@ import { outsideExecution } from '../billing/runtime/execution-scope.js';
 import type { StudioAgentRuntime } from './studio-agent-decorator.js';
 import type { StudioConversation } from './studio-wrapper-contracts.js';
 
+const durableJson = z.unknown().refine(value => boundedJsonSchema.safeParse(value).success, {
+  message: 'A bounded JSON projection is required.',
+});
+
 // The billing/native adapter owns application transformations. Validate the registered
 // schema at the tool boundary while forwarding original JSON, as the workflow facade does.
-const originalInput = <T>(schema: PublicSchema<T>) => {
+const originalInput = <T>(schema: PublicSchema<T>, optionalFields: readonly string[] = []) => {
   const standard = toStandardSchema(schema);
   return {
     '~standard': {
       ...standard['~standard'],
       validate: (value: unknown) => {
+        let projection = value;
+        if (optionalFields.length && value !== null && typeof value === 'object' && !Array.isArray(value)) {
+          const fields = Object.getOwnPropertyDescriptors(value);
+          for (const key of optionalFields) {
+            const field = fields[key];
+            if (field && 'value' in field && field.value === undefined) delete fields[key];
+          }
+          projection = Object.create(Object.getPrototypeOf(value), fields);
+        }
+        const bounded = durableJson.safeParse(projection);
+        if (!bounded.success) return { issues: bounded.error.issues };
         const result = standard['~standard'].validate(value);
         const original = (checked: Awaited<typeof result>) => (checked.issues ? checked : { value: value as T });
         return result instanceof Promise ? result.then(original) : original(result);
@@ -234,6 +249,7 @@ export function createStudioOperationTools(runtime: StudioAgentRuntime) {
               } else if (input.prompt != null)
                 context.addIssue({ code: 'custom', path: ['prompt'], message: 'Queries cannot include a prompt.' });
             }),
+          ['prompt', 'operationId'],
         ),
         execute: (input, context) =>
           safe(async () => {
@@ -328,7 +344,7 @@ export function createStudioOperationTools(runtime: StudioAgentRuntime) {
           }),
       });
       const envelope = toStandardSchema(
-        reference.extend({ step: z.enum(settings.approvalSteps as [string, ...string[]]), approvalData: z.unknown() }),
+        reference.extend({ step: z.enum(settings.approvalSteps as [string, ...string[]]), approvalData: durableJson }),
       );
       const resumeSchema = {
         '~standard': {
