@@ -8,9 +8,10 @@ services:
     ports:
       - '27017:27017'
     volumes:
-      # v7 suffix: mongod 7.x cannot open a data dir created by 8.x, so reusing
-      # the old `mongodbdata` volume would fail on machines that ran 8.3.4.
-      - mongodbdata-v7:/data/db
+      # mongod 7.x cannot open a data dir created by a newer major ("Wrong mongod
+      # version"). `mongodbdata` held 8.3.4 data and `mongodbdata-v7` may hold
+      # 9.0.8 data from when this image was briefly bumped, so use a fresh name.
+      - mongodbdata-mongo7:/data/db
     healthcheck:
       test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
       interval: 2s
@@ -62,4 +63,4 @@ services:
       retries: 15
       start_period: 3s
 volumes:
-  mongodbdata-v7:
+  mongodbdata-mongo7:
