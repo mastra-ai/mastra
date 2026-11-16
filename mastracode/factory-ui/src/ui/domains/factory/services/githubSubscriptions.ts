@@ -8,7 +8,8 @@ export interface PullRequestSubscription {
   repoFullName: string;
   pullRequestNumber: number;
   status: 'open' | 'closed' | 'merged';
-  updatedAt: string;
+  /** Absent on older servers. */
+  updatedAt?: string;
   url: string;
 }
 
@@ -51,7 +52,7 @@ function isPullRequestSubscription(value: unknown): value is PullRequestSubscrip
     Number.isInteger(value.pullRequestNumber) &&
     value.pullRequestNumber > 0 &&
     isPullRequestStatus(value.status) &&
-    typeof value.updatedAt === 'string' &&
+    (value.updatedAt === undefined || typeof value.updatedAt === 'string') &&
     typeof value.url === 'string'
   );
 }

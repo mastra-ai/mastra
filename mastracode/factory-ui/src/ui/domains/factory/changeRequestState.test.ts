@@ -18,7 +18,7 @@ function request(overrides: Partial<CardChangeRequest> = {}): CardChangeRequest 
   };
 }
 
-function subscription(status: PullRequestSubscription['status'], updatedAt: string): PullRequestSubscription {
+function subscription(status: PullRequestSubscription['status'], updatedAt?: string): PullRequestSubscription {
   return { id: 'subscription-42', repoFullName: 'Acme/App', pullRequestNumber: 42, status, url: URL_42, updatedAt };
 }
 
@@ -48,6 +48,10 @@ describe('changeRequestStatus', () => {
 
   it('keeps the source when it synced after the subscription', () => {
     expect(changeRequestStatus(request(), [subscription('closed', '2026-07-19T10:00:00.000Z')])).toBe('open');
+  });
+
+  it('takes the subscription of an older server, which sends no update time', () => {
+    expect(changeRequestStatus(request(), [subscription('closed')])).toBe('closed');
   });
 
   it('treats a merge as final, whichever side heard of it', () => {
