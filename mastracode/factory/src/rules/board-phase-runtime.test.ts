@@ -381,9 +381,16 @@ describe('board phase fields at runtime', () => {
           );
           expect(approved.status, await approved.clone().text()).toBe(200);
         }
-        await vi.waitFor(async () => expect(requests.some(text => text.includes('factory-review'))).toBe(true), {
-          timeout: 15_000,
-        });
+        await vi.waitFor(
+          async () =>
+            expect(
+              catalogs.some(
+                (tools, index) =>
+                  requests[index]?.includes('factory-review') && tools.includes('factory_record_review_verdict'),
+              ),
+            ).toBe(true),
+          { timeout: 15_000 },
+        );
         expect(catalogs.some(tools => tools.includes('factory_record_review_verdict'))).toBe(true);
         expect(
           catalogs.some(

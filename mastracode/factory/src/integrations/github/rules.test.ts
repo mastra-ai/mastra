@@ -3353,6 +3353,7 @@ describe('GithubRules', () => {
       },
     } as const;
     await githubRules.ingest(approvalEvent);
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:06Z'));
     expect((await current())?.stages).toEqual(['pr-review']);
     const mergedEvent = pullRequest('closed', 'lifecycle-pr-merged', true);
     await githubRules.ingest(mergedEvent);
