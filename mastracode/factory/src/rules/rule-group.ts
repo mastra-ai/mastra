@@ -34,7 +34,8 @@ export const CARD_RULE_FIELDS = [
   'item.key',
   'item.state',
   'item.assignees',
-  'author.trusted',
+  'item.trusted',
+  'pullRequest.trusted',
   'source.kind',
   'source.integration',
   'source.provider',
@@ -43,6 +44,25 @@ export const CARD_RULE_FIELDS = [
   'item.hasPullRequest',
   'item.hasIssue',
 ] as const;
+
+/**
+ * Fields renamed since conditions were first saved, by their old name. A stored condition naming
+ * one reads, and is tested, as the new field: `author.trusted` became `item.trusted`.
+ */
+const RENAMED_FIELDS: Readonly<Record<string, string>> = { 'author.trusted': 'item.trusted' };
+
+const currentField = (field: string) => RENAMED_FIELDS[field] ?? field;
+
+/** A stored group as it reads today: conditions saved under a renamed field name the new one. */
+export function currentRuleGroup<T extends RuleGroup | null | undefined>(group: T): T {
+  if (!group) return group;
+  return {
+    ...group,
+    conditions: group.conditions.map(member =>
+      'conditions' in member ? currentRuleGroup(member) : { ...member, field: currentField(member.field) },
+    ),
+  } as T;
+}
 
 export type RuleValue = string | number | boolean | Array<string | number | boolean>;
 
@@ -73,7 +93,11 @@ const ORDERED: ReadonlySet<RuleOperator> = new Set([
 
 function conditionSchema(fields: readonly [string, ...string[]]) {
   return z
-    .object({ field: z.enum(fields), operator: z.enum(RULE_OPERATORS), value: valueSchema.optional() })
+    .object({
+      field: z.preprocess(field => (typeof field === 'string' ? currentField(field) : field), z.enum(fields)),
+      operator: z.enum(RULE_OPERATORS),
+      value: valueSchema.optional(),
+    })
     .strict()
     .superRefine((condition, ctx) => {
       if (VALUELESS.has(condition.operator)) {
@@ -150,7 +174,7 @@ const matches = (actual: unknown, expected: unknown) =>
  * `not_contains` and `not_in`.
  */
 function evaluateCondition(condition: RuleCondition, facts: RuleFacts): boolean {
-  const actual = facts[condition.field];
+  const actual = facts[currentField(condition.field)];
   const present = actual !== undefined && actual !== null && !(Array.isArray(actual) && actual.length === 0);
   const expected = condition.value;
   switch (condition.operator) {

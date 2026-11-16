@@ -746,6 +746,17 @@ export function registerApiCommand(program: CommanderCommand): void {
       },
     ],
   });
+  addAction(factoryWorkItem, 'working-pull-request', FACTORY_API_ROUTE_CATALOG.workItemWorkingPullRequest, {
+    description: "Make one of a card's linked pull requests the one its sessions work on",
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Work on pull request 42',
+        command: `mastra api factory work-item working-pull-request <project-id> <work-item-id> '{"pullRequest":42,"expectedRevision":3}'`,
+      },
+    ],
+  });
   addAction(factoryWorkItem, 'start', FACTORY_API_ROUTE_CATALOG.workItemStart, {
     description: 'Explicitly start a Factory work-item run',
     input: 'required',

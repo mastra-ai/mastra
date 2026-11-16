@@ -466,12 +466,14 @@ export class Cards {
    * as `attached`, so it sorts after the card's origin source and never becomes the
    * card's primary source, whatever its timestamp. Only
    * the source's provider facts are stored; Factory-owned keys in `metadata`
-   * (trust stamps, process state) belong to the card and are ignored here.
+   * (trust stamps, process state) belong to the card and are ignored here; `cardMetadata`
+   * rewrites the card's own metadata in the same write, for what the card records about the source.
    */
   async attachSource(
     where: { org_id: string; id: string },
     source: { external_source: ExternalWorkItemSource; metadata: Record<string, unknown> | null; now: Date },
     expectedRevision?: number,
+    cardMetadata?: (metadata: Record<string, unknown>) => Record<string, unknown>,
   ): Promise<{ row: WorkItemDbRow; attached: boolean; ownerWorkItemId?: string; revisionConflict?: true } | null> {
     if (this.legacyMode) throw new Error('[cards] attaching a source needs the split work item tables.');
     const board = await this.ops.findOne<BoardItemDbRecord>(BOARD_ITEMS, where);
@@ -506,6 +508,7 @@ export class Cards {
         revision: row.revision + 1,
         updated_at: source.now,
         changed_at: nextChangedAt(row),
+        ...(cardMetadata ? { metadata: cardMetadata(row.metadata ?? {}) } : {}),
         ...(isLegacyReviewPlacement(row.board, joined.work_item_sources?.[0]?.source_type) &&
         joined.board !== LEGACY_REVIEW_BOARD
           ? normalizeLegacyReviewColumns(row, {})

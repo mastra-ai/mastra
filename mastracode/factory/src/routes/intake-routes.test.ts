@@ -17,8 +17,8 @@ import { AuditStorage } from '../storage/domains/audit/base.js';
 import { AuditDomain } from '../storage/domains/audit/domain.js';
 import {
   CATCH_ALL_INTAKE_ROUTE,
-  CLOSES_ISSUE_INTAKE_ROUTE,
   DEFAULT_INTAKE_ROUTE,
+  LINKED_PULL_REQUEST_ROUTE,
   OUTSIDE_PULL_REQUEST_INTAKE_ROUTE,
   PULL_REQUEST_INTAKE_ROUTE,
   StoredBoardsStorage,
@@ -36,7 +36,7 @@ const ADMIN = 'admin-user';
 const MEMBER = 'member-user';
 const SIGNED_OUT = 'signed-out';
 
-const TRUSTED = { operator: 'AND', conditions: [{ field: 'author.trusted', operator: 'equals', value: true }] };
+const TRUSTED = { operator: 'AND', conditions: [{ field: 'item.trusted', operator: 'equals', value: true }] };
 const DOCS = { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'docs' }] };
 const WORK = { boardKey: 'work' };
 const TRIAGE = { boardKey: 'work', phaseKey: 'triage' };
@@ -177,8 +177,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
 
   it('lists the default routes a new project starts with, and lets an admin edit them like any other', async () => {
     const { base, replicaA } = await setup({ seeded: true });
-    const [closesIssue, route, outsidePullRequests, pullRequests, ...rest] = await list(replicaA.send, base, MEMBER);
-    const events = rest.slice(0, -1);
+    const [route, outsidePullRequests, pullRequests, ...rest] = await list(replicaA.send, base, MEMBER);
+    const events = rest.slice(0, -2);
+    const linkedPullRequests = rest.at(-2);
     // Whatever no other route takes lands on Work's first phase, as it did before routes existed.
     expect(rest.at(-1)).toMatchObject({
       name: CATCH_ALL_INTAKE_ROUTE.name,
@@ -212,19 +213,20 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       { on: ['pull_request.review_requested'], target: { phaseKey: 'pr-review' }, problems: [] },
     ]);
     expect(events).toHaveLength(8);
-    expect(closesIssue).toMatchObject({
-      name: CLOSES_ISSUE_INTAKE_ROUTE.name,
-      position: 0,
+    // A pull request linked to the card of the issue it closes moves that card by a card-move rule.
+    expect(linkedPullRequests).toMatchObject({
+      name: LINKED_PULL_REQUEST_ROUTE.name,
+      position: 11,
       on: ['pull_request.opened'],
-      when: CLOSES_ISSUE_INTAKE_ROUTE.when,
-      target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: true },
+      when: LINKED_PULL_REQUEST_ROUTE.when,
+      target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false },
       createdBy: 'factory',
       problems: [],
     });
     // Pull requests with no card arrive on `pull_request.opened`: outside authors' wait in Intake.
     expect(outsidePullRequests).toMatchObject({
       name: OUTSIDE_PULL_REQUEST_INTAKE_ROUTE.name,
-      position: 2,
+      position: 1,
       on: ['pull_request.opened'],
       when: OUTSIDE_PULL_REQUEST_INTAKE_ROUTE.when,
       target: { boardKey: 'work', phaseKey: 'intake' },
@@ -233,9 +235,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     });
     expect(pullRequests).toMatchObject({
       name: PULL_REQUEST_INTAKE_ROUTE.name,
-      position: 3,
+      position: 2,
       on: ['pull_request.opened'],
-      when: null,
+      when: PULL_REQUEST_INTAKE_ROUTE.when,
       target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false },
       createdBy: 'factory',
       problems: [],
@@ -243,7 +245,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(route).toMatchObject({
       name: DEFAULT_INTAKE_ROUTE.name,
       enabled: true,
-      position: 1,
+      position: 0,
       on: ['work_item.opened'],
       when: DEFAULT_INTAKE_ROUTE.when,
       target: { boardKey: 'work', phaseKey: 'intake' },
@@ -367,9 +369,32 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       [{ boardKey: 'work', phaseKey: 'nope' }, 'unknown_phase'],
       [{ boardKey: 'work', phaseKey: 'done' }, 'terminal_phase'],
       [{ boardKey: 'stepwise', phaseKey: 'fixing' }, 'unreachable_phase'],
-      [{ boardKey: 'work', phaseKey: 'done', joinClosedIssue: true }, 'terminal_phase'],
-      [{ boardKey: 'work', phaseKey: 'nope', joinClosedIssue: true }, 'unknown_phase'],
+      // Only a route moving existing cards sends them to another board.
+      [{ boardKey: 'work', moveToBoardKey: 'stepwise', phaseKey: 'reported' }, 'move_on_arrival'],
     ] as const;
+    const moves = [
+      [{ boardKey: 'work', moveToBoardKey: 'nope' }, 'unknown_board'],
+      [{ boardKey: 'work', moveToBoardKey: 'stepwise', phaseKey: 'nope' }, 'unknown_phase'],
+    ] as const;
+    for (const [target, error] of moves) {
+      expect(
+        await replicaA.send('POST', base, { name: 'Bad', on: ['pull_request.synchronized'], target }),
+      ).toMatchObject({
+        status: 422,
+        body: { error },
+      });
+    }
+    // A card-move route may send a card into any phase of another board, working ones included.
+    expect(
+      await replicaA.send('POST', base, {
+        name: 'Ship',
+        on: ['pull_request.synchronized'],
+        target: { boardKey: 'work', moveToBoardKey: 'stepwise', phaseKey: 'fixing' },
+      }),
+    ).toMatchObject({
+      status: 201,
+      body: { intakeRoute: { target: { boardKey: 'work', moveToBoardKey: 'stepwise', phaseKey: 'fixing' } } },
+    });
     for (const [target, error] of cases) {
       expect(await replicaA.send('POST', base, { name: 'Bad', target })).toMatchObject({
         status: 422,
@@ -378,26 +403,15 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     }
     const route = (await replicaA.send('POST', base, { name: 'Ok', when: DOCS, target: { boardKey: 'work' } })).body
       .intakeRoute as Route;
-    expect(route.target).toEqual({ boardKey: 'work', phaseKey: null, joinClosedIssue: false });
-    // A card a pull request joins moves to any phase its board allows from where it is, so a
-    // joining route may name a phase new cards can't land in.
-    const joining = await replicaA.send('POST', base, {
-      name: 'Join',
-      target: { boardKey: 'stepwise', phaseKey: 'fixing', joinClosedIssue: true },
-      when: { operator: 'AND', conditions: [{ field: 'closedIssue.phase', operator: 'equals', value: 'intake' }] },
-    });
-    expect(joining).toMatchObject({
-      status: 201,
-      body: { intakeRoute: { target: { boardKey: 'stepwise', phaseKey: 'fixing', joinClosedIssue: true } } },
-    });
+    expect(route.target).toEqual({ boardKey: 'work', phaseKey: null, joinClosedIssue: false, moveToBoardKey: null });
     const patch = await replicaA.send('PATCH', `${base}/${route.id}`, {
       target: { boardKey: 'work', phaseKey: 'canceled' },
       expectedRevision: 1,
     });
     expect(patch).toMatchObject({ status: 422, body: { error: 'terminal_phase' } });
     expect(await list(replicaA.send, base)).toEqual([
+      expect.objectContaining({ name: 'Ship', revision: 1 }),
       expect.objectContaining({ name: 'Ok', revision: 1 }),
-      expect.objectContaining({ name: 'Join', revision: 1 }),
     ]);
   });
 
@@ -570,36 +584,27 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(undone).toMatchObject({ status: 200, body: { intakeRoute: moveOnly } });
   });
 
-  it('refuses a route that joins pull requests to their issue on any event but an arrival', async () => {
-    const { base, replicaA } = await setup();
+  it('refuses a new route that joins pull requests to their issue, but lets an admin switch off a stored one', async () => {
+    const { a, scope, base, replicaA } = await setup();
     const joins = { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: true };
-    const refused = { status: 422, body: { error: 'join_on_event' } };
+    const refused = { status: 422, body: { error: 'join_retired' } };
 
+    expect(await replicaA.send('POST', base, { name: 'Joins', target: joins })).toMatchObject(refused);
+    const plain = (await replicaA.send('POST', base, { name: 'Plain', target: { boardKey: 'work' } })).body
+      .intakeRoute as Route;
     expect(
-      await replicaA.send('POST', base, { name: 'On close', on: ['work_item.closed'], target: joins }),
+      await replicaA.send('PATCH', `${base}/${plain.id}`, { target: joins, expectedRevision: plain.revision }),
     ).toMatchObject(refused);
+
+    // One stored before pull requests linked on their own stays editable as it is.
+    const stored = await a.boards.createIntakeRoute(scope, { name: 'Old join', when: null, target: joins }, 'admin');
     expect(
-      await replicaA.send('POST', base, {
-        name: 'On both',
-        on: ['work_item.opened', 'work_item.reopened'],
+      await replicaA.send('PATCH', `${base}/${stored.id}`, {
+        enabled: false,
         target: joins,
+        expectedRevision: stored.revision,
       }),
-    ).toMatchObject(refused);
-    const created = await replicaA.send('POST', base, { name: 'Joins', target: joins });
-    expect(created).toMatchObject({ status: 201, body: { intakeRoute: { on: ['work_item.created'], problems: [] } } });
-    expect(
-      await replicaA.send('POST', base, { name: 'Issues join', on: ['work_item.opened'], target: joins }),
-    ).toMatchObject(refused);
-    expect(
-      await replicaA.send('POST', base, { name: 'Pull requests join', on: ['pull_request.opened'], target: joins }),
-    ).toMatchObject({ status: 201 });
-    const route = created.body.intakeRoute as Route;
-    expect(
-      await replicaA.send('PATCH', `${base}/${route.id}`, {
-        on: ['work_item.closed'],
-        expectedRevision: route.revision,
-      }),
-    ).toMatchObject(refused);
+    ).toMatchObject({ status: 200, body: { intakeRoute: { enabled: false, target: joins } } });
   });
 
   it('refuses a route that names no event, an unknown or repeated one, activity, or event conditions it cannot test', async () => {

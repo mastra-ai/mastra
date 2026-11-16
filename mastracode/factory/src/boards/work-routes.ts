@@ -15,7 +15,7 @@ export const DEFAULT_INTAKE_ROUTE: StoredIntakeRouteInput = {
     operator: 'AND',
     conditions: [
       { field: 'source.integration', operator: 'in', value: ['github', 'gitlab'] },
-      { field: 'author.trusted', operator: 'equals', value: false },
+      { field: 'item.trusted', operator: 'equals', value: false },
     ],
   },
   target: { boardKey: 'work', phaseKey: 'intake' },
@@ -34,7 +34,7 @@ export const OUTSIDE_PULL_REQUEST_INTAKE_ROUTE: StoredIntakeRouteInput = {
     conditions: [
       { field: 'source.integration', operator: 'in', value: ['github', 'gitlab'] },
       { field: 'source.kind', operator: 'equals', value: 'pull_request' },
-      { field: 'author.trusted', operator: 'equals', value: false },
+      { field: 'item.trusted', operator: 'equals', value: false },
     ],
   },
   target: { boardKey: 'work', phaseKey: 'intake' },
@@ -43,13 +43,13 @@ export const OUTSIDE_PULL_REQUEST_INTAKE_ROUTE: StoredIntakeRouteInput = {
 /**
  * Pull requests with no card are reviewed in Work › Review. It comes after
  * `OUTSIDE_PULL_REQUEST_INTAKE_ROUTE`, so a pull request from outside the write-access circle
- * still waits in Intake. As a card move it sends an issue card whose pull request opens to Review,
- * where the pull request rules send it anyway.
+ * still waits in Intake. It tests `source.kind` so that, as a card move, it never sends an issue's
+ * card anywhere when a pull request links to it: `LINKED_PULL_REQUEST_ROUTE` decides that move.
  */
 export const PULL_REQUEST_INTAKE_ROUTE: StoredIntakeRouteInput = {
   name: 'Pull requests go to Review',
   on: ['pull_request.opened'],
-  when: null,
+  when: { operator: 'AND', conditions: [{ field: 'source.kind', operator: 'equals', value: 'pull_request' }] },
   target: { boardKey: 'work', phaseKey: 'pr-review' },
 };
 
@@ -120,19 +120,37 @@ export const PULL_REQUEST_REVIEW_REQUESTED_ROUTE: StoredIntakeRouteInput = {
 };
 
 /**
- * A pull request from someone with write access that closes an issue nobody has started work on
- * joins that issue's card, which goes to Review. Once the issue has left Intake, the pull request
- * gets its own card in Review instead; projects can widen the phases. Its condition stands on its
- * own, so it is tried first.
+ * A trusted pull request that closes an issue nobody has started work on takes that issue's card
+ * to Review. Factory links a pull request to the card of the issue it closes itself, whoever
+ * opened it; this route only decides the move, from the card as it was before the pull request
+ * joined. Once the issue has left Intake the card stays put; projects can widen the phases.
  */
-export const CLOSES_ISSUE_INTAKE_ROUTE: StoredIntakeRouteInput = {
-  name: 'Pull requests that close a waiting issue join its card',
+export const LINKED_PULL_REQUEST_ROUTE: StoredIntakeRouteInput = {
+  name: 'Trusted pull requests take a waiting issue to Review',
   on: ['pull_request.opened'],
   when: {
     operator: 'AND',
     conditions: [
+      { field: 'pullRequest.trusted', operator: 'equals', value: true },
+      { field: 'pullRequest.closesIssue', operator: 'equals', value: true },
+      { field: 'closedIssue.phase', operator: 'in', value: ['intake'] },
+      { field: 'closedIssue.hasPullRequest', operator: 'equals', value: false },
+    ],
+  },
+  target: { boardKey: 'work', phaseKey: 'pr-review' },
+};
+
+/**
+ * The join route projects were given before pull requests linked to their issue's card on their own
+ * (`Pull requests that close a waiting issue join its card`): `LINKED_PULL_REQUEST_ROUTE` does what it
+ * did, so retiring it needs no word to the admin, unlike a join route they changed.
+ */
+export const RETIRED_JOIN_ROUTE: Pick<StoredIntakeRouteInput, 'when' | 'target'> = {
+  when: {
+    operator: 'AND',
+    conditions: [
       { field: 'source.kind', operator: 'equals', value: 'pull_request' },
-      { field: 'author.trusted', operator: 'equals', value: true },
+      { field: 'item.trusted', operator: 'equals', value: true },
       { field: 'pullRequest.closesIssue', operator: 'equals', value: true },
       { field: 'closedIssue.phase', operator: 'in', value: ['intake'] },
       { field: 'closedIssue.hasPullRequest', operator: 'equals', value: false },
@@ -140,6 +158,9 @@ export const CLOSES_ISSUE_INTAKE_ROUTE: StoredIntakeRouteInput = {
   },
   target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: true },
 };
+
+/** The key `LINKED_PULL_REQUEST_ROUTE` is seeded under; seeding it retires the project's join routes. */
+export const LINKED_PULL_REQUEST_ROUTE_KEY = 'linked-pull-request';
 
 /**
  * Every new issue no route before it placed lands in Work › Intake (`PULL_REQUEST_INTAKE_ROUTE`
@@ -167,7 +188,6 @@ export const DEFAULT_INTAKE_ROUTES: readonly {
   first?: true;
   newProjectsOnly?: true;
 }[] = [
-  { key: 'closes-issue', route: CLOSES_ISSUE_INTAKE_ROUTE, first: true },
   { key: 'outside-authors', route: DEFAULT_INTAKE_ROUTE },
   { key: 'outside-author-pull-requests', route: OUTSIDE_PULL_REQUEST_INTAKE_ROUTE, newProjectsOnly: true },
   { key: 'pull-requests', route: PULL_REQUEST_INTAKE_ROUTE },
@@ -179,5 +199,6 @@ export const DEFAULT_INTAKE_ROUTES: readonly {
   { key: 'pull-request-closed-issue', route: PULL_REQUEST_CLOSED_ISSUE_ROUTE },
   { key: 'pull-request-updated', route: PULL_REQUEST_UPDATED_ROUTE },
   { key: 'pull-request-review-requested', route: PULL_REQUEST_REVIEW_REQUESTED_ROUTE },
+  { key: LINKED_PULL_REQUEST_ROUTE_KEY, route: LINKED_PULL_REQUEST_ROUTE },
   { key: 'everything-else', route: CATCH_ALL_INTAKE_ROUTE },
 ];

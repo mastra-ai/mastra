@@ -10,6 +10,9 @@ import {
   newestOwnedOpenPullRequestNumber,
   pullRequestSources,
   intakeTarget,
+  isPullRequestCard,
+  sourceExternalId,
+  trustedPullRequestSource,
   rulePhaseField,
   withBoardClosure,
   withBoardFlow,
@@ -24,8 +27,10 @@ import {
   routeEventDecision,
   selectEventRule,
   withoutRouteEvent,
+  withPullRequestTrust,
 } from '../../rules/event-rules.js';
 import type { NotRoutedLookup } from '../../rules/event-rules.js';
+import { authorTrusted } from '../../rules/types.js';
 import type {
   FactoryGitLabEventName,
   FactoryGitLabRuleContext,
@@ -317,6 +322,25 @@ interface ProjectTarget {
   connectionIds: string[];
 }
 
+
+/**
+ * Whether the delivery's merge request comes from someone with write access, or from Factory: its
+ * own card's stamp, the stamp recorded when it joined the card, else its author's access now.
+ */
+export function gitlabMergeRequestTrusted(context: Pick<FactoryGitLabRuleContext, 'mergeRequest' | 'item'>): boolean {
+  const { mergeRequest, item } = context;
+  if (!mergeRequest) return false;
+  if (mergeRequest.factoryAuthored) return true;
+  if (item && isPullRequestCard(item)) return authorTrusted(item.metadata);
+  const attached = item
+    ? pullRequestSources(item).find(
+        source => source.integrationId === 'gitlab' && sourceExternalId(source) === mergeRequest.sourceKey,
+      )
+    : undefined;
+  if (item && attached) return trustedPullRequestSource(item, attached);
+  return mergeRequest.authorTrusted === true;
+}
+
 export class GitLabRules {
   constructor(private readonly options: GitLabRulesOptions) {}
 
@@ -511,12 +535,15 @@ export class GitLabRules {
       );
     }
     const headBranch = string(mergeRequest?.source_branch) ?? '';
+    // A branch name alone is not proof: a fork can reuse it. Factory pushes to this project only.
+    const sourceProjectId = number(mergeRequest?.source_project_id);
+    const fromThisProject = sourceProjectId === undefined || sourceProjectId === projectId;
     // A card whose session builds on the merge request's branch, in this project.
     const buildsOnBranch = (item: Card) =>
       item.externalSource?.type !== 'pull-request' &&
       !cardInOtherGitLabProject(item, host, projectId) &&
       Object.values(item.sessions).some(session => session.branch === headBranch);
-    const authoringItem = headBranch ? own(items.find(buildsOnBranch)) : undefined;
+    const authoringItem = headBranch && fromThisProject ? own(items.find(buildsOnBranch)) : undefined;
     const actorTrusted = await this.#trusted(connectionIds, String(projectId), username);
     const eventUserId = number(object(parsed.payload.user)?.id) ?? number(parsed.payload.user_id);
     const resolveAuthor = async (
@@ -562,9 +589,9 @@ export class GitLabRules {
       factoryAuthored: await this.#isFactoryUser(connectionIds, username),
     };
     // A merge request seen for the first time is filed on the card whose branch it comes from,
-    // when its board reviews merge requests. Otherwise a trusted author's merge request names the card of the issue
-    // its description says it closes, and the project's intake routes decide, when it is filed,
-    // whether it joins that card. An untrusted author's merge request never lands on another card.
+    // when its board reviews merge requests. Otherwise, whoever opened it, it links to the card of
+    // the issue its description says it closes. Linking runs nothing: an outsider's merge request
+    // is recorded as untrusted there.
     // A card with no source of its own (a manual card) never takes one: the merge request would
     // become its only source and turn it into a merge request card. A GitHub card keeps only
     // GitHub pull requests, so a merge request on its session's branch gets its own card.
@@ -575,19 +602,15 @@ export class GitLabRules {
       !isTerminalWorkItem(this.#boards(card), card);
     let home: { card: Card; reason: FactoryPullRequestHome['reason'] } | undefined;
     if (event === 'mergeRequestOpened' && mergeRequestKey && !reviewItem && !attachedItem) {
-      // A branch name alone is not proof: a fork can reuse it. The Factory's own merge requests come
-      // from this project under a trusted account.
-      const sourceProjectId = number(mergeRequest?.source_project_id);
-      const fromThisProject = sourceProjectId === undefined || sourceProjectId === projectId;
+      // The Factory's own merge requests come under a trusted account.
       if (
         authoringItem &&
-        fromThisProject &&
         (actorTrusted || mergeRequestAuthorTrusted) &&
         eligibleHome(authoringItem) &&
         cardBoardFlow(this.#boards(authoringItem), authoringItem).pullRequestReview !== undefined
       ) {
         home = { card: authoringItem, reason: 'authored' };
-      } else if (mergeRequestAuthorTrusted) {
+      } else {
         for (const iid of closingIssueNumbers(string(mergeRequest?.description), {
           provider: 'gitlab',
           repository: projectPath,
@@ -1076,6 +1099,10 @@ export class GitLabRules {
         ...decisions,
         { ...cardUpdateDecision(input.ingressIdentity, update, input.actor.type === 'gitlab' && input.actor.factoryAuthored) },
       ];
+    }
+    if (context.mergeRequest) {
+      const trusted = gitlabMergeRequestTrusted(context);
+      decisions = decisions.map(entry => withPullRequestTrust(entry, trusted));
     }
 
     // The item's current labels and assignees go on its own card in the same write as the update,

@@ -143,9 +143,17 @@ describe('rule group schemas', () => {
   });
 
   it("lets a condition test whether the card's author is trusted", () => {
-    expect(
-      cardRuleGroupSchema.safeParse(all({ field: 'author.trusted', operator: 'equals', value: true })).success,
-    ).toBe(true);
+    expect(cardRuleGroupSchema.safeParse(all({ field: 'item.trusted', operator: 'equals', value: true })).success).toBe(
+      true,
+    );
+  });
+});
+
+describe('a condition stored under author.trusted', () => {
+  it("tests the card's item.trusted fact", () => {
+    const stored = all({ field: 'author.trusted', operator: 'equals', value: true });
+    expect(evaluateRuleGroup(stored, { 'item.trusted': true })).toBe(true);
+    expect(evaluateRuleGroup(stored, { 'item.trusted': false })).toBe(false);
   });
 
   it('checks each operator gets the value it needs', () => {

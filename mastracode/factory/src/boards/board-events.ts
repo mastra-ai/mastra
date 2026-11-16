@@ -144,10 +144,15 @@ export function updateEventFacts(
 export function combineUpdates(events: readonly BoardEventFacts[]): BoardEventFacts | undefined {
   const [first] = events;
   if (!first || !isUpdateEvent(first.type)) return undefined;
-  return updateEventFacts(first.type, {
+  const combined = updateEventFacts(first.type, {
     labels: combineChanges(events.flatMap(event => (event.labels ? [event.labels] : []))),
     assignees: combineChanges(events.flatMap(event => (event.assignees ? [event.assignees] : []))),
   });
+  if (!combined) return undefined;
+  const identified = first.pullRequest !== undefined ? { ...combined, pullRequest: first.pullRequest } : combined;
+  // The folded change stands for every pull request in it, so it is trusted only when each one is.
+  if (events.some(event => event.pullRequestTrusted === undefined)) return identified;
+  return { ...identified, pullRequestTrusted: events.every(event => event.pullRequestTrusted === true) };
 }
 
 /**
@@ -195,6 +200,18 @@ export interface BoardEventFacts {
   reason?: CloseReason;
   labels?: ItemChange;
   assignees?: ItemChange;
+  /**
+   * On a pull request's update: which pull request changed (its source's external id), so changes
+   * to two pull requests on one card never net out against each other.
+   */
+  pullRequest?: string;
+  /** On a pull request event: whether that pull request's author has write access (or is Factory). */
+  pullRequestTrusted?: boolean;
+  /**
+   * On the `pull_request.opened` a pull request linking to the card of the issue it closes brings:
+   * that card as it was before the pull request joined it (see `closedIssueRuleFacts`).
+   */
+  closedIssue?: { phase: string | null; hasPullRequest: boolean };
 }
 
 /** The facts a route's `when` reads from an event. */
@@ -259,7 +276,6 @@ export const LEGACY_RULE_FIELDS = [
   'item.state',
   'source.integration',
   'item.pullRequest',
-  'author.trusted',
   'event.type',
   ...CLOSED_ISSUE_RULE_FIELDS,
 ] as const;

@@ -1,10 +1,16 @@
 import type { RuleFacts } from '../rules/rule-group.js';
 import { authorTrusted } from '../rules/types.js';
 import type { Card } from '../storage/domains/work-items/base.js';
-import { pullRequestSources } from '../work-items/change-requests.js';
+import {
+  isOpenPullRequestSource,
+  pointedPullRequest,
+  pullRequestSourceNumber,
+  pullRequestSources,
+  trustedPullRequestSource,
+  workingPullRequest,
+} from '../work-items/change-requests.js';
 import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { stringList, stringValue } from '../work-items/providers/metadata-keys.js';
-import { newestOpenPullRequestNumber } from './semantics.js';
 
 type WorkItemFacts = Pick<Card['workItem'], 'labels' | 'author'> &
   Partial<Pick<Card['workItem'], 'sources' | 'provider' | 'key' | 'state' | 'metadata'>>;
@@ -33,9 +39,29 @@ export function cardRuleFacts(
     : Array.isArray(metadata.labels)
       ? metadata.labels.filter((label): label is string => typeof label === 'string')
       : [];
-  const pointer = metadata.openPullRequestNumber;
+  // The card's working pull request: a pull request's own card is its own; an issue card's is
+  // the attached one it works on, and trusted unless a person picked an outsider's.
+  const sourced = { ...item, workItem: item.workItem ?? null };
+  const working = source?.type === 'pull-request' ? undefined : workingPullRequest(sourced);
+  // Number, trust and presence all describe the working pull request: a pointer to a linked one
+  // that closed unmerged gives way to it.
+  const pointer = pointedPullRequest(sourced);
   const pullRequest =
-    typeof pointer === 'number' ? pointer : newestOpenPullRequestNumber({ workItem: item.workItem ?? null });
+    typeof pointer === 'number'
+      ? pointer
+      : working && isOpenPullRequestSource(working)
+        ? (pullRequestSourceNumber(working) ?? null)
+        : null;
+  // A pointer the card has no source for is the pull request its session opened: Factory's own.
+  const sessionOpened = typeof pointer === 'number' && (!working || pullRequestSourceNumber(working) !== pointer);
+  const pullRequestTrusted =
+    source?.type === 'pull-request'
+      ? authorTrusted(item.metadata)
+      : sessionOpened
+        ? true
+        : working
+          ? trustedPullRequestSource(item, working)
+          : undefined;
   const author = source
     ? ((stored ?? normalized)?.author ?? null)
     : typeof metadata.author === 'string'
@@ -51,7 +77,9 @@ export function cardRuleFacts(
   const attachedOpenPullRequest =
     (typeof pointer === 'number' && !ownPullRequest) ||
     (ownPullRequest
-      ? newestOpenPullRequestNumber({ workItem: { sources: sources.slice(1) } }) !== null
+      ? pullRequestSources({ workItem: { sources: sources.slice(1) } }).some(
+          entry => isOpenPullRequestSource(entry) && pullRequestSourceNumber(entry) !== undefined,
+        )
       : pullRequest !== null);
   // A pull request linked to an issue: the card holds both a pull request and an issue source.
   const linksIssue =
@@ -64,7 +92,8 @@ export function cardRuleFacts(
     ...(key !== null ? { 'item.key': key } : {}),
     ...(state !== null ? { 'item.state': state } : {}),
     'item.assignees': assignees(source ? providerMetadata : metadata),
-    'author.trusted': authorTrusted(item.metadata),
+    'item.trusted': authorTrusted(item.metadata),
+    ...(pullRequestTrusted !== undefined ? { 'pullRequest.trusted': pullRequestTrusted } : {}),
     // The open change request: the one Factory opened for the card, else its own or an attached open one.
     ...(pullRequest !== null ? { 'item.pullRequest': pullRequest } : {}),
     'item.hasPullRequest': attachedOpenPullRequest,

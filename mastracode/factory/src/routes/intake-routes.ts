@@ -148,7 +148,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
   async #checkTarget(
     scope: Resolved,
     route: {
-      target: { boardKey: string; phaseKey?: string | null; joinClosedIssue?: boolean };
+      target: { boardKey: string; phaseKey?: string | null; joinClosedIssue?: boolean; moveToBoardKey?: string | null };
       on: readonly RouteEvent[];
       pullRequestOpenedMovesOnly?: boolean;
     },
@@ -165,6 +165,17 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
     if (evaluator !== 'intake-order') return [];
     const order = await this.deps.storage.readIntakeOrder(scope, { boards: [...registry.keys()] });
     return order.boardKeys.filter(key => registry.has(key));
+  }
+
+  /** Pull requests link to the card of the issue they close on their own; a route can't join them any more. */
+  #refuseJoin(target: { joinClosedIssue?: boolean } | undefined, current?: { joinClosedIssue: boolean }) {
+    if (target?.joinClosedIssue === true && current?.joinClosedIssue !== true) {
+      throw new Refusal(422, {
+        error: 'join_retired',
+        message:
+          'Pull requests link to the card of the issue they close on their own. Use a card-move rule on pull_request.opened to move that card.',
+      });
+    }
   }
 
   async #planReroute(scope: Resolved) {
@@ -468,6 +479,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
         const scope = await this.#resolve(c);
         await this.#requireAdmin(c, scope);
         const input = await this.#body(c, contracts.intakeRouteCreate.bodySchema);
+        this.#refuseJoin(input.target);
         await this.#checkTarget(scope, {
           target: input.target,
           on: input.on ?? DEFAULT_ROUTE_EVENTS,
@@ -487,6 +499,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
           // Narrowing or widening `on` changes which targets are allowed, so check the route as it will be.
           const current = await storage.getIntakeRoute(scope, id);
           if (!current) throw new Refusal(404, { error: 'intake_route_not_found' });
+          this.#refuseJoin(patch.target, current.target);
           // Under intake order a rule belongs to its board: it moves with it, never to another.
           if (
             (await this.#evaluator(scope)) === 'intake-order' &&

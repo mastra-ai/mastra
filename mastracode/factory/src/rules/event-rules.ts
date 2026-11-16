@@ -366,6 +366,17 @@ export function pullRequestMoveByRoutes<T extends Omit<FactoryTransitionDecision
 }
 
 /**
+ * A decision carrying a pull request event, tagged with whether that pull request's author has
+ * write access (or is Factory): what a route's `pullRequest.trusted` tests.
+ */
+export function withPullRequestTrust(entry: Record<string, unknown>, trusted: boolean): Record<string, unknown> {
+  if (entry.type !== 'transition' && entry.type !== 'routeEvent') return entry;
+  const event = entry.event as BoardEventFacts | undefined;
+  if (!event || !isPullRequestEvent(event.type)) return entry;
+  return { ...entry, event: { ...event, pullRequestTrusted: trusted } };
+}
+
+/**
  * A decision the deployment's own handler returned stays its answer: a stock close move it
  * wrapped or reused loses the event tag that would hand it to the project's intake routes.
  */

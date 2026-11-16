@@ -479,6 +479,8 @@ export interface CommitFactoryTransitionInput {
   workItemId: string;
   expectedRevision: number;
   destinationStage: string;
+  /** The board the card moves to with this transition, when a card-move rule sends it to another one. */
+  destinationBoard?: string;
   actorId: string;
   ingress: { identity: string; transitionId: string };
   causalChain: Array<{ ingressId: string; decisionType: string }>;
@@ -1691,12 +1693,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     source,
     metadata,
     expectedRevision,
+    cardMetadata,
   }: {
     orgId: string;
     id: string;
     source: ExternalWorkItemSource;
     metadata: Record<string, unknown> | null;
     expectedRevision?: number;
+    /** Rewrites the card's own metadata in the same write that attaches the source. */
+    cardMetadata?: (metadata: Record<string, unknown>) => Record<string, unknown>;
   }): Promise<{ item: Card; attached: boolean } | null> {
     let result: Awaited<ReturnType<Cards['attachSource']>>;
     try {
@@ -1706,6 +1711,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           { org_id: orgId, id },
           { external_source: source, metadata, now: new Date() },
           expectedRevision,
+          cardMetadata,
         );
         if (attached?.ownerWorkItemId) throw new WorkItemSourceConflictError(attached.ownerWorkItemId);
         if (attached?.revisionConflict) throw new WorkItemUpdateConflictError('revision');
@@ -2426,7 +2432,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             const accept = input.accept === true && !existing.acceptedAt;
             const triageType = existing.triageType ?? input.triageType ?? null;
             const classified = triageType !== existing.triageType;
-            if (existing.stages.length === 1 && existing.stages[0] === input.destinationStage) {
+            const changesBoard = input.destinationBoard !== undefined && input.destinationBoard !== existing.board;
+            if (!changesBoard && existing.stages.length === 1 && existing.stages[0] === input.destinationStage) {
               // Classification is part of a terminal handoff, so unlike an
               // autonomy flip alone it is a revisioned work-item change.
               return arm || disarm || accept || classified
@@ -2443,14 +2450,24 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               ...(disarm ? { autonomyArmedAt: null } : {}),
               ...(accept ? { acceptedAt: now } : {}),
               ...(classified ? { triageType } : {}),
+              ...(changesBoard ? { board: input.destinationBoard } : {}),
               stages: [input.destinationStage],
-              stageHistory: applyStageTransition(
-                existing.stageHistory,
-                existing.stages,
-                [input.destinationStage],
-                input.actorId,
-                now,
-              ),
+              // On another board, a phase of the same name is a new one: leave every phase, then enter it.
+              stageHistory: changesBoard
+                ? applyStageTransition(
+                    applyStageTransition(existing.stageHistory, existing.stages, [], input.actorId, now),
+                    [],
+                    [input.destinationStage],
+                    input.actorId,
+                    now,
+                  )
+                : applyStageTransition(
+                    existing.stageHistory,
+                    existing.stages,
+                    [input.destinationStage],
+                    input.actorId,
+                    now,
+                  ),
               revision: existing.revision + 1,
               updatedAt: now,
             });
@@ -3214,6 +3231,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     factoryProjectId: string;
     workItemId: string;
     role?: string;
+    /** Idempotency keys of decisions to keep: what a move just queued for the card. */
+    except?: readonly string[];
     supersededAt: Date;
   }): Promise<FactoryDeferredDecisionRecord[]> {
     const rows = await this.#db.findMany<GovernanceDbRow>('factory_deferred_decisions', {
@@ -3226,6 +3245,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     for (const row of rows) {
       const decision = toDeferredDecision(row);
       if (input.role !== undefined && decision.decision.role !== input.role) continue;
+      if (input.except?.includes(decision.idempotencyKey)) continue;
       const record =
         decision.status === 'proposed'
           ? await this.#settleProposedDecision(
@@ -4061,6 +4081,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     patch,
     expectedRevision,
     expectedBoard,
+    check,
   }: {
     orgId: string;
     id: string;
@@ -4068,6 +4089,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     patch: UpdateWorkItemInput;
     expectedRevision?: number;
     expectedBoard?: string | null;
+    /**
+     * Runs on the card as locked for the write, sources included; throw to refuse it. Source syncs
+     * lock the card first, so what it reads can't change before the write lands.
+     */
+    check?: (item: Card) => void;
   }): Promise<{ item: Card; previous: WorkItemPriorState } | null> {
     const run = async (ops: FactoryStorageOps) => {
       let previous = emptyPrior();
@@ -4079,6 +4105,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         if (expectedRevision !== undefined && current.revision !== expectedRevision) {
           throw new WorkItemUpdateConflictError('revision');
         }
+        check?.(toWorkItem(current));
         if (patch.parentWorkItemId !== undefined) {
           await this.#copyLegacyParent(ops, orgId, patch.parentWorkItemId);
           validateParentRelation(

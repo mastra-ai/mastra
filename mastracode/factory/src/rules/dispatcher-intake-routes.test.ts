@@ -22,7 +22,7 @@ type LinkedDecision = Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkIt
 
 const TRUSTED = {
   operator: 'AND',
-  conditions: [{ field: 'author.trusted', operator: 'equals', value: true }],
+  conditions: [{ field: 'item.trusted', operator: 'equals', value: true }],
 } as const;
 const DOCS = { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'docs' }] } as const;
 
@@ -80,6 +80,8 @@ async function setup(
   });
   const configVersion = 'intake-routes-v1';
   const workItems = seeded.workItems;
+  /** The contexts cards left, whose sandboxes stop. */
+  const contextsLeft: Array<{ workItemId: string; context: string; toContext: string | undefined }> = [];
   const dispatcherWith = (withRoutesReader: boolean) =>
     new FactoryDecisionDispatcher({
       controller: {} as never,
@@ -88,6 +90,9 @@ async function setup(
         configVersion,
         boards,
         audit: seeded.audit,
+        onContextLeft: ({ workItemId, context, toContext }) => {
+          contextsLeft.push({ workItemId, context, toContext });
+        },
       }),
       storage: workItems,
       boards,
@@ -231,10 +236,13 @@ async function setup(
     deliverDecision,
     putAt,
     recover,
+    /** Another replica's dispatcher, working the same queue. */
+    otherWorker: () => dispatcherWith(true),
     routeDecisions,
     stageAudits,
     runs,
     retry,
+    contextsLeft,
   };
 }
 
@@ -243,13 +251,7 @@ function placed(card: { board?: string | null; stages: string[] } | undefined) {
 }
 
 describe('intake routes placing linked cards', () => {
-  describe('a route that joins a pull request to the card of the issue it closes', () => {
-    const joinRoute = (enabled = true) => ({
-      name: 'Anything joins',
-      enabled,
-      when: null,
-      target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: true },
-    });
+  describe('a pull request that closes an issue on the board', () => {
     const pullRequest = (issueId: string, authorTrusted: boolean) => ({
       sourceKey: 'github-pr:17',
       source: 'github-pr' as const,
@@ -260,38 +262,102 @@ describe('intake routes placing linked cards', () => {
     const sourceTypes = async (seeded: Awaited<ReturnType<typeof setup>>, id: string) =>
       (await seeded.workItems.get({ orgId: 'org-1', id }))!.workItem.sources.map(source => source.sourceType);
 
-    it("joins a trusted author's pull request, and moves the waiting card to PR review", async () => {
-      const seeded = await setup();
-      await seeded.route(joinRoute());
+    it("links an outsider's pull request to the issue's card, and neither moves the card nor runs anything", async () => {
+      const seeded = await setup({ withDefaultRoute: true, autoStart: true });
+      const issue = (await seeded.deliver({ sourceKey: 'github-issue:42', metadata: { authorTrusted: false } }))!;
+
+      expect(await seeded.deliver(pullRequest(issue.id, false))).toBeUndefined();
+
+      const card = (await seeded.workItems.get({ orgId: 'org-1', id: issue.id }))!;
+      expect(await sourceTypes(seeded, issue.id)).toEqual(['issue', 'pull-request']);
+      expect(placed(card)).toEqual({ board: 'work', stages: ['intake'] });
+      expect(card.metadata).toMatchObject({ untrustedPullRequests: [expect.stringContaining('17')] });
+      expect(await seeded.workItems.list(seeded.scope)).toHaveLength(1);
+      expect(await seeded.runs(issue.id)).toEqual([]);
+    });
+
+    it("takes a waiting issue's card to Review for a trusted pull request, once, by the seeded card-move rule", async () => {
+      const seeded = await setup({ withDefaultRoute: true });
+      const linkedRoute = (await seeded.boards.listIntakeRoutes(seeded.scope)).find(
+        route => route.name === 'Trusted pull requests take a waiting issue to Review',
+      )!;
       const issue = (await seeded.deliver({ sourceKey: 'github-issue:42', metadata: { authorTrusted: true } }))!;
+
+      expect(await seeded.deliver(pullRequest(issue.id, true))).toBeUndefined();
+      // The same pull request filed again (a redelivery, or a later event) moves nothing more.
+      await seeded.deliver(pullRequest(issue.id, true));
+      await seeded.retry();
+
+      const card = (await seeded.workItems.get({ orgId: 'org-1', id: issue.id }))!;
+      expect(await sourceTypes(seeded, issue.id)).toEqual(['issue', 'pull-request']);
+      expect(placed(card)).toEqual({ board: 'work', stages: ['pr-review'] });
+      expect(card.metadata).not.toHaveProperty('untrustedPullRequests');
+      expect(card.stageHistory.filter(entry => entry.by === `intake-route:${linkedRoute.id}`)).toHaveLength(1);
+      expect(await seeded.workItems.list(seeded.scope)).toHaveLength(1);
+    });
+
+    it('hands the card the link as it happened, even when a person moved the card before its event was queued', async () => {
+      const seeded = await setup({ withDefaultRoute: true });
+      const issue = (await seeded.deliver({ sourceKey: 'github-issue:42', metadata: { authorTrusted: true } }))!;
+      // A person moves the card just after the pull request attached, before its event is queued.
+      const commit = seeded.workItems.commitRuleEvaluation.bind(seeded.workItems);
+      let raced = false;
+      vi.spyOn(seeded.workItems, 'commitRuleEvaluation').mockImplementation(async input => {
+        if (input.ingress.identity.startsWith('decision:linked-pull-request:') && !raced) {
+          raced = true;
+          await seeded.putAt(issue.id, 'planning');
+        }
+        return commit(input);
+      });
+
+      await seeded.deliver(pullRequest(issue.id, true));
+      await seeded.retry();
+
+      // The pull request linked while the card waited in Intake with no other pull request.
+      const [linked] = (await seeded.workItems.listDeferredDecisions('org-1', seeded.scope.factoryProjectId)).filter(
+        entry => entry.decision.type === 'routeEvent' && entry.workItemId === issue.id,
+      );
+      expect(linked?.decision).toMatchObject({
+        event: {
+          type: 'pull_request.opened',
+          pullRequestTrusted: true,
+          closedIssue: { phase: 'intake', hasPullRequest: false },
+        },
+      });
+      // The person's move came after the link, so it stands.
+      expect(placed((await seeded.workItems.get({ orgId: 'org-1', id: issue.id }))!)).toEqual({
+        board: 'work',
+        stages: ['planning'],
+      });
+    });
+
+    it("links a person's pull request to the card on whichever board it sits", async () => {
+      const seeded = await setup();
+      await seeded.boards.create(seeded.scope, docsBoard, 'admin');
+      await seeded.route({ name: 'Docs', when: DOCS, target: { boardKey: 'docs', phaseKey: 'inbox' } });
+      const issue = (await seeded.deliver({
+        sourceKey: 'github-issue:42',
+        metadata: { authorTrusted: true, labels: ['docs'] },
+      }))!;
+      expect(placed(issue)).toEqual({ board: 'docs', stages: ['inbox'] });
 
       expect(await seeded.deliver(pullRequest(issue.id, true))).toBeUndefined();
 
       expect(await sourceTypes(seeded, issue.id)).toEqual(['issue', 'pull-request']);
-      expect((await seeded.workItems.get({ orgId: 'org-1', id: issue.id }))!.stages).toEqual(['pr-review']);
+      expect(placed((await seeded.workItems.get({ orgId: 'org-1', id: issue.id }))!)).toEqual({
+        board: 'docs',
+        stages: ['inbox'],
+      });
     });
 
-    it("never joins an untrusted author's pull request, even when a route matches every card", async () => {
+    it('files the pull request on its own card when the issue card is finished', async () => {
       const seeded = await setup();
-      await seeded.route(joinRoute());
       const issue = (await seeded.deliver({ sourceKey: 'github-issue:42', metadata: { authorTrusted: true } }))!;
+      await seeded.putAt(issue.id, 'done');
 
       const own = await seeded.deliver(pullRequest(issue.id, false));
 
       expect(own!.id).not.toBe(issue.id);
-      expect(placed(own)).toEqual({ board: 'work', stages: ['intake'] });
-      expect(await sourceTypes(seeded, issue.id)).toEqual(['issue']);
-    });
-
-    it('falls through to the next route when the joining route is disabled', async () => {
-      const seeded = await setup();
-      await seeded.route(joinRoute(false));
-      await seeded.route({ name: 'To PR review', when: null, target: { boardKey: 'work', phaseKey: 'pr-review' } });
-      const issue = (await seeded.deliver({ sourceKey: 'github-issue:42', metadata: { authorTrusted: true } }))!;
-
-      const own = await seeded.deliver(pullRequest(issue.id, true));
-
-      expect(placed(own)).toEqual({ board: 'work', stages: ['pr-review'] });
       expect(await sourceTypes(seeded, issue.id)).toEqual(['issue']);
     });
   });
@@ -1178,6 +1244,192 @@ describe('intake routes moving existing cards on status events', () => {
     const after = await workItems.get({ orgId: 'org-1', id: card.id });
     expect(after).toMatchObject({ stages: ['canceled'] });
     expect(after!.stageHistory.filter(entry => entry.by.startsWith('intake-route:'))).toHaveLength(1);
+  });
+
+  describe('a card-move rule sending the card to another board', () => {
+    const shipBoard = {
+      key: 'ship',
+      name: 'Ship',
+      phases: [
+        { key: 'queued', name: 'Queued', kind: 'resting' as const, nextPhases: ['ready'] },
+        {
+          key: 'ready',
+          name: 'Ready',
+          kind: 'working' as const,
+          runner: { context: 'release', skill: 'factory-ship' },
+          autoStart: true,
+          nextPhases: ['shipped'],
+        },
+        { key: 'shipped', name: 'Shipped', kind: 'terminal' as const },
+      ],
+    };
+
+    it('moves the same card from Work › Building to Ship › Ready, stopping Work and starting Ship', async () => {
+      const { boards, scope, route, deliver, deliverEvent, putAt, runs, contextsLeft, workItems } = await setup();
+      await boards.create(scope, shipBoard, 'admin');
+      const ship = await route({
+        name: 'Opened pull requests ship',
+        on: ['pull_request.synchronized'],
+        target: { boardKey: 'work', moveToBoardKey: 'ship', phaseKey: 'ready' },
+      });
+      const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
+      await putAt(card.id, 'execute');
+
+      const moved = (await deliverEvent(card.id, { type: 'pull_request.synchronized', pullRequestTrusted: true }))
+        .card!;
+
+      expect(moved.id).toBe(card.id);
+      expect(placed(moved)).toEqual({ board: 'ship', stages: ['ready'] });
+      expect(moved.stageHistory.at(-1)).toMatchObject({ stage: 'ready', by: `intake-route:${ship.id}` });
+      expect(await workItems.list(scope)).toHaveLength(1);
+      expect(contextsLeft).toContainEqual({ workItemId: card.id, context: 'work', toContext: 'release' });
+      const started = await runs(card.id);
+      expect(started).toHaveLength(1);
+      expect(started).not.toContain('proposed');
+    });
+
+    it("keeps the run the new board asks for, even when another worker parks it before the old board's work is dropped", async () => {
+      const { boards, scope, route, deliver, deliverEvent, putAt, runs, workItems, otherWorker } = await setup();
+      // Ship's run waits for a person's approval: a worker parks it as a proposal.
+      await boards.create(
+        scope,
+        {
+          ...shipBoard,
+          phases: shipBoard.phases.map(phase => (phase.key === 'ready' ? { ...phase, autoStart: false } : phase)),
+        },
+        'admin',
+      );
+      await route({
+        name: 'Pushed pull requests ship',
+        on: ['pull_request.synchronized'],
+        target: { boardKey: 'work', moveToBoardKey: 'ship', phaseKey: 'ready' },
+      });
+      const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
+      await putAt(card.id, 'execute');
+      const supersede = workItems.supersedeDecisionsForWorkItem.bind(workItems);
+      vi.spyOn(workItems, 'supersedeDecisionsForWorkItem').mockImplementationOnce(async input => {
+        await otherWorker().runOnce(new Date('2030-01-01T00:02:30Z'));
+        return supersede(input);
+      });
+
+      const moved = (await deliverEvent(card.id, { type: 'pull_request.synchronized', pullRequestTrusted: true }))
+        .card!;
+
+      expect(placed(moved)).toEqual({ board: 'ship', stages: ['ready'] });
+      expect(await runs(card.id)).toContain('proposed');
+    });
+
+    it("records a new phase entry when the card moves to another board's phase of the same name", async () => {
+      const { boards, scope, route, deliver, deliverEvent, putAt } = await setup();
+      await boards.create(
+        scope,
+        {
+          key: 'release',
+          name: 'Release',
+          phases: [
+            { key: 'queued', name: 'Queued', kind: 'resting' as const, nextPhases: ['pr-review'] },
+            { key: 'pr-review', name: 'Review', kind: 'resting' as const, nextPhases: [] },
+          ],
+        },
+        'admin',
+      );
+      const release = await route({
+        name: 'Pushed reviews go to Release',
+        on: ['pull_request.synchronized'],
+        target: { boardKey: 'work', moveToBoardKey: 'release', phaseKey: 'pr-review' },
+      });
+      const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
+      await putAt(card.id, 'pr-review');
+
+      const moved = (await deliverEvent(card.id, { type: 'pull_request.synchronized', pullRequestTrusted: true }))
+        .card!;
+
+      expect(placed(moved)).toEqual({ board: 'release', stages: ['pr-review'] });
+      const reviews = moved.stageHistory.filter(entry => entry.stage === 'pr-review');
+      expect(reviews).toEqual([
+        expect.objectContaining({ by: 'user-1', exitedBy: `intake-route:${release.id}` }),
+        expect.objectContaining({ by: `intake-route:${release.id}` }),
+      ]);
+      expect(reviews[1]).not.toHaveProperty('exitedAt');
+    });
+
+    it('moves a card once per event when two boards send cards to each other', async () => {
+      const { boards, scope, route, deliver, deliverEvent, putAt, retry, workItems } = await setup();
+      await boards.create(scope, shipBoard, 'admin');
+      await route({
+        name: 'Work to Ship',
+        on: ['pull_request.synchronized'],
+        target: { boardKey: 'work', moveToBoardKey: 'ship', phaseKey: 'ready' },
+      });
+      await route({
+        name: 'Ship to Work',
+        on: ['pull_request.synchronized'],
+        target: { boardKey: 'ship', moveToBoardKey: 'work', phaseKey: 'execute' },
+      });
+      const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
+      await putAt(card.id, 'execute');
+
+      expect(
+        placed(
+          (await deliverEvent(card.id, { type: 'pull_request.synchronized', pullRequestTrusted: true }, 'push-1')).card,
+        ),
+      ).toEqual({
+        board: 'ship',
+        stages: ['ready'],
+      });
+      await deliverEvent(card.id, { type: 'pull_request.synchronized', pullRequestTrusted: true }, 'push-1');
+      await retry();
+      const replayed = await workItems.get({ orgId: 'org-1', id: card.id });
+      expect(placed(replayed!)).toEqual({ board: 'ship', stages: ['ready'] });
+
+      expect(
+        placed(
+          (await deliverEvent(card.id, { type: 'pull_request.synchronized', pullRequestTrusted: true }, 'push-2')).card,
+        ),
+      ).toEqual({
+        board: 'work',
+        stages: ['execute'],
+      });
+      const after = await workItems.get({ orgId: 'org-1', id: card.id });
+      expect(after!.stageHistory.filter(entry => entry.by.startsWith('intake-route:'))).toHaveLength(2);
+    });
+
+    it("skips a matching rule whose target can't hold the card, with a warning in the decision log, and takes the next one", async () => {
+      const { boards, scope, route, deliver, deliverEvent, putAt } = await setup();
+      const recorded = vi.spyOn(boards, 'recordIntakeDecision');
+      await boards.create(scope, shipBoard, 'admin');
+      const broken = await route({
+        name: 'Gone phase',
+        on: ['pull_request.synchronized'],
+        target: { boardKey: 'work', moveToBoardKey: 'ship', phaseKey: 'staging' },
+      });
+      await route({
+        name: 'Plan again',
+        on: ['pull_request.synchronized'],
+        target: { boardKey: 'work', phaseKey: 'planning' },
+      });
+      const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
+      await putAt(card.id, 'execute');
+      recorded.mockClear();
+
+      expect(
+        placed((await deliverEvent(card.id, { type: 'pull_request.synchronized', pullRequestTrusted: true })).card),
+      ).toEqual({
+        board: 'work',
+        stages: ['planning'],
+      });
+      const skips = (await Promise.all(recorded.mock.results.map(result => result.value))).filter(
+        record => record.outcome === 'rule_skipped',
+      );
+      expect(skips).toHaveLength(1);
+      expect(await boards.getIntakeDecision(scope, skips[0]!.id)).toMatchObject({
+        outcome: 'rule_skipped',
+        routeId: broken.id,
+        boardKey: 'ship',
+        reason: expect.stringContaining('"staging"'),
+        sourceKey: 'github-issue:1',
+      });
+    });
   });
 
   it('moves nothing without a routes reader under a forced route list', async () => {

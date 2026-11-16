@@ -18,6 +18,7 @@ function seededRoutes(): IntakeRouteInfo[] {
       boardKey: route.target.boardKey,
       phaseKey: route.target.phaseKey ?? null,
       joinClosedIssue: route.target.joinClosedIssue ?? false,
+      moveToBoardKey: null,
     },
     on: [...(route.on ?? ['work_item.opened'])],
     revision: 1,
@@ -68,6 +69,25 @@ describe('sendNewCardsTo', () => {
     ]);
     expect(writes.filter(write => write.kind === 'create').length).toBeGreaterThan(0);
   });
+
+  it("copies the card move a trusted linked pull request makes, testing the new board's own phases", () => {
+    const writes = sendNewCardsTo(seededRoutes(), [workBoardInfo, shipBoard], 'ship');
+
+    const linked = writes.find(
+      write =>
+        write.kind === 'create' && write.route.name === 'Trusted pull requests take a waiting issue to Review on Ship',
+    );
+    expect(linked).toMatchObject({
+      kind: 'create',
+      route: {
+        on: ['pull_request.opened'],
+        target: { boardKey: 'ship', phaseKey: 'pr' },
+        when: {
+          conditions: expect.arrayContaining([{ field: 'closedIssue.phase', operator: 'in', value: ['inbox'] }]),
+        },
+      },
+    });
+  });
 });
 
 describe('describeRule on routes', () => {
@@ -83,12 +103,12 @@ describe('describeRule on routes', () => {
       'Integration is GitHub or GitLab and source kind is pull request and author is not trusted',
     );
     expect(lines['closed-canceled']).toBe('Close reason is not planned');
-    expect(lines['closes-issue']).toBe(
-      'Source kind is pull request and author is trusted and pull request closes an issue and closed issue phase is Intake and closed issue has no pull request',
+    expect(lines['linked-pull-request']).toBe(
+      "Pull request's author is trusted and pull request closes an issue and closed issue phase is Intake and closed issue has no pull request",
     );
     expect(Object.values(lines).join(' ')).not.toMatch(/[a-z]+\.[a-zA-Z]+|_/);
     expect(describeRule(route('everything-else').when)).toBe('Every card');
-    expect(describeRule(route('pull-requests').when)).toBe('Every card');
+    expect(describeRule(route('pull-requests').when)).toBe('Source kind is pull request');
   });
 
   it('reads a repository condition as typed, since repository keys are names', () => {

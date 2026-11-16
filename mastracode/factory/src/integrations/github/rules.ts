@@ -12,6 +12,8 @@ import {
   newestOwnedOpenPullRequestNumber,
   pullRequestSources,
   intakeTarget,
+  isPullRequestCard,
+  trustedPullRequestSource,
   rulePhaseField,
   withBoardClosure,
   withBoardFlow,
@@ -30,6 +32,7 @@ import {
   routeEventDecision,
   selectEventRule,
   withoutRouteEvent,
+  withPullRequestTrust,
 } from '../../rules/event-rules.js';
 import type { CardUpdateStatus, NotRoutedLookup } from '../../rules/event-rules.js';
 import type {
@@ -40,6 +43,7 @@ import type {
   FactoryRuleDecision,
   FactorySignalActivityDecision,
 } from '../../rules/types.js';
+import { authorTrusted } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
@@ -196,6 +200,31 @@ function openedByAuthor(
     },
     login,
   };
+}
+
+/**
+ * Whether the delivery's pull request comes from someone with write access, or from Factory: its
+ * own card's stamp, the stamp recorded when it joined the card, else its author acting now.
+ */
+export function githubPullRequestTrusted(
+  context: Pick<FactoryGithubRuleContext, 'pullRequest' | 'item' | 'repository' | 'actor'>,
+): boolean {
+  const { pullRequest, item } = context;
+  if (!pullRequest) return false;
+  if (pullRequest.factoryAuthored) return true;
+  if (item && isPullRequestCard(item)) return authorTrusted(item.metadata);
+  const attached = item
+    ? pullRequestSources(item).find(source =>
+        isRepositoryPullRequest(source, context.repository.id, context.repository.fullName, pullRequest.number),
+      )
+    : undefined;
+  if (item && attached) return trustedPullRequestSource(item, attached);
+  return (
+    context.actor.type === 'github' &&
+    context.actor.trusted &&
+    pullRequest.author !== undefined &&
+    context.actor.login === pullRequest.author
+  );
 }
 
 /** The status change a GitHub delivery reports. `not_planned` and `duplicate` closes are canceled work. */
@@ -826,15 +855,25 @@ export class GithubRules {
     // A pull request intake turned away arrives again, now that it may match a board's rule.
     if (!item) return this.#intakeIfNotRouted(parsed, repositoryId, repositoryName, project, pullRequestNumber, 'pull-request');
     const ownCard = item.externalSource?.type === 'pull-request';
-    if (!ownCard && !attachedPullRequestSource(item, repositoryId, repositoryName, pullRequestNumber)) {
-      return { status: 'ignored' };
-    }
+    const attached = ownCard ? undefined : attachedPullRequestSource(item, repositoryId, repositoryName, pullRequestNumber);
+    if (!ownCard && !attached) return { status: 'ignored' };
     const labelChange = action === 'labeled' || action === 'unlabeled';
     const delta =
       action === 'labeled' || action === 'assigned' ? { added: [name], removed: [] } : { added: [], removed: [name] };
-    if (!ownCard) {
+    if (attached) {
       const event = updateEventFacts('pull_request.updated', labelChange ? { labels: delta } : { assignees: delta });
-      const queued = await this.#commitUpdate(parsed, repositoryName, project, item, event);
+      // `pullRequest.trusted` is the attached pull request's author, never whoever labelled it.
+      const queued = await this.#commitUpdate(
+        parsed,
+        repositoryName,
+        project,
+        item,
+        event && {
+          ...event,
+          pullRequest: attached.externalId,
+          pullRequestTrusted: trustedPullRequestSource(item, attached),
+        },
+      );
       return { status: queued === 'committed' || queued === 'replayed' ? 'committed' : 'ignored' };
     }
     // The pull request is the card's source: record its current labels and assignees on the card,
@@ -855,15 +894,16 @@ export class GithubRules {
           ? before.assignees
           : applied(before.assignees),
     };
+    const event = updateEventFacts('pull_request.updated', {
+      labels: listChange(before.labels, after.labels),
+      assignees: listChange(before.assignees, after.assignees),
+    });
     const queued = await this.#commitUpdate(
       parsed,
       repositoryName,
       project,
       item,
-      updateEventFacts('pull_request.updated', {
-        labels: listChange(before.labels, after.labels),
-        assignees: listChange(before.assignees, after.assignees),
-      }),
+      event && { ...event, pullRequestTrusted: authorTrusted(item.metadata) },
     );
     // Queued before the new lists are recorded: if queueing fails, a redelivery still sees the change.
     if (queued === 'ignored') return { status: 'ignored' };
@@ -1346,6 +1386,10 @@ export class GithubRules {
           })) ?? activitySignalFor(context);
         if (routed) decisions = [{ ...routed }];
       }
+      if (context.pullRequest) {
+        const trusted = githubPullRequestTrusted(context);
+        decisions = decisions.map(entry => withPullRequestTrust(entry, trusted));
+      }
 
       const committed = await this.options.storage.commitRuleEvaluation({
         orgId: project.orgId,
@@ -1646,9 +1690,8 @@ export class GithubRules {
    * Linear, incident.io) carries no repository of its own to match against, so it is taken as it is.
    * In order: the card that authored it (on a board that reviews pull requests), by provenance or session branch,
    * when the pull request is Factory-authored or its author is trusted; it is filed there. Then,
-   * for a trusted author only, the card of the first issue its description says it closes; an
-   * intake route decides whether it joins that one. An untrusted author's pull request never
-   * lands on another card, whatever it says.
+   * whoever opened it, the card of the first issue its description says it closes; it links to that
+   * one. Linking runs nothing: an outsider's pull request is recorded as untrusted there.
    */
   async #pullRequestHome(input: {
     orgId: string;
@@ -1661,7 +1704,6 @@ export class GithubRules {
     authorTrusted: boolean;
     body: string | undefined;
   }): Promise<{ card: Card; reason: FactoryPullRequestHome['reason'] } | undefined> {
-    if (!input.factoryAuthored && !input.authorTrusted) return undefined;
     const items = await this.options.storage.listShared({
       orgId: input.orgId,
       factoryProjectId: input.factoryProjectId,
@@ -1683,14 +1725,16 @@ export class GithubRules {
       !isTerminalWorkItem(this.#boards(input), card) &&
       (card.externalSource.integrationId !== 'github' ||
         cardBelongsToRepository(card, input.repositoryId, input.repositoryName));
+    // Resolution can match a card by branch alone, so only a trusted (or Factory's) pull request
+    // is taken as that card's own.
     if (
+      (input.factoryAuthored || input.authorTrusted) &&
       input.matchedItem &&
       eligible(input.matchedItem) &&
       cardBoardFlow(this.#boards(input), input.matchedItem).pullRequestReview !== undefined
     ) {
       return { card: input.matchedItem, reason: 'authored' };
     }
-    if (!input.authorTrusted) return undefined;
     for (const issueNumber of closingIssueNumbers(input.body, { provider: 'github', repository: input.repositoryName })) {
       const card = items.find(
         item =>

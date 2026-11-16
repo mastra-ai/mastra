@@ -157,24 +157,6 @@ function destinationLabelFor(scope: RouteScope, joining: boolean): string {
   return joining ? 'Join the issue’s card, move to' : 'Send to';
 }
 
-/**
- * Whether a route can join a pull request to the card of the issue it closes: it handles arrivals alone, and
- * every card it matches is a pull request that closes an issue.
- */
-function canJoinIssueCard(on: IntakeRouteInfo['on'], when: RuleGroup | null): boolean {
-  const arrival = on.length === 1 && (on[0] === 'pull_request.opened' || on[0] === 'work_item.created');
-  if (!arrival || when?.operator !== 'AND') return false;
-  const requires = (field: string, value: unknown) =>
-    when.conditions.some(
-      condition =>
-        !('conditions' in condition) &&
-        condition.field === field &&
-        condition.operator === 'equals' &&
-        condition.value === value,
-    );
-  return requires('source.kind', 'pull_request') && requires('pullRequest.closesIssue', true);
-}
-
 /** The phase a route keeps when what it does with cards changes: its own if cards can still be there. */
 function phaseStillOffered(board: InstalledBoardInfo | undefined, phaseKey: string, joining: boolean): string {
   if (targetPhases(board, true, joining).some(phase => phase.id === phaseKey)) return phaseKey;
@@ -554,9 +536,9 @@ function RouteCard({
 
   const joining = route.target.joinClosedIssue === true;
   const destinationLabel = destinationLabelFor(scope, joining);
-  // A route already joining keeps the switch whatever its conditions say now, so it can be turned off.
-  const offersJoin =
-    scope.kind === 'arrivals' && !readOnly && !isCatchAll && (joining || canJoinIssueCard(route.on, route.when));
+  // Pull requests link to their issue's card on their own now; a route still joining keeps the
+  // switch only so it can be turned off.
+  const offersJoin = scope.kind === 'arrivals' && !readOnly && !isCatchAll && joining;
 
   return (
     <RuleCard inactive={!route.enabled}>
@@ -712,11 +694,7 @@ function NewRoute({
       ? (scope.board.flow?.completed ?? scope.board.initialPhase)
       : (initialBoard?.initialPhase ?? ''),
   );
-  const [wantsJoin, setWantsJoin] = useState(false);
-  const offersJoin = scope.kind === 'arrivals' && canJoinIssueCard(on, when);
-  const joining = offersJoin && wantsJoin;
-  // Leaving joining can leave a phase new cards can't land in picked.
-  const targetPhase = scope.kind === 'arrivals' ? phaseStillOffered(board, phaseKey, joining) : phaseKey;
+  const targetPhase = scope.kind === 'arrivals' ? phaseStillOffered(board, phaseKey, false) : phaseKey;
   const problem = whenProblem(on, when);
   const needsCondition = scope.kind === 'arrivals' && when === null;
   const [adding, setAdding] = useState(false);
@@ -769,8 +747,7 @@ function NewRoute({
           </Txt>
         )}
       </RuleCardBody>
-      {offersJoin && <JoinIssueCard checked={wantsJoin} onChange={setWantsJoin} />}
-      <RuleCardOutcome label={destinationLabelFor(scope, joining)}>
+      <RuleCardOutcome label={destinationLabelFor(scope, false)}>
         {scope.kind === 'arrivals' && (
           <>
             <BoardPicker
@@ -792,7 +769,6 @@ function NewRoute({
             board={board}
             value={targetPhase}
             placesNew={scope.kind === 'arrivals'}
-            joining={joining}
             label={scope.kind === 'moves' ? 'Move to' : 'Phase'}
             onChange={setPhaseKey}
           />
@@ -811,7 +787,7 @@ function NewRoute({
                 name: name.trim(),
                 on,
                 when,
-                target: { boardKey: board.id, phaseKey: targetPhase, joinClosedIssue: joining },
+                target: { boardKey: board.id, phaseKey: targetPhase, joinClosedIssue: false, moveToBoardKey: null },
               });
               // An added route closes this form; a failed one leaves it to try again.
               if (!added) setAdding(false);
@@ -977,7 +953,6 @@ function RouteList({
             target: {
               boardKey: route.target.boardKey,
               phaseKey: route.target.phaseKey,
-              ...(route.target.joinClosedIssue ? { joinClosedIssue: true } : {}),
             },
           },
         },

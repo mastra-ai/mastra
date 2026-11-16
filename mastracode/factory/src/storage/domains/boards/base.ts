@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorageOps } from '@mastra/core/storage';
@@ -6,8 +7,13 @@ import type { FactoryStorageOps } from '@mastra/core/storage';
 import { arrivalKinds, DEFAULT_ROUTE_EVENTS, routeEventsProblem } from '../../../boards/board-events.js';
 import type { ArrivalKind, RouteArrivals, RouteEvent } from '../../../boards/board-events.js';
 import type { FactoryPhaseTool } from '../../../boards/define-board.js';
-import { deriveIntakeOrder, reconcileIntakeOrder } from '../../../boards/intake-order.js';
-import { DEFAULT_INTAKE_ROUTES } from '../../../boards/work-routes.js';
+import { deriveIntakeOrder, kindsTakenWhole, reconcileIntakeOrder } from '../../../boards/intake-order.js';
+import {
+  DEFAULT_INTAKE_ROUTES,
+  LINKED_PULL_REQUEST_ROUTE_KEY,
+  RETIRED_JOIN_ROUTE,
+} from '../../../boards/work-routes.js';
+import { currentRuleGroup } from '../../../rules/rule-group.js';
 import type { RuleGroup } from '../../../rules/rule-group.js';
 import type { RetiredAutomationSettings } from '../projects/base.js';
 import {
@@ -153,6 +159,12 @@ export interface IntakeRouteTarget {
    * more source instead of a card of its own. The route doesn't match any other arrival.
    */
   joinClosedIssue?: boolean;
+  /**
+   * On a route moving existing cards (one naming events besides `work_item.opened`), the board the
+   * card moves to, at `phaseKey`. `boardKey` stays the board whose cards the route moves. Unset
+   * keeps the card on `boardKey`.
+   */
+  moveToBoardKey?: string | null;
 }
 
 /** An intake route as it is written. */
@@ -176,7 +188,7 @@ export interface StoredIntakeRouteRecord {
   enabled: boolean;
   position: number;
   when: RuleGroup | null;
-  target: { boardKey: string; phaseKey: string | null; joinClosedIssue: boolean };
+  target: { boardKey: string; phaseKey: string | null; joinClosedIssue: boolean; moveToBoardKey: string | null };
   on: RouteEvent[];
   /**
    * Set on a route stored before `pull_request.opened` filed pull requests with no card (0.28): it
@@ -205,8 +217,12 @@ export type StoredBoardErrorCode =
 /** A board's most intake routes. */
 export const MAX_INTAKE_ROUTES_PER_BOARD = 100;
 
-/** How an arrival was decided. */
-export type IntakeDecisionOutcome = 'placed' | 'not_routed';
+/**
+ * How an arrival was decided; `rule_skipped` warns that a card-move rule matched but its target
+ * couldn't take the card, and `rule_retired` that Factory switched off a join route an admin had
+ * changed, whose work no rule does now.
+ */
+export type IntakeDecisionOutcome = 'placed' | 'not_routed' | 'rule_skipped' | 'rule_retired';
 
 /**
  * Which evaluator decides where an arrival goes: `route-list` is the old one, which projects created
@@ -272,7 +288,8 @@ export {
   PULL_REQUEST_CLOSED_ISSUE_ROUTE,
   PULL_REQUEST_UPDATED_ROUTE,
   PULL_REQUEST_REVIEW_REQUESTED_ROUTE,
-  CLOSES_ISSUE_INTAKE_ROUTE,
+  LINKED_PULL_REQUEST_ROUTE,
+  LINKED_PULL_REQUEST_ROUTE_KEY,
   CATCH_ALL_INTAKE_ROUTE,
   DEFAULT_INTAKE_ROUTES,
 } from '../../../boards/work-routes.js';
@@ -349,6 +366,7 @@ interface IntakeRouteRow extends Record<string, unknown> {
   join_closed_issue: boolean | null;
   /** Null on rows written before `pull_request.opened` filed pull requests: there it only moves a card. */
   opened_files_pull_requests?: boolean | null;
+  move_to_board_key: string | null;
   revision: number;
   created_by: string;
   created_at: Date;
@@ -438,8 +456,10 @@ function toPhaseRecord(row: PhaseRow): StoredPhaseRecord {
     runner: row.runner,
     nextPhases: row.next_phases,
     autoStart: row.auto_start,
-    autoStartWhen: row.auto_start_when,
-    exitTool: row.exit_tool,
+    autoStartWhen: currentRuleGroup(row.auto_start_when),
+    exitTool: row.exit_tool?.autoApproveWhen
+      ? { ...row.exit_tool, autoApproveWhen: currentRuleGroup(row.exit_tool.autoApproveWhen) }
+      : row.exit_tool,
     tools: row.tools ?? null,
   };
 }
@@ -1078,6 +1098,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
           board_key: patch.target.boardKey,
           phase_key: patch.target.phaseKey ?? null,
           join_closed_issue: patch.target.joinClosedIssue ?? false,
+          move_to_board_key: patch.target.moveToBoardKey ?? null,
         }),
         updated_by: options.actor,
       });
@@ -1159,15 +1180,50 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       const missing = missingDefaults(current);
       if (missing.length === 0) return;
       const rows = await readIntakeRoutes(ops, scope);
+      const retired = new Set<string>();
+      // Pull requests link to the card of the issue they close on their own now: a route that
+      // joined them is switched off, and kept so its history stays readable.
+      // One an admin had changed is named in the decision log: the linked rule doesn't do all it did.
+      if (missing.some(({ key }) => key === LINKED_PULL_REQUEST_ROUTE_KEY)) {
+        for (const row of rows) {
+          if (!row.join_closed_issue || !row.enabled) continue;
+          await updateIntakeRouteRow(ops, row, { enabled: false, updated_by: DEFAULT_INTAKE_ROUTE_ACTOR });
+          retired.add(row.id);
+          if (isShippedJoinRoute(row)) continue;
+          await ops.upsertOne(INTAKE_DECISIONS, ['org_id', 'factory_project_id', 'idempotency_key'], {
+            ...scopeWhere(scope),
+            idempotency_key: `rule-retired:${row.id}`,
+            outcome: 'rule_retired',
+            evaluator: current.intake_evaluator ?? 'route-list',
+            board_key: row.board_key,
+            route_id: row.id,
+            reason:
+              'Switched off: pull requests now link to the card of the issue they close on their own, and only the rule `Trusted pull requests take a waiting issue to Review` moves a waiting card. Add a card-move rule on pull_request.opened to move cards the way this route did.',
+            source_key: null,
+            title: row.name,
+            url: null,
+            arrival: null,
+            decided_at: new Date(),
+            resolved_at: null,
+            resolved_by: null,
+          });
+        }
+      }
       let position = rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
       const first: string[] = [];
       const perBoard = new Map<string, number>();
       // Only a project no default was added to yet is new.
       const newProject = seededDefaults(current).length === 0;
-      for (const { route, first: leads, newProjectsOnly } of missing) {
+      for (const { key, route, first: leads, newProjectsOnly } of missing) {
         if (newProjectsOnly && !newProject) continue;
-        // A board at the limit keeps its own routes; the default counts as added all the same.
-        const count = perBoard.get(route.target.boardKey) ?? boardRouteCount(rows, route.target.boardKey);
+        // A board at the limit keeps its own routes; the default counts as added all the same. The
+        // linked rule takes the slot of a join route it switched off.
+        const count =
+          perBoard.get(route.target.boardKey) ??
+          boardRouteCount(
+            key === LINKED_PULL_REQUEST_ROUTE_KEY ? rows.filter(row => !retired.has(row.id)) : rows,
+            route.target.boardKey,
+          );
         if (count >= MAX_INTAKE_ROUTES_PER_BOARD) continue;
         perBoard.set(route.target.boardKey, count + 1);
         const id = randomUUID();
@@ -1400,8 +1456,13 @@ function toIntakeRouteRecord(row: IntakeRouteRow): StoredIntakeRouteRecord {
     name: row.name,
     enabled: row.enabled,
     position: row.position,
-    when: row.when_condition,
-    target: { boardKey: row.board_key, phaseKey: row.phase_key, joinClosedIssue: row.join_closed_issue === true },
+    when: currentRuleGroup(row.when_condition),
+    target: {
+      boardKey: row.board_key,
+      phaseKey: row.phase_key,
+      joinClosedIssue: row.join_closed_issue === true,
+      moveToBoardKey: row.move_to_board_key ?? null,
+    },
     on: routeEvents(row),
     ...(routeArrivals(row).pullRequestOpenedMovesOnly && { pullRequestOpenedMovesOnly: true as const }),
     revision: row.revision,
@@ -1466,10 +1527,21 @@ function boardRouteCount(rows: readonly IntakeRouteRow[], boardKey: string): num
   return rows.filter(row => row.board_key === boardKey).length;
 }
 
+/** Whether a stored join route is still the one projects were given, which the linked rule replaces. */
+function isShippedJoinRoute(row: IntakeRouteRow): boolean {
+  return (
+    row.board_key === RETIRED_JOIN_ROUTE.target.boardKey &&
+    row.phase_key === RETIRED_JOIN_ROUTE.target.phaseKey &&
+    isDeepStrictEqual(currentRuleGroup(row.when_condition), RETIRED_JOIN_ROUTE.when)
+  );
+}
+
 /** Whether `row` files every new issue, or pull request, that reaches it, as the seeded "Everything else" route does. */
 function catchesEveryNewCard(row: IntakeRouteRow, kind: ArrivalKind): boolean {
   return (
-    row.enabled && row.when_condition === null && arrivalKinds(routeArrivals(row)).has(kind) && !row.join_closed_issue
+    row.enabled &&
+    !row.join_closed_issue &&
+    kindsTakenWhole({ when: row.when_condition, ...routeArrivals(row) }).includes(kind)
   );
 }
 
@@ -1525,6 +1597,7 @@ async function insertIntakeRoute(
     on_events: route.input.on ?? null,
     join_closed_issue: route.input.target.joinClosedIssue ?? false,
     opened_files_pull_requests: route.input.pullRequestOpenedMovesOnly ? null : true,
+    move_to_board_key: route.input.target.moveToBoardKey ?? null,
     revision: 1,
     created_by: route.actor,
     created_at: now,

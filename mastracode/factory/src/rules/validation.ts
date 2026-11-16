@@ -107,7 +107,11 @@ function boardIdentifier(value: unknown, label: string): string {
 
 function boardEvent(value: unknown, label: string): BoardEventFacts {
   if (!isPlainObject(value)) throw new FactoryRuleValidationError(`${label} event must be an object.`);
-  assertExactKeys(value, ['type', 'reason', 'labels', 'assignees'], `${label} event`);
+  assertExactKeys(
+    value,
+    ['type', 'reason', 'labels', 'assignees', 'pullRequest', 'pullRequestTrusted', 'closedIssue'],
+    `${label} event`,
+  );
   const type = enumValue(value.type, STATUS_EVENTS, `${label} event type`);
   const reason =
     value.reason === undefined ? undefined : enumValue(value.reason, CLOSE_REASONS, `${label} event reason`);
@@ -116,7 +120,21 @@ function boardEvent(value: unknown, label: string): BoardEventFacts {
   }
   const labels = itemChange(value.labels, `${label} event labels`);
   const assignees = itemChange(value.assignees, `${label} event assignees`);
-  return { type, ...(reason ? { reason } : {}), ...(labels ? { labels } : {}), ...(assignees ? { assignees } : {}) };
+  if (value.pullRequestTrusted !== undefined && typeof value.pullRequestTrusted !== 'boolean') {
+    throw new FactoryRuleValidationError(`${label} event pullRequestTrusted must be a boolean.`);
+  }
+  if (value.pullRequest !== undefined && (typeof value.pullRequest !== 'string' || value.pullRequest.length === 0)) {
+    throw new FactoryRuleValidationError(`${label} event pullRequest must be a non-empty string.`);
+  }
+  return {
+    type,
+    ...(reason ? { reason } : {}),
+    ...(labels ? { labels } : {}),
+    ...(assignees ? { assignees } : {}),
+    ...(typeof value.pullRequest === 'string' ? { pullRequest: value.pullRequest } : {}),
+    ...(typeof value.pullRequestTrusted === 'boolean' ? { pullRequestTrusted: value.pullRequestTrusted } : {}),
+    ...(value.closedIssue !== undefined ? { closedIssue: closedIssueFacts(value.closedIssue, label) } : {}),
+  };
 }
 
 const MAX_CHANGED_NAMES = 100;
@@ -133,6 +151,18 @@ function itemChange(value: unknown, label: string): ItemChange | undefined {
     return list.map(name => boundedString(name, `${label} ${side}`, MAX_CHANGED_NAME_LENGTH));
   };
   return { added: names(value.added, 'added'), removed: names(value.removed, 'removed') };
+}
+
+function closedIssueFacts(value: unknown, label: string): NonNullable<BoardEventFacts['closedIssue']> {
+  if (!isPlainObject(value)) throw new FactoryRuleValidationError(`${label} event closedIssue must be an object.`);
+  assertExactKeys(value, ['phase', 'hasPullRequest'], `${label} event closedIssue`);
+  if (value.phase !== null && !isBoardIdentifier(value.phase)) {
+    throw new FactoryRuleValidationError(`${label} event closedIssue.phase is invalid.`);
+  }
+  if (typeof value.hasPullRequest !== 'boolean') {
+    throw new FactoryRuleValidationError(`${label} event closedIssue.hasPullRequest must be a boolean.`);
+  }
+  return { phase: value.phase, hasPullRequest: value.hasPullRequest };
 }
 
 function linkedItemReference(value: unknown, field: 'attachTo' | 'closesIssue'): { workItemId: string } | undefined {

@@ -137,6 +137,7 @@ describe('api command descriptors', () => {
       'factoryWork-itemUpdate': ['workItemUpdate', ['id'], true, true, false],
       'factoryWork-itemDelete': ['workItemDelete', ['id'], false, false, false],
       'factoryWork-itemTransition': ['workItemTransition', ['id', 'workItemId'], true, true, false],
+      'factoryWork-itemWorking-pull-request': ['workItemWorkingPullRequest', ['id', 'workItemId'], true, true, false],
       'factoryWork-itemStart': ['workItemStart', ['id'], true, true, false],
       'factoryWork-itemAutomation-run': ['workItemAutomationRun', ['id', 'workItemId'], true, true, false],
       factorySessionRows: ['sessionRows', ['id'], true, false, false],

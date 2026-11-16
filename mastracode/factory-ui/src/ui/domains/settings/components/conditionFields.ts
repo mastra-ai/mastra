@@ -16,9 +16,14 @@ const CARD_FACT_PROPERTIES = {
       state: { type: 'string', title: 'State' },
       assignees: { type: 'string', title: 'Assignees' },
       pullRequest: { type: 'number', title: 'Open pull request' },
+      trusted: { type: 'boolean', title: 'Author trusted' },
     },
   },
-  author: { type: 'object', title: 'Author', properties: { trusted: { type: 'boolean', title: 'Trusted' } } },
+  pullRequest: {
+    type: 'object',
+    title: 'Pull request',
+    properties: { trusted: { type: 'boolean', title: 'Author trusted' } },
+  },
   source: {
     type: 'object',
     title: 'Source',
@@ -44,7 +49,10 @@ const ROUTE_FACT_PROPERTIES = {
   pullRequest: {
     type: 'object',
     title: 'Pull request',
-    properties: { closesIssue: { type: 'boolean', title: 'Closes an issue' } },
+    properties: {
+      ...CARD_FACT_PROPERTIES.pullRequest.properties,
+      closesIssue: { type: 'boolean', title: 'Closes an issue' },
+    },
   },
   closedIssue: {
     type: 'object',
@@ -149,7 +157,12 @@ const FIELD_SHAPES: Record<string, FieldShape> = {
   'item.state': { label: 'State' },
   'item.assignees': { label: 'Assignees', list: true },
   'item.pullRequest': { label: 'Open pull request' },
-  'author.trusted': { label: 'Author trust', options: yesNo('Trusted', 'Outside author'), strict: true },
+  'item.trusted': { label: 'Author trust', options: yesNo('Trusted', 'Outside author'), strict: true },
+  'pullRequest.trusted': {
+    label: 'Pull request author trust',
+    options: yesNo('Trusted', 'Outside author'),
+    strict: true,
+  },
   'source.kind': {
     label: 'Source kind',
     options: [
@@ -220,7 +233,8 @@ export function conditionFields(facts: Facts, options: Record<string, FilterBarO
 
 /** Yes/no facts read as a phrase, since "Author trust is trusted" says less than "author is trusted". */
 const BOOLEAN_TEXT: Record<string, readonly [yes: string, no: string]> = {
-  'author.trusted': ['author is trusted', 'author is not trusted'],
+  'item.trusted': ['author is trusted', 'author is not trusted'],
+  'pullRequest.trusted': ["pull request's author is trusted", "pull request's author is not trusted"],
   'pullRequest.closesIssue': ['pull request closes an issue', 'pull request closes no issue'],
   'closedIssue.hasPullRequest': ['closed issue has a pull request', 'closed issue has no pull request'],
 };

@@ -13,7 +13,7 @@ const selfReviewRule: RuleGroup = {
     {
       operator: 'OR',
       conditions: [
-        { operator: 'AND', conditions: [{ field: 'author.trusted', operator: 'equals', value: true }] },
+        { operator: 'AND', conditions: [{ field: 'item.trusted', operator: 'equals', value: true }] },
         {
           operator: 'OR',
           conditions: [
@@ -69,7 +69,7 @@ describe('condition rows', () => {
       return Array.isArray(suggestions) ? suggestions.find(option => option.value === String(value))?.label : undefined;
     };
 
-    expect(label('author.trusted', false)).toBe('Outside author');
+    expect(label('item.trusted', false)).toBe('Outside author');
     expect(label('source.kind', 'pull_request')).toBe('Pull request');
     expect(label('source.integration', 'incidentio')).toBe('incident.io');
     expect(label('event.reason', 'canceled')).toBe('Not planned');
