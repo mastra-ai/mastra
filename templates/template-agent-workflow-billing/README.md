@@ -13,7 +13,6 @@ We built this template to provide a starting point for billing in Mastra, with c
 - **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` in `.env` for the bundled Image Assistant and Image Generation examples.
 - Optional **[Autumn credentials](https://app.useautumn.com)**: configure `AUTUMN_SECRET_KEY`, trusted customer/feature bindings, and JWT identity as described in the [Autumn guide](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/docs/autumn.md). The default local provider needs no Autumn credentials.
 - **Node.js 22+ or 24+** on **macOS, Linux** or Windows. On Windows, use WSL2 or a Linux container and keep private state on its Linux filesystem.
-- `BILLING_STUDIO_ENABLED=true` is the default in `.env.example`, enabling the Image Assistant and billing Playground tools. Set it to `false` in `.env` to disable them. Local setup creates the credential used to authenticate in Studio.
 
 For the **Autumn sandbox experience in production mode**, follow the [Autumn integration guide](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/docs/autumn.md#test-autumn-sandbox-in-studio) instead of the local quickstart below. It covers account, plan and credit setup, JWT provisioning and renewal, and testing in Studio. `BILLING_MODE=production` enables verified JWT identity; the Autumn sandbox key keeps billing in sandbox.
 
