@@ -592,6 +592,43 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(errors).toEqual([]);
     });
 
+    // The board lets the Factory answer its own plan. A person answers the same plan at the same
+    // moment: one continuation drives the run, and the other is not reported as a failure (#30462).
+    it('resumes the plan once when the Factory answers its own plan while a person answers it', async () => {
+      const { answer, session, errors, signals, waitingOn, owner } = await parkedPhaseSession({
+        ownedByFactory: true,
+        movedFromOwnSession: true,
+      });
+      const ends: Array<{ reason?: string }> = [];
+      session.subscribe(event => {
+        if (event.type === 'agent_end') ends.push(event);
+      });
+      // How many times a continuation actually drove the parked call.
+      const resumes = vi.spyOn(session, 'resumeToolCall');
+
+      // The person's answer, and the answer the dispatcher sends for a plan it may approve:
+      // both in flight together, as a board decision lands while someone answers it.
+      await Promise.allSettled([
+        answer('approve'),
+        session.respondToToolSuspension({
+          toolCallId: PARKED.plan.toolCallId,
+          resumeData: { action: 'approved' },
+          requestContext: new RequestContext([['user', { workosId: owner, organizationId: ORG }]]),
+        }),
+      ]);
+
+      await vi.waitFor(() => expect(waitingOn()).toBeUndefined(), { timeout: 30_000 });
+      await vi.waitFor(() => expect(signals.filter(signal => signal.kind === 'done')).toHaveLength(1), {
+        timeout: 30_000,
+      });
+      // One continuation answers the plan; the other does not drive the run again.
+      expect(resumes).toHaveBeenCalledTimes(1);
+      expect(ends.map(end => end.reason)).toEqual(['complete']);
+      expect(errors).toEqual([]);
+      expect(signals.filter(signal => signal.kind === 'failed')).toEqual([]);
+      expect(signals.map(signal => signal.kind)).toEqual(['blocked', 'done']);
+    });
+
     it('declines a tool call that is not a plan from the web, so the tool never runs', async () => {
       const { answerOnWeb, errors, shipped, waitingOn } = await parkedPhaseSession({ parkedOn: 'release' });
       const requestsBefore = mock.getRequests().length;
