@@ -218,32 +218,78 @@ describe('LinearRules', () => {
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 
-  it("runs the renamed issue's card on another board next to the card filed under the new identifier", async () => {
+  // Cards an issue holds after Linear renamed it: `filed` under an identifier (null: filed by hand,
+  // with only the issue id in metadata), `alsoOn` linked onto another board, `runs` the cards
+  // the issue's update evaluates.
+  it.each([
+    {
+      name: 'a card under an older identifier on another board runs next to the current one',
+      cards: [
+        { key: 'old', filed: 'OLD-1', board: 'release', stage: 'planning' },
+        { key: 'current', filed: issue.identifier, board: 'work', stage: 'intake' },
+      ],
+      runs: ['old', 'current'],
+    },
+    {
+      name: "a live card wins its board over an older identifier's finished card when none is under the current one",
+      cards: [
+        { key: 'b', filed: 'OLD-B', board: 'work', stage: 'intake', alsoOn: { key: 'bShipped', board: 'release', stage: 'shipped' } },
+        { key: 'a', filed: 'OLD-A', board: 'release', stage: 'planning', alsoOn: { key: 'aDone', board: 'work', stage: 'done' } },
+      ],
+      runs: ['b', 'a'],
+    },
+    {
+      name: 'a hand-filed card holding the issue id is not the issue\'s card',
+      cards: [
+        { key: 'current', filed: issue.identifier, board: 'work', stage: 'intake' },
+        { key: 'manual', filed: null, board: 'release', stage: 'planning' },
+      ],
+      runs: ['current'],
+    },
+  ])('after a rename, $name', async ({ cards, runs }) => {
     const boards = createBoardRegistry({ boards: [createTestBoard()] });
     const { project, service, workItems } = await setup(undefined, boards);
-    const file = async (identifier: string, board: string, stage: string) =>
-      (
-        await workItems.upsert({
+    const ids = new Map<string, string>();
+    for (const card of cards) {
+      const { item } = await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          ...(card.filed
+            ? {
+                externalSource: {
+                  integrationId: 'linear',
+                  type: 'issue',
+                  externalId: `linear:${card.filed}`,
+                  url: issue.url,
+                },
+              }
+            : {}),
+          title: `${card.filed ?? 'By hand'}: Fix intake sync`,
+          board: card.board,
+          stages: [card.stage],
+          sessions: {},
+          metadata: { linearIssueId: issue.id },
+        },
+      });
+      ids.set(card.key, item.id);
+      if ('alsoOn' in card && card.alsoOn) {
+        const linked = await workItems.linkWorkItemToBoard({
           orgId: 'org-1',
+          id: item.id,
+          board: card.alsoOn.board,
+          stage: card.alsoOn.stage,
           userId: 'user-1',
-          factoryProjectId: project.id,
-          input: {
-            externalSource: { integrationId: 'linear', type: 'issue', externalId: `linear:${identifier}`, url: issue.url },
-            title: `${identifier}: Fix intake sync`,
-            board,
-            stages: [stage],
-            sessions: {},
-            metadata: { linearIssueId: issue.id },
-          },
-        })
-      ).item;
-    const old = await file('OLD-1', 'release', 'planning');
-    const current = await file(issue.identifier, 'work', 'intake');
+        });
+        ids.set(card.alsoOn.key, linked!.id);
+      }
+    }
     const evaluate = vi.spyOn(workItems, 'commitRuleEvaluation');
 
     await service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] });
 
-    expect(evaluate.mock.calls.map(([call]) => call.workItemId).sort()).toEqual([old.id, current.id].sort());
+    expect(evaluate.mock.calls.map(([call]) => call.workItemId).sort()).toEqual(runs.map(key => ids.get(key)).sort());
   });
 
   // A card finished while claims were enforced, the issue moved teams and reopened, and a second

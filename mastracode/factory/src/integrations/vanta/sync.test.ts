@@ -163,7 +163,9 @@ describe('createVantaSync', () => {
 
     const results = await Promise.all(commits.mock.results.map(result => result.value));
     const byCard = commits.mock.calls.map(([input], index) => [input.workItemId, input.ingress.identity, results[index].status]);
-    expect(byCard).toEqual([
+    // Cards filed in the same millisecond run in either order; each sync runs both.
+    const bySync = (from: number) => byCard.slice(from, from + 2).sort(([a], [b]) => (a === filed.id ? -1 : b === filed.id ? 1 : 0));
+    expect([...bySync(0), ...bySync(2)]).toEqual([
       // The first card keeps the identity the unbound evaluation was stored under.
       [filed.id, 'vanta:vuln-1:open', 'replayed'],
       [security!.id, `vanta:vuln-1:open:${security!.id}`, 'committed'],

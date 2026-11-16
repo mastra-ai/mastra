@@ -126,19 +126,13 @@ export class LinearRules {
     const itemsBySourceKey = cardsByExternalId(items, { integrationId: 'linear', type: 'issue' });
     const statuses: IngressStatus[] = [];
     for (const issue of input.issues) {
-      // One card per Linear issue per project; other projects may file their own.
-      // The identifier finds the card filed under it; after Linear renamed the
-      // identifier, the stable issue id finds it, preferring a live card over
-      // finished ones, as the issue detail route does.
+      // One card per Linear issue per board; other projects may file their own. The cards
+      // filed under the issue's identifier are its cards on their boards. After Linear renamed
+      // the identifier, the stable issue id finds its cards on every other board, one per board,
+      // preferring a live card over finished ones, as the issue detail route does.
       const byIssueId = items.filter(item => item.workItem.metadata?.linearIssueId === issue.id);
-      const renamed = byIssueId.find(item => !isTerminalWorkItem(this.#boards(input), item)) ?? byIssueId[0];
-      const filed = itemsBySourceKey.get(`linear:${issue.identifier}`);
-      const renamedId = renamed?.externalSource?.externalId;
-      const named = filed ?? (renamed ? ((renamedId && itemsBySourceKey.get(renamedId)) || [renamed]) : []);
-      // A card filed under an older identifier on a board none of those cover is still the
-      // issue's card there; one per board, the live one first.
-      const covered = new Set(named.map(card => effectiveBoard(card)));
-      const cards = [...named];
+      const cards = [...(itemsBySourceKey.get(`linear:${issue.identifier}`) ?? [])];
+      const covered = new Set(cards.map(card => effectiveBoard(card)));
       const live = (card: Card) => !isTerminalWorkItem(this.#boards(input), card);
       for (const card of [...byIssueId.filter(live), ...byIssueId.filter(card => !live(card))]) {
         if (covered.has(effectiveBoard(card)) || cards.some(held => held.id === card.id)) continue;
