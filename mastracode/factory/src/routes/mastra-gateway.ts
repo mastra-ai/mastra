@@ -1,7 +1,24 @@
+import { loadSettings } from '@mastra/code-sdk/onboarding/settings';
 import type { Context } from 'hono';
 import { z } from 'zod';
 
 import type { RouteAuth } from './route.js';
+
+/**
+ * The Mastra Gateway this server sends model calls to: the `memoryGateway.baseUrl` setting, then
+ * `MASTRA_GATEWAY_URL`, then production. Resolved the same way as the run path, without a trailing
+ * slash or `/v1`.
+ */
+export function mastraGatewayBaseUrl(): string {
+  let configured: string | undefined;
+  try {
+    configured = loadSettings().memoryGateway?.baseUrl;
+  } catch {
+    // An unreadable settings file leaves the environment and the default in charge.
+  }
+  const raw = configured ?? process.env.MASTRA_GATEWAY_URL ?? 'https://gateway-api.mastra.ai';
+  return raw.replace(/\/+$/, '').replace(/\/v1$/, '');
+}
 
 const MASTRA_PROJECTS_URL = process.env.MASTRA_PROJECTS_URL || 'https://projects.mastra.ai';
 

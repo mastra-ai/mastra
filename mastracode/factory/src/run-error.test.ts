@@ -1,3 +1,4 @@
+import { toPersistedErrorIdentity } from '@mastra/core/error';
 import { describe, expect, it } from 'vitest';
 
 import { describeRunError } from './run-error';
@@ -111,6 +112,187 @@ describe('describeRunError', () => {
       url: 'https://gateway-api.mastra.ai.example.com/v1/chat/completions',
     };
     expect(describeRunError(outOfCredits)).toMatchObject({ title: 'Provider quota exhausted' });
+  });
+
+  describe('Mastra Gateway v2 refusals', () => {
+    // What v2 sends for a reason code it has no special reply for, and what history keeps of it:
+    // no request URL, and the model the request named without the `mastra/` prefix.
+    const gatewayRefusal = (status: number, code: string, message = code) => {
+      const responseBody = JSON.stringify({ error: { type: 'gateway_error', code, message } });
+      const live = {
+        name: 'AI_APICallError',
+        message,
+        statusCode: status,
+        responseBody,
+        requestBodyValues: { model: 'anthropic/claude-opus-4-5' },
+      };
+      return toPersistedErrorIdentity(live);
+    };
+
+    it('keeps no request URL or gateway prefix in the saved part these cases are rebuilt from', () => {
+      const saved = gatewayRefusal(402, 'insufficient_credit');
+      expect(saved).not.toHaveProperty('url');
+      expect(saved).toMatchObject({
+        modelId: 'anthropic/claude-opus-4-5',
+        codes: expect.arrayContaining(['gateway_error', 'insufficient_credit']),
+      });
+    });
+
+    it('offers to add credits when the organization is out of credits', () => {
+      expect(describeRunError(gatewayRefusal(402, 'insufficient_credit'))).toEqual({
+        title: 'Out of Mastra Gateway credits',
+        message:
+          'Your organization has no gateway credits left. Add credits, then continue the run, or choose another model.',
+        recoveries: ['credits', 'continue', 'model'],
+        model: 'anthropic/claude-opus-4-5',
+      });
+    });
+
+    it('names the organization budget, and still offers credits, which lift a starting budget', () => {
+      const description = describeRunError(gatewayRefusal(402, 'organization_budget_exhausted'));
+      expect(description).toMatchObject({
+        title: 'Mastra Gateway budget reached',
+        recoveries: ['credits', 'continue', 'model'],
+      });
+      expect(description.message).toContain('used its Mastra Gateway budget');
+      expect(description.message).toContain('adding credits lifts it');
+    });
+
+    it.each(['organization_budget_insufficient', 'organization_budget_unbounded_request'])(
+      'says a %s request needs more than the budget has left',
+      code => {
+        const description = describeRunError(gatewayRefusal(402, code));
+        expect(description).toMatchObject({
+          title: 'Mastra Gateway budget reached',
+          recoveries: ['credits', 'continue', 'model'],
+        });
+        expect(description.message).toContain('This request needs more than your organization has left');
+      },
+    );
+
+    it.each(['key_budget_exhausted', 'spend_limit_reached'])(
+      'sends %s to an organization admin, without offering credits that would not help',
+      code => {
+        const description = describeRunError(gatewayRefusal(402, code));
+        expect(description).toMatchObject({ title: 'Mastra Gateway spend limit reached', recoveries: ['model'] });
+        expect(description.message).toContain('Ask an organization admin to raise the limit');
+      },
+    );
+
+    it('refuses usage the billing plan does not cover, without offering credits', () => {
+      expect(describeRunError(gatewayRefusal(402, 'billing_overage_unsupported'))).toMatchObject({
+        title: 'Usage not covered by the billing plan',
+        recoveries: ['model'],
+      });
+    });
+
+    it('keeps offering credits for a 402 code it does not know yet', () => {
+      expect(describeRunError(gatewayRefusal(402, 'some_new_billing_code'))).toMatchObject({
+        title: 'Out of Mastra Gateway credits',
+        recoveries: ['credits', 'continue', 'model'],
+      });
+    });
+
+    it('quotes the sentence the gateway wrote instead of the code', () => {
+      const description = describeRunError(
+        gatewayRefusal(402, 'spend_limit_reached', 'This key reached its monthly spend limit of $50.'),
+      );
+      expect(description.message).toBe(
+        'This key reached its monthly spend limit of $50. Ask an organization admin to raise the limit, or choose another model.',
+      );
+    });
+
+    it.each(['no_eligible_route', 'model_not_allowed'])(
+      'offers another model, not credentials, when routing policy refuses with %s',
+      code => {
+        expect(describeRunError(gatewayRefusal(403, code))).toMatchObject({
+          title: 'Model not available through the Mastra Gateway',
+          recoveries: ['model'],
+        });
+      },
+    );
+
+    it.each([
+      [413, 'context_too_large'],
+      [422, 'context_unaccountable'],
+    ])('treats a %i %s as a conversation over the model limit', (status, code) => {
+      expect(describeRunError(gatewayRefusal(status, code))).toMatchObject({
+        title: 'Conversation exceeds the model’s limit',
+        recoveries: ['model', 'new_session'],
+      });
+    });
+
+    it('reads the code from a Messages route reply, which repeats it as the message', () => {
+      const messagesReply = {
+        name: 'AI_APICallError',
+        message: 'organization_budget_exhausted',
+        statusCode: 402,
+        responseBody: JSON.stringify({
+          type: 'error',
+          error: { type: 'gateway_error', message: 'organization_budget_exhausted' },
+        }),
+      };
+      expect(describeRunError(toPersistedErrorIdentity(messagesReply))).toMatchObject({
+        title: 'Mastra Gateway budget reached',
+      });
+    });
+
+    it("describes the gateway's own rate limit as the key's or organization's, not the provider account's", () => {
+      const limited = {
+        name: 'AI_APICallError',
+        message: 'Gateway key requests limit exceeded. Retry in 12s.',
+        statusCode: 429,
+        url: 'https://gateway-api.mastra.ai/v1/chat/completions',
+        responseBody: JSON.stringify({
+          error: {
+            type: 'rate_limit_error',
+            code: 'rate_limit_exceeded',
+            message: 'Gateway key requests limit exceeded. Retry in 12s.',
+          },
+        }),
+      };
+      expect(describeRunError(limited)).toEqual({
+        title: 'Mastra Gateway rate limit reached',
+        message: 'Gateway key requests limit exceeded. Retry in 12s. Continue once it resets, or choose another model.',
+        recoveries: ['continue', 'model'],
+        model: undefined,
+      });
+    });
+
+    it('recognizes a gateway at the configured base URL', () => {
+      const staging = {
+        name: 'AI_APICallError',
+        message: 'Payment required',
+        statusCode: 402,
+        url: 'http://localhost:8787/v1/chat/completions',
+      };
+      expect(describeRunError(staging)).toMatchObject({ title: 'Provider quota exhausted' });
+      expect(describeRunError(staging, { gatewayBaseUrl: 'http://localhost:8787' })).toMatchObject({
+        title: 'Out of Mastra Gateway credits',
+      });
+      expect(describeRunError(staging, { gatewayBaseUrl: 'http://localhost:9999' })).toMatchObject({
+        title: 'Provider quota exhausted',
+      });
+    });
+
+    it('keeps an Anthropic 403 a credential problem', () => {
+      const anthropicDenied = {
+        name: 'AI_APICallError',
+        message: 'Your API key does not have permission to use the specified resource.',
+        statusCode: 403,
+        responseBody: JSON.stringify({
+          type: 'error',
+          error: {
+            type: 'permission_error',
+            message: 'Your API key does not have permission to use the specified resource.',
+          },
+        }),
+      };
+      expect(describeRunError(anthropicDenied)).toMatchObject({
+        title: 'Provider access failed',
+        recoveries: ['credentials', 'model'],
+      });
+    });
   });
 
   it('quotes a plain-text body the provider sent instead of JSON', () => {

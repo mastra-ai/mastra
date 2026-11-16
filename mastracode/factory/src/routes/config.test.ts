@@ -22,6 +22,7 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { buildProviderAccess, ConfigRoutes, listProviders, resolveDeploymentModelProviders } from './config.js';
 import type { ModelCatalogEntry } from './config.js';
+import { resetMastraGatewayCatalogCacheForTests } from './gateway-catalog.js';
 import type { RouteAuth } from './route.js';
 import {
   registerTenantCredentialResolver,
@@ -1017,6 +1018,120 @@ describe('Mastra Gateway routes with a tenant', () => {
 
     expect(await gatewayRow(buildApp(fakePlatform()))).toMatchObject({ connectWithMastraAccount: true });
     expect(await gatewayRow(buildApp())).not.toHaveProperty('connectWithMastraAccount');
+  });
+
+  describe('with a v2 gateway catalogue', () => {
+    const MODELS_URL = 'https://gateway-api.mastra.ai/v1/models';
+    const gateway = setupServer();
+    const catalogRequests: Array<string | null> = [];
+
+    beforeAll(() => gateway.listen({ onUnhandledRequest: 'error' }));
+    afterAll(() => gateway.close());
+    beforeEach(async () => {
+      resetMastraGatewayCatalogCacheForTests();
+      catalogRequests.length = 0;
+      // An empty settings directory, so a gateway URL in the developer's own settings cannot apply.
+      vi.stubEnv('MASTRA_APP_DATA_DIR', await fs.mkdtemp(join(tmpdir(), 'factory-gateway-catalog-')));
+      vi.stubEnv('MASTRA_GATEWAY_URL', 'https://gateway-api.mastra.ai');
+    });
+    afterEach(() => {
+      gateway.resetHandlers();
+      vi.unstubAllEnvs();
+      vi.restoreAllMocks();
+    });
+
+    const serveCatalog = (respond: () => Response) =>
+      gateway.use(
+        http.get(MODELS_URL, ({ request }) => {
+          catalogRequests.push(request.headers.get('authorization'));
+          return respond();
+        }),
+      );
+
+    const readSettings = async (app: Hono) => {
+      const providersRes = await app.request('/web/config/providers');
+      const modelsRes = await app.request('/web/config/models');
+      return {
+        providersStatus: providersRes.status,
+        modelsStatus: modelsRes.status,
+        gatewayRow: ((await providersRes.json()) as { providers: Array<{ provider: string }> }).providers.find(
+          p => p.provider === 'mastra',
+        ),
+        modelIds: ((await modelsRes.json()) as { models: Array<{ id: string }> }).models.map(m => m.id),
+      };
+    };
+
+    it("lists what the tenant's own v2 key may use, fetched once for both settings requests", async () => {
+      await seed.credentials.setCredential({ orgId: 'org1' }, 'mastra-gateway', {
+        type: 'api_key',
+        key: 'msk-gateway-tenant',
+      });
+      serveCatalog(() =>
+        Response.json({
+          data: [
+            { id: 'anthropic/claude-opus-4-5', endpoints: ['chat'] },
+            { id: 'openai/gpt-image-1', endpoints: ['images'] },
+          ],
+        }),
+      );
+
+      const settings = await readSettings(buildApp(fakePlatform()));
+
+      expect(settings.modelIds.filter(id => id.startsWith('mastra/'))).toEqual(['mastra/anthropic/claude-opus-4-5']);
+      expect(settings.gatewayRow).toMatchObject({ source: 'stored-org' });
+      expect(catalogRequests).toEqual(['Bearer msk-gateway-tenant']);
+    });
+
+    it('keeps settings working and the gateway row reachable when the catalogue fails', async () => {
+      await seed.credentials.setCredential({ orgId: 'org1' }, 'mastra-gateway', {
+        type: 'api_key',
+        key: 'msk-gateway-tenant',
+      });
+      serveCatalog(() => new Response(null, { status: 503 }));
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const settings = await readSettings(buildApp(fakePlatform()));
+
+      expect(settings).toMatchObject({ providersStatus: 200, modelsStatus: 200 });
+      expect(settings.gatewayRow).toMatchObject({ provider: 'mastra', source: 'stored-org', orgCredential: 'api_key' });
+      expect(settings.modelIds.some(id => id.startsWith('mastra/'))).toBe(false);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('msk-gateway-tenant');
+    });
+
+    it('serves the last catalogue it fetched while the gateway is failing', async () => {
+      await seed.credentials.setCredential({ orgId: 'org1' }, 'mastra-gateway', {
+        type: 'api_key',
+        key: 'msk-gateway-tenant',
+      });
+      let up = true;
+      serveCatalog(() =>
+        up
+          ? Response.json({ data: [{ id: 'anthropic/claude-opus-4-5', endpoints: ['chat'] }] })
+          : new Response(null, { status: 503 }),
+      );
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const app = buildApp(fakePlatform());
+      await readSettings(app);
+      up = false;
+      vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 5 * 60_000);
+
+      const settings = await readSettings(app);
+
+      expect(catalogRequests).toHaveLength(2);
+      expect(settings.modelIds).toContain('mastra/anthropic/claude-opus-4-5');
+    });
+
+    it('keeps the one-click connect when the server is in v2 mode without a key', async () => {
+      vi.stubEnv('MASTRA_GATEWAY_VERSION', 'v2');
+      vi.stubEnv('MASTRA_GATEWAY_API_KEY', '');
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const settings = await readSettings(buildApp(fakePlatform()));
+
+      expect(settings).toMatchObject({ providersStatus: 200, modelsStatus: 200 });
+      expect(settings.gatewayRow).toMatchObject({ provider: 'mastra', source: 'none', connectWithMastraAccount: true });
+    });
   });
 });
 
