@@ -61,32 +61,21 @@ export function createBillingApp({ organizations, execution, commercial, artifac
     if (!header) throw new BillingError('invalid_input');
     return header;
   };
+  const selected = (context: { get(key: 'credential'): string; req: { param(key: 'workspaceId'): string } }) =>
+    organizations.context({ credential: context.get('credential'), workspaceId: context.req.param('workspaceId') });
   app.get('/billing/context', async context =>
     context.json(await organizations.context({ credential: context.get('credential') })),
   );
-  app.get('/billing/workspaces/:workspaceId', async context =>
-    context.json(
-      await organizations.context({
-        credential: context.get('credential'),
-        workspaceId: context.req.param('workspaceId'),
-      }),
-    ),
-  );
+  app.get('/billing/workspaces/:workspaceId', async context => context.json(await selected(context)));
   app.post('/billing/workspaces/:workspaceId/convert', async context => {
     const input = await body(context.req);
     // Empty input must still reject protected actor/account fields.
     parseInput(z.strictObject({}), input);
-    const billing = await organizations.context({
-      credential: context.get('credential'),
-      workspaceId: context.req.param('workspaceId'),
-    });
+    const billing = await selected(context);
     return context.json(await organizations.convert(billing, key(context.req.header('idempotency-key'))));
   });
   app.post('/billing/workspaces/:workspaceId/invitations', async context => {
-    const billing = await organizations.context({
-      credential: context.get('credential'),
-      workspaceId: context.req.param('workspaceId'),
-    });
+    const billing = await selected(context);
     return context.json(
       await organizations.invite(billing, key(context.req.header('idempotency-key')), await body(context.req)),
     );
@@ -105,26 +94,17 @@ export function createBillingApp({ organizations, execution, commercial, artifac
     );
   });
   app.get('/billing/workspaces/:workspaceId/members', async context => {
-    const billing = await organizations.context({
-      credential: context.get('credential'),
-      workspaceId: context.req.param('workspaceId'),
-    });
+    const billing = await selected(context);
     return context.json(await organizations.members(billing));
   });
   app.patch('/billing/workspaces/:workspaceId/members', async context => {
-    const billing = await organizations.context({
-      credential: context.get('credential'),
-      workspaceId: context.req.param('workspaceId'),
-    });
+    const billing = await selected(context);
     return context.json(
       await organizations.changeMember(billing, key(context.req.header('idempotency-key')), await body(context.req)),
     );
   });
   app.get('/billing/workspaces/:workspaceId/billing-access', async context => {
-    const billing = await organizations.context({
-      credential: context.get('credential'),
-      workspaceId: context.req.param('workspaceId'),
-    });
+    const billing = await selected(context);
     const authorized = await organizations.authorize(billing, 'manage-billing');
     return context.json({
       actorId: authorized.actorId,
@@ -133,15 +113,10 @@ export function createBillingApp({ organizations, execution, commercial, artifac
     });
   });
   app.get('/billing/workspaces/:workspaceId/private-records/:recordId', async context => {
-    const billing = await organizations.context({
-      credential: context.get('credential'),
-      workspaceId: context.req.param('workspaceId'),
-    });
+    const billing = await selected(context);
     return context.json(await organizations.readPrivateRecord(billing, context.req.param('recordId')));
   });
   if (execution) {
-    const selection = async (context: { get(key: 'credential'): string; req: { param(key: 'workspaceId'): string } }) =>
-      organizations.context({ credential: context.get('credential'), workspaceId: context.req.param('workspaceId') });
     app.post('/billing/workspaces/:workspaceId/agents/:resourceId/generate', async context => {
       const input = parseInput(z.strictObject({ prompt: z.string().min(1).max(8192) }), await body(context.req));
       const resourceId = parseInput(identifierSchema, context.req.param('resourceId'));
@@ -149,7 +124,7 @@ export function createBillingApp({ organizations, execution, commercial, artifac
         await execution.generate(
           resourceId,
           input.prompt,
-          await selection(context),
+          await selected(context),
           key(context.req.header('idempotency-key')),
         ),
       );
@@ -159,7 +134,7 @@ export function createBillingApp({ organizations, execution, commercial, artifac
       return context.json(
         await execution.createRun(
           parseInput(identifierSchema, context.req.param('resourceId')),
-          await selection(context),
+          await selected(context),
           key(context.req.header('idempotency-key')),
         ),
       );
@@ -170,7 +145,7 @@ export function createBillingApp({ organizations, execution, commercial, artifac
           parseInput(identifierSchema, context.req.param('resourceId')),
           parseInput(identifierSchema, context.req.param('executionId')),
           'status',
-          await selection(context),
+          await selected(context),
           undefined,
           null,
         ),
@@ -190,7 +165,7 @@ export function createBillingApp({ organizations, execution, commercial, artifac
           parseInput(identifierSchema, context.req.param('resourceId')),
           parseInput(identifierSchema, context.req.param('executionId')),
           operation,
-          await selection(context),
+          await selected(context),
           key(context.req.header('idempotency-key')),
           value,
         ),
@@ -199,10 +174,7 @@ export function createBillingApp({ organizations, execution, commercial, artifac
   }
   if (artifacts) {
     app.get('/billing/workspaces/:workspaceId/artifacts/:artifactId', async context => {
-      const billing = await organizations.context({
-        credential: context.get('credential'),
-        workspaceId: context.req.param('workspaceId'),
-      });
+      const billing = await selected(context);
       const artifact = await artifacts.read(
         await organizations.accountingIdentity(billing),
         context.req.param('artifactId'),
@@ -225,8 +197,6 @@ export function createBillingApp({ organizations, execution, commercial, artifac
     });
   }
   if (commercial) {
-    const selected = (context: { get(key: 'credential'): string; req: { param(key: 'workspaceId'): string } }) =>
-      organizations.context({ credential: context.get('credential'), workspaceId: context.req.param('workspaceId') });
     app.get('/billing/workspaces/:workspaceId/usage', async context =>
       context.json(await commercial.usage(await selected(context))),
     );

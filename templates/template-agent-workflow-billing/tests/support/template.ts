@@ -13,16 +13,6 @@ import { expect } from 'vitest';
 import { readLocalProfiles } from '../../src/billing/providers/local/profiles.js';
 
 export const templateRoot = fileURLToPath(new URL('../../', import.meta.url));
-export const observations = {
-  location: 'Porto Alegre',
-  observedAt: '2026-11-08T12:00:00Z',
-  temperatureC: 24,
-  feelsLikeC: 26,
-  humidityPercent: 70,
-  windKph: 18,
-  precipitationChancePercent: 60,
-  conditions: 'Cloudy with showers possible',
-};
 export function sanitizedEnvironment(): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {};
   for (const key of ['PATH', 'HOME', 'TMPDIR', 'SYSTEMROOT', 'LANG'])
@@ -85,7 +75,7 @@ export async function command(
 }
 export async function templateCopy(install = false) {
   const root = await mkdtemp(join(tmpdir(), 'image-template-'));
-  const excluded = new Set(['node_modules', 'data', '.env', '.mastra', 'dist', 'coverage', '.git']);
+  const excluded = new Set(['node_modules', 'data', '.env', '.mastra', 'dist', 'coverage', '.git', '.vscode']);
   await cp(templateRoot, root, {
     recursive: true,
     filter: source => {

@@ -50,7 +50,6 @@ export const commercialCatalogSchema = z
         ctx.addIssue({ code: 'custom', message: 'Unknown allowance revision.' });
     }
   });
-export type CommercialCatalog = z.infer<typeof commercialCatalogSchema>;
 
 export function resolveAllowance<
   Catalog extends { readonly allowances: readonly { readonly key: string; readonly version: string }[] },

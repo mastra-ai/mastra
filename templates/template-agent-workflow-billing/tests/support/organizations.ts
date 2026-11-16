@@ -1,9 +1,7 @@
-import { spawn } from 'node:child_process';
+import { fixtureServer } from './fixture-server.js';
 import { ipcWorker } from './ipc-worker.js';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { setTimeout } from 'node:timers/promises';
-import { fileURLToPath } from 'node:url';
 import type { Hono } from 'hono';
 
 export async function httpServer(app: Hono<any>) {
@@ -44,74 +42,16 @@ export async function httpServer(app: Hono<any>) {
   };
 }
 
-export async function mastraServer(databaseUrl: string, credential: string) {
-  const portFinder = createServer();
-  portFinder.listen(0, '127.0.0.1');
-  await once(portFinder, 'listening');
-  const address = portFinder.address();
-  if (address === null || typeof address === 'string') throw new Error('No server address');
-  const port = address.port;
-  await new Promise<void>(resolve => portFinder.close(() => resolve()));
-  const child = spawn(
-    process.execPath,
-    ['node_modules/mastra/dist/index.js', 'dev', '--dir', 'tests/fixtures/organization-server'],
+export function mastraServer(databaseUrl: string, credential: string) {
+  return fixtureServer(
+    'organization-server',
     {
-      cwd: fileURLToPath(new URL('../../', import.meta.url)),
-      detached: true,
-      env: {
-        ...process.env,
-        NODE_ENV: 'development',
-        BILLING_MODE: 'local',
-        BILLING_DATABASE_URL: databaseUrl,
-        BILLING_PORT: String(port),
-        BILLING_PROVIDER: 'local',
-        BILLING_IDENTITY_CONFIG_FILE: undefined,
-        MASTRA_TELEMETRY_DISABLED: 'true',
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      BILLING_MODE: 'local',
+      BILLING_DATABASE_URL: databaseUrl,
+      BILLING_PROVIDER: 'local',
     },
+    credential,
   );
-  let output = '';
-  const capture = (chunk: Buffer) => {
-    output = (output + String(chunk)).slice(-64000);
-  };
-  child.stdout.on('data', capture);
-  child.stderr.on('data', capture);
-  const closed = once(child, 'exit');
-  const close = async () => {
-    if (child.exitCode !== null || child.signalCode !== null) return;
-    try {
-      process.kill(-child.pid!, 'SIGTERM');
-    } catch {
-      return;
-    }
-    await Promise.race([closed, setTimeout(3000)]);
-    try {
-      process.kill(-child.pid!, 'SIGKILL');
-    } catch {
-      /* Already stopped. */
-    }
-  };
-  const url = `http://127.0.0.1:${port}`;
-  try {
-    for (let attempt = 0; attempt < 300; attempt++) {
-      if (child.exitCode !== null || child.signalCode !== null) throw new Error(`Mastra exited: ${output}`);
-      try {
-        const response = await fetch(`${url}/billing/context`, {
-          headers: { authorization: `Bearer ${credential}` },
-          signal: AbortSignal.timeout(1000),
-        });
-        if (response.status === 200) return { url, close };
-      } catch {
-        /* Server is still building. */
-      }
-      await setTimeout(200);
-    }
-    throw new Error(`Mastra did not serve configured billing routes: ${output}`);
-  } catch (error) {
-    await close();
-    throw error;
-  }
 }
 
 export async function request(

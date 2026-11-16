@@ -177,9 +177,11 @@ export function createBilling(options: BillingOptions) {
           });
         } else nativeRoutes.add(`/api/workflows/${encodeURIComponent(id)}`);
       }
-      const nativeAccess = (path: string) =>
-        ![...protectedRoutes].some(prefix => path === prefix || path.startsWith(prefix + '/')) &&
-        [...nativeRoutes].some(prefix => path === prefix || path.startsWith(prefix + '/'));
+      const resourcePath = (path: string) => path.split('/', 4).join('/');
+      const nativeAccess = (path: string) => {
+        const resource = resourcePath(path);
+        return !protectedRoutes.has(resource) && nativeRoutes.has(resource);
+      };
       const releasePreparation = lifecycle.hold();
       try {
         const localAccounts =
@@ -261,8 +263,7 @@ export function createBilling(options: BillingOptions) {
               path.startsWith(apiPrefix + '/') ? '/api/' + path.slice(apiPrefix.length + 1) : path;
             const passthrough = (path: string, method = 'GET') => {
               const canonical = canonicalPath(path);
-              if ([...protectedRoutes].some(prefix => canonical === prefix || canonical.startsWith(prefix + '/')))
-                return false;
+              if (protectedRoutes.has(resourcePath(canonical))) return false;
               return nativeAccess(canonical) || router.match(method, path)[0].length > 0;
             };
             const nativeFallback: import('hono').MiddlewareHandler = async (context, next) => {

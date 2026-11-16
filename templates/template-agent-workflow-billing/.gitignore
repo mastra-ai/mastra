@@ -8,6 +8,7 @@ coverage/
 *.log
 *.tsbuildinfo
 .DS_Store
+.vscode/
 !package-lock.json
 data/
 *.db

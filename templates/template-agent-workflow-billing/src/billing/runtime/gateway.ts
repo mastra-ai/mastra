@@ -14,7 +14,7 @@ import {
   reservation,
   snapshotSchema,
 } from './accounting.js';
-import type { BillingResponse, BoundedExecutor } from './accounting.js';
+import type { BillingResponse, BoundedExecutor, ResourceConfiguration } from './accounting.js';
 import { OrganizationService } from '../organizations.js';
 import type { BillingContext } from '../organizations.js';
 import { AccountingStorage } from '../storage/accounting.js';
@@ -22,7 +22,7 @@ import { AccountingStorage } from '../storage/accounting.js';
 const runtimeId = randomUUID();
 
 export class BillingGateway {
-  private readonly configuration;
+  private readonly resources: ReadonlyMap<string, ResourceConfiguration>;
   private readonly executors = new Map<string, BoundedExecutor>();
   constructor(
     private readonly organizations: OrganizationService,
@@ -34,10 +34,11 @@ export class BillingGateway {
     if (provider.id !== 'local' && organizations.identity.kind !== 'jwt')
       throw new BillingError('invalid_configuration');
     this.storage.useReservations(provider);
-    this.configuration = parseBillingConfiguration(configuration, provider.capabilities);
-    if (this.configuration.provider !== provider.id) throw new BillingError('invalid_configuration');
+    const parsed = parseBillingConfiguration(configuration, provider.capabilities);
+    this.resources = new Map(parsed.resourcePolicies.map(resource => [resource.id, resource]));
+    if (parsed.provider !== provider.id) throw new BillingError('invalid_configuration');
     for (const executor of executors) {
-      const resource = this.configuration.resourcePolicies.find(resource => resource.id === executor.resourceId);
+      const resource = this.resources.get(executor.resourceId);
       const key = `${executor.resourceId}:${executor.operation}`;
       if (
         ['resume', 'cancel'].includes(executor.operation) ||
@@ -89,7 +90,7 @@ export class BillingGateway {
         }),
       );
     }
-    for (const resource of this.configuration.resourcePolicies)
+    for (const resource of this.resources.values())
       for (const operation of resource.operations)
         if (!['resume', 'cancel'].includes(operation) && !this.executors.has(`${resource.id}:${operation}`))
           throw new BillingError('invalid_configuration');
@@ -114,10 +115,31 @@ export class BillingGateway {
     };
     const previous = await this.storage.replay(claim);
     if (previous) return previous;
-    const resource =
-      lifecycle?.configuration ??
-      this.configuration.resourcePolicies.find(resource => resource.id === request.resourceId);
+    const resource = lifecycle?.configuration ?? this.resources.get(request.resourceId);
     if (!resource || !executor) throw new BillingError('unsupported');
+    const executeAdmitted = async (executionId: string) => {
+      let outcome;
+      let result = null;
+      try {
+        const charge = resource.policy.charge;
+        outcome = parseInput(
+          outcomeSchema,
+          await executor.execute(
+            projection,
+            Object.freeze({
+              executionId,
+              maxUnits: charge.type === 'usage' ? reservation(resource.policy) : null,
+              measure: charge.type === 'usage' ? charge.measure : null,
+            }),
+          ),
+        );
+        result = outcome.result ?? null;
+      } catch {
+        // A throw or malformed completion cannot prove termination; never dispatch it again.
+        outcome = { status: 'uncertain' as const, measurements: [], measurementComplete: false };
+      }
+      return this.storage.finish(executionId, outcome, result, lifecycle);
+    };
     if (this.provider.reservations && prepaid(resource.policy)) {
       const admission = await this.storage.claimReservation(claim, resource, lifecycle);
       if (admission.status === 'replayed') return admission.response;
@@ -151,26 +173,7 @@ export class BillingGateway {
           throw error;
         return this.storage.read(await this.organizations.accountingIdentity(context), id);
       }
-      let outcome;
-      let result = null;
-      try {
-        const charge = resource.policy.charge;
-        outcome = parseInput(
-          outcomeSchema,
-          await executor.execute(
-            projection,
-            Object.freeze({
-              executionId: id,
-              maxUnits: charge.type === 'usage' ? reservation(resource.policy) : null,
-              measure: charge.type === 'usage' ? charge.measure : null,
-            }),
-          ),
-        );
-        result = outcome.result ?? null;
-      } catch {
-        outcome = { status: 'uncertain' as const, measurements: [], measurementComplete: false };
-      }
-      return this.storage.finish(id, outcome, result, lifecycle);
+      return executeAdmitted(id);
     }
     for (let attempt = 0; attempt < 3; attempt++) {
       let snapshot: CommercialSnapshot | null = null;
@@ -214,33 +217,12 @@ export class BillingGateway {
       );
       if (admitted.status === 'stale') continue;
       if (admitted.status === 'replayed') return admitted.response;
-      let outcome;
-      let result = null;
-      try {
-        const charge = resource.policy.charge;
-        outcome = parseInput(
-          outcomeSchema,
-          await executor.execute(
-            projection,
-            Object.freeze({
-              executionId: admitted.executionId,
-              maxUnits: charge.type === 'usage' ? reservation(resource.policy) : null,
-              measure: charge.type === 'usage' ? charge.measure : null,
-            }),
-          ),
-        );
-        if (outcome.result !== undefined) result = outcome.result;
-      } catch {
-        // A throw or malformed completion cannot prove termination/failure.
-        // Preserve the claim and reservation and never dispatch it again.
-        outcome = { status: 'uncertain' as const, measurements: [], measurementComplete: false };
-      }
-      return this.storage.finish(admitted.executionId, outcome, result, lifecycle);
+      return executeAdmitted(admitted.executionId);
     }
     throw new BillingError('state_unavailable');
   }
   resource(resourceId: string) {
-    const resource = this.configuration.resourcePolicies.find(resource => resource.id === resourceId);
+    const resource = this.resources.get(resourceId);
     if (!resource) throw new BillingError('unsupported');
     return resource;
   }

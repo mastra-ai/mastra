@@ -22,9 +22,6 @@ export function serializeWeatherPrompt(
 ): string {
   return JSON.stringify({ observations, purpose });
 }
-export function weatherPrompt(observations: unknown, purpose: 'summary' | 'draft' | 'final' = 'summary'): string {
-  return JSON.stringify(parseInput(weatherRequestSchema, { observations, purpose }));
-}
 export function validateWeatherPrompt(prompt: string): string {
   let value: unknown;
   try {

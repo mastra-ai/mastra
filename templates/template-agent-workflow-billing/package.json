@@ -23,7 +23,7 @@
     "autumn:check": "node scripts/autumn-sandbox.mjs check",
     "test:local": "vitest run tests/template/local.test.ts tests/template/studio.test.ts tests/template/autumn-sandbox.test.ts",
     "test:openai": "node --env-file=.env scripts/test-openai-smoke.mjs --live",
-    "test:provider": "vitest run tests/billing/autumn-reservations.test.ts tests/billing/accounting.test.ts",
+    "test:provider": "vitest run tests/billing/autumn-reservations.test.ts",
     "test:autumn": "node --env-file=.env scripts/test-autumn-sandbox.mjs --live",
     "images": "node scripts/images.mjs",
     "test:images": "vitest run tests/billing/images.test.ts"

@@ -1,5 +1,5 @@
 import { register } from 'node:module';
-register('./typescript-loader.mjs', import.meta.url);
+register('../../scripts/typescript-loader.mjs', import.meta.url);
 const { runtimeFixture } = await import('./mastra.ts');
 const { independentClient } = await import('./billing.ts');
 const [serialized, replay] = process.argv.slice(2);

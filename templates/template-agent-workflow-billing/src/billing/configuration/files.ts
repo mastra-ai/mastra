@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { bindingSchema } from '../providers/autumn/index.js';
+import { bindingSchema } from '../providers/autumn/configuration.js';
 import { jwtIdentityConfigurationSchema } from '../identity.js';
 import { billingConfigurationSchema } from './policy.js';
 import { BillingError } from '../contracts/core.js';

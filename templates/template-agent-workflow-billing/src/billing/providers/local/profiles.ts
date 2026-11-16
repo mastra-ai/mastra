@@ -23,7 +23,6 @@ export const profilesSchema = z.strictObject({
   }),
 });
 export type LocalProfiles = z.infer<typeof profilesSchema>;
-export type ProfileName = 'owner' | 'member' | 'outsider';
 export function localPaths(root: string) {
   const directory = resolve(root, 'data');
   return { directory, manifest: resolve(directory, 'local-profiles.json'), lock: resolve(directory, 'setup.lock') };

@@ -1,11 +1,7 @@
+import { fixtureServer } from '../support/fixture-server.js';
 import { afterEach, describe, expect, it } from 'vitest';
-import { spawn } from 'node:child_process';
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createServer } from 'node:http';
-import { once } from 'node:events';
-import { setTimeout } from 'node:timers/promises';
-import { fileURLToPath } from 'node:url';
 import { ALL_SERVER_ROUTES } from '@mastra/server/server-adapter';
 import { modelBoundary, runtimeFixture } from '../support/mastra.js';
 import { temporaryDatabase } from '../support/billing.js';
@@ -13,69 +9,15 @@ const cleanups: (() => void | Promise<void>)[] = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
-const root = fileURLToPath(new URL('../../', import.meta.url));
-async function command(args: string[], environment: NodeJS.ProcessEnv) {
-  const child = spawn(process.execPath, args, { cwd: root, env: environment, stdio: ['ignore', 'pipe', 'pipe'] });
-  let output = '';
-  child.stdout.on('data', chunk => (output = (output + chunk).slice(-64000)));
-  child.stderr.on('data', chunk => (output = (output + chunk).slice(-64000)));
-  const [code] = await once(child, 'exit');
-  if (code !== 0) throw new Error(`Fixture command failed (${code}): ${output}`);
-}
 async function served(
   mode: 'development' | 'built',
   environment: NodeJS.ProcessEnv,
   credential: string,
   fixture = 'billing-server',
 ) {
-  const listener = createServer();
-  listener.listen(0, '127.0.0.1');
-  await once(listener, 'listening');
-  const address = listener.address();
-  if (!address || typeof address === 'string') throw new Error('No port');
-  await new Promise<void>(resolve => listener.close(() => resolve()));
-  const env = { ...environment, BILLING_PORT: String(address.port), MASTRA_TELEMETRY_DISABLED: 'true' };
-  if (mode === 'built')
-    await command(['node_modules/mastra/dist/index.js', 'build', '--dir', `tests/fixtures/${fixture}`], env);
-  const args =
-    mode === 'built'
-      ? ['.mastra/output/index.mjs']
-      : ['node_modules/mastra/dist/index.js', 'dev', '--dir', `tests/fixtures/${fixture}`];
-  const child = spawn(process.execPath, args, { cwd: root, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
-  let output = '';
-  child.stdout.on('data', chunk => (output = (output + chunk).slice(-64000)));
-  child.stderr.on('data', chunk => (output = (output + chunk).slice(-64000)));
-  const exit = once(child, 'exit');
-  const close = async () => {
-    if (child.exitCode !== null || child.signalCode !== null) return;
-    try {
-      process.kill(-child.pid!, 'SIGTERM');
-    } catch {
-      return;
-    }
-    await Promise.race([exit, setTimeout(3000)]);
-    try {
-      process.kill(-child.pid!, 'SIGKILL');
-    } catch {
-      /* Already stopped. */
-    }
-  };
-  const url = `http://127.0.0.1:${address.port}`;
-  cleanups.push(close);
-  for (let attempt = 0; attempt < 300; attempt++) {
-    if (child.exitCode !== null) throw new Error(`Fixture server exited: ${output}`);
-    try {
-      const result = await fetch(`${url}/billing/context`, {
-        headers: { authorization: `Bearer ${credential}` },
-        signal: AbortSignal.timeout(1000),
-      });
-      if (result.status === 200) return { url, close };
-    } catch {
-      /* Wait for the real server. */
-    }
-    await setTimeout(100);
-  }
-  throw new Error(`Fixture did not serve: ${output}`);
+  const server = await fixtureServer(fixture, environment, credential, mode);
+  cleanups.push(server.close);
+  return server;
 }
 describe('billing HTTP boundary', () => {
   it('native execution and data routes cannot bypass the billing gateway', async () => {
@@ -97,11 +39,7 @@ describe('billing HTTP boundary', () => {
         credential: runtime.credential,
         workspaceId: runtime.billingContext.workspaceId,
       };
-      const server = await served(
-        mode,
-        { ...process.env, BILLING_TEST_CONFIGURATION: JSON.stringify(options) },
-        runtime.credential,
-      );
+      const server = await served(mode, { BILLING_TEST_CONFIGURATION: JSON.stringify(options) }, runtime.credential);
       const headers = {
         authorization: `Bearer ${runtime.credential}`,
         'content-type': 'application/json',
@@ -207,7 +145,7 @@ it('native free resources coexist with billed resources and custom Mastra server
   for (const mode of ['development', 'built'] as const) {
     const server = await served(
       mode,
-      { ...process.env, BILLING_TEST_CONFIGURATION: JSON.stringify(configuration) },
+      { BILLING_TEST_CONFIGURATION: JSON.stringify(configuration) },
       runtime.credential,
       'mixed-server',
     );
