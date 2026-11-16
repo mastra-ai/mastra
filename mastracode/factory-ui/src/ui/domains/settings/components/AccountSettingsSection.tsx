@@ -80,7 +80,7 @@ export function AccountSettingsSection() {
           <SettingsRow label="Email" description="From your sign-in provider.">
             <AccountValue>{user?.email ?? 'Not provided'}</AccountValue>
           </SettingsRow>
-          <SettingsRow label="Authentication">
+          <SettingsRow label="Authentication" description="How you signed in.">
             <AccountValue>{authProviderLabel(state.provider)}</AccountValue>
           </SettingsRow>
           {user?.userId && (
@@ -89,7 +89,7 @@ export function AccountSettingsSection() {
             </SettingsRow>
           )}
           {user?.organizationId && (
-            <SettingsRow label="Organization ID">
+            <SettingsRow label="Organization ID" description="The organization that owns this Factory.">
               <CopyInput value={user.organizationId} label="organization ID" />
             </SettingsRow>
           )}
