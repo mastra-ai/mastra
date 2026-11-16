@@ -1525,7 +1525,7 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
   }
 
   // Test: each resumed foreach item receives its own suspend payload
-  for (const concurrency of [3, 1]) {
+  for (const concurrency of [3, 2, 1]) {
     const approveAction = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
       if (!resumeData) {
         return suspend({ item: inputData.item });
@@ -3961,6 +3961,28 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         expect(foreachSuspendDataExecutions(mocks.approveAction).sort((a: any, b: any) => a.item - b.item)).toEqual(
           [0, 1, 2].map(item => ({ item, suspendData: { item }, resumeData: { approved: 7 } })),
         );
+      },
+    );
+
+    // Item 2 is not reached before the foreach suspends, so it starts fresh during the resume.
+    it.skipIf(ctx.skipTests.resumeForeachSuspendData || !ctx.resume)(
+      'should give each suspended foreach item its own suspend data when all items are resumed before every item ran',
+      async () => {
+        const { workflow, mocks, resetMocks } = registry!['foreach-suspend-data-concurrency-2-workflow']!;
+        resetMocks?.();
+        const runId = `foreach-suspend-data-partial-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        const startResult = await execute(workflow, [{ item: 0 }, { item: 1 }, { item: 2 }], { runId });
+        expect(startResult.status).toBe('suspended');
+
+        mocks.approveAction.mockClear();
+        const result = await ctx.resume!(workflow, { runId, resumeData: { approved: 7 } });
+        expect(result.status).toBe('suspended');
+        expect(foreachSuspendDataExecutions(mocks.approveAction).sort((a: any, b: any) => a.item - b.item)).toEqual([
+          { item: 0, suspendData: { item: 0 }, resumeData: { approved: 7 } },
+          { item: 1, suspendData: { item: 1 }, resumeData: { approved: 7 } },
+          { item: 2, suspendData: undefined, resumeData: undefined },
+        ]);
       },
     );
 
