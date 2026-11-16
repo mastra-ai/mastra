@@ -193,7 +193,8 @@ function isFailedToolCallPart(part: RunStepPart): boolean {
 function recordedVerdict(steps: RunStep[]): boolean {
   return steps.some(step => {
     const parts = step.content.filter(isVerdictToolPart);
-    return parts.length > 0 && !parts.some(isFailedToolCallPart);
+    const failed = new Set(parts.filter(isFailedToolCallPart).map(part => part.toolCallId));
+    return parts.some(part => !failed.has(part.toolCallId));
   });
 }
 

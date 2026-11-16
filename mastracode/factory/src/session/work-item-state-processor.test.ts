@@ -492,6 +492,16 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
       expect(
         (await resend([{ content: [call, failed], toolCalls: [call], toolResults: [failed] }]))?.contents,
       ).not.toContain('Your verdict for this review pass is recorded');
+      // One call failing does not undo another that recorded a verdict in the same step.
+      const lost = { ...call, toolCallId: 'verdict-2' };
+      const lostResult = { ...failed, toolCallId: 'verdict-2' };
+      expect(
+        (
+          await resend([
+            { content: [call, result, lost, lostResult], toolCalls: [call, lost], toolResults: [result, lostResult] },
+          ])
+        )?.contents,
+      ).toContain('Your verdict for this review pass is recorded');
 
       // A later run is a new pass: a re-requested review, or a person disputing a finding, on
       // the same head must still be able to end in a verdict.
