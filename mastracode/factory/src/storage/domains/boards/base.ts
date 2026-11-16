@@ -3,8 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorageOps } from '@mastra/core/storage';
 
-import { DEFAULT_ROUTE_EVENTS, routeEventsProblem } from '../../../boards/board-events.js';
-import type { StatusEvent } from '../../../boards/board-events.js';
+import { arrivalKinds, DEFAULT_ROUTE_EVENTS, routeEventsProblem } from '../../../boards/board-events.js';
+import type { ArrivalKind, RouteArrivals, RouteEvent } from '../../../boards/board-events.js';
 import type { FactoryPhaseTool } from '../../../boards/define-board.js';
 import { deriveIntakeOrder, reconcileIntakeOrder } from '../../../boards/intake-order.js';
 import { DEFAULT_INTAKE_ROUTES } from '../../../boards/work-routes.js';
@@ -162,8 +162,10 @@ export interface StoredIntakeRouteInput {
   /** Null matches every card. */
   when?: RuleGroup | null;
   target: IntakeRouteTarget;
-  /** The status events the route handles; unset handles new cards (`work_item.created`). */
-  on?: StatusEvent[];
+  /** The events the route handles; unset files new issues and pull requests (`work_item.created`). */
+  on?: RouteEvent[];
+  /** Writes the route as 0.28 did, moving cards on `pull_request.opened` and filing none: how a deleted one is restored. */
+  pullRequestOpenedMovesOnly?: true;
 }
 
 export interface StoredIntakeRouteRecord {
@@ -175,7 +177,12 @@ export interface StoredIntakeRouteRecord {
   position: number;
   when: RuleGroup | null;
   target: { boardKey: string; phaseKey: string | null; joinClosedIssue: boolean };
-  on: StatusEvent[];
+  on: RouteEvent[];
+  /**
+   * Set on a route stored before `pull_request.opened` filed pull requests with no card (0.28): it
+   * names that event and only moves cards on it, as it always has. Writing `on` again clears it.
+   */
+  pullRequestOpenedMovesOnly?: true;
   revision: number;
   createdBy: string;
   createdAt: Date;
@@ -255,6 +262,7 @@ export interface StoredIntakeDecisionRecord {
 // Work's routes are its seed data, kept with the board they target.
 export {
   DEFAULT_INTAKE_ROUTE,
+  OUTSIDE_PULL_REQUEST_INTAKE_ROUTE,
   PULL_REQUEST_INTAKE_ROUTE,
   CLOSED_COMPLETED_ROUTE,
   CLOSED_CANCELED_ROUTE,
@@ -337,8 +345,10 @@ interface IntakeRouteRow extends Record<string, unknown> {
   board_key: string;
   phase_key: string | null;
   /** Null on rows written before routes named events: they place new cards. */
-  on_events: StatusEvent[] | null;
+  on_events: RouteEvent[] | null;
   join_closed_issue: boolean | null;
+  /** Null on rows written before `pull_request.opened` filed pull requests: there it only moves a card. */
+  opened_files_pull_requests?: boolean | null;
   revision: number;
   created_by: string;
   created_at: Date;
@@ -949,6 +959,17 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     };
   }
 
+  /** Whether intake turned the source away (Not routed) and nobody has filed it since. */
+  async isNotRouted(scope: StoredBoardScope, sourceKey: string): Promise<boolean> {
+    const row = await this.ops.findOne<IntakeDecisionRow>(INTAKE_DECISIONS, {
+      ...scopeWhere(scope),
+      outcome: 'not_routed',
+      source_key: sourceKey,
+      resolved_at: null,
+    });
+    return row !== null;
+  }
+
   /** Marks the Not routed rows for a source resolved once a card is filed for it. Returns how many. */
   async resolveNotRouted(scope: StoredBoardScope, sourceKey: string, by: string, now = new Date()): Promise<number> {
     return this.ops.updateMany(
@@ -1005,9 +1026,16 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       const position = rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
       await insertIntakeRoute(ops, scope, { id, input, position, actor });
       await forgetDerivedIntakeOrder(ops, scope);
-      const ahead = (input.on ?? DEFAULT_ROUTE_EVENTS).includes('work_item.created')
-        ? rows.findIndex(catchesEveryNewCard)
-        : -1;
+      // Ahead of the catch-all taking each kind it files, the later one when they differ, so a route
+      // filing issues and pull requests stays behind a catch-all for pull requests, as it always
+      // has. A kind no route catches reaches it at the end, so it stays there.
+      const catchAlls = [
+        ...arrivalKinds({
+          on: input.on ?? DEFAULT_ROUTE_EVENTS,
+          ...(input.pullRequestOpenedMovesOnly && { pullRequestOpenedMovesOnly: true }),
+        }),
+      ].map(kind => rows.findIndex(row => catchesEveryNewCard(row, kind)));
+      const ahead = catchAlls.length > 0 && !catchAlls.includes(-1) ? Math.max(...catchAlls) : -1;
       if (ahead >= 0) {
         const added = (await readIntakeRoutes(ops, scope)).find(row => row.id === id)!;
         await placeIntakeRoutes(ops, rows.toSpliced(ahead, 0, added), actor);
@@ -1134,7 +1162,10 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       let position = rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
       const first: string[] = [];
       const perBoard = new Map<string, number>();
-      for (const { route, first: leads } of missing) {
+      // Only a project no default was added to yet is new.
+      const newProject = seededDefaults(current).length === 0;
+      for (const { route, first: leads, newProjectsOnly } of missing) {
+        if (newProjectsOnly && !newProject) continue;
         // A board at the limit keeps its own routes; the default counts as added all the same.
         const count = perBoard.get(route.target.boardKey) ?? boardRouteCount(rows, route.target.boardKey);
         if (count >= MAX_INTAKE_ROUTES_PER_BOARD) continue;
@@ -1339,8 +1370,21 @@ async function writeBoard(
   await insertPhases(ops, scope, { ...input, key: row.board_key });
 }
 
-function routeEvents(row: IntakeRouteRow): StatusEvent[] {
-  return row.on_events ?? [...DEFAULT_ROUTE_EVENTS];
+/**
+ * A row's events as stored. One written before routes named events has none: it reads as the legacy
+ * `work_item.created`, filing issues and pull requests alike, as it always has (rows are never rewritten).
+ */
+function routeEvents(row: IntakeRouteRow): RouteEvent[] {
+  return row.on_events ? [...row.on_events] : [...DEFAULT_ROUTE_EVENTS];
+}
+
+/** A row's events with what they mean on it: `pull_request.opened` only moves a card on a row from before it filed. */
+function routeArrivals(row: IntakeRouteRow): RouteArrivals {
+  const on = routeEvents(row);
+  return {
+    on,
+    pullRequestOpenedMovesOnly: row.opened_files_pull_requests !== true && on.includes('pull_request.opened'),
+  };
 }
 
 function checkRouteEvents(on: readonly string[], when: RuleGroup | null): void {
@@ -1359,6 +1403,7 @@ function toIntakeRouteRecord(row: IntakeRouteRow): StoredIntakeRouteRecord {
     when: row.when_condition,
     target: { boardKey: row.board_key, phaseKey: row.phase_key, joinClosedIssue: row.join_closed_issue === true },
     on: routeEvents(row),
+    ...(routeArrivals(row).pullRequestOpenedMovesOnly && { pullRequestOpenedMovesOnly: true as const }),
     revision: row.revision,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -1421,13 +1466,10 @@ function boardRouteCount(rows: readonly IntakeRouteRow[], boardKey: string): num
   return rows.filter(row => row.board_key === boardKey).length;
 }
 
-/** Whether `row` places every new card that reaches it, as the seeded "Everything else" route does. */
-function catchesEveryNewCard(row: IntakeRouteRow): boolean {
+/** Whether `row` files every new issue, or pull request, that reaches it, as the seeded "Everything else" route does. */
+function catchesEveryNewCard(row: IntakeRouteRow, kind: ArrivalKind): boolean {
   return (
-    row.enabled &&
-    row.when_condition === null &&
-    (row.on_events ?? DEFAULT_ROUTE_EVENTS).includes('work_item.created') &&
-    !row.join_closed_issue
+    row.enabled && row.when_condition === null && arrivalKinds(routeArrivals(row)).has(kind) && !row.join_closed_issue
   );
 }
 
@@ -1482,6 +1524,7 @@ async function insertIntakeRoute(
     phase_key: route.input.target.phaseKey ?? null,
     on_events: route.input.on ?? null,
     join_closed_issue: route.input.target.joinClosedIssue ?? false,
+    opened_files_pull_requests: route.input.pullRequestOpenedMovesOnly ? null : true,
     revision: 1,
     created_by: route.actor,
     created_at: now,

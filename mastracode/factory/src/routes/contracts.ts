@@ -3,7 +3,7 @@ import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { validateSkillContent } from '@mastra/core/skills';
 import { z } from 'zod';
 
-import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem, STATUS_EVENTS } from '../boards/board-events.js';
+import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem, ROUTE_EVENTS } from '../boards/board-events.js';
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
 import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
@@ -125,9 +125,13 @@ const intakeRouteFields = {
   when: intakeRouteWhenSchema.nullable(),
   /** Where matching cards land. */
   target: intakeRouteTargetSchema,
-  /** The status events the route handles. `work_item.created` places new cards; the others move existing ones. */
+  /**
+   * The events the route handles. `work_item.opened` files new issues and `pull_request.opened` new
+   * pull requests with no card (and moves the card of an issue whose pull request opens); the others
+   * move existing cards. `work_item.created`, the legacy event, files both and is kept as written.
+   */
   on: z
-    .array(z.enum(STATUS_EVENTS, { error: issue => routeEventsProblem([String(issue.input)], null) ?? undefined }))
+    .array(z.enum(ROUTE_EVENTS, { error: issue => routeEventsProblem([String(issue.input)], null) ?? undefined }))
     .superRefine((on, ctx) => {
       const problem = routeEventsProblem(on, null);
       if (problem) ctx.addIssue({ code: 'custom', message: problem });
@@ -140,6 +144,8 @@ export const intakeRouteInputSchema = z
     when: intakeRouteFields.when.default(null),
     target: intakeRouteFields.target,
     on: intakeRouteFields.on.optional(),
+    /** Restores a route read with `pullRequestOpenedMovesOnly` as it was: moving cards on `pull_request.opened`, filing none. */
+    pullRequestOpenedMovesOnly: z.literal(true).optional(),
   })
   .strict();
 /** Changes the named fields; send the `revision` you read so a concurrent edit is not overwritten. */
@@ -182,7 +188,12 @@ const intakeRouteSchema = z.object({
   position: z.number().int(),
   when: intakeRouteWhenSchema.nullable(),
   target: z.object({ boardKey: z.string(), phaseKey: z.string().nullable(), joinClosedIssue: z.boolean() }),
-  on: z.array(z.enum(STATUS_EVENTS)),
+  on: z.array(z.enum(ROUTE_EVENTS)),
+  /**
+   * True on a route stored by 0.28 naming `pull_request.opened`: there it only moves a card, and
+   * files no pull request, through every edit. Add a route to file pull requests.
+   */
+  pullRequestOpenedMovesOnly: z.literal(true).optional(),
   /** Send it back as `expectedRevision` when editing or deleting. */
   revision: z.number().int(),
   createdBy: z.string(),

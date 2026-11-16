@@ -27,6 +27,7 @@ import { MaterializeError } from '../integrations/github/sandbox.js';
 import type { CardSource } from '../integrations/kept-cards.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
+import type { NotRoutedLookup } from '../rules/event-rules.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import { workItemSource } from '../rules/types.js';
@@ -597,6 +598,8 @@ export function buildIntegrationContext(
     boardRegistry: BoardRegistry | ProjectBoardSource;
     /** Passed for the workers' context only: routes do not sweep. */
     keptCards?: CardSource;
+    /** Which items intake turned away, so integrations run intake again when one changes. */
+    notRouted?: NotRoutedLookup;
     factoryReady: boolean;
     domains: Pick<
       FactoryApiRoutesDeps['domains'],
@@ -651,6 +654,7 @@ export function buildIntegrationContext(
             workItems: deps.domains.workItems,
             boards: deps.boardRegistry,
             ...(deps.keptCards ? { keptCards: deps.keptCards } : {}),
+            ...(deps.notRouted ? { notRouted: deps.notRouted } : {}),
           },
         }
       : {}),
@@ -835,6 +839,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         ...deps,
         // Integrations evaluate code behaviors and place new cards with the code boards.
         boardRegistry: toBoardSource(deps.boardRegistry).codeRegistry,
+        ...(deps.storedBoards ? { notRouted: deps.storedBoards.storage } : {}),
         stateSigner: deps.stateSigner,
         emitAudit,
         ...(githubRegistration ? { sourceControlOwnerId: 'github' } : {}),

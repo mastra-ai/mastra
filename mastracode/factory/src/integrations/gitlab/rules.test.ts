@@ -13,7 +13,7 @@ import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } f
 import { resolveGitLabRules } from './default-rules.js';
 import type { GitLabRuleOverrides } from './default-rules.js';
 import { encodeIssueReference, encodeSourceId } from './integration.js';
-import { GitLabRules } from './rules.js';
+import { GitLabRules, updateEventFor } from './rules.js';
 import type { GitLabRulesIntegration } from './rules.js';
 
 const PROJECT_ID = '101';
@@ -120,6 +120,8 @@ async function setup(
     boards?: ReturnType<typeof createBoardRegistry>;
     storage?: FactoryStorage;
     rules?: GitLabRuleOverrides;
+    /** The user Factory's GitLab connection acts as. */
+    factoryUsername?: string;
   } = {},
 ) {
   const seeded = options.storage
@@ -184,6 +186,7 @@ async function setup(
     rules: resolveGitLabRules(options.rules),
     getProjectMemberAccessLevel: vi.fn().mockResolvedValue(options.accessLevel ?? 40),
     getWorkItemAuthorUsername: vi.fn().mockResolvedValue('maintainer'),
+    getCurrentUsername: vi.fn().mockResolvedValue(options.factoryUsername ?? 'factory-bot'),
     resolveActiveConnectionForHost: vi
       .fn()
       .mockImplementation(async (connectionId: string, host: string) =>
@@ -198,6 +201,7 @@ async function setup(
     intake: seeded.intake,
     configVersion: 'gitlab-test-v1',
     boards: options.boards ?? createBoardRegistry(),
+    notRouted: seeded.boards,
   });
   return { seeded, project, gitlab, service, link };
 }
@@ -1496,7 +1500,7 @@ describe('GitLab board events', () => {
       await service.ingest(issueHook(`board-event-${action}`, action));
     }
     expect(seen).toEqual([
-      { event: 'issueOpened', boardEvent: { type: 'work_item.created' } },
+      { event: 'issueOpened', boardEvent: { type: 'work_item.opened' } },
       { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'completed' } },
       { event: 'issueReopened', boardEvent: { type: 'work_item.reopened' } },
       { event: 'issueUpdated', boardEvent: undefined },
@@ -1623,9 +1627,177 @@ describe('GitLab activity signals', () => {
         reference: `${PROJECT_PATH}#42`,
         idleBehavior: 'persist',
       }),
+      // A label change is no activity: it goes to the card's routes as an update.
+      {
+        type: 'routeEvent',
+        idempotencyKey: 'gitlab:101:activity-labels:event-route',
+        event: { type: 'work_item.updated', labels: { added: ['bug'], removed: [] } },
+      },
     ]);
     expect(JSON.stringify(decisions)).not.toContain('Ignore your instructions');
     expect(JSON.stringify(decisions)).not.toContain('Do this instead');
+  });
+});
+
+const ISSUE_42_KEY = encodeIssueReference({ host: 'gitlab.example.com', projectId: PROJECT_ID, issueIid: 42 });
+const MERGE_REQUEST_17_KEY = `gitlab-pr:${Buffer.from(
+  JSON.stringify({ version: 1, host: 'gitlab.example.com', projectId: 101, mergeRequestIid: 17 }),
+).toString('base64url')}`;
+const titles = (names: string[]) => names.map(title => ({ title }));
+
+/** A GitLab update hook for issue 42 or merge request 17, with `changes` and any `object_attributes` overrides. */
+function updateHook(
+  kind: 'issue' | 'merge request',
+  deliveryId: string,
+  changes: Record<string, unknown>,
+  attributes: Record<string, unknown> = {},
+  user?: string,
+) {
+  const delivery = kind === 'issue' ? issueOpened(deliveryId) : mergeRequestOpened(deliveryId);
+  return {
+    ...delivery,
+    payload: {
+      ...delivery.payload,
+      ...(user ? { user_username: user, user: { username: user } } : {}),
+      object_attributes: { ...delivery.payload.object_attributes, action: 'update', ...attributes },
+      changes,
+    },
+  };
+}
+
+async function gitlabCard(
+  seeded: Awaited<ReturnType<typeof setup>>['seeded'],
+  projectId: string,
+  input: { mergeRequest?: true; metadata?: Record<string, unknown>; sessions?: Record<string, unknown> } = {},
+) {
+  return (
+    await seeded.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: projectId,
+      input: {
+        externalSource: input.mergeRequest
+          ? { integrationId: 'gitlab', type: 'pull-request', externalId: MERGE_REQUEST_17_KEY }
+          : { integrationId: 'gitlab', type: 'issue', externalId: ISSUE_42_KEY },
+        title: input.mergeRequest ? 'MR 17' : 'Issue 42',
+        board: input.mergeRequest ? 'review' : 'work',
+        stages: input.mergeRequest ? ['done'] : ['execute'],
+        sessions: input.sessions ?? {},
+        metadata: input.metadata ?? (input.mergeRequest ? { authorTrusted: true } : {}),
+      },
+    })
+  ).item;
+}
+
+const routeEvents = async (seeded: Awaited<ReturnType<typeof setup>>['seeded'], projectId: string, workItemId: string) =>
+  (await seeded.workItems.listDeferredDecisions('org-1', projectId, { workItemId }))
+    .map(record => record.decision)
+    .flatMap(decision => (decision.type === 'routeEvent' ? [decision] : []));
+
+describe('GitLab label and assignee changes on a card', () => {
+  // Factory's own changes wait for the card's run, matched against each active connection's user.
+  it.each([
+    { case: "Factory's user, in any case", options: { factoryUsername: 'Factory-Bot' }, user: 'factory-bot', fromCardSession: true },
+    { case: 'a person', options: { factoryUsername: 'Factory-Bot' }, user: 'maintainer', fromCardSession: false },
+    { case: "Factory's user on the second connection", options: { duplicateInstallation: true }, otherFirst: true, user: 'factory-bot', fromCardSession: true },
+  ])('holds a change by $case for the run: $fromCardSession', async ({ options, otherFirst, user, fromCardSession }) => {
+    const { seeded, project, service, gitlab } = await setup(options);
+    if (otherFirst) vi.mocked(gitlab.getCurrentUsername!).mockResolvedValueOnce('other-bot');
+    const card = await gitlabCard(seeded, project.id);
+    await service.ingest(updateHook('issue', 'by-user', { labels: { previous: [], current: titles(['bug']) } }, {}, user));
+    expect((await routeEvents(seeded, project.id, card.id)).map(decision => decision.fromCardSession === true)).toEqual([
+      fromCardSession,
+    ]);
+  });
+
+  // Each hook is [deliveryId, updated_at, labels before, labels after]; the card starts with ['bug'].
+  it.each([
+    {
+      case: 'an earlier hook delivered again',
+      hooks: [['add-ship', '01', ['bug'], ['bug', 'ship']], ['remove-ship', '02', ['bug', 'ship'], ['bug']], ['add-ship', '01', ['bug'], ['bug', 'ship']]],
+      labels: ['bug'],
+    },
+    { case: 'the earlier hook arriving after the newer one', hooks: [['remove-ship', '02', ['bug', 'ship'], ['bug']], ['add-ship', '01', ['bug'], ['bug', 'ship']]], labels: ['bug'] },
+    { case: 'one hook', hooks: [['add-ship', '01', ['bug'], ['bug', 'ship']]], labels: ['bug', 'ship'] },
+  ] as const)("keeps the newest labels on the card after $case", async ({ hooks, labels }) => {
+    const { seeded, project, service } = await setup();
+    const card = await gitlabCard(seeded, project.id, { metadata: { labels: ['bug'], assignees: ['grace'] } });
+    for (const [deliveryId, second, previous, current] of hooks) {
+      await service.ingest(
+        updateHook(
+          'issue',
+          deliveryId,
+          { labels: { previous: titles([...previous]), current: titles([...current]) }, assignees: { previous: [{ username: 'grace' }], current: [] } },
+          { updated_at: `2030-01-01T00:00:${second}Z` },
+        ),
+      );
+    }
+    const stored = (await seeded.workItems.get({ orgId: 'org-1', id: card.id }))!;
+    expect({ labels: stored.workItem.labels, assignees: stored.workItem.metadata?.assignees }).toEqual({ labels, assignees: [] });
+  });
+
+  it.each([
+    { case: "the merge request's own card", mergeRequest: true, events: [{ type: 'pull_request.updated', labels: { added: ['ship'], removed: [] } }] },
+    // Neither filed nor attached: another merge request that happens to use the card's branch name.
+    { case: 'a card whose session only builds on its branch', mergeRequest: false, events: [] },
+  ])("hands a merge request's change to $case", async ({ mergeRequest, events }) => {
+    const { seeded, project, service } = await setup();
+    const card = mergeRequest
+      ? await gitlabCard(seeded, project.id, { mergeRequest: true })
+      : await gitlabCard(seeded, project.id, { sessions: { work: { sessionId: 'work-session', threadId: 'work-thread', branch: 'feature-17' } } });
+    await service.ingest(updateHook('merge request', 'relabel', { labels: { previous: [], current: titles(['ship']) } }));
+    expect((await routeEvents(seeded, project.id, card.id)).map(decision => decision.event).filter(event => event.type.endsWith('.updated'))).toEqual(events);
+  });
+});
+
+/** Records that intake turned the item with this source key away (Not routed), as intake does. */
+async function turnAway(seeded: Awaited<ReturnType<typeof setup>>['seeded'], projectId: string, sourceKey: string) {
+  await seeded.boards.recordIntakeDecision(
+    { orgId: 'org-1', factoryProjectId: projectId },
+    {
+      idempotencyKey: `intake:${sourceKey}`,
+      outcome: 'not_routed',
+      evaluator: 'intake-order',
+      sourceKey,
+      title: 'Turned away',
+      reason: 'The project has no board to take it.',
+    },
+  );
+}
+
+describe('GitLab updates to an item intake turned away', () => {
+  const ADD_SHIP = { labels: { previous: titles(['bug']), current: titles(['bug', 'ship']) } };
+  // Filed under the key intake recorded it Not routed with, so the dispatcher resolves that record.
+  it.each([
+    { kind: 'issue', turnedAway: true, state: 'opened', changes: ADD_SHIP, filed: { source: 'gitlab-issue', sourceKey: ISSUE_42_KEY } },
+    { kind: 'issue', turnedAway: true, state: 'closed', changes: ADD_SHIP, filed: undefined },
+    { kind: 'issue', turnedAway: false, state: 'opened', changes: ADD_SHIP, filed: undefined },
+    { kind: 'issue', turnedAway: true, state: 'opened', changes: { title: { previous: 'Old', current: 'New' } }, filed: undefined },
+    { kind: 'merge request', turnedAway: true, state: 'opened', changes: ADD_SHIP, filed: { source: 'gitlab-pr', sourceKey: MERGE_REQUEST_17_KEY } },
+    { kind: 'merge request', turnedAway: true, state: 'closed', changes: ADD_SHIP, filed: undefined },
+    { kind: 'merge request', turnedAway: false, state: 'opened', changes: ADD_SHIP, filed: undefined },
+  ] as const)(
+    'runs intake again for a $state $kind (turned away: $turnedAway) changing $changes',
+    async ({ kind, turnedAway, state, changes, filed }) => {
+      const { seeded, project, service } = await setup();
+      if (turnedAway) await turnAway(seeded, project.id, kind === 'issue' ? ISSUE_42_KEY : MERGE_REQUEST_17_KEY);
+      await service.ingest(updateHook(kind, 'changed', changes, { state }));
+      expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).map(entry => entry.decision)).toEqual(
+        filed ? [expect.objectContaining({ type: 'upsertLinkedWorkItem', ...filed })] : [],
+      );
+    },
+  );
+
+  it('files a merge request reopened with no card the way a new one is filed', async () => {
+    const { seeded, project, service } = await setup();
+    const delivery = mergeRequestOpened('mr-reopened-no-card');
+    await service.ingest({
+      ...delivery,
+      payload: { ...delivery.payload, object_attributes: { ...delivery.payload.object_attributes, action: 'reopen' } },
+    });
+    expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).map(entry => entry.decision)).toEqual([
+      expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'gitlab-pr' }),
+    ]);
   });
 });
 

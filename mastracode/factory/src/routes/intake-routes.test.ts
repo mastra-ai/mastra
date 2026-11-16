@@ -19,6 +19,7 @@ import {
   CATCH_ALL_INTAKE_ROUTE,
   CLOSES_ISSUE_INTAKE_ROUTE,
   DEFAULT_INTAKE_ROUTE,
+  OUTSIDE_PULL_REQUEST_INTAKE_ROUTE,
   PULL_REQUEST_INTAKE_ROUTE,
   StoredBoardsStorage,
 } from '../storage/domains/boards/base.js';
@@ -176,13 +177,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
 
   it('lists the default routes a new project starts with, and lets an admin edit them like any other', async () => {
     const { base, replicaA } = await setup({ seeded: true });
-    const [closesIssue, route, pullRequests, ...rest] = await list(replicaA.send, base, MEMBER);
+    const [closesIssue, route, outsidePullRequests, pullRequests, ...rest] = await list(replicaA.send, base, MEMBER);
     const events = rest.slice(0, -1);
     // Whatever no other route takes lands on Work's first phase, as it did before routes existed.
     expect(rest.at(-1)).toMatchObject({
       name: CATCH_ALL_INTAKE_ROUTE.name,
-      position: 11,
-      on: ['work_item.created'],
+      position: 12,
+      on: ['work_item.opened'],
       when: null,
       target: { boardKey: 'work', phaseKey: 'intake' },
       createdBy: 'factory',
@@ -214,14 +215,27 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(closesIssue).toMatchObject({
       name: CLOSES_ISSUE_INTAKE_ROUTE.name,
       position: 0,
+      on: ['pull_request.opened'],
       when: CLOSES_ISSUE_INTAKE_ROUTE.when,
       target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: true },
       createdBy: 'factory',
       problems: [],
     });
+    // Pull requests with no card arrive on `pull_request.opened`: outside authors' wait in Intake.
+    expect(outsidePullRequests).toMatchObject({
+      name: OUTSIDE_PULL_REQUEST_INTAKE_ROUTE.name,
+      position: 2,
+      on: ['pull_request.opened'],
+      when: OUTSIDE_PULL_REQUEST_INTAKE_ROUTE.when,
+      target: { boardKey: 'work', phaseKey: 'intake' },
+      createdBy: 'factory',
+      problems: [],
+    });
     expect(pullRequests).toMatchObject({
       name: PULL_REQUEST_INTAKE_ROUTE.name,
-      position: 2,
+      position: 3,
+      on: ['pull_request.opened'],
+      when: null,
       target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false },
       createdBy: 'factory',
       problems: [],
@@ -230,6 +244,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       name: DEFAULT_INTAKE_ROUTE.name,
       enabled: true,
       position: 1,
+      on: ['work_item.opened'],
       when: DEFAULT_INTAKE_ROUTE.when,
       target: { boardKey: 'work', phaseKey: 'intake' },
       createdBy: 'factory',
@@ -441,6 +456,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     });
     const route = created.body.intakeRoute as Route;
     const bare = (await replicaA.send('POST', base, { name: 'New cards', target: WORK })).body.intakeRoute;
+    // A route naming no event files issues and pull requests with no card, as routes always did.
     expect(bare).toMatchObject({ on: ['work_item.created'] });
 
     const reopened = await replicaA.send('PATCH', `${base}/${route.id}`, {
@@ -458,7 +474,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(
       await replicaA.send('POST', base, {
         name: 'Both',
-        on: ['work_item.created', 'work_item.closed'],
+        on: ['work_item.opened', 'work_item.closed'],
         target: { boardKey: 'work', phaseKey: 'done' },
       }),
     ).toMatchObject({ status: 422, body: { error: 'terminal_phase' } });
@@ -468,7 +484,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     });
     expect(done.status).toBe(200);
     expect(
-      await replicaA.send('PATCH', `${base}/${route.id}`, { on: ['work_item.created'], expectedRevision: 3 }),
+      await replicaA.send('PATCH', `${base}/${route.id}`, { on: ['work_item.opened'], expectedRevision: 3 }),
     ).toMatchObject({ status: 422, body: { error: 'terminal_phase' } });
   });
 
@@ -495,6 +511,65 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     );
   });
 
+  it('keeps a pull_request.opened route stored by 0.28 a card move through every edit, an undone trigger change, and a restore', async () => {
+    const { a, scope, base, replicaA } = await setup();
+    const id = randomUUID();
+    // As 0.28 wrote it: no marker, so `pull_request.opened` only moves a card.
+    await a.storage.ops.insertOne('factory_intake_routes', {
+      id,
+      org_id: scope.orgId,
+      factory_project_id: scope.factoryProjectId,
+      name: 'Opened pull requests go to Review',
+      enabled: true,
+      position: 0,
+      when_condition: null,
+      board_key: 'work',
+      phase_key: 'pr-review',
+      on_events: ['pull_request.opened'],
+      join_closed_issue: false,
+      revision: 1,
+      created_by: ADMIN,
+      created_at: new Date(),
+      updated_by: ADMIN,
+      updated_at: new Date(),
+    });
+    const moveOnly = { on: ['pull_request.opened'], pullRequestOpenedMovesOnly: true };
+    expect(await list(replicaA.send, base)).toEqual([expect.objectContaining({ id, ...moveOnly })]);
+
+    // Renamed and pointed at a finished phase, which only a card move may aim at, it stays a card move.
+    const renamed = await replicaA.send('PATCH', `${base}/${id}`, {
+      name: 'Opened pull requests are done',
+      target: { boardKey: 'work', phaseKey: 'done' },
+      expectedRevision: 1,
+    });
+    expect(renamed).toMatchObject({ status: 200, body: { intakeRoute: moveOnly } });
+
+    // Deleted and restored as the settings page's Undo sends it, it comes back the same.
+    await replicaA.send('DELETE', `${base}/${id}?expectedRevision=2`);
+    const restored = await replicaA.send('POST', base, {
+      name: 'Opened pull requests go to Review',
+      target: { boardKey: 'work', phaseKey: 'pr-review' },
+      ...moveOnly,
+    });
+    expect(restored).toMatchObject({ status: 201, body: { intakeRoute: moveOnly } });
+
+    // A trigger change, then the settings page's Undo sending the old `on` back, leaves it a card move.
+    const route = restored.body.intakeRoute as Route;
+    const changed = await replicaA.send('PATCH', `${base}/${route.id}`, {
+      on: ['pull_request.opened', 'work_item.closed'],
+      expectedRevision: route.revision,
+    });
+    expect(changed).toMatchObject({
+      status: 200,
+      body: { intakeRoute: { on: ['pull_request.opened', 'work_item.closed'], pullRequestOpenedMovesOnly: true } },
+    });
+    const undone = await replicaA.send('PATCH', `${base}/${route.id}`, {
+      on: ['pull_request.opened'],
+      expectedRevision: route.revision + 1,
+    });
+    expect(undone).toMatchObject({ status: 200, body: { intakeRoute: moveOnly } });
+  });
+
   it('refuses a route that joins pull requests to their issue on any event but an arrival', async () => {
     const { base, replicaA } = await setup();
     const joins = { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: true };
@@ -506,12 +581,18 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(
       await replicaA.send('POST', base, {
         name: 'On both',
-        on: ['work_item.created', 'work_item.reopened'],
+        on: ['work_item.opened', 'work_item.reopened'],
         target: joins,
       }),
     ).toMatchObject(refused);
     const created = await replicaA.send('POST', base, { name: 'Joins', target: joins });
     expect(created).toMatchObject({ status: 201, body: { intakeRoute: { on: ['work_item.created'], problems: [] } } });
+    expect(
+      await replicaA.send('POST', base, { name: 'Issues join', on: ['work_item.opened'], target: joins }),
+    ).toMatchObject(refused);
+    expect(
+      await replicaA.send('POST', base, { name: 'Pull requests join', on: ['pull_request.opened'], target: joins }),
+    ).toMatchObject({ status: 201 });
     const route = created.body.intakeRoute as Route;
     expect(
       await replicaA.send('PATCH', `${base}/${route.id}`, {

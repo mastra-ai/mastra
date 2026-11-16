@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import type { BoardEventFacts } from '../boards/board-events.js';
@@ -194,10 +196,34 @@ async function setup(
     (await seeded.audit.list({ orgId: 'org-1' })).events
       .filter(event => event.targets.some(target => target.id === cardId))
       .map(event => ({ action: event.action, actorId: event.actorId, metadata: event.metadata }));
+  /** Commits an update on a card at `at`, as an integration does, without dispatching it. */
+  const commitUpdate = async (
+    cardId: string,
+    event: BoardEventFacts,
+    at: string,
+    options: { fromCardSession?: true } = {},
+  ) => {
+    deliveries += 1;
+    const card = await workItems.get({ orgId: 'org-1', id: cardId });
+    await workItems.commitRuleEvaluation({
+      ...scope,
+      workItemId: cardId,
+      ingress: { identity: `update-${deliveries}` },
+      configVersion,
+      expectedRevision: card!.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'routeEvent', idempotencyKey: `update-${deliveries}:event-route`, event, ...options }],
+      causalChain: [],
+      now: new Date(at),
+    });
+  };
   return {
     ...seeded,
     scope,
     project,
+    dispatcher,
+    commitUpdate,
     defaultRoute: defaultRoute!,
     route,
     deliver,
@@ -351,7 +377,7 @@ describe('intake routes placing linked cards', () => {
     }
   });
 
-  it('sends the issues and pull requests no other route takes to the board an admin points the catch-all at', async () => {
+  it('sends the issues and pull requests no other route takes to the board an admin points the catch-alls at', async () => {
     const { boards, scope, deliver } = await setup({ withDefaultRoute: true });
     await boards.create(scope, docsBoard, 'admin');
     const routes = await boards.listIntakeRoutes(scope);
@@ -363,10 +389,11 @@ describe('intake routes placing linked cards', () => {
       { target: { boardKey: 'docs' } },
       { expectedRevision: catchAll.revision, actor: 'admin' },
     );
+    // Pull requests arrive on their own event, so their catch-all is the pull request route.
     await boards.updateIntakeRoute(
       scope,
       pullRequests.id,
-      { enabled: false },
+      { target: { boardKey: 'docs' } },
       { expectedRevision: pullRequests.revision, actor: 'admin' },
     );
 
@@ -378,7 +405,9 @@ describe('intake routes placing linked cards', () => {
       // The integration's rule files on Work; the catch-all decides.
       const card = await deliver({ ...arrival, board: 'work', stage: 'intake' });
       expect(placed(card), arrival.sourceKey).toEqual({ board: 'docs', stages: ['inbox'] });
-      expect(card?.metadata).toMatchObject({ intakeRouteId: catchAll.id });
+      expect(card?.metadata).toMatchObject({
+        intakeRouteId: arrival.source === 'github-pr' ? pullRequests.id : catchAll.id,
+      });
     }
     // Outside authors still meet their own route first.
     const outside = await deliver({ sourceKey: 'github-issue:4', metadata: { authorTrusted: false } });
@@ -416,6 +445,59 @@ describe('intake routes placing linked cards', () => {
     expect(placed(outside)).toEqual({ board: 'work', stages: ['intake'] });
     expect(await runs(outside!.id)).toEqual([]);
   });
+
+  it.each(['older', 'new'] as const)(
+    "still sends an outside author's pull request to Intake past a pull_request.opened route stored by 0.28 (%s project)",
+    async project => {
+      const { storage, boards, scope, deliver } = await setup({ project });
+      // As 0.28 wrote them: a "PR opened → Review" card move ahead of the outside-authors hold, which named no events.
+      const row = (id: string, position: number, fields: Record<string, unknown>) =>
+        storage.ops.insertOne('factory_intake_routes', {
+          id,
+          org_id: scope.orgId,
+          factory_project_id: scope.factoryProjectId,
+          enabled: true,
+          position,
+          join_closed_issue: false,
+          revision: 1,
+          created_by: 'admin',
+          created_at: new Date(),
+          updated_by: 'admin',
+          updated_at: new Date(),
+          ...fields,
+        });
+      const moveId = randomUUID();
+      const outsideId = randomUUID();
+      await row(moveId, 0, {
+        name: 'Opened pull requests go to Review',
+        when_condition: null,
+        board_key: 'work',
+        phase_key: 'pr-review',
+        on_events: ['pull_request.opened'],
+      });
+      await row(outsideId, 1, {
+        name: DEFAULT_INTAKE_ROUTE.name,
+        when_condition: DEFAULT_INTAKE_ROUTE.when,
+        board_key: 'work',
+        phase_key: 'intake',
+        on_events: null,
+      });
+
+      const outside = await deliver({
+        sourceKey: 'github-pr:3',
+        source: 'github-pr',
+        metadata: { authorTrusted: false },
+      });
+
+      expect(placed(outside)).toEqual({ board: 'work', stages: ['intake'] });
+      expect(outside?.metadata).toMatchObject({ intakeRouteId: outsideId });
+      // Read as written, so editing it never changes what it does.
+      expect(await boards.getIntakeRoute(scope, moveId)).toMatchObject({
+        on: ['pull_request.opened'],
+        pullRequestOpenedMovesOnly: true,
+      });
+    },
+  );
 
   it('places outside work wherever an admin edits the default route to send it, and on Work once it is disabled', async () => {
     const { boards, scope, defaultRoute, deliver } = await setup({ withDefaultRoute: true });
@@ -1105,6 +1187,171 @@ describe('intake routes moving existing cards on status events', () => {
     expect((await deliverEvent(card.id, { type: 'work_item.closed', reason: 'completed' })).card).toMatchObject({
       stages: ['intake'],
     });
+  });
+});
+
+describe('intake routes moving existing cards when labels or assignees change', () => {
+  const ADDED = (label: string) => ({
+    operator: 'AND' as const,
+    conditions: [{ field: 'event.labels.added', operator: 'contains' as const, value: label }],
+  });
+  const labels = (added: string[], removed: string[] = []) => ({
+    type: 'work_item.updated' as const,
+    labels: { added, removed },
+  });
+
+  async function shipRoute(options: { from?: string } = {}) {
+    const harness = await setup();
+    const shipping = await harness.route({
+      name: 'Ship it',
+      on: ['work_item.updated'],
+      when: options.from
+        ? {
+            operator: 'AND',
+            conditions: [...ADDED('ship').conditions, { field: 'card.phase', operator: 'equals', value: options.from }],
+          }
+        : ADDED('ship'),
+      target: { boardKey: 'work', phaseKey: 'done' },
+    });
+    const card = (await harness.deliver({ sourceKey: 'github-issue:1' }))!;
+    const card2 = await harness.workItems.get({ orgId: 'org-1', id: card.id });
+    return { ...harness, shipping, card: card2! };
+  }
+
+  it("moves the card when a person adds the route's label, once the burst window has passed", async () => {
+    const { card, commitUpdate, dispatcher, workItems, routeDecisions, shipping } = await shipRoute();
+
+    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:10:00Z');
+    // Within the burst window nothing moves yet, and the wait isn't an attempt.
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:01Z'));
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['intake'] });
+    expect(await routeDecisions(card.id)).toEqual(['pending']);
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:05Z'));
+    const moved = await workItems.get({ orgId: 'org-1', id: card.id });
+    expect(moved).toMatchObject({ stages: ['done'] });
+    expect(moved!.stageHistory.at(-1)).toMatchObject({ stage: 'done', by: `intake-route:${shipping.id}` });
+    expect(await routeDecisions(card.id)).toEqual(['succeeded']);
+    // The rule's move changed the card, not its source: it queues no update of its own.
+    await dispatcher.runOnce(new Date('2030-01-01T00:11:00Z'));
+    const updates = (await workItems.listDeferredDecisions('org-1', card.factoryProjectId, { workItemId: card.id }))
+      .map(entry => entry.decision as { type: string; event?: { type: string } })
+      .filter(decision => decision.event?.type === 'work_item.updated');
+    expect(updates).toHaveLength(1);
+  });
+
+  // A burst within the window moves the card once, by the net change; the older updates give way to the newest.
+  it.each([
+    {
+      case: 'carries the net change',
+      changes: [
+        [['ship'], []],
+        [['bug'], []],
+        [[], ['bug']],
+      ],
+      stages: ['done'],
+    },
+    {
+      case: 'moves nothing when it nets out',
+      changes: [
+        [['ship'], []],
+        [[], ['ship']],
+      ],
+      stages: ['intake'],
+    },
+  ] as const)('folds a burst of changes into one event that $case', async ({ changes, stages }) => {
+    const { card, commitUpdate, dispatcher, workItems, routeDecisions } = await shipRoute();
+    for (const [index, [added, removed]] of changes.entries()) {
+      await commitUpdate(card.id, labels([...added], [...removed]), `2030-01-01T00:10:0${index}Z`);
+    }
+    // The newest update is still in its window: nothing moves yet.
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:04Z'));
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['intake'] });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:08Z'));
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages });
+    expect(await routeDecisions(card.id)).toEqual([...changes.slice(1).map(() => 'superseded'), 'succeeded']);
+  });
+
+  it('waits for an earlier update still moving the card, even after its lease was renewed', async () => {
+    const { card, commitUpdate, dispatcher, workItems, routeDecisions } = await shipRoute();
+
+    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:10:00Z');
+    // Another worker claimed the first update before the second existed, and is still on it.
+    const [claimed] = await workItems.claimDeferredDecisions({
+      ownerId: 'other-worker',
+      now: new Date('2030-01-01T00:10:06Z'),
+      leaseExpiresAt: new Date('2030-01-01T00:11:00Z'),
+      limit: 10,
+    });
+    expect(claimed?.workItemId).toBe(card.id);
+    await commitUpdate(card.id, labels(['bug']), '2030-01-01T00:10:07Z');
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2030-01-01T00:10:08Z') });
+    try {
+      await workItems.renewDeferredDecisionLease(
+        { id: claimed!.id, orgId: 'org-1', factoryProjectId: card.factoryProjectId, ownerId: 'other-worker' },
+        new Date('2030-01-01T00:12:00Z'),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:20Z'));
+    // Folding now would hand `ship` to the card a second time.
+    expect(await routeDecisions(card.id)).toEqual(['leased', 'pending']);
+  });
+
+  it('starts a new event after the group last moved: an earlier, already applied change is not counted again', async () => {
+    const { card, commitUpdate, dispatcher, workItems, putAt } = await shipRoute();
+
+    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:10:00Z');
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:10Z'));
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['done'] });
+    await putAt(card.id, 'intake');
+
+    await commitUpdate(card.id, labels(['bug']), '2030-01-01T00:20:00Z');
+    await dispatcher.runOnce(new Date('2030-01-01T00:20:10Z'));
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['intake'] });
+  });
+
+  it("doesn't count again a change whose move committed but whose decision never finished", async () => {
+    const { card, commitUpdate, dispatcher, workItems, putAt } = await shipRoute();
+
+    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:10:00Z');
+    const complete = vi
+      .spyOn(workItems, 'completeDeferredDecision')
+      .mockRejectedValueOnce(new Error('connection lost'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:10Z'));
+    complete.mockRestore();
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['done'] });
+    await putAt(card.id, 'intake');
+
+    await commitUpdate(card.id, labels(['bug']), '2030-01-01T00:20:00Z');
+    await dispatcher.runOnce(new Date('2030-01-01T00:30:00Z'));
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['intake'] });
+  });
+
+  it('moves only from the phase a card.phase filter names', async () => {
+    const { card, commitUpdate, dispatcher, workItems, putAt } = await shipRoute({ from: 'triage' });
+
+    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:10:00Z');
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:10Z'));
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['intake'] });
+
+    await putAt(card.id, 'triage');
+    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:20:00Z');
+    await dispatcher.runOnce(new Date('2030-01-01T00:20:10Z'));
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['done'] });
+  });
+
+  it("never cancels a close: an update queued after it doesn't overtake it", async () => {
+    const { card, commitUpdate, deliverEvent, route, workItems } = await shipRoute();
+    await route({ name: 'Closed', on: ['work_item.closed'], target: { boardKey: 'work', phaseKey: 'canceled' } });
+
+    await commitUpdate(card.id, labels(['wontfix']), '2030-01-01T00:00:00Z');
+    await deliverEvent(card.id, { type: 'work_item.closed', reason: 'canceled' });
+
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['canceled'] });
   });
 });
 

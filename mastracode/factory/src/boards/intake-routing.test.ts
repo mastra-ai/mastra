@@ -29,12 +29,13 @@ function route(overrides: Partial<Parameters<typeof resolveIntakePlacement>[0][n
     enabled: true,
     when: null,
     target: { boardKey: 'work', phaseKey: 'triage' },
+    // Files issues and pull requests alike, as stored routes always have.
     on: ['work_item.created'],
     ...overrides,
   } as Parameters<typeof resolveIntakePlacement>[0][number];
 }
 
-const placing = (target: { boardKey: string; phaseKey: string }) => ({ target, on: ['work_item.created'] });
+const placing = (target: { boardKey: string; phaseKey: string }) => ({ target, on: ['work_item.opened'] });
 
 const issue = (labels: string[] = []) =>
   cardRuleFacts({
@@ -262,13 +263,13 @@ describe('resolveIntakePlacement', () => {
     expect(resolveIntakePlacement(to('review', 'review'), pullRequest, registry)).toBeUndefined();
   });
 
-  it('places new cards only by routes that handle work_item.created', () => {
+  it('places new cards only by routes that handle an arrival event', () => {
     const reopened = route({
       id: 'reopened',
       on: ['work_item.reopened'],
       target: { boardKey: 'work', phaseKey: 'intake' },
     });
-    const both = route({ id: 'both', on: ['work_item.reopened', 'work_item.created'] });
+    const both = route({ id: 'both', on: ['work_item.reopened', 'work_item.opened'] });
     expect(resolveIntakePlacement([reopened], issue(), registry)).toBeUndefined();
     expect(resolveIntakePlacement([reopened, both], issue(), registry)).toEqual({
       board: 'work',

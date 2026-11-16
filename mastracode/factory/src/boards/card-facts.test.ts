@@ -219,6 +219,59 @@ describe('item.pullRequest', () => {
   });
 });
 
+describe('item.hasPullRequest and item.hasIssue', () => {
+  const source = (sourceType: string, state: string, metadata: Record<string, unknown> = {}) =>
+    ({ sourceType, state, metadata }) as unknown as Card['workItem']['sources'][number];
+  const card = (kind: 'github issue' | 'github pull request', sources: Card['workItem']['sources']) => ({
+    title: 'Fix',
+    externalSource: SOURCES[kind]!,
+    metadata: {},
+    workItem: { labels: [], author: null, sources },
+  });
+  const openPullRequest = source('pull-request', 'open', { githubPullRequestNumber: 7 });
+  const merged = source('pull-request', 'merged', { githubPullRequestNumber: 7 });
+  const openIssue = source('issue', 'open');
+
+  // An issue has a pull request while one is open and attached; a pull request's own card is the pull request.
+  it.each([
+    {
+      case: 'issue with an open pull request',
+      kind: 'github issue',
+      sources: [openIssue, openPullRequest],
+      pr: true,
+      issue: true,
+    },
+    {
+      case: 'issue whose pull request merged',
+      kind: 'github issue',
+      sources: [openIssue, merged],
+      pr: false,
+      issue: true,
+    },
+    { case: 'issue alone', kind: 'github issue', sources: [openIssue], pr: false, issue: false },
+    {
+      case: 'pull request on its own card',
+      kind: 'github pull request',
+      sources: [openPullRequest],
+      pr: false,
+      issue: false,
+    },
+    {
+      case: 'pull request linking an issue',
+      kind: 'github pull request',
+      sources: [openPullRequest, openIssue],
+      pr: false,
+      issue: true,
+    },
+    { case: 'pull request still arriving', kind: 'github pull request', sources: undefined, pr: false, issue: false },
+  ] as const)('$case', ({ kind, sources, pr, issue }) => {
+    const facts = cardRuleFacts(
+      sources ? card(kind, [...sources]) : { title: 'Fix', externalSource: SOURCES[kind]!, metadata: {} },
+    );
+    expect({ pr: facts['item.hasPullRequest'], issue: facts['item.hasIssue'] }).toEqual({ pr, issue });
+  });
+});
+
 describe('author.trusted', () => {
   it.each([
     ['authorTrusted true', true],

@@ -1,15 +1,24 @@
 import type { StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
+import { arrivalKinds } from './board-events.js';
 
-type OrderRoute = Pick<StoredIntakeRouteRecord, 'enabled' | 'when' | 'on' | 'target'>;
+type OrderRoute = Pick<StoredIntakeRouteRecord, 'enabled' | 'when' | 'on' | 'pullRequestOpenedMovesOnly' | 'target'>;
 
 /** Whether the route can place a new card: enabled, handling arrivals, and not joining a closed issue's card. */
 export function placesArrivals(route: OrderRoute): boolean {
-  return route.enabled && route.on.includes('work_item.created') && !route.target.joinClosedIssue;
+  return route.enabled && arrivalKinds(route).size > 0 && !route.target.joinClosedIssue;
 }
 
-/** Whether the board's intake list takes every new card that reaches it. */
+/**
+ * Whether the board's intake list takes every new card that reaches it: unconditional rules file
+ * both issues and pull requests, in one rule or two.
+ */
 export function endsInCatchAll(routes: readonly OrderRoute[], boardKey: string): boolean {
-  return routes.some(route => route.target.boardKey === boardKey && placesArrivals(route) && route.when === null);
+  const kinds = new Set(
+    routes
+      .filter(route => route.target.boardKey === boardKey && placesArrivals(route) && route.when === null)
+      .flatMap(route => [...arrivalKinds(route)]),
+  );
+  return kinds.size === 2;
 }
 
 /**

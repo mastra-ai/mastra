@@ -4,7 +4,8 @@ import { externalSourceForWorkItem } from '../rules/types.js';
 import type { FactoryCommitDecision } from '../rules/types.js';
 import type { IntakeEvaluator, StoredBoardsStorage, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
 import type { Card } from '../storage/domains/work-items/base.js';
-import type { BoardEventFacts } from './board-events.js';
+import type { BoardEventFacts, RouteArrivals } from './board-events.js';
+import { arrivalKind, arrivalKinds, eventRuleFacts, LEGACY_ARRIVAL_EVENT } from './board-events.js';
 import { cardRuleFacts } from './card-facts.js';
 import { deriveIntakeOrder, reconcileIntakeOrder } from './intake-order.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
@@ -16,11 +17,22 @@ export type IntakeRoutesReader = Pick<
   'listIntakeRoutes' | 'readIntakeOrder' | 'recordIntakeDecision' | 'resolveNotRouted' | 'intakeEvaluator'
 >;
 
-type IntakeRoute = Pick<StoredIntakeRouteRecord, 'id' | 'enabled' | 'when' | 'target' | 'on'>;
+type IntakeRoute = Pick<
+  StoredIntakeRouteRecord,
+  'id' | 'enabled' | 'when' | 'target' | 'on' | 'pullRequestOpenedMovesOnly'
+>;
 
 /** Whether the route places new cards, rather than only moving existing ones on later events. */
-export function placesNewCards(route: Pick<StoredIntakeRouteRecord, 'on'>): boolean {
-  return route.on.includes('work_item.created');
+export function placesNewCards(route: RouteArrivals): boolean {
+  return arrivalKinds(route).size > 0;
+}
+
+/**
+ * Whether the route files this arrival: an issue by a `work_item.opened` route, a pull request with
+ * no card by a `pull_request.opened` one, either by a legacy `work_item.created` one.
+ */
+export function placesArrival(route: RouteArrivals, facts: RuleFacts): boolean {
+  return arrivalKinds(route).has(arrivalKind(facts));
 }
 
 /**
@@ -46,18 +58,21 @@ export type IntakeTargetProblem = {
  */
 export function intakeTargetProblem(
   registry: BoardRegistry,
-  route: { target: { boardKey: string; phaseKey?: string | null; joinClosedIssue?: boolean }; on: readonly string[] },
+  route: RouteArrivals & { target: { boardKey: string; phaseKey?: string | null; joinClosedIssue?: boolean } },
 ): IntakeTargetProblem | undefined {
   const { target } = route;
   const board = registry.get(target.boardKey);
   if (!board) {
     return { code: 'unknown_board', message: `Board "${target.boardKey}" is not installed in this project.` };
   }
-  if (target.joinClosedIssue && route.on.some(event => event !== 'work_item.created')) {
+  if (
+    target.joinClosedIssue &&
+    route.on.some(event => event !== 'pull_request.opened' && event !== LEGACY_ARRIVAL_EVENT)
+  ) {
     return {
       code: 'join_on_event',
       message:
-        'A route that joins a pull request to the card of the issue it closes handles only arrivals: its `on` must be `work_item.created` alone.',
+        'A route that joins a pull request to the card of the issue it closes handles only pull requests arriving: its `on` must be `pull_request.opened` alone.',
     };
   }
   if (!target.phaseKey) return undefined;
@@ -76,7 +91,7 @@ export function intakeTargetProblem(
   if (!kind) {
     return { code: 'unknown_phase', message: `Board "${target.boardKey}" has no phase "${target.phaseKey}".` };
   }
-  if (!route.on.includes('work_item.created')) return undefined;
+  if (!placesNewCards(route)) return undefined;
   if (kind === 'terminal') {
     return {
       code: 'terminal_phase',
@@ -124,6 +139,7 @@ export function closedIssueRuleFacts(closedIssue: Pick<Card, 'stages' | 'workIte
   if (!closedIssue) return { 'pullRequest.closesIssue': false };
   return {
     'pullRequest.closesIssue': true,
+    'item.hasIssue': true,
     ...(closedIssue.stages.length === 1 ? { 'closedIssue.phase': closedIssue.stages[0] } : {}),
     'closedIssue.hasPullRequest': hasPullRequest(closedIssue),
   };
@@ -148,7 +164,7 @@ export function resolveIntakeRoute(
   closedIssue?: Pick<Card, 'board'>,
 ): IntakeRouteResolution | undefined {
   for (const route of routes) {
-    if (!route.enabled || !placesNewCards(route) || !evaluateRuleGroup(route.when, facts)) continue;
+    if (!route.enabled || !placesArrival(route, facts) || !evaluateRuleGroup(route.when, facts)) continue;
     const board = registry.get(route.target.boardKey);
     if (!board) continue;
     if (route.target.joinClosedIssue) {
@@ -317,7 +333,7 @@ function resolveByIntakeOrder({ routes, order, facts, registry }: IntakeQuery): 
     checked.push(board.name);
     for (const route of routes) {
       if (route.target.boardKey !== boardKey || route.target.joinClosedIssue) continue;
-      if (!route.enabled || !placesNewCards(route) || !evaluateRuleGroup(route.when, facts)) continue;
+      if (!route.enabled || !placesArrival(route, facts) || !evaluateRuleGroup(route.when, facts)) continue;
       const phase = landingPhase(board, route.target.phaseKey);
       if (!placementTakesCard(board, phase, facts)) continue;
       return { outcome: 'placed', board: board.id, phase, routeId: route.id };
@@ -378,11 +394,7 @@ export function resolveEventRoute(
   board: InstalledBoard,
   carriesPullRequest = false,
 ): { phase: string; routeId: string } | undefined {
-  const facts: RuleFacts = {
-    ...cardFacts,
-    'event.type': event.type,
-    ...(event.reason ? { 'event.reason': event.reason } : {}),
-  };
+  const facts: RuleFacts = { ...cardFacts, ...eventRuleFacts(event) };
   for (const route of routes) {
     if (!route.enabled || !route.on.includes(event.type) || route.target.boardKey !== board.id) continue;
     if (!evaluateRuleGroup(route.when, facts)) continue;

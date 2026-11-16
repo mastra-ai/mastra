@@ -115,6 +115,8 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   #auth: RouteAuth | undefined;
   #ingestFactoryEvent: ReturnType<typeof attachGitLabRules>;
   readonly #orgIdByResourceId = new Map<string, string | null>();
+  // A connection keeps the GitLab user it was made with, so its identity is read once.
+  readonly #currentUsernames = new Map<string, Promise<string>>();
   readonly rules: GitLabEventRules;
 
   constructor(rules?: GitLabRuleOverrides) {
@@ -253,6 +255,16 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
     const api = (await this.contextById(connectionId)).api;
     const item = kind === 'issue' ? await api.getIssue(projectId, iid) : await api.getMergeRequest(projectId, iid);
     return item.author?.username;
+  }
+
+  async getCurrentUsername(connectionId: string): Promise<string | undefined> {
+    let username = this.#currentUsernames.get(connectionId);
+    if (!username) {
+      username = (async () => (await (await this.contextById(connectionId)).api.getCurrentUser()).username)();
+      this.#currentUsernames.set(connectionId, username);
+      username.catch(() => this.#currentUsernames.delete(connectionId));
+    }
+    return username;
   }
 
   async isProjectMemberTrustedForSource(sourceId: string, username: string): Promise<boolean> {

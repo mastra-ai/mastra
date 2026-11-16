@@ -2544,6 +2544,8 @@ export class MastraFactory {
           integrations: integrationRegistrations,
           configVersion,
           boardRegistry: this.#projectBoards ?? this.#boards,
+          // Only with the boards domain ready, as intake routes are.
+          ...(this.#projectBoards ? { notRouted: storedBoardsStorage } : {}),
           factoryReady,
           domains,
           ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
@@ -2583,6 +2585,8 @@ export class MastraFactory {
               configVersion,
               boardRegistry: this.#projectBoards ?? this.#boards,
               ...(this.#keptCards ? { keptCards: this.#keptCards } : {}),
+              // Only with the boards domain ready, as intake routes are.
+              ...(this.#projectBoards ? { notRouted: storedBoardsStorage } : {}),
               factoryReady,
               domains,
               // The Platform GitHub lane only receives pushes through its polling worker.

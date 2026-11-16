@@ -13,7 +13,8 @@ import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/ren
 import type { IntakeRouteInfo } from '../../../../../api/types';
 import { NewCardsHere } from '../../../boardConfig/components/NewCardsHere';
 import { CardMovesSection, IntakeRoutesSection } from '../IntakeRoutesSection';
-import { catchesEveryArrival } from '../intakeRoutes';
+import { catchesEveryArrival, placesNewCards } from '../intakeRoutes';
+import { arrivalKinds } from '@mastra/factory/boards/board-events';
 
 const ROUTES_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1/intake-routes`;
 
@@ -59,6 +60,7 @@ function serveRoutes({ canEdit = true, routes = seededRoutes() } = {}) {
       const body = (await request.json()) as Pick<IntakeRouteInfo, 'name' | 'when'> & {
         target: { boardKey: string; phaseKey?: string };
         on?: IntakeRouteInfo['on'];
+        pullRequestOpenedMovesOnly?: true;
       };
       state.requests.push({ method: 'POST', path: '', body });
       const route: IntakeRouteInfo = {
@@ -68,11 +70,16 @@ function serveRoutes({ canEdit = true, routes = seededRoutes() } = {}) {
         when: body.when ?? null,
         target: { boardKey: body.target.boardKey, phaseKey: body.target.phaseKey ?? null, joinClosedIssue: false },
         on: body.on ?? ['work_item.created'],
+        ...(body.pullRequestOpenedMovesOnly && { pullRequestOpenedMovesOnly: true }),
         createdBy: 'admin',
       };
-      // A route that places new cards goes ahead of the first route taking every new card. Each
-      // route that moves down a slot is a write to it, so its revision goes up, as in storage.
-      const ahead = route.on.includes('work_item.created') ? state.routes.findIndex(catchesEveryArrival) : -1;
+      // A route that places new cards goes ahead of the catch-all taking each kind it files, the
+      // later one when they differ. Each route that moves down a slot is a write to it, so its
+      // revision goes up, as in storage.
+      const catchAlls = [...arrivalKinds(route)].map(kind =>
+        state.routes.findIndex(entry => catchesEveryArrival(entry, kind)),
+      );
+      const ahead = catchAlls.length > 0 && !catchAlls.includes(-1) ? Math.max(...catchAlls) : -1;
       state.routes = (ahead < 0 ? [...state.routes, route] : state.routes.toSpliced(ahead, 0, route)).map(
         (entry, position) =>
           entry === route
@@ -417,9 +424,9 @@ describe('IntakeRoutesSection', () => {
     await screen.findByRole('list', { name: 'Intake routes' });
     // Routes that only move cards already on a board are on that board's Card moves page.
     expect(routeNames()).toEqual(
-      DEFAULT_INTAKE_ROUTES.filter(({ route }) =>
-        (route.on ?? ['work_item.created']).includes('work_item.created'),
-      ).map(({ route }) => route.name),
+      DEFAULT_INTAKE_ROUTES.filter(({ route }) => placesNewCards({ on: route.on ?? ['work_item.created'] })).map(
+        ({ route }) => route.name,
+      ),
     );
     expect(routeNames()).not.toContain('Closed issues go to Done');
     const last = within(screen.getByRole('list', { name: 'Intake routes' }))
@@ -457,6 +464,12 @@ describe('IntakeRoutesSection', () => {
       id: 'everything-else',
       target: { boardKey: 'ship', phaseKey: 'inbox' },
     });
+    // New pull requests have a catch-all of their own, which lands them in Ship's review phase.
+    expect(byName('Pull requests go to Ship › Pr')).toMatchObject({
+      id: 'pull-requests',
+      target: { boardKey: 'ship', phaseKey: 'pr' },
+    });
+    expect(byName('Pull requests go to Review')).toBeUndefined();
     // Status events move a card only through routes on its own board, so Ship gets its own.
     expect(byName('Closed issues go to Done on Ship')).toMatchObject({
       on: ['work_item.closed'],
@@ -479,6 +492,42 @@ describe('IntakeRoutesSection', () => {
       names.indexOf('Everything else goes to Ship › Inbox'),
     );
     expect(byName('Closed issues go to Done')?.target.boardKey).toBe('work');
+  });
+
+  it('leaves a pull_request.opened route stored by 0.28 a card move: not listed with new-card routes, and not sent on', async () => {
+    // Ahead of everything, as an older project's "PR opened → Review" card move can be.
+    const moveOnly: IntakeRouteInfo = {
+      ...seededRoutes()[0],
+      id: 'opened-to-review',
+      name: 'Opened pull requests go to Review',
+      when: null,
+      on: ['pull_request.opened'],
+      pullRequestOpenedMovesOnly: true,
+      target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false },
+    };
+    const state = serveRoutes({
+      routes: [moveOnly, ...seededRoutes()].map((route, position) => ({ ...route, position })),
+    });
+    const user = userEvent.setup();
+    renderSection();
+
+    await screen.findByRole('list', { name: 'Intake routes' });
+    expect(routeNames()).not.toContain('Opened pull requests go to Review');
+    await user.click(await screen.findByLabelText('Board for new cards'));
+    await user.click(await screen.findByRole('option', { name: 'Ship' }));
+
+    // Ship gets a copy of it, as of Work's other card moves, and the copy only moves cards too.
+    await waitFor(() =>
+      expect(state.routes.find(route => route.name === 'Opened pull requests go to Review on Ship')).toMatchObject({
+        on: ['pull_request.opened'],
+        pullRequestOpenedMovesOnly: true,
+        target: { boardKey: 'ship', phaseKey: 'pr' },
+      }),
+    );
+    // The real pull request catch-all is sent on; the card move itself is left as it was.
+    expect(state.routes.find(route => route.id === 'pull-requests')?.target).toMatchObject({ boardKey: 'ship' });
+    expect(state.routes.find(route => route.id === moveOnly.id)).toEqual(moveOnly);
+    expect(state.requests.some(request => request.path === moveOnly.id)).toBe(false);
   });
 
   it('adds a route ahead of the catch-all so it can match new cards', async () => {
@@ -888,8 +937,11 @@ describe('IntakeRoutesSection', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Move up' }));
     await waitFor(() => expect(routeNames().indexOf('Pull requests go to Review')).toBe(before - 1));
 
-    await user.click(screen.getByRole('switch', { name: 'Use Outside authors wait in Intake' }));
-    await waitFor(() => expect(state.routes.find(route => route.id === 'outside-authors')?.enabled).toBe(false));
+    const outsidePullRequests = 'Pull requests from outside authors wait in Intake';
+    await user.click(screen.getByRole('switch', { name: `Use ${outsidePullRequests}` }));
+    await waitFor(() =>
+      expect(state.routes.find(route => route.id === 'outside-author-pull-requests')?.enabled).toBe(false),
+    );
 
     const closesIssue = 'Pull requests that close a waiting issue join its card';
     await user.click(screen.getByRole('button', { name: `${closesIssue} actions` }));
@@ -899,15 +951,16 @@ describe('IntakeRoutesSection', () => {
 
     expect(state.requests.map(({ method, path }) => `${method} ${path}`)).toEqual([
       'POST reorder',
-      'PATCH outside-authors',
+      'PATCH outside-author-pull-requests',
       'DELETE closes-issue',
     ]);
     // The reorder swapped only the two routes it moved, keeping the hidden card moves in their slots.
     expect((state.requests[0]?.body as { ids: string[] }).ids).toEqual([
       'closes-issue',
-      'pull-requests',
       'outside-authors',
-      ...DEFAULT_INTAKE_ROUTES.slice(3).map(({ key }) => key),
+      'pull-requests',
+      'outside-author-pull-requests',
+      ...DEFAULT_INTAKE_ROUTES.slice(4).map(({ key }) => key),
     ]);
     expect(state.requests[1]?.body).toEqual({ enabled: false, expectedRevision: 2 });
     expect(state.requests[2]?.body).toBe(1);
@@ -1031,7 +1084,7 @@ describe('NewCardsHere', () => {
       name: id,
       when: { operator: 'AND', conditions: [{ field: 'source.kind', operator: 'equals', value: 'issue' }] },
       target: { boardKey: 'work', phaseKey: 'intake', joinClosedIssue: false },
-      on: ['work_item.created'],
+      on: ['work_item.opened'],
       ...extra,
     });
     serveRoutes({
@@ -1041,7 +1094,8 @@ describe('NewCardsHere', () => {
         route('Off', { enabled: false }),
         route('Elsewhere', { target: { boardKey: 'ship', phaseKey: null, joinClosedIssue: false } }),
         route('Reopened', { on: ['work_item.reopened'], when: null }),
-        route('Everything else', { when: null }),
+        // Takes issues and pull requests alike, so nothing reaches the route below it.
+        route('Everything else', { when: null, on: ['work_item.created'] }),
         route('Never reached', {}),
       ].map((entry, position) => ({ ...entry, position })),
     });

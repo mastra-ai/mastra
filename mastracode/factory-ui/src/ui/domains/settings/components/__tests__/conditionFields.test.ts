@@ -63,7 +63,7 @@ describe('condition rows', () => {
   });
 
   it('name stored values the way a person reads them', () => {
-    const fields = conditionFields(intakeRouteFacts(['work_item.created', 'work_item.closed']));
+    const fields = conditionFields(intakeRouteFacts(['work_item.opened', 'work_item.closed']));
     const label = (id: string, value: string | boolean) => {
       const suggestions = fields.find(field => field.id === id)?.suggestions;
       return Array.isArray(suggestions) ? suggestions.find(option => option.value === String(value))?.label : undefined;
@@ -78,7 +78,7 @@ describe('condition rows', () => {
   it('offer event facts only to routes that handle an event besides new cards', () => {
     const ids = (on: string[]) => conditionFields(intakeRouteFacts(on)).map(field => field.id);
 
-    expect(ids(['work_item.created'])).not.toContain('event.type');
+    expect(ids(['work_item.opened'])).not.toContain('event.type');
     expect(ids(['work_item.reopened'])).toContain('event.type');
     expect(ids(['work_item.reopened'])).not.toContain('event.reason');
     expect(ids(['work_item.closed'])).toContain('event.reason');
