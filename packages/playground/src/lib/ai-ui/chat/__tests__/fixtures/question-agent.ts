@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core/mastra';
 import type { ChunkType } from '@mastra/core/stream';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
@@ -12,20 +13,16 @@ const askQuestion = createTool({
 });
 
 type StreamOptions = NonNullable<Parameters<Agent['stream']>[1]>;
+type RunOptions = Pick<StreamOptions, 'maxSteps' | 'stopWhen'>;
 
 /** Ends the turn once the agent has asked its question, like an agent whose question tool waits for the user. */
 export const stopAfterQuestion: NonNullable<StreamOptions['stopWhen']> = ({ steps }) =>
   (steps.at(-1)?.toolCalls ?? []).some(call => call.toolName === 'askQuestion');
 
-/**
- * Runs a real agent whose model calls `askQuestion` on every step, and returns
- * the chunks its stream produced, as the agent stream route sends them.
- */
-export const streamQuestionAgent = async (
-  options: Pick<StreamOptions, 'maxSteps' | 'stopWhen'>,
-): Promise<ChunkType[]> => {
+/** A real agent whose model calls `askQuestion` on every step. */
+const createQuestionAgent = () => {
   let modelCalls = 0;
-  const agent = new Agent({
+  return new Agent({
     id: 'agent-1',
     name: 'Poster agent',
     instructions: 'Ask the user which style they want before designing.',
@@ -55,9 +52,36 @@ export const streamQuestionAgent = async (
       },
     }),
   });
+};
 
-  const output = await agent.stream('Make me a poster', options);
+/** The chunks the agent's own stream produced, as the agent stream route sends them. */
+export const streamQuestionAgent = async (options: RunOptions): Promise<ChunkType[]> => {
+  const output = await createQuestionAgent().stream('Make me a poster', options);
   const chunks: ChunkType[] = [];
   for await (const chunk of output.fullStream) chunks.push(chunk);
   return chunks;
+};
+
+/**
+ * The chunks a thread subscriber received while the agent ran on `thread-1`, as
+ * the thread subscribe route sends them to Studio's default signal transport.
+ * Thread broadcasts are slimmed copies of the run's chunks, not the chunks themselves.
+ */
+export const broadcastQuestionAgent = async (options: RunOptions): Promise<ChunkType[]> => {
+  const agent = createQuestionAgent();
+  new Mastra({ agents: { agent }, logger: false });
+  const memory = { thread: 'thread-1', resource: 'user-1' };
+  const subscription = await agent.subscribeToThread({ threadId: memory.thread, resourceId: memory.resource });
+  try {
+    const output = await agent.stream('Make me a poster', { ...options, memory });
+    await output.consumeStream();
+    const chunks: ChunkType[] = [];
+    for await (const chunk of subscription.stream) {
+      chunks.push(chunk);
+      if (chunk.type === 'finish') break;
+    }
+    return chunks;
+  } finally {
+    subscription.unsubscribe();
+  }
 };

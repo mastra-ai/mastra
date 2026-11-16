@@ -26,7 +26,7 @@ import {
   emptyApprovalHistory,
   generatedApprovalResponse,
 } from './fixtures/nested-approval';
-import { stopAfterQuestion, streamQuestionAgent } from './fixtures/question-agent';
+import { broadcastQuestionAgent, stopAfterQuestion, streamQuestionAgent } from './fixtures/question-agent';
 import {
   acceptedToolRun,
   emptyMcpServers,
@@ -381,24 +381,40 @@ describe('ChatProvider', () => {
 
   // A finish reason of 'tool-calls' only says the last step called a tool. A stopWhen
   // match ends a run the same way, so Studio must not read it as running out of steps. (#29612)
-  describe('when a run ends on a tool call', () => {
+  // Studio's default signal transport reads the run from a thread subscription, whose
+  // chunks are slimmed broadcast copies, so both transports are covered.
+  describe.each(['legacy', 'signals'] as const)('when a %s run ends on a tool call', transport => {
     const MAX_STEPS_WARNING = /reached maxSteps/;
+    const runAgent = transport === 'signals' ? broadcastQuestionAgent : streamQuestionAgent;
+
+    const sse = (chunks: ChunkType[]) => chunks.map(chunk => `data: ${JSON.stringify(chunk)}\n\n`).join('');
 
     const renderRun = async ({ maxSteps, chunks }: { maxSteps: number; chunks: ChunkType[] }) => {
+      Object.assign(window, { MASTRA_AGENT_SIGNALS: transport === 'signals' ? 'true' : 'false' });
       let requested = false;
+      let subscription: ReadableStreamDefaultController<Uint8Array> | undefined;
       server.use(
         http.post(`${BASE_URL}/api/agents/agent-1/stream`, () => {
           requested = true;
-          return new HttpResponse(
-            new ReadableStream<Uint8Array>({
-              start(controller) {
-                for (const chunk of chunks)
-                  controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
-                controller.close();
-              },
-            }),
-            { headers: { 'content-type': 'text/event-stream' } },
-          );
+          return new HttpResponse(sse(chunks), { headers: { 'content-type': 'text/event-stream' } });
+        }),
+        http.post(
+          `${BASE_URL}/api/agents/agent-1/threads/subscribe`,
+          () =>
+            new HttpResponse(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  subscription = controller;
+                },
+              }),
+              { headers: { 'content-type': 'text/event-stream' } },
+            ),
+        ),
+        http.post(`${BASE_URL}/api/agents/agent-1/send-message`, () => {
+          requested = true;
+          // The run reaches the open thread subscription, as the server broadcasts it.
+          queueMicrotask(() => subscription?.enqueue(new TextEncoder().encode(sse(chunks))));
+          return HttpResponse.json(acceptedToolRun(chunks[0].runId));
         }),
         http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(emptyMcpServers)),
         ...baseHandlers([]),
@@ -429,20 +445,22 @@ describe('ChatProvider', () => {
           </ChatProvider>
         </Wrapper>,
       );
+      if (transport === 'signals') await waitFor(() => expect(subscription).toBeDefined());
       fireEvent.click(screen.getByRole('button', { name: 'Send' }));
       await waitFor(() => expect(requested).toBe(true));
+      await screen.findByText('Make me a poster');
       await waitFor(() => expect(screen.getByTestId('run-state').textContent).toBe('Stopped'));
+      subscription?.close();
     };
 
-    // Both runs end the same way on the wire; only the step count tells them apart.
-    const expectToolCallFinish = (chunks: ChunkType[], steps: number) =>
-      expect(chunks.at(-1)).toMatchObject({
-        type: 'finish',
-        payload: { stepResult: { reason: 'tool-calls' }, output: { steps: Array(steps).fill(expect.anything()) } },
-      });
+    // Both runs end the same way on the wire; only the number of steps tells them apart.
+    const expectToolCallFinish = (chunks: ChunkType[], steps: number) => {
+      expect(chunks.at(-1)).toMatchObject({ type: 'finish', payload: { stepResult: { reason: 'tool-calls' } } });
+      expect(chunks.filter(chunk => chunk.type === 'step-finish')).toHaveLength(steps);
+    };
 
     it('shows no maxSteps warning when stopWhen ended the turn after the question', async () => {
-      const chunks = await streamQuestionAgent({ maxSteps: 10, stopWhen: stopAfterQuestion });
+      const chunks = await runAgent({ maxSteps: 10, stopWhen: stopAfterQuestion });
       expectToolCallFinish(chunks, 1);
 
       await renderRun({ maxSteps: 10, chunks });
@@ -451,7 +469,7 @@ describe('ChatProvider', () => {
     });
 
     it('warns when the run used every step it had', async () => {
-      const chunks = await streamQuestionAgent({ maxSteps: 3 });
+      const chunks = await runAgent({ maxSteps: 3 });
       expectToolCallFinish(chunks, 3);
 
       await renderRun({ maxSteps: 3, chunks });

@@ -29,6 +29,15 @@ describe('stream error messages', () => {
       expect(isMaxStepsFinishChunk({ chunk: finish({ steps }), maxSteps: 2 })).toBe(true);
     });
 
+    it('reads the step count a thread subscription copy carries instead of steps', () => {
+      const broadcast = (stepCount: number) => ({
+        type: 'finish',
+        payload: { stepResult: { reason: 'tool-calls' }, output: { stepCount } },
+      });
+      expect(isMaxStepsFinishChunk({ chunk: broadcast(3), maxSteps: 3 })).toBe(true);
+      expect(isMaxStepsFinishChunk({ chunk: broadcast(1), maxSteps: 10 })).toBe(false);
+    });
+
     it('does not warn without a known limit or step list', () => {
       expect(isMaxStepsFinishChunk({ chunk: finish({ steps: [step('tool-calls')] }), maxSteps: undefined })).toBe(
         false,

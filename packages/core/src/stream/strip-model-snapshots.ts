@@ -1,10 +1,21 @@
 /**
+ * The steps that count against `maxSteps`. A processor retry re-runs its step,
+ * so the loop does not count it toward the limit, and neither does this.
+ */
+function countBudgetedSteps(steps: unknown[]): number {
+  return steps.filter(
+    step => !(typeof step === 'object' && step !== null && 'finishReason' in step && step.finishReason === 'retry'),
+  ).length;
+}
+
+/**
  * Removes the model request/history snapshots that agent `step-start`,
  * `step-finish` and `finish` chunks carry (full prompt, file parts, message
  * history, cumulative steps). Used for copies of chunks that are fanned out to
- * other subscribers, which don't need those fields. Only the given chunk is
- * inspected; callers decide which nested chunks to pass in. Returns the same
- * reference when nothing was removed.
+ * other subscribers, which don't need those fields. A `finish` chunk keeps the
+ * number of steps as `output.stepCount`. Only the given chunk is inspected;
+ * callers decide which nested chunks to pass in. Returns the same reference
+ * when nothing was removed.
  */
 export function stripModelSnapshots<T>(chunk: T): T {
   if (!chunk || typeof chunk !== 'object') return chunk;
@@ -27,8 +38,11 @@ export function stripModelSnapshots<T>(chunk: T): T {
       changed = true;
     }
     if (p.output && typeof p.output === 'object' && 'steps' in p.output) {
-      const { steps: _steps, ...output } = p.output as Record<string, unknown>;
-      next.output = output;
+      const { steps, ...output } = p.output as Record<string, unknown>;
+      // Subscribers still need to know how many steps the run took, e.g. to tell a run
+      // that used its whole maxSteps budget from one a stopWhen ended early.
+      next.output =
+        type === 'finish' && Array.isArray(steps) ? { ...output, stepCount: countBudgetedSteps(steps) } : output;
       changed = true;
     }
     if ('messages' in p) {

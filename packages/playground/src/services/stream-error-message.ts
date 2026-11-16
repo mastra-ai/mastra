@@ -16,6 +16,7 @@ type FinishChunkLike = {
     };
     output?: {
       steps?: unknown;
+      stepCount?: unknown;
     };
   };
 };
@@ -27,10 +28,14 @@ const isRetryStep = (step: unknown) =>
 
 /**
  * The steps a run spent from its maxSteps budget. A processor retry re-runs its
- * step, so core's step limit does not count it, and neither does this.
+ * step, so core's step limit does not count it, and neither does this. Thread
+ * subscription copies of the chunk, which Studio's signal transport reads, drop
+ * `steps` and carry core's own count as `stepCount` instead.
  */
-const countBudgetedSteps = (steps: unknown) =>
-  Array.isArray(steps) ? steps.filter(step => !isRetryStep(step)).length : undefined;
+const countBudgetedSteps = (output: NonNullable<FinishChunkLike['payload']>['output']) => {
+  if (Array.isArray(output?.steps)) return output.steps.filter(step => !isRetryStep(step)).length;
+  return typeof output?.stepCount === 'number' ? output.stepCount : undefined;
+};
 
 const getMaxStepsErrorText = (maxSteps?: number) => {
   const limit = typeof maxSteps === 'number' ? ` (${maxSteps})` : '';
@@ -50,6 +55,8 @@ const getFinishReason = (chunk: FinishChunkLike) => {
  * last step called a tool: a `stopWhen` match or a client tool ends a run the
  * same way (#29612). So the run must also have used every step in `maxSteps`.
  * Without a known limit there is nothing to compare against, so no warning.
+ * A client tool called on the last allowed step still warns: the chunk does not
+ * say why the loop stopped, only how far it got (#28191 proposes that field).
  */
 export const isMaxStepsFinishChunk = ({
   chunk,
@@ -60,7 +67,7 @@ export const isMaxStepsFinishChunk = ({
 }) => {
   if (getFinishReason(chunk) !== MAX_STEPS_FINISH_REASON) return false;
   if (typeof maxSteps !== 'number' || maxSteps < 1) return false;
-  const usedSteps = countBudgetedSteps(chunk.payload?.output?.steps);
+  const usedSteps = countBudgetedSteps(chunk.payload?.output);
   return usedSteps !== undefined && usedSteps >= maxSteps;
 };
 
