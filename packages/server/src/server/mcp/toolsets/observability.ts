@@ -364,7 +364,8 @@ export function addObservabilityTools(kit: CatalogueKit) {
   }
 
   // The explorer's tools, with what the model reads of each: the model can show any of them in an open view.
-  if (explorer && config.appSteering) {
+  // Steering changes what the user sees, so a read-only server doesn't offer it.
+  if (explorer && config.appSteering && !config.readOnly) {
     const steerable = new Map<SteerableTool, ModelSummary>();
     if (offered(QUERY_TRACES)) steerable.set('query_traces', summarizeTraces('traces'));
     if (offered(LIST_TRACES_ROUTE)) steerable.set('list_traces', summarizeTraces('spans'));

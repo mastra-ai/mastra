@@ -250,7 +250,7 @@ export const mastra = new Mastra({
 })
 ```
 
-Views belong to the user who opened them, and expire after an hour without use. Set `appSteering: false` to turn steering off.
+Views belong to the user who opened them. The cache keeps a view's changes for an hour after the last one. A server with `readOnly: true` doesn't offer steering. Set `appSteering: false` to turn steering off.
 
 Apps are served only to clients that declare MCP Apps support. Other clients, such as Claude Code in a terminal, get the same tools and JSON results as without the package. Set `apps: false` to turn them off:
 

@@ -131,7 +131,13 @@ function capabilities(traceQuery: boolean, logs: boolean) {
  * also keeps logs and the caller can read them through `list_logs`, filtered by `level`.
  */
 /** A view's record, as the built-in server keeps it in its cache. */
-export type ViewRecord = { version: number; by: 'model' | 'app'; state: Record<string, any> | null };
+export type ViewRecord = {
+  version: number;
+  by: 'model' | 'app';
+  state: Record<string, any> | null;
+  /** How many sync calls to fail next, as a cache outage would. */
+  failures?: number;
+};
 
 export function observabilityExplorerServer({ traceQuery, logs = false }: { traceQuery: boolean; logs?: boolean }) {
   const calls: { tool: string; args: Record<string, any> }[] = [];
@@ -211,13 +217,18 @@ export function observabilityExplorerServer({ traceQuery, logs = false }: { trac
           state: z.record(z.string(), z.any()).optional(),
         }),
         execute: async args => {
+          if (view.failures) {
+            view.failures--;
+            throw new Error('500 The cache is unavailable');
+          }
           if (args.state) {
             record('sync_observability_view', args);
             if (args.base !== view.version) throw new Error(`View changed since version ${args.base}`);
             Object.assign(view, { version: view.version + 1, by: 'app', state: args.state });
             return { version: view.version };
           }
-          return view.version > (args.since ?? -1) ? { ...view } : { version: view.version };
+          const { version, by, state } = view;
+          return version !== args.since ? { version, by, state } : { version };
         },
       }),
       get_trace: createTool({

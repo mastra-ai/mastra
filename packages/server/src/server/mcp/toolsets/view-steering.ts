@@ -1,3 +1,4 @@
+import { deepEqual } from '@mastra/core/utils';
 import type { JSONSchema7 } from '@mastra/schema-compat';
 import { GET_CAPABILITIES } from '../../handlers/observability-new-endpoints';
 import { toolError } from '../catalogue';
@@ -10,22 +11,14 @@ import { summarizeTrace } from './observability-summary';
 export const STEER_VIEW_TOOL = 'steer_observability_view';
 export const SYNC_VIEW_TOOL = 'sync_observability_view';
 
-const READ_ONLY = { readOnlyHint: true };
+/** Both change what the user sees, though no Mastra data. */
+const CHANGES_VIEW = { readOnlyHint: false, destructiveHint: false };
 
 /** Whether two states show the same list and trace, whatever the view says about them. */
 function sameView(a: ViewState | null, b: ViewState): boolean {
   const { context: _a, ...shown } = a ?? {};
   const { context: _b, ...next } = b;
-  return stable(shown) === stable(next);
-}
-
-/** JSON with object keys sorted, so key order doesn't count as a difference. */
-function stable(value: unknown): string {
-  return JSON.stringify(value, (_key, v: unknown) =>
-    v && typeof v === 'object' && !Array.isArray(v)
-      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
-      : v,
-  );
+  return deepEqual(shown, next);
 }
 
 /** What the model is told a view shows. */
@@ -102,7 +95,7 @@ export function addViewSteeringTools(kit: CatalogueKit, steerable: Map<Steerable
       const updated = await writeView(cache, args.viewId, owner, state, 'model');
       return { text: [`${describe(args.viewId, updated)} The user sees it now.`, ...read].join('\n\n') };
     },
-    { annotations: READ_ONLY, summary: output => String(output.text) },
+    { annotations: CHANGES_VIEW, summary: output => String(output.text) },
   );
 
   const stateSchema: JSONSchema7 = object({
@@ -140,10 +133,11 @@ export function addViewSteeringTools(kit: CatalogueKit, steerable: Map<Steerable
         return { version };
       }
       const record = await readView(cache, args.viewId, owner);
-      return record.version > (args.since ?? -1)
+      // An older version than the view's means the record expired and started over.
+      return record.version !== args.since
         ? { version: record.version, by: record.by, state: record.state }
         : { version: record.version };
     },
-    { annotations: READ_ONLY, meta: { ui: { resourceUri: kit.apps.observabilityExplorer, visibility: ['app'] } } },
+    { annotations: CHANGES_VIEW, meta: { ui: { resourceUri: kit.apps.observabilityExplorer, visibility: ['app'] } } },
   );
 }

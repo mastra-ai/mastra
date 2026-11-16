@@ -244,7 +244,7 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
           let text = summary(sent);
           // A new explorer gets a view id: the model steers it, the explorer polls it, both by that id.
           if (tools[STEER_VIEW_TOOL] && opensExplorer(tools[toolName])) {
-            const viewId = await openView(mastra.getServerCache(), viewOwner(requestContext));
+            const viewId = await openView(viewOwner(requestContext));
             meta['mastra/viewId'] = viewId;
             text +=
               `\n\nThe user sees this in an observability explorer, view ${viewId}. To change what it shows ` +

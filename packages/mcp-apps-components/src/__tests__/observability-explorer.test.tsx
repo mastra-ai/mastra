@@ -7,6 +7,7 @@ import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ObservabilityExplorer } from '../apps/observability-explorer/observability-explorer';
+import { MAX_CONTEXT } from '../apps/observability-explorer/view-sync';
 import { serveAndConnect } from './greeting-server';
 import { observabilityExplorerServer } from './observability-explorer-server';
 
@@ -277,6 +278,49 @@ it('follows the model steering an open view, and reports what the user then has 
     expect(last?.args.state).not.toHaveProperty('traceId');
   }, POLL);
   expect(mcp.view.by).toBe('app');
+}, 20_000);
+
+it('brings the user back when the model sets the same view again after they moved off it', async () => {
+  const mcp = observabilityExplorerServer({ traceQuery: true, logs: true });
+  await openList(mcp, 'query_traces', { timeRange: lastHour() }, { meta: { 'mastra/viewId': 'view-1' } });
+  expect(await screen.findByText('weather-agent')).toBeTruthy();
+
+  const errorLogs = { tool: 'list_logs', args: { level: 'error' } };
+  Object.assign(mcp.view, { version: 1, by: 'model', state: errorLogs });
+  expect(await screen.findByRole('tab', { name: 'Logs', selected: true }, POLL)).toBeTruthy();
+  await waitFor(() => expect(mcp.view.version).toBe(2), POLL);
+
+  // The user goes back to the traces; the model then asks for the error logs again.
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'Traces' }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Traces' }));
+  expect(await screen.findByRole('tab', { name: 'Traces', selected: true })).toBeTruthy();
+  await waitFor(() => expect(mcp.view.state?.context).toContain('Traces tab'), POLL);
+  Object.assign(mcp.view, { version: mcp.view.version + 1, by: 'model', state: errorLogs });
+  expect(await screen.findByRole('tab', { name: 'Logs', selected: true }, POLL)).toBeTruthy();
+}, 20_000);
+
+it('keeps following the model after a sync call fails', async () => {
+  const mcp = observabilityExplorerServer({ traceQuery: true, logs: true });
+  Object.assign(mcp.view, { failures: 2 });
+  await openList(mcp, 'query_traces', { timeRange: lastHour() }, { meta: { 'mastra/viewId': 'view-1' } });
+  expect(await screen.findByText('weather-agent')).toBeTruthy();
+  await waitFor(() => expect(mcp.view.failures).toBe(0), { timeout: 8_000 });
+
+  Object.assign(mcp.view, { version: 1, by: 'model', state: { tool: 'list_logs', args: { level: 'error' } } });
+  expect(await screen.findByText('Carrier lookup failed for order 42', undefined, POLL)).toBeTruthy();
+}, 20_000);
+
+it('cuts what it reports of the screen to what the server takes', async () => {
+  const mcp = observabilityExplorerServer({ traceQuery: true, logs: true });
+  await openList(
+    mcp,
+    'query_traces',
+    { timeRange: lastHour(), textSearch: 'refund '.repeat(1000) },
+    { meta: { 'mastra/viewId': 'view-1' } },
+  );
+  await waitFor(() => expect(mcp.calls.some(call => call.tool === 'sync_observability_view')).toBe(true), POLL);
+  const report = mcp.calls.find(call => call.tool === 'sync_observability_view')!;
+  expect(report.args.state.context.length).toBe(MAX_CONTEXT);
 }, 20_000);
 
 it("doesn't poll a view the server gave no id", async () => {

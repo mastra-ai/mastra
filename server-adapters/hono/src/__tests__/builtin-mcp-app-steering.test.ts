@@ -56,6 +56,14 @@ class SharedCache extends MastraServerCache {
     await this.set(key, next);
     return next;
   }
+  /** One step with nothing awaited in between, as Redis runs it in one script. */
+  async listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>) {
+    const index = JSON.parse(this.values.get(counterKey) ?? '0') as number;
+    this.values.set(counterKey, JSON.stringify(index + 1));
+    const list = JSON.parse(this.values.get(listKey) ?? '[]') as unknown[];
+    this.values.set(listKey, JSON.stringify([...list, { ...value, index }]));
+    return index;
+  }
 }
 
 const cleanups: Array<() => Promise<void>> = [];
@@ -223,8 +231,9 @@ describe('steering an open observability explorer', () => {
     });
     expect(stale.isError).toBe(true);
     expect(text(stale)).toContain('changed since version 3');
+    // The refused report takes a version, but the view still shows the model's change.
     expect(json(await model.callTool({ name: SYNC, arguments: { viewId, since: 3 } }))).toMatchObject({
-      version: 4,
+      version: 5,
       by: 'model',
       state: { tool: 'analyze_metrics' },
     });
@@ -242,6 +251,8 @@ describe('steering an open observability explorer', () => {
       expect(result.isError).toBe(true);
       // Exactly as for a view that doesn't exist, so view ids can't be probed.
       expect(text(result)).toContain(`No open view ${viewId}`);
+      // The explorer stops polling on a 404, and keeps retrying anything else.
+      expect(text(result)).toMatch(/\b404\b/);
     }
   });
 
@@ -285,6 +296,48 @@ it('steers a view on one server instance that another instance opened, through a
     by: 'model',
     state: { tool: 'list_logs' },
   });
+});
+
+it("keeps the model's change when a stale report from the view lands with it on another instance", async () => {
+  const cache = new SharedCache();
+  const first = await start({}, cache);
+  const second = await start({}, cache);
+  const model = await first.connect('ada');
+  const view = await second.connect('ada');
+  const { viewId } = await openExplorer(model);
+
+  for (let round = 0; round < 5; round++) {
+    const { version } = json(await view.callTool({ name: SYNC, arguments: { viewId } }));
+    // Both read the same version before either writes.
+    const [steered, reported] = await Promise.all([
+      model.callTool({ name: STEER, arguments: { viewId, tool: 'list_logs', args: { level: 'error' } } }),
+      view.callTool({ name: SYNC, arguments: { viewId, base: version, state: { context: `round ${round}` } } }),
+    ]);
+    expect(steered.isError, text(steered)).toBeFalsy();
+    const synced = json(await view.callTool({ name: SYNC, arguments: { viewId, since: version } }));
+    expect(synced, `round ${round}, report ${text(reported)}`).toMatchObject({
+      by: 'model',
+      state: { tool: 'list_logs', args: { level: 'error' } },
+    });
+    expect(synced.state.context).toBeUndefined();
+  }
+});
+
+it('stores nothing for a view until the model or the user changes it', async () => {
+  const cache = new SharedCache();
+  const client = await (await start({}, cache)).connect('ada');
+  const keys = () => [...(cache as unknown as { values: Map<string, string> }).values.keys()];
+  const before = keys().filter(key => key.includes('mcp-apps:view'));
+  // The explorer's own list calls open views the same way the model's call does.
+  for (let page = 0; page < 3; page++) await openExplorer(client);
+  expect(keys().filter(key => key.includes('mcp-apps:view'))).toEqual(before);
+});
+
+it('offers no steering on a read-only server', async () => {
+  const client = await (await start({ readOnly: true, appSteering: true })).connect('ada');
+  expect((await client.listTools()).tools.map(t => t.name)).not.toContain(STEER);
+  const result = await client.callTool({ name: 'query_traces', arguments: { timeRange: lastDay() } });
+  expect(result._meta?.['mastra/viewId']).toBeUndefined();
 });
 
 it("doesn't offer steering on a single process's in-memory cache outside `mastra dev`", async () => {

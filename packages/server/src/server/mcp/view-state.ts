@@ -21,16 +21,31 @@ export type ViewState = {
 };
 
 /**
- * A view's record in the server cache. `version` grows with every change, so the view's poll picks up only
- * changes it hasn't seen; `by` says whether the model or the user (through the view) made the latest one.
- * `state` is null until either changes the view, which then shows what its opening tool call returned.
+ * What a view shows now. `version` grows with every change, so the view's poll picks up only changes it hasn't
+ * seen; `by` says whether the model or the user (through the view) made the latest one. `state` is null until
+ * either changes the view, which then shows what its opening tool call returned.
  */
-export type ViewRecord = { owner: string | null; version: number; by: 'model' | 'app'; state: ViewState | null };
+export type ViewRecord = { version: number; by: 'model' | 'app'; state: ViewState | null };
 
-/** A view the host keeps showing outlives a conversation turn; one left alone for this long can't be steered. */
+/** A view the host keeps showing outlives a conversation turn; one left alone for this long starts over. */
 export const VIEW_TTL_MS = 60 * 60 * 1000;
 
-const key = (viewId: string) => `mastra:mcp-apps:view:${viewId}`;
+/**
+ * A view's changes, oldest first, each with the index the cache gave it. The cache hands out indexes and appends
+ * in one step, so changes from any number of server instances get a single order without a lock. The braces put
+ * the log and its counter in one Redis Cluster slot, which keeps that step one atomic script there.
+ */
+const logKey = (viewId: string) => `mastra:mcp-apps:view:{${viewId}}`;
+const counterKey = (viewId: string) => `${logKey(viewId)}:n`;
+
+/** One change. `base` is the version a view's report was made against; the model's changes have none. */
+type Change = { by: ViewRecord['by']; state: ViewState; base?: number; index: number };
+
+/** A report made against an older version than the one it landed after lost to that change. */
+const applies = (change: Change) => change.base === undefined || change.base === change.index;
+
+/** Recent changes are enough to find the latest that applied: refused reports only pile up in a race. */
+const RECENT = 16;
 
 /**
  * Who may read and change a view: the signed-in user, else the resource the auth layer set. Without auth
@@ -46,28 +61,48 @@ export function viewOwner(requestContext: RequestContext): string | null {
   return typeof resource === 'string' ? `resource:${resource}` : null;
 }
 
-/** Records a new view for `owner` and returns its id. */
-export async function openView(cache: MastraServerCache, owner: string | null): Promise<string> {
-  const viewId = crypto.randomUUID();
-  const record: ViewRecord = { owner, version: 0, by: 'model', state: null };
-  await cache.set(key(viewId), record, VIEW_TTL_MS);
-  return viewId;
-}
-
-/** The view's record, or a 404 when it expired, never existed, or belongs to someone else. */
-export async function readView(cache: MastraServerCache, viewId: string, owner: string | null): Promise<ViewRecord> {
-  const record = (await cache.get(key(viewId))) as ViewRecord | undefined | null;
-  // Someone else's view answers exactly like a missing one, so view ids can't be probed.
-  if (!record || record.owner !== owner) {
-    throw toolError(404, `No open view ${viewId}. It may have expired; open the explorer again.`);
-  }
-  return record;
+async function ownerTag(owner: string | null, nonce: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${owner ?? ''}\n${nonce}`));
+  return [...new Uint8Array(digest, 0, 12)].map(byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
 /**
- * Replaces what the view shows. With `base`, only when the record is still at that version: the view reports
- * the user's changes against the version it shows, so a report made before it saw the model's latest change
- * can't undo that change (a 409; the view applies the change on its next poll). The model's changes always win.
+ * A new view id for `owner`. The id carries a hash binding it to its owner, so opening a view stores nothing:
+ * the explorer's own tool calls open views on every page and filter change, and the cache only holds views
+ * someone has changed.
+ */
+export async function openView(owner: string | null): Promise<string> {
+  const nonce = crypto.randomUUID();
+  return `${nonce}.${await ownerTag(owner, nonce)}`;
+}
+
+/** Someone else's view answers exactly like a malformed id, so view ids can't be probed. */
+async function checkOwner(viewId: string, owner: string | null): Promise<void> {
+  const [nonce, tag, ...rest] = viewId.split('.');
+  if (!nonce || !tag || rest.length > 0 || tag !== (await ownerTag(owner, nonce))) {
+    throw toolError(404, `No open view ${viewId}. Open the explorer again.`);
+  }
+}
+
+/** What the view shows, or a 404 when the id isn't one of `owner`'s. A view nobody changed is at version 0. */
+export async function readView(cache: MastraServerCache, viewId: string, owner: string | null): Promise<ViewRecord> {
+  await checkOwner(viewId, owner);
+  const recent = (await cache.listFromTo(logKey(viewId), -RECENT)) as Change[];
+  if (recent.length === 0) return { version: 0, by: 'model', state: null };
+  const latest = (changes: Change[]) =>
+    changes.filter(applies).reduce<Change | undefined>((a, b) => (a && a.index > b.index ? a : b), undefined);
+  const last =
+    latest(recent) ??
+    (recent.length === RECENT ? latest((await cache.listFromTo(logKey(viewId), 0)) as Change[]) : undefined);
+  const version = Math.max(...recent.map(change => change.index)) + 1;
+  return last ? { version, by: last.by, state: last.state } : { version, by: 'model', state: null };
+}
+
+/**
+ * Changes what the view shows. With `base`, only when nothing else changed it after that version: the view
+ * reports the user's changes against the version it shows, so a report made before it saw the model's latest
+ * change can't undo that change (a 409; the view applies the change on its next poll). The model's changes
+ * always win. The change is appended either way; a refused one never counts as what the view shows.
  */
 export async function writeView(
   cache: MastraServerCache,
@@ -77,11 +112,11 @@ export async function writeView(
   by: ViewRecord['by'],
   base?: number,
 ): Promise<ViewRecord> {
-  const current = await readView(cache, viewId, owner);
-  if (base !== undefined && current.version !== base) {
-    throw toolError(409, `View ${viewId} changed since version ${base}; it is now at ${current.version}.`);
+  await checkOwner(viewId, owner);
+  const change = base === undefined ? { by, state } : { by, state, base };
+  const index = await cache.listPushIndexed(logKey(viewId), counterKey(viewId), change, VIEW_TTL_MS);
+  if (!applies({ ...change, index })) {
+    throw toolError(409, `View ${viewId} changed since version ${base}; it is now at ${index + 1}.`);
   }
-  const record: ViewRecord = { owner, version: current.version + 1, by, state };
-  await cache.set(key(viewId), record, VIEW_TTL_MS);
-  return record;
+  return { version: index + 1, by, state };
 }
