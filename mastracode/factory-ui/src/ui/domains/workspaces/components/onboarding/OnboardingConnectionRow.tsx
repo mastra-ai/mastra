@@ -20,7 +20,7 @@ export function OnboardingConnectionRow({
   return (
     <div className="group/onboarding-connection flex min-h-15 min-w-0 items-center gap-3 rounded-lg px-3 py-2.5">
       <span
-        className="text-muted-foreground flex size-4 shrink-0 items-center justify-center motion-safe:transition-transform motion-safe:duration-200 motion-safe:group-hover/onboarding-connection:scale-110 [&>svg]:size-4"
+        className="text-muted-foreground size-icon-md [&>svg]:size-icon-md flex shrink-0 items-center justify-center motion-safe:transition-transform motion-safe:duration-200 motion-safe:group-hover/onboarding-connection:scale-110"
         aria-hidden="true"
       >
         {icon}

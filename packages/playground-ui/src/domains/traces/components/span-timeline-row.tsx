@@ -140,7 +140,7 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
               aria-expanded={isExpanded}
               className={cn(
                 'flex size-5 cursor-pointer items-center justify-center rounded-md',
-                'hover:bg-fill [&:hover>svg]:opacity-100 [&>svg]:size-4 [&>svg]:opacity-50',
+                'hover:bg-fill [&:hover>svg]:opacity-100 [&>svg]:size-icon-md [&>svg]:opacity-50',
                 focusRing,
               )}
             >

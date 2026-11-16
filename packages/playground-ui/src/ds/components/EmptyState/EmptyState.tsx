@@ -52,7 +52,7 @@ export function EmptyState({
         className,
       )}
     >
-      {iconSlot && <div className={cn('mb-3 max-w-full [&>svg]:size-5', iconColorByTone[tone])}>{iconSlot}</div>}
+      {iconSlot && <div className={cn('mb-3 max-w-full [&>svg]:size-icon-lg', iconColorByTone[tone])}>{iconSlot}</div>}
       <HeadingTag className="text-subheading text-foreground">{titleSlot}</HeadingTag>
       {descriptionSlot && (
         <Txt variant="caption" tone="muted" className="mt-1.5 max-w-md wrap-anywhere">
