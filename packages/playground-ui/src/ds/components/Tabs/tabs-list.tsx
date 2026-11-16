@@ -6,7 +6,7 @@ import { DropdownMenu } from '../DropdownMenu/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext, TabsContext } from './tabs-context';
 import type { TabMeasurement } from './tabs-context';
-import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { controlHeight } from '@/ds/primitives/control-size';
 import { transitions } from '@/ds/primitives/transitions';
@@ -252,7 +252,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                   className="tabular-nums"
                 >
                   +{hiddenTabs.length}
-                  <IconChevronBottom aria-hidden="true" className="size-3" />
+                  <IconChevronDownMedium aria-hidden="true" className="size-3" />
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content>
                   {hiddenTabs.map((tab, index) => (

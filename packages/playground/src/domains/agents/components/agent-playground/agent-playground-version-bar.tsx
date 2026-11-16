@@ -23,7 +23,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
 import { IconBubbleWide } from '@mastra/playground-ui/icons/central/IconBubbleWide';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
-import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
 import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -219,7 +219,7 @@ export function AgentPlaygroundVersionBar({
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
                   <Button size="icon-md" variant="default" disabled={saveDisabled} aria-label="More save options">
-                    <IconChevronBottom />
+                    <IconChevronDownMedium />
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">

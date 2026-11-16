@@ -6,8 +6,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastr
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { IconBubbleWide } from '@mastra/playground-ui/icons/central/IconBubbleWide';
-import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
-import { IconChevronTop } from '@mastra/playground-ui/icons/central/IconChevronTop';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
+import { IconChevronTopMedium } from '@mastra/playground-ui/icons/central/IconChevronTopMedium';
 import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
 import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
 import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
@@ -298,9 +298,9 @@ export function MemorySidebarBody({
                   </Txt>
                 </span>
                 {showMemory ? (
-                  <IconChevronBottom className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <IconChevronDownMedium className="h-4 w-4 shrink-0 text-muted-foreground" />
                 ) : (
-                  <IconChevronTop className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <IconChevronTopMedium className="h-4 w-4 shrink-0 text-muted-foreground" />
                 )}
               </span>
 

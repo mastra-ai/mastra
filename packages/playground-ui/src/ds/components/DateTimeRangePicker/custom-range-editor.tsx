@@ -8,7 +8,7 @@ import { Input } from '@/ds/components/Input';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowRight } from '@/ds/icons/central/IconArrowRight';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
-import { IconChevronLeft } from '@/ds/icons/central/IconChevronLeft';
+import { IconChevronLeftMedium } from '@/ds/icons/central/IconChevronLeftMedium';
 
 function formatDays(ms: number): string {
   const days = Math.round(ms / (24 * 60 * 60 * 1000));
@@ -144,7 +144,7 @@ export function CustomRangeEditor({
         </FieldError>
       </Field>
       <div className="flex items-center gap-2 border-t border-border px-3 py-2">
-        <Button icon={<IconChevronLeft />} variant="ghost" size="sm" disabled={disabled} onClick={onShowPresets}>
+        <Button icon={<IconChevronLeftMedium />} variant="ghost" size="sm" disabled={disabled} onClick={onShowPresets}>
           Presets
         </Button>
         <Button

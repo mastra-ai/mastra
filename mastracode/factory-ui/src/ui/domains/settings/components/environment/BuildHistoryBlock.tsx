@@ -1,5 +1,5 @@
-import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
-import { IconChevronRight } from '@mastra/playground-ui/icons/central/IconChevronRight';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
+import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
 import { useState } from 'react';
 
 import { Badge } from '@mastra/playground-ui/components/Badge';
@@ -69,9 +69,9 @@ function BuildHistoryRows({
               onClick={() => setOpen(expanded ? undefined : build.buildId)}
             >
               {expanded ? (
-                <IconChevronBottom className="size-3.5 shrink-0" aria-hidden />
+                <IconChevronDownMedium className="size-3.5 shrink-0" aria-hidden />
               ) : (
-                <IconChevronRight className="size-3.5 shrink-0" aria-hidden />
+                <IconChevronRightMedium className="size-3.5 shrink-0" aria-hidden />
               )}
               <Badge size="sm" variant={status.variant}>
                 {status.label}

@@ -16,7 +16,7 @@ import { REPOSITORY_PROVIDER_ICONS } from './repositoryProviderIcons';
 import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
 import { IconChanges } from '@mastra/playground-ui/icons/central/IconChanges';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
-import { IconChevronRight } from '@mastra/playground-ui/icons/central/IconChevronRight';
+import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
 import { IconSquareBehindSquare1 } from '@mastra/playground-ui/icons/central/IconSquareBehindSquare1';
 
 interface WorkspaceBranch {
@@ -193,7 +193,7 @@ export function WorkspaceSection({
             <DiffStat additions={lines.additions} deletions={lines.deletions} />
           </Txt>
         ) : null}
-        <IconChevronRight aria-hidden className="ml-auto" />
+        <IconChevronRightMedium aria-hidden className="ml-auto" />
       </Button>
     </section>
   );

@@ -8,7 +8,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { SettingsItem, SettingsItemIcon, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 import { IconDotGrid2x3 } from '@mastra/playground-ui/icons/central/IconDotGrid2x3';
 import { useId, useState } from 'react';
 
@@ -234,7 +234,7 @@ function RepositoryRow({
             <span className="min-w-0 truncate" title={label}>
               {label}
             </span>
-            <IconChevronBottom aria-hidden className={cn('size-4 shrink-0', expanded && 'rotate-180')} />
+            <IconChevronDownMedium aria-hidden className={cn('size-4 shrink-0', expanded && 'rotate-180')} />
           </button>
         }
         description={repository.inEnvironment ? undefined : 'Skipped'}

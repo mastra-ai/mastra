@@ -5,8 +5,8 @@ import { Code } from '@/ds/components/Code';
 import { Notice } from '@/ds/components/Notice';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowRotateClockwise } from '@/ds/icons/central/IconArrowRotateClockwise';
-import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
-import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 import { IconShield2 } from '@/ds/icons/central/IconShield2';
 import { IconTag } from '@/ds/icons/central/IconTag';
 
@@ -34,7 +34,11 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
               onClick={() => setIsExpanded(!isExpanded)}
               className="flex w-fit items-center gap-1.5 opacity-70 transition-opacity hover:opacity-100"
             >
-              {isExpanded ? <IconChevronBottom className="size-3.5" /> : <IconChevronRight className="size-3.5" />}
+              {isExpanded ? (
+                <IconChevronDownMedium className="size-3.5" />
+              ) : (
+                <IconChevronRightMedium className="size-3.5" />
+              )}
               <Txt as="span" variant="caption">
                 Details
               </Txt>

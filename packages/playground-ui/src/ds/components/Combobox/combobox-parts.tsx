@@ -9,7 +9,7 @@ import { ButtonChevron, ButtonIcon, isIconButtonSize } from '@/ds/components/But
 import type { ButtonSize, TextButtonSize } from '@/ds/components/Button/Button';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
-import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
@@ -103,7 +103,7 @@ function ComboboxFieldTrigger() {
     >
       {/* Sized like Select's chevron: outside the icon rung, so it keeps Lucide's default stroke
           (1.33px at 16px) instead of the rung's 1px. */}
-      <IconChevronBottom className="size-4" />
+      <IconChevronDownMedium className="size-4" />
     </BaseCombobox.Trigger>
   );
 }

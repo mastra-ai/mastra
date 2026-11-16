@@ -74,7 +74,7 @@ import {
 import { Button } from '@/ds/components/Button';
 import { IconBell2 } from '@/ds/icons/central/IconBell2';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
-import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
@@ -351,7 +351,7 @@ const strokeGlyphs = [
   IconPlusMedium,
   IconMagnifyingGlass,
   IconSettingsGear1,
-  IconChevronBottom,
+  IconChevronDownMedium,
   IconPencil,
   IconSquareBehindSquare1,
   IconCrossMedium,
