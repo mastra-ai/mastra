@@ -3,10 +3,11 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { BoardRegistry } from '../boards/registry.js';
-import { cardBoardFlow, isPullRequestCard } from '../boards/semantics.js';
+import { cardBoardFlow } from '../boards/semantics.js';
 import { resolveFactorySessionAddress } from '../rules/binding-context.js';
 import { workItemSource } from '../rules/types.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { isPullRequestCard } from '../work-items/change-requests.js';
 
 /**
  * The head self-review approved for the session's card, which a change request must open at.

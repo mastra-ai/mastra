@@ -1,10 +1,50 @@
-import {
-  isPullRequestCard,
-  pullRequestSourceNumber,
-  pullRequestSources,
-  reviewedPullRequest,
-} from '../boards/semantics.js';
 import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
+
+export interface SourcedItem {
+  readonly workItem?: { readonly sources?: readonly WorkItemSourceRow[] } | null;
+}
+
+/**
+ * A card whose own primary source is a pull or merge request: an outside contributor's
+ * PR filed on its own card, or a PR card filed before PRs attached to their issue's card.
+ * An issue card with an attached PR is not one; see `hasPullRequest`.
+ */
+export function isPullRequestCard(item: { readonly source: string }): boolean {
+  return item.source === 'github-pr' || item.source === 'gitlab-pr';
+}
+
+/** Every pull or merge request source on a card, oldest first. */
+export function pullRequestSources(item: SourcedItem): WorkItemSourceRow[] {
+  return (item.workItem?.sources ?? []).filter(source => source.sourceType === 'pull-request');
+}
+
+/** The provider number (GitHub PR number, GitLab MR IID) a pull request source names. */
+export function pullRequestSourceNumber(source: Pick<WorkItemSourceRow, 'metadata'>): number | undefined {
+  const metadata = source.metadata ?? {};
+  const value = metadata.githubPullRequestNumber ?? metadata.gitlabMergeRequestIid ?? metadata.number;
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+export function isOpenPullRequestSource(source: Pick<WorkItemSourceRow, 'state' | 'metadata'>): boolean {
+  const state = source.state ?? source.metadata?.state;
+  return state !== 'closed' && state !== 'merged' && source.metadata?.merged !== true;
+}
+
+/**
+ * The pull request a PR review pass on this card reviews: the one the card's
+ * `openPullRequestNumber` names, else the newest open one, else the newest one.
+ */
+export function reviewedPullRequest(
+  item: SourcedItem & { readonly metadata?: Record<string, unknown> | null },
+): WorkItemSourceRow | undefined {
+  const sources = pullRequestSources(item);
+  const pointer = item.metadata?.openPullRequestNumber;
+  return (
+    (typeof pointer === 'number' ? sources.find(source => pullRequestSourceNumber(source) === pointer) : undefined) ??
+    sources.findLast(isOpenPullRequestSource) ??
+    sources.at(-1)
+  );
+}
 
 export const PULL_REQUEST_STATUSES = ['draft', 'open', 'closed', 'merged'] as const;
 export type PullRequestStatus = (typeof PULL_REQUEST_STATUSES)[number];
