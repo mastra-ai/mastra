@@ -45,6 +45,7 @@ import type {
   MastraStreamTransformOptions,
   ModelManagerModelConfig,
   ProviderMetadata,
+  StepTripwireData,
   StreamChunkType,
   StreamTransportRef,
 } from '../stream/types';
@@ -226,7 +227,7 @@ export type LoopConfig<OUTPUT = undefined> = {
    */
   beforeDeadlineSave?: () => Promise<boolean | void>;
   /** @internal Runs when an output processor trips during the total-deadline pass. */
-  onDeadlineTripwire?: (turn: MessageList) => Promise<void>;
+  onDeadlineTripwire?: (turn: MessageList, tripwire?: StepTripwireData) => Promise<void>;
 };
 
 /**

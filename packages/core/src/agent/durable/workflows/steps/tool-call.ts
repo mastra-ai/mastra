@@ -2431,6 +2431,7 @@ export function createDurableToolCallStep() {
                 retry: processorError.options?.retry,
                 metadata: processorError.options?.metadata,
                 processorId: processorError.processorId,
+                persist: processorError.options?.persist,
               };
               if (pubsub) {
                 try {

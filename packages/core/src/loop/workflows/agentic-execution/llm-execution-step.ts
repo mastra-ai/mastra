@@ -502,6 +502,7 @@ function buildTripWireBailResponse<OUTPUT = undefined, TOOLS extends ToolSet = T
       retry: error.options?.retry,
       metadata: error.options?.metadata,
       processorId: error.processorId,
+      persist: error.options?.persist,
     },
   };
 
@@ -3442,6 +3443,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             retry: processOutputStepTripwire.options?.retry,
             metadata: processOutputStepTripwire.options?.metadata,
             processorId: processOutputStepTripwire.processorId,
+            persist: processOutputStepTripwire.options?.persist,
           }
         : undefined;
 

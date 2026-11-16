@@ -160,6 +160,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         retry: tripwire.options?.retry,
         metadata: tripwire.options?.metadata,
         processorId: tripwire.processorId,
+        persist: tripwire.options?.persist,
       },
     } as ChunkType<OUTPUT>);
   }

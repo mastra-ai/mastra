@@ -1515,4 +1515,142 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     },
     TEST_TIMEOUT_MS,
   );
+
+  // A guardrail that blocks a reply can ask memory to keep the turn instead of rolling it back
+  // (`abort(reason, { persist: 'partial' })`). Here nothing was saved before the trip, so the
+  // keep-save must write the user message and the completed tool step to the thread.
+  it(
+    'finish keeps the turn when an output processor opts in with persist: partial',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-finish-tripwire-partial-${engine}`;
+      const keeper: Processor = {
+        id: 'keeping-guardrail',
+        processOutputResult: ({ abort }) => abort('Kept by the aborter', { persist: 'partial' }),
+      };
+      const { output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Echo first, then answer.',
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        agentOutputProcessors: [keeper],
+        stopWhen: stepCountIs(5),
+        tools: { echoTool },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+          );
+          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'The echo ran.' });
+        },
+      });
+      expect(output.tripwire).toMatchObject({ reason: 'Kept by the aborter', processorId: 'keeping-guardrail' });
+
+      await vi.waitFor(
+        async () => {
+          const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+          expect(messages.map(message => message.role)).toContain('assistant');
+        },
+        { timeout: 5_000, interval: 100 },
+      );
+      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+      expect(messages.some(message => message.role === 'user')).toBe(true);
+      expect(toolResultIds(messages)).toContain('call_echo');
+      expect(JSON.stringify(messages)).toContain('The echo ran.');
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // The deadline sibling: the per-step saves already in the thread must survive a tripwire when
+  // the aborter opted in, instead of being rolled back as they are by default.
+  itStoppedStep(
+    'total-timeout keeps per-step saves when an output processor opts in with persist: partial',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-tripwire-partial-${engine}`;
+      const keeper: Processor = {
+        id: 'deadline-keeper',
+        processOutputResult: ({ abort }) => abort('Kept at the deadline', { persist: 'partial' }),
+      };
+      const hang = Promise.withResolvers<unknown>();
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Echo first, then wait.',
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          savePerStep: true,
+          agentOutputProcessors: [keeper],
+          stopWhen: stepCountIs(5),
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          expectStreamError: true,
+          collectChunks: true,
+          tools: {
+            echoTool,
+            hanging: createTool({
+              id: 'hanging',
+              description: 'Never returns.',
+              inputSchema: z.object({}),
+              execute: async () => hang.promise,
+            }),
+          },
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+            );
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 1 },
+              { toolCalls: [{ id: 'call_hang', name: 'hanging', arguments: {} }] },
+            );
+          },
+        });
+        expect(result.chunks!.some(chunk => chunk.type === 'tool-result')).toBe(true);
+        expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+
+        // On Inngest the worker keeps the stopped turn after the caller's error.
+        await vi.waitFor(
+          async () => {
+            const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+            expect(messages.map(message => message.role)).toContain('assistant');
+          },
+          { timeout: 5_000, interval: 100 },
+        );
+      } finally {
+        hang.resolve({});
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+});
+
+// What the retry note in the memory docs promises: the store writes by message id, so a client that
+// reuses the id on a retry overwrites the earlier row while a fresh id stores the turn twice.
+// Engine-independent: the write-by-id contract belongs to the store, not to any one engine.
+it('a retry reusing the user message id keeps one row, a new id stores the turn twice', async () => {
+  const memory = new MockMemory();
+  const threadId = `${THREAD}-retry-dedupe`;
+  const userMessage = (id: string) => ({
+    id,
+    role: 'user' as const,
+    createdAt: new Date(),
+    threadId,
+    resourceId: RESOURCE,
+    content: { format: 2 as const, content: 'Hello', parts: [{ type: 'text' as const, text: 'Hello' }] },
+  });
+
+  await memory.saveMessages({ messages: [userMessage('retry-id')] });
+  // The retry reuses the id, as a client that wants dedupe does.
+  await memory.saveMessages({ messages: [userMessage('retry-id')] });
+  let { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+  expect(messages.filter(message => message.role === 'user')).toHaveLength(1);
+
+  // A fresh id on the retry leaves the earlier row in place.
+  await memory.saveMessages({ messages: [userMessage('fresh-id')] });
+  ({ messages } = await memory.recall({ threadId, resourceId: RESOURCE }));
+  expect(messages.filter(message => message.role === 'user')).toHaveLength(2);
 });

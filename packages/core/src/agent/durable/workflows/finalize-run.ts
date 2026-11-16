@@ -23,6 +23,7 @@ import type { Agent } from '../../agent';
 import { convertMessages, coreContentToString, MessageList } from '../../message-list';
 import type { SerializedMessageListState } from '../../message-list/state';
 import { isTerminalToolInvocationState } from '../../message-list/utils/tool-invocation-state';
+import { persistPartialTurn } from '../../save-queue/persist-partial-turn';
 import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-messages';
 import { restoreRunAgentScopes } from '../../scopes';
 import { TripWire } from '../../trip-wire';
@@ -85,6 +86,7 @@ export interface DurableFinishSideEffectsResult {
     processorId?: string;
     retry?: boolean;
     metadata?: unknown;
+    persist?: 'none' | 'partial';
   };
 }
 
@@ -334,17 +336,52 @@ export async function runDurableFinishSideEffects({
       );
     } catch (error) {
       if (error instanceof TripWire) {
-        // Match Agent: a tripwire rejects the answer, so skip persistence and title generation,
-        // and remove any response messages this run already saved.
-        await undoSavedResponseMessages({
-          memory: registryEntry?.memory ?? rebuiltMemory,
-          threadId: durableState?.threadId,
-          memoryConfig: durableState?.memoryConfig,
-          messageList,
-          saveQueueManager: registryEntry?.saveQueueManager ?? rebuiltSaveQueueManager,
-          logger: effectiveLogger,
-          runId,
-        });
+        const tripwireMemory = registryEntry?.memory ?? rebuiltMemory;
+        const tripwireSaveQueueManager = registryEntry?.saveQueueManager ?? rebuiltSaveQueueManager;
+        if (error.options?.persist === 'partial') {
+          // The aborter asked to keep the run's messages instead of rolling them back.
+          await persistPartialTurn({
+            memory: tripwireMemory,
+            threadId: durableState?.threadId,
+            memoryConfig: durableState?.memoryConfig,
+            messageList,
+            saveQueueManager: tripwireSaveQueueManager,
+            authorize: async () => {
+              if (!durableState?.threadId || !durableState.resourceId) return;
+              await authorizeDurableMemory(getDurableMemoryAuthorizationChecks(registryEntry), {
+                mastra,
+                user: effectiveRequestContext.get('user'),
+                threadId: durableState.threadId,
+                resourceId: durableState.resourceId,
+                agentId: initData.agentId,
+                requestContext: effectiveRequestContext,
+                permission: MastraFGAPermissions.MEMORY_WRITE,
+                actor: initData.options?.actor,
+              });
+              if (!durableState.threadExists) {
+                await tripwireMemory?.createThread?.({
+                  threadId: durableState.threadId,
+                  resourceId: durableState.resourceId,
+                  memoryConfig: durableState.memoryConfig,
+                });
+              }
+            },
+            logger: effectiveLogger,
+            runId,
+          });
+        } else {
+          // Match Agent: a tripwire rejects the answer, so skip persistence and title generation,
+          // and remove any response messages this run already saved.
+          await undoSavedResponseMessages({
+            memory: tripwireMemory,
+            threadId: durableState?.threadId,
+            memoryConfig: durableState?.memoryConfig,
+            messageList,
+            saveQueueManager: tripwireSaveQueueManager,
+            logger: effectiveLogger,
+            runId,
+          });
+        }
         const outputText = resolveOutputText(messageList);
         return {
           messageListState: messageList.serialize(),
@@ -356,6 +393,7 @@ export async function runDurableFinishSideEffects({
             processorId: error.processorId,
             retry: error.options?.retry,
             metadata: error.options?.metadata,
+            persist: error.options?.persist,
           },
         };
       }
@@ -719,8 +757,21 @@ export async function runDurableDeadlineOutputPass({
         },
       );
     } catch (processorError) {
-      // A tripwire rejects the turn, as it does at finish: remove response messages already saved.
+      // A tripwire rejects the turn, as it does at finish: remove response messages already saved,
+      // or keep them when the aborter opted in. Write access was checked before this pass ran.
       if (processorError instanceof TripWire) {
+        if (processorError.options?.persist === 'partial') {
+          await persistPartialTurn({
+            memory: entry.memory,
+            threadId: durableState?.threadId,
+            memoryConfig: durableState?.memoryConfig,
+            messageList,
+            saveQueueManager: entry.saveQueueManager,
+            logger,
+            runId,
+          });
+          return;
+        }
         await undoSavedResponseMessages({
           memory: entry.memory,
           threadId: durableState?.threadId,

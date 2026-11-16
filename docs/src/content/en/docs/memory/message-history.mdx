@@ -130,6 +130,12 @@ For an AI SDK example, see [Using Mastra Memory](/integrations/agentic-ui/ai-sdk
   If you assemble the request input yourself and need it processed exactly as sent, set `retainFullInput: true` on `memory.options` for that call, or in the memory constructor options to apply it agent-wide. This disables input filtering, but stored history still loads. Every input message that isn't already stored is saved to the thread, including few-shot examples.
 </details>
 
+### Retrying a failed turn
+
+When a request fails before the model produces output, the user message is already in the thread. If your client retries that turn, reuse the **same message ID** for the user message. Storage writes by message ID, so the retry overwrites the earlier row instead of adding a second copy.
+
+Sending the same text under a new ID stores the turn twice, and the model sees the question repeated the next time the thread runs.
+
 ### Limit history by tokens
 
 Message count is a poor proxy for context size: a tool result can be a few tokens or thousands. Use `messageHistory` to keep recent history within a token budget instead:

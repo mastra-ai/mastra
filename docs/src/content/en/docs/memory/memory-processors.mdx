@@ -274,11 +274,11 @@ const agent = new Agent({
   outputProcessors: [contentBlocker],
 })
 
-// If the guardrail aborts, nothing is saved to memory
+// If the guardrail aborts, the memory save is blocked and the turn is rolled back
 const result = await agent.generate('Hello')
 if (result.tripwire) {
   console.log('Blocked:', result.tripwire.reason)
-  // Memory is empty - no messages were persisted
+  // Nothing from this turn was persisted
 }
 ```
 
@@ -320,20 +320,40 @@ const agent = new Agent({
 | Guardrail Type | When it runs | If it aborts |
 | - | - | - |
 | Input | After memory loads history | LLM not called, nothing saved |
-| Output | Before memory saves | Nothing saved to storage |
+| Output | Before memory saves | Nothing saved by default; pair `persist: 'partial'` with the abort to keep the turn |
 
-Both scenarios are safe - guardrails prevent inappropriate content from being persisted to memory
+Both scenarios are safe by default - guardrails prevent inappropriate content from being persisted to memory
 
 ## Aborted runs and saved messages
 
-Cancelling a run and blocking it with a processor `abort()` both stop generation, but they save different things:
+Runs can end early for several reasons, and each one leaves different messages in the thread:
 
 | What stops the run | Memory processors | What's persisted |
 | - | - | - |
+| Provider error | Still run | The user message, completed steps, and an error part |
 | `abortSignal` from the caller | Still run | The user message and the assistant text the user already saw |
-| `abort()` inside a processor | Skipped | Nothing; the tripwire blocks the save |
+| Total timeout (`modelSettings.timeout.totalMs`) | Still run | The user message, completed steps, and the text streamed for the cut-off step |
+| `abort()` inside a processor | Skipped | Nothing by default; the tripwire rolls back what the run already saved |
+| `abort(reason, { persist: 'partial' })` | Skipped | The user message, completed steps with their tool results, and the text streamed before the abort |
 
-A caller cancellation goes through output processors like any other run, so the built-in `MessageHistory` processor saves the thread. The partial answer is stored as an ordinary assistant message with no error part, which means the next turn starts from what the user actually read.
+A caller cancellation and a total timeout both go through output processors like any other run, so the built-in `MessageHistory` processor saves the thread. The partial answer is stored as an ordinary assistant message with no error part, which means the next turn starts from what the user actually read.
+
+An `abort()` in a processor blocks that save and, by default, rolls back response messages the run already persisted, for example through `savePerStep`. Pass `persist: 'partial'` to keep them instead, so the work the run already did stays in the thread:
+
+```typescript
+const refundGuardrail = {
+  id: 'refund-guardrail',
+  processOutputResult: async ({ messages, abort }) => {
+    if (messages.some(msg => mentionsUnapprovedRefund(msg))) {
+      // Keep the user message, completed tool calls, and the reply so far
+      abort('Refunds need human approval', { persist: 'partial' })
+    }
+    return messages
+  },
+}
+```
+
+`persist: 'partial'` doesn't change why the run stopped: the result still carries the tripwire and its reason. It only decides what memory keeps.
 
 ```typescript
 import { Agent } from '@mastra/core/agent'

@@ -117,6 +117,7 @@ export function convertFullStreamChunkToMastra(value: any, ctx: { runId: string 
         retry: value.retry,
         metadata: value.metadata,
         processorId: value.processorId,
+        persist: value.persist,
       },
     };
   }

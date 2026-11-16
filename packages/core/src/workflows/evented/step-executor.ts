@@ -444,7 +444,16 @@ export class StepExecutor extends MastraBase {
         error: {
           ...workflowTermination(
             error instanceof TripWire
-              ? { status: 'tripwire', tripwire: { reason: error.message, processorId: error.processorId } }
+              ? {
+                  status: 'tripwire',
+                  tripwire: {
+                    reason: error.message,
+                    retry: error.options?.retry,
+                    metadata: error.options?.metadata,
+                    processorId: error.processorId,
+                    persist: error.options?.persist,
+                  },
+                }
               : { status: 'failed', error: errorInstance },
           ),
           error: errorInstance,

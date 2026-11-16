@@ -2577,6 +2577,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                           retry: r.tripwireOptions?.retry,
                           metadata: r.tripwireOptions?.metadata,
                           processorId: r.processorId,
+                          persist: r.tripwireOptions?.persist,
                         },
                       },
                       true,
@@ -2777,6 +2778,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     reason: toolResultTripwire.message,
                     retry: toolResultTripwire.options?.retry,
                     metadata: toolResultTripwire.options?.metadata,
+                    persist: toolResultTripwire.options?.persist,
                   },
                 });
               }
@@ -2845,6 +2847,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         reason: error.message,
                         retry: error.options?.retry,
                         metadata: error.options?.metadata,
+                        persist: error.options?.persist,
                       },
                     });
                   }
@@ -2993,6 +2996,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   retry: processOutputStepTripwire.options?.retry,
                   metadata: processOutputStepTripwire.options?.metadata,
                   processorId: processOutputStepTripwire.processorId,
+                  persist: processOutputStepTripwire.options?.persist,
                 }
               : undefined;
 

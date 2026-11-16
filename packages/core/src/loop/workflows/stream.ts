@@ -153,7 +153,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         const enqueueTripwire = (
           reason: string | undefined,
-          tripwireOptions: { retry?: unknown; metadata?: unknown } | undefined,
+          tripwireOptions: { retry?: unknown; metadata?: unknown; persist?: 'none' | 'partial' } | undefined,
           processorId: string | undefined,
         ) => {
           safeEnqueue(controller, {
@@ -165,6 +165,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
               retry: tripwireOptions?.retry,
               metadata: tripwireOptions?.metadata,
               processorId,
+              persist: tripwireOptions?.persist,
             },
           } as ChunkType<OUTPUT>);
         };
