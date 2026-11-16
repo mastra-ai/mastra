@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { Autumn, HTTPClient } from 'autumn-js';
 import { createLocalJWKSet, exportJWK, generateKeyPair, importJWK, jwtVerify, SignJWT } from 'jose';
 import { z } from 'zod';
-import { identifierSchema } from '../src/billing/contracts/core.js';
+import { BillingError, identifierSchema } from '../src/billing/contracts/core.js';
 import { configuredOrganizations } from '../src/billing/configuration/environment.js';
 import { JwtIdentityAdapter, jwtIdentityConfigurationSchema } from '../src/billing/identity.js';
 import { OrganizationService } from '../src/billing/organizations.js';
@@ -294,7 +294,11 @@ export async function runSandboxCommand(args: string[], environment: NodeJS.Proc
     if (action === 'renew') profile = await issueToken(paths, profile);
     const organizations = await configuredOrganizations(environment);
     try {
-      const context = await organizations.context({ credential: profile.credential });
+      const context = await organizations.context({ credential: profile.credential }).catch(error => {
+        if (action !== 'renew' && error instanceof BillingError && error.code === 'unauthenticated')
+          fail('The saved JWT is expired or invalid. Run npm run autumn:renew.');
+        throw error;
+      });
       if (context.actorId !== profile.actorId || context.workspaceId !== profile.workspaceId)
         fail('The token, saved profile and database must identify the same sandbox user and workspace.');
     } finally {

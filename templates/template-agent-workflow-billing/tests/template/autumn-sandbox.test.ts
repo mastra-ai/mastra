@@ -169,7 +169,12 @@ it('documented commands preserve local state, bill a Studio image and renew expi
   expect((await fetch(server.url + '/api/agents', { headers: { Authorization: `Bearer ${expired}` } })).status).toBe(
     401,
   );
-  expect((await command(f.root, ['run', '--silent', 'autumn:header'], sanitizedEnvironment(), false)).code).not.toBe(0);
+  for (const action of ['autumn:header', 'autumn:check']) {
+    const rejected = await command(f.root, ['run', '--silent', action], sanitizedEnvironment(), false);
+    expect(rejected.code).not.toBe(0);
+    expect(rejected.output).toContain('Run npm run autumn:renew.');
+    expect(rejected.output).not.toContain(expired);
+  }
   const renewal = await command(f.root, ['run', 'autumn:renew'], sanitizedEnvironment());
   const renewed = await f.json('profile.json');
   expect(renewal.output).not.toContain(renewed.credential);
