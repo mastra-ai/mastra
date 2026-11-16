@@ -390,6 +390,14 @@ async function starterOf(
   return { type: 'agent', bindingId, role: binding?.role ?? 'agent' };
 }
 
+async function resolveCardRunRepository(
+  intake: Pick<IntakeStorage, 'getConfig'> | undefined,
+  args: Omit<Parameters<typeof resolveRunRepository>[0], 'linearRepositoryMap'>,
+) {
+  const intakeConfig = await intake?.getConfig({ orgId: args.orgId, integrationIds: ['linear'] });
+  return resolveRunRepository({ ...args, linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject });
+}
+
 /**
  * Start a factory run for a rule binding: ensure the source-control session the
  * coordinator requires, then hand it to `prepare` along with the factory's
@@ -455,17 +463,15 @@ export async function prepareFactoryRuleBinding(
     // PR review on each pull request's), so its session is reused only on the branch it holds.
     const boundSession =
       reusable && input.role === REVIEW_CONTEXT && !sameBranch(reusable.branch, branch) ? undefined : reusable;
-    const intakeConfig = await intake?.getConfig({ orgId: input.record.orgId, integrationIds: ['linear'] });
     // A card that names no repository keeps a retry in its role session's
     // repository, else starts in the environment's first one; its agent
     // determines which repository the card belongs to. An explicit signal is
     // never overridden.
-    const repository = await resolveRunRepository({
+    const repository = await resolveCardRunRepository(intake, {
       sourceControl,
       orgId: input.record.orgId,
       factoryProjectId: input.record.factoryProjectId,
       item: input.item,
-      linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
       ...(boundSession ? { boundProjectRepositoryId: boundSession.projectRepositoryId } : {}),
     });
     if (repository.status !== 'resolved') {
@@ -1042,13 +1048,11 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
                   if (!sourceControl) {
                     return { status: 'unlinked', hint: 'Factory project has no linked source-control repository.' };
                   }
-                  const intakeConfig = await deps.domains.intake?.getConfig({ orgId, integrationIds: ['linear'] });
-                  return resolveRunRepository({
+                  return resolveCardRunRepository(deps.domains.intake, {
                     sourceControl,
                     orgId,
                     factoryProjectId,
                     item,
-                    linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
                   });
                 },
               }
