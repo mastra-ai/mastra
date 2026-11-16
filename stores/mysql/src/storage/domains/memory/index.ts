@@ -1013,16 +1013,31 @@ export class MemoryMySQL extends MemoryStorage {
   }): Promise<StorageThreadType> {
     try {
       return await this.#fenced(fence, 'updateThread', async q => {
-        const existing = await this.#readThread(q, id);
-        if (!existing) {
-          throw new MastraError({
+        const notFound = () =>
+          new MastraError({
             id: createStorageErrorId('MYSQL', 'UPDATE_THREAD', 'NOT_FOUND'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             text: `Thread ${id} not found`,
             details: { threadId: id },
           });
+
+        if (metadata === undefined) {
+          // Leave metadata alone: rewriting it from an earlier read would drop a
+          // metadata write that landed in between.
+          const statement = prepareUpdateStatement({
+            tableName: TABLE_THREADS,
+            keys: { id },
+            updates: { ...(title !== undefined ? { title } : {}), updatedAt: new Date() },
+          });
+          await q.execute(statement.sql, statement.args);
+          const thread = await this.#readThread(q, id);
+          if (!thread) throw notFound();
+          return thread;
         }
+
+        const existing = await this.#readThread(q, id);
+        if (!existing) throw notFound();
 
         const mergedMetadata = {
           ...(existing.metadata ?? {}),

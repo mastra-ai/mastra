@@ -1329,8 +1329,7 @@ export class MemoryLibSQL extends MemoryStorage {
             args: [threadId],
           });
           const row = result.rows?.[0] as
-            | (Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string })
-            | undefined;
+            (Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }) | undefined;
 
           if (!row) {
             throw new Error(`Thread "${threadId}" not found`);
@@ -1570,9 +1569,8 @@ export class MemoryLibSQL extends MemoryStorage {
     fence?: RunFence;
   }): Promise<StorageThreadType> {
     const check = this.#runFenceCheck(fence, 'updateThread');
-    const thread = await this.getThreadById({ threadId: id });
-    if (!thread) {
-      throw new MastraError({
+    const notFound = () =>
+      new MastraError({
         id: createStorageErrorId('LIBSQL', 'UPDATE_THREAD', 'NOT_FOUND'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -1582,20 +1580,43 @@ export class MemoryLibSQL extends MemoryStorage {
           threadId: id,
         },
       });
-    }
 
     const now = new Date();
-    const updatedThread = {
-      ...thread,
-      title: title ?? thread.title,
-      metadata: {
-        ...thread.metadata,
-        ...metadata,
-      },
-      updatedAt: now,
-    };
-
     try {
+      if (metadata === undefined) {
+        // Leave the metadata column alone: rewriting it from an earlier read would
+        // drop a metadata write that landed in between.
+        const result = await this.#fencedWrite('updateThread', check, writer =>
+          writer.execute({
+            sql: `UPDATE ${TABLE_THREADS} SET title = COALESCE(?, title), updatedAt = ? WHERE id = ?
+                  RETURNING id, resourceId, title, json(metadata) AS metadata, createdAt`,
+            args: [title ?? null, now.toISOString(), id],
+          }),
+        );
+        const row = result.rows[0];
+        if (!row) throw notFound();
+        return {
+          id: row.id as string,
+          resourceId: row.resourceId as string,
+          title: row.title as string,
+          metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata as any),
+          createdAt: new Date(row.createdAt as string),
+          updatedAt: now,
+        };
+      }
+
+      const thread = await this.getThreadById({ threadId: id });
+      if (!thread) throw notFound();
+      const updatedThread = {
+        ...thread,
+        title: title ?? thread.title,
+        metadata: {
+          ...thread.metadata,
+          ...metadata,
+        },
+        updatedAt: now,
+      };
+
       await this.#fencedWrite('updateThread', check, writer =>
         writer.execute({
           // COALESCE so an omitted title leaves the stored one alone.
@@ -1606,7 +1627,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
       return updatedThread;
     } catch (error) {
-      if (isRunFenceConflictError(error)) throw error;
+      if (error instanceof MastraError || isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'UPDATE_THREAD', 'FAILED'),
