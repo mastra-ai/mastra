@@ -3,6 +3,8 @@ import type { ScoringFilter } from '../../../evals/predicate';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import type { ToolCallConcurrency } from '../../../loop/types';
 import type { MemoryConfig } from '../../../memory/types';
+import { getSpanErrorOrigin } from '../../../observability/error-count';
+import type { SpanErrorOrigin } from '../../../observability/error-count';
 import type { CoreTool } from '../../../tools/types';
 import { boundedStringify } from '../../../utils/safe-stringify';
 import type { MessageList } from '../../message-list';
@@ -417,12 +419,18 @@ export function createWorkflowInput(params: {
 /**
  * Serialize an error for workflow state
  */
-export function serializeError(error: unknown): { name: string; message: string; stack?: string } {
+export function serializeError(error: unknown): {
+  name: string;
+  message: string;
+  stack?: string;
+  __mastraSpanErrorOrigin?: SpanErrorOrigin;
+} {
   if (error instanceof Error) {
     return {
       name: error.name,
       message: error.message,
       stack: error.stack,
+      __mastraSpanErrorOrigin: getSpanErrorOrigin(error),
     };
   }
   return {

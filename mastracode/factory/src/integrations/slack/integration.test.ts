@@ -151,7 +151,8 @@ describe('SlackIntegration.channels', () => {
     );
     // Long descriptions are clipped so Slack's inline status stays one line.
     const long = 'A'.repeat(200);
-    expect(status({ description: long })).toHaveLength('is '.length + 80);
+    // Slack rejects a loading message of 51 characters or more.
+    expect(status({ description: long })).toHaveLength(50);
     expect(status({ description: long })!.endsWith('…')).toBe(true);
     // No usable description falls back to the generic status.
     expect(status({ command: 'ls' })).toBe('is working...');
@@ -305,6 +306,7 @@ describe('SlackIntegration.channels', () => {
         getId: () => 'us-1',
         getById: vi.fn(async () => ({ metadata: {} })),
         getSetting: vi.fn(async () => null),
+        getSettingOn: vi.fn(async () => null),
         setSetting: vi.fn(async () => {}),
         setSettingOn: vi.fn(async () => {}),
       },

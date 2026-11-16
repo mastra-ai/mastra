@@ -469,6 +469,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'server/mcp',
+              label: 'Built-in MCP Server',
+            },
+            {
+              type: 'doc',
               id: 'server/pubsub',
               label: 'PubSub',
             },

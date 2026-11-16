@@ -1,5 +1,4 @@
 import { ChartCard } from '../../../metrics/components/chart-card';
-import { pinActions } from '../../lib/pin-actions';
 import type { TableOptions } from '../../lib/table';
 import type { WidgetKindProps } from '../../widget-kind';
 import { TableTabs } from './table-tabs';
@@ -16,7 +15,9 @@ export function TableWidget(props: WidgetKindProps<TableOptions>) {
       <ChartCard
         title={props.widget.title ?? ''}
         dragHandle={props.dragHandle}
-        {...pinActions(props.pin)}
+        // Its loaded card titles several tabs with a menu, which can't be renamed.
+        onTitleChange={props.views.length < 2 ? props.onTitleChange : undefined}
+        actions={props.actions}
         bodyHeight="fit"
       >
         <MetricsCard.Loading />

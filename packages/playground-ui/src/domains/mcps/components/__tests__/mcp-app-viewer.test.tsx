@@ -11,6 +11,7 @@ import { useMcpAppToolCall } from '../../hooks/use-mcp-app-tool-call';
 import { McpAppViewer } from '../mcp-app-viewer';
 import type { McpAppViewerProps } from '../mcp-app-viewer';
 import { connectApp, sandboxFrame } from './connect-app';
+import { ThemeProvider } from '@/ds/components/ThemeProvider';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '@/test/render';
 
@@ -169,6 +170,28 @@ describe('McpAppViewer', () => {
 
     expect(app.getHostContext()?.theme).not.toBe('not-a-theme');
   });
+
+  it.each(['light', 'dark'] as const)(
+    'gives the frame the %s color-scheme it tells the app, so the app shows through instead of an opaque box',
+    async theme => {
+      const app = await renderApp(
+        {},
+        undefined,
+        <ThemeProvider
+          defaultTheme={theme}
+          storageKey={`mcp-app-viewer-${theme}`}
+          target={document.createElement('div')}
+        >
+          {viewer({})}
+        </ThemeProvider>,
+      );
+      const { frame } = await sandboxFrame(document.body);
+
+      expect(app.getHostContext()?.theme).toBe(theme);
+      // The browser paints an opaque canvas behind an iframe whose scheme differs from its document's root.
+      expect(getComputedStyle(frame).colorScheme).toBe(theme);
+    },
+  );
 
   it('opens web links the app asks for in a new tab, without giving the page a handle on Studio', async () => {
     const open = vi.spyOn(window, 'open').mockReturnValue(null);

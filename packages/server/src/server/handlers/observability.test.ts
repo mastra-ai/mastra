@@ -1931,33 +1931,6 @@ describe('Observability Handlers', () => {
     });
   });
 
-  describe('UPDATE_FEEDBACK_REVIEW_STATUS_ROUTE', () => {
-    it('should update and return the feedback review status', async () => {
-      const feedback = {
-        feedbackId: 'feedback-123',
-        timestamp: new Date('2026-09-01T12:00:00.000Z'),
-        traceId: 'trace-123',
-        feedbackSource: 'user',
-        feedbackType: 'comment',
-        value: 'Needs follow-up',
-        reviewStatus: 'reviewed' as const,
-      };
-      (mockObservabilityStore.updateFeedbackReviewStatus as ReturnType<typeof vi.fn>).mockResolvedValue(feedback);
-
-      const result = await NEW_ROUTES.UPDATE_FEEDBACK_REVIEW_STATUS.handler({
-        ...createTestServerContext({ mastra: mockMastra }),
-        feedbackId: 'feedback-123',
-        reviewStatus: 'reviewed',
-      });
-
-      expect(result).toEqual(feedback);
-      expect(mockObservabilityStore.updateFeedbackReviewStatus).toHaveBeenCalledWith({
-        feedbackId: 'feedback-123',
-        reviewStatus: 'reviewed',
-      });
-    });
-  });
-
   describe('CREATE_FEEDBACK_ROUTE', () => {
     it('given an authenticated user, when creating feedback, then persists their ID instead of the submitted ID', async () => {
       const context = createTestServerContext({ mastra: mockMastra });
@@ -1976,6 +1949,7 @@ describe('Observability Handlers', () => {
 
       expect(result).toMatchObject({ success: true, data: { traceId: 'trace-123', timestamp: expect.any(String) } });
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        onConflict: 'ignore',
         feedback: expect.objectContaining({ feedbackUserId: 'authenticated-user' }),
       });
     });
@@ -2027,6 +2001,7 @@ describe('Observability Handlers', () => {
 
       expect(result).toMatchObject({ success: true, data: { traceId: 'trace-123', timestamp: expect.any(String) } });
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        onConflict: 'ignore',
         feedback: expect.objectContaining({
           ...feedbackData,
           feedbackId: expect.any(String),
@@ -2055,6 +2030,7 @@ describe('Observability Handlers', () => {
       });
 
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        onConflict: 'ignore',
         feedback: expect.objectContaining({ ...feedbackData, timestamp: expect.any(Date) }),
       });
     });
@@ -2068,6 +2044,7 @@ describe('Observability Handlers', () => {
       });
 
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        onConflict: 'ignore',
         feedback: expect.objectContaining({ reviewStatus: 'needs-review' }),
       });
     });
@@ -2087,6 +2064,7 @@ describe('Observability Handlers', () => {
       });
 
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        onConflict: 'ignore',
         feedback: expect.objectContaining({ reviewStatus: 'reviewed' }),
       });
     });

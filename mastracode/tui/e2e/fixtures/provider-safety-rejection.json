@@ -1,0 +1,14 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Continue after the safety rejection."
+      },
+      "response": {
+        "content": "Recovered after the safety rejection."
+      }
+    }
+  ]
+}

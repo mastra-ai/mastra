@@ -1,5 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
+import type { MastraUser } from '../types/user';
+import { getRequestUser } from '../utils/dynamic-argument';
 
 /**
  * Scope types Memory reads as the run's identity. Every other scope type is
@@ -31,6 +33,8 @@ export type AgentScopesConfig<TRequestContext = unknown> =
       scopes: string[];
       requestContext: RequestContext<TRequestContext>;
       mastra?: any;
+      /** The authenticated end user, when the request has one. */
+      user?: MastraUser;
     }) => string[] | Promise<string[]>);
 
 /**
@@ -43,7 +47,7 @@ export async function applyAgentScopesConfig<TRequestContext>(
 ): Promise<string[]> {
   if (config === undefined) return args.scopes;
   if (typeof config !== 'function') return [...args.scopes, ...config];
-  return config(args);
+  return config({ ...args, user: getRequestUser(args.requestContext) });
 }
 
 export type ResolveAgentScopesInput = {

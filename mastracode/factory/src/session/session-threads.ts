@@ -33,7 +33,7 @@ export async function threadRunBinding(
   });
 }
 
-type ThreadLookup = Pick<AgentController<any>, 'queryThreadById'>;
+export type SessionThreadLookup = Pick<AgentController<any>, 'queryThreadById'>;
 
 /**
  * The one memory resource a Factory session runs under. A Slack session uses
@@ -45,7 +45,7 @@ type ThreadLookup = Pick<AgentController<any>, 'queryThreadById'>;
  * session's id, so the thread alone never makes a session the Factory's.
  */
 export async function sessionMemoryResourceId(
-  controller: ThreadLookup | undefined,
+  controller: SessionThreadLookup | undefined,
   session: FactorySessionOwnership,
   runs: SessionRunBindings | undefined,
 ): Promise<string> {

@@ -17,6 +17,12 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
+    "zai-org/GLM-5.2": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
     "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
@@ -27,12 +33,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.2": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
       }
     ],
     "deepseek-ai/DeepSeek-V4-Flash-0731": [

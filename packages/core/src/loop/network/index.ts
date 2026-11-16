@@ -288,7 +288,7 @@ export function getLastMessage(messages: MessageListInput) {
       const parts = lastMessage.parts;
       if (Array.isArray(parts)) {
         const lastPart = parts[parts.length - 1];
-        if (lastPart?.type === 'text' && lastPart?.text) {
+        if (lastPart?.type === 'text' && 'text' in lastPart && typeof lastPart.text === 'string' && lastPart.text) {
           message = lastPart.text;
         }
       }

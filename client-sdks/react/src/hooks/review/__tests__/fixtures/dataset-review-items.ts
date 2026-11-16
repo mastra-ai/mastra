@@ -61,6 +61,19 @@ export const resultsResponse: { results: DatasetExperimentResult[]; pagination: 
   pagination,
 };
 
+export const manyResults = (
+  count: number,
+  needsReviewIndexes: number[],
+  experimentId: string = EXPERIMENT_ID,
+): DatasetExperimentResult[] =>
+  Array.from({ length: count }, (_, index) => ({
+    ...needsReviewResultWithComment,
+    id: `${experimentId}-result-${index}`,
+    experimentId,
+    itemId: `item-${index}`,
+    status: needsReviewIndexes.includes(index) ? 'needs-review' : 'complete',
+  }));
+
 export const updatedResultResponse = (comment: string | null): DatasetExperimentResult => ({
   ...needsReviewResultWithComment,
   comment,

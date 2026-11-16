@@ -1,4 +1,3 @@
-import { Braces, CopyIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
 import { useContext, useMemo, useState } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
@@ -11,6 +10,10 @@ import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
 import { Notice } from '@/ds/components/Notice';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
+import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
+import { IconEyeSlash } from '@/ds/icons/central/IconEyeSlash';
+import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import { Icon } from '@/ds/icons/Icon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { quietTextHover } from '@/ds/primitives/typography';
@@ -97,7 +100,7 @@ const JsonField = ({
                   aria-label="Copy example JSON"
                 >
                   <Icon>
-                    <CopyIcon />
+                    <IconSquareBehindSquare1 />
                   </Icon>
                 </button>
               </TooltipTrigger>
@@ -130,7 +133,7 @@ const JsonField = ({
                 <TooltipTrigger asChild>
                   <button type="button" onClick={handleFormat} className={buttonClass} aria-label="Format JSON">
                     <Icon>
-                      <Braces />
+                      <IconCodeBrackets />
                     </Icon>
                   </button>
                 </TooltipTrigger>
@@ -140,7 +143,7 @@ const JsonField = ({
                 <TooltipTrigger asChild>
                   <button type="button" onClick={handleCopy} className={buttonClass} aria-label="Copy JSON">
                     <Icon>
-                      <CopyIcon />
+                      <IconSquareBehindSquare1 />
                     </Icon>
                   </button>
                 </TooltipTrigger>
@@ -155,7 +158,7 @@ const JsonField = ({
                       className={buttonClass}
                       aria-label={isExampleOpen ? `Hide example JSON` : `View example JSON`}
                     >
-                      <Icon>{isExampleOpen ? <EyeOffIcon /> : <EyeIcon />}</Icon>
+                      <Icon>{isExampleOpen ? <IconEyeSlash /> : <IconEyeOpen />}</Icon>
                     </button>
                   </TooltipTrigger>
                   <TooltipContent>View example JSON</TooltipContent>

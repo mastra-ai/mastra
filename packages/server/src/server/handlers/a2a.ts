@@ -393,7 +393,7 @@ export async function getAgentCardByIdHandler({
   requestContext,
   protocolVersion = '0.3',
 }: AgentCardOptions): Promise<AgentCard | AgentCardV1> {
-  const agent = await getAgentFromSystem({ mastra, agentId });
+  const agent = await getAgentFromSystem({ mastra, agentId, requestContext, access: 'read' });
 
   const [instructions, tools]: [
     Awaited<ReturnType<typeof agent.getInstructions>>,
@@ -2265,7 +2265,7 @@ export async function getAgentExecutionHandler({
   abortSignal?: AbortSignal;
   protocolVersion?: A2AProtocolVersion;
 }): Promise<any> {
-  const agent = await getAgentFromSystem({ mastra, agentId });
+  const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
   const protocolParams = protocolVersion === '1.0' ? normalizeV1Params(method, params) : params;
   const {
     pushNotificationStore: resolvedPushNotificationStore,

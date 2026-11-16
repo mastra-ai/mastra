@@ -273,24 +273,38 @@ async sendResponse(
 
 Handle streaming responses for agent generation. When an agent generates a response, it produces a stream of chunks that should be sent to the client as they become available. This method reads from the stream and optionally applies redaction to hide sensitive data before writing chunks to the response in the appropriate format (SSE or newline-delimited JSON).
 
+Cancel the stream when the client disconnects. For agents with resumable streams, such as durable agents, the cancel is the only signal that the client left. Without it, the run isn't kept for replay and the server keeps reading a stream nobody receives. The client can also leave before your route handler returns, so a `close` listener added afterward never fires.
+
+If your framework writes to a Node.js `ServerResponse`, use the helpers from `@mastra/server/server-adapter`:
+
+- `cancelReaderOnResponseClose(reader, res)` cancels the reader when the response closes, or right away if it's already closed. Call `dispose()` before ending the response so a normal end doesn't cancel.
+- `writeWithBackpressure(res, chunk)` waits for the client to catch up when the socket buffer is full, so a slow client doesn't make the server buffer the whole stream.
+
 ```typescript oxfmt:false
+import type { ServerResponse } from 'node:http';
+import { cancelReaderOnResponseClose, writeWithBackpressure } from '@mastra/server/server-adapter';
+
 async stream(
   route: ServerRoute,
-  response: MyResponse,
+  res: ServerResponse,
   result: unknown
 ): Promise<unknown> {
   const isSSE = route.streamFormat === 'sse';
 
   // Set streaming headers based on format
-  response.setHeader('Content-Type', isSSE ? 'text/event-stream' : 'text/plain');
-  response.setHeader('Transfer-Encoding', 'chunked');
+  res.setHeader('Content-Type', isSSE ? 'text/event-stream' : 'text/plain');
+  res.setHeader('Transfer-Encoding', 'chunked');
 
   const reader = result.fullStream.getReader();
+  const readerCancel = cancelReaderOnResponseClose(reader, res);
 
   try {
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+
+      if (done) {
+        break;
+      }
 
       // Apply redaction if enabled
       const chunk = this.streamOptions.redact
@@ -299,23 +313,24 @@ async stream(
 
       // Format based on stream format
       if (isSSE) {
-        response.write(`data: ${JSON.stringify(chunk)}\n\n`);
+        await writeWithBackpressure(res, `data: ${JSON.stringify(chunk)}\n\n`);
       } else {
-        response.write(JSON.stringify(chunk) + '\x1E');
+        await writeWithBackpressure(res, JSON.stringify(chunk) + '\x1E');
       }
     }
 
     // Send completion marker (SSE uses data: [DONE], other formats use record separator)
     if (isSSE) {
-      response.write('data: [DONE]\n\n');
+      await writeWithBackpressure(res, 'data: [DONE]\n\n');
     }
-    response.end();
-  } catch (error) {
-    reader.cancel();
-    throw error;
+  } finally {
+    readerCancel.dispose();
+    res.end();
   }
 }
 ```
+
+If your framework returns a fetch `Response` instead, wrap the stream in a `ReadableStream` that reads one chunk per `pull()` and cancels the reader in its `cancel()`. Also cancel the reader when the request's `abortSignal` aborts: some runtimes never read or cancel the body of a request that closed while the route handler ran.
 
 ## Helper methods
 
@@ -456,6 +471,20 @@ createRouteAdapterTestSuite({
   suiteName: 'My framework adapter',
   setupAdapter,
   executeHttpRequest,
+})
+```
+
+Run the stream disconnect suite to check that your adapter cancels a route's stream when the client disconnects and waits for a slow client. `startServer` serves the route over real HTTP and returns its URL. When the suite passes `beforeContext`, run it as async middleware before your context middleware:
+
+```typescript title="src/my-framework-adapter-stream.test.ts"
+import { createStreamDisconnectTestSuite } from '@mastra/server-adapters-test-suite'
+import { startMyFrameworkServer } from './adapter-test-helpers'
+
+createStreamDisconnectTestSuite({
+  startServer: async (route, { beforeContext } = {}) => {
+    const { url, close } = await startMyFrameworkServer(route, { beforeContext })
+    return { url, close }
+  },
 })
 ```
 

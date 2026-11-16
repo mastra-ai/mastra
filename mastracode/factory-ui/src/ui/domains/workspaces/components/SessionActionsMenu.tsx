@@ -1,7 +1,7 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { MoreHorizontal } from 'lucide-react';
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import type { ReactNode, RefObject } from 'react';
+import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
 
 export function SessionActionsMenu({
   name,
@@ -18,16 +18,13 @@ export function SessionActionsMenu({
     <DropdownMenu>
       <DropdownMenu.Trigger
         render={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
+          <Sidebar.NavAction
             aria-label={`Session actions for ${name}`}
             disabled={disabled}
-            className="group-focus-within/session:flex group-hover/session:flex data-[popup-open]:flex pointer-fine:hidden"
+            className="group-focus-within/nav-row:flex group-hover/nav-row:flex data-[popup-open]:flex pointer-fine:hidden"
           >
-            <MoreHorizontal />
-          </Button>
+            <IconDotGrid1x3Horizontal />
+          </Sidebar.NavAction>
         }
       />
       <DropdownMenu.Content anchor={anchor} align="end">

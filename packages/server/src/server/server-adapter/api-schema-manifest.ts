@@ -25,8 +25,8 @@ export interface ApiSchemaManifest {
   routes: ApiSchemaManifestRoute[];
 }
 
-function convertSchema(schema: ServerRoute['bodySchema']): JSONSchema7 | undefined {
-  return schema ? schemaToJsonSchema(schema) : undefined;
+function convertSchema(schema: ServerRoute['bodySchema'], io: 'input' | 'output'): JSONSchema7 | undefined {
+  return schema ? schemaToJsonSchema(schema, io) : undefined;
 }
 
 function asJsonSchema(value: unknown): JSONSchema7 | undefined {
@@ -91,14 +91,14 @@ export function buildApiSchemaManifest(routes: readonly ServerRoute[] = SERVER_R
   return {
     version: 1,
     routes: routes.filter(isManifestRoute).map(route => {
-      const responseSchema = convertSchema(route.responseSchema);
+      const responseSchema = convertSchema(route.responseSchema, 'output');
       return {
         method: route.method,
         path: route.path,
         responseType: route.responseType,
-        pathParamSchema: convertSchema(route.pathParamSchema),
-        queryParamSchema: convertSchema(route.queryParamSchema),
-        bodySchema: convertSchema(route.bodySchema),
+        pathParamSchema: convertSchema(route.pathParamSchema, 'input'),
+        queryParamSchema: convertSchema(route.queryParamSchema, 'input'),
+        bodySchema: convertSchema(route.bodySchema, 'input'),
         responseSchema,
         responseShape: inferResponseShape(responseSchema),
       };

@@ -13,6 +13,11 @@ export function offersSessionTools(integrationId: string): boolean {
   return !SOURCE_CONTROL_PROVIDERS.includes(integrationId);
 }
 
+/**
+ * The Mastra Connect tools Factory gives sessions by default, without delete,
+ * archive, and GitHub/GitLab tools. Passing `tools` replaces that default; call
+ * this to keep it alongside your own.
+ */
 export function platformConnectTools(
   projectId: string,
 ): (args: { requestContext: RequestContext }) => Promise<IntegrationTools> {

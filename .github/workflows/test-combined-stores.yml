@@ -6,6 +6,11 @@ on:
       head_sha:
         required: true
         type: string
+      skip_jobs:
+        description: Tier keys (job:<key>) this PR skips; see scripts/test-tiers/select.mjs.
+        required: false
+        type: string
+        default: '[]'
     secrets:
       TURBO_TOKEN:
         required: false
@@ -43,6 +48,7 @@ jobs:
       - id: set-stores
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SKIP_JOBS: ${{ inputs.skip_jobs }}
         run: |
           STORES=$(ls -d stores/*/ | grep -v '_test-utils' | cut -f2 -d'/' | jq -R -s -c 'split("\n")[:-1]')
           INVALID_STORES=$(echo "$STORES" | jq -r '.[] | select(test("^[a-zA-Z0-9_-]+$") | not)')
@@ -72,6 +78,9 @@ jobs:
           # one job (test-light) instead of one runner each: their tests take seconds, less
           # than each runner's checkout, setup and build. A store not listed here keeps its own job.
           # libsql is deliberately not listed: its cross-process tests are load-sensitive.
+          # Test tiers: stores marked `out` that this PR doesn't touch (decided in Prebuild).
+          STORES=$(jq -c -n --argjson all "$STORES" --argjson skip "$SKIP_JOBS" '[$all[] | select(("job:store/" + .) as $k | $skip | index($k) | not)]')
+
           LIGHT='["azure-ai-search","convex","dsql","duckdb","lance","oracledb","s3vectors","spanner","turbopuffer","turso"]'
           LIGHT_STORES=$(jq -c -n --argjson all "$STORES" --argjson light "$LIGHT" '[$all[] | select(. as $s | $light | index($s))]')
           STORES=$(jq -c -n --argjson all "$STORES" --argjson light "$LIGHT" '[$all[] | select(. as $s | $light | index($s) | not)]')
@@ -81,7 +90,7 @@ jobs:
 
   test:
     needs: setup
-    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    if: ${{ github.repository == 'mastra-ai/mastra' && needs.setup.outputs.stores != '[]' }}
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     permissions:

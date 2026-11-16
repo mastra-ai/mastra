@@ -23,12 +23,6 @@
     "zai-org/GLM-5.2-FP8"
   ],
   "reasoning": {
-    "z-ai/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
     "zai-org/GLM-5.2-FP8": [
       {
         "type": "effort",
@@ -41,6 +35,12 @@
       }
     ],
     "ambient/large": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "z-ai/glm-5.2": [
       {
         "type": "effort",
         "values": ["high", "max"]

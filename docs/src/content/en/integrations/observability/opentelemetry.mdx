@@ -13,13 +13,13 @@ Mastra supports OpenTelemetry (OTEL) through an exporter for sending traces and 
 
 ## Exporter
 
-The OpenTelemetry exporter sends your traces and logs using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, Sentry, SigNoz, MLflow, Latitude, Dash0, Traceloop, Laminar, telemetry.dev, Sazabi, and more.
+The OpenTelemetry exporter sends your traces and logs using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, Sentry, SigNoz, MLflow, Latitude, Dash0, Traceloop, Laminar, telemetry.dev, Sazabi, Agnost AI, and more.
 
 ### Installation
 
 Each provider requires specific protocol packages. Install the base exporter plus the protocol package for your provider:
 
-#### For HTTP/Protobuf providers (SigNoz, New Relic, Sentry, Laminar, MLflow, Latitude, telemetry.dev)
+#### For HTTP/Protobuf providers (SigNoz, New Relic, Sentry, Laminar, MLflow, Latitude, telemetry.dev, Agnost AI)
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-proto
@@ -166,6 +166,31 @@ new OtelExporter({
 ```
 
 See [Sazabi's Mastra guide](https://docs.sazabi.com/catalogs/log-sources/send-to-an-endpoint/mastra) for the full setup.
+
+#### Agnost AI
+
+[Agnost AI](https://agnost.ai) ingests OTLP/HTTP protobuf traces and groups them into conversations and users for production agent monitoring. Use the `custom` provider with your organization ID:
+
+```bash title=".env"
+AGNOST_ORG_ID=your-org-id
+```
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    custom: {
+      endpoint: 'https://otel.agnost.ai/v1/traces',
+      protocol: 'http/protobuf',
+      headers: {
+        'X-Agnost-Org-ID': process.env.AGNOST_ORG_ID!,
+      },
+    },
+  },
+  signals: { logs: false },
+})
+```
+
+Agnost AI reads `userId` and `conversationId` (or `threadId`) from `tracingOptions.metadata` to group traces by user and conversation. It stores traces only, so `signals: { logs: false }` skips the log export. See [Agnost AI's Mastra guide](https://docs.agnost.ai/mastra) for the full setup.
 
 #### Dash0
 
@@ -570,7 +595,7 @@ Make sure to install the correct protocol package for your provider. The exporte
 
 If you see an error like:
 
-```
+```text
 HTTP/Protobuf exporter is not installed (required for signoz).
 To use HTTP/Protobuf export, install the required package:
   npm install @opentelemetry/exporter-trace-otlp-proto
@@ -752,7 +777,7 @@ For details on span naming and attributes, see the [OpenTelemetry Exporter seman
 
 With the `OtelBridge`, your traces maintain proper hierarchy across OTEL and Mastra boundaries:
 
-```
+```text
 HTTP POST /api/chat (from Hono middleware)
 └── agent.assistant (from Mastra via OtelBridge)
     └── model_generation __AI_SDK_OPENAI_MODEL_BASE__ (generation loop)
@@ -768,7 +793,7 @@ HTTP POST /api/chat (from Hono middleware)
 
 The `OtelBridge` enables trace propagation across service boundaries. When Service A calls Service B via HTTP, trace context propagates automatically:
 
-```
+```text
 Service A: HTTP POST /api/process
 └── HTTP POST service-b/api/analyze (outgoing call)
 

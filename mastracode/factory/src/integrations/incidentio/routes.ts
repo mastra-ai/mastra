@@ -17,12 +17,11 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import type { Intake } from '../../capabilities/intake.js';
+import type { Intake, IntakeItem } from '../../capabilities/intake.js';
 import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import { IncidentioApiError } from './api.js';
-import type { IncidentioRulesIngress } from './rules.js';
 
 type RouteContext = Context;
 
@@ -53,22 +52,16 @@ export interface MountIncidentioRoutesOptions {
   /** Host auth seam. Intake selections are org-owned, so the feature is inert without it. */
   auth: RouteAuth;
   /**
-   * Cross-integration intake selection domain. Required for the issues route's
-   * project filter; when absent, only the disabled `status` route is served.
+   * Cross-integration intake selection domain. Required for the issue detail
+   * route's project filter; when absent, only the disabled `status` route is served.
    */
   intake?: IntakeStorage;
-  /**
-   * Factory rules ingress for observed follow-ups. When present, a
-   * board-scoped listing also materializes new cards through the incident.io
-   * event rules — the same automatic intake Linear and Jira have.
-   */
-  ingestFactoryIssues?: (input: IncidentioRulesIngress) => Promise<unknown>;
 }
 
 /**
  * Narrow the caller's selected incident.io sources to the ones that feed this
  * Factory project. Routing is explicit: a source feeds this Factory only when
- * its binding names both the Factory project and a board. Mirrors the Jira
+ * it is bound to the Factory project. Mirrors the Jira
  * routes' scoping semantics — the generic binding storage is provider-neutral.
  * Shared with the agent tools, which enforce the same source-level
  * authorization before fetching item details.
@@ -83,15 +76,11 @@ export async function scopeSourceIdsToProject({
   orgId: string;
   factoryProjectId: string;
   selectedIds: string[];
-}): Promise<Record<string, string>> {
+}): Promise<string[]> {
   const selected = new Set(selectedIds);
-  const intakeBoards: Record<string, string> = {};
-  for (const binding of await intake.listBindings({ orgId, integrationId: 'incidentio' })) {
-    if (binding.factoryProjectId === factoryProjectId && binding.board && selected.has(binding.sourceId)) {
-      intakeBoards[binding.sourceId] = binding.board;
-    }
-  }
-  return intakeBoards;
+  return (await intake.listBindings({ orgId, integrationId: 'incidentio' }))
+    .filter(binding => binding.factoryProjectId === factoryProjectId && selected.has(binding.sourceId))
+    .map(binding => binding.sourceId);
 }
 
 /**
@@ -117,17 +106,6 @@ async function resolveOrgTenant(
     };
   }
   return { tenant: { orgId: tenant.orgId, userId: tenant.userId } };
-}
-
-/**
- * Validate an opaque pagination cursor from the query string. Cursors are
- * server-issued base64url blobs, so anything outside a conservative
- * charset/length is rejected rather than decoded.
- */
-function parseAfterCursor(raw: string | undefined): string | undefined | null {
-  if (raw === undefined || raw === '') return undefined;
-  if (raw.length > 2_048 || !/^[\w+/=.:-]+$/.test(raw)) return null;
-  return raw;
 }
 
 /** Map an incident.io read failure to the API response for the SPA. */
@@ -159,6 +137,38 @@ interface IncidentioIssuePayload {
   createdAt: string;
   updatedAt: string;
   sourceId: string | null;
+}
+
+/**
+ * The follow-ups a listing page yields for the reconcile sweep that files
+ * their cards. Incidents stay out of intake even when a stale binding selects
+ * the incidents source.
+ */
+export function followUpIssues(items: IntakeItem[]): IncidentioIssuePayload[] {
+  return items
+    .filter(item => item.source.externalId.startsWith(FOLLOW_UP_PREFIX))
+    .map(item => {
+      const externalId = item.source.externalId;
+      const metadata = item.metadata ?? {};
+      const identifier = typeof metadata.identifier === 'string' ? metadata.identifier : externalId;
+      const titlePrefix = `${identifier}: `;
+      return {
+        id: externalId,
+        identifier,
+        title: item.title.startsWith(titlePrefix) ? item.title.slice(titlePrefix.length) : item.title,
+        url: item.source.url ?? '',
+        author: typeof metadata.author === 'string' ? metadata.author : null,
+        state: item.status ?? '',
+        stateType: typeof metadata.stateType === 'string' ? metadata.stateType : '',
+        priorityLabel: typeof metadata.priority === 'string' ? metadata.priority : '',
+        assignee: item.assignee ?? null,
+        incident: typeof metadata.incidentioIncidentId === 'string' ? metadata.incidentioIncidentId : null,
+        labels: item.labels ?? [],
+        createdAt: item.createdAt ?? '',
+        updatedAt: item.updatedAt ?? '',
+        sourceId: item.sourceId || null,
+      };
+    });
 }
 
 /**
@@ -215,99 +225,6 @@ export function buildIncidentioRoutes(options: MountIncidentioRoutesOptions): Ap
     return routes;
   }
 
-  // ── List bound follow-ups (cursor-paged) ────────────────────────────────
-  // Respects the caller's intake config: disabled incident.io intake 404s,
-  // and only sources routed to the requested Factory project are listed.
-  // Incidents never appear here — only follow-ups feed intake.
-  routes.push(
-    registerApiRoute('/web/incidentio/issues', {
-      method: 'GET',
-      requiresAuth: false,
-      handler: async c => {
-        const resolved = await resolveOrgTenant(loose(c), auth);
-        if ('response' in resolved) return resolved.response;
-
-        const after = parseAfterCursor(c.req.query('after'));
-        if (after === null) return c.json({ error: 'invalid_cursor' }, 400);
-        const factoryProjectId = c.req.query('factoryProjectId');
-        if (factoryProjectId && !UUID_RE.test(factoryProjectId)) {
-          return c.json({ error: 'invalid_factory_project_id' }, 400);
-        }
-
-        await intake.ensureReady();
-        const config = await intake.getConfig({ orgId: resolved.tenant.orgId, integrationIds: ['incidentio'] });
-        const selection = config.incidentio!;
-        if (!selection.enabled) {
-          return c.json(
-            { error: 'incidentio_intake_disabled', message: 'incident.io intake is turned off in Settings.' },
-            404,
-          );
-        }
-
-        const selectedIds = selection.sourceIds ?? [];
-        const intakeBoards = factoryProjectId
-          ? await scopeSourceIdsToProject({
-              intake,
-              orgId: resolved.tenant.orgId,
-              factoryProjectId,
-              selectedIds,
-            })
-          : null;
-        const sourceIds = intakeBoards ? Object.keys(intakeBoards) : selectedIds;
-        if (sourceIds.length === 0) {
-          return c.json({ issues: [], nextCursor: null });
-        }
-
-        try {
-          const page = await incidentio.intake.listItems({
-            orgId: resolved.tenant.orgId,
-            userId: resolved.tenant.userId,
-            sourceIds,
-            ...(after ? { cursor: after } : {}),
-          });
-          const issuePayload: IncidentioIssuePayload[] = [];
-          for (const item of page.items) {
-            const externalId = item.source.externalId;
-            // Incidents stay out of intake even when a stale binding selects
-            // the incidents source — only follow-ups are served.
-            if (!externalId.startsWith(FOLLOW_UP_PREFIX)) continue;
-            const metadata = item.metadata ?? {};
-            const identifier = typeof metadata.identifier === 'string' ? metadata.identifier : externalId;
-            const titlePrefix = `${identifier}: `;
-            issuePayload.push({
-              id: externalId,
-              identifier,
-              title: item.title.startsWith(titlePrefix) ? item.title.slice(titlePrefix.length) : item.title,
-              url: item.source.url ?? '',
-              author: typeof metadata.author === 'string' ? metadata.author : null,
-              state: item.status ?? '',
-              stateType: typeof metadata.stateType === 'string' ? metadata.stateType : '',
-              priorityLabel: typeof metadata.priority === 'string' ? metadata.priority : '',
-              assignee: item.assignee ?? null,
-              incident: typeof metadata.incidentioIncidentId === 'string' ? metadata.incidentioIncidentId : null,
-              labels: item.labels ?? [],
-              createdAt: item.createdAt ?? '',
-              updatedAt: item.updatedAt ?? '',
-              sourceId: item.sourceId || null,
-            });
-          }
-          if (factoryProjectId && intakeBoards && options.ingestFactoryIssues) {
-            await options.ingestFactoryIssues({
-              orgId: resolved.tenant.orgId,
-              userId: resolved.tenant.userId,
-              factoryProjectId,
-              issues: issuePayload,
-              intakeBoards,
-            });
-          }
-          return c.json({ issues: issuePayload, nextCursor: page.nextCursor });
-        } catch (err) {
-          return incidentioFetchError(loose(c), err);
-        }
-      },
-    }),
-  );
-
   // ── Follow-up detail (description for the card panel) ───────────────────
   routes.push(
     registerApiRoute('/web/incidentio/issues/detail', {
@@ -335,13 +252,13 @@ export function buildIncidentioRoutes(options: MountIncidentioRoutesOptions): Ap
             404,
           );
         }
-        const intakeBoards = await scopeSourceIdsToProject({
+        const boundSourceIds = await scopeSourceIdsToProject({
           intake,
           orgId: resolved.tenant.orgId,
           factoryProjectId,
           selectedIds: selection.sourceIds ?? [],
         });
-        if (Object.keys(intakeBoards).length === 0) return c.json({ error: 'issue_not_found' }, 404);
+        if (boundSourceIds.length === 0) return c.json({ error: 'issue_not_found' }, 404);
 
         try {
           // The item must resolve through a source routed to this Factory —
@@ -351,7 +268,7 @@ export function buildIncidentioRoutes(options: MountIncidentioRoutesOptions): Ap
             orgId: resolved.tenant.orgId,
             externalSource: { type: 'issue', externalId: issueRef },
           });
-          if (!dispatch || !dispatch.sourceId || !(dispatch.sourceId in intakeBoards)) {
+          if (!dispatch || !dispatch.sourceId || !boundSourceIds.includes(dispatch.sourceId)) {
             return c.json({ error: 'issue_not_found' }, 404);
           }
           const issue = await incidentio.intake.getIssue({

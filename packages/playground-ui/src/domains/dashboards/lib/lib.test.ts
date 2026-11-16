@@ -754,8 +754,21 @@ describe('kpisIssues', () => {
       name: ['mastra_agent_duration_ms'],
       aggregation: 'count',
     };
-    expect(kpisIssues(kpi([series]))).toEqual([
-      "KPI 'Runs' reads query 'runs', which is not a metrics or scores aggregate",
+    expect(kpisIssues(kpi([series]))).toEqual(["KPI 'Runs' reads query 'runs', which is not an aggregate"]);
+  });
+
+  it('takes a KPI reading one measure of an ungrouped trace aggregate, and reports one that groups or names none', () => {
+    const traces: DashboardQuery = { id: 'runs', source: 'traceAggregate', measures: ['duration.p95'] };
+    const read = (query: DashboardQuery, measure?: string): ResolvedView<KpisOptions> => ({
+      queries: [query],
+      options: { items: [{ label: 'Runs', format: 'duration', value: { query: 'runs', measure } }] },
+    });
+    expect(kpisIssues(read(traces, 'duration.p95'))).toEqual([]);
+    expect(kpisIssues(read({ ...traces, groupBy: ['entityName'] }, 'duration.p95'))).toEqual([
+      "KPI 'Runs' reads query 'runs', which groups or buckets its rows; a KPI shows one figure",
+    ]);
+    expect(kpisIssues(read(traces, 'count'))).toEqual([
+      "KPI 'Runs' reads query 'runs' without naming one of its measures",
     ]);
   });
 

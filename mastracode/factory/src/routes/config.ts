@@ -10,7 +10,7 @@ import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bed
 import { GOOGLE_VERTEX_GATEWAY_ID } from '@mastra/code-sdk/providers/google-vertex-gateway';
 import { MASTRA_GATEWAY_PREFIX } from '@mastra/code-sdk/providers/model-ids';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-import { getModelReasoningOptions } from '@mastra/core/llm';
+import { getModelReasoningOptions, MastraGateway } from '@mastra/core/llm';
 import type { ModelReasoningOption } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
@@ -37,16 +37,20 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { THINKING_LEVELS } from './contracts.js';
+import { createGatewayKey, getGatewayCredits, MASTRA_SIGN_IN_REQUIRED, MastraGatewayError } from './mastra-gateway.js';
 import {
   credentialLabel,
   getAuthProviderId,
   listTenantCredentialsForRequest,
+  MASTRA_GATEWAY_CATALOG_PROVIDER,
   resolveCredentialContext,
   tenantOrgId,
   WEB_OAUTH_PROVIDERS,
 } from './provider-credentials.js';
 import { loose, Route } from './route.js';
 import type { RouteAuth, RouteDependencies } from './route.js';
+import { readRunningPackages } from './running-packages.js';
+import type { RunningPackage } from './running-packages.js';
 import { resolveTenantProviderDefaultModel } from './tenant-credentials.js';
 
 /**
@@ -107,6 +111,8 @@ export interface ProviderInfo {
   oauth?: { supported: true; modes: LoginSessionKind[] };
   /** The provider is a stored custom OpenAI-compatible endpoint. */
   custom?: true;
+  /** Tenant mode: Factory can mint this provider's key with the caller's Mastra account (the Mastra Gateway). */
+  connectWithMastraAccount?: true;
 }
 
 /** Minimal session surface the config routes touch. */
@@ -128,9 +134,35 @@ export interface ModelCatalog {
       releaseDate?: string;
     }>
   >;
+  /** Drops cached auth so the next `listAvailableModels` call sees a credential change. */
+  invalidateAvailableModelsCache?: () => void;
   listModes?: () => Array<{ id: string; defaultModelId?: string }>;
   getDefaultMode?: () => { defaultModelId?: string };
   getSession?: (sessionId: string) => Promise<OMSession | undefined>;
+}
+
+type CatalogModel = Awaited<ReturnType<ModelCatalog['listAvailableModels']>>[number];
+
+/**
+ * The controller's model catalog, plus the Mastra Gateway's models for tenant
+ * callers. The boot-time catalog lists `mastra/...` models only when the server
+ * itself has a gateway key; tenants bring their own (connected in one click).
+ */
+async function listCatalogModels(
+  controller: ModelCatalog,
+  tenantCredentials: CredentialRecord[] | undefined,
+): Promise<CatalogModel[]> {
+  const models = await controller.listAvailableModels();
+  if (!tenantCredentials || models.some(m => m.provider === MASTRA_GATEWAY_CATALOG_PROVIDER)) return models;
+  const gateway = (await new MastraGateway().fetchProviders())[MASTRA_GATEWAY_CATALOG_PROVIDER];
+  const gatewayModels = (gateway?.models ?? []).map(modelName => ({
+    id: `${MASTRA_GATEWAY_CATALOG_PROVIDER}/${modelName}`,
+    provider: MASTRA_GATEWAY_CATALOG_PROVIDER,
+    modelName,
+    hasApiKey: false,
+    releaseDate: gateway?.modelReleaseDates?.[modelName],
+  }));
+  return [...models, ...gatewayModels];
 }
 
 /**
@@ -148,14 +180,17 @@ export async function listProviders({
   tenantCredentials,
   deploymentProviders,
   listCustomProviders,
+  connectWithMastraAccount,
 }: {
   controller: ModelCatalog;
   authStorage?: AuthStorage;
   tenantCredentials?: CredentialRecord[];
   deploymentProviders?: ReadonlySet<string>;
   listCustomProviders?: () => Promise<CustomProviderRecord[]>;
+  /** The auth provider can act on the Mastra platform as the caller. */
+  connectWithMastraAccount?: boolean;
 }): Promise<ProviderInfo[]> {
-  const models = await controller.listAvailableModels();
+  const models = await listCatalogModels(controller, tenantCredentials);
   const seen = new Map<string, ProviderInfo>();
 
   for (const model of models) {
@@ -217,6 +252,9 @@ export async function listProviders({
       ...(orgCredential ? { orgCredential } : {}),
       ...(orgCredentialExpired ? { orgCredentialExpired: true as const } : {}),
       ...(flowKind ? { oauth: { supported: true as const, modes: [flowKind] } } : {}),
+      ...(tenantCredentials && connectWithMastraAccount && model.provider === MASTRA_GATEWAY_CATALOG_PROVIDER
+        ? { connectWithMastraAccount: true as const }
+        : {}),
     });
   }
 
@@ -397,7 +435,7 @@ export async function buildProviderAccess({
   tenantCredentials?: CredentialRecord[];
   deploymentProviders?: ReadonlySet<string>;
 }): Promise<ProviderAccess> {
-  const models = await controller.listAvailableModels();
+  const models = await listCatalogModels(controller, tenantCredentials);
   const hasModelKey = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
   const accessLevel = (provider: string): ProviderAccessLevel => {
     const authProviderId = getAuthProviderId(provider);
@@ -410,6 +448,8 @@ export async function buildProviderAccess({
       const credential = grantingTenantRecord(tenantCredentials, authProviderId)?.credential;
       if (credential?.type === 'oauth') return 'oauth';
       if (credential?.type === 'api_key' && credential.key.trim().length > 0) return 'apikey';
+      // Model resolution falls back to the server's own gateway key, if it has one.
+      if (provider === MASTRA_GATEWAY_CATALOG_PROVIDER && MastraCodeGateway.getMastraGatewayApiKey()) return 'apikey';
       return false;
     }
 
@@ -474,7 +514,7 @@ export async function buildModelCatalog({
   listCustomProviders?: () => Promise<CustomProviderRecord[]>;
 }): Promise<ModelCatalogEntry[]> {
   const [models, access] = await Promise.all([
-    controller.listAvailableModels(),
+    listCatalogModels(controller, tenantCredentials),
     buildProviderAccess({
       controller,
       authStorage: tenantCredentials ? undefined : authStorage,
@@ -744,6 +784,8 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   controller: ModelCatalog;
   /** `mcp`: the Factory MCP endpoint is mounted (auth plus an MCP authorization server). */
   features?: { knowledge: boolean; mcp?: boolean };
+  /** Reads the Mastra packages this server runs; defaults to the build manifest. */
+  readPackages?: () => Promise<RunningPackage[]>;
   authStorage?: AuthStorage;
   /** Tenant credential domain handle; absent in local (no-DB) mode. */
   modelCredentials?: ModelCredentialsStorage;
@@ -774,6 +816,7 @@ export interface ConfigRoutesDeps extends RouteDependencies {
 /**
  * The web config routes as Mastra `apiRoutes`:
  *   - `GET    /web/config/features`               — list server-enabled product features
+ *   - `GET    /web/config/versions`               — list the Mastra packages and Node version this server runs
  *   - `GET    /web/config/providers`              — list providers + key source
  *   - `PUT    /web/config/providers/:provider/key` — set/update a provider's API key
  *   - `DELETE /web/config/providers/:provider/key` — remove a stored API key
@@ -791,6 +834,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
     const options = this.deps;
     const { controller, authStorage, auth, deploymentProviders } = options;
     const onCredentialsChanged = options.onCredentialsChanged ?? (() => {});
+    const connectWithMastraAccount = auth.fetchPlatformAsUser !== undefined;
+    const listTenantProviders = (records: CredentialRecord[]) =>
+      listProviders({ controller, tenantCredentials: records, deploymentProviders, connectWithMastraAccount });
+    const gatewayFailure = (c: Context, error: unknown) =>
+      error instanceof MastraGatewayError
+        ? c.json({ error: error.message }, error.status)
+        : c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
     const onCustomProvidersChanged = options.onCustomProvidersChanged ?? (() => {});
 
     const resolveSessionModelContext = async (
@@ -899,8 +949,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       const availableProviders = new Set(
         Object.entries(access).flatMap(([providerId, configured]) => (configured ? [providerId] : [])),
       );
-      // `mastra/` routes run through the Mastra gateway whenever its key is configured.
-      if (MastraCodeGateway.getMastraGatewayApiKey()) availableProviders.add(MASTRA_GATEWAY_PROVIDER);
+      // `mastra/` routes run through the Mastra gateway whenever a key is configured:
+      // the caller's own (tenant mode) or the server's.
+      if (access[MASTRA_GATEWAY_CATALOG_PROVIDER] || MastraCodeGateway.getMastraGatewayApiKey()) {
+        availableProviders.add(MASTRA_GATEWAY_PROVIDER);
+      }
       if (options.customProviders) {
         const context = await resolveCustomProvidersContext({
           c: loose(c),
@@ -939,6 +992,17 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           c.json({ knowledge: options.features?.knowledge ?? false, mcp: options.features?.mcp ?? false }),
       }),
 
+      registerApiRoute('/web/config/versions', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          await auth.ensureUser(loose(c));
+          if (!auth.tenant(loose(c)) && auth.enabled()) return c.json({ error: 'unauthorized' }, 401);
+          const packages = await (options.readPackages ?? readRunningPackages)();
+          return c.json({ packages, nodeVersion: process.version });
+        },
+      }),
+
       registerApiRoute('/web/config/providers', {
         method: 'GET',
         requiresAuth: false,
@@ -969,6 +1033,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 tenantCredentials,
                 deploymentProviders,
                 listCustomProviders,
+                connectWithMastraAccount,
               }),
               ...(orgKeyAdmin !== undefined ? { orgKeyAdmin } : {}),
             });
@@ -1018,16 +1083,64 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               await ctx.storage.setCredential(tenant, getAuthProviderId(provider), { type: 'api_key', key });
               onCredentialsChanged(tenant);
               const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
-              const providers = await listProviders({ controller, tenantCredentials: records, deploymentProviders });
+              const providers = await listTenantProviders(records);
               return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
             }
             if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
             // Local mode is single-user: scope is meaningless and ignored.
             authStorage.setStoredApiKey(provider, key, envVar);
+            controller.invalidateAvailableModelsCache?.();
             const providers = await listProviders({ controller, authStorage });
             return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+          }
+        },
+      }),
+
+      registerApiRoute(`/web/config/providers/${MASTRA_GATEWAY_CATALOG_PROVIDER}/connect`, {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async c => {
+          const ctx = await resolveCredentialContext({ c: loose(c), auth, credentials: options.modelCredentials });
+          if ('response' in ctx) return ctx.response;
+          if (ctx.mode !== 'tenant') return c.json({ error: MASTRA_SIGN_IN_REQUIRED }, 400);
+          let body: { scope?: unknown };
+          try {
+            body = await c.req.json();
+          } catch {
+            return c.json({ error: 'Invalid JSON body' }, 400);
+          }
+          const scope = body.scope === 'org' ? 'org' : 'user';
+          if (scope === 'org' && !(await auth.isOrganizationAdmin(loose(c), ctx.orgId))) {
+            return c.json({ error: 'organization_admin_required' }, 403);
+          }
+          const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
+          try {
+            if (!(await ctx.storage.getCredential(tenant, MASTRA_GATEWAY_PROVIDER))) {
+              const apiKey = await createGatewayKey(auth, loose(c), ctx.orgId, scope);
+              await ctx.storage.setCredential(tenant, MASTRA_GATEWAY_PROVIDER, { type: 'api_key', key: apiKey });
+              onCredentialsChanged(tenant);
+            }
+            const providers = await listTenantProviders(await ctx.storage.listCredentials(ctx.orgId, ctx.userId));
+            return c.json({ ok: true, provider: providers.find(p => p.provider === MASTRA_GATEWAY_CATALOG_PROVIDER) });
+          } catch (error) {
+            return gatewayFailure(loose(c), error);
+          }
+        },
+      }),
+
+      registerApiRoute(`/web/config/providers/${MASTRA_GATEWAY_CATALOG_PROVIDER}/credits`, {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          const ctx = await resolveCredentialContext({ c: loose(c), auth, credentials: options.modelCredentials });
+          if ('response' in ctx) return ctx.response;
+          if (ctx.mode !== 'tenant') return c.json({ error: MASTRA_SIGN_IN_REQUIRED }, 400);
+          try {
+            return c.json(await getGatewayCredits(auth, loose(c), ctx.orgId));
+          } catch (error) {
+            return gatewayFailure(loose(c), error);
           }
         },
       }),
@@ -1049,12 +1162,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
               await ctx.storage.removeCredential(tenant, getAuthProviderId(provider));
               onCredentialsChanged(tenant);
-              const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
-              const providers = await listProviders({ controller, tenantCredentials: records, deploymentProviders });
+              const providers = await listTenantProviders(await ctx.storage.listCredentials(ctx.orgId, ctx.userId));
               return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
             }
             if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
-            authStorage.remove(`apikey:${provider}`);
+            authStorage.removeStoredApiKey(provider);
+            controller.invalidateAvailableModelsCache?.();
             const providers = await listProviders({ controller, authStorage });
             return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
           } catch (error) {

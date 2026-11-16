@@ -1,4 +1,5 @@
 import type { SerializedError } from '../../error/utils';
+import { getSpanErrorOrigin, setSpanErrorOrigin } from '../../observability/error-count';
 
 const MAX_CAUSE_DEPTH = 5;
 
@@ -25,9 +26,13 @@ export function serializeError(err: Error, depth = 0): SerializedError {
   // Copy enumerable own properties (custom error fields)
   for (const key in err) {
     if (!Object.prototype.hasOwnProperty.call(err, key)) continue;
-    if (key === 'message' || key === 'name' || key === 'stack' || key === 'cause') continue;
+    if (key === 'message' || key === 'name' || key === 'stack' || key === 'cause' || key === '__mastraSpanErrorOrigin')
+      continue;
     json[key] = (err as unknown as Record<string, unknown>)[key];
   }
+
+  const origin = getSpanErrorOrigin(err);
+  if (origin) json.__mastraSpanErrorOrigin = origin;
 
   return json;
 }
@@ -50,9 +55,13 @@ export function rehydrateError(s: SerializedError): Error {
 
   for (const key in s) {
     if (!Object.prototype.hasOwnProperty.call(s, key)) continue;
-    if (key === 'message' || key === 'name' || key === 'stack' || key === 'cause') continue;
+    if (key === 'message' || key === 'name' || key === 'stack' || key === 'cause' || key === '__mastraSpanErrorOrigin')
+      continue;
     (err as unknown as Record<string, unknown>)[key] = s[key];
   }
+
+  const origin = getSpanErrorOrigin(s);
+  if (origin) setSpanErrorOrigin(err, origin);
 
   return err;
 }

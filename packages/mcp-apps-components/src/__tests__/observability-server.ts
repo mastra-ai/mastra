@@ -13,9 +13,11 @@ import {
 
 export const OBSERVABILITY_WIDGET_URI = 'ui://mastra/observability-widget';
 
-export type ObservabilityCall = { action: string; args: Record<string, unknown> };
+export type ObservabilityCall = { action: string; args: Record<string, unknown>; projectId?: string };
 /** An action's data, or the error the tool fails with. */
-type Answer = { data: unknown } | { error: string };
+type Reply = { data: unknown } | { error: string };
+/** A fixed reply, or one picked from the call, e.g. to answer the previous window differently. */
+type Answer = Reply | ((call: ObservabilityCall) => Reply);
 
 const readKey = ({ source, request }: { source: DashboardQuery['source']; request?: string }) =>
   request === undefined
@@ -199,13 +201,18 @@ export function observabilityServer({
         id: QUERY_OBSERVABILITY_TOOL,
         description: 'Runs one observability read',
         // As the README's server: an action outside the list fails, so the app must ask only for these.
-        inputSchema: z.object({ action: z.enum(OBSERVABILITY_READ_ACTIONS), args: z.record(z.string(), z.unknown()) }),
+        inputSchema: z.object({
+          action: z.enum(OBSERVABILITY_READ_ACTIONS),
+          args: z.record(z.string(), z.unknown()),
+          projectId: z.string().optional(),
+        }),
         outputSchema: z.object({ data: z.unknown() }),
         mcp: { _meta: { ui: { resourceUri: OBSERVABILITY_WIDGET_URI, visibility: ['app'] } } },
         execute: async call => {
           calls.push(call);
-          const answer = answers[call.action];
-          if (!answer) throw new Error(`No answer for ${call.action}`);
+          const given = answers[call.action];
+          if (!given) throw new Error(`No answer for ${call.action}`);
+          const answer = typeof given === 'function' ? given(call) : given;
           if ('error' in answer) throw new Error(answer.error);
           return answer;
         },

@@ -65,15 +65,17 @@ export function deprecatedErrorAria(error: boolean | undefined): { 'aria-invalid
 }
 export const fieldTriggerErrorBorder =
   'aria-invalid:border-destructive-indicator aria-invalid:hover:border-destructive-indicator aria-invalid:focus-visible:border-destructive-indicator';
+// A field shows a value, so its text is the 400-weight `text-body-sm` (13px), like Input and Textarea;
+// the 500-weight `text-label` it would get from Button's size recipe is for labels and button text.
 export const fieldTriggerStyle =
-  'bg-field shadow-input ' +
+  'bg-field shadow-input text-body-sm ' +
   fieldRimFocus +
   ' disabled:bg-field-disabled aria-disabled:bg-field-disabled data-[disabled]:bg-field-disabled aria-invalid:[--field-rim:var(--destructive-indicator)] aria-invalid:[--field-rim-focus:var(--destructive-indicator)]';
 
-// Width of a select/combobox trigger: fills its field unless an ancestor that owns
-// control sizing (SettingsRow) sets `--field-width` / `--field-shrink`. A width class
-// passed by the caller still wins, since `cn` drops the conflicting default.
-export const fieldTriggerWidthStyle = 'w-(--field-width,100%) shrink-(--field-shrink,1)';
+// Width of a select/combobox trigger: fills its field by default. An ancestor that owns control sizing
+// (SettingsRow) can set `--field-width: auto` so the trigger hugs its value, and `--field-max-width` to cap it
+// (the value truncates past that). A width class passed by the caller still wins, since `cn` drops the default.
+export const fieldTriggerWidthStyle = 'w-(--field-width,100%) max-w-(--field-max-width,none) shrink-(--field-shrink,1)';
 
 export const inputSurfaceAndFocusStyle =
   'bg-field shadow-input text-foreground disabled:bg-field-disabled ' +

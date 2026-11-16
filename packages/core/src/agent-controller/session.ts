@@ -19,7 +19,7 @@ import type {
   SendAgentSignalAccepted,
   ToolsetsInput,
 } from '../agent/types';
-import { getErrorFromUnknown } from '../error';
+import { getErrorFromUnknown, MastraError } from '../error';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraModelConfig } from '../llm/model/shared.types';
@@ -158,7 +158,7 @@ export const ABORTED_BY_USER_REASON = 'Aborted by the user';
  * preferences that must survive a host restart (sessions themselves are
  * in-memory only).
  */
-const PERSISTED_STATE_KEYS = ['thinkingLevel', 'notifications'] as const;
+const PERSISTED_STATE_KEYS = ['thinkingLevel', 'notifications', 'permissionRules'] as const;
 const OM_STATE_KEYS = [
   'observerModelId',
   'reflectorModelId',
@@ -469,9 +469,10 @@ export interface SessionMachinery {
    * The `activeTools` allowlist of `modeId` (the session's current mode when
    * omitted or unknown), or `undefined` when the mode does not restrict tools.
    * Resumes pass the suspended run's mode so the continuation sees the same
-   * tools as the initial stream.
+   * tools as the initial stream, and the run's request context so tools denied
+   * on the run's own thread are filtered out.
    */
-  resolveModeActiveTools(modeId?: string): string[] | undefined;
+  resolveModeActiveTools(modeId?: string, requestContext?: RequestContext): string[] | undefined;
   onSessionDeleted?(listener: () => void): () => void;
   /** Resolve the toolset (built-in controller  tools + user/subagent tools) for a run. */
   buildToolsets(requestContext: RequestContext): Promise<ToolsetsInput>;
@@ -2119,6 +2120,16 @@ export class SessionApproval {
     return this.#matching(filter).length > 0;
   }
 
+  /** The parked gates' tool and owner, without their resolvers. */
+  list(): Array<{ toolCallId: string; toolName: string; threadId?: string; runId?: string }> {
+    return [...this.#gates].map(({ toolCallId, toolName, threadId, runId }) => ({
+      toolCallId,
+      toolName,
+      threadId,
+      runId,
+    }));
+  }
+
   /** Ids of the parked gates that match `filter` (or every gate when omitted). */
   getToolCallIds(filter?: ApprovalGateFilter): string[] {
     return (filter ? this.#matching(filter) : [...this.#gates.values()]).map(gate => gate.toolCallId);
@@ -2136,14 +2147,23 @@ export class SessionApproval {
   respond({
     decision,
     toolCallId,
+    threadId,
+    runId,
     requestContext,
     declineContext,
     onAlwaysAllow,
   }: ApprovalResponse & {
     toolCallId: string;
+    /** Narrow to one owner when the same call id is parked on several threads or runs. */
+    threadId?: string;
+    runId?: string;
     onAlwaysAllow?: (toolName: string, threadId?: string) => void;
   }): SessionCommandResult {
-    const matches = this.#matching({ toolCallId });
+    const matches = this.#matching({
+      toolCallId,
+      ...(threadId !== undefined && { threadId }),
+      ...(runId !== undefined && { runId }),
+    });
     if (matches.length !== 1) {
       return { accepted: false, reason: this.#gates.size > 0 ? 'stale_tool_call' : 'not_pending' };
     }
@@ -2904,6 +2924,12 @@ class SessionOM {
   }
 }
 
+/** The permission rules held in a session state snapshot, or empty rules when none are set. */
+export function readPermissionRules(state: Readonly<Record<string, unknown>> | undefined): PermissionRules {
+  const rules = state?.permissionRules as PermissionRules | undefined;
+  return rules ?? { categories: {}, tools: {} };
+}
+
 /**
  * Owns the session's tool-permission rules: the per-category and per-tool
  * approval policies persisted in session state under `permissionRules`. The
@@ -2916,34 +2942,46 @@ class SessionOM {
 class SessionPermissions {
   #getState: (() => Record<string, unknown>) | undefined;
   #setState: ((updates: Record<string, unknown>) => Promise<void>) | undefined;
+  #onChange: (() => Promise<void>) | undefined;
 
   /** Attach the session-state read/write. The AgentController injects these once. */
   setResolver(options: {
     getState: () => Record<string, unknown>;
     setState: (updates: Record<string, unknown>) => Promise<void>;
+    /** Runs after a rule change is persisted, so parked approvals follow the new policy. */
+    onChange?: () => Promise<void>;
   }): void {
     this.#getState = options.getState;
     this.#setState = options.setState;
+    this.#onChange = options.onChange;
   }
 
   /** The current permission rules, or empty rules when none are set. */
   getRules(): PermissionRules {
-    const rules = this.#getState?.().permissionRules as PermissionRules | undefined;
-    return rules ?? { categories: {}, tools: {} };
+    return readPermissionRules(this.#getState?.());
   }
 
   /** Set the approval policy for a tool category. Resolves once persisted. */
   setForCategory({ category, policy }: { category: ToolCategory; policy: PermissionPolicy }): Promise<void> {
-    const rules = this.getRules();
-    rules.categories[category] = policy;
-    return this.#setState?.({ permissionRules: rules }) ?? Promise.resolve();
+    return this.#write(rules => ({ ...rules, categories: { ...rules.categories, [category]: policy } }));
   }
 
   /** Set the approval policy for an individual tool. Resolves once persisted. */
   setForTool({ toolName, policy }: { toolName: string; policy: PermissionPolicy }): Promise<void> {
-    const rules = this.getRules();
-    rules.tools[toolName] = policy;
-    return this.#setState?.({ permissionRules: rules }) ?? Promise.resolve();
+    return this.#write(rules => ({ ...rules, tools: { ...rules.tools, [toolName]: policy } }));
+  }
+
+  #writes: Promise<void> = Promise.resolve();
+
+  // Writes are serialized and read the rules inside the queue, so two setters
+  // called back to back both land. `edit` returns a fresh object, so state
+  // persistence sees the change instead of the same reference.
+  #write(edit: (rules: PermissionRules) => PermissionRules): Promise<void> {
+    const write = this.#writes.then(async () => {
+      await this.#setState?.({ permissionRules: edit(this.getRules()) });
+    });
+    this.#writes = write.catch(() => {});
+    return write.then(() => this.#onChange?.());
   }
 }
 
@@ -4769,13 +4807,20 @@ export class Session<TState = unknown> {
    * grant, then the tool's category grant/policy, falling back to "ask". Pure
    * session state plus the injected category resolver.
    *
-   * Grants are checked against `threadId` (default: the current thread) plus the
-   * session-wide bucket, so a grant made from one thread's approval prompt is
-   * not inherited by every other thread in the session.
+   * `scope` names the thread whose rules and grants apply. Pass a thread id to
+   * read that thread's grants against the session's current rules, or a run's
+   * request context to use the rules of the thread that run belongs to, which
+   * may not be the thread the session currently holds. Grants are checked
+   * against that thread (default: the current thread) plus the session-wide
+   * bucket, so a grant made from one thread's approval prompt is not inherited
+   * by every other thread in the session.
    */
-  resolveToolApproval(toolName: string, threadId?: string): PermissionPolicy {
-    const state = this.state.get() as Record<string, unknown>;
-    const rules = this.permissions.getRules();
+  resolveToolApproval(toolName: string, scope?: string | RequestContext): PermissionPolicy {
+    const { threadId, state } =
+      typeof scope === 'string' || scope === undefined
+        ? { threadId: scope, state: this.state.get() as Record<string, unknown> }
+        : this.__getRunState(scope);
+    const rules = readPermissionRules(state);
 
     const toolPolicy = rules.tools[toolName];
     if (toolPolicy === 'deny') return 'deny';
@@ -4794,6 +4839,24 @@ export class Session<TState = unknown> {
     }
 
     return 'ask';
+  }
+
+  /**
+   * @internal The thread and session state a run sees. Rules are thread-scoped
+   * state, so a run on a thread the session no longer holds reads its own
+   * thread's view from its request context. A run on the current thread reads
+   * the live state, which also covers a view whose source was released while
+   * the run was parked.
+   */
+  __getRunState(requestContext: RequestContext | undefined): {
+    threadId: string | undefined;
+    state: Record<string, unknown>;
+  } {
+    const context = requestContext?.get('controller') as AgentControllerRequestContext<TState> | undefined;
+    const threadId = context?.threadId ?? this.thread.getId() ?? undefined;
+    const active = context?.isThreadActive ? context.isThreadActive() : threadId === (this.thread.getId() ?? undefined);
+    if (!context || active) return { threadId, state: this.state.get() as Record<string, unknown> };
+    return { threadId, state: (context.getState?.() ?? context.state ?? {}) as Record<string, unknown> };
   }
 
   /**
@@ -4906,6 +4969,99 @@ export class Session<TState = unknown> {
     }
     if (approved) await this.approveToolCall(identity);
     else await this.declineToolCall(identity);
+  }
+
+  /**
+   * Answer parked approvals whose tool the current rules now allow or deny.
+   * The policy is otherwise read once, when the approval chunk streams past, so
+   * a rule set afterwards (a later `setForTool`, or a session-created hook on a
+   * process reopening a run parked elsewhere) would leave the call waiting for
+   * a click. Covers gates parked on this session and approvals stored with the
+   * current thread's suspended runs. Calls still resolving to `ask` stay parked.
+   */
+  #parkedApprovalsCheck: Promise<void> = Promise.resolve();
+  // Persisted calls this session already answered, so a later re-check (another
+  // rule write, or the post-create pass) does not resume the same call again
+  // while storage still lists its run as suspended.
+  readonly #answeredParkedApprovals = new Set<string>();
+  // The host-built context of the request that opened this session. A stored
+  // run resumes from its snapshot, which carries no authenticated user, so
+  // releasing it with no context leaves host credential gates nothing to check.
+  #parkedApprovalsRequestContext: RequestContext | undefined;
+
+  /** Resume calls released by a policy re-check under the context of the request that opened this session. */
+  setParkedApprovalsRequestContext(requestContext: RequestContext | undefined): void {
+    this.#parkedApprovalsRequestContext = requestContext;
+  }
+
+  applyToolPolicyToParkedApprovals(): Promise<void> {
+    const check = this.#parkedApprovalsCheck.then(() => this.#applyToolPolicyToParkedApprovalsSafely());
+    this.#parkedApprovalsCheck = check;
+    return check;
+  }
+
+  async #applyToolPolicyToParkedApprovalsSafely(): Promise<void> {
+    try {
+      await this.#applyToolPolicyToParkedApprovals();
+    } catch (error) {
+      // Best-effort: a parked call left waiting is no worse than before, and
+      // must not fail session creation or a rule write that already landed.
+      console.error('Re-checking parked tool approvals against the current policy failed:', error);
+    }
+  }
+
+  async #applyToolPolicyToParkedApprovals(): Promise<void> {
+    // Rules live on the active thread's state, so only that thread's calls
+    // can be judged against them.
+    const threadId = this.thread.getId();
+    if (!threadId) return;
+    const address = (runId: string | undefined, toolCallId: string) => `${runId ?? ''}:${toolCallId}`;
+    const handled = new Set<string>();
+    for (const gate of this.approval.list()) {
+      if (gate.threadId !== undefined && gate.threadId !== threadId) continue;
+      handled.add(address(gate.runId, gate.toolCallId));
+      const policy = this.resolveToolApproval(gate.toolName, threadId);
+      if (policy === 'ask') continue;
+      if (this.run.isAbortRequested()) continue;
+      this.approval.respond({
+        decision: policy === 'allow' ? 'approve' : 'decline',
+        toolCallId: gate.toolCallId,
+        threadId: gate.threadId,
+        runId: gate.runId,
+      });
+      this.displayState.clearPendingApprovals([gate.toolCallId]);
+    }
+
+    const agent = this.machinery.getAgent();
+    if (typeof agent.listSuspendedRuns !== 'function') return;
+    let runs: Awaited<ReturnType<typeof agent.listSuspendedRuns>>['runs'];
+    try {
+      ({ runs } = await agent.listSuspendedRuns({ threadId, resourceId: this.identity.getResourceId() }));
+    } catch (error) {
+      if (error instanceof MastraError && error.id === 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') return;
+      throw error;
+    }
+    for (const run of runs) {
+      for (const call of run.toolCalls) {
+        const { toolCallId, toolName } = call;
+        if (!call.requiresApproval || !toolCallId || !toolName) continue;
+        const key = address(run.runId, toolCallId);
+        if (handled.has(key) || this.#answeredParkedApprovals.has(key)) continue;
+        const policy = this.resolveToolApproval(toolName, threadId);
+        if (policy === 'ask') continue;
+        handled.add(key);
+        this.#answeredParkedApprovals.add(key);
+        const identity = {
+          toolCallId,
+          runId: run.runId,
+          threadId,
+          resourceId: this.identity.getResourceId(),
+          requestContext: this.#parkedApprovalsRequestContext,
+        };
+        if (policy === 'allow') await this.approveToolCall(identity);
+        else await this.declineToolCall(identity);
+      }
+    }
   }
 
   // ===========================================================================
@@ -5990,6 +6146,52 @@ export class Session<TState = unknown> {
   }
 
   /**
+   * Register a suspension that lives only in storage, so {@link claimToolSuspension}
+   * can find it. A run parked by a process that has since gone away stays
+   * suspended in storage, but this session never saw it park. Only an exact
+   * `toolCallId` on the active thread is looked up, and only when exactly one
+   * stored, non-approval suspension matches. The scan is bounded so an unknown
+   * id can't make a reply read every stored run on the thread.
+   */
+  async restoreStoredToolSuspension(toolCallId?: string, runId?: string): Promise<void> {
+    if (!toolCallId || this.suspensions.resolveAddress({ toolCallId, runId })) return;
+    const threadId = this.thread.getId();
+    if (!threadId) return;
+    const resourceId = this.identity.getResourceId();
+    const matches: Array<{ agent: Agent; runId: string; toolName: string }> = [];
+    const perPage = 100;
+    const maxPages = 10;
+    scan: for (const agent of this.machinery.getAgents?.() ?? [this.machinery.getAgent()]) {
+      if (typeof agent.listSuspendedRuns !== 'function') continue;
+      for (let page = 0; page < maxPages; page++) {
+        let result: Awaited<ReturnType<typeof agent.listSuspendedRuns>>;
+        try {
+          result = await agent.listSuspendedRuns({ threadId, resourceId, page, perPage });
+        } catch (error) {
+          if (error instanceof MastraError && error.id === 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') break;
+          throw error;
+        }
+        for (const run of result.runs) {
+          if (runId !== undefined && run.runId !== runId) continue;
+          for (const call of run.toolCalls) {
+            if (call.toolCallId !== toolCallId || !call.toolName || call.requiresApproval) continue;
+            matches.push({ agent, runId: run.runId, toolName: call.toolName });
+            if (matches.length > 1) break scan;
+          }
+        }
+        if ((page + 1) * perPage >= result.total) break;
+      }
+    }
+    if (matches.length !== 1) return;
+    // Another request may have restored it while this one was reading storage.
+    if (this.suspensions.resolveAddress({ toolCallId, runId })) return;
+    const match = matches[0]!;
+    const address = { threadId, resourceId, runId: match.runId, toolCallId };
+    this.suspensions.register({ ...address, toolName: match.toolName });
+    this.#suspensionAgents.set(this.suspensions.get(address)!, match.agent);
+  }
+
+  /**
    * Claim the parked suspension a {@link respondToToolSuspension} call would
    * resume. Returns the resolved tool call id, or a rejection when nothing is
    * pending or another response already claimed it.
@@ -6259,18 +6461,18 @@ export class Session<TState = unknown> {
       abortSignal,
       execution: true,
     });
-    const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
     const runModeId = await this.resolveSuspendedRunModeId(agent, runId, requestContext);
     const toolsets = await this.machinery.buildToolsets(requestContext);
-    const activeTools = this.machinery.resolveModeActiveTools(runModeId);
+    const activeTools = this.machinery.resolveModeActiveTools(runModeId, requestContext);
     onDispatch?.();
+    // The approval policy rides in the shared stream options; a top-level value
+    // would override it for the rest of the run.
     await agent.sendToolApproval({
       threadId,
       resourceId,
       runId,
       toolCallId,
       approved: true,
-      requireToolApproval: !isYolo,
       memory: { thread: threadId, resource: resourceId },
       abortSignal,
       requestContext,
@@ -6350,11 +6552,12 @@ export class Session<TState = unknown> {
       abortSignal,
       execution: true,
     });
-    const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
     const runModeId = await this.resolveSuspendedRunModeId(agent, runId, requestContext);
     const toolsets = await this.machinery.buildToolsets(requestContext);
-    const activeTools = this.machinery.resolveModeActiveTools(runModeId);
+    const activeTools = this.machinery.resolveModeActiveTools(runModeId, requestContext);
     onDispatch?.();
+    // The approval policy rides in the shared stream options; a top-level value
+    // would override it for the rest of the run.
     await agent.sendToolApproval({
       threadId,
       resourceId,
@@ -6362,7 +6565,6 @@ export class Session<TState = unknown> {
       toolCallId,
       approved: false,
       declineContext,
-      requireToolApproval: !isYolo,
       memory: { thread: threadId, resource: resourceId },
       abortSignal,
       requestContext,
@@ -6451,7 +6653,11 @@ export class Session<TState = unknown> {
     const promise = (async () => {
       try {
         for await (const chunk of subscription.stream) {
-          if (subscription.__getCurrentRunRequestContext?.()?.get(markerKey) !== attempt) continue;
+          const marker = subscription.__getCurrentRunRequestContext?.()?.get(markerKey);
+          // Durable runs deliver their last chunks after the run's request context is released.
+          // Once this attempt's run has streamed, its remaining chunks still belong to it.
+          const releasedRunChunk = dispatched && marker === undefined && chunk.runId === address.runId;
+          if (marker !== attempt && !releasedRunChunk) continue;
           if (chunk.runId && chunk.runId !== address.runId) continue;
           dispatched = true;
           if (chunk.type === 'tool-call-approval') {
@@ -6464,7 +6670,7 @@ export class Session<TState = unknown> {
             const ownedCalls = runScope?.get(SOURCE_APPROVAL_CALLS_KEY) ?? new Set<string>();
             ownedCalls.add(next.toolCallId);
             runScope?.set(SOURCE_APPROVAL_CALLS_KEY, ownedCalls);
-            const policy = this.resolveToolApproval(chunk.payload.toolName, address.threadId);
+            const policy = this.resolveToolApproval(chunk.payload.toolName, requestContext);
             const decision: Promise<ApprovalGateResolution> =
               policy === 'ask'
                 ? this.approval.arm({ ...next, toolName: chunk.payload.toolName })
@@ -6612,12 +6818,10 @@ export class Session<TState = unknown> {
    * Re-supplies the shared run budget so the resumed run doesn't stop mid-task
    * on the agent's small default maxSteps.
    *
-   * Interactive builtins (`ask_user`, `request_access`) are exempted from the
-   * approval re-check on resume: their resume schema is `z.string()` /
-   * `z.array(z.string())` which cannot carry the `{ approved }` field the
-   * approval gate demands, so re-entering the approval branch would always
-   * reject the answer. The caller already handled approval (setForTool policy,
-   * yolo mode, or a prior explicit approval gate).
+   * The continuation keeps the run's approval policy. The resumed call itself
+   * is not gated again: the loop only gates calls that have not run yet or that
+   * were parked for approval, so an `ask_user` answer reaches the model as-is
+   * while later calls in the run still go through approval.
    */
   async resumeToolCall(input: {
     resumeData: any;
@@ -6684,16 +6888,8 @@ export class Session<TState = unknown> {
       this.suspensions.delete(address);
       this.displayState.deletePendingSuspension(address);
       const sharedOptions = this.machinery.buildSharedRunOptions(requestContext);
-      // Interactive builtins suspend to collect user input, not for approval.
-      // The resume data is the user's answer (a bare string), which the approval
-      // re-check would reject because it cannot carry an `{ approved }` field.
-      // Exempt these tools so the answer reaches the model as-is.
-      const isInteractive = suspension.toolName === 'ask_user' || suspension.toolName === 'request_access';
-      if (isInteractive) {
-        sharedOptions.requireToolApproval = false;
-      }
       sharedOptions.onStepFinish = this.#resumeUsageRecorder(agent, suspension.runId, requestContext);
-      const activeTools = this.machinery.resolveModeActiveTools(modeId);
+      const activeTools = this.machinery.resolveModeActiveTools(modeId, requestContext);
       await agent.sendStreamResume({
         threadId,
         resourceId,

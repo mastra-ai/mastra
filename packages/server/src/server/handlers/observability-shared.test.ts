@@ -1,8 +1,14 @@
 import type { Mastra } from '@mastra/core/mastra';
+import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import { describe, it, expect, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
-import { getObservabilityStore, getScoresStore } from './observability-shared';
+import {
+  assertObservabilityTextSearchSupported,
+  getObservabilityStorageCapabilities,
+  getObservabilityStore,
+  getScoresStore,
+} from './observability-shared';
 
 const createMockMastra = (storage?: Partial<MastraCompositeStore>): Mastra =>
   ({
@@ -67,4 +73,23 @@ describe('getScoresStore', () => {
     expect(error).toBeInstanceOf(HTTPException);
     expect(error.status).toBe(500);
   });
+});
+
+describe('text search capabilities', () => {
+  it.each(['span', 'trace'] as const)(
+    'rejects %s search on a real store without indexed search support',
+    async kind => {
+      const store = await new InMemoryStore().getStore('observability');
+      if (!store) throw new Error('Missing observability store');
+      const capabilities = getObservabilityStorageCapabilities(store);
+      expect(capabilities.spanQueryTextSearch).toBe(false);
+      expect(capabilities.traceQueryTextSearch).toBe(false);
+      expect(() => assertObservabilityTextSearchSupported(store, 'error', kind)).toThrow(
+        expect.objectContaining({ status: 501 }),
+      );
+      // The same store remains usable for requests that don't ask for text search.
+      assertObservabilityTextSearchSupported(store, undefined, kind);
+      expect(await store.getEntityTypes({})).toEqual({ entityTypes: [] });
+    },
+  );
 });

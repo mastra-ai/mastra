@@ -7,20 +7,15 @@ import {
   deleteIntakeBinding,
   fetchIntakeBindings,
   fetchIntakeConfig,
-  fetchIntakeLabelRoutes,
   saveIntakeBinding,
-  saveIntakeLabelRoute,
   saveIntakeSelection,
   withIntakeBinding,
-  withIntakeLabelRoute,
   withoutIntakeBinding,
 } from '../ui/domains/factory/services/intake';
 import type {
   IntakeBindingTarget,
   IntakeBindingWrite,
   IntakeConfig,
-  IntakeLabelRoute,
-  IntakeLabelRouteWrite,
   IntakeSelection,
   IntakeSourceBinding,
 } from '../ui/domains/factory/services/intake';
@@ -45,20 +40,9 @@ export function useIntakeBindingsQuery(enabled: boolean = true) {
   return useQuery({ ...intakeBindingsQueryOptions(baseUrl), enabled });
 }
 
-/** GitHub label → board routes of one Factory project. */
-export function useIntakeLabelRoutesQuery(factoryProjectId: string | undefined) {
-  const { baseUrl } = useApiConfig();
-  return useQuery({
-    queryKey: queryKeys.intakeLabelRoutes(factoryProjectId),
-    queryFn: () => fetchIntakeLabelRoutes(baseUrl, factoryProjectId!),
-    enabled: Boolean(factoryProjectId),
-  });
-}
-
 const configWrites = () => ['intake-write', 'config'] as const;
 const selectionWrite = (integrationId: string) => [...configWrites(), integrationId] as const;
 const bindingWrites = () => ['intake-write', 'bindings'] as const;
-const labelRouteWrites = (factoryProjectId: string) => ['intake-write', 'label-routes', factoryProjectId] as const;
 
 export interface IntakeWriteCallbacks<TVariables> {
   onSaved?: (variables: TVariables) => void;
@@ -98,18 +82,6 @@ function serialWrite<TCache, TVariables>(
   };
 }
 
-// The GitHub feed never reads intake config or bindings, so it has nothing to refresh.
-function invalidateIssueFeed(queryClient: QueryClient, baseUrl: string, integrationId: string) {
-  const feeds: Record<string, QueryKey> = {
-    linear: queryKeys.linearIssuesAll(),
-    jira: queryKeys.jiraIssuesAll(),
-    gitlab: queryKeys.gitlabIssuesAll(baseUrl),
-    incidentio: queryKeys.incidentioIssuesAll(),
-  };
-  const queryKey = feeds[integrationId];
-  if (queryKey) void queryClient.invalidateQueries({ queryKey });
-}
-
 export function useSaveIntakeSelectionMutation(
   integrationId: string,
   callbacks?: IntakeWriteCallbacks<IntakeSelection>,
@@ -129,7 +101,6 @@ export function useSaveIntakeSelectionMutation(
     onMutate: write.optimistic,
     onSuccess: (saved, selection) => {
       write.settle(saved);
-      invalidateIssueFeed(queryClient, baseUrl, integrationId);
       callbacks?.onSaved?.(selection);
     },
     onError: (error, selection, context) => {
@@ -159,7 +130,6 @@ export function useSaveIntakeBindingMutation(callbacks?: IntakeWriteCallbacks<In
     onMutate: write.optimistic,
     onSuccess: (saved, binding) => {
       write.settle(saved);
-      invalidateIssueFeed(queryClient, baseUrl, binding.integrationId);
       callbacks?.onSaved?.(binding);
     },
     onError: (error, binding, context) => {
@@ -185,7 +155,6 @@ export function useDeleteIntakeBindingMutation(callbacks?: IntakeWriteCallbacks<
     onMutate: write.optimistic,
     onSuccess: (saved, binding) => {
       write.settle(saved);
-      invalidateIssueFeed(queryClient, baseUrl, binding.integrationId);
       callbacks?.onSaved?.(binding);
     },
     onError: (error, binding, context) => {
@@ -211,70 +180,11 @@ export function useAddIntakeBindingMutation(callbacks?: IntakeWriteCallbacks<Int
     mutationFn: (binding: IntakeBindingWrite) => saveIntakeBinding(baseUrl, binding),
     onSuccess: (saved, binding) => {
       write.confirm(saved, binding);
-      invalidateIssueFeed(queryClient, baseUrl, binding.integrationId);
       callbacks?.onSaved?.(binding);
     },
     onError: (error, binding) => {
       write.rollback();
       callbacks?.onFailed?.(error, binding);
-    },
-  });
-}
-
-export function useSaveIntakeLabelRouteMutation(
-  factoryProjectId: string,
-  callbacks?: IntakeWriteCallbacks<IntakeLabelRouteWrite>,
-) {
-  const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
-  const write = serialWrite<IntakeLabelRoute[], IntakeLabelRouteWrite>(
-    queryClient,
-    queryKeys.intakeLabelRoutes(factoryProjectId),
-    labelRouteWrites(factoryProjectId),
-    (routes, route) => withIntakeLabelRoute(routes, { factoryProjectId, ...route }),
-  );
-  return useMutation({
-    mutationKey: [...labelRouteWrites(factoryProjectId), 'save'],
-    scope: write.scope,
-    mutationFn: (route: IntakeLabelRouteWrite) => saveIntakeLabelRoute(baseUrl, { factoryProjectId, ...route }),
-    onMutate: write.optimistic,
-    onSuccess: (saved, route) => {
-      write.settle(saved);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
-      callbacks?.onSaved?.(route);
-    },
-    onError: (error, route, context) => {
-      write.rollback(context?.previous);
-      callbacks?.onFailed?.(error, route);
-    },
-  });
-}
-
-// Waits for the server: the form keeps what was typed when the server refuses it.
-export function useAddIntakeLabelRouteMutation(
-  factoryProjectId: string,
-  callbacks?: IntakeWriteCallbacks<IntakeLabelRouteWrite>,
-) {
-  const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
-  const write = serialWrite<IntakeLabelRoute[], IntakeLabelRouteWrite>(
-    queryClient,
-    queryKeys.intakeLabelRoutes(factoryProjectId),
-    labelRouteWrites(factoryProjectId),
-    (routes, route) => withIntakeLabelRoute(routes, { factoryProjectId, ...route }),
-  );
-  return useMutation({
-    mutationKey: [...labelRouteWrites(factoryProjectId), 'add'],
-    scope: write.scope,
-    mutationFn: (route: IntakeLabelRouteWrite) => saveIntakeLabelRoute(baseUrl, { factoryProjectId, ...route }),
-    onSuccess: (saved, route) => {
-      write.confirm(saved, route);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
-      callbacks?.onSaved?.(route);
-    },
-    onError: (error, route) => {
-      write.rollback();
-      callbacks?.onFailed?.(error, route);
     },
   });
 }

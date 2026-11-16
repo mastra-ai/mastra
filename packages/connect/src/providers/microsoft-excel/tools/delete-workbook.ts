@@ -28,6 +28,7 @@ export function deleteWorkbookTool(proxy: PlatformProxy) {
       // https://learn.microsoft.com/en-us/graph/api/driveitem-delete
       await platformProxy.delete({
         endpoint: `/v1.0/drives/${encodeURIComponent(input.driveId)}/items/${encodeURIComponent(input.itemId)}`,
+        headers: { Prefer: 'bypass-shared-lock' },
         retries: 3,
       });
 

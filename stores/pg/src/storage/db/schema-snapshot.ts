@@ -55,6 +55,14 @@ export interface SchemaSnapshot {
    * Lowercased because the live query compares `conname = lower($1)`.
    */
   primaryKeyIndexes: Map<string, string>;
+  /**
+   * Tables this init created because they were absent when the snapshot was
+   * read. They are empty, so their indexes are built without CONCURRENTLY:
+   * concurrent builds from processes cold-booting together wait on each other
+   * until the deadlock detector runs (`deadlock_timeout`, 1s by default), once
+   * per index.
+   */
+  createdTables: Set<string>;
 }
 
 /**
@@ -172,5 +180,6 @@ export async function loadSchemaSnapshot(client: DbClient, schemaName: string | 
     indexes,
     replicaIdentityIndexes,
     primaryKeyIndexes,
+    createdTables: new Set(),
   };
 }

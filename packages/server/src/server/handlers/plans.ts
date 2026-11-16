@@ -34,7 +34,7 @@ export const READ_AGENT_PLAN_ROUTE = createRoute({
   handler: async ({ agentId, mastra, path, requestContext, status, versionId }) => {
     try {
       const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
-      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext });
+      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext, access: 'read' });
       const tools = await agent.listTools({ requestContext });
       const hasSubmitPlan = Object.values(tools).some(
         tool => typeof tool === 'object' && tool !== null && 'id' in tool && tool.id === submitPlanTool.id,

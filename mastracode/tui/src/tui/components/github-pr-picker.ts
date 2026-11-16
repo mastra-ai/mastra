@@ -164,6 +164,10 @@ export class GithubPRPickerDialog extends Box implements Focusable {
     this.list = new PickerList({
       maxVisible: 12,
       renderItem: (item, highlighted) => [this.renderPullRequest(item, highlighted)],
+      onActivate: index => {
+        this.highlightedIndex = index;
+        this.handleInput('\r');
+      },
       emptyText: () =>
         this.errorMessage ? 'No PRs loaded. You can still use /github owner/repo#123.' : 'No matching PRs',
     });

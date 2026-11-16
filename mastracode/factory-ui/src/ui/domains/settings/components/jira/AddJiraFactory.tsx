@@ -1,13 +1,13 @@
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Plus } from 'lucide-react';
 import { useState } from 'react';
 
 import { NewJiraFactoryFields } from './NewJiraFactoryFields';
 import type { NewJiraRoute } from './NewJiraFactoryFields';
 import type { Factory } from './routing';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
-/** Routes a Jira project to one more factory, with the board and labels it starts with. */
+/** Routes a Jira project to one more factory, with the labels it starts with. */
 export function AddJiraFactory({
   project,
   unbound,
@@ -35,7 +35,7 @@ export function AddJiraFactory({
               factory.name
             ) : (
               <>
-                <Plus className="size-3.5" aria-hidden />
+                <IconPlusMedium className="size-3.5" aria-hidden />
                 Add factory
               </>
             )}
@@ -52,7 +52,6 @@ export function AddJiraFactory({
       {factory && (
         <NewJiraFactoryFields
           key={factory.id}
-          project={project}
           factory={factory}
           anotherTakesAll={anotherTakesAll}
           error={errors[factory.id]}

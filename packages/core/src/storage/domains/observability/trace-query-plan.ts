@@ -25,6 +25,7 @@ import type {
   TrustedTraceQueryDeltaTracesPlan,
   TrustedTraceQueryPaginatedTracesPlan,
   TrustedTraceQueryPlan,
+  TrustedTraceQueryPredicate,
 } from './trace-query';
 
 /**
@@ -38,6 +39,14 @@ export function planTraceQuery(
   options: TraceQueryPlanOptions = {},
 ): TrustedTraceQueryPlan {
   const issues: TraceQueryIssue[] = [];
+  const rootSource = request.rootSource === 'aggregated' ? 'aggregated' : undefined;
+  if (rootSource && !options.allowAggregatedRoots) {
+    issues.push({
+      code: 'field_not_allowed',
+      path: ['rootSource'],
+      message: 'Aggregated roots are not supported by this reader',
+    });
+  }
   const from = new Date(request.timeRange.from);
   const to = new Date(request.timeRange.to);
   if (from >= to) {
@@ -53,6 +62,13 @@ export function planTraceQuery(
   }
   const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
   const where = request.where ? planPredicate(request.where, 'trace', ['where'], 1, state) : undefined;
+  if (rootSource && where && hasMetadataPredicate(where)) {
+    issues.push({
+      code: 'field_not_allowed',
+      path: ['where'],
+      message: 'Aggregated roots do not support metadata predicates',
+    });
+  }
   if (issues.length > 0) throw new TraceQueryValidationError(issues);
 
   const timeRange = { from: from.toISOString(), to: to.toISOString() };
@@ -62,6 +78,8 @@ export function planTraceQuery(
     const result = 'groups' as const;
     const orderBy = { field: 'threadId', direction: 'asc' } as const;
     const binding = digestBinding({
+      rootSource,
+      textSearch: request.textSearch,
       timeRange,
       where,
       result,
@@ -73,6 +91,8 @@ export function planTraceQuery(
     const cursor = page.after ? decodeTraceQueryCursor(page.after, result, binding) : undefined;
     return {
       result,
+      rootSource,
+      textSearch: request.textSearch,
       timeRange,
       where,
       scope,
@@ -87,6 +107,8 @@ export function planTraceQuery(
   const result = 'traces' as const;
   const orderBy = request.orderBy?.[0] ?? ({ field: 'startedAt', direction: 'desc' } as const);
   const deltaBinding = digestBinding({
+    rootSource,
+    textSearch: request.textSearch,
     timeRange,
     where,
     result: 'trace-delta',
@@ -96,6 +118,8 @@ export function planTraceQuery(
   if (request.mode === 'delta') {
     return {
       result,
+      rootSource,
+      textSearch: request.textSearch,
       timeRange,
       where,
       scope,
@@ -109,6 +133,8 @@ export function planTraceQuery(
   if (request.pagination) {
     return {
       result,
+      rootSource,
+      textSearch: request.textSearch,
       timeRange,
       where,
       scope,
@@ -122,6 +148,8 @@ export function planTraceQuery(
 
   const page = request.page ?? { limit: 100 };
   const binding = digestBinding({
+    rootSource,
+    textSearch: request.textSearch,
     timeRange,
     where,
     result,
@@ -135,6 +163,8 @@ export function planTraceQuery(
   }
   return {
     result,
+    rootSource,
+    textSearch: request.textSearch,
     timeRange,
     where,
     scope,
@@ -304,4 +334,11 @@ function stableStringify(value: unknown): string {
       .join(',')}}`;
   }
   return JSON.stringify(value);
+}
+
+function hasMetadataPredicate(predicate: TrustedTraceQueryPredicate): boolean {
+  if (predicate.type === 'boolean') return predicate.args.some(hasMetadataPredicate);
+  if (predicate.type === 'not') return hasMetadataPredicate(predicate.arg);
+  if (predicate.type === 'relation') return hasMetadataPredicate(predicate.predicate);
+  return predicate.field.startsWith('metadata.');
 }

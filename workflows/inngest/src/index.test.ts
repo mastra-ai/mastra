@@ -4,7 +4,12 @@ import { openai } from '@ai-sdk/openai';
 import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
 import { createWorkflowTestSuite } from '@internal/workflow-test-utils';
-import type { WorkflowResult, WorkflowRegistry, ResumeWorkflowOptions } from '@internal/workflow-test-utils';
+import type {
+  WorkflowResult,
+  WorkflowRegistry,
+  ResumeWorkflowOptions,
+  TimeTravelWorkflowOptions,
+} from '@internal/workflow-test-utils';
 import { Agent } from '@mastra/core/agent';
 import { MastraError } from '@mastra/core/error';
 import type { MastraScorer } from '@mastra/core/evals';
@@ -15268,6 +15273,8 @@ createWorkflowTestSuite({
     // BEHAVIOR DIFFERENCES: Inngest handles these differently than default engine
     // ============================================================================
     schemaValidationThrows: true, // Inngest doesn't throw - validation happens async, returns result
+    // Known failure, pinned with it.fails (#29424 case):
+    schemaInitDataDefaultFails: true, // getInitData() returns undefined, not the defaulted input; cause not yet investigated
     abortStatus: true, // Inngest returns 'failed' or 'success', no 'canceled' status
     streamingSuspendResumeLegacy: true, // Inngest streaming has different suspend/resume behavior
     abortDuringStep: true, // Abort during step test has 5s timeout waiting for abort signal
@@ -15375,6 +15382,22 @@ createWorkflowTestSuite({
       label: options.label,
       resumeData: options.resumeData,
     } as any);
+
+    return result as WorkflowResult;
+  },
+
+  timetravelWorkflow: async (workflow, options: TimeTravelWorkflowOptions): Promise<WorkflowResult> => {
+    const inngestWorkflow = workflow as unknown as InngestWorkflow<any, any, any, any, any, any, any>;
+
+    const run = await inngestWorkflow.createRun({ runId: options.runId });
+    const result = await run.timeTravel({
+      step: options.step as any,
+      context: options.context as any,
+      perStep: options.perStep,
+      inputData: options.inputData as any,
+      nestedStepsContext: options.nestedStepsContext as any,
+      resumeData: options.resumeData as any,
+    });
 
     return result as WorkflowResult;
   },

@@ -138,6 +138,19 @@ export function getBuiltInRouteFGAConfig(route: ServerRoute): FGARouteConfig | n
     };
   }
 
+  // Same identity the handler checks: the caller's context resource wins over a requested resourceId.
+  if (path === '/memory/working-memory') {
+    return {
+      resourceType: 'resource',
+      resourceId: ({ resourceId }, { requestContext }) => {
+        const contextResourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY);
+        if (typeof contextResourceId === 'string' && contextResourceId) return contextResourceId;
+        return typeof resourceId === 'string' ? resourceId : undefined;
+      },
+      permission,
+    };
+  }
+
   if (path === '/v1/responses') {
     return { resourceType: 'agent', resourceIdParam: 'agent_id', permission };
   }

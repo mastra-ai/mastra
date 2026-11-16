@@ -174,6 +174,7 @@ export class ModelSelectorComponent extends Box implements Focusable {
     this.list = new PickerList<ModelItem | null>({
       maxVisible: 12,
       renderItem: (item, selected) => [this.renderRow(item, selected)],
+      onActivate: index => this.confirmIndex(index),
       emptyText: () => 'No matching models',
     });
     this.addChild(this.list);
@@ -264,6 +265,12 @@ export class ModelSelectorComponent extends Box implements Focusable {
     if (isSelected) return theme.fg('accent', '→ ' + label) + checkmark + noKeyIndicator;
     const modelText = item.hasApiKey ? label : theme.fg('muted', label);
     return '  ' + modelText + checkmark + noKeyIndicator;
+  }
+
+  private confirmIndex(index: number): void {
+    this.selectedIndex = index;
+    this.updateList();
+    this.handleInput('\r');
   }
 
   handleInput(keyData: string): void {

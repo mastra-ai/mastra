@@ -30,6 +30,9 @@ export class MastraTimeoutError extends Error {
  */
 export const DEADLINE_SAVE_WAIT_MS = 1_000;
 
+/** How long a durable run keeps its claim waiting for that save, so a hung store cannot block a later run with the same ID. */
+export const DEADLINE_SAVE_CLAIM_HOLD_MS = 30_000;
+
 /** Resolves when `promise` settles or `ms` passes, whichever is first. Never rejects. */
 export function settledOrElapsed(promise: Promise<unknown>, ms: number): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;

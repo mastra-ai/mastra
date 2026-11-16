@@ -11,16 +11,19 @@ import {
   planWidget,
   prepareWidget,
 } from '@mastra/playground-ui/domains/dashboards';
-import type { ReadyPreparedWidget, WidgetState } from '@mastra/playground-ui/domains/dashboards';
+import type { DashboardScope, ReadyPreparedWidget, WidgetState } from '@mastra/playground-ui/domains/dashboards';
+import { IconCircleInfo } from '@mastra/playground-ui/icons/central/IconCircleInfo';
+import { IconExclamationCircle } from '@mastra/playground-ui/icons/central/IconExclamationCircle';
 import { applyDocumentTheme } from '@modelcontextprotocol/ext-apps';
 import type { App, McpUiTheme } from '@modelcontextprotocol/ext-apps';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { InfoIcon, OctagonAlertIcon } from 'lucide-react';
-import { Component, useEffect, useState } from 'react';
+import { Component, useLayoutEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { readOpened } from './opened';
-import type { Opened } from './opened';
+import { readOpened, readView } from './opened';
+import type { HostView, Opened } from './opened';
+import { OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY } from './tool';
+import { useConfigure } from './use-configure';
 import { usePin } from './use-pin';
 import { useToolResults } from './use-tool-results';
 
@@ -48,7 +51,7 @@ function AppState({ children, ...props }: { children: ReactNode; role?: 'alert' 
 }
 
 function AppMessage({ tone, title, children }: { tone: 'error' | 'info'; title: string; children: ReactNode }) {
-  const Icon = tone === 'error' ? OctagonAlertIcon : InfoIcon;
+  const Icon = tone === 'error' ? IconExclamationCircle : IconCircleInfo;
   return (
     <AppState role="alert">
       <div className="flex min-w-0 items-start gap-3">
@@ -85,20 +88,23 @@ function Widget({
   opened,
   widget,
   prepared,
+  scope,
 }: {
   app: App;
   opened: ReadyOpened;
   widget: DashboardWidget;
   prepared: ReadyPreparedWidget;
+  scope: DashboardScope;
 }) {
   const { env } = opened;
   const [state, setState] = useState<WidgetState>({});
-  const pin = usePin(app, widget, opened.datePreset, opened.dashboard.defaults?.filters);
+  const configureButton = useConfigure(app, widget, opened.datePreset, opened.customRange, opened.filters);
+  const pinButton = usePin(app, widget, opened.datePreset, opened.customRange, opened.filters);
   const first = planWidget(prepared, env, state);
-  const discovered = useToolResults(app, first.status === 'ready' ? first.discover : []);
+  const discovered = useToolResults(app, first.status === 'ready' ? first.discover : [], opened.projectId);
   // Planned again with the discover answers so far; both lists go out in the same render.
   const plan = planWidget(prepared, env, state, discovered.results);
-  const sent = useToolResults(app, plan.status === 'ready' ? plan.requests : []);
+  const sent = useToolResults(app, plan.status === 'ready' ? plan.requests : [], opened.projectId);
   return (
     <StatelessWidget
       prepared={prepared}
@@ -111,8 +117,15 @@ function Widget({
         discovered.retry();
         sent.retry();
       }}
-      scope="project"
-      pin={pin}
+      scope={scope}
+      actions={
+        configureButton || pinButton ? (
+          <>
+            {configureButton}
+            {pinButton}
+          </>
+        ) : undefined
+      }
     />
   );
 }
@@ -120,17 +133,19 @@ function Widget({
 /**
  * Lays the dashboard's rows out on Studio's 12-column grid. Each widget is checked and drawn on its
  * own: one that fails to parse, query or render shows its own error and the rest still draw. Rows
- * whose widgets are all hidden for a project leave no gap.
+ * whose widgets are all hidden at the scope leave no gap.
  */
 function OpenedDashboard({ app, opened }: { app: App; opened: ReadyOpened }) {
+  // A host that passes a project draws the project's widgets; without one, the org's.
+  const scope: DashboardScope = opened.projectId ? 'project' : 'org';
   const rows = opened.dashboard.rows
-    .map(row => row.widgets.map(widget => ({ widget, prepared: prepareWidget(widget, REGISTRY, 'project') })))
+    .map(row => row.widgets.map(widget => ({ widget, prepared: prepareWidget(widget, REGISTRY, scope) })))
     .map(cells => cells.filter(cell => cell.prepared.ok !== 'hidden'))
     .filter(cells => cells.length > 0);
   if (rows.length === 0) {
     return (
       <AppMessage tone="info" title="Nothing to show">
-        None of this dashboard's widgets are shown for a project.
+        None of this dashboard's widgets are shown {scope === 'project' ? 'for a project' : 'across projects'}.
       </AppMessage>
     );
   }
@@ -143,7 +158,7 @@ function OpenedDashboard({ app, opened }: { app: App; opened: ReadyOpened }) {
             <DashboardGridCell key={widget.id} id={widget.id} span={widget.span}>
               <WidgetBoundary widget={widget}>
                 {prepared.ok === true ? (
-                  <Widget app={app} opened={opened} widget={widget} prepared={prepared} />
+                  <Widget app={app} opened={opened} widget={widget} prepared={prepared} scope={scope} />
                 ) : (
                   <WidgetError widget={widget} message={prepared.ok === false ? prepared.message : ''} />
                 )}
@@ -158,11 +173,13 @@ function OpenedDashboard({ app, opened }: { app: App; opened: ReadyOpened }) {
 
 /**
  * Draws the dashboard the opening tool returned (`ui/notifications/tool-result`), over the window its
- * `datePreset` names and under its `defaults.filters`. Every read goes through the server's app-only
+ * `datePreset` names and under its `defaults.filters`, unless the host's view
+ * (`OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY`) sets them. Every read goes through the server's app-only
  * `queryObservability` tool, so the server decides where the data comes from.
  */
 export function ObservabilityWidget() {
-  const [opened, setOpened] = useState<Opened>();
+  // A preset window ends when the dashboard opens, and again each time the host's view changes.
+  const [shown, setShown] = useState<{ content: unknown; view: HostView; now: number }>();
   // A failed read is shown with a retry button; the server's tool decides whether to retry itself.
   const [queryClient] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }),
@@ -171,11 +188,24 @@ export function ObservabilityWidget() {
     appInfo: { name: 'Mastra observability widget', version: '1.0.0' },
     capabilities: {},
     onAppCreated: app => {
-      app.ontoolresult = result => setOpened(readOpened(result.structuredContent, Date.now()));
-      app.onhostcontextchanged = context => applyTheme(context.theme);
+      app.ontoolresult = result =>
+        setShown({
+          content: result.structuredContent,
+          view: readView(app.getHostContext()?.[OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY]),
+          now: Date.now(),
+        });
+      app.onhostcontextchanged = context => {
+        applyTheme(context.theme);
+        // The host sends only what changed, so a pin leaves the window alone.
+        if (!(OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY in context)) return;
+        const view = readView(context[OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY]);
+        setShown(current => current && { ...current, view, now: Date.now() });
+      };
     },
   });
-  useEffect(() => applyTheme(app?.getHostContext()?.theme), [app]);
+  // Before paint, so the first frame after connecting is already in the host's theme.
+  useLayoutEffect(() => applyTheme(app?.getHostContext()?.theme), [app]);
+  const opened = useMemo(() => shown && readOpened(shown.content, shown.now, shown.view), [shown]);
 
   if (error) {
     return (
@@ -201,7 +231,12 @@ export function ObservabilityWidget() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <OpenedDashboard key={opened.env.window.end.getTime()} app={app} opened={opened} />
+      {/* A new window starts the widgets over; a custom one can keep its end and move only its start. */}
+      <OpenedDashboard
+        key={`${opened.env.window.start.getTime()}-${opened.env.window.end.getTime()}`}
+        app={app}
+        opened={opened}
+      />
     </QueryClientProvider>
   );
 }

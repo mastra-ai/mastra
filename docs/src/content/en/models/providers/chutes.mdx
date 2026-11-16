@@ -7,7 +7,7 @@ description: "Browse Chutes model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/chutes.svg" alt="Chutes logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Chutes
 
-Access 18 Chutes models through Mastra's model router. Authentication is handled automatically using the `CHUTES_API_KEY` environment variable.
+Access 19 Chutes models through Mastra's model router. Authentication is handled automatically using the `CHUTES_API_KEY` environment variable.
 
 Learn more in the [Chutes documentation](https://llm.chutes.ai).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "chutes/Qwen/Qwen3.5-397B-A17B-TEE"
+  model: "chutes/Qwen/Qwen3.5-27B-TEE"
 });
 
 // Generate a response
@@ -140,6 +140,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65535,
     "inputCost": 1.85,
     "outputCost": 9.5
+  },
+  {
+    "model": "chutes/Qwen/Qwen3.5-27B-TEE",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.2,
+    "outputCost": 1.75
   },
   {
     "model": "chutes/Qwen/Qwen3.5-397B-A17B-TEE",
@@ -278,7 +290,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://llm.chutes.ai/v1",
-    id: "chutes/Qwen/Qwen3.5-397B-A17B-TEE",
+    id: "chutes/Qwen/Qwen3.5-27B-TEE",
     apiKey: process.env.CHUTES_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -299,7 +311,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "chutes/zai-org/GLM-5.3"
-      : "chutes/Qwen/Qwen3.5-397B-A17B-TEE";
+      : "chutes/Qwen/Qwen3.5-27B-TEE";
   }
 });
 ```

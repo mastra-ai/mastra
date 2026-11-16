@@ -1,6 +1,5 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ArrowRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { OnboardingAccountsPreview } from '../../../../workspaces/components/onboarding/preview/OnboardingAccountsPreview';
@@ -15,6 +14,7 @@ import {
   MODEL_ROUTES,
   MODEL_SCOPE_LABELS,
 } from './model-routes';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 
 // Lets the dialog settle before the sketch morphs, so the change reads as before → after.
 const MORPH_DELAY_MS = 320;
@@ -60,7 +60,7 @@ export function ModelRoutingChangeDialog({
                     <Txt as="span" variant="meta" tone="muted">
                       {MODEL_DEFAULTS_LABELS[MODEL_ROUTES[from][lane]]}
                     </Txt>
-                    <ArrowRight aria-label="to" className="text-muted-foreground size-3" />
+                    <IconArrowRight aria-label="to" className="text-muted-foreground size-3" />
                     <Txt as="span" variant="meta">
                       {MODEL_DEFAULTS_LABELS[MODEL_ROUTES[to][lane]]}
                     </Txt>
@@ -93,7 +93,7 @@ function RoutingSketch({ from, to }: { from: FactoryModelScope; to: FactoryModel
   return (
     <div aria-hidden="true" className="relative mx-auto aspect-[5/4] w-full max-w-sm">
       <OnboardingIllustration scene="accounts" mode={ACCOUNT_MODES[shown]} />
-      <OnboardingAccountsPreview step="model-setup" modelScope={shown} />
+      <OnboardingAccountsPreview showModels={false} modelScope={shown} />
     </div>
   );
 }

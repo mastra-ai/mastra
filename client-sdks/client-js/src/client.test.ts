@@ -1132,6 +1132,17 @@ describe('MastraClient', () => {
       );
     });
 
+    it('sends the review status filter for experiment result listings', async () => {
+      mockSuccess();
+
+      await client.listDatasetExperimentResults('dataset-1', 'experiment-1', { perPage: 100, status: 'needs-review' });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/datasets/dataset-1/experiments/experiment-1/results?perPage=100&status=needs-review',
+        expect.any(Object),
+      );
+    });
+
     it('issues a DELETE for a dataset-scoped experiment', async () => {
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,

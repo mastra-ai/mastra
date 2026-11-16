@@ -1,27 +1,25 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { X } from 'lucide-react';
 import { useState } from 'react';
 
 import type { IntakeSourceBinding } from '../../../factory/services/intake';
-import { BoardPicker } from '../IntakeSourceRouting';
 import { JiraLabelEditor } from './JiraLabelEditor';
 import { RoutingNote } from './RoutingNote';
 import { routingGap } from './routing';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 
 const ALL_ISSUES = 'all';
 const LABELLED = 'labelled';
 const LABELLED_TEXT = 'Only issues labelled…';
 
-/** One factory a Jira project feeds: its board, which issues it takes, and removing it. */
+/** One factory a Jira project feeds: which issues it takes, and removing it. */
 export function JiraBindingRow({
   project,
   factory,
   binding,
   othersTakeLabels,
   error,
-  onBoardChange,
   onLabelsChange,
   onTakeAllIssues,
   onRemove,
@@ -31,7 +29,6 @@ export function JiraBindingRow({
   binding: IntakeSourceBinding;
   othersTakeLabels: boolean;
   error?: string;
-  onBoardChange: (board: string | null) => void;
   onLabelsChange: (labels: string[]) => void;
   onTakeAllIssues: () => void;
   onRemove: () => void;
@@ -57,12 +54,6 @@ export function JiraBindingRow({
         <Txt as="span" variant="caption" className="min-w-24 wrap-anywhere">
           {factory}
         </Txt>
-        <BoardPicker
-          name={`${project} in ${factory}`}
-          factoryProjectId={binding.factoryProjectId}
-          board={binding.board}
-          onChange={onBoardChange}
-        />
         <Select value={labelled ? LABELLED : ALL_ISSUES} onValueChange={pickFilter}>
           <SelectTrigger
             size="sm"
@@ -86,11 +77,11 @@ export function JiraBindingRow({
           onClick={onRemove}
           className="ml-auto"
         >
-          <X />
+          <IconCrossMedium />
         </Button>
       </div>
       {labelled && <JiraLabelEditor factory={factory} labels={labels} onChange={onLabelsChange} />}
-      <RoutingNote error={error} hint={routingGap({ board: binding.board, labelled, labels })} />
+      <RoutingNote error={error} hint={routingGap({ labelled, labels })} />
     </li>
   );
 }

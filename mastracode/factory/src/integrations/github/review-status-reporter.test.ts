@@ -105,6 +105,31 @@ describe('createGithubReviewStatusReporter', () => {
     expect(comments[0]!.body).not.toContain('Reviewed');
   });
 
+  it('reports on the pull request attached to an issue card', async () => {
+    const issue = {
+      id: 'item-1',
+      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:3' },
+      workItem: {
+        metadata: { githubRepositoryId: 42, githubIssueNumber: 3 },
+        sources: [
+          { integrationId: 'github', sourceType: 'issue', externalId: 'issue:github-issue:3', metadata: {} },
+          {
+            integrationId: 'github',
+            sourceType: 'pull-request',
+            externalId: 'pull-request:github-pr:7',
+            state: 'open',
+            metadata: { githubRepositoryId: 42, githubPullRequestNumber: 7 },
+          },
+        ],
+      },
+      metadata: { pullRequestHeadSha: HEAD, openPullRequestNumber: 7 },
+    };
+    const { report, comments, versionControl } = setup(issue as never);
+    await report(event('reviewing', { startedAt }));
+    expect(versionControl.createComment).toHaveBeenCalledWith(expect.objectContaining({ pullRequestId: '7' }));
+    expect(comments[0]!.body).toContain('Shipyard is reviewing this pull request');
+  });
+
   it('skips cards that are not GitHub pull requests and swallows provider errors', async () => {
     const issue = setup(card({}, 'issue'));
     await issue.report(event('queued'));
