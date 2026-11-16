@@ -456,39 +456,6 @@ describe('factory_list_attention', () => {
     expect(result.truncated).toBe(false);
   });
 
-  it('flags open cards filed by hand that name no repository while several are linked', async () => {
-    const linked = [
-      { id: 'link-1', repositoryId: 'repo-1', externalId: '2', slug: 'mastra-ai/mastra' },
-      { id: 'link-2', repositoryId: 'repo-2', externalId: '3', slug: 'mastra-ai/platform' },
-    ];
-    const sourceControl = {
-      integrationId: 'github',
-      connections: { list: async () => [{ id: 'connection-1', integrationId: 'github' }] },
-      projectRepositories: {
-        list: async () => linked.map(({ id, repositoryId }) => ({ id, repositoryId, inEnvironment: true })),
-      },
-      repositories: {
-        get: async ({ id }: { id: string }) => {
-          const link = linked.find(candidate => candidate.repositoryId === id);
-          return link ? { id, externalId: link.externalId, slug: link.slug } : null;
-        },
-      },
-    } as unknown as SourceControlStorageHandle;
-    const items = [
-      item({ id: 'unnamed', externalSource: null, metadata: { cardNumber: 1 } }),
-      item({ id: 'named', externalSource: null, metadata: { cardNumber: 2, repository: 'mastra-ai/mastra' } }),
-      item({ id: 'done', externalSource: null, stages: ['done'], metadata: { cardNumber: 3 } }),
-      item({ id: 'synced' }),
-    ];
-    const { run } = setup({ items, sessions: { getSourceControlBySessionId: async () => sourceControl } });
-    const result = await run<{
-      needsRepository: Array<{ workItemId: string; number: number | null }>;
-      linkedRepositories?: string[];
-    }>('factory_list_attention', {});
-    expect(result.needsRepository).toMatchObject([{ workItemId: 'unnamed', number: 1 }]);
-    expect(result.linkedRepositories).toEqual(['mastra-ai/mastra', 'mastra-ai/platform']);
-  });
-
   it('lists a run parked on a tool prompt while it is still in flight', async () => {
     let created: (session: LiveSession) => void = () => {};
     const liveSessions = new LiveSessions({

@@ -141,7 +141,7 @@ describe.each(['github-issue', 'github-pr', 'gitlab-issue', 'gitlab-pr'] as cons
     const provider = source.startsWith('github-') ? 'github' : 'gitlab';
     const otherProvider = provider === 'github' ? 'gitlab' : 'github';
 
-    it.each(['sole repository fallback', 'stored slug', 'explicit slug'])(
+    it.each(['sole repository fallback', 'stored slug'])(
       'rejects the other provider via %s before any writes',
       async selection => {
         const calls = stubEndpoints([
@@ -164,9 +164,12 @@ describe.each(['github-issue', 'github-pr', 'gitlab-issue', 'gitlab-pr'] as cons
             branch: 'factory/item-1',
             threadTitle: 'Fix login bug',
             workItem: providerWorkItem,
-            ...(selection === 'explicit slug' ? { repositorySlug: 'acme/other' } : {}),
           }),
-        ).rejects.toThrow('Choose a repository before starting this Factory run');
+        ).rejects.toThrow(
+          selection === 'stored slug'
+            ? 'Repository acme/other is not linked to this Factory with a provider matching this card'
+            : "No repository matching this card's provider is linked to this Factory.",
+        );
 
         expect(calls.sessionsCreatedFor).toEqual([]);
         expect(calls.patches).toEqual([]);
@@ -223,6 +226,27 @@ describe.each(['linear-issue', 'manual'] as const)('useStartFactoryRun fallback 
 
     expect(calls.sessionsCreatedFor).toEqual(['repo-1']);
     expect(calls.started()).toMatchObject({ workItem: { input: { metadata: { repository: 'acme/one' } } } });
+  });
+});
+
+describe('useStartFactoryRun for a card that names no repository among several', () => {
+  it("opens the session in the first repository and leaves the card's repository for the run to determine", async () => {
+    const calls = stubEndpoints([
+      { id: 'repo-1', externalId: '101', slug: 'acme/one' },
+      { id: 'repo-2', externalId: '202', slug: 'acme/two' },
+    ]);
+    const { result } = renderHookWithProviders(() => useStartFactoryRun(), { inner: RouteInner });
+    await waitFor(() => expect(result.current.enabled).toBe(true));
+
+    await result.current.start.mutateAsync({
+      branch: 'factory/item-1',
+      threadTitle: 'Fix login bug',
+      workItem: { ...workItem, source: 'manual', sourceKey: null, metadata: { cardNumber: 3 } },
+    });
+
+    expect(calls.sessionsCreatedFor).toEqual(['repo-1']);
+    expect(calls.patches).toEqual([]);
+    expect(calls.started()).toHaveProperty('workItem.input.metadata', { cardNumber: 3 });
   });
 });
 

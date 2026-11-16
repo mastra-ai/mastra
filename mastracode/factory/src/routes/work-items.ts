@@ -946,7 +946,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               return c.json({ result: error.result }, error.result.code === 'stale' ? 409 : 422);
             }
             if (error instanceof WorkItemRepositoryError) {
-              return c.json({ error: error.code, message: error.message, candidates: error.candidates }, 409);
+              return c.json({ error: error.code, message: error.message }, 409);
             }
             throw error;
           }

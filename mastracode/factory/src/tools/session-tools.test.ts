@@ -1268,7 +1268,7 @@ describe('factory_start_session in work-item mode', () => {
     expect(env.prepare).not.toHaveBeenCalled();
   });
 
-  it('refuses an item with several repositories, listing them and creating nothing', async () => {
+  it("starts an item that names no repository among several in the environment's first one", async () => {
     const env = await withItem();
     const second = await env.sourceControl.repositories.upsert({
       orgId: 'org-1',
@@ -1282,13 +1282,13 @@ describe('factory_start_session in work-item mode', () => {
     });
     const rowsBefore = await env.sessionRows();
 
-    await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).rejects.toThrow(
-      /several repositories \(.*mastra-ai\/mastra.*\); v1 can't choose one/,
+    await env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' });
+
+    const [created] = (await env.sessionRows()).filter(
+      row => !rowsBefore.some(before => before.sessionId === row.sessionId),
     );
-    await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).rejects.toThrow(/mastra-ai\/docs/);
-    expect(env.prepare).not.toHaveBeenCalled();
-    expect(await env.sessionRows()).toEqual(rowsBefore);
-    expect(await env.bindings()).toEqual([]);
+    expect(created).toMatchObject({ projectRepositoryId: env.projectRepository.id });
+    expect(env.prepare).toHaveBeenCalledWith(expect.objectContaining({ sessionId: created!.sessionId }));
   });
 
   it("refuses while the Factory runtime's coordinator isn't ready", async () => {

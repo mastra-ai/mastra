@@ -1,6 +1,7 @@
 import { SourceControlConnectionNotFoundError } from '../storage/domains/source-control/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { Card } from '../storage/domains/work-items/base.js';
+import { resolveEnvironmentRepositories } from './environment-repositories.js';
 
 export type WorkItemRepositoryResolution =
   | { status: 'resolved'; projectRepositoryId: string; slug: string }
@@ -137,4 +138,92 @@ export async function resolveWorkItemRepository(args: {
   const onlyRepository = candidates.length === 1 ? (pickLink(linked) ?? linked[0]) : undefined;
   if (onlyRepository) return resolvedRepository(onlyRepository);
   return { status: 'ambiguous', candidates };
+}
+
+export type RunRepositoryResolution =
+  | {
+      status: 'resolved';
+      projectRepositoryId: string;
+      slug: string;
+      /**
+       * Set when the card names no repository: the sandbox repositories its
+       * agent chooses among. The run is filed under `slug` until it does.
+       */
+      unnamed?: { repositories: string[] };
+    }
+  | { status: 'unlinked'; hint: string };
+
+/**
+ * Where a run on `item` is filed. A card that names its repository resolves
+ * exactly as {@link resolveWorkItemRepository} does. A card that names none
+ * among several repositories is not refused: the sandbox holds every
+ * environment repository, so the run stays in `boundProjectRepositoryId` (the
+ * session already working on the card) or else in the environment's first
+ * repository, and its agent determines which repository the card belongs to.
+ */
+export async function resolveRunRepository(
+  args: Parameters<typeof resolveWorkItemRepository>[0] & { boundProjectRepositoryId?: string },
+): Promise<RunRepositoryResolution> {
+  const resolution = await resolveWorkItemRepository(args);
+  if (resolution.status !== 'ambiguous') return resolution;
+  const { sourceControl, orgId, factoryProjectId, boundProjectRepositoryId } = args;
+  const environment = await resolveEnvironmentRepositories({ sourceControl, orgId, factoryProjectId });
+  const unnamed = { repositories: environment.map(entry => entry.repository.slug) };
+  if (boundProjectRepositoryId !== undefined) {
+    const link = await sourceControl.projectRepositories.get({ orgId, id: boundProjectRepositoryId });
+    const linked = link && (await sourceControl.repositories.get({ orgId, id: link.repositoryId }));
+    const currentLinks = link
+      ? await sourceControl.projectRepositories.list({ orgId, connectionId: link.connectionId })
+      : [];
+    if (
+      !linked ||
+      !resolution.candidates.includes(linked.slug) ||
+      !currentLinks.some(candidate => candidate.id === boundProjectRepositoryId)
+    ) {
+      return { status: 'unlinked', hint: 'The existing session repository is not linked to this Factory.' };
+    }
+    return { status: 'resolved', projectRepositoryId: boundProjectRepositoryId, slug: linked.slug, unnamed };
+  }
+  const primary = environment[0];
+  if (!primary) {
+    return { status: 'unlinked', hint: 'None of the repositories linked to this Factory is in its environment.' };
+  }
+  return { status: 'resolved', projectRepositoryId: primary.link.id, slug: primary.repository.slug, unnamed };
+}
+
+/** Card metadata recording which run session chose the card's `repository`, and which one it chose. */
+export const REPOSITORY_CHOICE_KEY = 'repositoryChoice';
+
+/**
+ * Whether `sessionId` recorded `slug` as the card's repository. That session
+ * was filed before the card named a repository, so it is filed under another
+ * one; it may keep working on the card, in `slug`. A repository set any other
+ * way (intake, a person) still refuses a session filed elsewhere.
+ */
+export function repositoryChosenBySession(item: Pick<Card, 'metadata'>, slug: string, sessionId: string): boolean {
+  const choice = item.metadata?.[REPOSITORY_CHOICE_KEY];
+  if (typeof choice !== 'object' || choice === null) return false;
+  const recorded = choice as Record<string, unknown>;
+  return item.metadata?.repository === slug && recorded.slug === slug && recorded.sessionId === sessionId;
+}
+
+const UNNAMED_REPOSITORY_INSTRUCTION = 'This card names no repository.';
+
+/** The plugin instruction telling a run's agent which repository it works in. */
+export function runRepositoryInstruction(
+  repository: { slug: string; unnamed?: { repositories: string[] } },
+  ownSlug: string,
+): string {
+  if (repository.unnamed) {
+    return `${UNNAMED_REPOSITORY_INSTRUCTION} This session's sandbox holds ${repository.unnamed.repositories.join(', ')}. Before editing files, determine from the card which of them it belongs to and work in that repository's checkout; pass it as \`repository\` to the source_control_* tools (they default to ${ownSlug}). The first push or change request records it on the card. If the card belongs to none of them, stop and say so.`;
+  }
+  const elsewhere =
+    repository.slug === ownSlug
+      ? ''
+      : ` This session is filed under ${ownSlug}, so pass \`repository: ${repository.slug}\` to the source_control_* tools.`;
+  return `Target repository: ${repository.slug}. Before editing files or creating a pull request, verify this session's checkout matches the target repository.${elsewhere}`;
+}
+
+export function isRunRepositoryInstruction(instruction: string): boolean {
+  return instruction.startsWith('Target repository: ') || instruction.startsWith(UNNAMED_REPOSITORY_INSTRUCTION);
 }

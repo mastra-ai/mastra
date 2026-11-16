@@ -28,7 +28,6 @@ export interface StartFactoryRunInput {
   branch: string;
   threadTitle: string;
   workItem: StartFactoryRunWorkItem;
-  repositorySlug?: string;
 }
 
 /**
@@ -47,23 +46,30 @@ export function useStartFactoryRun() {
   const startMutationKey = ['factory', 'start-run', factoryId] as const;
   const mutation = useMutation({
     mutationKey: startMutationKey,
-    mutationFn: async ({ branch, threadTitle, workItem, repositorySlug }: StartFactoryRunInput) => {
+    mutationFn: async ({ branch, threadTitle, workItem }: StartFactoryRunInput) => {
       if (!factoryId) throw new Error('A Factory session needs a factory in the route');
       const sourceMetadata = { ...workItem.metadata, ...workItem.workItem?.metadata };
-      const targetSlug = repositorySlug ?? (await repositorySlugFor(workItem.source, sourceMetadata));
+      const targetSlug = await repositorySlugFor(workItem.source, sourceMetadata);
       const repositoriesForSource = repositories.filter(candidate =>
         repositoryMatchesCardSource(candidate, workItem.source),
       );
+      // A card that names no repository opens in the first one; the sandbox holds them all and
+      // the session determines from the card which one it belongs to.
       const repository = targetSlug
         ? repositoriesForSource.find(candidate => candidate.slug === targetSlug)
-        : repositories.length === 1
-          ? repositoriesForSource[0]
-          : undefined;
-      if (!repository) throw new Error('Choose a repository before starting this Factory run');
-      const metadata = workItem.workItem
-        ? { repository: repository.slug }
-        : { ...workItem.metadata, repository: repository.slug };
-      if (workItem.metadata?.repository !== repository.slug) {
+        : repositoriesForSource[0];
+      if (!repository) {
+        throw new Error(
+          targetSlug
+            ? `Repository ${targetSlug} is not linked to this Factory with a provider matching this card`
+            : "No repository matching this card's provider is linked to this Factory.",
+        );
+      }
+      // With one repository for the card's provider there is nothing to determine, so the card records it.
+      const recordedSlug = targetSlug ?? (repositoriesForSource.length === 1 ? repository.slug : undefined);
+      const baseMetadata = workItem.workItem ? {} : (workItem.metadata ?? {});
+      const metadata = recordedSlug ? { ...baseMetadata, repository: recordedSlug } : baseMetadata;
+      if (recordedSlug && workItem.metadata?.repository !== recordedSlug) {
         await updateWorkItem(baseUrl, workItem.id, { metadata });
       }
       const userSession = await createUserSession(baseUrl, repository.projectRepositoryId, { branch });

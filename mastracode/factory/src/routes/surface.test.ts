@@ -974,7 +974,7 @@ describe('prepareFactoryRuleBinding', () => {
     );
   });
 
-  it('blocks autonomous dispatch on an unattributed multi-repository item before creating a session', async () => {
+  it("starts an unattributed multi-repository item in the environment's first repository", async () => {
     const { seeded, sourceControl, project, projectRepository, installation, github } =
       await seedFactoryWithRepository();
     const second = await sourceControl.repositories.upsert({
@@ -992,20 +992,16 @@ describe('prepareFactoryRuleBinding', () => {
       repositoryId: second.id,
       sandboxProvider: 'local',
     });
-    const createSession = vi.spyOn(sourceControl.sessions, 'create');
-    const prepare = vi.fn<FactoryStartCoordinator['prepare']>();
+    const prepare = vi.fn(async () => ({}) as never);
     const input = bindingInput(project.id);
     (input.item as { metadata: Record<string, unknown> | null }).metadata = null;
 
-    const error = await prepareFactoryRuleBinding(github, { prepare }, seeded.projects, boards, input).catch(
-      failure => failure,
-    );
+    await prepareFactoryRuleBinding(github, { prepare }, seeded.projects, boards, input);
 
-    expect(error).toBeInstanceOf(FactoryDispatchError);
-    expect(error).toMatchObject({ code: 'source_repository_ambiguous' });
-    expect(error.message).toContain('internetburrito/hydra');
-    expect(createSession).not.toHaveBeenCalled();
-    expect(prepare).not.toHaveBeenCalled();
+    const { sessionId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string };
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
+      projectRepositoryId: projectRepository.id,
+    });
   });
 
   it('retries an unattributed role in its existing linked repository without choosing the first', async () => {

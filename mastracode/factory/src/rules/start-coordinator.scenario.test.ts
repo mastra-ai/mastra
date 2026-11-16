@@ -1,11 +1,18 @@
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
+import { createTriageWorkRegistry } from '../boards/test-utils.js';
+import type { GithubIntegration } from '../integrations/github/integration.js';
+import { prepareFactoryRuleBinding } from '../routes/surface.js';
+import { recordRunRepositoryChoice } from '../session/self-review-gate.js';
 import { listFactorySessionThreads } from '../session/session-threads.js';
 import { observeSessionThreadStamp } from '../session/thread-session-stamp.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { FactoryDispatchError } from './dispatch-errors.js';
+import type { FactoryBindingPreparationInput } from './dispatcher.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
@@ -170,5 +177,181 @@ describe('scenario: concurrent runs in one Factory', () => {
     await expect(coordinator.prepare(runRequest('run-b', '3', { type: 'pull-request' }))).rejects.toThrow(
       'already shares memory with this Factory',
     );
+  });
+});
+
+describe('scenario: a card that names no repository in a multi-repository Factory', () => {
+  async function seedMultiRepositoryFactory() {
+    const seeded = await createFactoryStorageForTests();
+    const sourceControl = seeded.sourceControl.forIntegration('github');
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '123',
+    });
+    const connection = await sourceControl.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const link = async (externalId: string, slug: string) => {
+      const repository = await sourceControl.repositories.upsert({
+        orgId: 'org-1',
+        input: { installationId: installation.id, externalId, slug, defaultBranch: 'main' },
+      });
+      return sourceControl.projectRepositories.link({
+        orgId: 'org-1',
+        connectionId: connection.id,
+        repositoryId: repository.id,
+        createdByUserId: 'user-1',
+        sandboxProvider: 'local',
+        sandboxWorkdir: `/sandbox/${slug}`,
+      });
+    };
+    const mastra = await link('456', 'mastra-ai/mastra');
+    const hydra = await link('789', 'internetburrito/hydra');
+    // A hand-filed card: nothing on it says which repository it belongs to.
+    const { item } = await seeded.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: { title: 'Speed up the hydra build', stages: ['triage'], sessions: {}, metadata: {} },
+    });
+
+    const controller = new AgentController({
+      id: 'code',
+      storage: new InMemoryStore({ id: 'repository-choice' }),
+      stateSchema: undefined,
+      modes: [
+        {
+          id: 'build',
+          name: 'Build',
+          default: true,
+          defaultModelId: 'openai/gpt-5.5',
+          agent: new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'Test.', model: 'openai/gpt-5.5' }),
+        },
+      ],
+    });
+    await controller.init();
+    const coordinator = new FactoryStartCoordinator(controller, seeded.workItems, undefined, sourceControl);
+    const github = { id: 'github', sourceControlStorage: sourceControl } as unknown as GithubIntegration;
+
+    const dispatch = async (decisionId: string) => {
+      const card = await seeded.workItems.get({ orgId: 'org-1', id: item.id });
+      await prepareFactoryRuleBinding(github, coordinator, seeded.projects, boards, {
+        record: { id: decisionId, orgId: 'org-1', factoryProjectId: project.id },
+        item: card,
+        role: 'triage',
+      } as unknown as FactoryBindingPreparationInput);
+      const refreshed = await seeded.workItems.get({ orgId: 'org-1', id: item.id });
+      const sessionId = refreshed!.sessions.triage!.sessionId;
+      const session = (await controller.getSession(sessionId))!;
+      return { card: refreshed!, sessionId, session };
+    };
+    /** What source_control_push_branch records after a push from the run's session. */
+    const pushFrom = async (sessionId: string, slug: string, ownRepository: boolean) => {
+      const session = (await controller.getSession(sessionId))!;
+      const requestContext = new RequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+      requestContext.set('controller', {
+        sessionId,
+        threadId: session.thread.requireId(),
+        resourceId: session.identity.getResourceId(),
+        getState: () => session.state.get(),
+      });
+      await recordRunRepositoryChoice({
+        requestContext,
+        workItems: seeded.workItems,
+        sourceControl,
+        target: { slug, ownRepository },
+      });
+    };
+    return { seeded, sourceControl, project, item, mastra, hydra, dispatch, pushFrom };
+  }
+
+  const boards = createTriageWorkRegistry();
+
+  it('starts the run in the first environment repository and tells the agent to choose among them', async () => {
+    const { sourceControl, mastra, dispatch } = await seedMultiRepositoryFactory();
+
+    const { sessionId, session } = await dispatch('decision-1');
+
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
+      projectRepositoryId: mastra.id,
+    });
+    expect(session.state.get()).toMatchObject({ projectRepositoryId: mastra.id });
+    const instructions = session.state.get()?.pluginInstructions ?? [];
+    expect(instructions.filter(instruction => instruction.includes('repository'))).toEqual([
+      expect.stringContaining(
+        "This card names no repository. This session's sandbox holds mastra-ai/mastra, internetburrito/hydra.",
+      ),
+    ]);
+    expect(instructions.some(instruction => instruction.startsWith('Target repository:'))).toBe(false);
+  });
+
+  it('records the repository the run pushes to, and keeps the run in it on retry', async () => {
+    const { seeded, item, mastra, hydra, dispatch, pushFrom } = await seedMultiRepositoryFactory();
+    const first = await dispatch('decision-1');
+
+    await pushFrom(first.sessionId, 'internetburrito/hydra', false);
+
+    const recorded = await seeded.workItems.get({ orgId: 'org-1', id: item.id });
+    expect(recorded!.metadata).toMatchObject({
+      repository: 'internetburrito/hydra',
+      repositoryChoice: { slug: 'internetburrito/hydra', sessionId: first.sessionId },
+    });
+    // A later push elsewhere does not change the card's repository.
+    await pushFrom(first.sessionId, 'mastra-ai/mastra', true);
+    expect((await seeded.workItems.get({ orgId: 'org-1', id: item.id }))!.metadata).toMatchObject({
+      repository: 'internetburrito/hydra',
+    });
+
+    const retry = await dispatch('decision-2');
+
+    expect(retry.sessionId).toBe(first.sessionId);
+    expect(retry.session.state.get()).toMatchObject({ projectRepositoryId: mastra.id });
+    expect(retry.session.state.get()?.pluginInstructions?.filter(text => text.includes('repository'))).toEqual([
+      "Target repository: internetburrito/hydra. Before editing files or creating a pull request, verify this session's checkout matches the target repository. This session is filed under mastra-ai/mastra, so pass `repository: internetburrito/hydra` to the source_control_* tools.",
+    ]);
+    expect(hydra.id).not.toBe(mastra.id);
+  });
+
+  it('still refuses a session filed elsewhere when a person sets the repository', async () => {
+    const { seeded, item, dispatch } = await seedMultiRepositoryFactory();
+    await dispatch('decision-1');
+    const card = await seeded.workItems.get({ orgId: 'org-1', id: item.id });
+    await seeded.workItems.update({
+      orgId: 'org-1',
+      id: item.id,
+      userId: 'user-1',
+      patch: { metadata: { ...card!.metadata, repository: 'internetburrito/hydra' } },
+    });
+
+    const error = await dispatch('decision-2').catch(failure => failure);
+
+    expect(error).toBeInstanceOf(FactoryDispatchError);
+    expect(error).toMatchObject({ code: 'source_repository_ambiguous' });
+    expect(error.message).toContain('bound to a different repository than internetburrito/hydra');
+  });
+
+  it('files a card that names its repository there, as before', async () => {
+    const { seeded, sourceControl, item, hydra, dispatch } = await seedMultiRepositoryFactory();
+    await seeded.workItems.update({
+      orgId: 'org-1',
+      id: item.id,
+      userId: 'user-1',
+      patch: { metadata: { repository: 'internetburrito/hydra' } },
+    });
+
+    const { sessionId, session } = await dispatch('decision-1');
+
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
+      projectRepositoryId: hydra.id,
+    });
+    expect(session.state.get()?.pluginInstructions?.filter(text => text.includes('repository'))).toEqual([
+      "Target repository: internetburrito/hydra. Before editing files or creating a pull request, verify this session's checkout matches the target repository.",
+    ]);
   });
 });

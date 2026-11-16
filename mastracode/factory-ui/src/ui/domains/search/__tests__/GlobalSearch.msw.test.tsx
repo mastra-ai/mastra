@@ -403,8 +403,8 @@ afterEach(() => {
 
 describe('Global search', () => {
   describe.each(['board', 'search'] as const)('%s entry point', entryPoint => {
-    describe.each(['github', 'gitlab'] as const)('%s source-provider repository choices', provider => {
-      it.each([0, 1, 2])('offers usable choices with %s matching repositories', async count => {
+    describe.each(['github', 'gitlab'] as const)('%s source-provider repositories', provider => {
+      it.each([0, 1, 2])('starts a session with %s matching repositories', async count => {
         const sourceRepositories: LinkedRepositoryPayload[] = Array.from({ length: count }, (_, index) => ({
           projectRepositoryId: `${provider}-repo-${index}`,
           provider,
@@ -459,25 +459,16 @@ describe('Global search', () => {
           expect(
             await screen.findByText("No repository matching this card's provider is linked to this Factory."),
           ).toBeInTheDocument();
-          expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
           expect(requests.createSessionRequests).toBe(0);
           expect(patches).toEqual([]);
           expect(starts).toEqual([]);
           return;
         }
-        if (count > 1) {
-          const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
-          expect(within(picker).queryByRole('button', { name: /other-provider\/repo/ })).not.toBeInTheDocument();
-          expect(within(picker).getAllByRole('button', { name: new RegExp(`${provider}-org/repo-`) })).toHaveLength(
-            count,
-          );
-          expect(requests.createSessionRequests).toBe(0);
-          await user.click(within(picker).getByRole('button', { name: new RegExp(`${provider}-org/repo-0`) }));
-        }
         await waitFor(() => expect(starts).toHaveLength(1));
+        // One matching repository is recorded on the card; among several it opens in the first and leaves it unset.
+        expect(requests.createSessionRequests).toBe(1);
         expect(requests.sessionsCreatedFor).toEqual([`${provider}-repo-0`]);
-        expect(patches).toEqual([{ metadata: { repository: `${provider}-org/repo-0` } }]);
-        expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
+        expect(patches).toEqual(count === 1 ? [{ metadata: { repository: `${provider}-org/repo-0` } }] : []);
         if (search) await waitFor(() => expect(search).not.toBeInTheDocument());
       });
     });
@@ -823,7 +814,7 @@ describe('Global search', () => {
     expect(within(rail).getByRole('button', { name: /^Work items\s*2$/ })).toBeInTheDocument();
   });
 
-  it('keeps search open while choosing a repository for an unattributed work item', async () => {
+  it('starts an unattributed work item in the first repository without asking for one', async () => {
     const item = {
       ...workItems[3],
       board: 'custom',
@@ -839,7 +830,7 @@ describe('Global search', () => {
       }),
       http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
         starts.push(await request.json());
-        return HttpResponse.json({ threadId: 'thread-search' });
+        return HttpResponse.json({ prepared: { threadId: 'thread-search' } });
       }),
     );
     const user = userEvent.setup();
@@ -847,13 +838,10 @@ describe('Global search', () => {
     const search = await openWithShortcut();
     await user.click(await within(search).findByText(item.title));
 
-    const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    expect(search).toBeInTheDocument();
-    expect(requests.createSessionRequests).toBe(0);
-    expect(patches).toHaveLength(0);
-    await user.click(within(picker).getByRole('button', { name: /mastra-ai\/docs/ }));
-    await waitFor(() => expect(patches).toEqual([{ metadata: { number: 777, repository: 'mastra-ai/docs' } }]));
     await waitFor(() => expect(starts).toHaveLength(1));
+    expect(requests.sessionsCreatedFor).toEqual([FIRST_REPOSITORY_ID]);
+    expect(patches).toEqual([]);
+    expect(starts[0]).toHaveProperty('workItem.input.metadata', { number: 777 });
     await waitFor(() => expect(search).not.toBeInTheDocument());
   });
 
@@ -1184,7 +1172,6 @@ describe('Global search', () => {
     await user.click(card);
 
     expect(await screen.findByText("Another run can't start while this card is busy.")).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
     expect(requests.createSessionRequests).toBe(0);
     expect(requests.transitions).toEqual([]);
   });
@@ -1223,7 +1210,7 @@ describe('Global search', () => {
     await waitForMutationsIdle(client);
   });
 
-  it('refuses to open a second session while the session chosen through the repository picker is still starting', async () => {
+  it('refuses to open a second session while an unattributed work item session is still starting', async () => {
     const item = { ...workItems[3], board: 'custom', metadata: { number: 777 } };
     stubSearchApi({ workItems: [item] });
     const starts: unknown[] = [];
@@ -1232,27 +1219,21 @@ describe('Global search', () => {
       releaseStart = resolve;
     });
     server.use(
-      http.patch(`${TEST_BASE_URL}/web/factory/work-items/${item.id}`, () =>
-        HttpResponse.json({ workItem: toWireWorkItem(item) }),
-      ),
       http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
         starts.push(await request.json());
         await startGate;
-        return HttpResponse.json({ threadId: 'thread-search' });
+        return HttpResponse.json({ prepared: { threadId: 'thread-search' } });
       }),
     );
     const user = userEvent.setup();
     const { client } = renderSearchRoute();
     const search = await openWithShortcut();
     await user.click(await within(search).findByText(item.title));
-    const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    await user.click(within(picker).getByRole('button', { name: /mastra-ai\/docs/ }));
     await waitFor(() => expect(starts).toHaveLength(1));
 
     await user.click(within(search).getByText(item.title));
 
     expect(await screen.findByText("Another run can't start while this card is busy.")).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
     releaseStart();
     await waitForMutationsIdle(client);
     expect(starts).toHaveLength(1);
