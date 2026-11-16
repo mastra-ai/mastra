@@ -210,6 +210,12 @@ describe('posthog_run_query with live PostHog response shapes (#30528)', () => {
     expect(result.results).toEqual([[1]]);
   });
 
+  it('rejects flat string types, which PostHog does not send', async () => {
+    queryResponse = { ...selectOneResponse, types: ['UInt8'] };
+
+    await expect(runQuery('select 1')).rejects.toThrow(/types/);
+  });
+
   it('still rejects types that are not column name and type pairs', async () => {
     queryResponse = { ...selectOneResponse, types: [['1']] };
 
