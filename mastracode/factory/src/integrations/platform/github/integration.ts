@@ -757,12 +757,22 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
           });
         }
 
+        const mode = this.#integrationStorage ? (await this.#modes.get(tenant.orgId)).mode : 'legacy';
         const [{ installations, hiddenPersonalInstallReason }, userConnection] = await Promise.all([
           this.#syncInstallations(tenant.orgId, tenant.userId),
-          this.#fetchUserConnection(tenant.userId),
+          mode === 'connect'
+            ? this.#ownGithub(tenant.orgId, tenant.userId).then(
+                own => ({
+                  connected: own.connection?.status === 'active' || own.pat.configured,
+                  githubUsername: own.pat.login ?? own.connection?.accountLabel ?? null,
+                }),
+                () => ({ connected: false, githubUsername: null }),
+              )
+            : this.#fetchUserConnection(tenant.userId),
         ]);
         return c.json({
           enabled: true,
+          mode,
           sandboxEnabled: !!ctx.sandbox,
           connected: installations.length > 0,
           installations: installations.map(installation => ({
@@ -924,15 +934,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
           const user = await caller(c);
           if (!user) return c.json({ error: 'unauthorized' }, 401);
           try {
-            const connections = await this.connect.withResource(user.userId).listConnections();
-            const own = connections.find(
-              connection =>
-                connection.integrationId === FACTORY_GITHUB_PROVIDER_KEY && connection.resourceId === user.userId,
-            );
-            return c.json({
-              connection: own ? { id: own.id, status: own.status, accountLabel: own.accountLabel ?? null } : null,
-              pat: await getGithubUserPatStatus(this.integrationStorage, user.orgId, user.userId),
-            });
+            return c.json(await this.#ownGithub(user.orgId, user.userId));
           } catch (error) {
             return c.json({ error: 'platform_request_failed', message: platformErrorMessage(error) }, 502);
           }
@@ -962,6 +964,21 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
         },
       }),
     ];
+  }
+
+  /** The user's own end-user `factory-github` connection and pasted PAT, as the UI shows them. */
+  async #ownGithub(orgId: string, userId: string) {
+    const [connections, pat] = await Promise.all([
+      this.connect.withResource(userId).listConnections(),
+      getGithubUserPatStatus(this.integrationStorage, orgId, userId),
+    ]);
+    const own = connections.find(
+      connection => connection.integrationId === FACTORY_GITHUB_PROVIDER_KEY && connection.resourceId === userId,
+    );
+    return {
+      connection: own ? { id: own.id, status: own.status, accountLabel: own.accountLabel ?? null } : null,
+      pat,
+    };
   }
 
   /**
@@ -1097,10 +1114,19 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     installations: SourceControlInstallation[];
     hiddenPersonalInstallReason?: PlatformHiddenPersonalInstallReason;
   }> {
-    const result = await this.#legacy.listInstallations();
-    const usableInstallations = result.installations.filter(
-      installation => installation.usable && !installation.suspendedAt,
-    );
+    // A switched org's installations are the Mastra Factory apps'; listing the
+    // legacy app here would re-create the rows the switch moved.
+    const record = this.#integrationStorage ? await this.#modes.get(orgId) : undefined;
+    const result =
+      record?.mode === 'connect'
+        ? { installations: await this.#sourceInstallations(orgId), hiddenPersonalInstallReason: undefined }
+        : await this.#legacy.listInstallations().then(listed => ({
+            ...listed,
+            installations: listed.installations.filter(
+              installation => installation.usable && !installation.suspendedAt,
+            ),
+          }));
+    const usableInstallations = result.installations;
     const installations = await Promise.all(
       usableInstallations.map(installation =>
         this.versionControl.registerInstallation({

@@ -152,6 +152,7 @@ async function setup(
     emitAudit,
     modes,
     status: () => app.request('/web/integrations/platform/github/switch'),
+    githubStatus: () => app.request('/web/github/status'),
     switchApps: () => app.request('/web/integrations/platform/github/switch', { method: 'POST' }),
   };
 }
@@ -270,6 +271,22 @@ describe('GitHub app switch', () => {
     const report = await (await status()).json();
     expect(report).toMatchObject({ mode: 'connect', switchedAt });
     expect(report).not.toHaveProperty('plan');
+  });
+
+  it("reports the switched org's new installation, without re-creating the legacy one", async () => {
+    const { switchApps, githubStatus, sourceControl, platform } = await setup();
+    expect((await switchApps()).status).toBe(200);
+
+    const response = await githubStatus();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      mode: 'connect',
+      connected: true,
+      installations: [{ installationId: 900, accountLogin: 'acme', accountType: 'Organization' }],
+      userConnected: false,
+    });
+    expect(await sourceControl.installations.list({ orgId: 'org-1' })).toMatchObject([{ externalId: '900' }]);
+    expect(platform.requests.some(request => request.path.startsWith('/v1/server/github'))).toBe(false);
   });
 
   it('lets exactly one of two concurrent switches move the installations', async () => {
