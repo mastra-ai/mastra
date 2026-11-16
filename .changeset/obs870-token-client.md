@@ -2,4 +2,4 @@
 '@mastra/client-js': minor
 ---
 
-Update experimental search types for token predicates.
+Update experimental observability query types.
