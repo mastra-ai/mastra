@@ -84,6 +84,7 @@
     "@mastra/deployer": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/pg": "workspace:*",
+    "@mastra/redis-streams": "workspace:*",
     "@mastra/server": "workspace:*",
     "@types/node": "22.19.15",
     "msw": "^2.12.11",

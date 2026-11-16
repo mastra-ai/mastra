@@ -3143,6 +3143,243 @@ describe('GithubRules', () => {
     );
   });
 
+  it('takes a Work card through repeated PR review and build cycles before approval and merge', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const boards = createTriageWorkRegistry();
+    const configVersion = 'lifecycle-stress';
+    const transitionService = new FactoryTransitionService({ storage: workItems, boards, configVersion });
+    const work = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github:10:issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const itemId = work.item.id;
+    const current = () => workItems.get({ orgId: 'org-1', id: itemId });
+    let sequence = 0;
+    const move = async (stage: string, actor: 'human' | 'agent' = 'human') => {
+      const item = (await current())!;
+      const role = item.stages[0] === 'pr-review' ? 'review' : 'work';
+      const result = await transitionService.transition({
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        workItemId: itemId,
+        board: 'work',
+        stage,
+        expectedRevision: item.revision,
+        actor:
+          actor === 'human'
+            ? { type: 'human', id: 'user-1' }
+            : { type: 'agent', bindingId: `${role}-binding`, role },
+        ingress: { type: actor, identity: `lifecycle-${++sequence}` },
+        cause: 'Lifecycle stress scenario',
+      });
+      expect(result).toMatchObject({ status: 'accepted', stage });
+    };
+    await move('planning');
+    expect((await current())?.stages).toEqual(['planning']);
+    const planningRevision = (await current())!.revision;
+    const waiting = await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      workItemId: itemId,
+      board: 'work',
+      stage: 'execute',
+      expectedRevision: (await current())!.revision,
+      actor: { type: 'agent', bindingId: 'work-binding', role: 'work' },
+      ingress: { type: 'agent', identity: 'before-plan-approval' },
+      cause: 'Attempt to build before the plan is approved',
+    });
+    expect(waiting).toMatchObject({ status: 'rejected', code: 'approval_required' });
+    const approvedAt = new Date().toISOString();
+    await workItems.update({
+      orgId: 'org-1',
+      id: itemId,
+      userId: 'agent:work-binding',
+      patch: {
+        metadata: { phaseExit: { phase: 'planning', tool: 'submit_plan', at: approvedAt }, planApprovedAt: approvedAt },
+      },
+      expectedRevision: (await current())!.revision,
+    });
+    const staleMove = await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      workItemId: itemId,
+      board: 'work',
+      stage: 'execute',
+      expectedRevision: planningRevision,
+      actor: { type: 'agent', bindingId: 'work-binding', role: 'work' },
+      ingress: { type: 'agent', identity: 'stale-plan-move' },
+      cause: 'Delayed move from before plan approval',
+    });
+    expect(staleMove).toMatchObject({ status: 'rejected', code: 'stale' });
+    expect((await current())?.stages).toEqual(['planning']);
+    await move('execute', 'agent');
+    expect((await current())?.stages).toEqual(['execute']);
+
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: itemId },
+    });
+    const githubRules = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards,
+      configVersion,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSession: vi.fn(async () => undefined), listActiveThreadRuns: () => [] } as never,
+      transitionService,
+      storage: workItems,
+      boards,
+      ownerId: 'lifecycle-worker',
+    });
+    await githubRules.ingest(pullRequest('opened', 'lifecycle-pr-opened'));
+    const decisionsBeforeReplay = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(await githubRules.ingest(pullRequest('opened', 'lifecycle-pr-opened'))).toEqual({ status: 'replayed' });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(decisionsBeforeReplay);
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: itemId,
+          decision: expect.objectContaining({ type: 'transition', stage: 'pr-review' }),
+        }),
+      ]),
+    );
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+    expect((await current())?.stages).toEqual(['pr-review']);
+    expect((await current())?.metadata?.openPullRequestNumber).toBe(17);
+
+    const reviewEvent = {
+      event: 'pull_request_review',
+      deliveryId: 'lifecycle-review-changes',
+      payload: {
+        action: 'submitted',
+        installation: { id: 7 },
+        repository: { id: 10, full_name: 'acme/repo' },
+        sender: { login: 'reviewer' },
+        review: {
+          id: 99,
+          state: 'changes_requested',
+          html_url: 'https://github.com/acme/repo/pull/17#pullrequestreview-99',
+        },
+        pull_request: {
+          number: 17,
+          title: 'PR 17',
+          html_url: 'https://github.com/acme/repo/pull/17',
+          state: 'open',
+          merged: false,
+          head: { ref: 'feature' },
+          base: { ref: 'main' },
+        },
+      },
+    } as const;
+    await githubRules.ingest(reviewEvent);
+    const decisionsBeforeReviewReplay = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(await githubRules.ingest(reviewEvent)).toEqual({ status: 'replayed' });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(decisionsBeforeReviewReplay);
+    const feedback = (await workItems.listDeferredDecisions('org-1', project.id)).find(
+      record => record.workItemId === itemId && record.decision.type === 'sendMessage',
+    );
+    expect(feedback?.decision).toMatchObject({ type: 'sendMessage', role: 'work', priority: 'high' });
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:02Z'));
+    expect(
+      (await workItems.listDeferredDecisions('org-1', project.id)).find(record => record.id === feedback?.id),
+    ).toMatchObject({ status: 'succeeded' });
+    // Dispatch considers the wake successful even though this item has no author binding to receive it.
+    expect((await current())?.stages).toEqual(['pr-review']);
+    expect((await current())?.metadata?.openPullRequestNumber).toBe(17);
+
+    // The reviewer moves the issue card back to the author. Here the agent moves
+    // are driven through the transition service; no author session receives the wake.
+    await move('execute', 'agent');
+    expect((await current())?.stages).toEqual(['execute']);
+    await move('pr-review', 'agent');
+    expect((await current())?.stages).toEqual(['pr-review']);
+    await githubRules.ingest(pullRequest('synchronize', 'lifecycle-pr-push-1'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:03Z'));
+    expect((await current())?.stages).toEqual(['pr-review']);
+    const secondReviewEvent = {
+      ...reviewEvent,
+      deliveryId: 'lifecycle-review-changes-again',
+      payload: {
+        ...reviewEvent.payload,
+        review: { ...reviewEvent.payload.review, id: 101 },
+      },
+    } as const;
+    await githubRules.ingest(secondReviewEvent);
+    const secondFeedback = (await workItems.listDeferredDecisions('org-1', project.id)).find(
+      record =>
+        record.workItemId === itemId &&
+        record.decision.type === 'sendMessage' &&
+        record.id !== feedback?.id &&
+        record.decision.idempotencyKey?.includes('address-review-feedback'),
+    );
+    expect(secondFeedback?.decision).toMatchObject({ type: 'sendMessage', role: 'work', priority: 'high' });
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:04Z'));
+    expect(
+      (await workItems.listDeferredDecisions('org-1', project.id)).find(record => record.id === secondFeedback?.id),
+    ).toMatchObject({ status: 'succeeded' });
+    expect((await current())?.stages).toEqual(['pr-review']);
+    await move('execute', 'agent');
+    await move('pr-review', 'agent');
+    await githubRules.ingest(pullRequest('synchronize', 'lifecycle-pr-push-2'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:05Z'));
+    expect((await current())?.stages).toEqual(['pr-review']);
+    expect((await current())?.metadata?.openPullRequestNumber).toBe(17);
+    const approvalEvent = {
+      ...reviewEvent,
+      deliveryId: 'lifecycle-review-approved',
+      payload: {
+        ...reviewEvent.payload,
+        review: { ...reviewEvent.payload.review, id: 100, state: 'approved' },
+      },
+    } as const;
+    await githubRules.ingest(approvalEvent);
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:06Z'));
+    expect((await current())?.stages).toEqual(['pr-review']);
+    const mergedEvent = pullRequest('closed', 'lifecycle-pr-merged', true);
+    await githubRules.ingest(mergedEvent);
+    const decisionsBeforeMergeReplay = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(await githubRules.ingest(mergedEvent)).toEqual({ status: 'replayed' });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(decisionsBeforeMergeReplay);
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:07Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:08Z'));
+    expect((await current())?.stages).toEqual(['done']);
+    expect((await current())?.metadata?.openPullRequestNumber).toBeNull();
+    expect((await current())?.stageHistory.map(entry => entry.stage)).toEqual([
+      'intake',
+      'planning',
+      'execute',
+      'pr-review',
+      'execute',
+      'pr-review',
+      'execute',
+      'pr-review',
+      'done',
+    ]);
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:09Z'));
+    expect((await current())?.stages).toEqual(['done']);
+  });
+
   it('ignores provenance recorded by a sibling Factory project in the same org', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
     const work = await workItems.upsert({

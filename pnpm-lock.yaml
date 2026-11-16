@@ -2573,6 +2573,9 @@ importers:
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../stores/pg
+      '@mastra/redis-streams':
+        specifier: workspace:*
+        version: link:../../pubsub/redis-streams
       '@mastra/server':
         specifier: workspace:*
         version: link:../../packages/server
