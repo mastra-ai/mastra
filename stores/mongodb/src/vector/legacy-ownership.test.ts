@@ -1121,12 +1121,13 @@ describe('legacy ownership', () => {
               throw new Error('provision failed');
             },
           };
+          const rev = (await entry(coll))?.rev ?? 0;
           const call = a.createSearchIndex({ indexName: coll, searchIndexName: 'B' });
           await expect(call).rejects.toThrow('provision failed');
           expect(await entry(coll)).toMatchObject({
             deleting: true,
             deleteToken: 't',
-            rev: 1,
+            rev: rev + 1,
             textSearchIndexName: 'B',
           });
         });
@@ -1208,6 +1209,142 @@ describe('legacy ownership', () => {
           const err = await refresh;
           expect(err.id).toBe(createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'));
           expect(await entry(coll)).toBeNull();
+          expect(await searchIndexNames(db, coll)).toEqual([]);
+        });
+
+        // The registration is removed after the call's write but before it provisions: provisioning
+        // then would leave a search index on the caller's collection that nothing records.
+        it('T-R3b: a same-name refresh whose registration is deleted after its write refuses with CONFLICT and recreates nothing', async () => {
+          const coll = await byo();
+          await a.createSearchIndex({ indexName: coll, searchIndexName: 'A' });
+          const p = pause();
+          (a as any).testHooks = { beforePendingDropCheck: p.hook };
+          const refresh = a
+            .createSearchIndex({ indexName: coll, searchIndexName: 'A', fields: ['title'] })
+            .catch(e => e);
+          await reached(p);
+          await b.deleteIndex({ indexName: coll });
+          expect(await searchIndexNames(db, coll)).toEqual([]);
+          p.release.resolve();
+          const err = await refresh;
+          expect(err.id).toBe(createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'));
+          expect(await entry(coll)).toBeNull();
+          expect(await searchIndexNames(db, coll)).toEqual([]);
+        });
+
+        it('T-R3c: a createIndex refresh whose registration is deleted after its write refuses with CONFLICT and recreates nothing', async () => {
+          const coll = await byo();
+          const p = pause();
+          (a as any).testHooks = { beforePendingDropCheck: p.hook };
+          const refresh = a.createIndex({ indexName: coll, dimension: 4, collectionName: coll }).catch(e => e);
+          await reached(p);
+          await b.deleteIndex({ indexName: coll });
+          expect(await searchIndexNames(db, coll)).toEqual([]);
+          p.release.resolve();
+          const err = await refresh;
+          expect(err.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+          expect(await entry(coll)).toBeNull();
+          expect(await searchIndexNames(db, coll)).toEqual([]);
+        });
+
+        it('T-R3d: a createIndex refresh never rewrites an entry whose delete started after its read', async () => {
+          const coll = await byo();
+          let marked: Document | null = null;
+          (a as any).testHooks = {
+            afterCreateIndexRead: async () => {
+              await db
+                .collection(REGISTRY)
+                .updateOne({ _id: coll as any }, { $set: { deleting: true, deleteToken: 't' }, $inc: { rev: 1 } });
+              marked = await entry(coll);
+            },
+          };
+          const err = await a.createIndex({ indexName: coll, dimension: 4, collectionName: coll }).catch(e => e);
+          expect(err.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'INDEX_DELETING'));
+          expect(await entry(coll)).toEqual(marked);
+        });
+
+        // A rollback restores the document the call read. An ownership write by another call in
+        // between keeps the claimToken, so only its `rev` bump stops the rollback from erasing it.
+        it('I-2: a failed createSearchIndex never undoes the vector ownership a concurrent createIndex recorded', async () => {
+          const coll = uniqueName('own');
+          colls.push(coll);
+          await seedCollection(db, coll, [{ title: 'a', embedding: [1, 0, 0, 0] }]);
+          const pb = pause();
+          const pa = pause();
+          (b as any).testHooks = { beforePendingDropCheck: pb.hook };
+          (a as any).testHooks = {
+            afterCreateSearchIndexRead: pa.hook,
+            beforeSearchIndexProvision: async () => {
+              throw new Error('provision failed');
+            },
+          };
+          const create = b.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
+          await reached(pb);
+          const search = a.createSearchIndex({ indexName: coll, searchIndexName: 'A' }).catch(e => e);
+          // The search call has read the entry before the vector index exists or is recorded as owned.
+          await reached(pa);
+          expect((await entry(coll))?.ownsVectorIndex).toBeUndefined();
+          pb.release.resolve();
+          await create;
+          expect((await entry(coll))?.ownsVectorIndex).toBe(true);
+          pa.release.resolve();
+          expect((await search).message).toMatch(/provision failed/);
+          expect((await entry(coll))?.ownsVectorIndex).toBe(true);
+          (a as any).testHooks = undefined;
+          await a.deleteIndex({ indexName: coll });
+          expect(await searchIndexNames(db, coll)).toEqual([]);
+        });
+
+        it('I-2: a failed createSearchIndex never undoes a claim that completed while it ran', async () => {
+          const coll = uniqueName('clm');
+          colls.push(coll);
+          await seedCollection(db, coll, [{ title: 'a' }]);
+          await seedRegistry(db, {
+            _id: coll,
+            indexName: coll,
+            collectionName: coll,
+            searchIndexName: `${coll}_vector_index`,
+            isByo: false,
+            allowWrites: true,
+            claimToken: 't0',
+          });
+          const pa = pause();
+          (a as any).testHooks = {
+            afterCreateSearchIndexRead: pa.hook,
+            beforeSearchIndexProvision: async () => {
+              throw new Error('provision failed');
+            },
+          };
+          const search = a.createSearchIndex({ indexName: coll, searchIndexName: 'A' }).catch(e => e);
+          await reached(pa);
+          await b.claimLegacyIndex({ indexName: coll });
+          expect((await entry(coll))?.ownsCollection).toBe(true);
+          pa.release.resolve();
+          expect((await search).message).toMatch(/provision failed/);
+          expect(await entry(coll)).toMatchObject({ ownsCollection: true, ownsVectorIndex: true });
+        });
+
+        it('M-2: a registration on a collection a managed delete is dropping refuses with INDEX_DELETING', async () => {
+          const coll = uniqueName('mdel');
+          colls.push(coll);
+          await seedCollection(db, coll, [{ title: 'a', embedding: [1, 0, 0, 0] }]);
+          await seedRegistry(db, {
+            _id: coll,
+            indexName: coll,
+            collectionName: coll,
+            searchIndexName: `${coll}_vector_index`,
+            isByo: false,
+            allowWrites: true,
+            ownsCollection: true,
+            ownsVectorIndex: true,
+            deleting: true,
+            deleteToken: 't',
+          });
+          const err = await b
+            .createIndex({ indexName: `${coll}_Y`, dimension: 4, collectionName: coll, searchIndexName: 'yv' })
+            .catch(e => e);
+          expect(err.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'INDEX_DELETING'));
+          expect(await entry(`${coll}_Y`)).toBeNull();
           expect(await searchIndexNames(db, coll)).toEqual([]);
         });
       });
@@ -1386,7 +1523,8 @@ describe('legacy ownership', () => {
         await store.claimLegacyIndex({ indexName: X });
         const first = await reg(X);
         await store.claimLegacyIndex({ indexName: X });
-        expect(await reg(X)).toEqual(first);
+        // Only the concurrency counter moves; every recorded field stays the same.
+        expect({ ...(await reg(X)), rev: 0 }).toEqual({ ...first, rev: 0 });
       });
     });
 

@@ -129,11 +129,16 @@ const stubRegistered = (v: MongoDBVector, entries: Record<string, object>) =>
 // Mocked collections that hold no Atlas Search indexes yet.
 const noSearchIndexes = () => ({ toArray: async () => [] });
 
-// Mocked db: the target collection exists, no registration is being deleted, and every registry write matches.
+// Mocked db: the target collection exists, the call's own registration is live, no other one is being deleted,
+// and every registry write matches.
 const stubDb = (v: MongoDBVector) =>
   ((v as any).db = {
     listCollections: () => ({ hasNext: async () => true }),
-    collection: () => ({ find: () => ({ toArray: async () => [] }), updateOne: async () => ({ matchedCount: 1 }) }),
+    collection: () => ({
+      findOne: async () => ({ _id: 'registered' }),
+      find: () => ({ toArray: async () => [] }),
+      updateOne: async () => ({ matchedCount: 1 }),
+    }),
   });
 
 // Helper function to wait for a condition with timeout
@@ -1520,6 +1525,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
 
     it('R5-4: createSearchIndex persists the registry target BEFORE provisioning (crash-safe ordering)', async () => {
       const v = makeVector();
+      stubDb(v);
       const order: string[] = [];
       const createSearchIndex = vi.fn().mockImplementation(async () => {
         order.push('provision');
@@ -1588,6 +1594,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
     // defensively hydrate missing collectionName/searchIndexName from the managed default.
     it('FIX1: createSearchIndex persists a COMPLETE registry target (never partial)', async () => {
       const v = makeVector();
+      stubDb(v);
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       // A legacy managed index with no registry entry yet: the first write creates a full one.
@@ -2640,7 +2647,8 @@ describe('MongoDBVector autoEmbed', () => {
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       const registry = {
-        findOne: vi.fn().mockResolvedValue(null),
+        // Nothing registered on the first read; the call's own entry on the post-write check.
+        findOne: vi.fn().mockResolvedValueOnce(null).mockResolvedValue({ _id: 'movies' }),
         updateOne: vi.fn().mockResolvedValue({}),
         find: () => ({ toArray: async () => [] }),
       };
@@ -2654,6 +2662,7 @@ describe('MongoDBVector autoEmbed', () => {
       expect(registry.updateOne.mock.calls[0][0]).toEqual({
         _id: 'movies',
         collectionName: 'movies',
+        deleting: { $ne: true },
         'autoEmbed.path': 'fullplot',
         'autoEmbed.model': 'voyage-4',
         // No entry was read, so the write must not land on one registered since.
@@ -2666,7 +2675,8 @@ describe('MongoDBVector autoEmbed', () => {
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       const registry = {
-        findOne: vi.fn().mockResolvedValue(null),
+        // Nothing registered on the first read; the call's own entry on the post-write check.
+        findOne: vi.fn().mockResolvedValueOnce(null).mockResolvedValue({ _id: 'movies' }),
         updateOne: vi.fn().mockResolvedValue({}),
         find: () => ({ toArray: async () => [] }),
       };
@@ -2683,6 +2693,7 @@ describe('MongoDBVector autoEmbed', () => {
       expect(registry.updateOne.mock.calls[0][0]).toEqual({
         _id: 'movies',
         collectionName: 'movies',
+        deleting: { $ne: true },
         autoEmbed: null,
         // No entry was read, so the write must not land on one registered since.
         claimToken: { $exists: false },

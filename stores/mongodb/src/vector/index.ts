@@ -665,22 +665,28 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     entry: Partial<RegistryDoc>,
     claim?: Document,
     upsert = true,
+    bumpRev = false,
   ): Promise<void> {
     const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
-    await registry.updateOne({ _id: indexName, ...claim }, { $set: { indexName, ...entry } }, { upsert });
+    await registry.updateOne(
+      { _id: indexName, ...claim },
+      { $set: { indexName, ...entry }, ...(bumpRev ? { $inc: { rev: 1 } } : {}) },
+      { upsert },
+    );
   }
 
   /**
    * Record that this store created a search index. `claim` pins the entry to this call's
    * `claimToken` and the index name, so the flag never lands on an entry another process
-   * rewrote or re-registered in the meantime. No upsert, so a deleted entry stays deleted.
+   * rewrote or re-registered in the meantime. No upsert, so a deleted entry stays deleted. Bumps
+   * `rev`, so a concurrent call's rollback never restores a snapshot from before this flag.
    */
   private async markOwned(
     indexName: string,
     owned: Pick<IndexTarget, 'ownsVectorIndex'> | Pick<IndexTarget, 'ownsTextIndex'>,
     claim: Document,
   ): Promise<void> {
-    await this.writeRegistryEntry(indexName, owned, claim, false);
+    await this.writeRegistryEntry(indexName, owned, claim, false, true);
   }
 
   /**
@@ -939,6 +945,11 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * Refuse to reference a search index that a delete in progress is about to drop. The attach half
    * of the handshake described on {@link handOverPendingDrop}: callers run it after writing their
    * registration, so either this read sees the pending drop or the delete's read sees the registration.
+   *
+   * It also re-reads this call's own entry, which a deleteIndex may have removed or started removing
+   * since the write: provisioning then would leave a search index no registration records. Callers
+   * run it last before provisioning. An entry another call rewrote since is live and still records
+   * the target, so it is not refused here.
    */
   private async assertNoPendingDrop(
     collectionName: string,
@@ -948,15 +959,30 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   ): Promise<void> {
     await this.testHooks?.beforePendingDropCheck?.(indexName);
     const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
+    const own = await registry.findOne({ _id: indexName });
+    if (!own) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', op, 'CONFLICT'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+        text: `Index "${indexName}" was removed by another call while this one ran, so nothing was provisioned. Retry.`,
+      });
+    }
+    this.assertNotDeleting(own, op);
     for (const other of await registry.find({ collectionName, deleting: true, _id: { $ne: indexName } }).toArray()) {
-      const name = names.find(n => n && recordedDropSet(other).includes(n));
+      // A managed delete drops the whole collection, so every name on it is pending.
+      const name =
+        other.ownsCollection === true && !other.isByo
+          ? names.find(Boolean)
+          : names.find(n => n && recordedDropSet(other).includes(n));
       if (!name) continue;
       throw new MastraError({
         id: createVectorErrorId('MONGODB', op, 'INDEX_DELETING'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         details: { indexName, searchIndexName: name, deletingIndexName: other._id },
-        text: `The search index "${name}" is being dropped by a deleteIndex in progress (index "${other._id}"). Nothing was changed. Retry after it finishes; if that delete was interrupted, retry deleteIndex({ indexName: "${other._id}" }) first.`,
+        text: `The search index "${name}" is being dropped by a deleteIndex in progress (index "${other._id}"). Retry after it finishes; retrying is safe. If that delete was interrupted, retry deleteIndex({ indexName: "${other._id}" }) first. The delete may already have handed the index to this registration, in which case the registration was kept.`,
       });
     }
   }
@@ -1380,6 +1406,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // and null also matches entries written before autoEmbed existed, which carry no such key.
       const registryClaim: Document = {
         collectionName: targetCollection,
+        // A deleting entry fails the filter, so the upsert hits 11000 and the call refuses with INDEX_DELETING.
+        deleting: { $ne: true },
         ...(resolvedAutoEmbed
           ? { 'autoEmbed.path': resolvedAutoEmbed.path, 'autoEmbed.model': resolvedAutoEmbed.model }
           : { autoEmbed: null }),
@@ -2954,6 +2982,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
               // An explicit false records that the index existed before registration; keep it.
               ownsVectorIndex: { $ifNull: ['$ownsVectorIndex', true] },
               ...(seen.textSearchIndexName ? { ownsTextIndex: { $ifNull: ['$ownsTextIndex', true] } } : {}),
+              // Ownership changed, so a concurrent call's rollback must not restore its older snapshot.
+              rev: { $add: [{ $ifNull: ['$rev', 0] }, 1] },
             },
           },
         ],
