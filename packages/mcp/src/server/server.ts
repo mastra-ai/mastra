@@ -17,7 +17,12 @@ import type {
 } from '@mastra/core/mcp';
 import { EntityType, SpanType, getOrCreateSpan } from '@mastra/core/observability';
 import type { Span, TracingContext } from '@mastra/core/observability';
-import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '@mastra/core/request-context';
+import {
+  MASTRA_AUTH_TOKEN_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+  RequestContext,
+} from '@mastra/core/request-context';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema, toStandardSchema } from '@mastra/core/schema';
 import type { StandardSchemaWithJSON } from '@mastra/core/schema';
 import { createTool, getValidationIssuePaths, isValidationError, validateToolInput } from '@mastra/core/tools';
@@ -437,18 +442,42 @@ export class MCPServer extends MCPServerBase {
           description: `Ask agent '${agent.name}' a question. Agent description: ${description}`,
           inputSchema: {
             type: 'object' as const,
-            properties: { message: { type: 'string', description: 'The question or input for the agent.' } },
+            properties: {
+              message: { type: 'string', description: 'The question or input for the agent.' },
+              threadId: {
+                type: 'string',
+                description: 'Conversation thread id. Reuse the threadId from an earlier reply to continue it.',
+              },
+              resourceId: {
+                type: 'string',
+                description: 'Owner of the conversation memory (for example a user id).',
+              },
+            },
             required: ['message'],
             additionalProperties: false,
           },
           mcp: { toolType: 'agent' },
           execute: async (inputData, context) => {
-            const { message } = inputData as { message: string };
-            return agent.generate(message, {
-              requestContext: context?.requestContext,
+            const { message, threadId, resourceId } = inputData as {
+              message: string;
+              threadId?: string;
+              resourceId?: string;
+            };
+            const requestContext = context?.requestContext;
+            // Reserved keys on the trusted request context win in core (a client cannot override the
+            // authenticated owner), so read them first to keep `memory` and the echoed id in sync.
+            const contextThreadId = requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+            const resolvedResourceId =
+              (requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined) ?? resourceId;
+            const resolvedThreadId = contextThreadId ?? threadId ?? (resolvedResourceId ? randomUUID() : undefined);
+            const result = await agent.generate(message, {
+              requestContext,
               tracingContext: context?.tracingContext,
               abortSignal: context?.abortSignal,
+              // A thread is always resolved when a resource is: core memory needs a thread id.
+              ...(resolvedThreadId ? { memory: { thread: resolvedThreadId, resource: resolvedResourceId } } : {}),
             });
+            return resolvedThreadId ? { ...result, threadId: resolvedThreadId } : result;
           },
         }),
       );

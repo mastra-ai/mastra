@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -141,13 +141,125 @@ describe('MCPServer', () => {
         id: 'ask_helper',
         name: 'ask_helper',
         toolType: 'agent',
-        inputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] },
+        inputSchema: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+            threadId: { type: 'string' },
+            resourceId: { type: 'string' },
+          },
+          required: ['message'],
+        },
       });
 
       const requestContext = new RequestContext();
       const result = await server.executeTool('ask_helper', { message: 'Hello' }, { requestContext });
       expect(result).toMatchObject({ status: 'completed', output: { text: 'generated' } });
       expect(generate).toHaveBeenCalledWith('Hello', expect.objectContaining({ requestContext }));
+      // Without a thread or resource id the tool runs the agent without memory, exactly as before.
+      const options = generate.mock.calls[0]![1] as { memory?: unknown };
+      expect(options.memory).toBeUndefined();
+      expect((result as { output: { threadId?: string } }).output.threadId).toBeUndefined();
+    });
+
+    it('passes a caller-supplied thread and resource to generate and echoes the thread id', async () => {
+      const agent = createMockAgent('MyAgent', 'Answers questions.');
+      const generate = vi.spyOn(agent, 'generate');
+      const server = new MCPServer({ name: 'Agents', version: '1.0.0', tools: {}, agents: { helper: agent } });
+
+      const result = await server.executeTool(
+        'ask_helper',
+        { message: 'Hi', threadId: 't-1', resourceId: 'u-1' },
+        { requestContext: new RequestContext() },
+      );
+      expect(generate).toHaveBeenCalledWith(
+        'Hi',
+        expect.objectContaining({ memory: { thread: 't-1', resource: 'u-1' } }),
+      );
+      expect((result as { output: { threadId?: string } }).output.threadId).toBe('t-1');
+    });
+
+    it('mints a thread when only a resource id is given and echoes it', async () => {
+      const agent = createMockAgent('MyAgent', 'Answers questions.');
+      const generate = vi.spyOn(agent, 'generate');
+      const server = new MCPServer({ name: 'Agents', version: '1.0.0', tools: {}, agents: { helper: agent } });
+
+      const result = await server.executeTool(
+        'ask_helper',
+        { message: 'Hi', resourceId: 'u-1' },
+        { requestContext: new RequestContext() },
+      );
+      const options = generate.mock.calls[0]![1] as { memory?: { thread?: string; resource?: string } };
+      expect(options.memory?.resource).toBe('u-1');
+      expect(options.memory?.thread).toMatch(/^[0-9a-f-]{36}$/);
+      expect((result as { output: { threadId?: string } }).output.threadId).toBe(options.memory?.thread);
+    });
+
+    it('derives the resource from the trusted request context and mints a thread', async () => {
+      const agent = createMockAgent('MyAgent', 'Answers questions.');
+      const generate = vi.spyOn(agent, 'generate');
+      const server = new MCPServer({ name: 'Agents', version: '1.0.0', tools: {}, agents: { helper: agent } });
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'ctx-user');
+      const result = await server.executeTool('ask_helper', { message: 'Hi' }, { requestContext });
+      const options = generate.mock.calls[0]![1] as { memory?: { thread?: string; resource?: string } };
+      expect(options.memory?.resource).toBe('ctx-user');
+      expect(options.memory?.thread).toMatch(/^[0-9a-f-]{36}$/);
+      expect((result as { output: { threadId?: string } }).output.threadId).toBe(options.memory?.thread);
+    });
+
+    it('lets the reserved thread key win over the argument', async () => {
+      const agent = createMockAgent('MyAgent', 'Answers questions.');
+      const generate = vi.spyOn(agent, 'generate');
+      const server = new MCPServer({ name: 'Agents', version: '1.0.0', tools: {}, agents: { helper: agent } });
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_THREAD_ID_KEY, 'ctx-thread');
+      const result = await server.executeTool(
+        'ask_helper',
+        { message: 'Hi', threadId: 'arg-thread' },
+        { requestContext },
+      );
+      expect(generate).toHaveBeenCalledWith(
+        'Hi',
+        expect.objectContaining({ memory: { thread: 'ctx-thread', resource: undefined } }),
+      );
+      expect((result as { output: { threadId?: string } }).output.threadId).toBe('ctx-thread');
+    });
+
+    it('round-trips a thread id over the wire', async () => {
+      const server = new MCPServer({
+        name: 'AgentWire',
+        version: '1.0.0',
+        tools: {},
+        agents: { helper: createMockAgent('MyAgent', 'Answers questions.') },
+      });
+      const served = await serveHTTP(server);
+      try {
+        const client = await connectClient(served.url);
+        try {
+          const first = JSON.parse(
+            textOf(await client.callTool({ name: 'ask_helper', arguments: { message: 'Hello', resourceId: 'u-1' } }))!,
+          ) as { text: string; threadId?: string };
+          expect(first.text).toBe('generated');
+          expect(first.threadId).toMatch(/^[0-9a-f-]{36}$/);
+
+          const second = JSON.parse(
+            textOf(
+              await client.callTool({
+                name: 'ask_helper',
+                arguments: { message: 'Again', resourceId: 'u-1', threadId: first.threadId },
+              }),
+            )!,
+          ) as { threadId?: string };
+          expect(second.threadId).toBe(first.threadId);
+        } finally {
+          await client.close();
+        }
+      } finally {
+        await served.close();
+      }
     });
 
     it('exposes workflows as run_<key> tools that start a run with the request context', async () => {
