@@ -11,7 +11,7 @@ import {
   PULL_REQUEST_INTAKE_ROUTE,
 } from '../storage/domains/boards/base.js';
 import type { IntakeEvaluator, StoredIntakeRouteInput } from '../storage/domains/boards/base.js';
-import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { asProjectFromBeforeIntakeEvaluator, createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision } from './types.js';
@@ -43,6 +43,8 @@ const docsBoard = {
 /**
  * A real dispatcher over real storage, with the project's stored boards and intake routes.
  * Tests start without the default routes every project gets, unless they pass `withDefaultRoute`.
+ * The project is one from before the evaluator setting, on the route list, unless `project` is
+ * `new` (stamped with intake order, as one created today is).
  */
 async function setup(
   options: {
@@ -52,11 +54,13 @@ async function setup(
     withDefaultRoute?: boolean;
     codeRegistry?: BoardRegistry;
     intakeEvaluator?: IntakeEvaluator;
+    project?: 'new' | 'older';
   } = {},
 ) {
   const seeded = await createFactoryStorageForTests();
   const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Routes' } });
   const scope = { orgId: 'org-1', factoryProjectId: project.id };
+  if (options.project !== 'new') await asProjectFromBeforeIntakeEvaluator(seeded.storage, scope);
   const defaults = await seeded.boards.listIntakeRoutes(scope);
   const defaultRoute = defaults.find(route => route.name === DEFAULT_INTAKE_ROUTE.name);
   if (!options.withDefaultRoute) {
@@ -1234,6 +1238,48 @@ describe('intake routes moving existing cards on pull request events', () => {
   });
 });
 
+describe('which evaluator decides a project’s arrivals', () => {
+  const docsRule = { name: 'Docs', when: DOCS, target: { boardKey: 'docs', phaseKey: null } };
+  /** A project whose only rule takes docs items; a bug report matches nothing. */
+  async function docsOnly(options: Parameters<typeof setup>[0] = {}) {
+    const seeded = await setup(options);
+    await seeded.boards.create(seeded.scope, docsBoard, 'admin');
+    await seeded.route(docsRule);
+    return seeded;
+  }
+  const bug = { sourceKey: 'github-issue:7', metadata: { labels: ['bug'] } };
+
+  it('decides a project created now by intake order with nothing forcing it', async () => {
+    const seeded = await docsOnly({ project: 'new' });
+
+    expect(await seeded.deliver(bug)).toBeUndefined();
+    expect((await seeded.boards.listNotRouted(seeded.scope)).notRouted).toMatchObject([
+      { sourceKey: 'github-issue:7', evaluator: 'intake-order' },
+    ]);
+  });
+
+  it('keeps a project from before the setting on the route list, which files an unmatched item on Work', async () => {
+    const seeded = await docsOnly({ project: 'older' });
+
+    expect(placed(await seeded.deliver(bug))).toEqual({ board: 'work', stages: ['intake'] });
+  });
+
+  it('lets a forced evaluator win over the project’s setting, either way', async () => {
+    const forcedOld = await docsOnly({ project: 'new', intakeEvaluator: 'route-list' });
+    expect(placed(await forcedOld.deliver(bug))).toEqual({ board: 'work', stages: ['intake'] });
+
+    const forcedNew = await docsOnly({ project: 'older', intakeEvaluator: 'intake-order' });
+    expect(await forcedNew.deliver(bug)).toBeUndefined();
+  });
+
+  it('decides the next arrival by the evaluator an older project is switched to', async () => {
+    const seeded = await docsOnly({ project: 'older' });
+    await seeded.boards.setIntakeEvaluator(seeded.scope, 'intake-order');
+
+    expect(await seeded.deliver(bug)).toBeUndefined();
+  });
+});
+
 describe('intake by intake order', () => {
   const docsRule = { name: 'Docs', when: DOCS, target: { boardKey: 'docs', phaseKey: null } };
   const everything = { name: 'Everything else', when: null, target: { boardKey: 'work', phaseKey: null } };
@@ -1313,7 +1359,7 @@ describe('intake by intake order', () => {
     });
   });
 
-  it('still files an unmatched arrival on Work under the old evaluator, the default', async () => {
+  it('still files an unmatched arrival on Work under the old evaluator, on a project from before the setting', async () => {
     const seeded = await setup();
     const card = await seeded.deliver({ sourceKey: 'github-issue:9', metadata: { labels: ['bug'] } });
     expect(placed(card)).toEqual({ board: 'work', stages: ['intake'] });

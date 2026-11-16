@@ -188,3 +188,19 @@ export async function createFactoryStorageForTests(
     voiceSettings,
   };
 }
+
+/**
+ * Makes a project read as one created before the intake evaluator setting: its lock row carries no
+ * setting, so the project uses `route-list` unless one is forced, and its intake order is derived
+ * from the route list.
+ */
+export async function asProjectFromBeforeIntakeEvaluator(
+  storage: Pick<FactoryStorage, 'ops'>,
+  scope: { orgId: string; factoryProjectId: string },
+): Promise<void> {
+  await storage.ops.updateMany(
+    'factory_intake_route_locks',
+    { org_id: scope.orgId, factory_project_id: scope.factoryProjectId },
+    { intake_evaluator: null, intake_order: null, intake_order_origin: null },
+  );
+}

@@ -16,6 +16,7 @@ import {
   reviewedChangeRequest,
 } from '../boards/index.js';
 import type { BoardRegistry, InstalledBoard } from '../boards/index.js';
+import type { ForcedIntakeEvaluator } from '../boards/intake-routing.js';
 import { legacyPlanRoleFor, workLaneForRole } from '../boards/legacy-plan-role.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardCache, ProjectBoardSource } from '../boards/project-boards.js';
@@ -161,8 +162,10 @@ export interface FactoryApiRoutesDeps {
   configVersion: string;
   /** Each project's boards; integrations use the code boards (`codeRegistry`). */
   boardRegistry: BoardRegistry | ProjectBoardSource;
-  /** Which evaluator places new items; the old `route-list` by default. */
+  /** Forces an evaluator on every project; without it each project uses its own setting. */
   intakeEvaluator?: IntakeEvaluator;
+  /** What forced `intakeEvaluator`. */
+  intakeEvaluatorSource?: ForcedIntakeEvaluator['source'];
   /** Stored boards and their cache; mounts the board management routes when present. */
   storedBoards?: {
     storage: StoredBoardsStorage;
@@ -1064,6 +1067,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           storage: deps.storedBoards.storage,
           boards: deps.storedBoards.cache,
           intakeEvaluator: deps.intakeEvaluator,
+          intakeEvaluatorSource: deps.intakeEvaluatorSource,
           configVersion: deps.configVersion,
         }).routes()
       : []),

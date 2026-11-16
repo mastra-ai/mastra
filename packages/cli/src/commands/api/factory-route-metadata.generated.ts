@@ -1069,13 +1069,14 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "intakeOrderUpdate",
     "method": "PUT",
     "path": "/web/factory/projects/:id/intake-order",
-    "description": "Set the order a Factory project's boards are asked to take a new item",
+    "description": "Set the order a Factory project's boards are asked to take a new item, or its evaluator",
     "pathParams": [
       "id"
     ],
     "queryParams": [],
     "bodyParams": [
-      "boardKeys"
+      "boardKeys",
+      "evaluator"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -3242,6 +3243,29 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "intake-order"
           ]
         },
+        "evaluatorSource": {
+          "type": "string",
+          "enum": [
+            "option",
+            "env",
+            "project",
+            "legacy"
+          ]
+        },
+        "projectEvaluator": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "route-list",
+                "intake-order"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "comparison": {
           "type": "object",
           "properties": {
@@ -3275,6 +3299,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "boards",
         "origin",
         "evaluator",
+        "evaluatorSource",
+        "projectEvaluator",
         "comparison",
         "canEdit"
       ]
@@ -10348,23 +10374,33 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "type": "object",
       "properties": {
         "boardKeys": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "evaluator": {
+          "$ref": "#/$defs/__schema2"
+        }
+      },
+      "additionalProperties": false,
+      "$defs": {
+        "__schema0": {
           "minItems": 1,
           "maxItems": 10000,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema0"
+            "$ref": "#/$defs/__schema1"
           }
-        }
-      },
-      "required": [
-        "boardKeys"
-      ],
-      "additionalProperties": false,
-      "$defs": {
-        "__schema0": {
+        },
+        "__schema1": {
           "type": "string",
           "minLength": 1,
           "maxLength": 128
+        },
+        "__schema2": {
+          "type": "string",
+          "enum": [
+            "route-list",
+            "intake-order"
+          ]
         }
       }
     },
@@ -10404,6 +10440,29 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "intake-order"
           ]
         },
+        "evaluatorSource": {
+          "type": "string",
+          "enum": [
+            "option",
+            "env",
+            "project",
+            "legacy"
+          ]
+        },
+        "projectEvaluator": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "route-list",
+                "intake-order"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "comparison": {
           "type": "object",
           "properties": {
@@ -10437,6 +10496,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "boards",
         "origin",
         "evaluator",
+        "evaluatorSource",
+        "projectEvaluator",
         "comparison",
         "canEdit"
       ]

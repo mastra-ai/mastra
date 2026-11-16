@@ -11,7 +11,11 @@ import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { FACTORY_GITHUB_EVENTS } from '../../rules/types.js';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
-import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../storage/test-utils.js';
+import {
+  asProjectFromBeforeIntakeEvaluator,
+  createFactoryStorageForTests,
+  createIsolatedFactoryPostgresForTests,
+} from '../../storage/test-utils.js';
 import { workItemBranch, workItemBranchSource } from '../../work-item-branch.js';
 import { KeptCards } from '../kept-cards.js';
 import { GithubAppIdentity } from './app-identity.js';
@@ -4249,6 +4253,8 @@ describe('GithubRules with intake routes', () => {
       ownerId: 'worker-intake-routes',
     });
     const scope = { orgId: 'org-1', factoryProjectId: base.project.id };
+    // These cases pin the route list, which a project from before the evaluator setting keeps.
+    await asProjectFromBeforeIntakeEvaluator(base.storage, scope);
     if (!withDefaultRoute) {
       // Last first, so no delete moves (and re-revisions) a route still to delete.
       for (const defaultRoute of (await base.boards.listIntakeRoutes(scope)).toReversed()) {

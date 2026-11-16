@@ -30,6 +30,7 @@ import {
   resolveEventRoute,
   resolveIntake,
   resolveIntakeRoute,
+  projectIntakeEvaluator,
   ROUTE_AGAIN_KEY_PREFIX,
   routesHandleEvent,
 } from '../boards/intake-routing.js';
@@ -499,7 +500,7 @@ export interface FactoryDecisionDispatcherOptions {
   boards?: BoardRegistry | ProjectBoardSource;
   /** The project's intake routes, which place newly filed linked cards. Without it, decisions place cards as they say. */
   intakeRoutes?: IntakeRoutesReader;
-  /** Which evaluator places arrivals; the old `route-list` until every replica runs `intake-order`. */
+  /** Forces an evaluator on every project; without it each project uses its own setting. */
   intakeEvaluator?: IntakeEvaluator;
   ownerId?: string;
   reconcileToolResults?: () => Promise<void>;
@@ -714,7 +715,8 @@ export class FactoryDecisionDispatcher {
   readonly #transitionService: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
   readonly #boards: ProjectBoardSource;
   readonly #intakeRoutes?: IntakeRoutesReader;
-  readonly #intakeEvaluator: IntakeEvaluator;
+  /** Forced on every project; undefined: each project's own setting. */
+  readonly #intakeEvaluator: IntakeEvaluator | undefined;
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
   readonly #autoApproving = new Set<string>();
@@ -774,7 +776,7 @@ export class FactoryDecisionDispatcher {
     this.#transitionService = options.transitionService;
     this.#boards = toBoardSource(options.boards);
     this.#intakeRoutes = options.intakeRoutes;
-    this.#intakeEvaluator = options.intakeEvaluator ?? 'route-list';
+    this.#intakeEvaluator = options.intakeEvaluator;
     this.#storage = options.storage;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${globalThis.crypto.randomUUID()}`;
     this.#reconcileToolResults = options.reconcileToolResults;
@@ -2205,7 +2207,7 @@ export class FactoryDecisionDispatcher {
     const scope = { orgId: record.orgId, factoryProjectId: record.factoryProjectId };
     const evaluator = decision.idempotencyKey.startsWith(ROUTE_AGAIN_KEY_PREFIX)
       ? 'intake-order'
-      : this.#intakeEvaluator;
+      : await projectIntakeEvaluator(this.#intakeEvaluator, this.#intakeRoutes, scope);
     const [routes, order] = await Promise.all([
       this.#intakeRoutes.listIntakeRoutes(scope),
       evaluator === 'intake-order'

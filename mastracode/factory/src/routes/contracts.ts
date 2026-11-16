@@ -199,10 +199,21 @@ const intakeRouteListQuerySchema = z
 const intakeOrderResponseSchema = z.object({
   /** Every board of the project, in the order intake asks them. */
   boards: z.array(z.object({ boardKey: z.string(), name: z.string() })),
-  /** `derived` follows the rule list until an admin sets the order; then it is `explicit`. */
+  /**
+   * `derived` follows the rule list until an admin sets the order; then it is `explicit`. A project
+   * created with intake order has its own order from the start, so it is `explicit` from the start.
+   */
   origin: z.enum(['derived', 'explicit']),
-  /** Which evaluator places new items now: `route-list` (the old one) or `intake-order`. */
+  /** Which evaluator places the project's new items now: `route-list` (the old one) or `intake-order`. */
   evaluator: z.enum(['route-list', 'intake-order']),
+  /**
+   * What decided `evaluator`: the Factory's `intake.evaluator` option or `FACTORY_INTAKE_EVALUATOR`
+   * (forced on every project), the project's own setting, or none (a project from before the
+   * setting, on `route-list`).
+   */
+  evaluatorSource: z.enum(['option', 'env', 'project', 'legacy']),
+  /** The project's own setting, used unless one is forced; null for a project from before the setting. */
+  projectEvaluator: z.enum(['route-list', 'intake-order']).nullable(),
   /** Both evaluators run over the project's newest 200 items against this order, worked out on each read. */
   comparison: z.object({
     compared: z.number().int(),
@@ -219,9 +230,15 @@ export const intakeOrderBodySchema = z
       .array(z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH))
       .min(1)
       .max(MAX_PROJECT_INTAKE_ROUTES)
-      .refine(keys => new Set(keys).size === keys.length, { message: 'Each board may appear only once.' }),
+      .refine(keys => new Set(keys).size === keys.length, { message: 'Each board may appear only once.' })
+      .optional(),
+    /** Switches the project's evaluator; a forced one still wins until it is unset. */
+    evaluator: z.enum(['route-list', 'intake-order']).optional(),
   })
-  .strict();
+  .strict()
+  .refine(body => body.boardKeys !== undefined || body.evaluator !== undefined, {
+    message: 'Name the boardKeys, the evaluator, or both.',
+  });
 const intakeDecisionSchema = z.object({
   id: z.string(),
   outcome: z.enum(['placed', 'not_routed']),
@@ -1362,7 +1379,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
   intakeOrderUpdate: {
     method: 'PUT',
     path: '/web/factory/projects/:id/intake-order',
-    description: "Set the order a Factory project's boards are asked to take a new item",
+    description: "Set the order a Factory project's boards are asked to take a new item, or its evaluator",
     pathSchema: projectPathSchema,
     bodySchema: intakeOrderBodySchema,
     responseSchema: intakeOrderResponseSchema,

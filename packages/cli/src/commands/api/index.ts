@@ -909,17 +909,22 @@ export function registerApiCommand(program: CommanderCommand): void {
     .command('intake-order')
     .description("Read or set the order in which a Factory project's boards are asked to take a new item");
   addAction(factoryIntakeOrder, 'get', FACTORY_API_ROUTE_CATALOG.intakeOrderGet, {
-    description: 'Get the intake order, the evaluator in use, and how the old and new evaluators compare',
+    description:
+      'Get the intake order, the evaluator in use and where it came from, and how the old and new evaluators compare',
     routePlacement: 'origin',
   });
   addAction(factoryIntakeOrder, 'set', FACTORY_API_ROUTE_CATALOG.intakeOrderUpdate, {
-    description: 'Set the intake order, naming every board once',
+    description: "Set the intake order, naming every board once, or switch the project's evaluator",
     input: 'required',
     routePlacement: 'origin',
     examples: [
       {
         description: 'Ask the docs board before Work',
         command: `mastra api factory intake-order set <project-id> '{"boardKeys":["docs","work"]}'`,
+      },
+      {
+        description: 'Switch an older project to intake order',
+        command: `mastra api factory intake-order set <project-id> '{"evaluator":"intake-order"}'`,
       },
     ],
   });

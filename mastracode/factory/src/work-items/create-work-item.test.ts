@@ -11,7 +11,7 @@ import type { StoredIntakeRouteInput } from '../storage/domains/boards/base.js';
 import { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { CreateWorkItemInput } from '../storage/domains/work-items/base.js';
-import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { asProjectFromBeforeIntakeEvaluator, createFactoryStorageForTests } from '../storage/test-utils.js';
 import { createFactoryWorkItem } from './create-work-item.js';
 import type { CreateFactoryWorkItemArgs, CreateFactoryWorkItemResult } from './create-work-item.js';
 
@@ -142,12 +142,14 @@ describe('createFactoryWorkItem under the intake order evaluator', () => {
   /** A project with only the Desk board and none of the seeded rules, filing with `evaluator`. */
   async function setupDesk(
     routes: StoredIntakeRouteInput[],
-    evaluator: 'intake-order' | 'route-list',
-    { withRules = true }: { withRules?: boolean } = {},
+    /** Forced; `undefined` leaves it to the project's setting. */
+    evaluator: 'intake-order' | 'route-list' | undefined,
+    { withRules = true, age = 'new' }: { withRules?: boolean; age?: 'new' | 'older' } = {},
   ) {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Desk' } });
     const scope = { orgId: 'org-1', factoryProjectId: project.id };
+    if (age === 'older') await asProjectFromBeforeIntakeEvaluator(seed.storage, scope);
     for (const seeded of (await seed.boards.listIntakeRoutes(scope)).toReversed()) {
       await seed.boards.deleteIntakeRoute(scope, seeded.id, { expectedRevision: seeded.revision });
     }
@@ -165,7 +167,7 @@ describe('createFactoryWorkItem under the intake order evaluator', () => {
         factoryProjectId: project.id,
         input,
         ...(withRules ? { intakeRoutes: seed.boards } : {}),
-        intakeEvaluator: evaluator,
+        ...(evaluator ? { intakeEvaluator: evaluator } : {}),
       });
     return { create, seed, scope };
   }
@@ -179,6 +181,20 @@ describe('createFactoryWorkItem under the intake order evaluator', () => {
     const { create, scope } = await setupDesk([docsToTriage], 'intake-order');
     const created = await create({ title: 'Write the guide', metadata: { labels: ['docs'] } });
     expect(created).toMatchObject({ status: 'created', item: { board: 'desk', stages: ['triage'] } });
+  });
+
+  it('asks for the board on a project created now with nothing forced, and files on the first board on an older one', async () => {
+    const created = await setupDesk([docsToTriage], undefined);
+    expect(await created.create({ title: 'Flaky build', metadata: { labels: ['bug'] } })).toMatchObject({
+      status: 'refused',
+      code: 'intake_board_required',
+    });
+
+    const older = await setupDesk([docsToTriage], undefined, { age: 'older' });
+    expect(await older.create({ title: 'Flaky build', metadata: { labels: ['bug'] } })).toMatchObject({
+      status: 'created',
+      item: { board: 'desk', stages: ['inbox'] },
+    });
   });
 
   it('refuses a card no board takes, asking the person for the board, and files nothing', async () => {
@@ -304,6 +320,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       const orgId = `org-${randomUUID()}`;
       const project = await projects.create({ orgId, userId: 'user-1', input: { name: 'Cards' } });
       const scope = { orgId, userId: 'user-1', factoryProjectId: project.id };
+      // These races were written against the route list a project from before the evaluator setting keeps.
+      await asProjectFromBeforeIntakeEvaluator(storage, scope);
       for (const route of routes) {
         await intakeRoutes.createIntakeRoute({ orgId, factoryProjectId: project.id }, route, 'admin');
       }

@@ -65,6 +65,7 @@ import {
 } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
 import { intakeEvaluatorFrom } from './boards/intake-routing.js';
+import type { ForcedIntakeEvaluator } from './boards/intake-routing.js';
 import { occupiedPhasesOf, ownReviewBoard, ProjectBoardCache, toBoardSource } from './boards/project-boards.js';
 import type { ProjectBoardSource } from './boards/project-boards.js';
 import { publishDispatchWake, subscribeDispatchWakes } from './dispatch-wake.js';
@@ -339,10 +340,12 @@ export interface MastraFactoryConfig {
   /** How intake places a new item. */
   intake?: {
     /**
-     * `route-list` (default) runs the project's intake rules as one list and files an item no rule
-     * takes on Work, else the first board. `intake-order` asks each board in the project's intake
-     * order and records an item no board takes as Not routed instead. Overrides
-     * `FACTORY_INTAKE_EVALUATOR`.
+     * Forces one evaluator on every project. `route-list` runs the project's intake rules as one list
+     * and files an item no rule takes on Work, else the first board. `intake-order` asks each board
+     * in the project's intake order and records an item no board takes as Not routed instead.
+     * Unset (and `FACTORY_INTAKE_EVALUATOR` unset too), each project uses its own setting:
+     * `intake-order` for a project created since it shipped, `route-list` for an older one until an
+     * admin switches it. Overrides `FACTORY_INTAKE_EVALUATOR`.
      */
     evaluator?: IntakeEvaluator;
   };
@@ -592,9 +595,8 @@ export class MastraFactory {
   readonly #boards: BoardRegistry;
   /** Each project's boards: the code boards plus the boards it stored. Undefined until `prepare()` or when the boards domain is down. */
   #projectBoards: ProjectBoardCache | undefined;
-  /** Which evaluator places new items; see `MastraFactoryConfig.intake`. */
-  readonly #intakeEvaluator: IntakeEvaluator;
-  /** Each project's one-time intake order measure; undefined until `prepare()` or when the boards domain is down. */
+  /** The evaluator forced on every project, if any; see `MastraFactoryConfig.intake`. */
+  readonly #forcedIntake: ForcedIntakeEvaluator | undefined;
   /** Writes to stored boards for `upsertBoard()`; undefined until `prepare()` or when the boards domain is down. */
   #boardStore:
     | { writes: BoardWrites; boards: ProjectBoardCache; projects: FactoryProjectsStorage; audit: AuditDomain }
@@ -642,7 +644,7 @@ export class MastraFactory {
       );
     }
     this.#skills = assertFactorySkills(config.skills);
-    this.#intakeEvaluator = intakeEvaluatorFrom(config.intake?.evaluator, process.env);
+    this.#forcedIntake = intakeEvaluatorFrom(config.intake?.evaluator, process.env);
     for (const problem of findBoardSkillProblems(this.#boards, this.#skills)) {
       console.warn(`[factory] ${problem}`);
     }
@@ -1454,7 +1456,7 @@ export class MastraFactory {
       audit: auditStorage,
       boards: boards,
       // Kept without stored boards too, so intake order refuses rather than files where it can't decide.
-      intakeEvaluator: this.#intakeEvaluator,
+      intakeEvaluator: this.#forcedIntake?.evaluator,
       ...(this.#projectBoards
         ? {
             intakeRoutes: storedBoardsStorage,
@@ -2209,7 +2211,8 @@ export class MastraFactory {
             knowledgeKey: this.#config.knowledge?.key,
             configVersion,
             boardRegistry: boards,
-            intakeEvaluator: this.#intakeEvaluator,
+            intakeEvaluator: this.#forcedIntake?.evaluator,
+            intakeEvaluatorSource: this.#forcedIntake?.source,
             ...(this.#projectBoards
               ? {
                   storedBoards: {
@@ -2229,7 +2232,7 @@ export class MastraFactory {
                 audit: auditDomain,
                 boards: boards,
                 // Kept without stored boards too, so intake order defers arrivals it can't decide.
-                intakeEvaluator: this.#intakeEvaluator,
+                intakeEvaluator: this.#forcedIntake?.evaluator,
                 ...(this.#projectBoards
                   ? {
                       intakeRoutes: storedBoardsStorage,

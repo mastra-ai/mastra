@@ -109,6 +109,9 @@ export const FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA: CollectionSchema = {
     // 'explicit' once an admin set the order; null while it is derived from the route list, which
     // re-derives it on every rule write.
     intake_order_origin: { type: 'text', nullable: true },
+    // Which evaluator places the project's new items: 'intake-order' for projects created since it
+    // shipped (stamped with the project), or set by an admin. Null on older projects: 'route-list'.
+    intake_evaluator: { type: 'text', nullable: true },
   },
   uniqueIndexes: [{ name: 'factory_intake_route_locks_project', columns: ['org_id', 'factory_project_id'] }],
 };

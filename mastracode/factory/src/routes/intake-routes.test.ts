@@ -24,6 +24,7 @@ import {
 } from '../storage/domains/boards/base.js';
 import { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { asProjectFromBeforeIntakeEvaluator } from '../storage/test-utils.js';
 import { BoardRoutes } from './boards.js';
 import { IntakeRouteRoutes } from './intake-routes.js';
 import type { RouteAuth } from './route.js';
@@ -69,6 +70,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
         ? new PgFactoryStorage({ id: `intake-routes-${randomUUID()}`, connectionString: postgresUrl! })
         : new LibSQLFactoryStorage({ id: `intake-routes-${randomUUID()}`, url });
     const domains = {
+      storage,
       projects: storage.registerDomain(new FactoryProjectsStorage()),
       workItems: storage.registerDomain(new WorkItemsStorage()),
       boards: storage.registerDomain(new StoredBoardsStorage()),
@@ -85,7 +87,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
   function replica(
     domains: Client,
     orgId: string,
-    options: { auth?: RouteAuth; evaluator?: 'route-list' | 'intake-order' } = {},
+    options: {
+      auth?: RouteAuth;
+      evaluator?: 'route-list' | 'intake-order';
+      evaluatorSource?: 'option' | 'env';
+    } = {},
   ) {
     const cache = new ProjectBoardCache({
       codeRegistry: createTriageWorkRegistry(),
@@ -113,6 +119,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
         boards: cache,
         configVersion: 'intake-routes-test',
         ...(options.evaluator ? { intakeEvaluator: options.evaluator } : {}),
+        ...(options.evaluatorSource ? { intakeEvaluatorSource: options.evaluatorSource } : {}),
       }).routes(),
       ...new BoardRoutes({
         auth,
@@ -838,6 +845,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
 
     it('compares the order that is in force, derived or chosen, on every read', async () => {
       const { a, orgId, scope, projectPath, base } = await setup({ evaluator: 'intake-order' });
+      // Only a project from before the setting derives its order from the rule list.
+      await asProjectFromBeforeIntakeEvaluator(a.storage, scope);
       const { send } = replica(a, orgId, { evaluator: 'intake-order' });
       expect((await send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);
       await a.workItems.upsert({
@@ -952,6 +961,65 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
         body: { error: 'invalid_intake_cursor' },
       });
       expect((await replicaA.send('GET', `${path}?limit=101`)).status).toBe(422);
+    });
+
+    it('reports the evaluator a project uses and where it came from: its stamp, none, or a forced one', async () => {
+      const { a, orgId, scope, projectPath, replicaA } = await setup();
+      const read = async (send = replicaA.send) => (await send('GET', `${projectPath}/intake-order`)).body;
+
+      // Created now, so stamped with intake order.
+      expect(await read()).toMatchObject({
+        evaluator: 'intake-order',
+        evaluatorSource: 'project',
+        projectEvaluator: 'intake-order',
+      });
+      // A replica with FACTORY_INTAKE_EVALUATOR (or the option) set forces its evaluator on every project.
+      const forced = replica(a, orgId, { evaluator: 'route-list', evaluatorSource: 'env' });
+      expect(await read(forced.send)).toMatchObject({
+        evaluator: 'route-list',
+        evaluatorSource: 'env',
+        projectEvaluator: 'intake-order',
+      });
+
+      await asProjectFromBeforeIntakeEvaluator(a.storage, scope);
+      expect(await read()).toMatchObject({
+        evaluator: 'route-list',
+        evaluatorSource: 'legacy',
+        projectEvaluator: null,
+      });
+    });
+
+    it('switches an older project to intake order for an admin, with an audit entry, keeping its order derived', async () => {
+      const { a, orgId, scope, projectPath, base, replicaA } = await setup();
+      await asProjectFromBeforeIntakeEvaluator(a.storage, scope);
+      expect((await replicaA.send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);
+      const docs = (await replicaA.send('POST', base, { name: 'Docs', when: DOCS, target: { boardKey: 'docs' } })).body
+        .intakeRoute as Route;
+      const path = `${projectPath}/intake-order`;
+
+      expect((await replicaA.send('PUT', path, { evaluator: 'intake-order' }, MEMBER)).status).toBe(403);
+      expect((await replicaA.send('PUT', path, {})).status).toBe(422);
+      // Under the route list a rule may still move to another board.
+      expect(
+        (await replicaA.send('PATCH', `${base}/${docs.id}`, { target: WORK, expectedRevision: docs.revision })).status,
+      ).toBe(200);
+
+      const switched = await replicaA.send('PUT', path, { evaluator: 'intake-order' });
+      expect(switched).toMatchObject({
+        status: 200,
+        body: { evaluator: 'intake-order', evaluatorSource: 'project', origin: 'derived' },
+      });
+      // Now the rule belongs to its board.
+      expect(
+        (await replicaA.send('PATCH', `${base}/${docs.id}`, { target: { boardKey: 'docs' }, expectedRevision: 2 }))
+          .body,
+      ).toMatchObject({ error: 'intake_route_board_fixed' });
+      // Asking again changes nothing and records nothing.
+      expect((await replicaA.send('PUT', path, { evaluator: 'intake-order' })).status).toBe(200);
+      const trail = await a.audit.list({ orgId, actions: auditActionsInNamespaces(['intake_order']) });
+      expect(trail.events).toMatchObject([
+        { action: 'factory.intake_order.evaluator_updated', metadata: { before: null, after: 'intake-order' } },
+      ]);
     });
 
     it('routes a Not routed item again once a rule takes it, and refuses while none does', async () => {

@@ -9,6 +9,7 @@ import {
   INTAKE_ORDER_SAMPLE,
   intakeEvaluatorFrom,
   intakeTargetProblem,
+  projectIntakeEvaluator,
   resolveIntake,
   resolveIntakePlacement,
 } from './intake-routing.js';
@@ -142,11 +143,32 @@ describe('resolveIntake', () => {
     expect(resolution).toMatchObject({ outcome: 'placed', board: 'work', routeId: 'all' });
   });
 
-  it('reads the evaluator from the option first, then FACTORY_INTAKE_EVALUATOR, defaulting to the old one', () => {
-    expect(intakeEvaluatorFrom(undefined, {})).toBe('route-list');
-    expect(intakeEvaluatorFrom(undefined, { FACTORY_INTAKE_EVALUATOR: 'intake-order' })).toBe('intake-order');
-    expect(intakeEvaluatorFrom(undefined, { FACTORY_INTAKE_EVALUATOR: 'nonsense' })).toBe('route-list');
-    expect(intakeEvaluatorFrom('route-list', { FACTORY_INTAKE_EVALUATOR: 'intake-order' })).toBe('route-list');
+  it('forces the evaluator from the option first, then a valid FACTORY_INTAKE_EVALUATOR, else none', () => {
+    // Nothing forced: each project uses its own setting.
+    expect(intakeEvaluatorFrom(undefined, {})).toBeUndefined();
+    expect(intakeEvaluatorFrom(undefined, { FACTORY_INTAKE_EVALUATOR: 'nonsense' })).toBeUndefined();
+    expect(intakeEvaluatorFrom(undefined, { FACTORY_INTAKE_EVALUATOR: 'intake-order' })).toEqual({
+      evaluator: 'intake-order',
+      source: 'env',
+    });
+    expect(intakeEvaluatorFrom(undefined, { FACTORY_INTAKE_EVALUATOR: 'route-list' })).toEqual({
+      evaluator: 'route-list',
+      source: 'env',
+    });
+    expect(intakeEvaluatorFrom('route-list', { FACTORY_INTAKE_EVALUATOR: 'intake-order' })).toEqual({
+      evaluator: 'route-list',
+      source: 'option',
+    });
+  });
+
+  it('uses the project’s setting unless one is forced, and the route list for a project without one', async () => {
+    const storage = (setting: 'route-list' | 'intake-order' | null) => ({ intakeEvaluator: async () => setting });
+    const scope = { orgId: 'org', factoryProjectId: 'project' };
+
+    expect(await projectIntakeEvaluator(undefined, storage('intake-order'), scope)).toBe('intake-order');
+    expect(await projectIntakeEvaluator(undefined, storage(null), scope)).toBe('route-list');
+    expect(await projectIntakeEvaluator('route-list', storage('intake-order'), scope)).toBe('route-list');
+    expect(await projectIntakeEvaluator('intake-order', storage(null), scope)).toBe('intake-order');
   });
 });
 

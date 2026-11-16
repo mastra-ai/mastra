@@ -13,7 +13,7 @@ import { boardFlow, boardForWorkItem, hasPullRequest, intakeTarget, isTerminalWo
 /** Reads a project's intake routes and intake order, and logs how intake decided each arrival. */
 export type IntakeRoutesReader = Pick<
   StoredBoardsStorage,
-  'listIntakeRoutes' | 'readIntakeOrder' | 'recordIntakeDecision' | 'resolveNotRouted'
+  'listIntakeRoutes' | 'readIntakeOrder' | 'recordIntakeDecision' | 'resolveNotRouted' | 'intakeEvaluator'
 >;
 
 type IntakeRoute = Pick<StoredIntakeRouteRecord, 'id' | 'enabled' | 'when' | 'target' | 'on'>;
@@ -223,19 +223,41 @@ export async function arrivalRuleFacts(
  */
 export const ROUTE_AGAIN_KEY_PREFIX = 'intake-route-again:';
 
-/** The env var naming the evaluator when the Factory's `intake.evaluator` option doesn't. */
+/** The env var that forces an evaluator on every project when the Factory's `intake.evaluator` option doesn't. */
 export const INTAKE_EVALUATOR_ENV = 'FACTORY_INTAKE_EVALUATOR';
 
+/** An evaluator this process forces on every project, and what forced it. */
+export interface ForcedIntakeEvaluator {
+  evaluator: IntakeEvaluator;
+  source: 'option' | 'env';
+}
+
+/** Where a project's evaluator came from: forced, its own setting, or none (an older project). */
+export type IntakeEvaluatorSource = ForcedIntakeEvaluator['source'] | 'project' | 'legacy';
+
 /**
- * The evaluator this process uses: the configured one, else `FACTORY_INTAKE_EVALUATOR`, else the
- * old `route-list`. Every replica must run one that knows `intake-order` before it is switched on.
+ * The evaluator this process forces on every project: the configured one, else a valid
+ * `FACTORY_INTAKE_EVALUATOR`. Undefined when neither is set: each project uses its own.
  */
 export function intakeEvaluatorFrom(
   configured: IntakeEvaluator | undefined,
   env: Record<string, string | undefined> = process.env,
-): IntakeEvaluator {
-  if (configured) return configured;
-  return env[INTAKE_EVALUATOR_ENV] === 'intake-order' ? 'intake-order' : 'route-list';
+): ForcedIntakeEvaluator | undefined {
+  if (configured) return { evaluator: configured, source: 'option' };
+  const value = env[INTAKE_EVALUATOR_ENV];
+  return value === 'intake-order' || value === 'route-list' ? { evaluator: value, source: 'env' } : undefined;
+}
+
+/**
+ * The evaluator that decides a project's arrivals: the forced one, else the project's setting
+ * (`intake-order` for a project created since it shipped), else `route-list`.
+ */
+export async function projectIntakeEvaluator(
+  forced: IntakeEvaluator | undefined,
+  storage: Pick<StoredBoardsStorage, 'intakeEvaluator'>,
+  scope: { orgId: string; factoryProjectId: string },
+): Promise<IntakeEvaluator> {
+  return forced ?? (await storage.intakeEvaluator(scope)) ?? 'route-list';
 }
 
 /** Where intake sends an arrival, by the evaluator `query` names. Join routes never place here. */

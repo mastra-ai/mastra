@@ -19,9 +19,11 @@ import {
   arrivalRuleFacts,
   compareIntakeOrder,
   intakeTargetProblem,
+  projectIntakeEvaluator,
   resolveIntake,
   ROUTE_AGAIN_KEY_PREFIX,
 } from '../boards/intake-routing.js';
+import type { ForcedIntakeEvaluator } from '../boards/intake-routing.js';
 import type { ProjectBoardCache } from '../boards/project-boards.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import { applyReroute, planReroute, summarizeReroute } from '../boards/reroute.js';
@@ -52,8 +54,10 @@ export interface IntakeRouteRoutesDeps extends RouteDependencies {
   >;
   /** The project's installed boards, to check route targets against. */
   boards: Pick<ProjectBoardCache, 'describe'>;
-  /** Which evaluator places new items; the old `route-list` by default. */
+  /** Forces an evaluator on every project; without it each project uses its own setting. */
   intakeEvaluator?: IntakeEvaluator;
+  /** What forced `intakeEvaluator`. */
+  intakeEvaluatorSource?: ForcedIntakeEvaluator['source'];
   /** The rule set a Route again commits under. */
   configVersion?: string;
 }
@@ -154,11 +158,11 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
     if (problem) throw new Refusal(422, { error: problem.code, message: problem.message });
   }
 
-  get #evaluator(): IntakeEvaluator {
-    return this.deps.intakeEvaluator ?? 'route-list';
+  #evaluator(scope: Resolved): Promise<IntakeEvaluator> {
+    return projectIntakeEvaluator(this.deps.intakeEvaluator, this.deps.storage, scope);
   }
 
-  async #order(scope: Resolved, registry: BoardRegistry, evaluator = this.#evaluator): Promise<string[]> {
+  async #order(scope: Resolved, registry: BoardRegistry, evaluator: IntakeEvaluator): Promise<string[]> {
     if (evaluator !== 'intake-order') return [];
     const order = await this.deps.storage.readIntakeOrder(scope, { boards: [...registry.keys()] });
     return order.boardKeys.filter(key => registry.has(key));
@@ -170,10 +174,8 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
       this.deps.storage.listIntakeRoutes(scope),
       this.deps.workItems.listShared(scope),
     ]);
-    return planReroute(routes, items, registry, {
-      evaluator: this.#evaluator,
-      order: await this.#order(scope, registry),
-    });
+    const evaluator = await this.#evaluator(scope);
+    return planReroute(routes, items, registry, { evaluator, order: await this.#order(scope, registry, evaluator) });
   }
 
   async #canEdit(c: Context, scope: Resolved): Promise<boolean> {
@@ -193,17 +195,21 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
   /** The project's boards in intake order: the stored order, with any board it lacks slotted in as a new one is. */
   async #intakeOrder(c: Context, scope: Resolved) {
     const registry = await this.#registry(scope);
-    const [stored, routes, cards] = await Promise.all([
+    const [stored, routes, cards, projectEvaluator] = await Promise.all([
       this.deps.storage.readIntakeOrder(scope, { boards: [...registry.keys()] }),
       this.deps.storage.listIntakeRoutes(scope),
       this.deps.workItems.listShared(scope),
+      this.deps.storage.intakeEvaluator(scope),
     ]);
+    const forced = this.deps.intakeEvaluator;
     const listed = stored.boardKeys.filter(key => registry.has(key));
     const order = [...listed, ...[...registry.keys()].filter(key => !listed.includes(key))];
     return c.json({
       boards: order.map(boardKey => ({ boardKey, name: registry.get(boardKey)!.name })),
       origin: stored.origin,
-      evaluator: this.#evaluator,
+      evaluator: forced ?? projectEvaluator ?? 'route-list',
+      evaluatorSource: forced ? (this.deps.intakeEvaluatorSource ?? 'option') : projectEvaluator ? 'project' : 'legacy',
+      projectEvaluator,
       // Worked out on every read, so it always describes the order in force and today's rules.
       comparison: compareIntakeOrder({ routes, order, registry, cards }),
       canEdit: await this.#canEdit(c, scope),
@@ -361,19 +367,36 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
       this.#route(contracts.intakeOrderUpdate, async c => {
         const scope = await this.#resolve(c);
         await this.#requireAdmin(c, scope);
-        const { boardKeys } = await this.#body(c, contracts.intakeOrderUpdate.bodySchema);
+        const { boardKeys, evaluator } = await this.#body(c, contracts.intakeOrderUpdate.bodySchema);
         const registry = await this.#registry(scope);
-        const before = await storage.readIntakeOrder(scope, { boards: [...registry.keys()] });
-        await storage.setIntakeOrder(scope, boardKeys, { boards: [...registry.keys()] });
-        await this.deps.audit.emit({
-          context: c,
-          input: {
-            action: 'factory.intake_order.updated',
-            factoryProjectId: scope.factoryProjectId,
-            targets: [{ type: 'factory_project', id: scope.factoryProjectId }],
-            metadata: { before: before.boardKeys, after: boardKeys },
-          },
-        });
+        const targets = [{ type: 'factory_project', id: scope.factoryProjectId }];
+        if (boardKeys) {
+          const before = await storage.readIntakeOrder(scope, { boards: [...registry.keys()] });
+          await storage.setIntakeOrder(scope, boardKeys, { boards: [...registry.keys()] });
+          await this.deps.audit.emit({
+            context: c,
+            input: {
+              action: 'factory.intake_order.updated',
+              factoryProjectId: scope.factoryProjectId,
+              targets,
+              metadata: { before: before.boardKeys, after: boardKeys },
+            },
+          });
+        }
+        if (evaluator) {
+          const before = await storage.setIntakeEvaluator(scope, evaluator);
+          if (before !== evaluator) {
+            await this.deps.audit.emit({
+              context: c,
+              input: {
+                action: 'factory.intake_order.evaluator_updated',
+                factoryProjectId: scope.factoryProjectId,
+                targets,
+                metadata: { before, after: evaluator },
+              },
+            });
+          }
+        }
         return this.#intakeOrder(c, scope);
       }),
 
@@ -469,7 +492,11 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
           const current = await storage.getIntakeRoute(scope, id);
           if (!current) throw new Refusal(404, { error: 'intake_route_not_found' });
           // Under intake order a rule belongs to its board: it moves with it, never to another.
-          if (this.#evaluator === 'intake-order' && patch.target && patch.target.boardKey !== current.target.boardKey) {
+          if (
+            (await this.#evaluator(scope)) === 'intake-order' &&
+            patch.target &&
+            patch.target.boardKey !== current.target.boardKey
+          ) {
             throw new Refusal(422, {
               error: 'intake_route_board_fixed',
               message: `This rule belongs to board "${current.target.boardKey}"; add a rule on the other board instead.`,

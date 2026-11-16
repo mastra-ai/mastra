@@ -5,7 +5,7 @@
 
 import { cardRuleFacts } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import { INTAKE_ROUTE_METADATA_KEY, resolveIntake } from '../boards/intake-routing.js';
+import { INTAKE_ROUTE_METADATA_KEY, projectIntakeEvaluator, resolveIntake } from '../boards/intake-routing.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { EmitAuditInput } from '../storage/domains/audit/domain.js';
@@ -62,7 +62,7 @@ export interface CreateFactoryWorkItemArgs {
   input: CreateWorkItemInput;
   /** The project's intake routes; they place a card filed without a board or stages. */
   intakeRoutes?: IntakeRoutesReader;
-  /** Which evaluator places a card filed without a board; the old `route-list` by default. */
+  /** Forces the evaluator that places a card filed without a board; else the project's setting. */
   intakeEvaluator?: IntakeEvaluator;
   /** Where a browser request came from; a session's tool call carries none. */
   origin?: Pick<FactoryTransitionRequest, 'actorProfile' | 'context'>;
@@ -83,7 +83,7 @@ export async function createFactoryWorkItem({
   factoryProjectId,
   input,
   intakeRoutes,
-  intakeEvaluator = 'route-list',
+  intakeEvaluator,
   origin,
 }: CreateFactoryWorkItemArgs): Promise<CreateFactoryWorkItemResult> {
   // A card filed without a board goes where intake says; one that names a board went where the
@@ -99,7 +99,9 @@ export async function createFactoryWorkItem({
   }
   if (boardId === undefined) {
     const scope = { orgId, factoryProjectId };
-    const evaluator = intakeRoutes ? intakeEvaluator : 'route-list';
+    const evaluator = intakeRoutes
+      ? await projectIntakeEvaluator(intakeEvaluator, intakeRoutes, scope)
+      : (intakeEvaluator ?? 'route-list');
     const routed = intakeRoutes && (evaluator === 'intake-order' || input.stages === undefined);
     const [routes, order] = routed
       ? await Promise.all([

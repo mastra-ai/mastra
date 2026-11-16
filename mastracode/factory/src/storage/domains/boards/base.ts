@@ -201,7 +201,10 @@ export const MAX_INTAKE_ROUTES_PER_BOARD = 100;
 /** How an arrival was decided. */
 export type IntakeDecisionOutcome = 'placed' | 'not_routed';
 
-/** Which evaluator decided where an arrival goes; `route-list` is the old one, behind the flag. */
+/**
+ * Which evaluator decides where an arrival goes: `route-list` is the old one, which projects created
+ * before `intake-order` shipped keep until an admin switches them.
+ */
 export type IntakeEvaluator = 'route-list' | 'intake-order';
 
 /**
@@ -349,6 +352,8 @@ interface IntakeRouteLockRow extends Record<string, unknown> {
   intake_order: string[] | null;
   /** Null while derived. */
   intake_order_origin: 'explicit' | null;
+  /** Null on projects created before the setting: they use `route-list`. */
+  intake_evaluator?: IntakeEvaluator | null;
 }
 
 interface IntakeDecisionRow extends Record<string, unknown> {
@@ -866,6 +871,23 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     });
   }
 
+  /** The project's own evaluator; null for a project created before the setting, which uses `route-list`. */
+  async intakeEvaluator(scope: StoredBoardScope): Promise<IntakeEvaluator | null> {
+    const lock = await this.ops.findOne<IntakeRouteLockRow>(INTAKE_ROUTE_LOCKS, scopeWhere(scope));
+    return lock?.intake_evaluator ?? null;
+  }
+
+  /** Switches the project's evaluator; returns the setting it had (null: none). */
+  async setIntakeEvaluator(scope: StoredBoardScope, evaluator: IntakeEvaluator): Promise<IntakeEvaluator | null> {
+    await this.#ensureIntakeRoutes(scope);
+    return this.#transact(async ops => {
+      await lockIntakeRoutes(ops, scope);
+      const lock = (await ops.findOne<IntakeRouteLockRow>(INTAKE_ROUTE_LOCKS, scopeWhere(scope)))!;
+      await ops.updateMany(INTAKE_ROUTE_LOCKS, scopeWhere(scope), { intake_evaluator: evaluator });
+      return lock.intake_evaluator ?? null;
+    });
+  }
+
   /** Records how intake decided an arrival; a redelivery under the same key replaces the row. */
   async recordIntakeDecision(
     scope: StoredBoardScope,
@@ -1358,6 +1380,25 @@ function decodeDecisionCursor(cursor: string): { decidedAt: Date; id: string } {
     throw new StoredBoardError('invalid_intake_cursor', 'The cursor is not one this list returned.');
   }
   return { decidedAt, id };
+}
+
+/**
+ * Stamps a project being created with the `intake-order` evaluator, through `ops`, the creating
+ * transaction's, so the project and its setting commit together. A new project has no lock row yet;
+ * its first intake read adds the default routes to this one. Its intake order is its own from the
+ * start (`explicit`, empty): deriving one from the route list is for projects that had one before,
+ * and would keep Work, whose defaults lead the list, ahead of every board added later. Each board
+ * slots in as it comes, just above the first board that takes every new card.
+ */
+export async function stampNewProjectIntake(ops: FactoryStorageOps, scope: StoredBoardScope): Promise<void> {
+  await ops.insertOne(INTAKE_ROUTE_LOCKS, {
+    ...scopeWhere(scope),
+    locked_at: new Date(),
+    seeded_defaults: [],
+    intake_order: [],
+    intake_order_origin: 'explicit',
+    intake_evaluator: 'intake-order',
+  });
 }
 
 function toIntakeOrder(lock: IntakeRouteLockRow, boardKeys: string[]): StoredIntakeOrder {
