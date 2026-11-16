@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { Hono } from 'hono';
+import { describe, expect, it, vi } from 'vitest';
 
+import type { IntegrationContext } from '../../base.js';
 import { startFakePlatform } from '../foundation/test-utils.js';
 import type { FakePlatform } from '../foundation/test-utils.js';
-import { createPlatformStorageForTests } from '../test-utils.js';
+import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js';
 import { FACTORY_GITHUB_PROVIDER_KEY, FACTORY_REVIEWS_GITHUB_PROVIDER_KEY } from './connect-events.js';
-import { FACTORY_GITHUB_USER_PROVIDER_KEY } from './connect-tokens.js';
 import {
   GithubTokenScopeUnavailableError,
   PlatformGithubConnectionInactiveError,
@@ -41,20 +42,35 @@ function connection(platform: FakePlatform, id: string, integrationId: string, e
   platform.linked.add(id);
 }
 
-async function setup(options: { reviewsActive?: boolean; users?: Record<string, string> } = {}) {
+async function setup(
+  options: {
+    reviewsActive?: boolean;
+    users?: Record<string, string>;
+    /** Valid PATs and the GitHub login each belongs to. */
+    pats?: Record<string, string>;
+    /** Makes the org's recorded `factory-github` connection an end-user one. */
+    orgGithubResourceId?: string;
+  } = {},
+) {
   const platform = await startFakePlatform();
   const github: FakeGithub = await startFakeGithub();
-  connection(platform, 'conn-github', FACTORY_GITHUB_PROVIDER_KEY);
+  connection(
+    platform,
+    'conn-github',
+    FACTORY_GITHUB_PROVIDER_KEY,
+    options.orgGithubResourceId ? { resourceId: options.orgGithubResourceId } : {},
+  );
   if (options.reviewsActive !== false) connection(platform, 'conn-reviews', FACTORY_REVIEWS_GITHUB_PROVIDER_KEY);
   platform.credentials.set('conn-github', { type: 'oauth2', accessToken: 'tok-github', expiresAt: FUTURE });
   platform.credentials.set('conn-reviews', { type: 'oauth2', accessToken: 'tok-reviews', expiresAt: FUTURE });
   const logins = new Map<string, string>();
   for (const [userId, login] of Object.entries(options.users ?? {})) {
     const id = `conn-user-${userId}`;
-    connection(platform, id, FACTORY_GITHUB_USER_PROVIDER_KEY, { resourceId: userId });
+    connection(platform, id, FACTORY_GITHUB_PROVIDER_KEY, { resourceId: userId });
     platform.credentials.set(id, { type: 'oauth2', accessToken: `tok-${userId}`, expiresAt: FUTURE });
     logins.set(`tok-${userId}`, login);
   }
+  for (const [token, login] of Object.entries(options.pats ?? {})) logins.set(token, login);
 
   const seed = await createPlatformStorageForTests();
   const integration = new PlatformGithubIntegration({ connect: platform.connect(), githubApiUrl: github.baseUrl });
@@ -71,8 +87,10 @@ async function setup(options: { reviewsActive?: boolean; users?: Record<string, 
 
   const pulls: unknown[] = [];
   github.route = request => {
-    if (request.path === '/user' && request.token && logins.has(request.token)) {
-      return { status: 200, body: { login: logins.get(request.token) } };
+    if (request.path === '/user') {
+      return request.token && logins.has(request.token)
+        ? { status: 200, body: { login: logins.get(request.token) } }
+        : { status: 401, body: { message: 'Bad credentials' } };
     }
     if (request.method === 'GET' && request.path === '/repos/acme/app/pulls') return { status: 200, body: pulls };
     if (request.method === 'POST' && request.path === '/repos/acme/app/pulls') {
@@ -90,8 +108,38 @@ async function setup(options: { reviewsActive?: boolean; users?: Record<string, 
     }
     return undefined;
   };
-  return { platform, github, integration, storage: seed.sourceControl.forIntegration('github') };
+  /** Calls the integration's routes as a signed-in user of org-1. */
+  const asUser = (userId: string) => {
+    const context = {
+      auth: {
+        enabled: () => true,
+        ensureUser: vi.fn(async () => ({ workosId: userId, organizationId: 'org-1' })),
+        tenant: () => ({ orgId: 'org-1', userId }),
+        isOrganizationAdmin: vi.fn(async () => false),
+      },
+      sandbox: { enabled: true, provider: 'stub' },
+      storage: { generic, sourceControl: seed.sourceControl.forIntegration('github'), projects: seed.projects },
+      controller: {},
+      stateSigner: {},
+      baseUrl: 'https://factory.example',
+    } as unknown as IntegrationContext;
+    const app = new Hono();
+    mountApiRoutes(app as never, integration.routes(context));
+    return app;
+  };
+  return { platform, github, integration, asUser, storage: seed.sourceControl.forIntegration('github') };
 }
+
+const openPullRequest = (integration: PlatformGithubIntegration, actingUserId: string) =>
+  integration.versionControl.createPullRequest({
+    connection: switchedConnection,
+    sourceId: 'acme/app',
+    headBranch: 'fix',
+    baseBranch: 'main',
+    title: 'Fix',
+    body: 'Body',
+    actingUserId,
+  });
 
 const switchedConnection = { type: 'app-installation' as const, installationId: 900, orgId: 'org-1' };
 
@@ -195,5 +243,75 @@ describe('PlatformGithubIntegration in connect mode', () => {
     expect(request?.token).toBe('tok-github');
     expect((request?.body as { body: string }).body).toMatch(/^> Opened by @user-1\n/);
     expect(github.calls('/repos/acme/app/issues/7/assignees', 'POST')).toEqual([]);
+  });
+
+  it("never treats a user's end-user factory-github connection as the org's", async () => {
+    const { integration } = await setup({ orgGithubResourceId: 'user-1' });
+
+    await expect(
+      integration.versionControl.listPullRequests({ connection: switchedConnection, sourceId: 'acme/app' }),
+    ).rejects.toBeInstanceOf(PlatformGithubConnectionInactiveError);
+  });
+
+  describe("a user's own GitHub PAT", () => {
+    const save = (app: Hono, token: string) =>
+      app.request('/web/github/user-pat', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+
+    it('checks it with GitHub, keeps it per user, and never sends it back', async () => {
+      const { asUser } = await setup({ pats: { 'pat-good': 'hubot' } });
+      const ada = asUser('user-1');
+
+      const saved = await save(ada, 'pat-good');
+      const text = await saved.text();
+      expect(saved.status).toBe(200);
+      expect(JSON.parse(text)).toEqual({ configured: true, login: 'hubot' });
+      expect(text).not.toContain('pat-good');
+
+      await expect((await ada.request('/web/github/user-pat')).json()).resolves.toEqual({
+        configured: true,
+        login: 'hubot',
+      });
+      await expect((await asUser('user-2').request('/web/github/user-pat')).json()).resolves.toEqual({
+        configured: false,
+        login: null,
+      });
+    });
+
+    it('refuses a token GitHub rejects, and stores nothing', async () => {
+      const { asUser } = await setup();
+      const ada = asUser('user-1');
+
+      const saved = await save(ada, 'pat-bad');
+      expect(saved.status).toBe(400);
+      await expect((await ada.request('/web/github/user-pat')).json()).resolves.toEqual({
+        configured: false,
+        login: null,
+      });
+    });
+
+    it('writes as the user once saved, and as the app again once removed', async () => {
+      const { github, integration, asUser } = await setup({ pats: { 'pat-good': 'hubot' } });
+      const ada = asUser('user-1');
+
+      // Remembered "no token" must not outlive saving one.
+      await openPullRequest(integration, 'user-1');
+      expect((await save(ada, 'pat-good')).status).toBe(200);
+      await openPullRequest(integration, 'user-1');
+      expect((await ada.request('/web/github/user-pat', { method: 'DELETE' })).status).toBe(200);
+      await openPullRequest(integration, 'user-1');
+
+      expect(github.calls('/repos/acme/app/pulls', 'POST').map(request => request.token)).toEqual([
+        'tok-github',
+        'pat-good',
+        'tok-github',
+      ]);
+      expect(github.calls('/repos/acme/app/issues/7/assignees', 'POST')).toEqual([
+        expect.objectContaining({ token: 'pat-good', body: { assignees: ['hubot'] } }),
+      ]);
+    });
   });
 });

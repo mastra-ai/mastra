@@ -92,7 +92,7 @@ import {
   FACTORY_REVIEWS_GITHUB_PROVIDER_KEY,
 } from './connect-events.js';
 import { GithubConnectTokens } from './connect-tokens.js';
-import { ConnectGithubTransport, githubErrorStatus } from './connect-transport.js';
+import { ConnectGithubTransport, githubErrorStatus, toGithubApiError } from './connect-transport.js';
 import { legacyGithubTopicSubscription } from './legacy-events.js';
 import { LegacyGithubTransport, splitRepository } from './legacy-transport.js';
 import type {
@@ -113,6 +113,7 @@ import type {
   GithubReviewCommentCreate,
   GithubTransport,
 } from './transport.js';
+import { clearGithubUserPat, getGithubUserPat, getGithubUserPatStatus, setGithubUserPat } from './user-pat.js';
 import { PlatformGithubVersionControl } from './version-control.js';
 
 /** Why Platform withheld a personal-account installation from this org's credentials. */
@@ -219,7 +220,10 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
   }
   readonly #legacy: LegacyGithubTransport;
   readonly #modes = new PlatformGithubModes(() => this.integrationStorage as unknown as PlatformGithubModeStorage);
-  readonly #tokens = new GithubConnectTokens(this.connect);
+  readonly #tokens = new GithubConnectTokens(this.connect, {
+    userPat: (orgId, userId) =>
+      this.#integrationStorage ? getGithubUserPat(this.#integrationStorage, orgId, userId) : Promise.resolve(null),
+  });
   /** One Connect transport per switched installation, keeping its token cache warm. */
   readonly #connectTransports = new Map<string, ConnectGithubTransport>();
   readonly #githubApiUrl: string | undefined;
@@ -680,6 +684,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
       this.#statusRoute(ctx),
       this.#connectRoute(ctx),
       this.#connectUserRoute(ctx),
+      ...this.#userPatRoutes(ctx),
       ...buildGithubRoutes({
         auth: ctx.auth,
         sandbox: ctx.sandbox,
@@ -808,6 +813,77 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
         return c.redirect(url);
       },
     });
+  }
+
+  /**
+   * The signed-in user's own GitHub PAT, for orgs on the Mastra Factory apps:
+   * writes made for them run with it when they have no end-user connection.
+   * Saving checks the token against GitHub; the token is never sent back.
+   */
+  #userPatRoutes(ctx: IntegrationContext): ApiRoute[] {
+    const caller = async (c: Parameters<typeof loose>[0]) => {
+      await ctx.auth.ensureUser(loose(c));
+      const tenant = ctx.auth.tenant(loose(c));
+      return tenant?.orgId && tenant.userId ? { orgId: tenant.orgId, userId: tenant.userId } : null;
+    };
+    return [
+      registerApiRoute('/web/github/user-pat', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          const user = await caller(c);
+          if (!user) return c.json({ error: 'unauthorized' }, 401);
+          return c.json(await getGithubUserPatStatus(this.integrationStorage, user.orgId, user.userId));
+        },
+      }),
+      registerApiRoute('/web/github/user-pat', {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async c => {
+          const user = await caller(c);
+          if (!user) return c.json({ error: 'unauthorized' }, 401);
+          let body: { token?: unknown };
+          try {
+            body = await c.req.json();
+          } catch {
+            return c.json({ error: 'Invalid JSON body' }, 400);
+          }
+          const token = typeof body.token === 'string' ? body.token.trim() : '';
+          if (!token) return c.json({ error: 'A token is required' }, 400);
+          if (token.length > 500) return c.json({ error: 'Token too long (max 500 characters)' }, 400);
+          if (/\s/.test(token)) return c.json({ error: 'Token must not contain whitespace' }, 400);
+
+          let login: string;
+          try {
+            const octokit = new Octokit({
+              auth: token,
+              request: { timeout: 15_000 },
+              ...(this.#githubApiUrl ? { baseUrl: this.#githubApiUrl } : {}),
+            });
+            login = (await octokit.request('GET /user')).data.login;
+          } catch (error) {
+            const status = githubErrorStatus(toGithubApiError(error));
+            if (status === 401 || status === 403) return c.json({ error: 'GitHub rejected this token.' }, 400);
+            logPlatformWarn('Could not check a GitHub token with GitHub', { orgId: user.orgId, status });
+            return c.json({ error: 'Could not reach GitHub to check this token. Try again.' }, 502);
+          }
+          await setGithubUserPat(this.integrationStorage, user.orgId, user.userId, token, login);
+          this.#tokens.invalidateUser(user.orgId, user.userId);
+          return c.json(await getGithubUserPatStatus(this.integrationStorage, user.orgId, user.userId));
+        },
+      }),
+      registerApiRoute('/web/github/user-pat', {
+        method: 'DELETE',
+        requiresAuth: false,
+        handler: async c => {
+          const user = await caller(c);
+          if (!user) return c.json({ error: 'unauthorized' }, 401);
+          await clearGithubUserPat(this.integrationStorage, user.orgId, user.userId);
+          this.#tokens.invalidateUser(user.orgId, user.userId);
+          return c.json(await getGithubUserPatStatus(this.integrationStorage, user.orgId, user.userId));
+        },
+      }),
+    ];
   }
 
   /**
@@ -1827,16 +1903,19 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
       (owner ? installations.find(candidate => candidate.accountLogin.toLowerCase() === owner) : undefined);
     if (!installation) throw new PlatformGithubInstallationNotFoundError(org.orgId, repository);
     await this.#requireActive(installation);
-    return this.#transportFor(installation);
+    return this.#transportFor(org.orgId, installation);
   }
 
   /** Both apps' connections must be live: a switched org never falls back to the legacy app. */
   async #requireActive(installation: PlatformGithubConnectInstallation): Promise<void> {
     const [github, reviews] = await Promise.all([
-      this.connectionFor(FACTORY_GITHUB_PROVIDER_KEY, connection => connection.id === installation.connectionId),
+      this.connectionFor(
+        FACTORY_GITHUB_PROVIDER_KEY,
+        connection => connection.id === installation.connectionId && connection.resourceId === null,
+      ),
       this.connectionFor(
         FACTORY_REVIEWS_GITHUB_PROVIDER_KEY,
-        connection => connection.id === installation.reviewsConnectionId,
+        connection => connection.id === installation.reviewsConnectionId && connection.resourceId === null,
       ),
     ]);
     if (!github || !reviews) {
@@ -1847,11 +1926,12 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     }
   }
 
-  #transportFor(installation: PlatformGithubConnectInstallation): ConnectGithubTransport {
-    const key = `${installation.installationId}:${installation.connectionId}:${installation.reviewsConnectionId}`;
+  #transportFor(orgId: string, installation: PlatformGithubConnectInstallation): ConnectGithubTransport {
+    const key = `${orgId}:${installation.installationId}:${installation.connectionId}:${installation.reviewsConnectionId}`;
     let transport = this.#connectTransports.get(key);
     if (!transport) {
       transport = new ConnectGithubTransport({
+        orgId,
         installation,
         tokens: this.#tokens,
         isFactoryLogin: login => this.isFactoryCommentAuthor(login),

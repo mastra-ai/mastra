@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { REVIEW_STATUS_COMMENT_MARKER } from '../../github/review-status-comment.js';
 import { startFakePlatform } from '../foundation/test-utils.js';
 import type { FakePlatform } from '../foundation/test-utils.js';
-import { FACTORY_GITHUB_USER_PROVIDER_KEY, GithubConnectTokens } from './connect-tokens.js';
+import { FACTORY_GITHUB_PROVIDER_KEY } from './connect-events.js';
+import { GithubConnectTokens } from './connect-tokens.js';
 import {
   ConnectGithubTransport,
   GithubApiError,
@@ -57,31 +58,47 @@ interface Harness {
   now: { value: number };
 }
 
-async function harness(options: { users?: Record<string, string> } = {}): Promise<Harness> {
+/**
+ * `users` connect GitHub as an end-user `factory-github` connection (token
+ * `tok-<userId>`); `pats` paste a PAT instead (token `pat-<userId>`). PATs are
+ * read for org `org-1` only.
+ */
+async function harness(
+  options: { users?: Record<string, string>; pats?: Record<string, string> } = {},
+): Promise<Harness> {
   const platform = await startFakePlatform();
   const github = await startFakeGithub();
+  // The org's own `factory-github` connection shares the provider key with users' connections.
+  platform.orgConnections.push({ id: 'conn-github', integrationId: FACTORY_GITHUB_PROVIDER_KEY, status: 'active' });
+  platform.linked.add('conn-github');
   platform.credentials.set('conn-github', { type: 'oauth2', accessToken: 'tok-github', expiresAt: FUTURE });
   platform.credentials.set('conn-reviews', { type: 'oauth2', accessToken: 'tok-reviews', expiresAt: FUTURE });
+  const answerUser = (token: string, login: string) => {
+    const previous = github.route;
+    github.route = request =>
+      request.path === '/user' && request.token === token ? { status: 200, body: { login } } : previous(request);
+  };
   for (const [userId, login] of Object.entries(options.users ?? {})) {
     const id = `conn-user-${userId}`;
     platform.orgConnections.push({
       id,
-      integrationId: FACTORY_GITHUB_USER_PROVIDER_KEY,
+      integrationId: FACTORY_GITHUB_PROVIDER_KEY,
       status: 'active',
       resourceId: userId,
     });
     platform.linked.add(id);
     platform.credentials.set(id, { type: 'oauth2', accessToken: `tok-${userId}`, expiresAt: FUTURE });
-    const userRoute = github.route;
-    github.route = request =>
-      request.path === '/user' && request.token === `tok-${userId}`
-        ? { status: 200, body: { login } }
-        : userRoute(request);
+    answerUser(`tok-${userId}`, login);
   }
+  for (const [userId, login] of Object.entries(options.pats ?? {})) answerUser(`pat-${userId}`, login);
   const now = { value: Date.parse('2026-11-13T12:00:00Z') };
-  const tokens = new GithubConnectTokens(platform.connect(), { now: () => now.value });
+  const tokens = new GithubConnectTokens(platform.connect(), {
+    now: () => now.value,
+    userPat: async (orgId, userId) => (orgId === 'org-1' && options.pats?.[userId] ? `pat-${userId}` : null),
+  });
   const tokenClasses: Harness['tokenClasses'] = [];
   const transport = new ConnectGithubTransport({
+    orgId: 'org-1',
     installation: INSTALLATION,
     tokens,
     isFactoryLogin: login => login === 'mastra-factory[bot]' || login === 'mastra-factory-reviews[bot]',
@@ -191,6 +208,47 @@ describe('ConnectGithubTransport', () => {
       expect(request?.token).toBe('tok-user-1');
       expect(request?.body).toEqual({ body: 'Done' });
       expect(comment.user?.login).toBe('octocat');
+    });
+
+    it('uses the PAT they pasted when they have no connection, without attribution', async () => {
+      const { github, transport, tokenClasses } = await harness({ pats: { 'user-3': 'hubot' } });
+      answer(github, 'POST', `/repos/${REPO}/issues/7/comments`, request => ({
+        status: 201,
+        body: rawComment(1, (request.body as { body: string }).body, 'hubot'),
+      }));
+
+      await transport.createIssueComment({ repository: REPO, actingUserId: 'user-3' }, 7, 'Thanks');
+
+      const [request] = github.calls(`/repos/${REPO}/issues/7/comments`);
+      expect(request?.token).toBe('pat-user-3');
+      expect(request?.body).toEqual({ body: 'Thanks' });
+      expect(tokenClasses.at(-1)?.tokenClass).toBe('user');
+      expect(await transport.userLogin('user-3')).toBe('hubot');
+    });
+
+    it('prefers their end-user connection over a PAT', async () => {
+      const { github, transport } = await harness({ users: { 'user-1': 'octocat' }, pats: { 'user-1': 'octocat' } });
+      answer(github, 'POST', `/repos/${REPO}/issues/7/comments`, request => ({
+        status: 201,
+        body: rawComment(1, (request.body as { body: string }).body, 'octocat'),
+      }));
+
+      await transport.createIssueComment({ repository: REPO, actingUserId: 'user-1' }, 7, 'Thanks');
+
+      expect(github.calls(`/repos/${REPO}/issues/7/comments`)[0]?.token).toBe('tok-user-1');
+    });
+
+    it("never takes the org's own factory-github connection for a person's token", async () => {
+      const { tokens } = await harness();
+
+      expect(await tokens.userToken('org-1', 'user-9')).toBeNull();
+    });
+
+    it('reads a PAT only in the org it was pasted in', async () => {
+      const { tokens } = await harness({ pats: { 'user-3': 'hubot' } });
+
+      expect(await tokens.userToken('org-1', 'user-3')).toEqual({ source: 'pat', token: 'pat-user-3' });
+      expect(await tokens.userToken('org-2', 'user-3')).toBeNull();
     });
 
     it('runs as the app and names the person when they have no GitHub connection', async () => {

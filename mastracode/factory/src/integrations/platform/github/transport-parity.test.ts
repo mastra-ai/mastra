@@ -383,6 +383,7 @@ async function transports(): Promise<{ legacy: LegacyGithubTransport; connect: C
   return {
     legacy: new LegacyGithubTransport(platform.connect()),
     connect: new ConnectGithubTransport({
+      orgId: 'org-1',
       installation: {
         accountLogin: 'acme',
         installationId: 900,
