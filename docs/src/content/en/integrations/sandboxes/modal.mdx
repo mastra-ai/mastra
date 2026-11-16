@@ -94,6 +94,13 @@ Get your credentials from the [Modal dashboard](https://modal.com/settings/token
     defaultValue: '300000 (5 minutes)',
   },
   {
+    name: 'idleTimeoutMs',
+    type: 'number',
+    description:
+      'How long in milliseconds the sandbox can sit idle before Modal terminates it. Must be a multiple of 1000. `timeoutMs` still caps the total lifetime, so set it at least as long as this value. When unset, the sandbox runs until `timeoutMs` expires.',
+    isOptional: true,
+  },
+  {
     name: 'env',
     type: 'Record<string, string>',
     description: 'Environment variables baked into the sandbox at create time.',
@@ -216,6 +223,17 @@ await sandbox.processes.spawn('npm install')
 await sandbox._stop()
 await sandbox._start()
 ```
+
+Set `idleTimeoutMs` to shut the sandbox down when it goes unused, and keep `timeoutMs` as the hard upper limit:
+
+```typescript
+const sandbox = new ModalSandbox({
+  timeoutMs: 60 * 60_000, // never runs longer than 1 hour
+  idleTimeoutMs: 5 * 60_000, // terminated after 5 idle minutes
+})
+```
+
+`clone({ idleTimeoutMinutes })` sets `idleTimeoutMs` on the clone. If the inherited `timeoutMs` is shorter than the idle window, the clone's `timeoutMs` is raised to match.
 
 ## Volumes and persistent files
 

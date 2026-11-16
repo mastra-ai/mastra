@@ -239,6 +239,22 @@ describe('ModalSandbox lifecycle', () => {
       expect.objectContaining({ timeoutMs: 120_000 }),
     );
   });
+
+  it('shuts down after idleTimeoutMs of inactivity while timeoutMs stays the hard limit (#30369)', async () => {
+    const sandbox = new ModalSandbox({ timeoutMs: 60 * 60_000, idleTimeoutMs: 120_000 });
+    await sandbox._start();
+
+    const [, , params] = mockSandboxes.create.mock.calls[0]!;
+    expect(params).toMatchObject({ timeoutMs: 60 * 60_000, idleTimeoutMs: 120_000 });
+  });
+
+  it('sends no idle timeout when idleTimeoutMs is not set', async () => {
+    const sandbox = new ModalSandbox({ timeoutMs: 120_000 });
+    await sandbox._start();
+
+    const [, , params] = mockSandboxes.create.mock.calls[0]!;
+    expect(params.idleTimeoutMs).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -718,12 +734,42 @@ describe('ModalSandbox.clone', () => {
     });
   });
 
-  it('maps idleTimeoutMinutes to timeoutMs', () => {
-    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', timeoutMs: 120_000 });
+  // Core defines idleTimeoutMinutes as an idle teardown window. It used to be sent
+  // as Modal's timeoutMs (hard lifetime), so a clone with a 1-minute idle window
+  // was killed 60s after start even while a command was running. (#30369)
+  it('a clone with idleTimeoutMinutes gets an idle timeout and keeps the template lifetime (#30369)', async () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', timeoutMs: 60 * 60_000 });
+
+    const child = template.clone({ id: 'x', idleTimeoutMinutes: 1 });
+    await child._start();
+
+    const [, , params] = mockSandboxes.create.mock.calls[0]!;
+    expect(params).toMatchObject({ name: 'x', idleTimeoutMs: 60_000, timeoutMs: 60 * 60_000 });
+    expect(await child.getInfo()).toMatchObject({ metadata: { timeoutMs: 60 * 60_000, idleTimeoutMs: 60_000 } });
+  });
+
+  it('a clone keeps its idle timeout when it resumes from a snapshot after stop() (#30369)', async () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', timeoutMs: 60 * 60_000 });
+    const child = template.clone({ id: 'x', idleTimeoutMinutes: 1 });
+    await child._start();
+    await child._stop();
+    await child._start();
+
+    expect(mockSandboxes.create).toHaveBeenCalledTimes(2);
+    const [, image, params] = mockSandboxes.create.mock.calls[1]!;
+    expect(image).toEqual({ imageId: 'snap-123' });
+    expect(params).toMatchObject({ idleTimeoutMs: 60_000, timeoutMs: 60 * 60_000 });
+  });
+
+  it('a clone whose idle window exceeds the inherited lifetime gets a lifetime at least that long (#30369)', async () => {
+    // Template uses the 5-minute default lifetime.
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec' });
 
     const child = template.clone({ idleTimeoutMinutes: 15 });
+    await child._start();
 
-    expect(child['_constructorOptions']).toMatchObject({ timeoutMs: 900_000 });
+    const [, , params] = mockSandboxes.create.mock.calls[0]!;
+    expect(params).toMatchObject({ idleTimeoutMs: 900_000, timeoutMs: 900_000 });
   });
 
   it('applies workingDirectory override', () => {
