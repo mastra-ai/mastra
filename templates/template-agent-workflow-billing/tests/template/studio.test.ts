@@ -49,7 +49,6 @@ async function fixture(shared = false) {
   cleanups.push(boundary.close);
   const env = {
     ...sanitizedEnvironment(),
-    BILLING_STUDIO_ENABLED: 'true',
     OPENAI_API_KEY: 'controlled-not-live',
     OPENAI_BASE_URL: boundary.url,
   };

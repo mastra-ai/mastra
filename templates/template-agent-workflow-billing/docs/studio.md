@@ -1,6 +1,6 @@
 # Billing in Studio
 
-Set `BILLING_STUDIO_ENABLED=true`, run `npm run dev` and open [Studio](http://127.0.0.1:4111). `npm run build` includes Studio with this flag; `npm start` serves the built UI. Rebuild after changing it. Follow the [README](../README.md) for local profiles or [Autumn](autumn.md#test-autumn-sandbox-in-studio) for sandbox JWTs.
+`BILLING_STUDIO_ENABLED=true` is the default in `.env.example`. Run `npm run dev` and open [Studio](http://127.0.0.1:4111). `npm run build` includes Studio with this flag; `npm start` serves the built UI. Rebuild after changing it. Follow the [README](../README.md) for local profiles or [Autumn](autumn.md#test-autumn-sandbox-in-studio) for sandbox JWTs.
 
 With `BILLING_STUDIO_ENABLED=false`, the bundled conversation agent and billing Playground tools are not registered. Billing HTTP endpoints and the server-side facade still work and native paid routes remain blocked. Ordinary native resources retain their own routes. The flag does not remove the Studio UI from the development server or turn off billing.
 
@@ -167,4 +167,4 @@ registerApplicationShutdown(integration.close);
 
 `agentTool(id)` provides execute/query actions. Both agent and workflow queries accept an optional `operationId`; omitting it recovers the latest twenty initiating operations for this conversation and resource without repeating execution. `workflowTools(id, { approvalSteps })` provides start/query/resume/cancel tools using registered schemas and validates resumable step IDs before serving. Mutating tools derive their request key from the persisted native invocation, never model-provided idempotency. Neither agents nor tools access SQL. Additional Mastra options, custom server routes, middleware and API prefixes stay in the normal constructor/server settings.
 
-Keep the lockfile and the compatible `@mastra/memory` version. Revalidate native chat, history, Stop/reconnect, tool approval and route isolation before framework upgrades; see [compatibility](architecture.md#mastra-compatibility).
+Keep the lockfile and the compatible `@mastra/memory` version. Revalidate native chat, history, Stop/reconnect, tool approval and route isolation before framework upgrades.

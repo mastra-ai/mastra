@@ -30,7 +30,12 @@ it('personal image quickstart is repeatable and shared billing remains isolated'
   cleanups.push(copy.cleanup);
   const model = await imageBoundary();
   cleanups.push(model.close);
-  const env = { ...sanitizedEnvironment(), OPENAI_API_KEY: 'controlled-not-live', OPENAI_BASE_URL: model.url };
+  const env = {
+    ...sanitizedEnvironment(),
+    BILLING_STUDIO_ENABLED: 'false',
+    OPENAI_API_KEY: 'controlled-not-live',
+    OPENAI_BASE_URL: model.url,
+  };
   const setup = await command(copy.root, ['run', 'setup'], env);
   expect(setup.code).toBe(0);
   if (!semanticOnly) expect(setup.output).toContain('added');
@@ -368,7 +373,12 @@ it('image examples demonstrate shared billing suspension and organization isolat
   cleanups.push(copy.cleanup);
   const boundary = await imageBoundary();
   cleanups.push(boundary.close);
-  const env = { ...sanitizedEnvironment(), OPENAI_API_KEY: 'controlled', OPENAI_BASE_URL: boundary.url };
+  const env = {
+    ...sanitizedEnvironment(),
+    BILLING_STUDIO_ENABLED: 'false',
+    OPENAI_API_KEY: 'controlled',
+    OPENAI_BASE_URL: boundary.url,
+  };
   await command(copy.root, ['run', 'setup'], env);
   await shareOwnerWorkspace(copy.root);
   let server = await serve(copy.root, env);

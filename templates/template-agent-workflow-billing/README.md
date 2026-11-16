@@ -10,10 +10,10 @@ We built this template to provide a starting point for billing in Mastra, with c
 
 ## Prerequisites
 
-- **macOS or Linux with Node.js 22.13+ or 24**. On Windows, use WSL2 or a Linux container and keep private state on its Linux filesystem. Native Windows is rejected before private state initialization.
 - **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` in `.env` for the bundled Image Assistant and Image Generation examples.
-- Set `BILLING_STUDIO_ENABLED=true` to enable the Image Assistant. Local setup creates the credential used to authenticate in Studio.
 - Optional **[Autumn credentials](https://app.useautumn.com)**: configure `AUTUMN_SECRET_KEY`, trusted customer/feature bindings, and JWT identity as described in the [Autumn guide](docs/autumn.md). The default local provider needs no Autumn credentials.
+- **Node.js 22+ or 24+** on **macOS, Linux** or Windows. On Windows, use WSL2 or a Linux container and keep private state on its Linux filesystem.
+- `BILLING_STUDIO_ENABLED=true` is the default in `.env.example`, enabling the Image Assistant and billing Playground tools. Set it to `false` in `.env` to disable them. Local setup creates the credential used to authenticate in Studio.
 
 For the **Autumn sandbox experience in production mode**, follow the [Autumn integration guide](docs/autumn.md#test-autumn-sandbox-in-studio) instead of the local quickstart below. It covers account, plan and credit setup, JWT provisioning and renewal, and testing in Studio. `BILLING_MODE=production` enables verified JWT identity; the Autumn sandbox key keeps billing in sandbox.
 
@@ -23,7 +23,7 @@ For the **Autumn sandbox experience in production mode**, follow the [Autumn int
    - Run `npx create-mastra@latest billing-demo --template agent-workflow-billing`.
    - Run `cd billing-demo`, then `npm install`.
 2. **Configure Studio**
-   - Run `cp .env.example .env`, add `OPENAI_API_KEY`, and set `BILLING_STUDIO_ENABLED=true` as described under Prerequisites.
+   - Run `cp .env.example .env` and add `OPENAI_API_KEY` as described under Prerequisites.
 3. **Prepare local billing**
    - Run `npm run setup` to create John, Emma, and Alex with separate personal organizations. Each new account starts with 30 simulated credits. Existing profiles, credentials, and spent balances are preserved.
 4. **Connect to Mastra Studio**
@@ -40,7 +40,7 @@ Image generation is a sample use case for testing billing. The template includes
 - In the same conversation, ask: “Create a three-style illustration kit of the same blue bird.” The workflow reserves 3 credits and saves prompts in Notion-inspired, 3D, and vector illustration styles. Review the prompts and select **Approve**. Complete success produces three private artifacts and confirms one 3-credit charge; the nested image-agent calls have no separate charge. Select **Decline** to cancel and release the reservation instead.
 - Reopen the saved conversation and ask: “Query my saved image and kit operations.” The assistant retrieves their status and receipts without generating again. A new generation request creates new paid work. **Stop** ends conversation activity; to cancel business work, explicitly ask the assistant to cancel the workflow.
 
-Generated PNGs are stored privately in `data/private-images/` under the project root; metadata and ownership live in the billing database. Results include authenticated `downloadPath` links. Use `npm run images -- download ARTIFACT_ID bird.png` to save a file, or follow the [Studio download instructions](docs/studio.md#download-results). Keep the image directory and billing/workflow databases together when moving state.
+Generated PNGs are stored privately in `data/private-images/` under the project root; metadata and ownership live in the billing database. Results include authenticated `downloadPath` links.
 
 ## Customization
 
@@ -52,7 +52,6 @@ Generated PNGs are stored privately in `data/private-images/` under the project 
 - [Billing guide](docs/billing.md): policies, subscription-only access and external API calls.
 - [Studio guide](docs/studio.md): authenticated chat, approval, downloads and denial tests.
 - [Autumn guide](docs/autumn.md): sandbox setup, real identities and provider bindings.
-- [Architecture reference](docs/architecture.md): execution boundaries, compatibility, platform support and every billing module.
 
 ## About Mastra templates
 
