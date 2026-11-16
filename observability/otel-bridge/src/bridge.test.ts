@@ -15,7 +15,7 @@ import { InternalSpans, SamplingStrategyType, SpanType, TracingEventType } from 
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { DefaultObservabilityInstance, Observability, TestExporter } from '@mastra/observability';
-import { context, isSpanContextValid, trace } from '@opentelemetry/api';
+import { context, isSpanContextValid, logs as coreLogs, trace } from '@opentelemetry/api';
 import { logs as otelLogs, SeverityNumber } from '@opentelemetry/api-logs';
 import { InMemoryLogRecordExporter, LoggerProvider, SimpleLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
@@ -1007,6 +1007,88 @@ describe('OtelBridge', () => {
       } finally {
         otelLogs.setGlobalLoggerProvider(loggerProvider);
       }
+    });
+  });
+
+  // An app on OpenTelemetry JS SDK 3 registers its LoggerProvider with `logs`
+  // from `@opentelemetry/api`. That registry is separate from the one in
+  // `@opentelemetry/api-logs`, which SDK 2 apps use. (#29695)
+  describe('LoggerProvider registered through @opentelemetry/api', () => {
+    function makeLogEvent(message: string): LogEvent {
+      return { type: 'log', log: { logId: 'log-1', timestamp: new Date(), level: 'info', message } };
+    }
+
+    function makeProvider() {
+      const exporter = new InMemoryLogRecordExporter();
+      const provider = new LoggerProvider({ processors: [new SimpleLogRecordProcessor({ exporter })] });
+      return { exporter, provider };
+    }
+
+    /** Runs `fn` with nothing in the api-logs registry, as in an app that only has SDK 3. */
+    async function withOnlyCoreRegistry(fn: () => Promise<void>): Promise<void> {
+      otelLogs.disable();
+      try {
+        await fn();
+      } finally {
+        coreLogs.disable();
+        otelLogs.setGlobalLoggerProvider(loggerProvider);
+      }
+    }
+
+    it('delivers Mastra logs to the app log exporter (#29695)', async () => {
+      await withOnlyCoreRegistry(async () => {
+        const { exporter, provider } = makeProvider();
+        coreLogs.setGlobalLoggerProvider(provider);
+
+        const bridge = new OtelBridge();
+        await bridge.onLogEvent(makeLogEvent('from an SDK 3 app'));
+
+        expect(exporter.getFinishedLogRecords().map(record => record.body)).toEqual(['from an SDK 3 app']);
+        await bridge.shutdown();
+      });
+    });
+
+    it('delivers Mastra logs when the provider is registered after the bridge is constructed', async () => {
+      await withOnlyCoreRegistry(async () => {
+        const bridge = new OtelBridge();
+        await bridge.onLogEvent(makeLogEvent('before registration'));
+
+        const { exporter, provider } = makeProvider();
+        coreLogs.setGlobalLoggerProvider(provider);
+        await bridge.onLogEvent(makeLogEvent('after registration'));
+
+        expect(exporter.getFinishedLogRecords().map(record => record.body)).toEqual(['after registration']);
+        await bridge.shutdown();
+      });
+    });
+
+    it('flushes the provider on flush()', async () => {
+      await withOnlyCoreRegistry(async () => {
+        const { provider } = makeProvider();
+        const forceFlush = vi.spyOn(provider, 'forceFlush');
+        coreLogs.setGlobalLoggerProvider(provider);
+
+        const bridge = new OtelBridge();
+        await bridge.flush();
+
+        expect(forceFlush).toHaveBeenCalledTimes(1);
+        await bridge.shutdown();
+      });
+    });
+
+    it('says once at debug level that logs are not exported when no provider is registered anywhere', async () => {
+      await withOnlyCoreRegistry(async () => {
+        const debug = vi.fn();
+        const bridge = new OtelBridge();
+        bridge.__setLogger({ debug, info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any);
+
+        await bridge.onLogEvent(makeLogEvent('dropped'));
+        await bridge.onLogEvent(makeLogEvent('dropped again'));
+
+        const notes = debug.mock.calls.filter(([message]) => String(message).includes('logger provider'));
+        expect(notes).toHaveLength(1);
+        await bridge.shutdown();
+      });
     });
   });
 
