@@ -443,6 +443,21 @@ describe('JsonRenderProcessor', () => {
     expect(saved.content.parts.some(part => part.type === 'data-spec')).toBe(false);
   });
 
+  it('keeps the prose of the retry after a reply that left its spec block open', async () => {
+    const { model } = modelWriting(
+      'Here.\n```spec\n{"op":"add","path":"/root","value":"card"}',
+      `Sorry.\n${specBlock(weatherCard)}\nEnjoy!`,
+    );
+
+    const { streamed, messages } = await chat(model, 'Weather in Paris?');
+
+    const text = streamed.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.payload.text);
+    expect(text.join('')).toBe('Here.\nSorry.\nEnjoy!');
+    const replies = messages.filter(message => message.role === 'assistant');
+    expect(replies.map(reply => textOf(reply.content.parts))).toEqual(['Sorry.\nEnjoy!']);
+    expect(buildSpecFromParts(replies[0]!.content.parts as any)).toEqual(weatherCard);
+  });
+
   it('keeps a last line that only looked like it could start a spec', async () => {
     const { model } = modelWriting('Install it first.\n`pnpm add zod` does it');
 
