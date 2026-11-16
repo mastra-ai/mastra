@@ -56,6 +56,11 @@ export interface GithubFeatureDiagnostics {
 
 export interface GithubStatus {
   enabled: boolean;
+  /**
+   * Which GitHub apps serve the org: the legacy GitHub App, or the Mastra
+   * Factory apps once an admin has switched. Absent on servers without the switch.
+   */
+  mode?: 'legacy' | 'connect';
   sandboxEnabled?: boolean;
   connected: boolean;
   installations: GithubInstallation[];

@@ -75,6 +75,9 @@ function useInvalidateProviderState(provider: PlatformConnectProviderId) {
             queryClient.invalidateQueries({ queryKey: ['linear', 'issue'] }),
           ]
         : []),
+      ...(provider === 'factory-github' || provider === 'factory-reviews-github'
+        ? [queryClient.invalidateQueries({ queryKey: queryKeys.githubSwitch() })]
+        : []),
       ...(gitlab
         ? [
             // GitLab lists self-hosted connections too, so either flow changes both listings.

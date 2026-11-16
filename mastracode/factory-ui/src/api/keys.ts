@@ -61,6 +61,8 @@ export const queryKeys = {
     ['factory', 'sandbox-envs', factoryProjectId ?? null] as const,
   githubStatus: () => ['github', 'status'] as const,
   githubPat: () => ['github', 'pat'] as const,
+  githubSwitch: () => ['github', 'switch'] as const,
+  githubOwn: () => ['github', 'own'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
   githubIssue: (githubProjectId: string | undefined, number: number | undefined) =>
     ['github', 'issue', githubProjectId ?? null, number ?? null] as const,
