@@ -97,6 +97,16 @@ start the Docker services with `pnpm --dir mastracode/web db:up`, then run
 `pnpm --dir mastracode/web api` and `pnpm --filter ./mastracode/factory-ui dev`
 in separate terminals.
 
+### Check that the server is ready
+
+Poll `GET /health` to check from a script whether the server is up. It returns `200` without signing in:
+
+```shell
+until curl -sf --max-time 2 http://localhost:4111/health >/dev/null; do sleep 1; done
+```
+
+Use port `5873` in integrated mode. Don't poll `/`. When sign-in is configured, `/` redirects browsers to `/signin` but returns `401` to `curl` and other clients that don't send `Accept: text/html`.
+
 ### Slack channels (optional)
 
 Slack sends events to public HTTPS origins only, so a local server needs a
