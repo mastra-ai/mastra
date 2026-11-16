@@ -85,49 +85,36 @@ async function setup() {
 }
 
 describe('githubIntakeLookup', () => {
-  it('reads an issue from a linked repository with the facts its arrival would carry', async () => {
-    const { lookup, reads, scope } = await setup();
-    const result = await lookup.lookup(scope, 'https://github.com/Mastra-AI/Mastra/issues/12');
-    expect(result).toEqual({
-      status: 'found',
-      title: 'Crash on start',
-      url: 'https://github.com/mastra-ai/mastra/issues/12',
-      facts: expect.objectContaining({
-        'item.labels': ['bug'],
-        'item.author': 'outsider',
-        'item.assignees': ['ana'],
-        'item.key': 'mastra-ai/mastra#12',
-        'item.trusted': false,
-        'source.kind': 'issue',
-        'source.repository': 'mastra-ai/mastra',
-      }),
-    });
-    expect(reads).toEqual(['issue 41 mastra-ai/mastra#12', 'permission 41 mastra-ai/mastra outsider']);
-  });
-
-  it('reads a pull request, and one named by an issue URL, with its author trust', async () => {
-    const { lookup, scope } = await setup();
-    for (const url of ['https://github.com/mastra-ai/mastra/pull/34/files', 'https://github.com/mastra-ai/mastra/issues/34']) {
-      const result = await lookup.lookup(scope, url);
-      expect(result).toMatchObject({
-        status: 'found',
-        facts: { 'source.kind': 'pull_request', 'item.trusted': true, 'pullRequest.trusted': true, 'item.labels': ['docs'] },
-      });
-    }
-  });
-
-  it('refuses repositories not linked to the project without fetching anything', async () => {
-    const { lookup, reads, scope } = await setup();
-    // Linked to another project in the same organization, and not linked at all.
-    expect(await lookup.lookup(scope, 'https://github.com/mastra-ai/ship/issues/1')).toEqual({ status: 'not_linked' });
-    expect(await lookup.lookup(scope, 'https://github.com/someone/else/pull/1')).toEqual({ status: 'not_linked' });
-    expect(reads).toEqual([]);
-  });
-
-  it('reports a missing item, and leaves other providers’ URLs alone', async () => {
-    const { lookup, scope } = await setup();
-    expect(await lookup.lookup(scope, 'https://github.com/mastra-ai/mastra/issues/99')).toEqual({ status: 'not_found' });
-    expect(await lookup.lookup(scope, 'https://gitlab.com/mastra-ai/mastra/-/issues/12')).toBeUndefined();
-    expect(await lookup.lookup(scope, 'https://linear.app/mastra/issue/ENG-1')).toBeUndefined();
+  const issueFacts = {
+    'item.labels': ['bug'],
+    'item.author': 'outsider',
+    'item.assignees': ['ana'],
+    'item.key': 'mastra-ai/mastra#12',
+    'item.trusted': false,
+    'source.kind': 'issue',
+    'source.repository': 'mastra-ai/mastra',
+  };
+  const prFacts = { 'source.kind': 'pull_request', 'item.trusted': true, 'pullRequest.trusted': true, 'item.labels': ['docs'] };
+  it.each([
+    {
+      url: 'https://github.com/Mastra-AI/Mastra/issues/12',
+      result: { status: 'found', title: 'Crash on start', url: 'https://github.com/mastra-ai/mastra/issues/12', facts: issueFacts },
+      reads: ['issue 41 mastra-ai/mastra#12', 'permission 41 mastra-ai/mastra outsider'],
+    },
+    { url: 'https://github.com/mastra-ai/mastra/pull/34/files', result: { status: 'found', facts: prFacts } },
+    // An issue URL may name a pull request: GitHub numbers them together.
+    { url: 'https://github.com/mastra-ai/mastra/issues/34', result: { status: 'found', facts: prFacts } },
+    // Linked to another project of the organization, or not linked at all: nothing is fetched.
+    { url: 'https://github.com/mastra-ai/ship/issues/1', result: { status: 'not_linked' }, reads: [] },
+    { url: 'https://github.com/someone/else/pull/1', result: { status: 'not_linked' }, reads: [] },
+    { url: 'https://github.com/mastra-ai/mastra/issues/99', result: { status: 'not_found' } },
+    { url: 'https://gitlab.com/mastra-ai/mastra/-/issues/12', result: undefined, reads: [] },
+    { url: 'https://linear.app/mastra/issue/ENG-1', result: undefined, reads: [] },
+  ])('$url', async ({ url, result, reads }) => {
+    const seeded = await setup();
+    const found = await seeded.lookup.lookup(seeded.scope, url);
+    if (result) expect(found).toMatchObject(result);
+    else expect(found).toBeUndefined();
+    if (reads) expect(seeded.reads).toEqual(reads);
   });
 });

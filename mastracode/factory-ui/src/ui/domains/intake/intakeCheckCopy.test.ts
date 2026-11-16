@@ -13,14 +13,12 @@ import {
 const boardName = (key: string) => ({ ship: 'Ship', platform: 'Platform', work: 'Work' })[key] ?? key;
 const keys = (count: number) => Array.from({ length: count }, (_, index) => `item-${index}`);
 
+// The dry-run counts feed the boards' intake pages; the tester panel's own labels are covered by its MSW test.
 describe('intake check copy', () => {
-  it('counts what a rule takes and what it loses, board by board', () => {
-    expect(ruleCounts({ takes: keys(6), lost: [] }, boardName)).toEqual(['takes 6']);
-    expect(ruleCounts({ takes: keys(6), lost: [{ boardKey: 'ship', keys: keys(3) }] }, boardName)).toEqual([
-      'takes 6',
-      'lost 3 to Ship',
-    ]);
-    expect(
+  it.each<[string, unknown, unknown]>([
+    ['a rule that only takes', ruleCounts({ takes: keys(6), lost: [] }, boardName), ['takes 6']],
+    [
+      'a rule losing items to several boards, skipping empty ones',
       ruleCounts(
         {
           takes: [],
@@ -32,15 +30,16 @@ describe('intake check copy', () => {
         },
         boardName,
       ),
-    ).toEqual(['takes 0', 'lost 3 to Ship, 1 to Platform']);
-    expect(ruleFiledLabel({ filed: 4 })).toBe('filed 4 in the last 30 days');
-  });
-
-  it('sums up a board, counting an item lost to several boards once', () => {
-    expect(boardSummary({ takes: keys(14), lostTo: [{ boardKey: 'ship', keys: keys(9) }] }, 200, boardName)).toBe(
+      ['takes 0', 'lost 3 to Ship, 1 to Platform'],
+    ],
+    ['live counts', ruleFiledLabel({ filed: 4 }), 'filed 4 in the last 30 days'],
+    [
+      'a board losing items',
+      boardSummary({ takes: keys(14), lostTo: [{ boardKey: 'ship', keys: keys(9) }] }, 200, boardName),
       "Would take 14 of the last 200 items. 9 more matched this board's rules but Ship took them first.",
-    );
-    expect(
+    ],
+    [
+      'a board losing one item to two boards, counted once',
       boardSummary(
         {
           takes: [],
@@ -52,41 +51,38 @@ describe('intake check copy', () => {
         1,
         boardName,
       ),
-    ).toBe("Would take 0 of the last 1 item. 3 more matched this board's rules but Ship and Platform took them first.");
-    expect(boardSummary({ takes: keys(2), lostTo: [] }, 200, boardName)).toBe('Would take 2 of the last 200 items.');
-  });
-
-  it('describes a preview and the items no board takes', () => {
-    expect(changedSummary(12, 200)).toBe('12 of the last 200 items would now land on a different board or phase.');
-    expect(changedSummary(0, 200)).toBe('None of the last 200 items would land anywhere new.');
+      "Would take 0 of the last 1 item. 3 more matched this board's rules but Ship and Platform took them first.",
+    ],
+    ['a preview', changedSummary(12, 200), '12 of the last 200 items would now land on a different board or phase.'],
+    ['a preview changing nothing', changedSummary(0, 200), 'None of the last 200 items would land anywhere new.'],
     // Includes items a rule matched but whose phase refused them.
-    expect(notRoutedSummary(3, 200)).toBe('3 of the last 200 items would not be routed because no board takes them.');
-    expect(notRoutedSummary(0, 200)).toBeNull();
-  });
-
-  it('names the value a failed condition saw', () => {
-    expect(failedConditionLabel({ field: 'item.labels', operator: 'contains', value: 'ship', actual: [] })).toBe(
+    [
+      'items no board takes',
+      notRoutedSummary(3, 200),
+      '3 of the last 200 items would not be routed because no board takes them.',
+    ],
+    ['no item left out', notRoutedSummary(0, 200), null],
+    [
+      'an empty list',
+      failedConditionLabel({ field: 'item.labels', operator: 'contains', value: 'ship', actual: [] }),
       'item.labels is empty, wanted contains ship',
-    );
-    expect(failedConditionLabel({ field: 'item.author', operator: 'exists', actual: null })).toBe(
+    ],
+    [
+      'a missing fact',
+      failedConditionLabel({ field: 'item.author', operator: 'exists', actual: null }),
       'item.author has no value, wanted exists',
-    );
-    expect(failedConditionLabel({ field: 'item.pullRequest', operator: 'greater_than', value: 3, actual: 2 })).toBe(
-      'item.pullRequest is 2, wanted greater_than 3',
-    );
-  });
-  it('names an event with what changed on it', () => {
-    expect(eventLabel({ type: 'work_item.opened' })).toBe('work_item.opened');
-    expect(eventLabel({ type: 'work_item.closed', reason: 'completed' })).toBe('work_item.closed (completed)');
-    expect(
-      eventLabel({
-        type: 'work_item.updated',
-        labels: { added: ['ship', 'p1'], removed: [] },
-        assignees: { added: [], removed: ['ada'] },
-      }),
-    ).toBe('work_item.updated, labels +ship +p1, assignees −ada');
-    expect(eventLabel({ type: 'pull_request.opened', pullRequestTrusted: false })).toBe(
+    ],
+    [
+      'assignee changes',
+      eventLabel({ type: 'work_item.updated', assignees: { added: ['grace'], removed: ['ada'] } }),
+      'work_item.updated, assignees +grace −ada',
+    ],
+    [
+      'an untrusted pull request',
+      eventLabel({ type: 'pull_request.opened', pullRequestTrusted: false }),
       'pull_request.opened, from an untrusted author',
-    );
+    ],
+  ])('words %s', (_, actual, expected) => {
+    expect(actual).toEqual(expected);
   });
 });

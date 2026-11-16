@@ -90,62 +90,54 @@ async function setup() {
 }
 
 describe('gitlabIntakeLookup', () => {
-  it('reads an issue from a linked project with the facts its arrival would carry', async () => {
-    const { lookup, reads, scope } = await setup();
-    const result = await lookup.lookup(scope, 'https://GitLab.example.com/Acme/Platform/API/-/issues/3');
-    expect(result).toEqual({
-      status: 'found',
-      title: 'Crash on start',
-      url: 'https://gitlab.example.com/acme/platform/api/-/issues/3',
-      facts: expect.objectContaining({
-        'item.labels': ['bug'],
-        'item.author': 'outsider',
-        'item.assignees': ['ana'],
-        'item.key': 'acme/platform/api#3',
-        'item.state': 'open',
-        'item.trusted': false,
-        'source.kind': 'issue',
-        'source.provider': 'gitlab',
-        'source.repository': 'acme/platform/api',
-      }),
-    });
-    expect(reads).toEqual(['issue direct-1 55 3', 'access direct-1 55 outsider']);
-    const closed = await lookup.lookup(scope, 'https://gitlab.example.com/acme/platform/api/-/issues/4');
-    expect(closed).toMatchObject({ status: 'found', facts: { 'item.state': 'closed' } });
-  });
-
-  it('reads a merge request with its state and author trust', async () => {
-    const { lookup, scope } = await setup();
-    const result = await lookup.lookup(scope, 'https://gitlab.example.com/acme/platform/api/-/merge_requests/7/diffs');
-    expect(result).toMatchObject({
-      status: 'found',
-      facts: {
-        'source.kind': 'pull_request',
-        'item.state': 'merged',
-        'item.key': 'acme/platform/api!7',
-        'item.trusted': true,
-        'pullRequest.trusted': true,
+  const host = 'https://gitlab.example.com';
+  it.each([
+    {
+      url: `https://GitLab.example.com/Acme/Platform/API/-/issues/3`,
+      result: {
+        status: 'found',
+        title: 'Crash on start',
+        url: `${host}/acme/platform/api/-/issues/3`,
+        facts: {
+          'item.labels': ['bug'],
+          'item.author': 'outsider',
+          'item.assignees': ['ana'],
+          'item.key': 'acme/platform/api#3',
+          'item.state': 'open',
+          'item.trusted': false,
+          'source.kind': 'issue',
+          'source.provider': 'gitlab',
+          'source.repository': 'acme/platform/api',
+        },
       },
-    });
-  });
-
-  it('refuses projects not linked to this Factory project, or on another host, without fetching', async () => {
-    const { lookup, reads, scope } = await setup();
-    for (const url of [
-      'https://gitlab.example.com/acme/ship/-/issues/1',
-      'https://gitlab.example.com/acme/elsewhere/-/issues/1',
-      'https://gitlab.com/acme/platform/api/-/issues/3',
-    ]) {
-      expect(await lookup.lookup(scope, url)).toEqual({ status: 'not_linked' });
-    }
-    expect(reads).toEqual([]);
-  });
-
-  it('reports a missing item, and leaves other providers’ URLs alone', async () => {
-    const { lookup, scope } = await setup();
-    expect(await lookup.lookup(scope, 'https://gitlab.example.com/acme/platform/api/-/issues/99')).toEqual({
-      status: 'not_found',
-    });
-    expect(await lookup.lookup(scope, 'https://github.com/acme/api/issues/3')).toBeUndefined();
+      // Read through the host's active connection, not the stored one.
+      reads: ['issue direct-1 55 3', 'access direct-1 55 outsider'],
+    },
+    { url: `${host}/acme/platform/api/-/issues/4`, result: { status: 'found', facts: { 'item.state': 'closed' } } },
+    {
+      url: `${host}/acme/platform/api/-/merge_requests/7/diffs`,
+      result: {
+        status: 'found',
+        facts: {
+          'source.kind': 'pull_request',
+          'item.state': 'merged',
+          'item.key': 'acme/platform/api!7',
+          'item.trusted': true,
+          'pullRequest.trusted': true,
+        },
+      },
+    },
+    // Linked to another project, not linked, or on another host: nothing is fetched.
+    { url: `${host}/acme/ship/-/issues/1`, result: { status: 'not_linked' }, reads: [] },
+    { url: `${host}/acme/elsewhere/-/issues/1`, result: { status: 'not_linked' }, reads: [] },
+    { url: 'https://gitlab.com/acme/platform/api/-/issues/3', result: { status: 'not_linked' }, reads: [] },
+    { url: `${host}/acme/platform/api/-/issues/99`, result: { status: 'not_found' } },
+    { url: 'https://github.com/acme/api/issues/3', result: undefined, reads: [] },
+  ])('$url', async ({ url, result, reads }) => {
+    const seeded = await setup();
+    const found = await seeded.lookup.lookup(seeded.scope, url);
+    if (result) expect(found).toMatchObject(result);
+    else expect(found).toBeUndefined();
+    if (reads) expect(seeded.reads).toEqual(reads);
   });
 });
