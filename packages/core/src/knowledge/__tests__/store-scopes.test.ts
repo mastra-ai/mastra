@@ -2,10 +2,11 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { setRunAgentScopes } from '../../agent/scopes';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
+import type { KnowledgeStorage } from '../../storage';
 import { KnowledgeDeclarationError, knowledgeMemoryScopes } from '../declarations';
 import type { KnowledgeScopeDeclarations } from '../declarations';
 import { Knowledge } from '../index';
-import { KNOWLEDGE_STORE_DECLARATIONS_TTL_MS } from '../scope-runtime';
+import { KNOWLEDGE_STORE_DECLARATIONS_TTL_MS, KnowledgeScopeRuntime } from '../scope-runtime';
 
 const host = { author: 'host' };
 const imports = [{ principal: 'imports:all', role: 'viewer' as const }];
@@ -88,6 +89,29 @@ describe('Knowledge scope declarations a store supplies', () => {
     await expect(knowledge.renameScopeDeclaration('gone:$id', 'docs:$team')).resolves.toBe(0);
     await call('knowledge_search', { query: 'Roadmap' });
     expect(declaring).toHaveBeenCalledTimes(2);
+  });
+
+  it("doesn't let a read started before invalidate() publish its answer after it", async () => {
+    let finishOld!: (declarations: KnowledgeScopeDeclarations) => void;
+    const reads: Array<Promise<KnowledgeScopeDeclarations>> = [
+      new Promise(resolve => (finishOld = resolve)),
+      Promise.resolve({}),
+    ];
+    const getScopeDeclarations = vi.fn(() => reads.shift()!);
+    const storage = { getScopeDeclarations } as unknown as KnowledgeStorage;
+    const runtime = new KnowledgeScopeRuntime(
+      knowledgeMemoryScopes(),
+      async () => storage,
+      () => {},
+    );
+    const old = runtime.resolve();
+    await vi.waitFor(() => expect(getScopeDeclarations).toHaveBeenCalledTimes(1));
+    runtime.invalidate();
+    await runtime.resolve();
+    finishOld(LINEAR);
+    await old;
+    expect(runtime.compiled.match('linear:acme:conn_1')).toBeFalsy();
+    expect(getScopeDeclarations).toHaveBeenCalledTimes(2);
   });
 
   it('reads the store again after a failed read', async () => {

@@ -46,6 +46,8 @@ export class KnowledgeScopeRuntime {
   #declarationsChecked?: Promise<void>;
   /** The store's declarations as last read, shared by concurrent calls until they expire. */
   #stored?: { readAt: number; declarations: Promise<KnowledgeScopeDeclarations> };
+  /** Bumped by {@link invalidate}, so a read started before it can't publish its answer after it. */
+  #generation = 0;
 
   constructor(
     declarations: KnowledgeScopeDeclarations,
@@ -71,7 +73,10 @@ export class KnowledgeScopeRuntime {
    * when the store's answer changes.
    */
   async resolve(): Promise<CompiledKnowledgeScopes> {
+    const generation = this.#generation;
     const stored = await this.#readStored();
+    // Invalidated while this read was in flight: its answer may predate the change, so read again.
+    if (generation !== this.#generation) return this.resolve();
     const key = JSON.stringify(stored);
     if (key === this.#resolved.stored) return this.#resolved.compiled;
     let merged = this.#config;
@@ -122,11 +127,13 @@ export class KnowledgeScopeRuntime {
   /** Makes the next {@link resolve} read the store's declarations again. */
   invalidate(): void {
     this.#stored = undefined;
+    this.#generation++;
   }
 
   #readStored(): Promise<KnowledgeScopeDeclarations> {
     const now = Date.now();
-    if (this.#stored && now - this.#stored.readAt < KNOWLEDGE_STORE_DECLARATIONS_TTL_MS) {
+    // `now >= readAt` keeps a clock that moved backwards from extending the window.
+    if (this.#stored && now >= this.#stored.readAt && now - this.#stored.readAt < KNOWLEDGE_STORE_DECLARATIONS_TTL_MS) {
       return this.#stored.declarations;
     }
     const entry = {
