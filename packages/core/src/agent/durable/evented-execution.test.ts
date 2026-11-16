@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, onTestFinished, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { Event } from '../../events/types';
@@ -734,6 +734,126 @@ it('does not mark a participant lost when its renewal reaches storage after the 
   await vi.advanceTimersByTimeAsync(0);
 
   expect(renewed()).toBe(false);
+  expect(participant.isLost()).toBe(false);
+  expect(lost).not.toHaveBeenCalled();
+});
+
+/**
+ * Another process sharing only `storage` and `pubsub` with this one: a fresh module registry, so no execution state
+ * kept in module memory crosses over.
+ */
+async function otherProcess(storage: NonNullable<ReturnType<Mastra['getStorage']>>, pubsub: EventEmitterPubSub) {
+  vi.resetModules();
+  const fences = await import('./execution-fence');
+  const evented = await import('./evented-execution');
+  const { Mastra: OtherMastra } = await import('../../mastra');
+  expect(fences.ExecutionFence).not.toBe(ExecutionFence);
+  const mastra = new OtherMastra({ storage, pubsub, logger: false });
+  onTestFinished(async () => {
+    await evented.stopDurableExecutionParticipants(mastra);
+    fences.__resetExecutionFencesForTests();
+  });
+  return { mastra, fences, evented };
+}
+
+// The API process's coordinator and the worker settling the run live in different processes that share storage. The
+// worker's release only shows in the ownership record, which still names the coordinator's claim. (#30206)
+it('does not mark a coordinator lost when a worker in another process released the suspended run before its renewal landed (#30206)', async () => {
+  vi.useFakeTimers();
+  const storage = new InMemoryStore();
+  const workflowsStore = (await storage.getStore('workflows'))!;
+  const pubsub = new EventEmitterPubSub();
+  const mastra = new Mastra({ storage, pubsub, logger: false });
+  instances.push(mastra);
+  const coordinator = await ExecutionFence.claim({
+    workflowsStore,
+    leaseProvider: pubsub,
+    agentId: 'agent',
+    runId: 'run',
+    mode: 'acquire',
+  });
+  onTestFinished(() => coordinator.stopHeartbeat());
+  const lost = vi.fn();
+  coordinator.onLost(lost);
+  const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+  const delivery = Promise.withResolvers<void>();
+  const renewals: boolean[] = [];
+  vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementation(async args => {
+    if (renewals.length === 0) await delivery.promise;
+    const result = await renew(args);
+    renewals.push(result.renewed);
+    return result;
+  });
+  await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+
+  const worker = await otherProcess(storage, pubsub);
+  const suspension: Event = {
+    id: 'suspend',
+    type: 'workflow.suspend',
+    runId: 'run',
+    createdAt: new Date(),
+    data: {
+      workflowId: 'durable-agentic-loop',
+      requestContext: { [MASTRA_DURABLE_EXECUTIONS_KEY]: { run: coordinator.claim } },
+    },
+  };
+  await worker.evented.settleEventedDurableExecution(worker.mastra, suspension);
+  expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({
+    ownerId: coordinator.executionId,
+    generation: coordinator.generation,
+    leaseExpiresAt: null,
+  });
+  delivery.resolve();
+  await vi.advanceTimersByTimeAsync(0);
+
+  expect(renewals).toEqual([false]);
+  expect(coordinator.isLost()).toBe(false);
+  expect(lost).not.toHaveBeenCalled();
+
+  // A release that nothing settles, such as an abandoned terminal, must still reach a coordinator that keeps waiting:
+  // its next renewal finds the claim still released and reports the loss.
+  await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+  expect(renewals).toEqual([false, false]);
+  expect(coordinator.isLost()).toBe(true);
+});
+
+// Two workers share a run: the one settling the suspension releases the claim that a participant in the other worker
+// is still renewing. (#30206)
+it('does not mark a participant in another worker lost when this worker released the suspended run before its renewal landed (#30206)', async () => {
+  vi.useFakeTimers();
+  const { workflowsStore, pubsub, mastra, coordinator, event } = await createExecution();
+  const other = await otherProcess(mastra.getStorage()!, pubsub);
+  await other.evented.participateInDurableExecution(other.mastra, event, async () => {});
+  const participant = other.mastra
+    .__getRunScope('run')!
+    .get(other.fences.DURABLE_PARTICIPANT_FENCES)!
+    .get(coordinator.executionId)!;
+  const lost = vi.fn();
+  participant.onLost(lost);
+  const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+  const delivery = Promise.withResolvers<void>();
+  const sent = Promise.withResolvers<void>();
+  let renewed: boolean | undefined;
+  vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementationOnce(async args => {
+    sent.resolve();
+    await delivery.promise;
+    const result = await renew(args);
+    renewed = result.renewed;
+    return result;
+  });
+  await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+  await sent.promise;
+
+  await settleEventedDurableExecution(mastra, { ...event, type: 'workflow.suspend' });
+  expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({
+    ownerId: coordinator.executionId,
+    generation: coordinator.generation,
+    leaseExpiresAt: null,
+  });
+  delivery.resolve();
+  await vi.advanceTimersByTimeAsync(0);
+
+  expect(renewed).toBe(false);
   expect(participant.isLost()).toBe(false);
   expect(lost).not.toHaveBeenCalled();
 });

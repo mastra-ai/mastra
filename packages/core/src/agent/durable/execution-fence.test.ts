@@ -174,6 +174,55 @@ describe('ExecutionFence heartbeat', () => {
     expect(acquire).not.toHaveBeenCalled();
     expect(await pubsub.getLeaseOwner(key('run-1'))).toBe('foreign');
   });
+
+  // A released lease records nothing, so only the release itself can confirm that nobody took the run over before
+  // it. A takeover landing just before the settling execution gave the lease up used to pass that check, leaving the
+  // old execution healthy and publishing on the successor's topics. (#30206)
+  it('marks an execution lost when a takeover lands just before its settle gives up the lease (#30206)', async () => {
+    vi.useFakeTimers();
+    const pubsub = new EventEmitterPubSub();
+    onTestFinished(() => pubsub.close());
+    const fence = await claim(pubsub, 'run-1');
+    // Hold the heartbeat's renewal until the settle is over.
+    const renew = pubsub.renewLease.bind(pubsub);
+    const delivery = Promise.withResolvers<void>();
+    vi.spyOn(pubsub, 'renewLease').mockImplementationOnce(async (...args) => {
+      await delivery.promise;
+      return renew(...args);
+    });
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    // A successor takes the run over the moment the settling execution starts giving up its lease, whichever call
+    // that is.
+    const transfer = pubsub.transferLease.bind(pubsub);
+    const release = pubsub.releaseLease.bind(pubsub);
+    let takenOver = false;
+    const takeOver = async () => {
+      if (takenOver) return;
+      takenOver = true;
+      expect(await transfer(key('run-1'), fence.executionId, 'successor', EXECUTION_LEASE_TTL_MS)).toBe(true);
+    };
+    vi.spyOn(pubsub, 'transferLease').mockImplementation(async (leaseKey, from, to, ttlMs) => {
+      if (from === fence.executionId) await takeOver();
+      return transfer(leaseKey, from, to, ttlMs);
+    });
+    vi.spyOn(pubsub, 'releaseLease').mockImplementation(async (leaseKey, owner) => {
+      if (owner === fence.executionId) await takeOver();
+      return release(leaseKey, owner);
+    });
+
+    await fence.settle(async () => {});
+    expect(takenOver).toBe(true);
+    expect(await pubsub.getLeaseOwner(key('run-1'))).toBe('successor');
+    delivery.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(fence.isLost()).toBe(true);
+    const published = vi.fn();
+    await pubsub.subscribe('run-1-stream', published);
+    await fencePubSub(pubsub, fence).publish('run-1-stream', { type: 'stale', runId: 'run-1', data: {} });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(published).not.toHaveBeenCalled();
+  });
 });
 
 describe('ExecutionFence.settle', () => {

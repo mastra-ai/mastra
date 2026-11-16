@@ -53,6 +53,11 @@ const STORAGE_RENEWAL_GRACE_MS = EXECUTION_LEASE_TTL_MS;
 const STORE_CLOCK_SKEW_MS = EXECUTION_LEASE_RENEW_INTERVAL_MS;
 const VERIFY_RETRY_DELAY_MS = 250;
 const TAKEOVER_ATTEMPTS = 3;
+/**
+ * How long the marker owner a lease release hands the lease to may outlive a failed drop. The release drops it at
+ * once; a claim that meets it retries until {@link EXECUTION_CLAIM_WAIT_MS}.
+ */
+const RELEASED_LEASE_MARKER_TTL_MS = 1_000;
 const EXECUTION_CLAIM_WAIT_MS = 5_000;
 const CLAIM_POLL_INTERVAL_MS = 100;
 
@@ -329,6 +334,8 @@ export interface UntrackedRunLiveness {
   ttlMs: number;
 }
 
+type RenewalResult = { renewed: true; leaseExpiresAt?: Date | null } | { renewed: false; released: boolean };
+
 /** Where a run's ownership lives. One instance per run. */
 interface OwnershipBackend {
   /** Whether a claim lapses unless renewed. */
@@ -347,10 +354,11 @@ interface OwnershipBackend {
   /** Read-only active ownership observation by a worker, never a renewal. */
   observe(claim: DurableExecutionClaim, details: ExecutionDetails): Promise<void>;
   /**
-   * Extend `claim`. `renewed: false` once another execution owns the run; throws on backend errors.
-   * `leaseExpiresAt` is the new expiry on the store's clock, when the backend reports one.
+   * Extend `claim`. `renewed: false` once the claim was released or another execution owns the run; throws on
+   * backend errors. `leaseExpiresAt` is the new expiry on the store's clock, when the backend reports one.
+   * `released` is true when the backend shows `claim` itself released the run and nobody claimed it since.
    */
-  renew(claim: DurableExecutionClaim): Promise<{ renewed: boolean; leaseExpiresAt?: Date | null }>;
+  renew(claim: DurableExecutionClaim): Promise<RenewalResult>;
   /** Whether another execution claimed the run after `claim`. Throws on backend errors. */
   isSuperseded(claim: DurableExecutionClaim): Promise<boolean>;
   /**
@@ -412,16 +420,23 @@ function leaseBackend(provider: LeaseProvider, agentId: string, runId: string): 
         );
       }
     },
-    renew: async claim => ({ renewed: await provider.renewLease(key, claim.executionId, EXECUTION_LEASE_TTL_MS) }),
+    // A released lease is gone, so a failed renewal can't tell a release from a takeover.
+    renew: async claim =>
+      (await provider.renewLease(key, claim.executionId, EXECUTION_LEASE_TTL_MS))
+        ? { renewed: true }
+        : { renewed: false, released: false },
     async isSuperseded(claim) {
       const owner = await provider.getLeaseOwner(key);
       return owner !== undefined && owner !== claim.executionId;
     },
-    // `releaseLease` does not report whether it released anything, so a renewal first confirms the lease is still
-    // held. A lease has no generation: a takeover landing between the two calls goes unseen.
+    // `releaseLease` does not report whether it released anything. `transferLease` checks the owner and hands the
+    // lease to a marker owner in one step, so it confirms nobody took the run over first; the marker is then dropped.
     async release(claim) {
-      const held = await provider.renewLease(key, claim.executionId, EXECUTION_LEASE_TTL_MS).catch(() => false);
-      await provider.releaseLease(key, claim.executionId);
+      const marker = `${claim.executionId}:released`;
+      const held = await provider
+        .transferLease(key, claim.executionId, marker, RELEASED_LEASE_MARKER_TTL_MS)
+        .catch(() => false);
+      await provider.releaseLease(key, held ? marker : claim.executionId);
       return held;
     },
     // A lease has no generation to move past: releasing is all it can do.
@@ -499,9 +514,13 @@ function storageBackend(store: WorkflowsStorage, runId: string): OwnershipBacken
       }
       if (!record?.live) throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, details);
     },
+    // A failed renewal reports the run's record. A claim keeps its owner and generation when released, and any later
+    // claim raises the generation, so a record still naming `claim` with no lease means `claim` was released.
     async renew(claim) {
-      const { renewed, record } = await store.renewRunOwnership({ ...fence(claim), leaseMs: EXECUTION_LEASE_TTL_MS });
-      return { renewed, leaseExpiresAt: record?.leaseExpiresAt };
+      const result = await store.renewRunOwnership({ ...fence(claim), leaseMs: EXECUTION_LEASE_TTL_MS });
+      if (result.renewed) return { renewed: true, leaseExpiresAt: result.record.leaseExpiresAt };
+      const { record } = result;
+      return { renewed: false, released: !!record && matchesRunFence(record, fence(claim)) && !record.leaseExpiresAt };
     },
     // Release keeps the record, so a missing one means the store lost it:
     // the holder is unknown.
@@ -588,6 +607,8 @@ export class ExecutionFence implements RunFenceScope {
    * reach the backend after it and come back unrenewed; only that confirmation shows nobody took the run over first.
    */
   #ownRelease?: Promise<boolean>;
+  /** A renewal found this claim released by a fence of this execution in another process, before this one settled. */
+  #releaseSeen = false;
   #settlement?: Promise<ExecutionSettlement>;
   #settledAs?: ExecutionSettlement;
   #resolveSettled!: () => void;
@@ -1189,10 +1210,16 @@ export class ExecutionFence implements RunFenceScope {
   /**
    * Keep the claim alive between write checks. A `false` renewal marks the
    * fence lost, which notifies {@link onLost} listeners. Backend errors are
-   * tolerated until the local lease deadline. A failed renewal is ignored only
+   * tolerated until the local lease deadline. A failed renewal is ignored
    * when this execution released its claim and the backend confirmed the claim
    * still held the run at that point: the renewal then failed because of the
    * release. Without that confirmation another execution claimed the run first.
+   *
+   * A release made in another process is seen only in storage, when a failed
+   * renewal finds the record still naming this claim with its lease cleared.
+   * It is ignored once this fence settled. An unsettled fence gets until its
+   * next renewal to settle (a released run's terminal event is on its way);
+   * a release nothing settles, such as an abandoned terminal, is then a loss.
    */
   #startHeartbeat(): void {
     let fences = renewingFencesByExecutionId.get(this.executionId);
@@ -1214,11 +1241,12 @@ export class ExecutionFence implements RunFenceScope {
       const startedAt = Date.now();
       void this.#backend
         .renew(this.claim)
-        .then(async ({ renewed, leaseExpiresAt }) => {
-          if (renewed) {
+        .then(async result => {
+          if (result.renewed) {
             if (this.#ownRelease) return;
             // The lease runs at least a TTL from when the renewal was sent. A queued storage renewal ran later:
             // trust the store's expiry, less a clock skew allowance, but never past a TTL from now.
+            const { leaseExpiresAt } = result;
             const reported = leaseExpiresAt
               ? Math.min(leaseExpiresAt.getTime() - STORE_CLOCK_SKEW_MS, Date.now() + EXECUTION_LEASE_TTL_MS)
               : 0;
@@ -1226,6 +1254,10 @@ export class ExecutionFence implements RunFenceScope {
             return;
           }
           if (await this.#ownRelease) return;
+          if (result.released && (this.#settlement || !this.#releaseSeen)) {
+            this.#releaseSeen = true;
+            return;
+          }
           this.#markLost(new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, this.#details()));
           return this.#noteTakeover();
         })
