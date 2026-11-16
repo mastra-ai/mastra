@@ -100,26 +100,34 @@ function TokenRow({
   }
 
   return (
-    <SettingsRow label={label} description={description} errorMsg={removeMutation.error?.message}>
-      <Button
-        ref={editButton}
-        size="sm"
-        icon={configured ? <IconPencil /> : <IconPlusMedium />}
-        disabled={removeMutation.isPending}
-        onClick={() => setEditing(true)}
-      >
-        {configured ? 'Update token' : 'Add token'}
-      </Button>
-      {configured && (
+    <SettingsRow
+      label={label}
+      description={description}
+      errorMsg={removeMutation.error?.message}
+      // "Update token" and "Remove" together are wider than the control column, so they sit under the label.
+      controlPlacement={configured ? 'below' : 'side'}
+    >
+      <div className="flex flex-wrap items-center gap-2">
         <Button
+          ref={editButton}
           size="sm"
-          icon={<TrashIcon />}
+          icon={configured ? <IconPencil /> : <IconPlusMedium />}
           disabled={removeMutation.isPending}
-          onClick={() => removeMutation.mutate()}
+          onClick={() => setEditing(true)}
         >
-          {removeMutation.isPending ? 'Removing…' : 'Remove'}
+          {configured ? 'Update token' : 'Add token'}
         </Button>
-      )}
+        {configured && (
+          <Button
+            size="sm"
+            icon={<TrashIcon />}
+            disabled={removeMutation.isPending}
+            onClick={() => removeMutation.mutate()}
+          >
+            {removeMutation.isPending ? 'Removing…' : 'Remove'}
+          </Button>
+        )}
+      </div>
     </SettingsRow>
   );
 }
