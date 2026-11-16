@@ -1,4 +1,3 @@
-import { z } from 'zod/v4';
 /**
  * Storage contract for `aggregateSpans()`: grouped measures over individual current spans.
  *
@@ -8,6 +7,7 @@ import { z } from 'zod/v4';
  * attributed per span rather than per trace. Trace-level questions ("traces containing a failing
  * tool call") remain `aggregateTraces()` with `spans.some`.
  */
+import { z } from 'zod/v4';
 import {
   getTraceAggregateCountDistinctField,
   TRACE_AGGREGATE_DEFAULT_LIMIT,
