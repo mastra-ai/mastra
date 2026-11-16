@@ -146,3 +146,66 @@ describe('Credentials interface shape', () => {
     expect(creds.currentOrgId).toBe('org2');
   });
 });
+
+describe('openBrowser', () => {
+  const originalPlatform = process.platform;
+
+  async function loadWithMockedExec() {
+    vi.resetModules();
+    const execFileSync = vi.fn();
+    vi.doMock('node:child_process', () => ({ execFileSync }));
+    const { openBrowser } = await import('./credentials.js');
+    return { openBrowser, execFileSync };
+  }
+
+  function setPlatform(platform: NodeJS.Platform) {
+    Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+  }
+
+  afterEach(() => {
+    setPlatform(originalPlatform);
+    vi.doUnmock('node:child_process');
+  });
+
+  it.each(['file:///etc/passwd', 'javascript:alert(1)', 'calc.exe', '--help', '', 'ftp://example.com/x'])(
+    'refuses to open %j and never spawns a process',
+    async url => {
+      const { openBrowser, execFileSync } = await loadWithMockedExec();
+
+      expect(() => openBrowser(url)).toThrow(/Refusing to open/);
+      expect(execFileSync).not.toHaveBeenCalled();
+    },
+  );
+
+  it('passes the URL as a single argument on macOS', async () => {
+    setPlatform('darwin');
+    const { openBrowser, execFileSync } = await loadWithMockedExec();
+
+    openBrowser('https://example.com/login?a=1&b=2');
+
+    expect(execFileSync).toHaveBeenCalledWith('open', ['https://example.com/login?a=1&b=2']);
+  });
+
+  it('does not route the URL through cmd.exe on Windows', async () => {
+    setPlatform('win32');
+    const { openBrowser, execFileSync } = await loadWithMockedExec();
+
+    openBrowser('https://example.com/login?a=1&calc.exe');
+
+    expect(execFileSync).toHaveBeenCalledWith('rundll32.exe', [
+      'url.dll,FileProtocolHandler',
+      'https://example.com/login?a=1&calc.exe',
+    ]);
+    expect(execFileSync.mock.calls.some(([cmd]) => /^cmd/i.test(String(cmd)))).toBe(false);
+  });
+
+  it('percent-encodes shell metacharacters that are not valid in a URL', async () => {
+    setPlatform('darwin');
+    const { openBrowser, execFileSync } = await loadWithMockedExec();
+
+    openBrowser('http://localhost:3000/a b"$(touch x)`id`');
+
+    const [, args] = execFileSync.mock.calls[0]!;
+    expect(args).toEqual(['http://localhost:3000/a%20b%22$(touch%20x)%60id%60']);
+  });
+});
