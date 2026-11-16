@@ -499,6 +499,21 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
       expect(laterRun?.contents).toContain('This is a new review pass.');
       expect(laterRun?.contents).toContain(`record a verdict for \`${NEW}\``);
       expect(laterRun?.contents).not.toContain('Your verdict for this review pass is recorded');
+
+      // A re-requested review changes nothing on the card, and the copy the session last saw
+      // says its pass is complete. The next run must be sent the card again, and only once.
+      const after = (steps: unknown[], cacheKey: string | undefined) =>
+        card.processor.computeStateSignal(
+          stateArgs(card.context, {
+            steps,
+            lastSnapshot: { metadata: { state: { cacheKey } } },
+            contextWindow: { hasSnapshot: true },
+          }),
+        );
+      const reRequested = await after([], sameRun?.cacheKey);
+      expect(reRequested?.contents).toContain('This is a new review pass.');
+      expect(reRequested?.contents).toContain('read the newest comments and reviews on the change request');
+      expect(await after([], reRequested?.cacheKey)).toBeUndefined();
     });
 
     it('keeps malformed head metadata out of the review guidance', async () => {

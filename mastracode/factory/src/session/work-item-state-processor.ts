@@ -135,18 +135,22 @@ export class FactoryWorkItemStateProcessor implements Processor<'factory-work-it
     if (!item) return;
     const boards = await this.#boards.load(binding);
     if (!workItemPhaseSemantics(boards, item)) return;
+    // Part of the key so a later run is sent the card again: the copy the session last saw says
+    // its pass is complete, and a re-requested review changes nothing on the card.
+    const verdictRecordedThisRun = recordedVerdict(args.steps);
     const cacheKey = cacheKeyOf([
       item.id,
       item.revision,
       item.workItem.revision,
       (item.workItem.sources ?? []).map(source => [source.id, source.revision]),
       binding.id,
+      verdictRecordedThisRun,
     ]);
     const hasBase = Boolean(args.lastSnapshot) && args.contextWindow.hasSnapshot;
     if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
       return;
 
-    const contents = renderWorkItem({ item, binding, boards, verdictRecordedThisRun: recordedVerdict(args.steps) });
+    const contents = renderWorkItem({ item, binding, boards, verdictRecordedThisRun });
     const stage = item.stages[0]!;
     return {
       id: STATE_ID,
@@ -364,7 +368,7 @@ function headLine(
     return (
       `This is a new review pass. The previous pass ${priorPass} on \`${reviewed}\`, which is also the last recorded head. ` +
       `Read the current head first: if it moved, review the changes since \`${reviewed}\` and record a verdict for the new head; ` +
-      `otherwise check the change request for anything new and record a verdict for \`${head}\`.`
+      `otherwise read the newest comments and reviews on the change request before deciding whether that verdict still stands, and record a verdict for \`${head}\`.`
     );
   }
   if (head) return `This review pass covers head \`${head}\`. Record your verdict for that head.`;
