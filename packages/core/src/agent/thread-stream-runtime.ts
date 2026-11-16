@@ -516,7 +516,8 @@ function resumeMemoryOnOwnThread({
  * The options a resume leaves on its run's record. Resume callers hand over the resume's own
  * `autoResumeSuspendedTools`, not the agent default merged in, so `undefined` means the resume left it out. The run
  * then keeps the value it started with: a run that turned auto-resume off keeps holding a queued message for an
- * explicit resume after it parks again. (#30190)
+ * explicit resume after it parks again. Callers that resume a run rebuilt from storage pass the run's persisted value
+ * instead, since this process has no record of it. (#30190)
  */
 function keepRunAutoResume<OUTPUT>(
   resume: AgentExecutionOptions<OUTPUT>,
@@ -4462,8 +4463,8 @@ export class AgentThreadStreamRuntime {
       state.threadRunsById.get(record.runId) === record &&
       record.streamOptions === options &&
       record.lifecycle === 'suspended' &&
-      // A resume that another process registered executes the run there; this record only looks parked. That
-      // process takes the follow-up from the `signal-enqueued` this one published.
+      // A resume that another process registered executes the run there; this record only looks parked. A follow-up
+      // sent here is only forwarded to that process (`#queueForActiveRun`), which runs the reply turn once.
       !record.registeredElsewhere &&
       !this.#isApprovalSuspendedRun(state, record.runId) &&
       // Shutdown hands parked runs back as they are; it starts no new turns.
@@ -4840,10 +4841,23 @@ export class AgentThreadStreamRuntime {
     record: AgentThreadRunRecord<any>,
     signal: CreatedAgentSignal,
   ) {
+    this.#recordLocallyQueuedSignal(state, key, signal.id);
+    if (record.registeredElsewhere) {
+      // Another process resumed the run and executes it, so the signal is that execution's input: it admits it from
+      // the `signal-enqueued` below, and runs the reply turn itself if the run parked there. No copy stays here: a
+      // copy would start a second reply turn once that execution's turn ends and this stale record is released.
+      // (#30190)
+      this.#publish(pubsub, key, {
+        type: 'signal-enqueued',
+        runId: record.runId,
+        signal: this.#serializeSignal(signal),
+        sourceId: this.#getSourceId(),
+      });
+      return;
+    }
     const queue = state.pendingSignalsByThread.get(key) ?? [];
     queue.push(signal);
     state.pendingSignalsByThread.set(key, queue);
-    this.#recordLocallyQueuedSignal(state, key, signal.id);
     this.#publishPendingUserMessage(pubsub, key, record.runId, signal, 'pending');
     this.#notifyPendingSignals(state, key, signal);
     this.#publish(pubsub, key, {

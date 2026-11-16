@@ -9,6 +9,7 @@ import { isDurableAgentLike } from '../../../agent/types';
 import { EventEmitterPubSub } from '../../../events';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
+import type { MastraCompositeStore } from '../../../storage';
 import type { MastraModelOutput } from '../../../stream/base/output';
 import type { ChunkType } from '../../../stream/types';
 import type {
@@ -140,6 +141,26 @@ export async function createSharedAgent(
 }
 
 /**
+ * The agent of `shared` as another process sees it: a second {@link Mastra} instance with the same agent id and
+ * storage and its own pubsub, so it can resume the runs `shared` parked but holds none of their in-process state.
+ * Pass the same `opts` that built `shared`.
+ */
+export async function createSharedAgentInAnotherProcess(
+  llm: LLMock,
+  shared: { agent: Agent; mastra: any },
+  opts: Omit<Parameters<typeof createSharedAgent>[1], 'pubsub'> = {},
+): Promise<{ agent: Agent; mastra: any }> {
+  return buildScenarioAgent({
+    llm,
+    ...opts,
+    inputProcessorsOnAgent: true,
+    agentId: shared.agent.id,
+    storage: shared.mastra.getStorage(),
+    pubsub: new EventEmitterPubSub(),
+  });
+}
+
+/**
  * Build an {@link Agent} backed by a real OpenAI v5 provider pointed at the
  * in-test AIMock server, registered on a {@link Mastra} instance with storage
  * so suspend/resume (tool approval) works.
@@ -174,7 +195,15 @@ async function buildScenarioAgent({
   maxRetries,
   inputProcessorsOnAgent,
   agentOutputProcessors,
-}: { inputProcessorsOnAgent?: boolean } & Pick<
+  agentId: sharedAgentId,
+  storage,
+}: {
+  inputProcessorsOnAgent?: boolean;
+  /** Reuse an existing agent's id, for a second instance that resumes its runs. */
+  agentId?: string;
+  /** Reuse an existing instance's storage, for a second instance that resumes its runs. */
+  storage?: MastraCompositeStore;
+} & Pick<
   RunLoopScenarioOptions,
   | 'llm'
   | 'tools'
@@ -209,7 +238,7 @@ async function buildScenarioAgent({
 
   // Unique id per run so repeated scenarios in one suite don't collide on the
   // Mastra agent registry.
-  const agentId = `aimock-loop-scenario-agent-${++scenarioAgentCounter}`;
+  const agentId = sharedAgentId ?? `aimock-loop-scenario-agent-${++scenarioAgentCounter}`;
 
   // Use dynamic model function if provided, otherwise use default AIMock-backed model
   const modelConfig = model ?? openai(SCENARIO_MODEL_ID);
@@ -318,7 +347,7 @@ async function buildScenarioAgent({
   const mastra = new Mastra({
     agents: isFs ? {} : { [agentId]: registrableAgent as any },
     logger: false,
-    storage: new InMemoryStore(),
+    storage: storage ?? new InMemoryStore(),
     ...(backgroundTasks ? { backgroundTasks } : {}),
     ...(eventedPubsub ? { pubsub: eventedPubsub } : pubsub ? { pubsub } : {}),
     ...(cache ? { cache } : {}),

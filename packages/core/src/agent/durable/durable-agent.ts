@@ -3680,6 +3680,8 @@ export class DurableAgent<
     // the caller passes its own request context.
     let rehydratedScopes: unknown;
     let coldSnapshot: WorkflowRunState | undefined;
+    // The run's `autoResumeSuspendedTools`, read from its persisted input when this process holds no record of it.
+    let coldRunAutoResume: boolean | undefined;
     if (!entry) {
       // A persisted durable run can outlive this process (or the registry TTL).
       // Rebuild the non-serializable runtime state before resuming the stored
@@ -3815,6 +3817,7 @@ export class DurableAgent<
       // Absent (vs recorded []) marks a run suspended before the scopes upgrade; the resume
       // adopts the supplied scopes with the same trust posture as a fresh run.
       rehydratedScopes = persistedScopes;
+      coldRunAutoResume = workflowInput.options?.autoResumeSuspendedTools;
       const memory = threadId
         ? {
             ...options?.memory,
@@ -4380,8 +4383,8 @@ export class DurableAgent<
       ...resolvedOptions,
       runId,
       // The resume's own value, not the default merged in: the thread runtime keeps the run's when this is left
-      // out (#30190).
-      autoResumeSuspendedTools: options?.autoResumeSuspendedTools,
+      // out. A run rebuilt from storage has no record here, so it keeps the value its persisted input holds (#30190).
+      autoResumeSuspendedTools: options?.autoResumeSuspendedTools ?? coldRunAutoResume,
     } as AgentExecutionOptions<TOutput>;
     const continued = agentThreadStreamRuntime.continueRun(
       this as unknown as Agent<any, any, any, any>,

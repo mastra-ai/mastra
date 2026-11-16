@@ -1,5 +1,6 @@
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { getRunRegistryEntry } from '../../../../agent/durable/run-registry';
 import { AgentThreadStreamRuntime } from '../../../../agent/thread-stream-runtime';
 import type { PubSub } from '../../../../events/pubsub';
 import { MockMemory } from '../../../../memory';
@@ -7,7 +8,13 @@ import type { MastraModelOutput } from '../../../../stream/base/output';
 import type { ChunkType } from '../../../../stream/types';
 import { createTool } from '../../../../tools';
 import { createStep, createWorkflow } from '../../../../workflows';
-import { createSharedAgent, runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import {
+  createSharedAgent,
+  createSharedAgentInAnotherProcess,
+  runLoopScenario,
+  useLoopScenarioAimock,
+  describeForAllEngines,
+} from '../aimock-scenario';
 
 /**
  * Automatic tool resumption with `autoResumeSuspendedTools`.
@@ -621,6 +628,108 @@ describeForAllEngines(
         }
         // Long enough for a turn the follow-up started to reach the model. A new Inngest turn takes over a second.
         await new Promise(resolve => setTimeout(resolve, engine === 'inngest' ? 3_000 : 500));
+        expect(requestsWithFollowUp()).toBe(0);
+        expect(view.activeRunId()).toBe(runId);
+        expect(seen.answers).toEqual(['first answer']);
+      },
+    );
+
+    // Technical: the run's own `autoResumeSuspendedTools` lived only on this process's thread-runtime record. A resume
+    // through another Mastra instance (another process, or this one after a restart) has no record, so a resume that
+    // omitted the option fell back to the agent's default (on), and once the run parked again a follow-up started a
+    // turn the run had turned off. The run's setting is now persisted with its suspension and restored on resume.
+    // A run that started with auto-resume on keeps it the same way: the follow-up starts the reply turn. (#30190)
+    // Skipped on Inngest: its harness registers every agent on one shared host Mastra, so it cannot build a second
+    // instance with the same agent id. Not yet checked on Inngest.
+    (engine === 'inngest' ? it.skip : it).each([
+      { firstCallAutoResume: false, outcome: 'keeps a follow-up queued' },
+      { firstCallAutoResume: undefined, outcome: 'starts the follow-up turn' },
+    ] as const)(
+      '$outcome when a run started with autoResumeSuspendedTools $firstCallAutoResume is resumed from another Mastra instance and pauses again (#30190)',
+      async ({ firstCallAutoResume }) => {
+        const ANSWER_FOLLOW_UP = 'Here is my second answer';
+        const seen = { answers: [] as string[] };
+        const askTool = createTool({
+          id: 'ask',
+          description: 'Asks the user a question',
+          inputSchema: z.object({ question: z.string() }),
+          suspendSchema: z.object({ message: z.string() }),
+          resumeSchema: z.object({ answer: z.string() }),
+          execute: async ({ question }, context) => {
+            if (!context?.agent?.resumeData) return context?.agent?.suspend({ message: question });
+            seen.answers.push(context.agent.resumeData.answer);
+            return { answer: context.agent.resumeData.answer };
+          },
+        });
+        const memory = new MockMemory();
+        const agentOptions = {
+          tools: { askTool },
+          memory,
+          defaultOptions: { autoResumeSuspendedTools: true },
+          engine,
+        } as const;
+        const shared = await createSharedAgent(getMock(), agentOptions);
+        const threadId = globalThis.crypto.randomUUID();
+        const resourceId = globalThis.crypto.randomUUID();
+
+        const llm = getMock();
+        // Registered first: a turn the follow-up started would answer it.
+        llm.onMessage(new RegExp(ANSWER_FOLLOW_UP), { content: 'FOLLOW_UP_TURN' });
+        // Once the first question is answered, the model asks a second one, which pauses the run again.
+        llm.on(
+          { endpoint: 'chat', toolCallId: 'call-q1', hasToolResult: true },
+          { toolCalls: [{ id: 'call-q2', name: 'ask', arguments: { question: 'second?' } }] },
+        );
+
+        const first = await runLoopScenario({
+          engine,
+          llm,
+          sharedAgent: shared,
+          prompt: 'Ask me two questions',
+          memory,
+          threadId,
+          resourceId,
+          fixtures: mock => {
+            mock.onMessage(/two questions/, {
+              toolCalls: [{ id: 'call-q1', name: 'ask', arguments: { question: 'first?' } }],
+            });
+          },
+          collectChunks: true,
+          ...(firstCallAutoResume !== undefined ? { autoResumeSuspendedTools: firstCallAutoResume } : {}),
+        });
+        expect(first.chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
+        const runId = first.output.runId;
+
+        // The first instance is done with the run's first segment, as a process that stopped would be.
+        await getRunRegistryEntry(runId, shared.mastra)?.workflowExecution;
+        // Another instance on the same storage resumes the run, naming only the run and its answer.
+        const elsewhere = await createSharedAgentInAnotherProcess(llm, shared, agentOptions);
+        const resumed = await elsewhere.agent.resumeStream(
+          { answer: 'first answer' },
+          { runId, toolCallId: 'call-q1' },
+        );
+        const resumedChunks: ChunkType[] = [];
+        for await (const chunk of resumed.fullStream) resumedChunks.push(chunk);
+        expect(seen.answers).toEqual(['first answer']);
+        expect(
+          resumedChunks.some(
+            c => c.type === 'tool-call-suspended' && (c.payload as { toolCallId?: string }).toolCallId === 'call-q2',
+          ),
+        ).toBe(true);
+
+        const view = await elsewhere.agent.subscribeToThread({ resourceId, threadId });
+        onTestFinished(() => view.unsubscribe());
+        const requestsWithFollowUp = () =>
+          llm.getRequests().filter(request => JSON.stringify(request.body.messages).includes(ANSWER_FOLLOW_UP)).length;
+
+        await elsewhere.agent.sendMessage(ANSWER_FOLLOW_UP, { resourceId, threadId }).accepted;
+        if (firstCallAutoResume === undefined) {
+          await vi.waitFor(() => expect(requestsWithFollowUp()).toBeGreaterThan(0), { timeout: 7_000 });
+          await vi.waitFor(() => expect(view.activeRunId()).toBeNull(), { timeout: 7_000 });
+          return;
+        }
+        // Long enough for a turn the follow-up started to reach the model.
+        await new Promise(resolve => setTimeout(resolve, 500));
         expect(requestsWithFollowUp()).toBe(0);
         expect(view.activeRunId()).toBe(runId);
         expect(seen.answers).toEqual(['first answer']);

@@ -8941,6 +8941,19 @@ export class Agent<
     return undefined;
   }
 
+  /**
+   * The `autoResumeSuspendedTools` a suspended run executed with, persisted beside its stream state. A resume in
+   * another process, or after a restart, has no other record of it. (#30190)
+   */
+  #getSnapshotAutoResumeSuspendedTools(existingSnapshot: WorkflowRunState | null | undefined): boolean | undefined {
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      const persisted = step?.status === 'suspended' ? step.suspendPayload?.__autoResumeSuspendedTools : undefined;
+      if (typeof persisted === 'boolean') return persisted;
+    }
+    return undefined;
+  }
+
   /** The run-level `returnScorerData` a suspended run started with, persisted beside its stream state. */
   #getSnapshotReturnScorerData(existingSnapshot: WorkflowRunState | null | undefined): boolean | undefined {
     for (const key in existingSnapshot?.context) {
@@ -11554,6 +11567,12 @@ export class Agent<
     if (persistedReturnScorerData !== undefined) {
       mergedStreamOptions.returnScorerData = loopStreamOptions.returnScorerData = persistedReturnScorerData;
     }
+    // Same precedence. The resume's own value, or else the run's, is also what the thread runtime keeps for the run.
+    const runAutoResume =
+      streamOptions?.autoResumeSuspendedTools ?? this.#getSnapshotAutoResumeSuspendedTools(existingSnapshot);
+    if (runAutoResume !== undefined) {
+      mergedStreamOptions.autoResumeSuspendedTools = loopStreamOptions.autoResumeSuspendedTools = runAutoResume;
+    }
 
     if (snapshotMemoryInfo?.threadId) {
       mergedStreamOptions.memory = {
@@ -11690,11 +11709,11 @@ export class Agent<
       await agentThreadStreamRuntime.registerRun(
         this as Agent<any, any, any, any>,
         result.result as unknown as MastraModelOutput<OUTPUT>,
-        // The resume's own value, not the default merged in: the thread runtime keeps the run's when this is left
-        // out (#30190).
+        // The resume's own value or the run's, not the default merged in: the thread runtime keeps the run's when
+        // this is left out, as for a snapshot written before the run's value was persisted (#30190).
         {
           ...preparedOptions,
-          autoResumeSuspendedTools: streamOptions?.autoResumeSuspendedTools,
+          autoResumeSuspendedTools: runAutoResume,
         } as AgentExecutionOptions<OUTPUT>,
         threadStreamPubSub,
       );
@@ -11780,6 +11799,13 @@ export class Agent<
       options?.returnScorerData === undefined ? this.#getSnapshotReturnScorerData(existingSnapshot) : undefined;
     if (persistedReturnScorerData !== undefined) {
       mergedOptions.returnScorerData = loopOptions.returnScorerData = persistedReturnScorerData;
+    }
+    const persistedAutoResume =
+      options?.autoResumeSuspendedTools === undefined
+        ? this.#getSnapshotAutoResumeSuspendedTools(existingSnapshot)
+        : undefined;
+    if (persistedAutoResume !== undefined) {
+      mergedOptions.autoResumeSuspendedTools = loopOptions.autoResumeSuspendedTools = persistedAutoResume;
     }
     const { options: scopedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(mergedOptions, {
       callScopes: options?.scopes,

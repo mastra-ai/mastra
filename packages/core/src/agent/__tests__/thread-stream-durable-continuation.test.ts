@@ -651,68 +651,101 @@ describe('continuing a run from a resume that names no thread', () => {
 describe('a follow-up sent while another runtime executes the parked run', () => {
   // Technical: the #30190 release checked only this process's record and step owners. A resume registered by another
   // runtime marks the record `registeredElsewhere`, but the record still read as parked, so a follow-up started a turn
-  // here beside the remote execution. (#30190)
-  it('leaves the follow-up to that runtime instead of starting a turn here, with auto-resume on (#30190)', async () => {
-    const h = setup();
-    const threadId = 'continuation-thread';
-    const resourceId = 'continuation-user';
-    /** An agent instance in one process, recording the queued turns that process starts. */
-    const agentInProcess = (turns: unknown[]) =>
-      ({
-        id: 'continuation-agent',
-        getDefaultOptions: async () => ({ autoResumeSuspendedTools: true }),
-        stream: vi.fn(async (_signal: unknown, options: { runId: string }) => {
-          turns.push(options);
-          return { runId: options.runId };
-        }),
-      }) as unknown as Agent<any, any, any, any>;
-    const turnsHere: unknown[] = [];
-    const agent = agentInProcess(turnsHere);
-    const otherAgent = agentInProcess([]);
-    const first = h.makeStream();
-    await first.ready;
-    const otherRuntime = new AgentThreadStreamRuntime();
-    const resumed = h.makeStream();
-    try {
-      await h.runtime.registerRun(agent, first.output, h.options, h.pubsub, { continuation: 'across-suspension' });
-      await vi.waitFor(() => expect(h.registrations()).toHaveLength(1));
-      await h.chunk('tool-call-suspended', { toolCallId: 'call-1', toolName: 'ask', suspendPayload: {} });
-      await vi.waitFor(() => expect(first.output.status).toBe('suspended'));
-      await vi.waitFor(() => expect(h.suspensions()).toHaveLength(1));
+  // here beside the remote execution. With that check alone, this process also kept its own copy of the follow-up it
+  // forwarded: once the other runtime's reply turn ended, the stale parked record here was released and that copy ran
+  // as a second reply turn. (#30190)
+  it.each([
+    { otherRunParks: 'before the follow-up is sent' },
+    { otherRunParks: 'after the follow-up is sent' },
+  ] as const)(
+    'runs the follow-up once, on the runtime executing the run, when that run parks $otherRunParks, with auto-resume on (#30190)',
+    async ({ otherRunParks }) => {
+      const h = setup();
+      const threadId = 'continuation-thread';
+      const resourceId = 'continuation-user';
+      const turnStreams: Array<ReturnType<typeof h.makeStream>> = [];
+      /** An agent instance in one process: each queued turn it starts streams and registers on that process's runtime. */
+      const agentInProcess = (runtime: AgentThreadStreamRuntime, turns: string[]) => {
+        const agent = {
+          id: 'continuation-agent',
+          getDefaultOptions: async () => ({ autoResumeSuspendedTools: true }),
+          stream: vi.fn(async (_signal: unknown, options: { runId: string }) => {
+            turns.push(options.runId);
+            const turn = h.makeStream({ runId: options.runId });
+            turnStreams.push(turn);
+            await turn.ready;
+            await runtime.registerRun(agent, turn.output, options as any, h.pubsub);
+            return turn.output;
+          }),
+        } as unknown as Agent<any, any, any, any>;
+        return agent;
+      };
+      const otherRuntime = new AgentThreadStreamRuntime();
+      const turnsHere: string[] = [];
+      const turnsElsewhere: string[] = [];
+      const agent = agentInProcess(h.runtime, turnsHere);
+      const otherAgent = agentInProcess(otherRuntime, turnsElsewhere);
+      const first = h.makeStream();
+      const resumed = h.makeStream();
+      try {
+        await first.ready;
+        await h.runtime.registerRun(agent, first.output, h.options, h.pubsub, { continuation: 'across-suspension' });
+        await vi.waitFor(() => expect(h.registrations()).toHaveLength(1));
+        await h.chunk('tool-call-suspended', { toolCallId: 'call-1', toolName: 'ask', suspendPayload: {} });
+        await vi.waitFor(() => expect(first.output.status).toBe('suspended'));
+        await vi.waitFor(() => expect(h.suspensions()).toHaveLength(1));
 
-      // Another process resumes the run and executes it from here on.
-      await resumed.ready;
-      await otherRuntime.registerRun(
-        otherAgent,
-        resumed.output,
-        { ...h.options, toolCallId: 'call-1' } as any,
-        h.pubsub,
-        { continuation: 'across-suspension' },
-      );
-      await vi.waitFor(() => expect(h.registrations()).toHaveLength(2));
+        // Another process resumes the run and executes it from here on.
+        await resumed.ready;
+        await otherRuntime.registerRun(
+          otherAgent,
+          resumed.output,
+          { ...h.options, toolCallId: 'call-1' } as any,
+          h.pubsub,
+          { continuation: 'across-suspension' },
+        );
+        await vi.waitFor(() => expect(h.registrations()).toHaveLength(2));
+        // The answered question leads to another: the run parks again in that process.
+        const parkElsewhere = async () => {
+          await h.chunk('tool-call-suspended', { toolCallId: 'call-2', toolName: 'ask', suspendPayload: {} });
+          // Both runtimes read the run's stream, so each reports this suspension.
+          await vi.waitFor(() => expect(h.suspensions().length).toBeGreaterThanOrEqual(2));
+        };
+        if (otherRunParks === 'before the follow-up is sent') await parkElsewhere();
 
-      const sent = h.runtime.sendSignal(
-        agent,
-        { type: 'user-message', contents: 'my answer' },
-        { resourceId, threadId },
-        h.pubsub,
-      );
-      expect((await sent.accepted).action).toBe('deliver');
-      // Long enough for a turn the follow-up started here to begin.
-      await new Promise(resolve => setTimeout(resolve, 300));
-      expect(turnsHere).toHaveLength(0);
-      // The follow-up went out to the run, which the other runtime takes it from.
-      expect(
-        h.publish.mock.calls.some(
-          ([, event]) => event.type === 'signal-enqueued' && (event.data as { runId?: string })?.runId === h.runId,
-        ),
-      ).toBe(true);
-    } finally {
-      first.cleanup();
-      resumed.cleanup();
-      await h.pubsub.close();
-    }
-  });
+        const sent = h.runtime.sendSignal(
+          agent,
+          { type: 'user-message', contents: 'my answer' },
+          { resourceId, threadId },
+          h.pubsub,
+        );
+        expect((await sent.accepted).action).toBe('deliver');
+        if (otherRunParks === 'after the follow-up is sent') await parkElsewhere();
+
+        // The runtime executing the run starts the reply turn.
+        await vi.waitFor(() => expect(turnsElsewhere).toHaveLength(1));
+        expect(turnsHere).toHaveLength(0);
+        const [replyRunId] = turnsElsewhere;
+        await vi.waitFor(() => expect(h.registrations()).toHaveLength(3));
+        await emitFinishEvent(h.pubsub, replyRunId!, {
+          output: { text: 'done', steps: [] },
+          stepResult: { reason: 'stop' },
+        } as any);
+        await vi.waitFor(() =>
+          expect(otherRuntime.getActiveThreadRunId({ threadId, resourceId }, h.pubsub)).toBeUndefined(),
+        );
+        // Long enough for a turn the follow-up started here, once the reply turn ended, to begin.
+        await new Promise(resolve => setTimeout(resolve, 300));
+        expect(turnsHere).toHaveLength(0);
+        expect(turnsElsewhere).toHaveLength(1);
+      } finally {
+        first.cleanup();
+        resumed.cleanup();
+        for (const turn of turnStreams) turn.cleanup();
+        await h.pubsub.close();
+      }
+    },
+  );
 });
 
 /**
