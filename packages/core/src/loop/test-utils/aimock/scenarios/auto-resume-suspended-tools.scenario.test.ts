@@ -2,6 +2,8 @@ import { expect, it, onTestFinished, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { AgentThreadStreamRuntime } from '../../../../agent/thread-stream-runtime';
 import { MockMemory } from '../../../../memory';
+import type { MastraModelOutput } from '../../../../stream/base/output';
+import type { ChunkType } from '../../../../stream/types';
 import { createTool } from '../../../../tools';
 import { createStep, createWorkflow } from '../../../../workflows';
 import { createSharedAgent, runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
@@ -422,6 +424,106 @@ describeForAllEngines(
       expect(thread).toContain('The user is Dero Israel');
       expect(seen.resumedWith).toBe('Dero Israel');
       expect(thread).toContain('FINAL_REPLY Dero Israel');
+    });
+
+    // Technical: the #30190 fix lets a follow-up start the next turn once an auto-resume run has
+    // parked on suspend(). An approval suspension is excluded: consent arrives through the
+    // approval APIs, so with auto-resume on the follow-up still waits on the parked run, and
+    // only runs once the tool is approved. (#30190)
+    it('keeps a follow-up queued behind a pending tool approval until the tool is approved, with auto-resume on (#30190)', async () => {
+      let deletes = 0;
+      const deleteFileTool = createTool({
+        id: 'delete-file',
+        description: 'Deletes a file',
+        inputSchema: z.object({ path: z.string() }),
+        requireApproval: true,
+        execute: async ({ path }) => {
+          deletes++;
+          return { deleted: true, path };
+        },
+      });
+      const memory = new MockMemory();
+      const shared = await createSharedAgent(getMock(), {
+        tools: { deleteFileTool },
+        memory,
+        defaultOptions: { autoResumeSuspendedTools: true },
+        engine,
+      });
+      const threadId = globalThis.crypto.randomUUID();
+      const resourceId = globalThis.crypto.randomUUID();
+
+      const llm = getMock();
+      // Registered first: a turn whose latest user message is the follow-up answers it.
+      llm.onMessage(/Also check the backups/, { content: 'FOLLOWUP_REPLY backups are fine' });
+      llm.on({ endpoint: 'chat', toolCallId: 'call-del-1', hasToolResult: true }, { content: 'DELETED_REPLY' });
+
+      const first = await runLoopScenario({
+        engine,
+        llm,
+        sharedAgent: shared,
+        prompt: 'Delete the config file',
+        memory,
+        threadId,
+        resourceId,
+        fixtures: mock => {
+          mock.onMessage(/Delete the config file/, {
+            toolCalls: [{ id: 'call-del-1', name: 'delete-file', arguments: { path: '/etc/config.json' } }],
+          });
+        },
+        collectChunks: true,
+      });
+      expect(first.chunks!.some(c => c.type === 'tool-call-approval')).toBe(true);
+      const runId = first.output.runId;
+
+      const view = await shared.agent.subscribeToThread({ resourceId, threadId });
+      onTestFinished(() => view.unsubscribe());
+      const requestsWithFollowUp = () =>
+        llm.getRequests().filter(request => JSON.stringify(request.body.messages).includes('Also check the backups'))
+          .length;
+
+      // Studio sends the follow-up while the approval is pending.
+      await shared.agent.sendMessage('Also check the backups', { resourceId, threadId }).accepted;
+      // Long enough for a turn the follow-up started to reach the model.
+      await new Promise(resolve => setTimeout(resolve, 500));
+      expect(requestsWithFollowUp()).toBe(0);
+      expect(view.activeRunId()).toBe(runId);
+      expect(deletes).toBe(0);
+
+      const approved = (await shared.agent.approveToolCall({ runId, toolCallId: 'call-del-1' })) as unknown as {
+        output?: MastraModelOutput<unknown>;
+        fullStream: AsyncIterable<ChunkType>;
+      };
+      const finishes: ChunkType[] = [];
+      for await (const chunk of approved.fullStream) {
+        if (chunk.type === 'finish') finishes.push(chunk);
+      }
+
+      // The approved run finishes once and the tool runs once.
+      expect(finishes).toHaveLength(1);
+      expect(deletes).toBe(1);
+
+      // Then the follow-up is handled exactly once: one model request carries it, after the
+      // approved tool's result, and the thread holds it and its answer once each.
+      const textOf = (message: { content: { parts?: Array<{ type: string; text?: string }> } }) =>
+        (message.content.parts ?? []).map(part => (part.type === 'text' ? part.text : '')).join('');
+      const deadline = Date.now() + 10_000;
+      let { messages } = await memory.recall({ threadId, resourceId });
+      while (!messages.some(m => textOf(m).includes('FOLLOWUP_REPLY')) && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        ({ messages } = await memory.recall({ threadId, resourceId }));
+      }
+      expect(messages.filter(m => textOf(m).includes('Also check the backups'))).toHaveLength(1);
+      expect(messages.filter(m => m.role === 'assistant' && textOf(m).includes('FOLLOWUP_REPLY'))).toHaveLength(1);
+      expect(requestsWithFollowUp()).toBe(1);
+      const followUpRequest = llm
+        .getRequests()
+        .find(request => JSON.stringify(request.body.messages).includes('Also check the backups'));
+      expect(
+        followUpRequest?.body.messages.some(
+          (m: { role: string; tool_call_id?: string }) => m.role === 'tool' && m.tool_call_id === 'call-del-1',
+        ),
+      ).toBe(true);
+      expect(deletes).toBe(1);
     });
 
     /** The issue's case: the same workflow run resumes once, and the step before the suspension is not rerun. */
