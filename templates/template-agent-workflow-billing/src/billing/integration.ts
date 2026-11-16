@@ -180,6 +180,7 @@ export function createBilling(options: BillingOptions) {
       const nativeAccess = (path: string) =>
         ![...protectedRoutes].some(prefix => path === prefix || path.startsWith(prefix + '/')) &&
         [...nativeRoutes].some(prefix => path === prefix || path.startsWith(prefix + '/'));
+      const releasePreparation = lifecycle.hold();
       try {
         const localAccounts =
           typeof options.localAccounts === 'function' ? await options.localAccounts() : options.localAccounts;
@@ -367,7 +368,10 @@ export function createBilling(options: BillingOptions) {
         preparedIntegrations.add(preparedIntegration);
         return preparedIntegration;
       } catch (error) {
+        releasePreparation();
         return lifecycle.fail(error);
+      } finally {
+        releasePreparation();
       }
     },
   };

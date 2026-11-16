@@ -1,12 +1,29 @@
+import { BillingError } from './contracts/core.js';
+
 /** Each acquired resource has one owner. Every disposer runs even if another fails. */
 export class Lifecycle {
   private readonly disposers: (() => void | Promise<void>)[] = [];
   private closing: Promise<void> | undefined;
+  private readonly preparations = new Set<Promise<void>>();
+  /** Keep shutdown pending until an in-flight acquisition has registered all its resources. */
+  hold() {
+    if (this.closing) throw new BillingError('state_unavailable');
+    let release!: () => void;
+    const preparation = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    this.preparations.add(preparation);
+    return () => {
+      this.preparations.delete(preparation);
+      release();
+    };
+  }
   own(dispose: () => void | Promise<void>) {
     this.disposers.push(dispose);
   }
   close(): Promise<void> {
     return (this.closing ??= (async () => {
+      await Promise.all(this.preparations);
       const errors: unknown[] = [];
       for (const dispose of this.disposers.splice(0).reverse()) {
         try {

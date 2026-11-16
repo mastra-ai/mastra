@@ -642,3 +642,15 @@ it.each(['1024x1024', '1536x1024', '1024x1536'])(
     expect(Buffer.from(await download.arrayBuffer())).toEqual(pngFixture(width, height));
   },
 );
+
+it('rejects high-bit PNG chunk types even when their CRC and compressed pixels are valid', async () => {
+  const { validatePng, crc32 } = await import('../../src/images/png-validation.js');
+  const png = pngFixture(1024, 1024);
+  expect(validatePng(png)).toEqual({ width: 1024, height: 1024 });
+  const damaged = Buffer.from(png);
+  const offset = damaged.indexOf(Buffer.from('IDAT'));
+  const length = damaged.readUInt32BE(offset - 4);
+  damaged[offset] = 0xc9;
+  damaged.writeUInt32BE(crc32(damaged.subarray(offset, offset + 4 + length)), offset + 4 + length);
+  expect(() => validatePng(damaged)).toThrow(expect.objectContaining({ code: 'state_unavailable' }));
+});

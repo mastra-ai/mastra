@@ -1,3 +1,8 @@
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { fileURLToPath } from 'node:url';
+import { temporaryDatabase } from '../support/billing.js';
+import { billingSocket } from '../support/http.js';
 import { afterEach, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { readFile, writeFile, rename, stat } from 'node:fs/promises';
@@ -430,3 +435,86 @@ it('image examples demonstrate shared billing suspension and organization isolat
     (await query(copy.root, 'SELECT units FROM billing_ledger ORDER BY units')).map(row => Number(row.units)),
   ).toEqual([1, 1, 3]);
 }, 600000);
+
+it('negative commands must exit normally instead of passing after a timeout or signal', async () => {
+  const database = await temporaryDatabase();
+  cleanups.push(database.cleanup);
+  await writeFile(
+    join(database.directory, 'package.json'),
+    JSON.stringify({
+      scripts: {
+        hang: 'node -e "setInterval(() => {}, 1000)"',
+        reject: 'node -e "process.exit(2)"',
+      },
+    }),
+  );
+  await expect(command(database.directory, ['run', 'hang'], sanitizedEnvironment(), false, 100)).rejects.toThrow(
+    'timed out',
+  );
+  // npm may translate a script signal into an exit code; terminate the npm process itself.
+  await writeFile(join(database.directory, 'kill-npm.cjs'), "process.kill(process.ppid, 'SIGKILL');");
+  await writeFile(
+    join(database.directory, 'package.json'),
+    JSON.stringify({ scripts: { signal: 'node kill-npm.cjs', reject: 'node -e "process.exit(2)"' } }),
+  );
+  await expect(command(database.directory, ['run', 'signal'], sanitizedEnvironment(), false)).rejects.toThrow(
+    'terminated by SIGKILL',
+  );
+  expect((await command(database.directory, ['run', 'reject'], sanitizedEnvironment(), false)).code).toBe(2);
+});
+
+it('the image CLI exposes its generated key before a lost response and replays with clean JSON stdout', async () => {
+  const database = await temporaryDatabase();
+  cleanups.push(database.cleanup);
+  const profile = join(database.directory, 'profile.json');
+  await writeFile(profile, JSON.stringify({ workspaceId: 'team', credential: 'controlled' }));
+  let stderr = '';
+  let savedKey = '';
+  let exposedBeforeDispatch = false;
+  let requests = 0;
+  const server = await billingSocket({
+    fetch: async request => {
+      const key = request.headers.get('idempotency-key')!;
+      if (!requests++) {
+        exposedBeforeDispatch = stderr.includes(`Idempotency key: ${key}`);
+        savedKey = key;
+        throw new Error('Response lost after saving');
+      }
+      expect(key).toBe(savedKey);
+      return Response.json({ result: { text: 'Recovered result' }, replayed: true });
+    },
+  });
+  cleanups.push(server.close);
+  const invoke = async (key?: string) => {
+    const child = spawn(
+      process.execPath,
+      [
+        fileURLToPath(new URL('../../scripts/images.mjs', import.meta.url)),
+        'generate',
+        '--profile-file',
+        profile,
+        '--url',
+        server.url,
+        '--json',
+        JSON.stringify({ brief: 'A blue bird in a quiet forest' }),
+        ...(key ? ['--key', key] : []),
+      ],
+      { env: sanitizedEnvironment(), stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    let stdout = '';
+    child.stdout.on('data', chunk => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', chunk => {
+      stderr += chunk;
+    });
+    const [code] = await once(child, 'close');
+    return { code, stdout };
+  };
+  expect(await invoke()).toEqual({ code: 1, stdout: '' });
+  expect(exposedBeforeDispatch).toBe(true);
+  expect(savedKey).toMatch(/^[0-9a-f-]{36}$/);
+  const replay = await invoke(savedKey);
+  expect(replay.code).toBe(0);
+  expect(JSON.parse(replay.stdout)).toEqual({ result: { text: 'Recovered result' }, replayed: true });
+});

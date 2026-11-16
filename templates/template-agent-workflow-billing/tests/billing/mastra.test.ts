@@ -1,3 +1,7 @@
+import { Memory } from '@mastra/memory';
+import { StudioAgentRuntime } from '../../src/studio-with-billing/studio-agent-decorator.js';
+import { studioChatProxy } from '../../src/studio-with-billing/studio-chat-proxy.js';
+import { createBilling } from '../../src/billing/integration.js';
 import { OrganizationService } from '../../src/billing/organizations.js';
 import { LocalBillingStorage } from '../../src/billing/providers/local/storage.js';
 import { LibSQLStore } from '@mastra/libsql';
@@ -617,7 +621,7 @@ describe('billed Mastra runtime', () => {
       } else {
         expect(['completed', 'canceled']).toContain(record.status);
         expect(ledger).toHaveLength(1);
-        expect([0n, 2n]).toContain(ledger[0].units);
+        expect(ledger[0].units).toBe(record.status === 'completed' ? 2n : 0n);
         expect(reservations).toEqual([{ active: 0n }]);
       }
       const events = (
@@ -649,7 +653,7 @@ describe('billed Mastra runtime', () => {
       .generate('[mixed] omit second usage', { billing: runtime.billingContext, idempotencyKey: 'mixed' });
     if (mixed.kind === 'nested') throw new Error('Unexpected nested execution');
     expect(mixed.billing).toMatchObject({
-      executionStatus: 'completed',
+      executionStatus: 'uncertain',
       observedUnits: 5,
       billedUnits: null,
       settlementStatus: 'pending',
@@ -1284,7 +1288,14 @@ describe('billed Mastra runtime', () => {
         step: 'approval',
         resumeData: { approved: true },
       });
-      expect(completed.billing).toMatchObject({ settlementStatus: 'pending', billedUnits: null });
+      expect(completed.billing).toMatchObject({
+        executionStatus: 'uncertain',
+        settlementStatus: 'pending',
+        billedUnits: null,
+      });
+      expect((await observer.execute('SELECT status, terminal_at FROM billing_executions')).rows).toEqual([
+        { status: 'uncertain', terminal_at: null },
+      ]);
       expect((await observer.execute('SELECT status FROM billing_workflow_runs')).rows).toEqual([
         { status: 'uncertain' },
       ]);
@@ -1675,6 +1686,7 @@ async function catalogFixture() {
   ];
   const createReport = (dependencies: ResourceDependencies) => {
     created.push('catalog-report');
+    const child = dependencies.nestedAgent('catalog-answer');
     const prepare = createStep({
       id: 'prepare',
       inputSchema,
@@ -1688,7 +1700,7 @@ async function catalogFixture() {
       inputSchema,
       outputSchema,
       execute: async ({ inputData }) => ({
-        answer: (await dependencies.nestedAgent('catalog-answer').generate(inputData.prompt)).text,
+        answer: (await child.generate(inputData.prompt)).text,
       }),
     });
     return createWorkflow({
@@ -2050,7 +2062,7 @@ it('invalid catalogs and partial startup fail without external work or leaked li
     }),
   ).rejects.toMatchObject({ code: 'invalid_configuration' });
   expect(f.created).toEqual([]);
-  // Factory dependencies cannot resolve before all registrations and persistent snapshots are usable.
+  // Factory dependencies may resolve handles, but execution still requires a ready runtime.
   await expect(
     createBillingApplication({
       environment: f.environment,
@@ -2061,7 +2073,7 @@ it('invalid catalogs and partial startup fail without external work or leaked li
           {
             ...report,
             create: dependencies => {
-              dependencies.nestedAgent('catalog-answer');
+              dependencies.nestedAgent('catalog-answer').generate('too early');
               return report.create(dependencies);
             },
           },
@@ -2207,3 +2219,180 @@ it('invalid catalogs and partial startup fail without external work or leaked li
   await expect(failingCloseApplication.close()).rejects.toMatchObject({ errors: [cleanupFailure] });
   expect(f.closed).toEqual(['catalog-report', 'catalog-extra', 'catalog-answer']);
 }, 60_000);
+
+it('shutdown waits for pending preparation and rejects preparation after closure', async () => {
+  const f = await catalogFixture();
+  for (let round = 0; round < 20; round++) {
+    const gate = operationBarrier();
+    const billing = createBilling({
+      environment: f.environment,
+      billingKeys: f.catalog.configuration.billingKeys,
+      localAccounts: async () => {
+        await gate.pause();
+        return f.catalog.configuration.localAccounts;
+      },
+    });
+    const preparing = billing.prepare({ agents: {}, workflows: {} });
+    await gate.entered;
+    let closed = false;
+    const closing = billing.close().then(() => {
+      closed = true;
+    });
+    await new Promise(resolve => setTimeout(resolve, 1));
+    const closedBeforePreparation = closed;
+    gate.release();
+    const prepared = await preparing;
+    await closing;
+    expect(closedBeforePreparation).toBe(false);
+    await expect(prepared.organizations.context({ credential: f.first.credential! })).rejects.toMatchObject({
+      code: 'storage_unavailable',
+    });
+  }
+  const billing = createBilling({ environment: f.environment, billingKeys: f.catalog.configuration.billingKeys });
+  await billing.close();
+  await expect(billing.prepare({ agents: {}, workflows: {} })).rejects.toMatchObject({ code: 'state_unavailable' });
+});
+
+it('the socket fixture terminates rejected handlers and broken response bodies', async () => {
+  for (const failure of ['handler', 'body'] as const) {
+    const server = await billingSocket({
+      fetch: async () => {
+        if (failure === 'handler') throw new Error('Handler failed');
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(new Error('Body failed'));
+            },
+          }),
+        );
+      },
+    });
+    cleanups.push(server.close);
+    await expect(fetch(server.url, { signal: AbortSignal.timeout(1000) })).rejects.toThrow('fetch failed');
+  }
+});
+
+async function conversationFixture() {
+  const f = await catalogFixture();
+  const billing = createBilling({
+    environment: { ...f.environment, BILLING_STUDIO_ENABLED: 'false' },
+    billingKeys: { meters: [] },
+  });
+  const integration = await billing.prepare({ agents: {}, workflows: {} });
+  cleanups.push(integration.close);
+  const runtime = new StudioAgentRuntime(integration);
+  const memory = new Memory({
+    storage: integration.storage,
+    options: { semanticRecall: false, workingMemory: { enabled: false }, generateTitle: false },
+  });
+  const agent = runtime.decorate(
+    new Agent({
+      id: 'conversation',
+      name: 'Conversation',
+      instructions: 'Answer.',
+      model: { id: 'billing-test/model', api: 'chat', url: f.model.url, apiKey: 'controlled' },
+      memory,
+      maxRetries: 0,
+    }),
+  );
+  new Mastra({ agents: { conversation: agent }, storage: integration.storage, logger: false });
+  const context = await integration.organizations.context({ credential: f.first.credential! });
+  const owner = await integration.conversations.thread(context, agent.id, 'cleanup-thread', true);
+  await memory.createThread({ threadId: owner.threadId, resourceId: owner.resourceId });
+  const conversation = runtime.bind({ billing: context, owner, controller: new AbortController() });
+  const observer = await independentClient(pathToFileURL(join(f.database.directory, 'workflow.db')).href);
+  cleanups.push(() => observer.close());
+  return { ...f, integration, runtime, memory, agent, context, owner, conversation, observer };
+}
+
+it('conversation activity retries stopped-message cleanup after recall or persistence recovers', async () => {
+  for (const failure of ['recall', 'save'] as const) {
+    const f = await conversationFixture();
+    await f.memory.saveMessages({
+      messages: [
+        {
+          id: 'pending-message',
+          role: 'assistant',
+          threadId: f.owner.threadId,
+          resourceId: f.owner.resourceId,
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: { toolCallId: 'pending-call', toolName: 'business', state: 'call', args: {} },
+              },
+            ],
+            metadata: { pendingToolApprovals: { 'pending-call': { runId: 'stopped-run' } } },
+          },
+        },
+      ],
+    });
+    // Interrupt real SQLite reads/writes instead of replacing Memory or storage.
+    if (failure === 'recall') await f.observer.execute('ALTER TABLE mastra_messages RENAME TO unavailable_messages');
+    else
+      await f.observer.execute(
+        "CREATE TRIGGER unavailable_messages BEFORE INSERT ON mastra_messages BEGIN SELECT RAISE(FAIL, 'temporary storage failure'); END",
+      );
+    f.runtime.request.run(f.conversation, () =>
+      f.agent.abortThreadStream({ threadId: f.owner.threadId, resourceId: f.owner.resourceId }),
+    );
+    await expect(f.runtime.settled(f.owner.threadId)).rejects.toThrow();
+    if (failure === 'recall') await f.observer.execute('ALTER TABLE unavailable_messages RENAME TO mastra_messages');
+    else await f.observer.execute('DROP TRIGGER unavailable_messages');
+    await f.runtime.settled(f.owner.threadId);
+    const { messages } = await f.memory.recall({ threadId: f.owner.threadId, resourceId: f.owner.resourceId });
+    expect(messages[0].content.metadata?.pendingToolApprovals).toBeUndefined();
+    expect(messages[0].content.parts).toMatchObject([
+      { toolInvocation: { state: 'output-error', errorText: expect.stringContaining('Conversation stopped') } },
+    ]);
+  }
+});
+
+it('a run-specific Stop cannot stop the newer active run in the same conversation', async () => {
+  const f = await conversationFixture();
+  await f.integration.conversations.bindRun(f.context, f.owner, 'old-run');
+  const stream = await f.runtime.request.run(f.conversation, () =>
+    f.agent.streamUntilIdle('[abort] waiting for Stop', {
+      runId: 'new-run',
+      memory: { thread: f.owner.threadId, resource: f.owner.resourceId },
+    }),
+  );
+  const output = stream.getFullOutput().catch(() => {});
+  await f.model.stallStarted;
+  const app = new Hono();
+  app.use(
+    '*',
+    studioChatProxy(f.runtime, '/api', async (_context, next) => next()),
+  );
+  app.all('*', context => context.json({ unexpected: true }));
+  const server = await billingSocket(app);
+  cleanups.push(server.close);
+  const stop = async (path: string, body: object) => {
+    const response = await fetch(server.url + path, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${f.first.credential}`, 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    expect(response.status).toBe(200);
+    return response.json();
+  };
+  try {
+    // A conflicting body must not replace the route's run identity.
+    expect(await stop('/api/agents/conversation/runs/old-run/abort', { runId: 'new-run' })).toEqual({ aborted: false });
+    expect(f.agent.getActiveThreadRunId({ threadId: f.owner.threadId, resourceId: f.owner.resourceId })).toBe(
+      'new-run',
+    );
+    expect(f.conversation.controller.signal.aborted).toBe(false);
+    expect(
+      await stop('/api/agents/conversation/threads/abort', { threadId: f.owner.threadId, expectedRunId: 'old-run' }),
+    ).toEqual({ aborted: false });
+    expect(
+      await stop('/api/agents/conversation/threads/abort', { threadId: f.owner.threadId, expectedRunId: 'new-run' }),
+    ).toEqual({ aborted: true });
+  } finally {
+    f.model.release();
+    await output;
+  }
+});

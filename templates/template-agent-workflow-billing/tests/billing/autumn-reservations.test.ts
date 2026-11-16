@@ -1,3 +1,5 @@
+import { CommercialService } from '../../src/billing/runtime/commercial.js';
+import { CommercialStorage } from '../../src/billing/storage/commercial.js';
 import { configurationFile } from '../support/configuration-files.js';
 import { AutumnBillingProvider } from '../../src/billing/providers/autumn/index.js';
 import { imagePolicies } from '../support/image-configuration.js';
@@ -1915,4 +1917,54 @@ describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
     expect(await restoredReplay.json()).toEqual({ status: 'created', url: f.behavior.portalUrl });
     expect(effects()).toHaveLength(2);
   });
+});
+
+it('cached checkout and portal URLs stay private when permission is revoked after either cache lookup', async () => {
+  for (const operation of ['checkout', 'portal'] as const) {
+    for (const boundary of ['claim', 'dispatch'] as const) {
+      const f = await fixture();
+      const storage = await CommercialStorage.open({ url: f.database.url }, f.organizations.storage);
+      cleanups.push(async () => storage.close());
+      const service = new CommercialService(f.organizations, storage, f.provider(), f.configuration);
+      const input = {
+        returnUrl: 'https://app.example.test/billing',
+        ...(operation === 'checkout' ? { product: 'credit-pack' } : {}),
+      };
+      expect(await service[operation](f.context, 'cached-session', input)).toMatchObject({ status: 'created' });
+      const original = storage[boundary].bind(storage);
+      // Real transactions finish before this concurrent membership change commits.
+      const intercepted = vi.spyOn(storage, boundary).mockImplementation(async (...args) => {
+        const result = await original(...args);
+        await f.observer.execute({
+          sql: "UPDATE memberships SET role = 'member' WHERE identity_id = ? AND workspace_id = ?",
+          args: [f.context.actorId, f.context.workspaceId],
+        });
+        return result;
+      });
+      if (boundary === 'dispatch') {
+        const claim = storage.claim.bind(storage);
+        vi.spyOn(storage, 'claim').mockImplementation(async (...args) => {
+          const result = await claim(...args);
+          // Another authorized request completes the operation between claim and dispatch.
+          if (result.claimed) {
+            await original(...args);
+            await storage.complete(
+              args[0],
+              operation,
+              args[2],
+              operation === 'checkout' ? f.behavior.checkoutUrl : f.behavior.portalUrl,
+            );
+          }
+          return result;
+        });
+      }
+      await expect(
+        service[operation](f.context, boundary === 'dispatch' ? 'concurrent-session' : 'cached-session', input),
+      ).rejects.toMatchObject({ code: 'forbidden' });
+      intercepted.mockRestore();
+      expect(
+        f.requests.filter(request => ['/v1/billing.attach', '/v1/billing.open_customer_portal'].includes(request.path)),
+      ).toHaveLength(1);
+    }
+  }
 });

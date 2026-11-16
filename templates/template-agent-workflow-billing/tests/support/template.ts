@@ -42,7 +42,13 @@ const npmPath =
     .find(filename => existsSync(filename));
 if (!npmPath) throw new Error('The npm CLI must be installed and available on PATH.');
 const npmCli = realpathSync(npmPath);
-export async function command(root: string, args: string[], env: NodeJS.ProcessEnv, success = true) {
+export async function command(
+  root: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  success = true,
+  timeoutMs = 600000,
+) {
   const child = spawn(process.execPath, [npmCli, ...args], {
     cwd: root,
     env,
@@ -56,15 +62,21 @@ export async function command(root: string, args: string[], env: NodeJS.ProcessE
   child.stderr.on('data', chunk => {
     output = (output + chunk).slice(-32000);
   });
+  let timedOut = false;
   const timer = globalThis.setTimeout(() => {
+    timedOut = true;
     try {
       process.kill(-child.pid!, 'SIGKILL');
     } catch {
       /* Already stopped. */
     }
-  }, 600000);
-  const [code] = await once(child, 'close');
+  }, timeoutMs);
+  const [code, signal] = await once(child, 'close');
   globalThis.clearTimeout(timer);
+  if (timedOut || signal)
+    throw new Error(
+      `Template command ${args.join(' ')} ${timedOut ? 'timed out' : `terminated by ${signal}`}: ${output}`,
+    );
   if (success && code !== 0) throw new Error(`Template command ${args.join(' ')} failed (${code}): ${output}`);
   return { code, output };
 }

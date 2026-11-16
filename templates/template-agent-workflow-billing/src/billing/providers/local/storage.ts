@@ -302,8 +302,16 @@ export class LocalBillingStorage {
         })
       ).rows[0];
       if (!meter) throw new BillingError('conflict');
-      if (meter.funding === 'prepaid' && publicInteger(meter.balance) < event.units)
-        throw new BillingError('insufficient_credits');
+      if (meter.funding === 'prepaid') {
+        const holds = (
+          await transaction.execute({
+            sql: "SELECT units FROM local_provider_reservations WHERE account_id = ? AND meter = ? AND state = 'reserved' AND expires_at > ?",
+            args: [event.account.id, event.meter, Date.now()],
+          })
+        ).rows;
+        const held = holds.reduce((sum, row) => sum + BigInt(String(row.units)), 0n);
+        if (BigInt(String(meter.balance)) - held < BigInt(event.units)) throw new BillingError('insufficient_credits');
+      }
       await transaction.execute({
         sql: 'INSERT INTO immutable_usage (id, account_id, meter, execution_id, policy_version, units, occurred_at, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         args: [

@@ -905,6 +905,7 @@ export class AccountingStorage {
         : true;
       const incomplete =
         status === 'completed' && charge.type === 'usage' && (!outcome.measurementComplete || !workflowComplete);
+      const finalStatus = incomplete ? 'uncertain' : status;
       const terminal = !unknown && !incomplete;
       const billed = !terminal
         ? null
@@ -928,12 +929,12 @@ export class AccountingStorage {
       await transaction.execute({
         sql: 'UPDATE billing_executions SET status = ?, settlement = ?, observed_units = ?, billed_units = ?, result = ?, terminal_at = ?, recovery_fenced = CASE WHEN ? = 1 THEN 1 ELSE recovery_fenced END WHERE id = ? AND status IN (?, ?)',
         args: [
-          status,
+          finalStatus,
           settlement,
           observed,
           billed,
           result === null ? null : JSON.stringify(result),
-          unknown ? null : now,
+          terminal ? now : null,
           timedOut ? 1 : 0,
           executionId,
           'running',
@@ -993,7 +994,7 @@ export class AccountingStorage {
         await transaction.execute({
           sql: 'UPDATE billing_workflow_runs SET status = ?, owner = NULL, expires_at = NULL, measurement_complete = CASE WHEN ? = 1 THEN measurement_complete ELSE 0 END, result = ? WHERE id = ? AND version = ?',
           args: [
-            unknown || incomplete ? 'uncertain' : status,
+            finalStatus,
             outcome.measurementComplete ? 1 : 0,
             result === null ? null : JSON.stringify(result),
             lifecycle.executionId,

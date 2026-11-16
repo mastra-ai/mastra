@@ -62,7 +62,10 @@ export class CommercialService {
     const binding = this.provider.hostedBinding?.({ account, ...parsed });
     const signature = binding === undefined ? fingerprint(parsed) : fingerprint({ input: parsed, binding });
     const claim = await this.storage.claim(current, operation, key, signature);
-    if (!claim.claimed) return { status: 'created', url: claim.url! };
+    if (!claim.claimed) {
+      await this.organizations.authorize(context, 'manage-billing');
+      return { status: 'created', url: claim.url! };
+    }
     const prepared =
       operation === 'checkout'
         ? await this.provider.prepareCheckout({
@@ -78,7 +81,10 @@ export class CommercialService {
       key,
       signature,
     );
-    if (!dispatch.claimed) return { status: 'created', url: dispatch.url! };
+    if (!dispatch.claimed) {
+      await this.organizations.authorize(context, 'manage-billing');
+      return { status: 'created', url: dispatch.url! };
+    }
     const result = await prepared.dispatch();
     if (result.status !== 'created') throw new BillingError('state_unavailable');
     await this.storage.complete(current, operation, key, result.url);

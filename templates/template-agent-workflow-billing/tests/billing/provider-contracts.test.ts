@@ -263,3 +263,41 @@ it.each([undefined, '', '{invalid-json', 'null', '{}'])(
     await expect(stat(database.filename)).rejects.toMatchObject({ code: 'ENOENT' });
   },
 );
+
+it('usage cannot spend capacity already held for another execution', async () => {
+  const input = configuration();
+  input.localAccounts[0].meters[0].balance = 10;
+  const { billing, database } = await fixture(input);
+  const account = await billing.provider.ensureAccount({ workspaceId: 'team' });
+  const protocol = billing.provider.reservations!;
+  const now = Date.now();
+  const request = {
+    id: 'held-work',
+    account,
+    meter: 'credits',
+    units: 8,
+    executionCutoff: now + 60000,
+    confirmationCutoff: now + 90000,
+    expiresAt: now + 120000,
+  };
+  const payload = protocol.prepareReservation(request);
+  expect(await protocol.reserve(payload)).toMatchObject({ status: 'reserved' });
+  await expect(billing.provider.reportUsage(usage(account, { units: 4 }))).rejects.toMatchObject({
+    code: 'insufficient_credits',
+  });
+  const observer = await independentClient(database.url);
+  cleanups.push(() => observer.close());
+  expect((await observer.execute('SELECT * FROM immutable_usage')).rows).toEqual([]);
+  const event = usage(account, { units: 2 });
+  expect(await billing.provider.reportUsage(event)).toMatchObject({ status: 'accepted' });
+  expect(await billing.provider.reportUsage(event)).toMatchObject({ status: 'duplicate' });
+  expect(
+    await protocol.finalize(
+      protocol.prepareFinalization({ reservation: request, action: 'confirm', units: 8 }, payload),
+    ),
+  ).toMatchObject({ status: 'confirmed' });
+  expect((await billing.provider.getState(account)).meters[0]).toMatchObject({
+    confirmedBalance: 0,
+    consumedUnits: 10,
+  });
+});

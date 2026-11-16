@@ -4,7 +4,12 @@ import { z } from 'zod';
 import { resourceAction } from '../../../src/billing/resource-catalog.js';
 import type { ResourceDependencies, ResourceDefinition } from '../../../src/billing/resource-catalog.js';
 import { identifierSchema } from '../../../src/billing/contracts/core.js';
-import { observationsSchema, reportApprovalSchema, weatherPrompt, validateWeatherPrompt } from './observations.js';
+import {
+  observationsSchema,
+  reportApprovalSchema,
+  serializeWeatherPrompt,
+  validateWeatherPrompt,
+} from './observations.js';
 const selectionSchema = z.strictObject({ workspaceId: identifierSchema });
 const operationSchema = selectionSchema.extend({ idempotencyKey: identifierSchema });
 const runSchema = selectionSchema.extend({ executionId: identifierSchema });
@@ -35,7 +40,7 @@ function createWeatherReport(dependencies: ResourceDependencies) {
     outputSchema: stateSchema,
     execute: async ({ inputData }) => ({
       observations: inputData,
-      draft: (await generate(weatherPrompt(inputData, 'draft'))).text,
+      draft: (await generate(serializeWeatherPrompt(inputData, 'draft'))).text,
     }),
   });
   const approval = createStep({
@@ -55,7 +60,7 @@ function createWeatherReport(dependencies: ResourceDependencies) {
     outputSchema,
     execute: async ({ inputData }) => ({
       ...inputData,
-      report: (await generate(weatherPrompt(inputData.observations, 'final'))).text,
+      report: (await generate(serializeWeatherPrompt(inputData.observations, 'final'))).text,
     }),
   });
   return createWorkflow({
@@ -79,7 +84,7 @@ const actions = [
     execute: async (input, { execution, selected }) =>
       execution.generate(
         'weather-agent',
-        weatherPrompt(input.observations),
+        serializeWeatherPrompt(input.observations),
         await selected(input.workspaceId),
         input.idempotencyKey,
       ),

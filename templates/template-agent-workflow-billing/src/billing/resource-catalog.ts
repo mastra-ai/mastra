@@ -280,11 +280,12 @@ export function materializeResources<const D extends readonly ResourceDefinition
   for (const definition of definitions) {
     const dependencies: ResourceDependencies = {
       nestedAgent: id => {
-        if (!billing) throw new BillingError('state_unavailable');
         if (!definition.agentDependencies?.includes(id)) throw new BillingError('unsupported');
         return {
-          generate: (prompt, slot) =>
-            billing!.nestedAgent(id as keyof CatalogAgents<D> & string).generate(prompt, { slot }),
+          generate: (prompt, slot) => {
+            if (!billing) throw new BillingError('state_unavailable');
+            return billing.nestedAgent(id as keyof CatalogAgents<D> & string).generate(prompt, { slot });
+          },
         };
       },
     };

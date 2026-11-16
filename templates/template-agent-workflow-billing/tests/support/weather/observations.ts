@@ -16,6 +16,12 @@ export const weatherRequestSchema = z.strictObject({
   observations: observationsSchema,
   purpose: z.enum(['summary', 'draft', 'final']).default('summary'),
 });
+export function serializeWeatherPrompt(
+  observations: Observations,
+  purpose: 'summary' | 'draft' | 'final' = 'summary',
+): string {
+  return JSON.stringify({ observations, purpose });
+}
 export function weatherPrompt(observations: unknown, purpose: 'summary' | 'draft' | 'final' = 'summary'): string {
   return JSON.stringify(parseInput(weatherRequestSchema, { observations, purpose }));
 }

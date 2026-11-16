@@ -35,7 +35,7 @@ export function validatePng(bytes: Buffer, expected?: { width: number; height: n
     const length = bytes.readUInt32BE(offset),
       end = offset + 12 + length;
     if (end > bytes.length) invalid();
-    const kind = bytes.toString('ascii', offset + 4, offset + 8),
+    const kind = bytes.toString('latin1', offset + 4, offset + 8),
       data = bytes.subarray(offset + 8, end - 4);
     if (crc32(bytes.subarray(offset + 4, end - 4)) !== bytes.readUInt32BE(end - 4)) invalid();
     if (!/^[A-Za-z]{4}$/.test(kind) || (offset === 8 && kind !== 'IHDR')) invalid();

@@ -4,12 +4,16 @@ import type { AnyAgent } from '../billing/mastra-resources.js';
 import { BillingError, identifierSchema } from '../billing/contracts/core.js';
 import type { StudioBillingIntegration, StudioConversation } from './studio-wrapper-contracts.js';
 
+interface Finalization {
+  readonly run: () => Promise<void>;
+  pending?: Promise<void>;
+}
 /** Trusted association survives native queued/idle stream re-entry without editable RequestContext. */
 export class StudioAgentRuntime {
   private readonly approving = new AsyncLocalStorage<boolean>();
   readonly request = new AsyncLocalStorage<StudioConversation>();
   private readonly threads = new Map<string, StudioConversation>();
-  private readonly finalizations = new Map<string, Promise<void>>();
+  private readonly finalizations = new Map<string, Finalization>();
   readonly subscriptions = new Map<string, symbol>();
   private readonly decorated = new WeakMap<object, string>();
   readonly agents: Record<string, AnyAgent> = Object.create(null);
@@ -55,14 +59,27 @@ export class StudioAgentRuntime {
   }
   /** Wait for durable conversational cleanup before acknowledging Stop or reloading history. */
   async settled(threadId: string) {
-    await this.finalizations.get(threadId);
+    const finalization = this.finalizations.get(threadId);
+    if (!finalization) return;
+    await this.finish(finalization);
+    if (this.finalizations.get(threadId) === finalization) this.finalizations.delete(threadId);
+    else await this.settled(threadId);
+  }
+  private async finish(finalization: Finalization) {
+    const pending = (finalization.pending ??= finalization.run());
+    try {
+      await pending;
+    } catch (error) {
+      if (finalization.pending === pending) finalization.pending = undefined;
+      throw error;
+    }
   }
   private finalizeStopped(conversation: StudioConversation, runId?: string) {
     const { threadId, resourceId, agentId } = conversation.owner;
     const previous = this.finalizations.get(threadId);
-    const finalization = (previous ?? Promise.resolve())
-      .catch(() => {})
-      .then(async () => {
+    const finalization: Finalization = {
+      run: async () => {
+        if (previous) await this.finish(previous);
         const memory = await this.agents[agentId].getMemory();
         if (!memory) throw new BillingError('state_unavailable');
         const thread = await memory.getThreadById({ threadId });
@@ -130,14 +147,10 @@ export class StudioAgentRuntime {
           return ids.size ? [{ ...message, content: { ...message.content, parts, metadata } }] : [];
         });
         if (changed.length) await memory.saveMessages({ messages: changed });
-      });
-    this.finalizations.set(threadId, finalization);
-    void finalization.then(
-      () => {
-        if (this.finalizations.get(threadId) === finalization) this.finalizations.delete(threadId);
       },
-      () => {},
-    );
+    };
+    this.finalizations.set(threadId, finalization);
+    void this.settled(threadId).catch(() => {});
   }
   alias(id: string, native: AnyAgent) {
     const canonical = this.decorated.get(native);

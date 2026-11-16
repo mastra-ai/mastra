@@ -349,7 +349,7 @@ describe('transactional billing gateway', () => {
         measurementComplete: false,
         measurements: [],
         status: 'succeeded',
-        executionStatus: 'completed',
+        executionStatus: 'uncertain',
         billed: null,
         settlement: 'pending',
         active: 1n,
@@ -359,7 +359,7 @@ describe('transactional billing gateway', () => {
         measurementComplete: false,
         measurements: [{ id: 'partial', measure: 'token-count', units: 2 }],
         status: 'succeeded',
-        executionStatus: 'completed',
+        executionStatus: 'uncertain',
         billed: null,
         settlement: 'pending',
         active: 1n,
@@ -852,4 +852,33 @@ describe('transactional billing gateway', () => {
       clock.mockRestore();
     }
   });
+});
+
+it('late measurements complete an incomplete usage execution exactly once', async () => {
+  for (const charge of [charges[4], charges[5]]) {
+    const f = await fixture(charge, {
+      run: async () => ({ ...succeeded, measurementComplete: false, measurements: [] }),
+    });
+    const first = await f.gateway.execute(f.context, f.request('late-measurement'));
+    expect(first.billing).toMatchObject({
+      executionStatus: 'uncertain',
+      billedUnits: null,
+      settlementStatus: 'pending',
+    });
+    await f.storage.capture(first.billing.executionId, [{ id: 'late', measure: 'token-count', units: 4 }]);
+    const result = await f.storage.finish(
+      first.billing.executionId,
+      { status: 'succeeded', measurementComplete: true },
+      { text: 'recovered' },
+    );
+    expect(result.billing).toMatchObject({
+      executionStatus: 'completed',
+      observedUnits: 4,
+      billedUnits: 4,
+      settlementStatus: 'settled',
+    });
+    await f.storage.finish(first.billing.executionId, { status: 'succeeded', measurementComplete: true }, null);
+    expect((await totals(f)).ledger).toEqual([{ units: 4n, outcome: 'completed' }]);
+    expect((await totals(f)).holds[0].active).toBe(0n);
+  }
 });

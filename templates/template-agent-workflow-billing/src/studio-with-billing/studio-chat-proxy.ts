@@ -307,7 +307,8 @@ export function studioChatProxy(
         ? decodeURIComponent(memoryRoute[2])
         : (body.threadId ?? url.searchParams.get('threadId'));
       let threadId = claimedThread as string | undefined;
-      const runId = body.runId ?? /^\/runs\/([^/]+)\/abort$/.exec(suffix)?.[1] ?? url.searchParams.get('runId');
+      const requestedRunId = /^\/runs\/([^/]+)\/abort$/.exec(suffix)?.[1];
+      const runId = requestedRunId ?? body.runId ?? url.searchParams.get('runId');
       if (runId) {
         const owner = await runtime.integration.conversations.run(billing, agentId, runId);
         if (threadId && threadId !== owner.threadId) throw new BillingError('forbidden');
@@ -368,7 +369,9 @@ export function studioChatProxy(
       // must parse the same rewritten request as native adapters reading raw.
       context.req.bodyCache = {};
       if (stopping) {
-        const aborted = runtime.request.run(conversation, () => runtime.stop(conversation, agent, body.expectedRunId));
+        const aborted = runtime.request.run(conversation, () =>
+          runtime.stop(conversation, agent, requestedRunId ? runId : body.expectedRunId),
+        );
         await runtime.settled(threadId);
         return context.json({ aborted });
       }

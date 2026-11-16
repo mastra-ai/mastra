@@ -44,6 +44,7 @@ const endpoint = parseInput(
 );
 const workspace = parseInput(identifierSchema, values.workspace ?? profile.workspaceId);
 const key = parseInput(identifierSchema, values.key ?? randomUUID());
+if (!values.key) console.error(`Idempotency key: ${key}`);
 const base = `/billing/workspaces/${workspace}`;
 async function request(path: string, body?: unknown) {
   const result = await fetch(`${endpoint.replace(/\/$/, '')}${path}`, {
