@@ -22,6 +22,7 @@ import type {
   UpsertSourceControlInstallationInput,
   UpsertSourceControlRepositoryInput,
 } from './base.js';
+import { isSeenBy } from './base.js';
 
 /** In-memory provider-scoped source-control handle for route tests. */
 export class SourceControlStorageInMemory implements SourceControlStorageHandle {
@@ -463,10 +464,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       orgId: string;
       factoryProjectId: string;
       viewerUserId: string;
-    }) =>
-      this.#linkedProjectSessions(orgId, factoryProjectId).filter(
-        row => row.visibility !== 'private' || row.userId === viewerUserId,
-      ),
+    }) => this.#linkedProjectSessions(orgId, factoryProjectId).filter(row => isSeenBy(row, viewerUserId)),
     getBySessionId: async (sessionId: string): Promise<SourceControlSession | null> => {
       const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
       if (!row) return null;

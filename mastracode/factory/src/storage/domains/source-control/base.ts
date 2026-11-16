@@ -389,6 +389,10 @@ export interface SourceControlSession {
   updatedAt: Date;
 }
 
+export function isSeenBy(session: Pick<SourceControlSession, 'visibility' | 'userId'>, viewerUserId: string): boolean {
+  return session.visibility !== 'private' || session.userId === viewerUserId;
+}
+
 export interface CreateSourceControlSessionInput {
   sessionId: string;
   projectRepositoryId: string;
@@ -1667,9 +1671,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
         },
         listSharedByProject: linkedProjectSessions,
         listByProject: async ({ viewerUserId, ...project }) =>
-          (await linkedProjectSessions(project)).filter(
-            session => session.visibility !== 'private' || session.userId === viewerUserId,
-          ),
+          (await linkedProjectSessions(project)).filter(session => isSeenBy(session, viewerUserId)),
         getBySessionId: async sessionId => {
           const row = await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId });
           return row && (await getProjectRepositoryById(row.project_repository_id)) ? toSession(row) : null;

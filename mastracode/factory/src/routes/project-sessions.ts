@@ -1,8 +1,9 @@
 import type { IUserProvider } from '@mastra/core/server';
 
 import type { BoardRegistry } from '../boards/registry.js';
-import { isSeenBy, SessionRowIndex } from '../session/session-rows.js';
+import { SessionRowIndex } from '../session/session-rows.js';
 import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
+import { isSeenBy } from '../storage/domains/source-control/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { Card, WorkItemsStorage, WorkItemSubscription } from '../storage/domains/work-items/base.js';
 

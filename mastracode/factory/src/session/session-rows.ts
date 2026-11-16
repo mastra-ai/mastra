@@ -3,6 +3,7 @@ import type { BoardRegistry } from '../boards/registry.js';
 import { boardForWorkItem } from '../boards/semantics.js';
 import type { SessionRow } from '../routes/contracts.js';
 import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
+import { isSeenBy } from '../storage/domains/source-control/base.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import { isPersonSessionBranch } from '../work-item-branch.js';
 import { cardContextSessions, cardThreadSession } from '../work-items/card-context-sessions.js';
@@ -82,11 +83,6 @@ interface BuiltRow {
 }
 
 const CARRIED_STATUSES: readonly SessionActivityStatus[] = ['waiting', 'working'];
-
-/** Whether a viewer may see a session: anyone in the org, or only its owner when it is private. */
-export function isSeenBy(session: Pick<RowSession, 'visibility' | 'userId'>, viewerUserId: string): boolean {
-  return session.visibility !== 'private' || session.userId === viewerUserId;
-}
 
 function changeRequestOf(card: Card): CardChangeRequest | undefined {
   return cardChangeRequest({
