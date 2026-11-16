@@ -1,5 +1,61 @@
 # @mastra/factory
 
+## 0.29.0-alpha.4
+
+### Minor Changes
+
+- New factories no longer create database columns and tables that nothing reads. Existing factories keep working: the old columns and their data stay in place, and the factory simply stops writing them. ([#30495](https://github.com/mastra-ai/mastra/pull/30495))
+
+  **Removed**
+
+  - The `filesystem_snapshots` and `intake_label_routes` tables are no longer created, and the background file-listing capture that filled `filesystem_snapshots` no longer runs.
+  - The `waitForPendingFilesystemCapture` export is removed. Remove any call to it; there is nothing left to wait for.
+  - Project repository responses no longer include `sandboxWorkdir` or `lastBuiltAt`, and linking a repository no longer accepts `sandboxWorkdir`.
+
+  **Upgrading**
+
+  Update `@mastra/pg` or `@mastra/libsql` together with `@mastra/factory`. Older adapter versions keep the retired columns required on existing databases, which makes card, rule and repository writes fail.
+
+- Removed the unused `sandboxProvider` field from linked project repositories. Factory always uses the sandbox you configure, so the stored value was never read, and the GitHub and GitLab repository listings only ever filled it with `custom` or `none`. ([#30508](https://github.com/mastra-ai/mastra/pull/30508))
+
+  - Linking or updating a project repository no longer accepts `sandboxProvider`, and project repository responses no longer include it.
+  - The GitHub and GitLab repository listings used during setup no longer include `sandboxProvider`.
+  - New factories no longer create the `sandbox_provider` column. Existing factories keep the column and its stored values, and Factory simply stops writing it.
+
+  **Upgrading**
+
+  Stop passing `sandboxProvider` when linking a project repository:
+
+  ```ts
+  // Before
+  await github.projectRepositories.link({ orgId, connectionId, repositoryId, sandboxProvider: 'local' });
+
+  // After
+  await github.projectRepositories.link({ orgId, connectionId, repositoryId });
+  ```
+
+  Update `mastra` together with `@mastra/factory`. The Factory UI ships with `mastra`, and repository linking fails when one of the two is older than the other.
+
+### Patch Changes
+
+- New Factory databases no longer get the tables that only existed to migrate data from older releases (pre-split cards, the split progress marker, per-member intake settings, the original intake source bindings and their migration log). Databases created by an older release keep those tables and their data, and still migrate them on boot. ([#30488](https://github.com/mastra-ai/mastra/pull/30488))
+
+- Fixed Factory plan previews when the plan file lives inside a repository checkout in a multi-repository session. The approval card now resolves the checkout's `.artifacts` root, and the session workspace routes can list and read approved plan files there without bypassing symlink and ignored-file guards. ([#30436](https://github.com/mastra-ai/mastra/pull/30436))
+
+- Fixed reopened pull requests showing as closed in Factory. Reopening a GitHub pull request now marks it open again on every card that holds it: its own card and the issue card that links it. Reopening a GitLab merge request now does the same on the merge request's own card. ([#30388](https://github.com/mastra-ai/mastra/pull/30388))
+
+- Removed Factory server routes that nothing calls anymore. The board and search stopped reading provider issue and pull request lists, so `GET /web/github/projects/:id/issues`, `GET /web/github/projects/:id/prs`, `GET /web/gitlab/issues`, `GET /web/gitlab/projects/:id/prs`, `GET /web/linear/issues`, `GET /web/jira/issues` and `GET /web/incidentio/issues` are gone. Also removed the unused `GET /web/github/projects/:id/commits` and the legacy `GET`/`POST /web/github/projects/:id/settings` (use `/web/source-control/projects/:id/settings`). Single issue and pull request routes, webhooks, sign-in and session routes are unchanged. ([#30489](https://github.com/mastra-ai/mastra/pull/30489))
+
+- Added a file index for a session's workspace, so **Go to file** in the session panel finds any file the file tree can open by name, not only files in folders already opened. In a multi-repository session that includes files at the workspace root, such as saved plans. Files the repository ignores, nested repositories, and links that don't lead to a readable file in the workspace are left out. In a very large repository the list stops at a size limit, and in a multi-repository session a checkout that can't be read is skipped; either way the list says that it is partial. ([#30388](https://github.com/mastra-ai/mastra/pull/30388))
+
+  Pull request subscriptions from GitHub and GitLab now include when each one last changed. The session panel uses it to show the most recent state of a pull request when the card and the subscription disagree.
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`0170d70`](https://github.com/mastra-ai/mastra/commit/0170d700a411ce2b5e64a82bc1133716ae75cbd6), [`4224ee3`](https://github.com/mastra-ai/mastra/commit/4224ee32d3e8fa0f76aedab499c24acc1a564435), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b)]:
+  - @mastra/core@1.84.0-alpha.3
+  - @mastra/mcp@2.10.0-alpha.0
+  - @mastra/code-sdk@1.19.1-alpha.4
+  - @mastra/connect@1.4.1-alpha.1
+
 ## 0.29.0-alpha.3
 
 ### Minor Changes

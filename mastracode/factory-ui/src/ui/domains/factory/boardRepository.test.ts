@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
+import { environmentRepository } from '../settings/components/__tests__/fixtures/environment';
 import type { LinkedRepositoryPayload } from '../workspaces/services/github';
 import { providerFactsCard } from '../../__tests__/fixtures/providerFactsCard';
-import { cardProjectRepositoryId, cardRepositorySlug, cardSessionRepository } from './boardRepository';
+import {
+  cardProjectRepositoryId,
+  cardRepositorySlug,
+  cardSessionRepository,
+  firstEnvironmentRepository,
+} from './boardRepository';
 import type { CardSessionRepository } from './boardRepository';
 
 function repository(provider: 'github' | 'gitlab', externalId: string, slug: string): LinkedRepositoryPayload {
@@ -12,7 +18,6 @@ function repository(provider: 'github' | 'gitlab', externalId: string, slug: str
     externalId,
     slug,
     gitBranch: 'main',
-    sandboxWorkdir: `/sandbox/${slug}`,
   };
 }
 
@@ -194,20 +199,14 @@ describe('cardSessionRepository', () => {
     expect(resolvedSlug(cardSessionRepository(repositories, card, config))).toBe('acme/other');
   });
 
-  it('asks which repository when several could hold the card', () => {
+  it('leaves the choice to the environment when several could hold a card that names none', () => {
     const repositories = [repository('github', '101', 'acme/one'), repository('gitlab', '202', 'acme/two')];
     const result = cardSessionRepository(repositories, { source: 'manual' }, undefined);
 
-    expect(result.kind === 'choose' && result.choices.map(choice => choice.slug)).toEqual(['acme/one', 'acme/two']);
-  });
-
-  it('asks which provider when the stored slug is linked on both', () => {
-    const github = repository('github', '101', 'acme/app');
-    const gitlab = { ...repository('gitlab', '202', 'acme/app'), projectRepositoryId: 'gitlab-app' };
-    const card = { source: 'manual', metadata: { repository: 'acme/app' } };
-    const result = cardSessionRepository([github, gitlab], card, undefined);
-
-    expect(result.kind === 'choose' && result.choices.map(choice => choice.provider)).toEqual(['github', 'gitlab']);
+    expect(result.kind === 'environment' && result.candidates.map(candidate => candidate.slug)).toEqual([
+      'acme/one',
+      'acme/two',
+    ]);
   });
 
   it('refuses a stored slug that is not linked', () => {
@@ -218,5 +217,30 @@ describe('cardSessionRepository', () => {
     );
 
     expect(result.kind).toBe('unavailable');
+  });
+});
+
+describe('firstEnvironmentRepository', () => {
+  const candidates = [
+    repository('github', '101', 'acme/one'),
+    repository('github', '202', 'acme/two'),
+    repository('github', '303', 'acme/three'),
+  ];
+
+  it('picks the candidate first in the environment, skipping repositories left out of it', () => {
+    const environment = [
+      environmentRepository({ projectRepositoryId: 'acme/elsewhere', position: 0 }),
+      environmentRepository({ projectRepositoryId: 'acme/one', position: 1, inEnvironment: false }),
+      environmentRepository({ projectRepositoryId: 'acme/two', position: 3 }),
+      environmentRepository({ projectRepositoryId: 'acme/three', position: 2 }),
+    ];
+
+    expect(firstEnvironmentRepository(candidates, environment)?.slug).toBe('acme/three');
+  });
+
+  it('finds none when no candidate is in the environment', () => {
+    const environment = [environmentRepository({ projectRepositoryId: 'acme/one', inEnvironment: false })];
+
+    expect(firstEnvironmentRepository(candidates, environment)).toBeUndefined();
   });
 });

@@ -1,4 +1,4 @@
-import { SESSION_ROW_WINDOW } from '@mastra/factory/session/session-row-limits';
+import { SESSION_ROW_WINDOW } from '@mastra/factory/session/session-row-query';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar, useMaybeSidebarState } from '@mastra/playground-ui/components/Sidebar';
@@ -39,8 +39,8 @@ import {
   SESSION_UPDATED_MENU_OPTIONS,
   sessionOwnerMenuOptions,
 } from './sessionPropertyOptions';
-import { IconArrowTopBottom } from '@mastra/playground-ui/icons/central/IconArrowTopBottom';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { IconArrowsUpDown } from '@mastra/playground-ui/icons/central/IconArrowsUpDown';
 
 const NO_EXTRA_ROWS: Readonly<Record<string, number>> = {};
 
@@ -63,14 +63,15 @@ export function SessionsSection() {
   const children = view.revealChildSessions && sidebarState !== 'collapsed';
   const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters();
   const pinned = usePinnedSessions();
-  const viewKey = JSON.stringify([view.sort, view.groupBy, filters, children]);
+  const viewKey = JSON.stringify([factoryId, view.sort, view.groupBy, filters, children]);
   const [deepened, setDeepened] = useState({ viewKey, extraRows: NO_EXTRA_ROWS });
+  if (deepened.viewKey !== viewKey) setDeepened({ viewKey, extraRows: NO_EXTRA_ROWS });
   const extraRows = deepened.viewKey === viewKey ? deepened.extraRows : NO_EXTRA_ROWS;
   const deepen = (groupKey: string, extra: number | undefined) => {
     const { [groupKey]: _previous, ...others } = extraRows;
     setDeepened({ viewKey, extraRows: extra === undefined ? others : { ...others, [groupKey]: extra } });
   };
-  const rowsRead = useSessionRowsQuery(
+  const { read: rowsRead, shown: response } = useSessionRowsQuery(
     factoryId,
     sessionRowsRequest({
       sort: view.sort,
@@ -90,7 +91,6 @@ export function SessionsSection() {
   const deletion = useSessionDeletion(factoryId);
   const { baseUrl, sessionId: chatSessionId, sessionEnabled } = useChatSessionContext();
 
-  const response = rowsRead.data;
   const owners = sessionOwners(response?.owners ?? [], viewer);
   const defaultHeadings = sessionGroupHeadings(view.groupBy, {
     catalog: catalog.data,
@@ -127,10 +127,9 @@ export function SessionsSection() {
   const nothingToList = loaded && !hasRepositories && response?.total === 0 && !loadFailed;
   if (!factoryId || nothingToList) return null;
 
-  const emptyMessage =
-    response && !rowsRead.isPlaceholderData
-      ? emptyListMessage({ total: response.total, matching: response.matching, groupCount: groups.length })
-      : undefined;
+  const emptyMessage = rowsRead.data
+    ? emptyListMessage({ total: rowsRead.data.total, matching: rowsRead.data.matching, groupCount: groups.length })
+    : undefined;
 
   return (
     <section className="flex flex-col gap-2" aria-label="Sessions">
@@ -146,7 +145,7 @@ export function SessionsSection() {
                 onClick={() => openNewUserSession(factoryId)}
                 disabled={deletion.deleting}
               >
-                <IconPlusMedium size={15} />
+                <IconPlusMedium />
               </Button>
             )}
             <PropertiesMenu
@@ -159,7 +158,7 @@ export function SessionsSection() {
             >
               <DropdownMenu.RadioSub
                 label="Sort"
-                icon={<IconArrowTopBottom aria-hidden />}
+                icon={<IconArrowsUpDown aria-hidden />}
                 options={SESSION_SORT_MENU_OPTIONS}
                 value={view.sort}
                 onValueChange={sort => updateView({ sort })}

@@ -166,7 +166,7 @@ export function SortableSignalHeaders({
                               style={{ left: '100%' }}
                               title={`Drag to reorder the ${label} column`}
                             >
-                              <IconDotGrid2x3 aria-hidden="true" className="size-3.5" />
+                              <IconDotGrid2x3 aria-hidden="true" className="size-icon-sm" />
                             </div>
                           </div>
                         </div>

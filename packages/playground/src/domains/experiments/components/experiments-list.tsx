@@ -162,7 +162,7 @@ function ExperimentRow({
             onDelete();
           }}
         >
-          <TrashIcon className="size-4" />
+          <TrashIcon />
         </Button>
       </DataList.ActionsCell>
     </DataList.RowWrapper>

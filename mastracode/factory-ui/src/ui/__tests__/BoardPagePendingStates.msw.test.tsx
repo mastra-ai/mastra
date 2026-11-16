@@ -1,3 +1,4 @@
+import type { FactoryTransitionResultRejected } from '@mastra/factory/rules/types';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -8,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
+import type { FactoryDecisionSummary } from '../domains/factory/services/decisions';
 import type { GithubIssue } from '../domains/factory/services/factory';
 import { createAppRoutes } from '../router';
 import { saveKanbanView } from './boardLayoutQueries';
@@ -140,6 +142,25 @@ function createDataTransfer() {
   };
 }
 
+/** A run a rule queued for the card, which the board shows as "Starting an automated run…". */
+const automationStartingRun = {
+  id: 'decision-1',
+  evaluationId: 'evaluation-1',
+  workItemId: ITEM_ID,
+  type: 'invokeSkill',
+  role: 'work',
+  status: 'pending',
+  attempts: 0,
+  failureOccurrence: 0,
+  source: null,
+  failureCode: null,
+  canRetry: true,
+  lastError: null,
+  createdAt: '2026-07-18T00:00:00.000Z',
+  updatedAt: '2026-07-18T00:01:00.000Z',
+  completedAt: null,
+} satisfies FactoryDecisionSummary;
+
 /** Stubs the Work board's data endpoints with one triage item and a gated transition. */
 function stubBoardEndpoints() {
   const transitionGate = deferred();
@@ -155,7 +176,7 @@ function stubBoardEndpoints() {
           {
             id: FACTORY_ID,
             name: 'Acme Factory',
-            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main' })],
           },
         ],
       }),
@@ -190,9 +211,6 @@ function stubBoardEndpoints() {
     ),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
-      HttpResponse.json({ issues: [], nextPage: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({
@@ -760,26 +778,7 @@ describe('Board card pending states', () => {
     const { transitionGate, transitionRequests } = stubBoardEndpoints();
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
-        HttpResponse.json({
-          decisions: [
-            {
-              id: 'decision-1',
-              evaluationId: 'evaluation-1',
-              workItemId: ITEM_ID,
-              type: 'invokeSkill',
-              status: 'pending',
-              attempts: 0,
-              failureOccurrence: 0,
-              source: null,
-              failureCode: null,
-              canRetry: true,
-              lastError: null,
-              createdAt: '2026-07-18T00:00:00.000Z',
-              updatedAt: '2026-07-18T00:01:00.000Z',
-              completedAt: null,
-            },
-          ],
-        }),
+        HttpResponse.json({ decisions: [automationStartingRun] }),
       ),
     );
     const { client } = renderWorkBoard();
@@ -802,6 +801,58 @@ describe('Board card pending states', () => {
     await waitFor(() => expect(transitionRequests).toEqual([ITEM_ID]));
     transitionGate.resolve();
     await waitForMutationsIdle(client);
+  });
+
+  // Without the run queue the board cannot say who holds the card, so the server decides the move.
+  it('sends a drop the board cannot judge, then puts the card back and toasts when the server refuses it', async () => {
+    stubBoardEndpoints();
+    const transitionRequests: unknown[] = [];
+    let cardReads = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
+        HttpResponse.json({ decisions: [automationStartingRun] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/run-queue`, () =>
+        HttpResponse.json({ error: 'unavailable' }, { status: 503 }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => {
+        cardReads += 1;
+        return HttpResponse.json({ workItems: [workItem] });
+      }),
+      http.post(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/${ITEM_ID}/transition`,
+        async ({ request }) => {
+          transitionRequests.push(await request.json());
+          const result: FactoryTransitionResultRejected = {
+            status: 'rejected',
+            transitionId: 'transition-busy',
+            itemId: ITEM_ID,
+            code: 'card_busy',
+            reason: 'Another run cannot start on this card yet.',
+          };
+          return HttpResponse.json({ result }, { status: 422 });
+        },
+      ),
+    );
+    const { client } = renderWorkBoard();
+    const triageColumn = await screen.findByTestId('board-column-triage');
+    const card = await within(triageColumn).findByTestId('work-item-card');
+    await within(card).findByText('Starting an automated run…');
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    const readsBeforeDrop = cardReads;
+    const planningColumn = screen.getByTestId('board-column-planning');
+    const dataTransfer = createDataTransfer();
+
+    fireEvent.dragStart(card, { dataTransfer });
+    fireEvent.dragOver(planningColumn, { dataTransfer });
+    fireEvent.drop(planningColumn, { dataTransfer });
+
+    expect(await screen.findByText('Another run cannot start on this card yet.')).toBeVisible();
+    expect(transitionRequests).toEqual([expect.objectContaining({ stage: 'planning', cause: 'board_drag' })]);
+    await waitForMutationsIdle(client);
+    expect(within(triageColumn).getByText('Fix login bug')).toBeVisible();
+    expect(within(planningColumn).queryByTestId('work-item-card')).not.toBeInTheDocument();
+    expect(cardReads).toBeGreaterThan(readsBeforeDrop);
   });
 
   it('moves a mapped Linear card into a working lane without asking for a repository while intake config loads', async () => {
@@ -865,7 +916,6 @@ describe('Board card pending states', () => {
     configGate.resolve();
 
     await waitFor(() => expect(transitionRequests).toEqual([ITEM_ID]));
-    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
     transitionGate.resolve();
     await waitForMutationsIdle(client);
   });

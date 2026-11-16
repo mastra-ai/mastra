@@ -5,26 +5,21 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import type { InstalledBoardInfo } from '../../../../api/types';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useRunQueue } from '../../../../hooks/useFactoryDecisions';
-import type { FactoryProject, LinkedRepositoryPayload } from '../../workspaces/services/github';
-import { cardSourceMetadata } from '../boardRepository';
+import type { FactoryProject } from '../../workspaces/services/github';
 import { currentItemStage } from '../boardStages';
 import { cardControls } from '../cardControls';
 import { useBoardDecisions } from '../hooks/useBoardDecisions';
 import { useBoardItems } from '../hooks/useBoardItems';
-import { useRepositoryChoice } from '../hooks/useRepositoryChoice';
 import type { WorkItem } from '../services/workItems';
-import { RepositoryPickerDialog } from './RepositoryPickerDialog';
 
 export function CardDraftActions({
   factory,
   item,
   board,
-  chosenRepository,
 }: {
   factory: FactoryProject;
   item: WorkItem;
   board: InstalledBoardInfo;
-  chosenRepository: LinkedRepositoryPayload | undefined;
 }) {
   const currentUserId = useFactoryAuth().data?.user?.userId;
   const decisions = useBoardDecisions(factory.id);
@@ -36,20 +31,7 @@ export function CardDraftActions({
     currentUserId,
     onFailure: message => toast.error(message),
   });
-  const repositoryChoice = useRepositoryChoice(factory, board);
-  const move = (stage: string) => {
-    if (chosenRepository) {
-      items.move(item.id, stage, { repositorySlug: chosenRepository.slug });
-      return;
-    }
-    void repositoryChoice.choose(
-      item.source,
-      cardSourceMetadata(item),
-      stage,
-      slug => items.move(item.id, stage, { repositorySlug: slug }),
-      () => items.move(item.id, stage),
-    );
-  };
+  const move = (stage: string) => items.move(item.id, stage);
   const { actions } = cardControls({
     item,
     definition: board,
@@ -85,13 +67,6 @@ export function CardDraftActions({
             </Button>
           ))}
         </div>
-      )}
-      {repositoryChoice.pending && (
-        <RepositoryPickerDialog
-          repositories={factory.repositories}
-          onClose={repositoryChoice.cancel}
-          onSelect={repository => repositoryChoice.select(repository.slug)}
-        />
       )}
     </>
   );

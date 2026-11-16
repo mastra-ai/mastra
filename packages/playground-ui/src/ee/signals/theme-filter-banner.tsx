@@ -85,7 +85,7 @@ export function ThemeFilterBanner({
                 <Metadata.Item>{selectionName}</Metadata.Item>
               </Metadata>
             </Txt>
-            <IconCrossMedium aria-hidden="true" className="size-3.5" />
+            <IconCrossMedium aria-hidden="true" className="size-icon-sm" />
           </button>
         );
       })}

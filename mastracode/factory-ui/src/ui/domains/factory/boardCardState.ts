@@ -1,3 +1,4 @@
+import { phaseMayStartRun } from '@mastra/factory/boards/busy-card';
 import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
 
 import type { InstalledPhaseInfo } from '../../../api/types';
@@ -79,7 +80,7 @@ export function boardCardState(input: BoardCardStateInput): BoardCardState {
   };
 }
 
-export const BUSY_CARD_MOVE_REFUSAL = "Another run can't start while this card is busy.";
+export { BUSY_CARD_MOVE_REFUSAL } from '@mastra/factory/boards/busy-card';
 
 export function canStartRun(ownerKind: BoardCardOwner['kind']): boolean {
   return ownerKind === 'free';
@@ -91,10 +92,6 @@ export function canMoveTo(
 ): boolean {
   if (ownerKind === 'you') return false;
   return canStartRun(ownerKind) || !phaseMayStartRun(phaseKind);
-}
-
-function phaseMayStartRun(phaseKind: InstalledPhaseInfo['kind'] | undefined): boolean {
-  return phaseKind !== 'resting' && phaseKind !== 'terminal';
 }
 
 function sessionIsLive(sessionStatus: SessionRowStatus | undefined): boolean {

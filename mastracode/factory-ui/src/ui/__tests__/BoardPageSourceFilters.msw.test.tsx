@@ -5,6 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
+import { recordProviderListRequests } from '../../../e2e/ui/provider-list-requests';
 import {
   closePropertiesMenus,
   openPropertiesMenu,
@@ -137,11 +138,7 @@ describe('Board source and Linear project filters', () => {
 
   it('shows Linear, Jira and incident.io cards without asking those providers for their issue lists', async () => {
     stubSources();
-    const listRequests: string[] = [];
-    const listed = (provider: string) => () => {
-      listRequests.push(provider);
-      return HttpResponse.json({ issues: [], nextCursor: null });
-    };
+    const listRequests = recordProviderListRequests();
     const filedBy = (integrationId: string, id: string, title: string) => ({
       ...wireSourceCards[0],
       id,
@@ -186,9 +183,6 @@ describe('Board source and Linear project filters', () => {
       http.get(`${TEST_BASE_URL}/web/incidentio/status`, () =>
         HttpResponse.json({ enabled: true, configured: true, mode: 'platform', reason: 'ready' }),
       ),
-      http.get(`${TEST_BASE_URL}/web/linear/issues`, listed('linear')),
-      http.get(`${TEST_BASE_URL}/web/jira/issues`, listed('jira')),
-      http.get(`${TEST_BASE_URL}/web/incidentio/issues`, listed('incidentio')),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
         HttpResponse.json({
           workItems: [

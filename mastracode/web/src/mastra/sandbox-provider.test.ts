@@ -49,6 +49,7 @@ describe('entry host sandbox (src/mastra/index.ts)', () => {
       'LINEAR_CLIENT_SECRET',
       'SLACK_APP_SIGNING_SECRET',
       'MASTRACODE_DISPATCH_MAX_IN_FLIGHT',
+      'MASTRACODE_DISPATCH_MAX_INTERACTIVE_IN_FLIGHT',
       'E2B_API_KEY',
       'SANDBOX_PROVIDER',
       'FACTORY_SANDBOX_PROVIDER',

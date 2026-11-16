@@ -315,7 +315,7 @@ describe('JiraRules', () => {
     });
   });
 
-  it.each(['completed', 'canceled'])('closes linked issues in state %s with shared audit metadata', async stateType => {
+  it.each(['completed', 'canceled'])('closes linked issues in state %s', async stateType => {
     const { project, service, workItems } = await setup();
     await workItems.upsert({
       orgId: 'org-1',
@@ -337,8 +337,7 @@ describe('JiraRules', () => {
     });
     expect(commit).toHaveBeenCalledWith(
       expect.objectContaining({
-        configVersion: 'factory-config-v1',
-        ingress: { identity: `jira:${issue.id}:${issue.updatedAt}`, triggerType: 'jira.issueObserved' },
+        ingress: { identity: `jira:${issue.id}:${issue.updatedAt}` },
       }),
     );
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([

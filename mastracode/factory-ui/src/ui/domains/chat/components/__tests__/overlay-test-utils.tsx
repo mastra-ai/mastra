@@ -53,7 +53,6 @@ export function useOverlayControllerHandlers() {
             repositories: [
               listedRepository(OVERLAY_PROJECT_REPOSITORY_ID, 'org/overlay', {
                 branch: 'main',
-                sandboxWorkdir: '/workspace/overlay',
               }),
             ],
           },

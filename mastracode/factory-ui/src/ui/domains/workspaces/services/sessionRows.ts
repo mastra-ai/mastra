@@ -1,4 +1,5 @@
 import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
+import { SLACK_SESSION_BRANCH_PREFIX } from '@mastra/factory/work-item-branch';
 import { isSettledChangeRequest } from '@mastra/factory/work-items/change-requests';
 import type { CardChangeRequest, PullRequestStatus } from '@mastra/factory/work-items/change-requests';
 
@@ -11,7 +12,6 @@ import type { WorkItemSource } from '../../factory/services/workItems';
 import type { FactoryProject } from './github';
 import { getFactorySessionSource, getSessionOwnerDetails, getUserSessionLabel } from './sessionPresentation';
 import type { SessionOwnerDetails, SessionSource, SessionViewerProfile } from './sessionPresentation';
-import { SLACK_SESSION_BRANCH_PREFIX } from './user-sessions';
 
 export type SessionActivityStatus = SessionRowWire['status'];
 
@@ -22,13 +22,6 @@ export const SESSION_STATUS_LABELS: Record<SessionActivityStatus, string> = {
   idle: 'Idle',
   done: 'Done',
 };
-
-function isSessionActivityStatus(value: string): value is SessionActivityStatus {
-  return value in SESSION_STATUS_LABELS;
-}
-
-export const SESSION_ACTIVITY_STATUSES: readonly SessionActivityStatus[] =
-  Object.keys(SESSION_STATUS_LABELS).filter(isSessionActivityStatus);
 
 export interface SessionOwner {
   userId: string;
@@ -197,8 +190,9 @@ export function pinnedSessionsAfter(
   pin: boolean,
 ): ReadonlySet<string> {
   const next = new Set(pinned);
+  next.delete(row.session.sessionId);
   if (pin) next.add(row.session.sessionId);
-  else for (const sessionId of row.cardSessionIds ?? [row.session.sessionId]) next.delete(sessionId);
+  else for (const sessionId of row.cardSessionIds ?? []) next.delete(sessionId);
   return next;
 }
 

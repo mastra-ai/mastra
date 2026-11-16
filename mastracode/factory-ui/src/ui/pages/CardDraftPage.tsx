@@ -3,11 +3,9 @@ import { Button, buttonVariants } from '@mastra/playground-ui/components/Button'
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Logo } from '@mastra/playground-ui/components/Logo';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconTicket } from '@mastra/playground-ui/icons/central/IconTicket';
-import { useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../hooks/useBoardCatalog';
@@ -30,8 +28,7 @@ import { useCardSessionRepository } from '../domains/factory/hooks/useCardSessio
 import { useStartCardSessionFromDraft } from '../domains/factory/hooks/useStartCardSessionFromDraft';
 import type { WorkItem } from '../domains/factory/services/workItems';
 import { factoryHomePath, threadPath } from '../domains/workspaces/services/factoryPaths';
-import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
-import { HOST_NAMES } from '../domains/workspaces/services/sourceControlHosts';
+import type { FactoryProject } from '../domains/workspaces/services/github';
 
 const DRAFT_TITLE = 'New session';
 
@@ -145,11 +142,7 @@ function CardDraft({
 }) {
   useGlobalShortcuts();
   const sessionRepository = useCardSessionRepository(factory.repositories, item);
-  const [chosenId, setChosenId] = useState<string>();
-  const choices = sessionRepository?.kind === 'choose' ? sessionRepository.choices : [];
-  const chosen = choices.find(repository => repository.projectRepositoryId === chosenId);
-  const repository = sessionRepository?.kind === 'resolved' ? sessionRepository.repository : chosen;
-  const draftStart = useStartCardSessionFromDraft(item, repository);
+  const draftStart = useStartCardSessionFromDraft(item, sessionRepository);
 
   return (
     <DraftSessionStartContext.Provider value={draftStart}>
@@ -169,48 +162,11 @@ function CardDraft({
               {sessionRepository?.kind === 'unavailable' && (
                 <Notice variant="warning">{sessionRepository.reason}</Notice>
               )}
-              {board && <CardDraftActions factory={factory} item={item} board={board} chosenRepository={chosen} />}
-              {choices.length > 0 && <RepositorySelect choices={choices} chosen={chosen} onChange={setChosenId} />}
+              {board && <CardDraftActions factory={factory} item={item} board={board} />}
             </div>
           </section>
         }
       />
     </DraftSessionStartContext.Provider>
-  );
-}
-
-function RepositorySelect({
-  choices,
-  chosen,
-  onChange,
-}: {
-  choices: LinkedRepositoryPayload[];
-  chosen: LinkedRepositoryPayload | undefined;
-  onChange: (projectRepositoryId: string) => void;
-}) {
-  const label = (repository: LinkedRepositoryPayload) =>
-    choices.some(other => other !== repository && other.slug === repository.slug)
-      ? `${repository.slug} (${HOST_NAMES[repository.provider ?? 'github']})`
-      : repository.slug;
-  return (
-    <Select
-      value={chosen?.projectRepositoryId ?? null}
-      onValueChange={projectRepositoryId => {
-        if (projectRepositoryId) onChange(projectRepositoryId);
-      }}
-    >
-      <SelectTrigger size="sm" aria-label="Repository" className="w-fit max-w-full">
-        <Txt as="span" variant="caption" className="truncate">
-          {chosen ? label(chosen) : 'Choose a repository'}
-        </Txt>
-      </SelectTrigger>
-      <SelectContent>
-        {choices.map(choice => (
-          <SelectItem key={choice.projectRepositoryId} value={choice.projectRepositoryId}>
-            {label(choice)}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   );
 }

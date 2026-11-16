@@ -373,6 +373,7 @@ it("follows the host's theme, so a light host doesn't get dark-theme text", asyn
   await openWidget(mcp, { dashboard: dashboardOf(agentRunsKpi) }, { theme: 'light' });
 
   await screen.findByText('Agent runs');
+  // Checked as soon as the dashboard shows: its first frame must not be in the dark theme.
   expect(document.documentElement.classList.contains('light')).toBe(true);
 });
 

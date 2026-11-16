@@ -1,12 +1,16 @@
+import {
+  SESSION_ROW_GROUP_BYS,
+  SESSION_ROW_STATUSES,
+  sessionRowGroupKeys,
+} from '@mastra/factory/session/session-row-query';
 import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
 
 import type { InstalledBoardInfo } from '../../../../api/types';
 import { orderedBoards } from '../../factory/boardCatalog';
-import { SESSION_ACTIVITY_STATUSES, SESSION_STATUS_LABELS } from './sessionRows';
+import { SESSION_STATUS_LABELS } from './sessionRows';
 import type { SessionListRow, SessionOwner } from './sessionRows';
 
-export const SESSION_GROUP_BYS = ['board', 'status', 'owner', 'none'] as const;
-export type SessionGroupBy = (typeof SESSION_GROUP_BYS)[number];
+export type SessionGroupBy = (typeof SESSION_ROW_GROUP_BYS)[number];
 
 export const DEFAULT_SESSION_GROUP_BY: SessionGroupBy = 'none';
 
@@ -17,7 +21,7 @@ export const SESSION_GROUP_BY_LABELS: Record<SessionGroupBy, string> = {
   none: 'None',
 };
 
-export const SESSION_GROUP_BY_OPTIONS: readonly DropdownMenuRadioOption<SessionGroupBy>[] = SESSION_GROUP_BYS.map(
+export const SESSION_GROUP_BY_OPTIONS: readonly DropdownMenuRadioOption<SessionGroupBy>[] = SESSION_ROW_GROUP_BYS.map(
   value => ({ value, label: SESSION_GROUP_BY_LABELS[value] }),
 );
 
@@ -44,18 +48,18 @@ export interface SessionGroupContext {
   viewerUserId: string | undefined;
 }
 
-const USER_GROUP: SessionGroupHeading = { key: 'user', label: 'User', icon: 'user' };
-const SLACK_GROUP: SessionGroupHeading = { key: 'slack', label: 'Slack', icon: 'slack' };
-const ALL_GROUP: SessionGroupHeading = { key: 'all', label: 'All', icon: 'all' };
+const USER_GROUP: SessionGroupHeading = { key: sessionRowGroupKeys.user, label: 'User', icon: 'user' };
+const SLACK_GROUP: SessionGroupHeading = { key: sessionRowGroupKeys.slack, label: 'Slack', icon: 'slack' };
+const ALL_GROUP: SessionGroupHeading = { key: sessionRowGroupKeys.all, label: 'All', icon: 'all' };
 
-const STATUS_GROUPS: readonly SessionGroupHeading[] = SESSION_ACTIVITY_STATUSES.map(status => ({
-  key: `status:${status}`,
+const STATUS_GROUPS: readonly SessionGroupHeading[] = SESSION_ROW_STATUSES.map(status => ({
+  key: sessionRowGroupKeys.status(status),
   label: SESSION_STATUS_LABELS[status],
   icon: 'status',
 }));
 
 function boardHeading(boardId: string, label: string): SessionGroupHeading {
-  return { key: `board:${boardId}`, label, icon: 'board' };
+  return { key: sessionRowGroupKeys.board(boardId), label, icon: 'board' };
 }
 
 function boardGroupHeadings(
@@ -90,7 +94,7 @@ export function sessionGroupHeadings(
     case 'owner':
       return context.owners
         .toSorted((a, b) => Number(b.userId === context.viewerUserId) - Number(a.userId === context.viewerUserId))
-        .map(({ userId, name }) => ({ key: `owner:${userId}`, label: name, icon: 'owner' }));
+        .map(({ userId, name }) => ({ key: sessionRowGroupKeys.owner(userId), label: name, icon: 'owner' }));
     case 'none':
       return [ALL_GROUP];
   }

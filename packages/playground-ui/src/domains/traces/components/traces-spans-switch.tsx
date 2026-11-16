@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
 import { Txt } from '@/ds/components/Txt';
-import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
+import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
 import { IconGanttChart } from '@/ds/icons/central/IconGanttChart';
 import { Icon } from '@/ds/icons/Icon';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
@@ -14,7 +14,7 @@ const DEFAULT_VIEWS: ObservabilityView[] = ['traces', 'spans'];
 const VIEW_TABS: Record<ObservabilityView, { icon: ReactNode; label: string }> = {
   traces: { icon: <TraceIcon />, label: 'Traces' },
   spans: { icon: <IconGanttChart />, label: 'Spans' },
-  threads: { icon: <IconBubbleText />, label: 'Threads' },
+  threads: { icon: <IconChatBubbles />, label: 'Threads' },
 };
 
 export interface TracesSpansSwitchProps {

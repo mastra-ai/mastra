@@ -1,13 +1,8 @@
+import { SESSION_ROW_ALL_OWNERS, SESSION_ROW_MY_SESSIONS } from '@mastra/factory/session/session-row-query';
 import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
 import type { LucideIcon } from 'lucide-react';
 
-import {
-  ALL_SESSION_OWNERS,
-  MY_SESSIONS,
-  SESSION_STATUS_OPTIONS,
-  SESSION_UPDATED_OPTIONS,
-  sessionOwnerOptions,
-} from '../services/sessionFilters';
+import { SESSION_STATUS_OPTIONS, SESSION_UPDATED_OPTIONS, sessionOwnerOptions } from '../services/sessionFilters';
 import { SESSION_GROUP_BY_OPTIONS } from '../services/sessionGroups';
 import type { SessionOwner } from '../services/sessionRows';
 import { SESSION_SORT_OPTIONS } from '../services/sessionSort';
@@ -65,8 +60,8 @@ export const SESSION_GROUP_MENU_OPTIONS = withIcons(SESSION_GROUP_BY_OPTIONS, {
 });
 
 const OWNER_ICONS: Partial<Record<string, LucideIcon>> = {
-  [ALL_SESSION_OWNERS]: IconUserDuo,
-  [MY_SESSIONS]: IconUserAdded,
+  [SESSION_ROW_ALL_OWNERS]: IconUserDuo,
+  [SESSION_ROW_MY_SESSIONS]: IconUserAdded,
 };
 
 export function sessionOwnerMenuOptions(owners: readonly SessionOwner[], viewerUserId: string | undefined) {

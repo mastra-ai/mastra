@@ -37,18 +37,6 @@ export function relatedWorkItemIndex(allItems: readonly WorkItem[]): (item: Work
   return relatedCardIndex(allItems, PULL_REQUEST_FACTS);
 }
 
-export function inferredParentWorkItemId(
-  metadata: Record<string, unknown>,
-  allItems: readonly WorkItem[],
-): string | undefined {
-  const headBranch = metadata.headBranch;
-  if (typeof headBranch !== 'string') return undefined;
-  return allItems.find(
-    item =>
-      !isPullRequestSource(item.source) && Object.values(item.sessions).some(session => session.branch === headBranch),
-  )?.id;
-}
-
 /** A pull request opens the board that holds its card; an unfiled one, or one with no board, opens the default board. */
 export function relationshipPath(
   item: Pick<WorkItem, 'source'> & { readonly board?: string | null },

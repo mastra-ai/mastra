@@ -3,9 +3,6 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useClock } from '@mastra/playground-ui/hooks/use-clock';
-import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
-import { IconChevronLeft } from '@mastra/playground-ui/icons/central/IconChevronLeft';
-import { IconChevronRight } from '@mastra/playground-ui/icons/central/IconChevronRight';
 
 import type { InstalledBoardInfo, InstalledPhaseInfo } from '../../../../api/types';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
@@ -13,18 +10,18 @@ import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
 import { headerCapsuleClass } from '../../chat/components/chatPageHeader';
 import type { FactoryProject } from '../../workspaces/services/github';
 import { BUSY_CARD_MOVE_REFUSAL, boardCardState, canMoveTo } from '../boardCardState';
-import { cardSourceMetadata } from '../boardRepository';
 import { phaseName } from '../boardStages';
 import { cardStages, elapsedLabel, enteredCurrentStageAt, stageBlockReason, stageDescription } from '../cardStageBar';
 import type { StageStep } from '../cardStageBar';
 import { useItemDecisions } from '../hooks/useBoardDecisions';
 import { useItemSessionStatuses } from '../hooks/useItemSessionStatuses';
 import { useBoardItems } from '../hooks/useBoardItems';
-import { useRepositoryChoice } from '../hooks/useRepositoryChoice';
 import { useSessionSubscriptions } from '../hooks/useSessionSubscriptions';
 import type { WorkItem } from '../services/workItems';
 import { BoardStageIcon, phaseIconKind } from './BoardIcons';
-import { RepositoryPickerDialog } from './RepositoryPickerDialog';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
+import { IconChevronLeftMedium } from '@mastra/playground-ui/icons/central/IconChevronLeftMedium';
+import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
 
 const NO_SESSIONS: readonly string[] = [];
 
@@ -50,7 +47,6 @@ export function CardStageBar({
     currentUserId,
     onFailure: message => toast.error(message),
   });
-  const repositoryChoice = useRepositoryChoice(factory, board);
   const { session, links } = useSessionSubscriptions();
   const repository = session.repository;
   const subscriptions = links.subscriptions;
@@ -67,14 +63,7 @@ export function CardStageBar({
   const { current } = stages;
   const moving = evaluatingStages.has(item.id);
   const held = (phase: InstalledPhaseInfo) => !canMoveTo(owner.kind, phase.kind);
-  const moveTo = (stage: string) =>
-    void repositoryChoice.choose(
-      item.source,
-      cardSourceMetadata(item),
-      stage,
-      slug => move(item.id, stage, { repositorySlug: slug }),
-      () => move(item.id, stage),
-    );
+  const moveTo = (stage: string) => move(item.id, stage);
   const icon = (phase: InstalledPhaseInfo) => (
     <BoardStageIcon stage={phase.id} kind={phaseIconKind(board.id, phase.kind)} decorative />
   );
@@ -130,7 +119,7 @@ export function CardStageBar({
                 {elapsed}
               </Txt>
             ) : null}
-            <IconChevronBottom aria-hidden />
+            <IconChevronDownMedium aria-hidden />
           </DropdownMenu.Trigger>
           <DropdownMenu.Content align="center" className="max-h-(--available-height) w-72">
             <DropdownMenu.RadioGroup
@@ -155,13 +144,6 @@ export function CardStageBar({
           />
         ) : null}
       </div>
-      {repositoryChoice.pending ? (
-        <RepositoryPickerDialog
-          repositories={factory.repositories}
-          onClose={repositoryChoice.cancel}
-          onSelect={repository => repositoryChoice.select(repository.slug)}
-        />
-      ) : null}
     </>
   );
 }
@@ -191,9 +173,9 @@ function NeighbourButton({
       disabled={disabled || held || step.blocked !== undefined}
       onClick={() => onMove(step.phase.id)}
     >
-      {direction === 'previous' ? <IconChevronLeft aria-hidden /> : null}
+      {direction === 'previous' ? <IconChevronLeftMedium aria-hidden /> : null}
       <span className="hidden @2xl:inline">{name}</span>
-      {direction === 'next' ? <IconChevronRight aria-hidden /> : null}
+      {direction === 'next' ? <IconChevronRightMedium aria-hidden /> : null}
     </Button>
   );
 }

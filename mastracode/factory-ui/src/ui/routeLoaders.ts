@@ -80,31 +80,13 @@ function whenFactoryListed(
   }, noop);
 }
 
-function prefetchSessionReads(
-  { queryClient, api }: RouteLoaderServices,
-  { factoryId, sessionId, threadId }: LoaderFunctionArgs['params'],
-) {
-  if (!factoryId) return;
-  const { sort, groupBy, revealChildSessions } = readSessionListView();
-  const request = sessionRowsRequest({
-    sort,
-    groupBy,
-    filters: readSessionFilters(),
-    pinned: readPinnedSessions(),
-    // User sessions route as `user/threads/:threadId`.
-    open: sessionId ?? threadId,
-    children: revealChildSessions,
-    windows: {},
-  });
-  void queryClient.query(sessionRowsQueryOptions(api.baseUrl, factoryId, request)).catch(noop);
-  void queryClient.query(sessionActivityQueryOptions(api.baseUrl, factoryId)).catch(noop);
-}
-
 export const prefetchFactoryLayout: Prefetch = (services, { params }) => {
   const { factoryId } = params;
   if (!factoryId) return;
+  const { queryClient, api } = services;
   whenFactoryListed(services, factoryId, factory => {
-    if (hasLinkedRepository(factory)) prefetchSessionReads(services, params);
+    if (!hasLinkedRepository(factory)) return;
+    void queryClient.query(sessionActivityQueryOptions(api.baseUrl, factoryId)).catch(noop);
   });
 };
 
@@ -117,7 +99,18 @@ export const prefetchSidebar: Prefetch = (services, { params, request }) => {
   void queryClient.query(boardCatalogQueryOptions(api.client, factoryId)).catch(noop);
   // Says whether the sidebar offers "New board": only organization admins may change boards.
   void queryClient.query(intakeRoutesQueryOptions(api.baseUrl, factoryId)).catch(noop);
-  prefetchSessionReads(services, params);
+  const { sort, groupBy, revealChildSessions } = readSessionListView();
+  const rows = sessionRowsRequest({
+    sort,
+    groupBy,
+    filters: readSessionFilters(),
+    pinned: readPinnedSessions(),
+    // User sessions route as `user/threads/:threadId`.
+    open: params.sessionId ?? params.threadId,
+    children: revealChildSessions,
+    windows: {},
+  });
+  void queryClient.query(sessionRowsQueryOptions(api.baseUrl, factoryId, rows)).catch(noop);
 };
 
 export const prefetchBoard: Prefetch = (services, { params, request }) => {

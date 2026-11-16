@@ -1,9 +1,10 @@
+import { SESSION_ROW_GROUP_BYS, SESSION_ROW_SORTS } from '@mastra/factory/session/session-row-query';
 import { createLocalStorageStore, useLocalStorageStore } from '@mastra/playground-ui/hooks/use-local-storage-store';
 import { z } from 'zod';
 
-import { DEFAULT_SESSION_GROUP_BY, SESSION_GROUP_BYS, customGroupOrder } from '../services/sessionGroups';
+import { DEFAULT_SESSION_GROUP_BY, customGroupOrder } from '../services/sessionGroups';
 import type { SessionGroupBy, SessionGroupHeading } from '../services/sessionGroups';
-import { DEFAULT_SESSION_SORT, SESSION_SORTS } from '../services/sessionSort';
+import { DEFAULT_SESSION_SORT } from '../services/sessionSort';
 import type { SessionSort } from '../services/sessionSort';
 
 type GroupKeysByGroupBy = Partial<Record<SessionGroupBy, string[]>>;
@@ -35,7 +36,7 @@ const groupKeysByGroupBySchema = z
   .catch({})
   .transform(groupKeys => {
     const kept: GroupKeysByGroupBy = {};
-    for (const groupBy of SESSION_GROUP_BYS) {
+    for (const groupBy of SESSION_ROW_GROUP_BYS) {
       const keys = groupKeys[groupBy];
       if (keys) kept[groupBy] = keys;
     }
@@ -44,8 +45,8 @@ const groupKeysByGroupBySchema = z
 
 // Each setting falls back to its default on its own, so one stale value doesn't reset the rest.
 const sessionListViewSchema: z.ZodType<SessionListView> = z.object({
-  sort: z.enum(SESSION_SORTS).catch(DEFAULT_SESSION_LIST_VIEW.sort),
-  groupBy: z.enum(SESSION_GROUP_BYS).catch(DEFAULT_SESSION_LIST_VIEW.groupBy),
+  sort: z.enum(SESSION_ROW_SORTS).catch(DEFAULT_SESSION_LIST_VIEW.sort),
+  groupBy: z.enum(SESSION_ROW_GROUP_BYS).catch(DEFAULT_SESSION_LIST_VIEW.groupBy),
   hiddenGroups: groupKeysByGroupBySchema,
   groupOrder: groupKeysByGroupBySchema,
   compact: z.boolean().catch(DEFAULT_SESSION_LIST_VIEW.compact),

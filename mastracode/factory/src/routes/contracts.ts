@@ -7,7 +7,17 @@ import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem, STATUS_EVENTS } from '../
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
 import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
-import { SESSION_ROW_PINS_MAX, SESSION_ROW_WINDOW_MAX } from '../session/session-row-limits.js';
+import {
+  SESSION_ROW_ALL_OWNERS,
+  SESSION_ROW_GROUP_BYS,
+  SESSION_ROW_PINS_MAX,
+  SESSION_ROW_SORTS,
+  SESSION_ROW_STATUSES,
+  SESSION_ROW_UPDATED_WITHIN,
+  SESSION_ROW_WINDOW_MAX,
+  SESSION_ROW_WINDOWS_MAX,
+  sessionRowOwnerSchema,
+} from '../session/session-row-query.js';
 import { MAX_INTAKE_ROUTES } from '../storage/domains/boards/base.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 import { PULL_REQUEST_STATUSES } from '../work-items/change-requests.js';
@@ -206,7 +216,6 @@ export const projectListRepositorySchema = z.object({
   defaultBranch: z.string().nullable(),
   /** The branch set on the link; null means the repository's default branch. */
   branch: z.string().nullable(),
-  sandboxWorkdir: z.string(),
 });
 export type ProjectListRepository = z.infer<typeof projectListRepositorySchema>;
 
@@ -235,6 +244,12 @@ const runQueueEntrySchema = z.object({
   /** `waiting`: no slot yet. `claimed`: a server holds a slot for it, starting or running the run. */
   state: z.enum(['waiting', 'claimed']),
   type: z.enum(['invokeSkill', 'sendMessage', 'signalActivity']),
+  /**
+   * `interactive`: a reply a person sent on the card's pull request or issue,
+   * claimed ahead of automated runs into its own reserve of slots.
+   * `automated`: everything else.
+   */
+  lane: z.enum(['automated', 'interactive']),
   role: z.string().nullable(),
   /** The skill an `invokeSkill` run starts; `null` for a prompt run and for messages and activity. */
   skillName: z.string().nullable(),
@@ -253,12 +268,27 @@ const runQueueEntrySchema = z.object({
 
 export const runQueueResponseSchema = z.object({
   /** This server process's run slots; `null` when it runs no dispatcher. Other servers keep their own. */
-  slots: z.object({ scope: z.literal('server'), inUse: z.number().int(), cap: z.number().int() }).nullable(),
+  slots: z
+    .object({
+      scope: z.literal('server'),
+      /** Automated run slots, including any a person's reply borrowed once its reserve was full. */
+      inUse: z.number().int(),
+      cap: z.number().int(),
+      /** Slots kept for people's replies, on top of `cap`. */
+      interactive: z.object({ inUse: z.number().int(), cap: z.number().int() }),
+    })
+    .nullable(),
   /** The project's runs holding a slot on any server. */
   running: z.number().int(),
   claimed: z.array(runQueueEntrySchema),
-  /** Every waiting run, though `queued` lists at most the oldest 50. */
+  /** Every waiting run, though `queued` lists at most 50. */
   queuedCount: z.number().int(),
+  /** `queuedCount` split by lane. */
+  queuedByLane: z.object({ automated: z.number().int(), interactive: z.number().int() }),
+  /**
+   * Waiting replies, then automated runs, each oldest first: interactive runs are claimed before
+   * automated ones. `position` counts within the run's lane.
+   */
   queued: z.array(runQueueEntrySchema.extend({ position: z.number().int().positive() })),
 });
 export type RunQueueResponse = z.infer<typeof runQueueResponseSchema>;
@@ -300,7 +330,6 @@ const environmentRepositorySchema = z.object({
   teardownCommand: z.string().nullable(),
   lastBuildStatus: z.enum(['unbuilt', 'configured', 'failed']),
   lastBuildError: z.string().nullable(),
-  lastBuiltAt: z.string().nullable(),
 });
 
 /** The configured FactorySandbox as factory describes it: provider id, JSON Schema of its settings, capabilities. */
@@ -721,11 +750,6 @@ export type BoardPhasesQuery = z.output<typeof boardPhasesQuerySchema>;
 export type BoardPhasesResponse = z.infer<typeof boardPhasesResponseSchema>;
 export type WorkItemFilterOptionsResponse = z.infer<typeof workItemFilterOptionsResponseSchema>;
 
-export const SESSION_ROW_STATUSES = ['waiting', 'working', 'initializing', 'idle', 'done'] as const;
-export const SESSION_ROW_SORTS = ['activity', 'updated', 'created'] as const;
-export const SESSION_ROW_GROUP_BYS = ['board', 'status', 'owner', 'none'] as const;
-export const SESSION_ROW_UPDATED_WITHIN = ['24h', '7d', '30d'] as const;
-
 /** `<group key>:<count>`: how many rows of one group to list. Group keys hold colons, so the count follows the last. */
 const sessionRowWindowSchema = z
   .string()
@@ -750,15 +774,7 @@ export const sessionRowsQuerySchema = z.object({
   sort: z.enum(SESSION_ROW_SORTS).default('activity'),
   groupBy: z.enum(SESSION_ROW_GROUP_BYS).default('none'),
   /** `all`, `mine`, or `owner:<user id>`. */
-  owner: z
-    .union([
-      z.enum(['all', 'mine']),
-      z
-        .string()
-        .regex(/^owner:.+$/)
-        .max(512),
-    ])
-    .default('all'),
+  owner: sessionRowOwnerSchema.default(SESSION_ROW_ALL_OWNERS),
   status: z.enum(SESSION_ROW_STATUSES).optional(),
   updated: z.enum(SESSION_ROW_UPDATED_WITHIN).optional(),
   /** `true` lists a card's other sessions under its row. */
@@ -774,7 +790,7 @@ export const sessionRowsQuerySchema = z.object({
   /** Repeatable `<group key>:<count>`: lists that group's first `count` rows instead of `SESSION_ROW_WINDOW`. */
   window: z
     .array(sessionRowWindowSchema)
-    .max(64)
+    .max(SESSION_ROW_WINDOWS_MAX)
     .default([])
     .refine(windows => new Set(windows.map(([group]) => group)).size === windows.length, {
       message: 'Send one window per group',

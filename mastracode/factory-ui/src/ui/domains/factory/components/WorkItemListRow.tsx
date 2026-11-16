@@ -72,7 +72,6 @@ export function WorkItemListRow({
   const verdict = columnReviewVerdict(item, columnStage, board);
   return (
     <BoardListRow
-      testId="work-item-card"
       title={item.title}
       href={href}
       linkRef={deepLinkRef}

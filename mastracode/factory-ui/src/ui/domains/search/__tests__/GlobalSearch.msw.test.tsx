@@ -1,4 +1,5 @@
 import type { ProjectListRepository } from '@mastra/factory/routes/contracts';
+import type { FactoryTransitionResultRejected } from '@mastra/factory/rules/types';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -8,20 +9,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { isStubbedProjectRead } from '../../../../../e2e/ui/board-reads';
 import { server } from '../../../../../e2e/ui/msw-server';
+import { recordProviderListRequests } from '../../../../../e2e/ui/provider-list-requests';
 import { workBoardInfo } from '../../../../../e2e/ui/board-catalog';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render';
 import { createQueryClient } from '../../../../query-client';
-import type { GithubIssue, GithubPullRequest } from '../../factory/services/factory';
 import type { WorkItem } from '../../factory/services/workItems';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { createAppRoutes } from '../../../router';
+import { environmentPayload, environmentRepository } from '../../settings/components/__tests__/fixtures/environment';
 import {
   ACTIVE_FACTORY_ID,
   factoryProjects,
   factoryRepositories,
   FIRST_REPOSITORY_ID,
-  intakeIssues,
-  intakePullRequests,
   listWorkItemsResponse,
   OTHER_FACTORY_ID,
   OTHER_REPOSITORY_ID,
@@ -48,7 +48,7 @@ interface SearchRequestState {
   createSessionRequests: number;
   created: Record<string, unknown>[];
   transitions: Array<{ itemId: string; body: Record<string, unknown> }>;
-  intakeRequests: number;
+  providerListRequests: string[];
   sessionRequests: Record<string, number>;
   /** The query string of each read of the card list; `''` is a read of the whole board. */
   workItemQueries: string[];
@@ -59,10 +59,7 @@ interface StubSearchOptions {
   failSessionAttempts?: number;
   /** How many reads of the cards holding a session fail before one answers. */
   failSessionCardAttempts?: number;
-  failIntake?: boolean;
   failWorkItems?: boolean;
-  /** The live GitHub intake of `FIRST_REPOSITORY_ID`, instead of the fixtures. */
-  intake?: { issues: GithubIssue[]; pullRequests: GithubPullRequest[] };
   /**
    * A server that narrows the list by session only, as before the palette's reads existed: it
    * ignores `started`, `q`, `limit` and `source`, and sends the whole board with no `total`.
@@ -102,7 +99,7 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     createSessionRequests: 0,
     created: [],
     transitions: [],
-    intakeRequests: 0,
+    providerListRequests: recordProviderListRequests(),
     sessionRequests: {},
     workItemQueries: [],
   };
@@ -118,6 +115,20 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       projectListResponse({ ...factoryRepositories, [ACTIVE_FACTORY_ID]: activeFactoryRepositories(options) }),
+    ),
+    // Every linked repository is in the environment, in link order.
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/environment`, () =>
+      HttpResponse.json({
+        environment: environmentPayload({
+          repositories: activeFactoryRepositories(options).map((repository, index) =>
+            environmentRepository({
+              projectRepositoryId: repository.projectRepositoryId,
+              slug: repository.slug,
+              position: index + 1,
+            }),
+          ),
+        }),
+      }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId`, ({ params }) => {
       const project = factoryProjects.find(candidate => candidate.id === String(params.factoryProjectId));
@@ -157,25 +168,6 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/issues`, ({ params, request }) => {
-      state.intakeRequests += 1;
-      if (options.failIntake) return HttpResponse.json({ error: 'intake unavailable' }, { status: 500 });
-      const label = new URL(request.url).searchParams.get('label');
-      const serveFixtures = !label && String(params.projectRepositoryId) === FIRST_REPOSITORY_ID;
-      return HttpResponse.json({
-        issues: serveFixtures ? (options.intake?.issues ?? intakeIssues) : [],
-        nextPage: null,
-      });
-    }),
-    http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/prs`, ({ params }) => {
-      state.intakeRequests += 1;
-      if (options.failIntake) return HttpResponse.json({ error: 'intake unavailable' }, { status: 500 });
-      const serveFixtures = String(params.projectRepositoryId) === FIRST_REPOSITORY_ID;
-      return HttpResponse.json({
-        pullRequests: serveFixtures ? (options.intake?.pullRequests ?? intakePullRequests) : [],
-        nextPage: null,
-      });
-    }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/sessions`, async ({ params, request }) => {
       const factoryProjectId = String(params.factoryProjectId);
       if (!isStubbedProjectRead(request)) {
@@ -393,6 +385,7 @@ afterEach(() => {
 });
 
 describe('Global search', () => {
+
   it('opens with Mod+K on the labeled, focused command input and hands focus back on close', async () => {
     stubSearchApi();
     const user = userEvent.setup();
@@ -582,7 +575,7 @@ describe('Global search', () => {
     expect(await within(dialog).findByText('Add universal command search')).toBeInTheDocument();
     await waitFor(() => expect(requests.workItemQueries).toContain('started=false&q=universal'));
 
-    expect(requests.intakeRequests).toBe(0);
+    expect(requests.providerListRequests).toEqual([]);
     expect(requests.workItemQueries.filter(query => query.startsWith('source='))).toEqual([]);
     expect(within(dialog).queryByText('not filed')).not.toBeInTheDocument();
   });
@@ -630,7 +623,11 @@ describe('Global search', () => {
     const backlog = Array.from({ length: 24 }, (_, index) =>
       unstartedCard(`backlog-${index}`, `Backlog chore ${index}`, `2026-07-${String(index + 1).padStart(2, '0')}`),
     );
-    const [pullRequest] = intakePullRequests;
+    const pullRequest = {
+      number: 20454,
+      title: 'Harden the review board drop target',
+      url: 'https://github.com/mastra-ai/mastra/pull/20454',
+    };
     stubSearchApi({
       workItems: [
         ...backlog,
@@ -728,6 +725,7 @@ describe('Global search', () => {
     await listed(['Bump the command palette dependencies', 'Palette keyboard traps focus on mobile']);
     expect(within(rail).getByRole('button', { name: /^Work items\s*2$/ })).toBeInTheDocument();
   });
+
 
   it('opens the session a listed card gained since, instead of starting another', async () => {
     const listed = { ...workItems[3], board: 'custom', metadata: { number: 777 } };
@@ -842,7 +840,7 @@ describe('Global search', () => {
 
   // Technical: with no candidate the filed-cards lookup is disabled, and refetching it fails for good.
   it('recovers from a failed read of the session cards on retry when the intake offers nothing', async () => {
-    stubSearchApi({ failSessionCardAttempts: 1, intake: { issues: [], pullRequests: [] } });
+    stubSearchApi({ failSessionCardAttempts: 1 });
     const user = userEvent.setup();
     renderSearchRoute();
     await openWithShortcut();
@@ -1007,7 +1005,7 @@ describe('Global search', () => {
     expect(within(results).getByText('Factories')).toBeInTheDocument();
     expect(Object.values(requests.sessionRequests)).toHaveLength(0);
     expect(requests.workItemQueries).toHaveLength(0);
-    expect(requests.intakeRequests).toBe(0);
+    expect(requests.providerListRequests).toEqual([]);
   });
 
   it('cancels its read of the sessions when the dialog closes, as nothing else on the page reads them', async () => {

@@ -1,4 +1,8 @@
-import { SESSION_ROW_PINS_MAX, SESSION_ROW_WINDOW_MAX } from '@mastra/factory/session/session-row-limits';
+import {
+  SESSION_ROW_PINS_MAX,
+  SESSION_ROW_WINDOW_MAX,
+  SESSION_ROW_WINDOWS_MAX,
+} from '@mastra/factory/session/session-row-query';
 
 import type { SessionActivity, SessionRowsRequest, SessionRowsResponse } from '../../../../api/types';
 import { requestJson } from '../../factory/services/request';
@@ -33,7 +37,9 @@ export function sessionRowsRequest({
     pin: [...pinned].slice(-SESSION_ROW_PINS_MAX).sort(),
     ...(open ? { open } : {}),
     windows: Object.fromEntries(
-      Object.entries(windows).map(([group, count]) => [group, Math.min(count, SESSION_ROW_WINDOW_MAX)]),
+      Object.entries(windows)
+        .slice(-SESSION_ROW_WINDOWS_MAX)
+        .map(([group, count]) => [group, Math.min(count, SESSION_ROW_WINDOW_MAX)]),
     ),
   };
 }

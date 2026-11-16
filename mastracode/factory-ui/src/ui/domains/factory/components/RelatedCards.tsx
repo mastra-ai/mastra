@@ -2,7 +2,7 @@ import { useQueries } from '@tanstack/react-query';
 
 import { useApiConfig } from '../../../../api/config';
 import type { InstalledBoardInfo } from '../../../../api/types';
-import { userSessionQueryOptions } from '../../../../hooks/useWorkspaces';
+import { sessionUnavailableError, userSessionQueryOptions } from '../../../../hooks/useWorkspaces';
 import { PanelHeading } from '../../workspace-viewer/components/PanelHeading';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
 import type { WorkItem } from '../services/workItems';
@@ -15,7 +15,11 @@ function useLiveSessions(related: readonly WorkItem[]): string[] {
   const sessionIds = [...new Set(related.flatMap(item => Object.values(item.sessions).map(ref => ref.sessionId)))];
   return useQueries({
     queries: sessionIds.map(sessionId => userSessionQueryOptions(baseUrl, sessionId)),
-    combine: results => sessionIds.filter((_, index) => results[index]?.data !== undefined),
+    combine: results =>
+      sessionIds.filter((_, index) => {
+        const result = results[index];
+        return result?.data !== undefined && !sessionUnavailableError(result);
+      }),
   });
 }
 

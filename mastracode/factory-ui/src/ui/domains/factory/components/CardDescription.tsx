@@ -8,7 +8,7 @@ import type { WorkItem } from '../services/workItems';
 import { SourceDescriptionLoading, useSourceDescription } from './BoardCardDetails';
 import { DescriptionMarkdown } from './DescriptionMarkdown';
 
-const CLAMP_REM = 4.5;
+const CLAMP_REM = 6.25;
 const clampStyle: CSSProperties & { '--clamp': string } = { '--clamp': `${CLAMP_REM}rem` };
 
 // Keyword heights only animate where `calc-size` exists; elsewhere a plain cap clamps without the glide.
@@ -53,13 +53,13 @@ export function CardDescription({
   }
 
   return (
-    <div className="group/description flex flex-col items-start gap-0.5" style={clampStyle}>
+    <div className="group/description relative flex flex-col items-center gap-0.5" style={clampStyle}>
       <div
         id={id}
         className={cn(
           'w-full overflow-hidden px-2 [interpolate-size:allow-keywords]',
           'motion-safe:transition-[height] motion-safe:duration-(--duration-slow) motion-safe:ease-(--resize-ease)',
-          expanded ? 'h-auto' : cn(clampedClass, 'has-data-clamped:mask-b-from-30%'),
+          expanded ? 'h-auto' : cn(clampedClass, 'has-data-clamped:mask-b-from-50%'),
         )}
       >
         <div ref={markClamped} className="flex flex-col gap-2">
@@ -82,9 +82,12 @@ export function CardDescription({
         </div>
       </div>
       <Button
-        variant="ghost"
+        variant="default"
         size="sm"
-        className="hidden group-has-data-clamped/description:inline-flex"
+        className={cn(
+          'hidden group-has-data-clamped/description:inline-flex',
+          !expanded && 'absolute bottom-0 left-1/2 -translate-x-1/2',
+        )}
         aria-expanded={expanded}
         aria-controls={id}
         onClick={() => setExpanded(!expanded)}

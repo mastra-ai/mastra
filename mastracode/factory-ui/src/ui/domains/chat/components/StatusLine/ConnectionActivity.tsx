@@ -18,7 +18,7 @@ export function ConnectionActivity() {
   if (preparingThreadId)
     return (
       <span className={statusItem} role="status" aria-live="polite">
-        <IconFormCircle size={10} /> {workspacePending ? 'Preparing workspace…' : 'Connecting…'}
+        <IconFormCircle className="size-icon-xs" /> {workspacePending ? 'Preparing workspace…' : 'Connecting…'}
       </span>
     );
   // Spinning composer ring is the visible cue; this keeps the state announced.

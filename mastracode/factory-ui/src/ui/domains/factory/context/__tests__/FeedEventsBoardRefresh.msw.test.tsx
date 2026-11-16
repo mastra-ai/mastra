@@ -92,7 +92,7 @@ function watchBoard() {
   return {
     cards: { isSuccess: cards.isSuccess, data: cards.data?.workItems },
     decisions: useFactoryDecisionStatus(PROJECT_ID, ['pending', 'leased']),
-    sessionRows: useSessionRowsQuery(PROJECT_ID, SIDEBAR_VIEW).data,
+    sessionRows: useSessionRowsQuery(PROJECT_ID, SIDEBAR_VIEW).shown,
     sessionActivity: useSessionActivityQuery(PROJECT_ID).data,
     move: useTransitionWorkItemMutation(PROJECT_ID),
   };

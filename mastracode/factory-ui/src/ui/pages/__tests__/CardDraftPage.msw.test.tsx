@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -9,6 +9,7 @@ import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createQueryClient } from '../../../query-client';
 import { providerFactsCard } from '../../__tests__/fixtures/providerFactsCard';
+import { environmentPayload, environmentRepository } from '../../domains/settings/components/__tests__/fixtures/environment';
 import { createAppRoutes } from '../../router';
 import { DRAFT_SESSION_ID, FACTORY_ID, stubDraftRoute } from './fixtures/draftRoute';
 
@@ -187,7 +188,7 @@ describe('a card without a session', () => {
     await waitForMutationsIdle(client);
   });
 
-  it('asks which repository the session works in when several could hold it, and starts it in the one picked', async () => {
+  it("starts in the environment's first repository when several could hold the card, leaving its repository to the run", async () => {
     const route = stubDraftRoute();
     const runStarts = stubCard({ authorTrusted: true });
     const docsCreates: unknown[] = [];
@@ -205,6 +206,16 @@ describe('a card without a session', () => {
               ],
             },
           ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`, () =>
+        HttpResponse.json({
+          environment: environmentPayload({
+            repositories: [
+              environmentRepository({ projectRepositoryId: 'repository-draft-handoff', slug: 'acme/app', position: 2 }),
+              environmentRepository({ projectRepositoryId: 'repository-docs', slug: 'acme/docs', position: 1 }),
+            ],
+          }),
         }),
       ),
       http.post(`${TEST_BASE_URL}/web/source-control/projects/repository-docs/sessions`, async ({ request }) => {
@@ -237,68 +248,13 @@ describe('a card without a session', () => {
     const { client } = renderAt(`/factories/${FACTORY_ID}/cards/${CARD_ID}/new/${DRAFT_SESSION_ID}`);
 
     await user.type(await screen.findByRole('textbox', { name: 'Message' }), 'write the docs');
-    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
-
-    await user.click(screen.getByRole('combobox', { name: 'Repository' }));
-    const options = await screen.findByRole('listbox');
-    expect(
-      within(options)
-        .getAllByRole('option')
-        .map(option => option.textContent),
-    ).toEqual(['acme/app', 'acme/docs']);
-    await user.click(within(options).getByRole('option', { name: 'acme/docs' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled());
     await user.click(screen.getByRole('button', { name: 'Send message' }));
 
     await waitFor(() => expect(docsCreates).toEqual([{ branch: 'factory/linear-eng-42' }]));
-    expect(patches).toEqual([{ metadata: { repository: 'acme/docs' } }]);
     await waitFor(() => expect(runStarts).toHaveLength(1));
-    expect(route.createBodies).toEqual([]);
-
-    route.finishWorkspace();
-    await waitForMutationsIdle(client);
-  });
-
-  it('tells same-named repositories apart by provider and starts the session in the one picked', async () => {
-    const route = stubDraftRoute();
-    const runStarts = stubCard();
-    const gitlabCreates: unknown[] = [];
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({
-          projects: [
-            {
-              id: FACTORY_ID,
-              name: 'Acme Factory',
-              repositories: [
-                listedRepository('repository-draft-handoff', 'acme/app'),
-                listedRepository('repository-gitlab-app', 'acme/app', { integrationId: 'gitlab' }),
-              ],
-            },
-          ],
-        }),
-      ),
-      http.post(`${TEST_BASE_URL}/web/source-control/projects/repository-gitlab-app/sessions`, async ({ request }) => {
-        gitlabCreates.push(await request.json());
-        return HttpResponse.json({ session: { sessionId: DRAFT_SESSION_ID, branch: 'factory/linear-eng-42' } });
-      }),
-    );
-    const user = userEvent.setup();
-    const { client } = renderAt(`/factories/${FACTORY_ID}/cards/${CARD_ID}/new/${DRAFT_SESSION_ID}`);
-
-    await user.type(await screen.findByRole('textbox', { name: 'Message' }), 'repair the facts');
-    await user.click(screen.getByRole('combobox', { name: 'Repository' }));
-    const options = await screen.findByRole('listbox');
-    expect(
-      within(options)
-        .getAllByRole('option')
-        .map(option => option.textContent),
-    ).toEqual(['acme/app (GitHub)', 'acme/app (GitLab)']);
-    await user.click(within(options).getByRole('option', { name: 'acme/app (GitLab)' }));
-    expect(screen.getByRole('combobox', { name: 'Repository' })).toHaveTextContent('acme/app (GitLab)');
-    await user.click(screen.getByRole('button', { name: 'Send message' }));
-
-    await waitFor(() => expect(gitlabCreates).toEqual([{ branch: 'factory/linear-eng-42' }]));
-    await waitFor(() => expect(runStarts).toHaveLength(1));
+    expect(patches).toEqual([]);
+    expect(runStarts[0]).toHaveProperty('workItem.input.metadata', {});
     expect(route.createBodies).toEqual([]);
 
     route.finishWorkspace();
@@ -351,7 +307,6 @@ describe('a card without a session', () => {
 
     await user.type(await screen.findByRole('textbox', { name: 'Message' }), 'repair the facts');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled());
-    expect(screen.queryByRole('combobox', { name: 'Repository' })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Send message' }));
 
     await waitFor(() => expect(otherCreates).toEqual([{ branch: 'factory/linear-eng-42' }]));

@@ -1,3 +1,4 @@
+import type { FactoryEnvironmentRepository } from '../workspaces/services/environment';
 import type { LinkedRepositoryPayload } from '../workspaces/services/github';
 import type { IntakeConfig } from './services/intake';
 
@@ -61,9 +62,13 @@ export function cardSourceMetadata(card: CardRepositoryFacts): Record<string, un
   return { ...card.metadata, ...card.workItem?.metadata };
 }
 
+/**
+ * `resolved`: the card's repository is known, so the card records it.
+ * `environment`: several could hold it; the session starts in the environment's first and the run determines which.
+ */
 export type CardSessionRepository =
   | { kind: 'resolved'; repository: LinkedRepositoryPayload }
-  | { kind: 'choose'; choices: LinkedRepositoryPayload[] }
+  | { kind: 'environment'; candidates: LinkedRepositoryPayload[] }
   | { kind: 'unavailable'; reason: string };
 
 /** Where a card's own session can start: the repository its source names, else the one it could live in. */
@@ -81,16 +86,26 @@ export function cardSessionRepository(
     const [only] = compatible;
     return compatible.length === 1 && only
       ? { kind: 'resolved', repository: only }
-      : { kind: 'choose', choices: compatible };
+      : { kind: 'environment', candidates: compatible };
   }
-  const named = compatible.filter(candidate => candidate.slug === slug);
-  const [only] = named;
-  if (named.length > 1) return { kind: 'choose', choices: named };
-  if (only) return { kind: 'resolved', repository: only };
+  const named = compatible.find(candidate => candidate.slug === slug);
+  if (named) return { kind: 'resolved', repository: named };
   return {
     kind: 'unavailable',
     reason: `Repository ${slug} is not linked to this Factory with a provider matching this card.`,
   };
+}
+
+/** The candidate a rule run is filed under: the first, by position, of those in the environment. */
+export function firstEnvironmentRepository(
+  candidates: LinkedRepositoryPayload[],
+  environment: FactoryEnvironmentRepository[],
+) {
+  const first = environment
+    .filter(entry => entry.inEnvironment)
+    .sort((a, b) => a.position - b.position)
+    .find(entry => candidates.some(candidate => candidate.projectRepositoryId === entry.projectRepositoryId));
+  return first && candidates.find(candidate => candidate.projectRepositoryId === first.projectRepositoryId);
 }
 
 /** The linked repository a card's source lives in, else the board's primary repository. */

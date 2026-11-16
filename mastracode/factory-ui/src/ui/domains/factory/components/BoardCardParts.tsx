@@ -128,7 +128,7 @@ export function CardStatus({ status, compact = false }: { status: BoardCardStatu
         status.detail !== undefined && 'underline decoration-dotted underline-offset-2',
       )}
     >
-      <IconExclamationTriangle size={11} aria-hidden className={cn('shrink-0', !compact && 'mt-0.5')} />
+      <IconExclamationTriangle aria-hidden className={cn('size-icon-xs shrink-0', !compact && 'mt-0.5')} />
       <span className={cn('min-w-0', compact ? 'truncate' : 'wrap-anywhere')}>{status.label}</span>
     </Txt>
   );

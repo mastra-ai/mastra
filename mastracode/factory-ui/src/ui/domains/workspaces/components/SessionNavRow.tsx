@@ -182,7 +182,7 @@ export function SessionNavRow({
         {runByFactory ? <span className="text-muted-foreground ml-1.5">run by Factory</span> : null}
       </Sidebar.NavLabel>
       {pinned && !loading ? (
-        <IconPin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
+        <IconPin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-icon-xs shrink-0 rotate-45" />
       ) : null}
       {statusLabel ? (
         <span id={statusId} hidden>
@@ -352,7 +352,7 @@ function SessionSourceIcon({
   pullRequestStatus?: PullRequestStatus;
 }) {
   if (source === 'user') {
-    return <IconUser data-source="user" aria-hidden className="text-muted-foreground size-3.5 shrink-0" />;
+    return <IconUser data-source="user" aria-hidden className="text-muted-foreground size-icon-sm shrink-0" />;
   }
   if (pullRequestStatus) {
     return <PullRequestStatusIcon status={pullRequestStatus} provider={provider} decorative className="size-3.5" />;

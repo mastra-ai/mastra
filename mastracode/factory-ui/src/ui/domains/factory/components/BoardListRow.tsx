@@ -44,7 +44,6 @@ type BoardListRowCells = {
 };
 
 export function BoardListRow({
-  testId,
   title,
   href,
   linkRef,
@@ -57,7 +56,6 @@ export function BoardListRow({
   createdAt,
   cells,
 }: {
-  testId: 'work-item-card' | 'candidate-card';
   title: string;
   href: string;
   linkRef?: (element: HTMLElement | null) => void;
@@ -143,6 +141,7 @@ export function BoardListRow({
           </Txt>
         )}
         <span className="col-start-1 row-start-1 flex items-center max-sm:[&_button]:pointer-events-auto max-sm:[&_button]:opacity-100">
+
           <DropdownMenu>
             <DropdownMenu.Trigger
               render={
@@ -156,7 +155,7 @@ export function BoardListRow({
                   onClick={stopRowClick}
                   className={REVEAL_ROW_CONTROLS}
                 >
-                  <IconDotGrid1x3Vertical size={13} aria-hidden />
+                  <IconDotGrid1x3Vertical aria-hidden />
                 </Button>
               }
             />
@@ -173,7 +172,7 @@ export function BoardListRow({
     <DataList.RowWrapper
       role="article"
       aria-label={title}
-      data-testid={testId}
+      data-testid="work-item-card"
       data-highlighted={highlighted || undefined}
       aria-busy={busy || locked || undefined}
       tabIndex={-1}

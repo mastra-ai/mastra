@@ -14,7 +14,7 @@ import type { WorkItem } from '../services/workItems';
 import { isPullRequestSource } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
-import { IconBubbleWide } from '@mastra/playground-ui/icons/central/IconBubbleWide';
+import { IconChatBubble7 } from '@mastra/playground-ui/icons/central/IconChatBubble7';
 
 export const RELATED_ITEM_LINK_CLASS = `hover:text-foreground relative z-10 flex w-fit max-w-full items-center gap-1 rounded-sm hover:underline ${focusRing}`;
 
@@ -56,10 +56,9 @@ export function RelatedWorkItemLink({
         {reference ?? item.title}
       </Txt>
       {live && (
-        <IconBubbleWide
+        <IconChatBubble7
           data-live-session-indicator
-          size={11}
-          className="text-badge-green-indicator shrink-0"
+          className="text-badge-green-indicator size-icon-xs shrink-0"
           aria-hidden
         />
       )}

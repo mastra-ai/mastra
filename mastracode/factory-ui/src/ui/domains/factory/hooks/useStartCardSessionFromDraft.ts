@@ -11,17 +11,21 @@ import { useChatThinking } from '../../chat/context/useChatThinking';
 import { startPromptHandoff } from '../../chat/hooks/useHandoffPrompt';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { stashHandoffFiles } from '../../chat/services/handoffFiles';
+import { getFactoryEnvironment } from '../../workspaces/services/environment';
 import { threadPath } from '../../workspaces/services/factoryPaths';
-import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { createUserSession, getUserSession } from '../../workspaces/services/user-sessions';
 import { itemSessionSpec } from '../boardItems';
+import { firstEnvironmentRepository } from '../boardRepository';
+import type { CardSessionRepository } from '../boardRepository';
 import { startFactoryRun, updateWorkItem } from '../services/workItems';
 import type { WorkItem } from '../services/workItems';
+
+type StartableRepository = Exclude<CardSessionRepository, { kind: 'unavailable' }>;
 
 /** Creates without a session id, so the server reuses the person's session on the card's branch, e.g. one whose start failed. */
 export function useStartCardSessionFromDraft(
   item: WorkItem,
-  repository: LinkedRepositoryPayload | undefined,
+  sessionRepository: CardSessionRepository | undefined,
 ): DraftSessionStart {
   const { baseUrl } = useChatSessionContext();
   const { activeModelId, defaultModelId } = useChatModels();
@@ -29,13 +33,30 @@ export function useStartCardSessionFromDraft(
   const { factoryId } = useParams<{ factoryId: string }>();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const startable = sessionRepository?.kind === 'unavailable' ? undefined : sessionRepository;
+
+  const sessionRepositoryFor = async (factoryId: string, target: StartableRepository) => {
+    if (target.kind === 'resolved') return target.repository;
+    const environment = await queryClient.fetchQuery({
+      queryKey: queryKeys.factoryEnvironment(factoryId),
+      queryFn: () => getFactoryEnvironment(baseUrl, factoryId),
+    });
+    const repository = firstEnvironmentRepository(target.candidates, environment.repositories);
+    if (!repository) {
+      throw new Error("None of the repositories matching this card's provider is in this Factory's environment.");
+    }
+    return repository;
+  };
 
   const startSession = useMutation({
-    mutationFn: async ({ factoryId, repository }: { factoryId: string; repository: LinkedRepositoryPayload }) => {
-      const metadata = item.workItem
-        ? { repository: repository.slug }
-        : { ...item.metadata, repository: repository.slug };
-      if (item.metadata?.repository !== repository.slug) await updateWorkItem(baseUrl, item.id, { metadata });
+    mutationFn: async ({ factoryId, target }: { factoryId: string; target: StartableRepository }) => {
+      const repository = await sessionRepositoryFor(factoryId, target);
+      const recordedSlug = target.kind === 'resolved' ? repository.slug : undefined;
+      const baseMetadata = item.workItem ? {} : (item.metadata ?? {});
+      const metadata = recordedSlug ? { ...baseMetadata, repository: recordedSlug } : baseMetadata;
+      if (recordedSlug && item.metadata?.repository !== recordedSlug) {
+        await updateWorkItem(baseUrl, item.id, { metadata });
+      }
       const { branch, threadTitle } = itemSessionSpec(item);
       const { sessionId } = await createUserSession(baseUrl, repository.projectRepositoryId, { branch });
       await startFactoryRun(baseUrl, factoryId, {
@@ -56,13 +77,13 @@ export function useStartCardSessionFromDraft(
   });
 
   const start: DraftSessionStart['start'] = async ({ prompt, files }) => {
-    if (!factoryId || !repository) {
+    if (!factoryId || !startable) {
       throw new Error('Could not create the session. Reload the page and try again.');
     }
     if (!activeModelId) {
       throw new Error('Session configuration is not ready. Try again.');
     }
-    const session = await startSession.mutateAsync({ factoryId, repository }).catch((error: unknown) => {
+    const session = await startSession.mutateAsync({ factoryId, target: startable }).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : 'Session creation failed';
       throw new Error(`Could not create the session: ${message}. Try again.`, { cause: error });
     });
@@ -86,5 +107,5 @@ export function useStartCardSessionFromDraft(
     });
   };
 
-  return { ready: repository !== undefined && !startSession.isPending, start };
+  return { ready: startable !== undefined && !startSession.isPending, start };
 }

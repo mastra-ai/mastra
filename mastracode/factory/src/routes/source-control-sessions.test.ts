@@ -10,7 +10,6 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { getFactorySessionAddress, resolveFactorySessionAddress } from '../rules/binding-context.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
-import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import {
   FACTORY_OPEN_RUNS_SETTING,
   listSessionOpenRuns,
@@ -23,11 +22,6 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { createProjectSessionsReader } from './project-sessions.js';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
-
-vi.mock('../session/filesystem-capture.js', async importOriginal => {
-  const actual = await importOriginal<typeof import('../session/filesystem-capture.js')>();
-  return { ...actual, waitForPendingFilesystemCapture: vi.fn(actual.waitForPendingFilesystemCapture) };
-});
 
 const user = { workosId: 'user-1', organizationId: 'org-1' };
 
@@ -99,9 +93,6 @@ async function seedGitLabRepository() {
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'user-1',
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/workspace/factory-gitlab-primary',
   });
   return { seed, sourceControl, projectRepository, project };
 }
@@ -1009,9 +1000,6 @@ describe('source-control session routes', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/workspace/hello',
     });
     const other = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Other' } });
     const otherConnection = await github.connections.create({
@@ -1024,9 +1012,6 @@ describe('source-control session routes', () => {
       orgId: 'org-1',
       connectionId: otherConnection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/workspace/other',
     });
     const session = (sessionId: string, projectRepositoryId: string, userId: string, visibility: 'org' | 'private') =>
       ({
@@ -1347,7 +1332,6 @@ describe('session sandbox recreate', () => {
       controller?: RouteOptions['controller'];
       abortSettleTimeoutMs?: number;
       caller?: { workosId: string; organizationId: string };
-      filesystem?: RouteOptions['filesystem'];
     } = {},
   ) {
     const app = new Hono();
@@ -1367,7 +1351,6 @@ describe('session sandbox recreate', () => {
         ...(options.sessionRetirement ? { sessionRetirement: options.sessionRetirement } : {}),
         sandboxRecreateSupported: options.sandboxRecreateSupported ?? true,
         ...(options.abortSettleTimeoutMs !== undefined ? { abortSettleTimeoutMs: options.abortSettleTimeoutMs } : {}),
-        ...(options.filesystem ? { filesystem: options.filesystem } : {}),
       }),
     );
     return app;
@@ -1556,25 +1539,6 @@ describe('session sandbox recreate', () => {
     expect(warn).toHaveBeenCalledWith('[Factory Sessions] Failed to abort the active run', expect.anything());
   });
 
-  it('drains a pending filesystem capture before recreating', async () => {
-    const { seed, sourceControl, session } = await seedRecreateSession();
-    const order: string[] = [];
-    vi.mocked(waitForPendingFilesystemCapture).mockImplementationOnce(async resourceId => {
-      await new Promise(resolve => setTimeout(resolve, 20));
-      order.push(`drained:${resourceId}`);
-    });
-    const sessionRetirement = fakeCoordinator(async () => {
-      order.push('recreate');
-      return 'recreated';
-    });
-    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement });
-
-    const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
-
-    expect(response.status).toBe(200);
-    expect(order).toEqual([`drained:${session.sessionId}`, 'recreate']);
-  });
-
   it('lets an org admin recreate a teammate org-visible session', async () => {
     const { seed, sourceControl, session } = await seedRecreateSession('user-2');
     const sessionRetirement = fakeCoordinator();
@@ -1656,57 +1620,12 @@ describe('session sandbox recreate', () => {
     });
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     onTestFinished(() => error.mockRestore());
-    const filesystem = { deleteResourceFiles: vi.fn(async () => 0) };
-    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement, filesystem });
+    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement });
 
     const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
 
     expect(response.status).toBe(500);
     await expect(response.json()).resolves.toEqual({ error: 'provider unavailable' });
-    expect(filesystem.deleteResourceFiles).not.toHaveBeenCalled();
-  });
-
-  it('clears the captured file listings once the sandbox is recreated', async () => {
-    const { seed, sourceControl, session } = await seedRecreateSession();
-    const order: string[] = [];
-    const sessionRetirement = fakeCoordinator(async () => {
-      order.push('recreate');
-      return 'recreated';
-    });
-    const filesystem = {
-      deleteResourceFiles: vi.fn(async ({ resourceId }: { resourceId: string }) => {
-        order.push(`clear:${resourceId}`);
-        return 2;
-      }),
-    };
-    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement, filesystem });
-
-    const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
-
-    expect(response.status).toBe(200);
-    expect(order).toEqual(['recreate', `clear:${session.sessionId}`]);
-  });
-
-  it('still reports the recreate when clearing the file listings fails', async () => {
-    const { seed, sourceControl, session } = await seedRecreateSession();
-    const sessionRetirement = fakeCoordinator();
-    const filesystem = {
-      deleteResourceFiles: vi.fn(async () => {
-        throw new Error('db down');
-      }),
-    };
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    onTestFinished(() => warn.mockRestore());
-    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement, filesystem });
-
-    const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ recreated: true, aborted: false });
-    expect(warn).toHaveBeenCalledWith(
-      '[Factory Sessions] Failed to clear file listings after sandbox recreate',
-      expect.objectContaining({ sessionId: session.sessionId }),
-    );
   });
 
   it('returns 404 when the coordinator no longer finds the session', async () => {

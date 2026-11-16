@@ -48,7 +48,7 @@ export function ToolCallGroup({ steps, leading, children }: ToolCallGroupProps) 
         <ActivityHeader>
           <ActivityLeading>{leading}</ActivityLeading>
           <ActivityIcon>
-            <IconArrowsHide size={14} aria-hidden className="text-placeholder" />
+            <IconArrowsHide aria-hidden className="size-icon-sm text-placeholder" />
           </ActivityIcon>
           <ActivityLabel>{steps.length} steps</ActivityLabel>
           {live && live.description ? (
@@ -85,7 +85,7 @@ function GroupProgress({ steps }: { steps: ToolCallGroupStep[] }) {
   const failed = steps.filter(step => step.status === 'error').length;
   const errorIndicator =
     failed > 0 ? (
-      <IconCrossMedium size={13} role="img" aria-label="Failed" className="shrink-0 text-destructive-foreground" />
+      <IconCrossMedium role="img" aria-label="Failed" className="size-icon-sm shrink-0 text-destructive-foreground" />
     ) : null;
   // Older consumers only supply visual status, which cannot distinguish completed from interrupted calls.
   if (steps.some(step => step.hasResult === undefined)) return errorIndicator;

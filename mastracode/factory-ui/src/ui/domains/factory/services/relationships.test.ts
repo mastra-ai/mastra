@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  inferredParentWorkItemId,
   relatedCardName,
   relatedWorkItemIndex,
   relationshipLabel,
@@ -58,7 +57,6 @@ describe('Factory work item relationships', () => {
 
     expect(relatedWorkItemIndex([review, issue])(review)).toEqual([issue]);
     expect(relatedWorkItemIndex([review, issue])(issue)).toEqual([review]);
-    expect(inferredParentWorkItemId(review.metadata, [review, issue])).toBe(issue.id);
   });
 
   it('links a GitLab MR back to its issue session and names it as a Review item', () => {
@@ -76,7 +74,6 @@ describe('Factory work item relationships', () => {
     });
     expect(relatedWorkItemIndex([review, issue])(review)).toEqual([issue]);
     expect(relatedWorkItemIndex([review, issue])(issue)).toEqual([review]);
-    expect(inferredParentWorkItemId(review.metadata, [review, issue])).toBe(issue.id);
     expect(relationshipLabel(review)).toBe('Review: MR !5');
     expect(workItemReference(review)).toBe('MR !5');
   });
@@ -126,7 +123,6 @@ describe('Factory work item relationships', () => {
     });
 
     expect(relatedWorkItemIndex([review, issue])(review)).toEqual([]);
-    expect(inferredParentWorkItemId(review.metadata, [review, issue])).toBeUndefined();
   });
 
   it('uses source-specific relationship references', () => {

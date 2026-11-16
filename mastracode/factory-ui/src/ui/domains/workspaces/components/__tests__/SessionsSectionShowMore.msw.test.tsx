@@ -1,19 +1,33 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { Link, MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, onTestFinished } from 'vitest';
 
 import { isStubbedProjectRead } from '../../../../../../e2e/ui/board-reads';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import type { SessionRowWire } from '../../../../../api/types';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import { stubSessionsFactory, testChatSession } from './fixtures/sessionsSection';
 import type { FactoryUserSession } from '../../services/user-sessions';
+import { presentSessionRow } from '../../services/sessionRows';
+import { SessionGroupList } from '../SessionGroupList';
 import { SessionsSection } from '../SessionsSection';
 import { groupSessionsByBoard, pickSessionProperty } from './fixtures/sessionProperties';
 
 const projectRepositoryId = 'ghp-1';
+
+function listedRow(index: number): SessionRowWire {
+  const { id, sessionId, userId, branch, createdAt } = reviewSession(index);
+  return {
+    session: { id, sessionId, projectRepositoryId, userId, branch, title: null, visibility: 'org', createdAt },
+    origin: 'user',
+    status: 'idle',
+    pinned: false,
+    updatedAt: createdAt,
+  };
+}
 
 function reviewSession(index: number): FactoryUserSession {
   const createdAt = new Date(Date.parse('2026-07-23T00:00:00.000Z') + index * 1_000).toISOString();
@@ -119,6 +133,42 @@ describe('Sessions sidebar show more', () => {
     await waitFor(() => expect(links()).toHaveLength(5));
   });
 
+  it('opens another factory, then the first one again, with its groups at their first 5 sessions', async () => {
+    stubSessions(Array.from({ length: 30 }, (_, index) => reviewSession(index + 1)));
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-2/work-items`, () => HttpResponse.json({ items: [] })),
+    );
+    stubSessionsFactory('fp-1', [projectRepositoryId]);
+    const user = userEvent.setup();
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/factories/fp-1']}>
+        <ChatSessionContext.Provider value={testChatSession('fp-1', projectRepositoryId)}>
+          <Link to="/factories/fp-1">First factory</Link>
+          <Link to="/factories/fp-2">Other factory</Link>
+          <Routes>
+            <Route path="/factories/:factoryId" element={<SessionsSection />} />
+          </Routes>
+        </ChatSessionContext.Provider>
+      </MemoryRouter>,
+    );
+    const links = async () =>
+      within(await screen.findByRole('region', { name: 'Work sessions' })).getAllByRole('link', {
+        name: /^factory\/pr-200\d+$/,
+      });
+    await waitFor(async () => expect(await links()).toHaveLength(5));
+    await user.click(screen.getByRole('button', { name: 'Show 20 more' }));
+    await waitFor(async () => expect(await links()).toHaveLength(25));
+
+    await user.click(screen.getByRole('link', { name: 'Other factory' }));
+
+    await waitFor(async () => expect(await links()).toHaveLength(5));
+
+    await user.click(screen.getByRole('link', { name: 'First factory' }));
+
+    await waitFor(async () => expect(await links()).toHaveLength(5));
+    expect(screen.getByRole('button', { name: 'Show 20 more' })).toBeInTheDocument();
+  });
+
   it('asks the server for 20 more rows of the group, and lists the ones it sends', async () => {
     stubSessions(Array.from({ length: 30 }, (_, index) => reviewSession(index + 1)));
     const reads = appReads();
@@ -174,9 +224,12 @@ describe('Sessions sidebar show more', () => {
     expect(screen.getAllByRole('link', { name: /^factory\/pr-200\d+$/ })).toHaveLength(1);
   });
 
-  it.each([1, 30])(
-    'keeps open session %i visible across batches and after collapsing without duplicating it',
-    async index => {
+  it.each([
+    { index: 1, first: 26, second: 46, last: 2 },
+    { index: 30, first: 25, second: 45, last: 3 },
+  ])(
+    'keeps open session $index visible across batches and after collapsing without duplicating it',
+    async ({ index, first, second, last }) => {
       stubSessions(Array.from({ length: 48 }, (_, index) => reviewSession(index + 1)));
       const user = userEvent.setup();
 
@@ -189,10 +242,10 @@ describe('Sessions sidebar show more', () => {
       expect(within(group).getByRole('link', { name: activeName })).toHaveAttribute('aria-current', 'page');
 
       await user.click(within(group).getByRole('button', { name: 'Show 20 more' }));
-      await waitFor(() => expect(links()).toHaveLength(26));
+      await waitFor(() => expect(links()).toHaveLength(first));
       await user.click(within(group).getByRole('button', { name: 'Show 20 more' }));
-      await waitFor(() => expect(links()).toHaveLength(46));
-      await user.click(within(group).getByRole('button', { name: 'Show 2 more' }));
+      await waitFor(() => expect(links()).toHaveLength(second));
+      await user.click(within(group).getByRole('button', { name: `Show ${last} more` }));
       await waitFor(() => expect(links()).toHaveLength(48));
 
       await user.click(within(group).getByRole('button', { name: 'Show less' }));
@@ -221,6 +274,34 @@ describe('Sessions sidebar show more', () => {
 
     await user.keyboard('{Enter}');
     await waitFor(() => expect(within(group).getByRole('button', { name: 'Show 20 more' })).toHaveFocus());
+  });
+
+  it('keeps the sessions it shows when reading more fails, and shows the rest on retry', async () => {
+    stubSessions(Array.from({ length: 8 }, (_, index) => reviewSession(index + 1)));
+    let deeperReadsFail = true;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/session-rows`, ({ request }) =>
+        deeperReadsFail && new URL(request.url).searchParams.has('window')
+          ? HttpResponse.json({ error: 'Service unavailable' }, { status: 503 })
+          : undefined,
+      ),
+    );
+    const user = userEvent.setup();
+
+    renderSection();
+
+    const group = () => screen.getByRole('region', { name: 'Work sessions' });
+    const links = () => within(group()).getAllByRole('link', { name: /^factory\/pr-200\d+$/ });
+    await waitFor(() => expect(links()).toHaveLength(5));
+
+    await user.click(within(group()).getByRole('button', { name: 'Show 3 more' }));
+    expect(await screen.findByText('Couldn’t load sessions')).toBeInTheDocument();
+    expect(links()).toHaveLength(5);
+
+    deeperReadsFail = false;
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(links()).toHaveLength(8));
+    expect(screen.queryByText('Couldn’t load sessions')).not.toBeInTheDocument();
   });
 
   it('keeps a pinned session visible and persists the pin', async () => {
@@ -262,5 +343,33 @@ describe('Sessions sidebar show more', () => {
     const group = await screen.findByRole('region', { name: 'Work sessions' });
     expect(await within(group).findAllByRole('link', { name: /^factory\/pr-200\d+$/ })).toHaveLength(3);
     expect(screen.queryByRole('button', { name: /Show \d+ more/ })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { listed: 485, offered: 'Show 15 more' },
+    { listed: 500, offered: undefined },
+  ])('offers no more than the 500 sessions the server lists per group, at $listed listed', ({ listed, offered }) => {
+    const rows = Array.from({ length: listed }, (_, index) =>
+      presentSessionRow(listedRow(index + 1), {
+        factoryId: 'fp-1',
+        openSessionId: undefined,
+        viewer: undefined,
+        repositories: undefined,
+      }),
+    );
+
+    renderWithProviders(
+      <SessionGroupList
+        group={{ key: 'board:work', label: 'Work', icon: 'board', total: 600, rows }}
+        showHeader
+        renderRow={row => <li>{row.name}</li>}
+        onShowMore={() => {}}
+        onShowLess={() => {}}
+      />,
+    );
+
+    const group = screen.getByRole('region', { name: 'Work sessions' });
+    expect(within(group).queryByRole('button', { name: /Show \d+ more/ })?.textContent).toBe(offered);
+    expect(within(group).getByRole('button', { name: 'Show less' })).toBeInTheDocument();
   });
 });
