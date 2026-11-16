@@ -17,6 +17,7 @@ import type { WorkItem } from '../../factory/services/workItems';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { createAppRoutes } from '../../../router';
+import { environmentPayload, environmentRepository } from '../../settings/components/__tests__/fixtures/environment';
 import {
   ACTIVE_FACTORY_ID,
   factoryProjects,
@@ -131,6 +132,20 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       projectListResponse({ ...factoryRepositories, [ACTIVE_FACTORY_ID]: activeFactoryRepositories(options) }),
+    ),
+    // Every linked repository is in the environment, in link order.
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/environment`, () =>
+      HttpResponse.json({
+        environment: environmentPayload({
+          repositories: activeFactoryRepositories(options).map((repository, index) =>
+            environmentRepository({
+              projectRepositoryId: repository.projectRepositoryId,
+              slug: repository.slug,
+              position: index + 1,
+            }),
+          ),
+        }),
+      }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId`, ({ params }) => {
       const project = factoryProjects.find(candidate => candidate.id === String(params.factoryProjectId));

@@ -300,7 +300,7 @@ describe('scenario: a card that names no repository in a multi-repository Factor
     const recorded = await seeded.workItems.get({ orgId: 'org-1', id: item.id });
     expect(recorded!.metadata).toMatchObject({
       repository: 'internetburrito/hydra',
-      repositoryChoice: { slug: 'internetburrito/hydra', sessionId: first.sessionId },
+      repositoryChoice: { slug: 'internetburrito/hydra' },
     });
     // A later push elsewhere does not change the card's repository.
     await pushFrom(first.sessionId, 'mastra-ai/mastra', true);
@@ -316,6 +316,31 @@ describe('scenario: a card that names no repository in a multi-repository Factor
       "Target repository: internetburrito/hydra. Before editing files or creating a pull request, verify this session's checkout matches the target repository. This session is filed under mastra-ai/mastra, so pass `repository: internetburrito/hydra` to the source_control_* tools.",
     ]);
     expect(hydra.id).not.toBe(mastra.id);
+  });
+
+  it('keeps a role session working once another session records the repository', async () => {
+    const { seeded, item, mastra, dispatch } = await seedMultiRepositoryFactory();
+    const triage = await dispatch('decision-1');
+    // Another session on the card (its chat, a review on another branch) pushed to hydra, so
+    // recordRunRepositoryChoice wrote the card's repository under that session's binding.
+    const card = await seeded.workItems.get({ orgId: 'org-1', id: item.id });
+    await seeded.workItems.update({
+      orgId: 'org-1',
+      id: item.id,
+      userId: 'agent:other-binding',
+      expectedRevision: card!.revision,
+      patch: {
+        metadata: { repository: 'internetburrito/hydra', repositoryChoice: { slug: 'internetburrito/hydra' } },
+      },
+    });
+
+    const retriage = await dispatch('decision-2');
+
+    expect(retriage.sessionId).toBe(triage.sessionId);
+    expect(retriage.session.state.get()).toMatchObject({ projectRepositoryId: mastra.id });
+    expect(retriage.session.state.get()?.pluginInstructions?.filter(text => text.includes('repository'))).toEqual([
+      "Target repository: internetburrito/hydra. Before editing files or creating a pull request, verify this session's checkout matches the target repository. This session is filed under mastra-ai/mastra, so pass `repository: internetburrito/hydra` to the source_control_* tools.",
+    ]);
   });
 
   it('still refuses a session filed elsewhere when a person sets the repository', async () => {

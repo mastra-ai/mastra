@@ -92,7 +92,7 @@ export async function recordRunRepositoryChoice(options: {
       patch: {
         metadata: {
           repository: options.target.slug,
-          [REPOSITORY_CHOICE_KEY]: { slug: options.target.slug, sessionId: binding.sessionId },
+          [REPOSITORY_CHOICE_KEY]: { slug: options.target.slug },
         },
       },
     });

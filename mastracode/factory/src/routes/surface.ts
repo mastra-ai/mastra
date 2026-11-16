@@ -40,7 +40,7 @@ import {
 } from '../session/factory-session.js';
 import type { EnsuredFactorySourceSession, OrganizationModelSources } from '../session/factory-session.js';
 import type { LiveSessions } from '../session/live-sessions.js';
-import { repositoryChosenBySession, resolveRunRepository } from '../session/work-item-repository.js';
+import { repositoryChosenByRun, resolveRunRepository } from '../session/work-item-repository.js';
 import type { StateSigner } from '../state-signing.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
@@ -464,13 +464,13 @@ export async function prepareFactoryRuleBinding(
     // Re-preparing a binding (server restart, retired controller session) must
     // land in the role's existing session: minting a replacement would repoint
     // the work item, flip the session's owner to the approver, and orphan the
-    // previous sandbox. The one session that may work on a card outside its own
-    // repository is the one that recorded that repository on the card.
+    // previous sandbox. A session may work on a card outside its own repository
+    // only when a run recorded that repository on a card that named none.
     const approver = input.record.approvedBy ?? undefined;
     if (
       boundSession &&
       boundSession.projectRepositoryId !== repository.projectRepositoryId &&
-      !repositoryChosenBySession(input.item, repository.slug, boundSession.sessionId)
+      !repositoryChosenByRun(input.item, repository.slug)
     ) {
       throw new FactoryDispatchError(
         'source_repository_ambiguous',

@@ -191,20 +191,20 @@ export async function resolveRunRepository(
   return { status: 'resolved', projectRepositoryId: primary.link.id, slug: primary.repository.slug, unnamed };
 }
 
-/** Card metadata recording which run session chose the card's `repository`, and which one it chose. */
+/** Card metadata recording the `repository` a run chose for a card that named none. */
 export const REPOSITORY_CHOICE_KEY = 'repositoryChoice';
 
 /**
- * Whether `sessionId` recorded `slug` as the card's repository. That session
- * was filed before the card named a repository, so it is filed under another
- * one; it may keep working on the card, in `slug`. A repository set any other
- * way (intake, a person) still refuses a session filed elsewhere.
+ * Whether a run recorded `slug` as the card's repository. Every role session
+ * on the card was filed before it named a repository, so under another one;
+ * they may keep working on the card, in `slug`. A repository set any other
+ * way (intake, a person) no longer matches the recorded choice and still
+ * refuses a session filed elsewhere.
  */
-export function repositoryChosenBySession(item: Pick<Card, 'metadata'>, slug: string, sessionId: string): boolean {
+export function repositoryChosenByRun(item: Pick<Card, 'metadata'>, slug: string): boolean {
   const choice = item.metadata?.[REPOSITORY_CHOICE_KEY];
   if (typeof choice !== 'object' || choice === null) return false;
-  const recorded = choice as Record<string, unknown>;
-  return item.metadata?.repository === slug && recorded.slug === slug && recorded.sessionId === sessionId;
+  return item.metadata?.repository === slug && (choice as Record<string, unknown>).slug === slug;
 }
 
 const UNNAMED_REPOSITORY_INSTRUCTION = 'This card names no repository.';

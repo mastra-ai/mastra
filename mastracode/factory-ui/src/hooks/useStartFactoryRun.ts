@@ -10,6 +10,7 @@ import { useFactoryQuery } from './useFactories';
 import { useCardRepositorySlug } from '../ui/domains/factory/hooks/useCardRepositorySlug';
 import { repositoryMatchesCardSource } from '../ui/domains/factory/boardRepository';
 import { startFactoryRun, updateWorkItem } from '../ui/domains/factory/services/workItems';
+import { getFactoryEnvironment } from '../ui/domains/workspaces/services/environment';
 import type { WorkItem, WorkItemSource } from '../ui/domains/factory/services/workItems';
 
 export interface StartFactoryRunWorkItem {
@@ -43,6 +44,21 @@ export function useStartFactoryRun() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
 
+  // A card that names no repository opens in the environment's first repository, the one a
+  // rule run is filed under: the sandbox holds every environment repository and the session
+  // determines from the card which one it belongs to.
+  const firstEnvironmentRepository = async (candidates: typeof repositories) => {
+    const environment = await queryClient.fetchQuery({
+      queryKey: queryKeys.factoryEnvironment(factoryId),
+      queryFn: () => getFactoryEnvironment(baseUrl, factoryId!),
+    });
+    const first = environment.repositories
+      .filter(entry => entry.inEnvironment)
+      .sort((a, b) => a.position - b.position)
+      .find(entry => candidates.some(candidate => candidate.projectRepositoryId === entry.projectRepositoryId));
+    return first && candidates.find(candidate => candidate.projectRepositoryId === first.projectRepositoryId);
+  };
+
   const startMutationKey = ['factory', 'start-run', factoryId] as const;
   const mutation = useMutation({
     mutationKey: startMutationKey,
@@ -53,16 +69,18 @@ export function useStartFactoryRun() {
       const repositoriesForSource = repositories.filter(candidate =>
         repositoryMatchesCardSource(candidate, workItem.source),
       );
-      // A card that names no repository opens in the first one; the sandbox holds them all and
-      // the session determines from the card which one it belongs to.
       const repository = targetSlug
         ? repositoriesForSource.find(candidate => candidate.slug === targetSlug)
-        : repositoriesForSource[0];
+        : repositoriesForSource.length > 1
+          ? await firstEnvironmentRepository(repositoriesForSource)
+          : repositoriesForSource[0];
       if (!repository) {
         throw new Error(
           targetSlug
             ? `Repository ${targetSlug} is not linked to this Factory with a provider matching this card`
-            : "No repository matching this card's provider is linked to this Factory.",
+            : repositoriesForSource.length > 1
+              ? "None of the repositories matching this card's provider is in this Factory's environment."
+              : "No repository matching this card's provider is linked to this Factory.",
         );
       }
       // With one repository for the card's provider there is nothing to determine, so the card records it.

@@ -8,6 +8,11 @@ import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { providerFactsCard } from '../../ui/__tests__/fixtures/providerFactsCard';
+import {
+  environmentPayload,
+  environmentRepository,
+} from '../../ui/domains/settings/components/__tests__/fixtures/environment';
+import type { FactoryEnvironmentRepository } from '../../ui/domains/workspaces/services/environment';
 import { useStartFactoryRun } from '../useStartFactoryRun';
 import type { StartFactoryRunWorkItem } from '../useStartFactoryRun';
 
@@ -25,6 +30,7 @@ function RouteInner({ children }: { children: ReactNode }) {
 
 function stubEndpoints(
   repositories: Array<{ id: string; externalId: string; slug: string; provider?: 'github' | 'gitlab' }>,
+  environment: FactoryEnvironmentRepository[] = [],
 ) {
   const sessionsCreatedFor: string[] = [];
   const patches: Array<Record<string, unknown>> = [];
@@ -46,6 +52,9 @@ function stubEndpoints(
           },
         ],
       }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`, () =>
+      HttpResponse.json({ environment: environmentPayload({ repositories: environment }) }),
     ),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({ config: { github: { enabled: true, sourceIds: [] }, linear: { enabled: false } } }),
@@ -230,10 +239,19 @@ describe.each(['linear-issue', 'manual'] as const)('useStartFactoryRun fallback 
 });
 
 describe('useStartFactoryRun for a card that names no repository among several', () => {
-  it("opens the session in the first repository and leaves the card's repository for the run to determine", async () => {
-    const calls = stubEndpoints([
-      { id: 'repo-1', externalId: '101', slug: 'acme/one' },
-      { id: 'repo-2', externalId: '202', slug: 'acme/two' },
+  const repositories = [
+    { id: 'repo-1', externalId: '101', slug: 'acme/one' },
+    { id: 'repo-2', externalId: '202', slug: 'acme/two' },
+    { id: 'repo-3', externalId: '303', slug: 'acme/three' },
+  ];
+  const unnamedCard = { ...workItem, source: 'manual' as const, sourceKey: null, metadata: { cardNumber: 3 } };
+
+  it("opens the session in the environment's first repository and leaves the card's repository for the run to determine", async () => {
+    // repo-1 is the oldest link but Skipped from the environment, and the environment's order differs from link order.
+    const calls = stubEndpoints(repositories, [
+      environmentRepository({ projectRepositoryId: 'repo-1', slug: 'acme/one', position: 1, inEnvironment: false }),
+      environmentRepository({ projectRepositoryId: 'repo-2', slug: 'acme/two', position: 3 }),
+      environmentRepository({ projectRepositoryId: 'repo-3', slug: 'acme/three', position: 2 }),
     ]);
     const { result } = renderHookWithProviders(() => useStartFactoryRun(), { inner: RouteInner });
     await waitFor(() => expect(result.current.enabled).toBe(true));
@@ -241,12 +259,40 @@ describe('useStartFactoryRun for a card that names no repository among several',
     await result.current.start.mutateAsync({
       branch: 'factory/item-1',
       threadTitle: 'Fix login bug',
-      workItem: { ...workItem, source: 'manual', sourceKey: null, metadata: { cardNumber: 3 } },
+      workItem: unnamedCard,
     });
 
-    expect(calls.sessionsCreatedFor).toEqual(['repo-1']);
+    expect(calls.sessionsCreatedFor).toEqual(['repo-3']);
     expect(calls.patches).toEqual([]);
     expect(calls.started()).toHaveProperty('workItem.input.metadata', { cardNumber: 3 });
+  });
+
+  it('refuses before any writes when none of the linked repositories is in the environment', async () => {
+    const calls = stubEndpoints(
+      repositories,
+      repositories.map((repository, index) =>
+        environmentRepository({
+          projectRepositoryId: repository.id,
+          slug: repository.slug,
+          position: index + 1,
+          inEnvironment: false,
+        }),
+      ),
+    );
+    const { result } = renderHookWithProviders(() => useStartFactoryRun(), { inner: RouteInner });
+    await waitFor(() => expect(result.current.enabled).toBe(true));
+
+    await expect(
+      result.current.start.mutateAsync({
+        branch: 'factory/item-1',
+        threadTitle: 'Fix login bug',
+        workItem: unnamedCard,
+      }),
+    ).rejects.toThrow("None of the repositories matching this card's provider is in this Factory's environment.");
+
+    expect(calls.sessionsCreatedFor).toEqual([]);
+    expect(calls.patches).toEqual([]);
+    expect(calls.started()).toBeUndefined();
   });
 });
 

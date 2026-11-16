@@ -10,7 +10,7 @@ import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js
 import { hydrateFactorySession, resolveFactorySessionModel } from '../session/factory-session.js';
 import {
   isRunRepositoryInstruction,
-  repositoryChosenBySession,
+  repositoryChosenByRun,
   resolveRunRepository,
   runRepositoryInstruction,
 } from '../session/work-item-repository.js';
@@ -230,7 +230,7 @@ export class FactoryStartCoordinator {
     }
     if (
       repository.projectRepositoryId !== sourceSession.projectRepositoryId &&
-      !repositoryChosenBySession(runItem, repository.slug, sourceSession.sessionId)
+      !repositoryChosenByRun(runItem, repository.slug)
     ) {
       throw new WorkItemRepositoryError(
         'repository_mismatch',
