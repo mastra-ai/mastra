@@ -63,7 +63,7 @@ export function SessionsSection() {
   const children = view.revealChildSessions && sidebarState !== 'collapsed';
   const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters();
   const pinned = usePinnedSessions();
-  const viewKey = JSON.stringify([view.sort, view.groupBy, filters, children]);
+  const viewKey = JSON.stringify([factoryId, view.sort, view.groupBy, filters, children]);
   const [deepened, setDeepened] = useState({ viewKey, extraRows: NO_EXTRA_ROWS });
   const extraRows = deepened.viewKey === viewKey ? deepened.extraRows : NO_EXTRA_ROWS;
   const deepen = (groupKey: string, extra: number | undefined) => {

@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { Link, MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, onTestFinished } from 'vitest';
 
 import { isStubbedProjectRead } from '../../../../../../e2e/ui/board-reads';
@@ -131,6 +131,36 @@ describe('Sessions sidebar show more', () => {
 
     await user.click(within(group).getByRole('button', { name: 'Show less' }));
     await waitFor(() => expect(links()).toHaveLength(5));
+  });
+
+  it('opens another factory with its groups at their first 5 sessions', async () => {
+    stubSessions(Array.from({ length: 30 }, (_, index) => reviewSession(index + 1)));
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-2/work-items`, () => HttpResponse.json({ items: [] })),
+    );
+    stubSessionsFactory('fp-1', [projectRepositoryId]);
+    const user = userEvent.setup();
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/factories/fp-1']}>
+        <ChatSessionContext.Provider value={testChatSession('fp-1', projectRepositoryId)}>
+          <Link to="/factories/fp-2">Other factory</Link>
+          <Routes>
+            <Route path="/factories/:factoryId" element={<SessionsSection />} />
+          </Routes>
+        </ChatSessionContext.Provider>
+      </MemoryRouter>,
+    );
+    const links = async () =>
+      within(await screen.findByRole('region', { name: 'Work sessions' })).getAllByRole('link', {
+        name: /^factory\/pr-200\d+$/,
+      });
+    await waitFor(async () => expect(await links()).toHaveLength(5));
+    await user.click(screen.getByRole('button', { name: 'Show 20 more' }));
+    await waitFor(async () => expect(await links()).toHaveLength(25));
+
+    await user.click(screen.getByRole('link', { name: 'Other factory' }));
+
+    await waitFor(async () => expect(await links()).toHaveLength(5));
   });
 
   it('asks the server for 20 more rows of the group, and lists the ones it sends', async () => {
