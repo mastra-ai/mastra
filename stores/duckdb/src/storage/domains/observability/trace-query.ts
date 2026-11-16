@@ -177,7 +177,7 @@ const TRACE_SELECT = `
 
 function fieldDefinition<TField extends string>(
   registry: Partial<FieldRegistry<TField>>,
-  field: string,
+  field: TraceQueryCanonicalField,
 ): FieldDefinition {
   const definition = registry[field as TField];
   if (definition === undefined) throw new Error(`Unsupported trusted trace-query field: ${field}`);
@@ -188,7 +188,7 @@ function parameterSql(type: ParameterType): string {
   return type === 'timestamp' ? 'CAST(? AS TIMESTAMP)' : '?';
 }
 
-function isMetadataField(field: string): field is `metadata.${string}` {
+function isMetadataField(field: TraceQueryPredicateField): field is `metadata.${string}` {
   return field.startsWith('metadata.');
 }
 
@@ -197,6 +197,7 @@ function compileScalarPredicate<TField extends string>(
   registry: Partial<FieldRegistry<TField>>,
   allowMetadata = false,
 ): SqlFragment {
+  if (predicate.type === 'tokens') throw new Error('Indexed token search is not supported by this store');
   if (predicate.type === 'boolean') {
     const values: unknown[] = [];
     const parts = predicate.args.map(arg => {
@@ -270,7 +271,7 @@ function compileScalarPredicate<TField extends string>(
   }
 
   const parameter = parameterSql(field.parameterType);
-  const operators: Partial<Record<string, string>> = { lt: '<', lte: '<=', gt: '>', gte: '>=' };
+  const operators = { lt: '<', lte: '<=', gt: '>', gte: '>=' } as const;
   if (predicate.operator === 'eq') {
     return { sql: `${field.sql} IS NOT DISTINCT FROM ${parameter}`, values: [...fieldValues, predicate.value] };
   }

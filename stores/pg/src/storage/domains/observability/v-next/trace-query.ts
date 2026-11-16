@@ -224,7 +224,10 @@ const TRACE_SELECT = `
   r."stopReason" AS "stopReason",
   r."stopReasonContext" AS "stopReasonContext"`;
 
-function fieldSql<TField extends string>(registry: Partial<FieldRegistry<TField>>, field: string): string {
+function fieldSql<TField extends string>(
+  registry: Partial<FieldRegistry<TField>>,
+  field: TraceQueryCanonicalField,
+): string {
   const sql = registry[field as TField];
   if (sql === undefined) throw new Error(`Unsupported trusted trace-query field: ${field}`);
   return sql;
@@ -241,7 +244,7 @@ export function traceMetadataValueSql(keyParameter: string): string {
     )`;
 }
 
-function isMetadataField(field: string): field is `metadata.${string}` {
+function isMetadataField(field: TraceQueryPredicateField): field is `metadata.${string}` {
   return field.startsWith('metadata.');
 }
 
@@ -291,6 +294,7 @@ function compileScalarPredicate<TField extends string>(
   parameterOffset: number,
   allowMetadata = false,
 ): SqlFragment {
+  if (predicate.type === 'tokens') throw new Error('Indexed token search is not supported by this store');
   if (predicate.type === 'boolean') {
     const values: unknown[] = [];
     const parts = predicate.args.map(arg => {
@@ -357,7 +361,7 @@ function compileScalarPredicate<TField extends string>(
   }
 
   const parameter = `$${parameterOffset}`;
-  const operators: Partial<Record<string, string>> = { lt: '<', lte: '<=', gt: '>', gte: '>=' };
+  const operators = { lt: '<', lte: '<=', gt: '>', gte: '>=' } as const;
   // `value` is never null, so plain `=`/`<>` keep `IS [NOT] DISTINCT FROM` semantics while staying
   // indexable. The null guards keep `NOT (...)` two-valued on null columns.
   if (predicate.operator === 'eq') {

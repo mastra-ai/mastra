@@ -2,4 +2,4 @@
 '@mastra/duckdb': patch
 ---
 
-Maintain compatibility with experimental query predicate types.
+Reject unsupported experimental token predicates.
