@@ -1673,10 +1673,15 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
       const memory = new MockMemory();
       const threadId = `${THREAD}-stream-partial-${engine}`;
       let deltas = 0;
+      let rejected = '';
       const breaker: Processor = {
         id: 'stream-keeper',
         processOutputStream: async ({ part, abort }) => {
-          if (part.type === 'text-delta' && ++deltas === 2) abort('Stream stopped by policy', { persist: 'partial' });
+          if (part.type === 'text-delta' && ++deltas === 2) {
+            // The chunk that trips the run is never accepted, so memory must not hold it.
+            rejected = part.payload.text as string;
+            abort('Stream stopped by policy', { persist: 'partial' });
+          }
           return part;
         },
       };
@@ -1707,8 +1712,9 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
       const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
       const saved = JSON.stringify(messages);
       expect(saved).toContain('KEPT');
-      // The chunk the processor rejected never reaches the thread.
-      expect(saved).not.toContain('STOPPED');
+      // The delta the processor refused never reaches the thread.
+      expect(rejected).not.toBe('');
+      expect(saved).not.toContain(rejected);
     },
     TEST_TIMEOUT_MS,
   );

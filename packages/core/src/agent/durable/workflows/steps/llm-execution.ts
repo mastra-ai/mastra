@@ -2780,8 +2780,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               if (toolResultTripwire) endTripwireSpans(toolResultTripwire);
               // The keep decision belongs to whichever hook stopped the run: a rejected tool
               // result carries it on the TripWire, a blocked chunk only in the payload it
-              // published (the chunk itself is never collected).
-              const tripwirePersist = toolResultTripwire?.options?.persist ?? blockedStreamPersist;
+              // published (the chunk itself is never collected). Both can be set in one
+              // attempt, so the tripwire that exists decides: a keep needs one of them to
+              // ask for it rather than inheriting the other's.
+              const tripwirePersist = toolResultTripwire ? toolResultTripwire.options?.persist : blockedStreamPersist;
               if (toolResultTripwire && pubsub) {
                 await emitChunkEvent(pubsub, runId, {
                   type: 'tripwire',

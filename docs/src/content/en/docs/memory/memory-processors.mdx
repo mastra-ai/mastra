@@ -390,6 +390,8 @@ const { messages } = await memory.recall({ threadId: 'thread-1', resourceId: 'us
 
 `onAbort` receives the steps that completed before the cancellation and the assistant text streamed for the in-flight step. For the abort lifecycle itself, including durable runs aborted by `runId`, see the [`stream()` reference](/reference/streaming/agents/stream#aborting-a-run).
 
+A tripwire from `processToolResult` or `processOutputStream` is the exception on runs that aren't [durable or evented](/docs/harness/durable-agents). The stream ends at the hook, before output processors run, and that pass is what writes the thread. Those runs save nothing for either hook, on both settings, as they did before `persist` existed.
+
 ## Handling large attachments
 
 Some storage providers enforce record size limits that base64-encoded file attachments can exceed:
