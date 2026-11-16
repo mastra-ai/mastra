@@ -663,6 +663,16 @@ describe('built-in board and integration handlers', () => {
       expect((decision as { message: string }).message).toContain('#pullrequestreview-99');
     });
 
+    it.each(['done', 'canceled'])(
+      'does not prepare a Work binding for a %s card when changes are requested',
+      async stage => {
+        const decision = await defaultGithubRules.pullRequestReviewSubmitted?.(
+          bind(reviewContext(), ruleItem({ ...item, stages: [stage] })),
+        );
+        expect(decision).toMatchObject({ type: 'sendMessage', role: 'work', prepareBinding: false });
+      },
+    );
+
     it('stays quiet for reviews that are not asking for changes', async () => {
       const rule = defaultGithubRules.pullRequestReviewSubmitted;
       for (const state of ['approved', 'commented', 'dismissed']) {
@@ -816,6 +826,23 @@ describe('built-in board and integration handlers', () => {
       );
       expect(decision).toMatchObject({ type: 'sendMessage', role: 'work', prepareBinding: true, priority: 'high' });
     });
+
+    it.each(['done', 'canceled'])(
+      'does not prepare a Work binding for a %s card after a Factory verdict comment',
+      async stage => {
+        const decision = await defaultGithubRules.pullRequestCommentCreated?.(
+          bind(
+            commentContext({
+              actor: { type: 'github', login: 'factory[bot]', trusted: true, factoryAuthored: true },
+              issueComment: { id: 556, body: '**Verdict: Request changes**', author: 'factory[bot]' },
+            }),
+            ruleItem({ ...item, stages: [stage] }),
+          ),
+        );
+        expect(decision).toMatchObject({ type: 'sendMessage', role: 'work' });
+        expect(decision).not.toHaveProperty('prepareBinding');
+      },
+    );
 
     it('ignores a Factory verdict that approves, and a verdict only quoted in the body', async () => {
       const rule = defaultGithubRules.pullRequestCommentCreated;
