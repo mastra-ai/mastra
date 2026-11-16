@@ -4333,15 +4333,120 @@ describe('GithubRules issue labels', () => {
       const events = (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: card.id }))
         .filter(entry => entry.decision.type === 'routeEvent')
         .map(entry => entry.decision.event);
+      // On an issue card the event names the pull request that changed and that pull request's trust.
+      const pullRequest =
+        where === 'own card'
+          ? { pullRequestTrusted: false }
+          : { pullRequest: 'pull-request:github:10:pull-request:17', pullRequestTrusted: true };
       expect(events).toEqual([
-        { type: 'pull_request.updated', labels: { added: ['ready'], removed: [] } },
-        { type: 'pull_request.updated', assignees: { added: [], removed: ['ada'] } },
+        { type: 'pull_request.updated', labels: { added: ['ready'], removed: [] }, ...pullRequest },
+        { type: 'pull_request.updated', assignees: { added: [], removed: ['ada'] }, ...pullRequest },
       ]);
       if (where === 'own card') {
         // Routes read the card's labels and assignees: they are the pull request's current ones.
         const stored = (await workItems.get({ orgId: 'org-1', id: card.id }))!;
         expect({ labels: stored.workItem.labels, assignees: stored.workItem.metadata?.assignees }).toEqual({ labels: ['bug', 'ready'], assignees: [] });
       }
+    },
+  );
+
+  // A maintainer labels the pull request; the rule's `pullRequest.trusted` is its author's trust,
+  // on the pull request's own card and on the issue card it is linked to alike.
+  it.each([
+    ['a trusted author', 'its own card', false, true],
+    ['an outside author', 'its own card', true, false],
+    ['a trusted author', "the issue's card", false, true],
+    ['an outside author', "the issue's card", true, false],
+  ] as const)(
+    "moves %s's labelled pull request on %s by a rule requiring a trusted pull request only when the author is trusted",
+    async (_author, _card, outsider, moves) => {
+      const base = await setup('write');
+      const scope = { orgId: 'org-1', factoryProjectId: base.project.id };
+      await base.boards.createIntakeRoute(
+        scope,
+        {
+          name: 'Ready pull requests ship',
+          on: ['pull_request.updated'],
+          when: {
+            operator: 'AND',
+            conditions: [
+              { field: 'pullRequest.trusted', operator: 'equals', value: true },
+              { field: 'event.labels.added', operator: 'contains', value: 'ready' },
+            ],
+          },
+          target: { boardKey: 'work', phaseKey: 'done' },
+        },
+        'admin',
+      );
+      const boards = new ProjectBoardCache({ codeRegistry: createTriageWorkRegistry(), storage: base.boards, recheckMs: 0 });
+      const service = new GithubRules({
+        github: base.github,
+        sourceControl: base.sourceControl,
+        integrationStorage: base.integrationStorage,
+        projects: base.projects,
+        storage: base.workItems,
+        boards,
+        configVersion: 'factory-config-v1',
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: {} as never,
+        storage: base.workItems,
+        boards,
+        transitionService: new FactoryTransitionService({ storage: base.workItems, boards, configVersion: 'factory-config-v1' }),
+        intakeRoutes: base.boards,
+        ownerId: 'pull-request-label-trust',
+      });
+      const card =
+        _card === 'its own card'
+          ? (
+              await base.workItems.upsert({
+                orgId: 'org-1',
+                userId: 'user-1',
+                factoryProjectId: base.project.id,
+                input: {
+                  externalSource: {
+                    integrationId: 'github',
+                    type: 'pull-request',
+                    externalId: 'github-pr:17',
+                    url: 'https://github.com/acme/repo/pull/17',
+                  },
+                  title: 'PR 17',
+                  board: 'work',
+                  stages: ['intake'],
+                  sessions: {},
+                  metadata: { number: 17, authorTrusted: !outsider },
+                },
+              })
+            ).item
+          : await createLinkedIssue(base.workItems, base.project.id, ['intake']);
+      if (_card !== 'its own card') {
+        await base.workItems.attachSource({
+          orgId: 'org-1',
+          id: card.id,
+          source: {
+            integrationId: 'github',
+            type: 'pull-request',
+            externalId: 'github:10:pull-request:17',
+            url: 'https://github.com/acme/repo/pull/17',
+          },
+          metadata: { state: 'open' },
+          // How linking records an outside author's pull request on the issue's card.
+          ...(outsider
+            ? {
+                cardMetadata: (metadata: Record<string, unknown>) => ({
+                  ...metadata,
+                  [UNTRUSTED_PULL_REQUESTS_KEY]: ['github:pull-request:github:10:pull-request:17'],
+                }),
+              }
+            : {}),
+        });
+      }
+
+      await service.ingest(pullRequestChanged('labeled', 'label-ready', { label: { name: 'ready' } }));
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:01Z'));
+
+      expect((await base.workItems.get({ orgId: 'org-1', id: card.id }))?.stages).toEqual(moves ? ['done'] : card.stages);
     },
   );
 

@@ -1737,7 +1737,7 @@ describe('GitLab label and assignee changes on a card', () => {
   });
 
   it.each([
-    { case: "the merge request's own card", mergeRequest: true, events: [{ type: 'pull_request.updated', labels: { added: ['ship'], removed: [] } }] },
+    { case: "the merge request's own card", mergeRequest: true, events: [{ type: 'pull_request.updated', labels: { added: ['ship'], removed: [] }, pullRequestTrusted: true }] },
     // Neither filed nor attached: another merge request that happens to use the card's branch name.
     { case: 'a card whose session only builds on its branch', mergeRequest: false, events: [] },
   ])("hands a merge request's change to $case", async ({ mergeRequest, events }) => {
