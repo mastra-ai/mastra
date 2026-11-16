@@ -95,18 +95,36 @@ type Ttl = '5m' | '1h';
  * `wanted` when it fits, `'5m'` when a mark before it is shorter, `null` when a mark after it is longer.
  */
 function allowedTtl(prompt: LanguageModelV2Prompt, index: number, wanted: Ttl | undefined): Ttl | undefined | null {
+  const position = anthropicSendOrder(prompt);
   let shortestBefore = Infinity;
   let longestAfter = 0;
   prompt.forEach((message, i) => {
     if (i === index) return;
     for (const ttl of anthropicTtls(message)) {
-      if (i < index) shortestBefore = Math.min(shortestBefore, ttlSeconds(ttl));
+      if (position[i]! < position[index]!) shortestBefore = Math.min(shortestBefore, ttlSeconds(ttl));
       else longestAfter = Math.max(longestAfter, ttlSeconds(ttl));
     }
   });
   const seconds = Math.min(ttlSeconds(wanted), shortestBefore);
   if (seconds < longestAfter) return null;
   return seconds === ttlSeconds(wanted) ? wanted : '5m';
+}
+
+/**
+ * Each message's position in the request Anthropic receives. The provider sends the first run of consecutive
+ * system messages as the top-level system prompt, ahead of every message, wherever that run is in the prompt.
+ * Later system messages stay in place.
+ */
+function anthropicSendOrder(prompt: LanguageModelV2Prompt): number[] {
+  const start = prompt.findIndex(message => message.role === 'system');
+  if (start < 0) return prompt.map((_, i) => i);
+  let end = start;
+  while (prompt[end + 1]?.role === 'system') end++;
+  const runLength = end - start + 1;
+  return prompt.map((_, i) => {
+    if (i >= start && i <= end) return i - start;
+    return i < start ? i + runLength : i;
+  });
 }
 
 function ttlSeconds(ttl: unknown): number {

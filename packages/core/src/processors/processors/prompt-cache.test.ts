@@ -237,6 +237,31 @@ describe('PromptCacheProcessor', () => {
         expect(result[0]!.providerOptions).toBeUndefined();
       });
 
+      // Anthropic sends the first run of system messages as the top-level system prompt, ahead of every message.
+      it('checks order as Anthropic sends it, with the first system messages moved to the front', () => {
+        const prompt: LanguageModelV2Prompt = [
+          { role: 'user', content: [{ type: 'text', text: 'hi' }], providerOptions: oneHour },
+          { role: 'system', content: 'added after the user message' },
+        ];
+
+        expect(runWith(undefined, prompt)).toBe(prompt);
+        expect(runWith('1h', prompt)[1]!.providerOptions).toEqual(oneHour);
+      });
+
+      it('keeps later system messages where they are', () => {
+        const prompt: LanguageModelV2Prompt = [
+          { role: 'system', content: 'a' },
+          { role: 'user', content: [{ type: 'text', text: 'x' }], providerOptions: mark },
+          { role: 'system', content: 'b' },
+          { role: 'user', content: [{ type: 'text', text: 'y' }] },
+        ];
+
+        // System b stays after the caller's 5m mark on x, so a 1h mark on it would be out of order.
+        expect(runWith('1h', prompt)[2]!.providerOptions).toEqual({
+          anthropic: { cacheControl: { type: 'ephemeral', ttl: '5m' } },
+        });
+      });
+
       it('marks both with 1h when the caller set none', () => {
         const prompt: LanguageModelV2Prompt = [
           { role: 'system', content: 'a' },
