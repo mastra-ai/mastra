@@ -3699,7 +3699,8 @@ describe('FactoryDecisionDispatcher', () => {
   });
 
   async function prepareDeliverScenario(idempotencyKey: string) {
-    const storage = (await createFactoryStorageForTests()).workItems;
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
       role: 'work',
@@ -3727,7 +3728,7 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffKey: 'kickoff-null',
       kickoffMessage: null,
     });
-    return { storage, item, transitionService };
+    return { storage, item, transitionService, audit: seed.audit };
   }
 
   it('does not resend a queued kickoff that surfaces once the ending run finishes', async () => {
@@ -3752,6 +3753,51 @@ describe('FactoryDecisionDispatcher', () => {
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(decision?.status).toBe('succeeded');
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
+  });
+
+  it('records the incoming role’s run while the hand-off is still in flight', async () => {
+    // The kickoff is delivered onto a run that is still going, so the turn that
+    // carried it has not ended. The run belongs to this role from the moment the
+    // kickoff reaches the session: run state has to read the new stage as busy,
+    // not "last run ended, nothing started" until the carrying turn ends.
+    const { storage, transitionService, audit } = await prepareDeliverScenario('skill-hand-off-run-start');
+    const { controller, session, emitAgentEnd } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'deliver' }),
+      // The queued copy is not in the thread yet and the carrying run is still
+      // live, which is exactly the mid-turn hand-off.
+      dropDeliveredSignal: true,
+      // Once that run ends, the dispatcher follows the boundary instead of
+      // trusting the ack, and this wakes the run it sends next.
+      acceptRedeliveredSignal: true,
+    });
+    controller.listActiveThreadRuns = vi.fn(() => [{ runId: 'run-1', threadId: 'thread-1' }]);
+    observeSessionRunEnd(session, { audit });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      boards: autoStartingBoards(),
+      transitionService,
+      storage,
+      audit,
+      ownerId: 'worker-1',
+    });
+
+    const tick = dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    await vi.waitFor(async () => {
+      const events = (await audit.list({ orgId: 'org-1' })).events;
+      expect(events.filter(event => event.action === 'factory.run.started').map(event => event.metadata)).toEqual([
+        expect.objectContaining({ role: 'work' }),
+      ]);
+      expect(events.filter(event => event.action === 'factory.run.ended')).toEqual([]);
+    });
+
+    emitAgentEnd('complete');
+    await tick;
+    await vi.waitFor(async () => {
+      const events = (await audit.list({ orgId: 'org-1' })).events;
+      expect(events.filter(event => event.action === 'factory.run.ended').map(event => event.metadata)).toEqual([
+        expect.objectContaining({ role: 'work', reason: 'complete' }),
+      ]);
+    });
   });
 
   it('drops a dropped kickoff instead of resending it once the card has moved to another stage', async () => {

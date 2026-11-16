@@ -1605,6 +1605,21 @@ export class FactoryDecisionDispatcher {
 
           try {
             let settled = await sendKickoff();
+            // The run starts the moment its kickoff reaches the session, not when the
+            // deliver loop exits. Delivered into a turn already in flight this is this
+            // role's run from that instant: `run.endReason` is still unset, so the run
+            // opens with no observed end instead of being closed in the same tick with
+            // the carrying run's reason. Run state then reads the new stage as busy
+            // while the hand-off is still running, rather than "last run ended,
+            // nothing started" until the turn ends.
+            await this.#recordRunStart(
+              session,
+              binding,
+              deliveryId,
+              record.approvedBy ?? undefined,
+              run.endReason,
+              item?.title,
+            );
             while (settled.action === 'deliver') {
               // `deliver` means the signal was queued onto a run that was already
               // in flight. If that run ends before draining its queue the prompt
@@ -1635,14 +1650,6 @@ export class FactoryDecisionDispatcher {
               settled = await sendKickoff();
             }
             if (goal) await this.#remindPhaseGoal(record, goal, session, binding, requestContext);
-            await this.#recordRunStart(
-              session,
-              binding,
-              deliveryId,
-              record.approvedBy ?? undefined,
-              run.endReason,
-              item?.title,
-            );
             this.#reviewWatched.add(record);
             await this.#reviewStatus(record, decision, { phase: 'reviewing', startedAt: since });
             // A landed `deliver` still runs on the in-flight session, so the run's
