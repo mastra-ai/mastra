@@ -62,13 +62,9 @@ export function cardSourceMetadata(card: CardRepositoryFacts): Record<string, un
   return { ...card.metadata, ...card.workItem?.metadata };
 }
 
-/**
- * `resolved`: the card's repository is known, so the card records it.
- * `environment`: several could hold it; the session starts in the environment's first and the run determines which.
- */
 export type CardSessionRepository =
   | { kind: 'resolved'; repository: LinkedRepositoryPayload }
-  | { kind: 'environment'; candidates: LinkedRepositoryPayload[] }
+  | { kind: 'firstInEnvironment'; candidates: LinkedRepositoryPayload[] }
   | { kind: 'unavailable'; reason: string };
 
 /** Where a card's own session can start: the repository its source names, else the one it could live in. */
@@ -86,7 +82,7 @@ export function cardSessionRepository(
     const [only] = compatible;
     return compatible.length === 1 && only
       ? { kind: 'resolved', repository: only }
-      : { kind: 'environment', candidates: compatible };
+      : { kind: 'firstInEnvironment', candidates: compatible };
   }
   const named = compatible.find(candidate => candidate.slug === slug);
   if (named) return { kind: 'resolved', repository: named };
@@ -96,7 +92,6 @@ export function cardSessionRepository(
   };
 }
 
-/** The candidate a rule run is filed under: the first, by position, of those in the environment. */
 export function firstEnvironmentRepository(
   candidates: LinkedRepositoryPayload[],
   environment: FactoryEnvironmentRepository[],

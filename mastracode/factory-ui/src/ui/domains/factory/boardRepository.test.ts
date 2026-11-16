@@ -203,7 +203,7 @@ describe('cardSessionRepository', () => {
     const repositories = [repository('github', '101', 'acme/one'), repository('gitlab', '202', 'acme/two')];
     const result = cardSessionRepository(repositories, { source: 'manual' }, undefined);
 
-    expect(result.kind === 'environment' && result.candidates.map(candidate => candidate.slug)).toEqual([
+    expect(result.kind === 'firstInEnvironment' && result.candidates.map(candidate => candidate.slug)).toEqual([
       'acme/one',
       'acme/two',
     ]);
