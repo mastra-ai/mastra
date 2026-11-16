@@ -922,6 +922,29 @@ describe('storage-backed ExecutionFence', () => {
     fence.stopHeartbeat();
   });
 
+  // A successor that took the run over and then released it leaves a record with no lease, as the execution's own
+  // release would, but under the successor's owner and generation. That record is still a takeover. (#30206)
+  it('marks an execution lost when a takeover already finished and released the run (#30206)', async () => {
+    vi.useFakeTimers();
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    const lost = vi.fn();
+    fence.onLost(lost);
+    const successor = await storageClaim(workflowsStore, 'run-1', 'takeover');
+    expect(await successor.settle(async () => {})).toBe('owned');
+    expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
+      ownerId: successor.executionId,
+      generation: successor.generation,
+      leaseExpiresAt: null,
+    });
+
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+
+    expect(fence.isLost()).toBe(true);
+    expect(lost).toHaveBeenCalledWith(expect.objectContaining({ id: EXECUTION_SUPERSEDED_ERROR_ID }));
+    fence.stopHeartbeat();
+  });
+
   // Whether a failed renewal came from the execution's own release is decided by what the backend said about the
   // claim as it was released, never by when the renewal's response arrives. (#30206)
   it.each(['storage', 'lease'] as const)(
@@ -1013,6 +1036,53 @@ describe('storage-backed ExecutionFence', () => {
     expect(fence.isLost()).toBe(false);
     await next.settle(async () => {});
   });
+
+  // Another release of the same claim in this process: `shared`, a worker's releaseSharedClaim of the run it settled;
+  // `sibling`, the coordinator settling while a participant fence still renews. The next execution claims the run
+  // before the held renewal reaches the store, which then reports that claim. The release, not a takeover, explains
+  // the failure, so this fence gets one renewal of grace; it never settled, so its next renewal reports the loss.
+  // (#30206)
+  it.each(['shared', 'sibling'] as const)(
+    'gives a fence one renewal of grace when a %s release in this process lands before the next claim (#30206)',
+    async path => {
+      vi.useFakeTimers();
+      const { storage, workflowsStore } = await stores();
+      const mastra = new Mastra({ storage, logger: false });
+      const coordinator = await storageClaim(workflowsStore, 'run-1');
+      if (path === 'sibling') coordinator.stopHeartbeat();
+      const fence = path === 'sibling' ? await ExecutionFence.follow(mastra, 'run-1', coordinator.claim) : coordinator;
+      if (!fence) throw new Error('expected a participant fence for the claim');
+      const lost = vi.fn();
+      fence.onLost(lost);
+      const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+      let deliver!: () => void;
+      const delivery = new Promise<void>(resolve => (deliver = resolve));
+      let renewed: boolean | undefined;
+      vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementationOnce(async args => {
+        await delivery;
+        const result = await renew(args);
+        renewed = result.renewed;
+        return result;
+      });
+
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+      if (path === 'shared') await ExecutionFence.releaseSharedClaim(mastra, 'run-1', coordinator.claim, 'settled');
+      else expect(await coordinator.settle(async () => {})).toBe('owned');
+      const next = await storageClaim(workflowsStore, 'run-1');
+      deliver();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(renewed).toBe(false);
+      expect(fence.isLost()).toBe(false);
+      expect(lost).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+      expect(fence.isLost()).toBe(true);
+      expect(lost).toHaveBeenCalledWith(expect.objectContaining({ id: EXECUTION_SUPERSEDED_ERROR_ID }));
+      fence.stopHeartbeat();
+      await next.settle(async () => {});
+    },
+  );
 
   // A release that failed leaves the claim with this execution, so a renewal that succeeded still extends its lease.
   // `shared`: a worker's releaseSharedClaim; `sibling`: another fence of the execution in this process settled. (#30206)

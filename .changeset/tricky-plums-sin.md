@@ -10,3 +10,4 @@ This happened with storage that tracks which execution owns a run, most often wh
 
 - With storage that does not track run ownership, a late renewal after a run suspends still reports the run as lost, as before.
 - When an evented worker finished or suspended a run but the result never reached the caller, the caller now gets the loss error up to one lease-renewal interval (5s) later than before. A run abandoned by a worker in another process is also reported up to 5s later. A run abandoned in this process is reported as before.
+- With storage that tracks run ownership, an execution that outlives its claim's release (for example a worker still running after the run suspended) keeps publishing for up to one lease-renewal interval longer before its events are dropped.
