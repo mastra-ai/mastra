@@ -714,3 +714,62 @@ describe('a follow-up sent while another runtime executes the parked run', () =>
     }
   });
 });
+
+/**
+ * Work queued for after a run (`queueMessage`, `queueSignal`) starts a new run once the thread's run has ended. A run parked on a tool's suspend() has not ended, even with auto-resume on: only input for
+ * the run itself (a sent message or a continuation) answers it. (#30190)
+ */
+describe('work queued for after a run that parks with auto-resume on', () => {
+  // Technical: the #30190 release checked `#hasPendingThreadWork`, which counts the idle queue too. A message queued
+  // with `queueSignal` while the run still worked started a turn once the run parked, while the same message queued a
+  // moment later stayed queued. (#30190)
+  it('stays queued when the run parks on a suspended tool, like work queued after it parked (#30190)', async () => {
+    const h = setup();
+    const threadId = 'continuation-thread';
+    const resourceId = 'continuation-user';
+    const turns: unknown[] = [];
+    const agent = {
+      id: 'continuation-agent',
+      getDefaultOptions: async () => ({ autoResumeSuspendedTools: true }),
+      stream: vi.fn(async (_signal: unknown, options: { runId: string }) => {
+        turns.push(options);
+        return { runId: options.runId };
+      }),
+    } as unknown as Agent<any, any, any, any>;
+    const first = h.makeStream();
+    await first.ready;
+    try {
+      await h.runtime.registerRun(agent, first.output, h.options, h.pubsub, { continuation: 'across-suspension' });
+      await vi.waitFor(() => expect(h.registrations()).toHaveLength(1));
+
+      // Queued while the run still works: it waits for the run to end.
+      const queuedWhileRunning = h.runtime.queueSignal(
+        agent,
+        { type: 'user-message', contents: 'after this run' },
+        { resourceId, threadId },
+        h.pubsub,
+      );
+      expect((await queuedWhileRunning.accepted).action).toBe('deliver');
+
+      await h.chunk('tool-call-suspended', { toolCallId: 'call-1', toolName: 'ask', suspendPayload: {} });
+      await vi.waitFor(() => expect(first.output.status).toBe('suspended'));
+      await vi.waitFor(() => expect(h.suspensions()).toHaveLength(1));
+
+      // Queued after the run parked, the same way.
+      const queuedAfterPark = h.runtime.queueSignal(
+        agent,
+        { type: 'user-message', contents: 'after this run too' },
+        { resourceId, threadId },
+        h.pubsub,
+      );
+      expect((await queuedAfterPark.accepted).action).toBe('deliver');
+      // Long enough for a turn the queued work started to begin.
+      await new Promise(resolve => setTimeout(resolve, 300));
+      expect(turns).toHaveLength(0);
+      expect(h.runtime.getActiveThreadRunId({ threadId, resourceId }, h.pubsub)).toBe(h.runId);
+    } finally {
+      first.cleanup();
+      await h.pubsub.close();
+    }
+  });
+});

@@ -627,6 +627,93 @@ describeForAllEngines(
       },
     );
 
+    // Technical: with no call-level `autoResumeSuspendedTools`, the #30190 release awaits the agent's default
+    // options before it starts the follow-up turn. An explicit resume with `autoResumeSuspendedTools: false` can
+    // update the same record and park the run again during that await. The record is unchanged, so the release read
+    // the default it had awaited (on) and started the turn the run had just turned off. (#30190)
+    it('keeps a follow-up queued when an explicit resume turns auto-resume off while the agent defaults still resolve (#30190)', async () => {
+      const ANSWER_FOLLOW_UP = 'Here is my queued answer';
+      const seen = { answers: [] as string[] };
+      const askTool = createTool({
+        id: 'ask',
+        description: 'Asks the user a question',
+        inputSchema: z.object({ question: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.object({ answer: z.string() }),
+        execute: async ({ question }, context) => {
+          if (!context?.agent?.resumeData) return context?.agent?.suspend({ message: question });
+          seen.answers.push(context.agent.resumeData.answer);
+          // The answered question leads to another, which parks the run again.
+          return context.agent.suspend({ message: 'second?' });
+        },
+      });
+      // Agent defaults that resolve asynchronously, as ones read from a settings store do. Once the follow-up is
+      // sent, the next lookup waits until the test lets it answer (auto-resume on).
+      let holdNextLookup = false;
+      let heldLookups = 0;
+      let answerHeldLookup!: () => void;
+      const lookupAnswered = new Promise<void>(resolve => (answerHeldLookup = resolve));
+      onTestFinished(() => answerHeldLookup());
+      const defaultOptions = async () => {
+        if (!holdNextLookup) return {};
+        holdNextLookup = false;
+        heldLookups++;
+        await lookupAnswered;
+        return { autoResumeSuspendedTools: true };
+      };
+      const memory = new MockMemory();
+      const shared = await createSharedAgent(getMock(), { tools: { askTool }, memory, defaultOptions, engine });
+      const threadId = globalThis.crypto.randomUUID();
+      const resourceId = globalThis.crypto.randomUUID();
+
+      const llm = getMock();
+      // Registered first: a turn the follow-up started would answer it.
+      llm.onMessage(new RegExp(ANSWER_FOLLOW_UP), { content: 'FOLLOW_UP_TURN' });
+
+      const first = await runLoopScenario({
+        engine,
+        llm,
+        sharedAgent: shared,
+        prompt: 'Ask me a question',
+        memory,
+        threadId,
+        resourceId,
+        fixtures: mock => {
+          mock.onMessage(/Ask me a question/, {
+            toolCalls: [{ id: 'call-q1', name: 'ask', arguments: { question: 'first?' } }],
+          });
+        },
+        collectChunks: true,
+      });
+      expect(first.chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
+      const runId = first.output.runId;
+      const view = await shared.agent.subscribeToThread({ resourceId, threadId });
+      onTestFinished(() => view.unsubscribe());
+      const requestsWithFollowUp = () =>
+        llm.getRequests().filter(request => JSON.stringify(request.body.messages).includes(ANSWER_FOLLOW_UP)).length;
+
+      holdNextLookup = true;
+      await shared.agent.sendMessage(ANSWER_FOLLOW_UP, { resourceId, threadId }).accepted;
+      await vi.waitFor(() => expect(heldLookups).toBe(1));
+
+      // While the defaults resolve, the user answers through an explicit resume that turns auto-resume off.
+      const resumed = await shared.agent.resumeStream(
+        { answer: 'first answer' },
+        { runId, toolCallId: 'call-q1', autoResumeSuspendedTools: false },
+      );
+      const resumedChunks: ChunkType[] = [];
+      for await (const chunk of resumed.fullStream) resumedChunks.push(chunk);
+      expect(seen.answers).toEqual(['first answer']);
+      expect(resumedChunks.some(c => c.type === 'tool-call-suspended')).toBe(true);
+
+      answerHeldLookup();
+      // Long enough for a turn the follow-up started to reach the model. A new Inngest turn takes over a second.
+      await new Promise(resolve => setTimeout(resolve, engine === 'inngest' ? 3_000 : 500));
+      expect(requestsWithFollowUp()).toBe(0);
+      expect(view.activeRunId()).toBe(runId);
+      expect(seen.answers).toEqual(['first answer']);
+    });
+
     // Technical: the #30190 fix lets a follow-up start the next turn once an auto-resume run has
     // parked on suspend(). An approval suspension is excluded: consent arrives through the
     // approval APIs, so with auto-resume on the follow-up still waits on the parked run, and

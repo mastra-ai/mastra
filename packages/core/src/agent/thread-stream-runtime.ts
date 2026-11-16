@@ -2203,11 +2203,15 @@ export class AgentThreadStreamRuntime {
    * queued idle signals.
    */
   #hasPendingThreadWork(state: AgentThreadRuntimeState, key: string): boolean {
+    return this.#hasPendingRunInput(state, key) || (state.pendingIdleSignalsByThread.get(key)?.length ?? 0) > 0;
+  }
+
+  /** Queued input for the thread's current run: sent signals and continuations, not work queued for after it. */
+  #hasPendingRunInput(state: AgentThreadRuntimeState, key: string): boolean {
     return (
       (state.pendingSignalsByThread.get(key)?.length ?? 0) > 0 ||
       (state.preRunSignalsByThread.get(key)?.length ?? 0) > 0 ||
-      (state.pendingContinuationsByThread.get(key)?.length ?? 0) > 0 ||
-      (state.pendingIdleSignalsByThread.get(key)?.length ?? 0) > 0
+      (state.pendingContinuationsByThread.get(key)?.length ?? 0) > 0
     );
   }
 
@@ -4439,6 +4443,10 @@ export class AgentThreadStreamRuntime {
    * Without auto-resume, the message keeps waiting for the explicit resume (an
    * AgentController prompt waits for its answer), and a run parked on a tool
    * approval keeps holding the thread: consent arrives through the approval APIs.
+   *
+   * Only input for the run starts the turn: a sent message or a continuation.
+   * Work queued for after the run (`queueMessage`, `queueSignal`) waits for the
+   * run to end, as it does when queued after the run parked.
    */
   async #startQueuedTurnAfterParkedRun(
     state: AgentThreadRuntimeState,
@@ -4446,9 +4454,13 @@ export class AgentThreadStreamRuntime {
     key: string,
     record: AgentThreadRunRecord<any>,
   ): Promise<void> {
+    // The options the decision below reads. A resume of this record replaces them (`continueRun`), and can park the
+    // run again with auto-resume off while this check awaits; that park checks again with the new options.
+    const options = record.streamOptions;
     const canStart = () =>
       // A resume registers a new record under the run id; that one holds the thread now.
       state.threadRunsById.get(record.runId) === record &&
+      record.streamOptions === options &&
       record.lifecycle === 'suspended' &&
       // A resume that another process registered executes the run there; this record only looks parked. That
       // process takes the follow-up from the `signal-enqueued` this one published.
@@ -4456,14 +4468,13 @@ export class AgentThreadStreamRuntime {
       !this.#isApprovalSuspendedRun(state, record.runId) &&
       // Shutdown hands parked runs back as they are; it starts no new turns.
       !state.shutdownStreams.has(record.streamId) &&
-      this.#hasPendingThreadWork(state, key);
+      this.#hasPendingRunInput(state, key);
     if (!canStart()) return;
     // A call's own option wins over the agent's default, as when the run was started.
     const autoResume =
-      record.streamOptions.autoResumeSuspendedTools ??
-      (await record.agent.getDefaultOptions({ requestContext: record.streamOptions.requestContext }))
-        .autoResumeSuspendedTools;
-    if (!autoResume) return;
+      options.autoResumeSuspendedTools ??
+      (await record.agent.getDefaultOptions({ requestContext: options.requestContext })).autoResumeSuspendedTools;
+    if (!autoResume || !canStart()) return;
     // A step that raises a suspension can end its segment while a sibling tool call of that step still runs. The
     // next turn waits for it rather than run beside it on the thread.
     let owners = this.#runStepOwners(state, record);
