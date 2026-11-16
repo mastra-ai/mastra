@@ -805,6 +805,23 @@ describe('AccountRotationProcessor.processAPIError', () => {
     expect(active?.id).not.toBe(seeded.accountA.id);
     expect(active?.id).not.toBe(seeded.accountB.id);
   });
+
+  it('switches to the account after the failed one in switch order, not the top of the pool', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const accountC = await addThirdAccount(seeded.storage);
+    // Switch order C, A, B with A active: B follows A, C is only reached by wrapping.
+    seeded.storage.reorderAccounts(PROVIDER, [accountC.id, seeded.accountA.id, seeded.accountB.id]);
+    seeded.storage.activateAccount(PROVIDER, seeded.accountA.id);
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+    const args = makeArgs({ error: apiError(429) });
+
+    expect(await processor.processAPIError(args as any)).toEqual({ retry: true });
+    expect(seeded.storage.getActiveAccount?.(PROVIDER)?.id).toBe(seeded.accountB.id);
+    expect(args.writer.custom.mock.calls[0][0].data).toMatchObject({
+      from: { id: seeded.accountA.id },
+      to: { id: seeded.accountB.id },
+    });
+  });
 });
 
 function makeRouteContext(options: {

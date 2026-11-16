@@ -663,9 +663,11 @@ export class AccountRotationProcessor implements Processor {
       return this.declarePoolUnavailable(args, providerId, 'pool-exhausted');
     }
 
-    // If the selected account was removed elsewhere, even a single survivor
-    // is still untried. Resume from the freshly loaded global cursor.
-    const candidates = active ? accounts : orderAccountsFromActive(accounts, store.getActiveAccount?.(providerId)?.id);
+    // Walk switch order from the account that failed, so the next account is
+    // the one after it rather than the top of the pool. If the selected
+    // account was removed elsewhere, even a single survivor is still untried:
+    // resume from the freshly loaded global cursor.
+    const candidates = orderAccountsFromActive(accounts, active?.id ?? store.getActiveAccount?.(providerId)?.id);
     const nextCandidate = candidates.find(account => !tried.has(account.id));
 
     const next = nextCandidate ? store.activateAccount?.(providerId, nextCandidate.id) : undefined;
