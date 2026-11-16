@@ -42,9 +42,16 @@ const toAttribute = value => {
   return `{${JSON.stringify(value)}}`;
 };
 
-const toJsx = (node, Fragment) => {
+const scaleStroke = (value, strokeScale) => {
+  if (strokeScale === 1) return value;
+  const scaled = Number((Number(value) * strokeScale).toFixed(4));
+  if (!Number.isFinite(scaled)) throw new Error(`Cannot scale strokeWidth ${String(value)}`);
+  return typeof value === 'string' ? String(scaled) : scaled;
+};
+
+const toJsx = (node, Fragment, strokeScale = 1) => {
   if (node === null || node === undefined || node === false) return '';
-  if (Array.isArray(node)) return node.map(child => toJsx(child, Fragment)).join('');
+  if (Array.isArray(node)) return node.map(child => toJsx(child, Fragment, strokeScale)).join('');
   if (typeof node.type !== 'string' && node.type !== Fragment) {
     throw new Error(`Unexpected element type in icon shapes: ${String(node.type)}`);
   }
@@ -52,9 +59,9 @@ const toJsx = (node, Fragment) => {
   const tag = node.type === Fragment ? '' : node.type;
   const { children, ...props } = node.props;
   const attributes = Object.entries(props)
-    .map(([key, value]) => ` ${key}=${toAttribute(value)}`)
+    .map(([key, value]) => ` ${key}=${toAttribute(key === 'strokeWidth' ? scaleStroke(value, strokeScale) : value)}`)
     .join('');
-  const inner = toJsx(children, Fragment);
+  const inner = toJsx(children, Fragment, strokeScale);
 
   return inner ? `<${tag}${attributes}>${inner}</${tag}>` : `<${tag}${attributes} />`;
 };
@@ -85,11 +92,7 @@ try {
     const element = module[name].type.render({}, null);
     const shapes = element.props.renderShapes ? element.props.renderShapes(maskToken) : element.props.children;
     const inset = opticalInset[name] ?? 0;
-    const strokeScale = (24 + 2 * inset) / 24;
-    const jsx = toJsx(shapes, Fragment).replace(
-      /strokeWidth=(?:"([\d.]+)"|\{([\d.]+)\})/g,
-      (_, quoted, braced) => `strokeWidth="${Number((Number(quoted ?? braced) * strokeScale).toFixed(4))}"`,
-    );
+    const jsx = toJsx(shapes, Fragment, (24 + 2 * inset) / 24);
     const body = Array.isArray(shapes) ? `<>${jsx}</>` : jsx;
     const parameter = jsx.includes('${maskId}') ? 'maskId' : '()';
 
