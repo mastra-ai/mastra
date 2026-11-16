@@ -151,25 +151,6 @@ export const ControlGroup: Story = {
   ),
 };
 
-/**
- * A setting that is on or off is a `Switch` alone: no "Enabled"/"Disabled" text beside it, since the switch already
- * shows its state. When the viewer can't change it, keep the switch and disable it (`viewOnly` on the row, or
- * `disabled` on the switch), rather than swapping it for text. Text in the control slot is for a status the user
- * doesn't set (a `Badge`), not for a toggle.
- */
-export const Toggle: Story = {
-  render: () => (
-    <>
-      <SettingsRow label="Notifications" description="Notify when a run finishes">
-        <Switch aria-label="Notifications" defaultChecked />
-      </SettingsRow>
-      <SettingsRow label="Observability" description="Only admins can change this" viewOnly>
-        <Switch aria-label="Observability" defaultChecked />
-      </SettingsRow>
-    </>
-  ),
-};
-
 export const LongDescription: Story = {
   render: () => (
     <SettingsRow
