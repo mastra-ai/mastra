@@ -33,12 +33,12 @@ import type {
 import { buildKnowledgeInstructions } from './instructions';
 import type { KnowledgeInstructionsOption } from './instructions';
 import { reindexKnowledgeLinks } from './links';
-import { reembedKnowledge } from './reembed';
-import type { KnowledgeReembedOptions, KnowledgeReembedResult } from './reembed';
 import { buildKnowledgePageTools } from './page-tools';
 import { DEFAULT_MAX_PINS, DEFAULT_PINNED_MAX_TOKENS, knowledgeDeliveredPins } from './pinned';
 import type { PinBudget, PinEntry } from './pinned';
 import { PINNED_READ_MEMO_KEY } from './pinned-state-processor';
+import { reembedKnowledge } from './reembed';
+import type { KnowledgeReembedOptions, KnowledgeReembedResult } from './reembed';
 import { KnowledgeRun, knowledgeRunPrincipals } from './run';
 import type { KnowledgeRunContext } from './run';
 import { KnowledgeScopeRuntime } from './scope-runtime';
