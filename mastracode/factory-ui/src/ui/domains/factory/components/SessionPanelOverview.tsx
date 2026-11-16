@@ -71,7 +71,7 @@ export function SessionPanelOverview({ workspace }: { workspace: (slots?: Worksp
     item,
     subscriptions: links.subscriptions,
     provider,
-    shownElsewhere: [sourceUrl, ownRequest?.url, ...related.map(relatedItem => relatedItem.url ?? undefined)],
+    shownElsewhere: [sourceUrl, ownRequest?.url],
   });
   const requestsNoun = changeRequestsNoun(repository ? [provider] : requests.map(request => request.provider));
   const moved = item.stageHistory.some(entry => entry.exitedAt);
