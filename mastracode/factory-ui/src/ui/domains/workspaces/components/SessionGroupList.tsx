@@ -10,7 +10,7 @@ import { IconCircleDashed } from '@mastra/playground-ui/icons/central/IconCircle
 import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
 import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
 import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
-import { IconBubbleWide } from '@mastra/playground-ui/icons/central/IconBubbleWide';
+import { IconChatBubble7 } from '@mastra/playground-ui/icons/central/IconChatBubble7';
 
 const GROUP_ROW_INCREMENT = 20;
 
@@ -19,8 +19,8 @@ type ToggleName = 'more' | 'less';
 const GROUP_ICONS: Record<SessionGroupIcon, ReactNode> = {
   board: <IconKanbanView />,
   review: <IconPullRequest />,
-  user: <IconBubbleWide />,
-  slack: <IconBubbleWide />,
+  user: <IconChatBubble7 />,
+  slack: <IconChatBubble7 />,
   status: <IconCircleDashed />,
   owner: <IconUser />,
   all: null,

@@ -14,7 +14,7 @@ import { Txt } from '@/ds/components/Txt';
 import { IconArchive } from '@/ds/icons/central/IconArchive';
 import { IconLayoutGrid1 } from '@/ds/icons/central/IconLayoutGrid1';
 import { IconPencil } from '@/ds/icons/central/IconPencil';
-import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
 import { IconUnarchiv } from '@/ds/icons/central/IconUnarchiv';
 
 export function TraceSignalSettingsButton({ open, onClick }: { open: boolean; onClick: () => void }) {
@@ -32,7 +32,7 @@ export function TraceSignalSettingsButton({ open, onClick }: { open: boolean; on
       aria-expanded={open}
       onClick={onClick}
     >
-      <IconSettingsGear1 aria-hidden="true" />
+      <IconSettingsGear5 aria-hidden="true" />
     </Button>
   );
 }
@@ -43,7 +43,7 @@ export function TraceSignalSettingsPanel({ onClose }: { onClose: () => void }) {
       <DataDetailsPanel>
         <DataDetailsPanel.Header>
           <DataDetailsPanel.Heading className="items-center text-subheading text-foreground">
-            <IconSettingsGear1 aria-hidden="true" /> Trace signal settings
+            <IconSettingsGear5 aria-hidden="true" /> Trace signal settings
           </DataDetailsPanel.Heading>
           <DataDetailsPanel.CloseButton onClick={onClose} tooltip="Close settings" />
         </DataDetailsPanel.Header>

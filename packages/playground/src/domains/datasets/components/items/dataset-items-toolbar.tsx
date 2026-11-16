@@ -7,7 +7,7 @@ import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/S
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
 import { IconArrowOutOfBox } from '@mastra/playground-ui/icons/central/IconArrowOutOfBox';
-import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
 import { IconFolderAddRight } from '@mastra/playground-ui/icons/central/IconFolderAddRight';
 import { IconMoveFolder } from '@mastra/playground-ui/icons/central/IconMoveFolder';
@@ -102,7 +102,7 @@ export function DatasetItemsToolbar({
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
         <Button>
-          {selectedCount} selected <IconChevronBottom />
+          {selectedCount} selected <IconChevronDownMedium />
         </Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" className="w-72">
@@ -163,7 +163,7 @@ export function DatasetItemsToolbar({
             <DropdownMenu>
               <DropdownMenu.Trigger asChild>
                 <Button size="icon-md" aria-label="Dataset actions menu">
-                  <IconChevronBottom />
+                  <IconChevronDownMedium />
                 </Button>
               </DropdownMenu.Trigger>
               <DropdownMenu.Content align="end">
