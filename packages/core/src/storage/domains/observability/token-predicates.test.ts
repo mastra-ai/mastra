@@ -3,8 +3,8 @@ import { planSpanAggregate } from './span-aggregate';
 import { planSpanQuery, encodeSpanQueryCursor } from './span-query';
 import { parseTraceAggregateRequest } from './trace-aggregate';
 import { planTraceAggregate } from './trace-aggregate-planner';
-import { parseTraceQueryRequest, TraceQueryCursorError } from './trace-query';
-import { planTraceQuery } from './trace-query-plan';
+import { parseQueryThreadsInput, parseTraceQueryRequest, TraceQueryCursorError } from './trace-query';
+import { planThreadQuery, planTraceQuery } from './trace-query-plan';
 
 const options = { allowTokenSearch: true };
 const timeRange = { from: '2026-11-01T00:00:00Z', to: '2026-11-08T00:00:00Z' };
@@ -32,6 +32,57 @@ const cases = [
 
 describe.each(cases)('%s token predicates', (_, plan, related) => {
   const wrap = (predicate: unknown) => (related ? { spans: { some: predicate } } : predicate);
+  it.each([
+    ['direct NOT', { op: 'not', arg: token('input', 'tacos') }],
+    ['NOT around AND', { op: 'not', arg: conjunction }],
+    ['double NOT', { op: 'not', arg: { op: 'not', arg: token('input', 'tacos') } }],
+    ['NOT under OR', { op: 'or', args: [token('output', 'nachos'), { op: 'not', arg: token('input', 'tacos') }] }],
+  ])('rejects token search beneath %s', (_, predicate) => {
+    expect(() => plan(wrap(predicate))).toThrow(
+      expect.objectContaining({
+        issues: expect.arrayContaining([
+          expect.objectContaining({
+            code: 'operator_not_allowed',
+            message: 'Token search is not supported beneath not or none',
+          }),
+        ]),
+      }),
+    );
+  });
+  if (related) {
+    it.each([
+      ['spans.none', { spans: { none: conjunction } }],
+      ['NOT around spans.some', { op: 'not', arg: { spans: { some: conjunction } } }],
+      ['NOT inside spans.none', { spans: { none: { op: 'not', arg: token('input', 'tacos') } } }],
+    ])('rejects token search beneath %s', (_, predicate) => {
+      expect(() => plan(predicate)).toThrow(
+        expect.objectContaining({
+          issues: expect.arrayContaining([
+            expect.objectContaining({
+              code: 'operator_not_allowed',
+              message: 'Token search is not supported beneath not or none',
+            }),
+          ]),
+        }),
+      );
+    });
+  }
+  it('allows a positive search alongside an ordinary negative filter', () => {
+    const result = plan(
+      wrap({
+        op: 'and',
+        args: [
+          token('input', 'tacos'),
+          { op: 'not', arg: { op: 'eq', left: { path: 'name' }, right: { literal: 'ignored' } } },
+        ],
+      }),
+    );
+    expect(result.where).toMatchObject(
+      related
+        ? { type: 'relation', quantifier: 'some', predicate: { type: 'boolean', operator: 'and' } }
+        : { type: 'boolean', operator: 'and' },
+    );
+  });
   it.each(['first', 'last'])('enforces the literal budget with the token predicate %s', position => {
     const memberships = Array.from({ length: 10 }, (_, index) => ({
       op: 'in',
@@ -123,4 +174,22 @@ it('rejects token predicates when an older host has not opted in', () => {
   expect(() =>
     planTraceAggregate(parseTraceAggregateRequest({ timeRange, where: traceWhere, measures: ['count'] })),
   ).toThrow();
+});
+
+it.each(['selection', 'related trace'])('explains that thread queries cannot use token search in %s', location => {
+  const where = { spans: { some: token('input', 'tacos') } };
+  const request =
+    location === 'selection'
+      ? { traces: { timeRange, where } }
+      : { traces: { timeRange }, where: { traces: { some: where } } };
+  expect(() => planThreadQuery(parseQueryThreadsInput(request), options)).toThrow(
+    expect.objectContaining({
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          code: 'operator_not_allowed',
+          message: 'Token search is not supported in thread queries',
+        }),
+      ]),
+    }),
+  );
 });

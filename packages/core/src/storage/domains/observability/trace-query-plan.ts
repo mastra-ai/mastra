@@ -200,7 +200,7 @@ export function planThreadQuery(
     });
   }
 
-  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
+  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues, isThreadQuery: true };
   const traceWhere = request.traces.where
     ? planPredicate(request.traces.where, 'trace', ['traces', 'where'], 1, state)
     : undefined;
@@ -340,6 +340,7 @@ function stableStringify(value: unknown): string {
 }
 
 function hasMetadataPredicate(predicate: TrustedTraceQueryPredicate): boolean {
+  if (predicate.type === 'tokens') return false;
   if (predicate.type === 'boolean') return predicate.args.some(hasMetadataPredicate);
   if (predicate.type === 'not') return hasMetadataPredicate(predicate.arg);
   if (predicate.type === 'relation') return hasMetadataPredicate(predicate.predicate);

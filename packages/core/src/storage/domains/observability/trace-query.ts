@@ -74,6 +74,14 @@ export const TRACE_QUERY_TOKEN_FIELDS = [
   'all',
 ] as const;
 export type TraceQueryTokenField = (typeof TRACE_QUERY_TOKEN_FIELDS)[number];
+/**
+ * Positive whole-token matching on indexed span content. For `all`, one underlying column
+ * must contain every query token; tokens cannot be satisfied across different columns.
+ * The planner preserves case. Tokenization and case folding belong to the supporting store
+ * (Platform uses splitByNonAlpha with ASCII lowercasing). A literal producing no tokens
+ * matches nothing, including missing content. `not` and `none` ancestors are unsupported;
+ * positive predicates can compose through `and`, `or`, and `spans.some`.
+ */
 const tokenPredicateSchema = z
   .object({
     op: z.literal('hasAllTokens'),
@@ -1066,6 +1074,7 @@ type PredicateContext = TraceQueryPredicateScope | 'spanQuery' | 'threadQuery';
 /** @internal */
 export interface PlannerState {
   allowTokenSearch?: boolean;
+  isThreadQuery?: boolean;
   nodes: number;
   relatedClauses: number;
   literalUnits: number;
@@ -1369,7 +1378,7 @@ export function planThreadQuerySelectionPredicate(
   where: TraceQueryScalarPredicate,
   issues: TraceQueryIssue[],
 ): TrustedTraceQueryScalarPredicate | undefined {
-  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
+  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues, isThreadQuery: true };
   return planPredicate(where, 'threadQuery', ['where'], 1, state) as TrustedTraceQueryScalarPredicate | undefined;
 }
 
@@ -1380,6 +1389,7 @@ export function planPredicate(
   path: Array<string | number>,
   depth: number,
   state: PlannerState,
+  underNegation = false,
 ): TrustedTraceQueryPredicate | TrustedTraceQueryScalarPredicate | undefined {
   state.nodes += 1;
   if (depth > TRACE_QUERY_MAX_DEPTH || state.nodes > TRACE_QUERY_MAX_NODES) {
@@ -1409,7 +1419,14 @@ export function planPredicate(
       'spans' in predicate ? predicate.spans : 'scores' in predicate ? predicate.scores : predicate.feedback;
     const quantifier = 'some' in clause ? 'some' : 'none';
     const nested = 'some' in clause ? clause.some : clause.none;
-    const planned = planPredicate(nested, collection, [...path, collection, quantifier], depth + 1, state);
+    const planned = planPredicate(
+      nested,
+      collection,
+      [...path, collection, quantifier],
+      depth + 1,
+      state,
+      underNegation || quantifier === 'none',
+    );
     return planned
       ? { type: 'relation', collection, quantifier, predicate: planned as TrustedTraceQueryScalarPredicate }
       : undefined;
@@ -1417,16 +1434,26 @@ export function planPredicate(
 
   if (predicate.op === 'and' || predicate.op === 'or') {
     const args = predicate.args
-      .map((arg, index) => planPredicate(arg, context, [...path, 'args', index], depth + 1, state))
+      .map((arg, index) => planPredicate(arg, context, [...path, 'args', index], depth + 1, state, underNegation))
       .filter((arg): arg is TrustedTraceQueryPredicate => arg !== undefined);
     return { type: 'boolean', operator: predicate.op, args };
   }
   if (predicate.op === 'not') {
-    const arg = planPredicate(predicate.arg, context, [...path, 'arg'], depth + 1, state);
+    const arg = planPredicate(predicate.arg, context, [...path, 'arg'], depth + 1, state, true);
     return arg ? { type: 'not', arg } : undefined;
   }
 
   if (predicate.op === 'hasAllTokens') {
+    if (state.isThreadQuery || underNegation) {
+      state.issues.push({
+        code: 'operator_not_allowed',
+        path: [...path, 'op'],
+        message: state.isThreadQuery
+          ? 'Token search is not supported in thread queries'
+          : 'Token search is not supported beneath not or none',
+      });
+      return undefined;
+    }
     if (!state.allowTokenSearch) {
       state.issues.push({
         code: 'operator_not_allowed',
