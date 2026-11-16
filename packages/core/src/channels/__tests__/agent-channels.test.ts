@@ -1117,9 +1117,11 @@ describe('AgentChannels', () => {
         } as any;
       }
 
-      async function setup(mastra = makeMastra()) {
+      async function setup(mastra = makeMastra(), toolDisplay?: (event: any) => any) {
         const adapter = createMockAdapter('discord');
-        const channels = new AgentChannels({ adapters: { discord: { adapter } } });
+        const channels = new AgentChannels({
+          adapters: { discord: { adapter, ...(toolDisplay ? { toolDisplay } : {}) } },
+        });
         channels.__setAgent(mockAgent);
         const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
         channels.__setLogger(logger as any);
@@ -1240,6 +1242,25 @@ describe('AgentChannels', () => {
         expect(dispatchApproval).toHaveBeenCalledTimes(1);
         expect(dispatchApproval).toHaveBeenCalledWith(
           expect.objectContaining({ runId: 'run-1', toolCallId: 'tool-call-1' }),
+        );
+      });
+
+      it('reports the answered sub-agent call id on the resolved card event', async () => {
+        const toolDisplay = vi.fn(() => undefined);
+        const { postCard, click } = await setup(makeMastra(), toolDisplay);
+        postCard('call_delete_b', 'card-b');
+
+        await click('tool_approve:call_delete_b', 'card-b');
+
+        // A function-form `toolDisplay` draws the answered card from this event,
+        // so it names the sub-agent call the user answered, not the delegation.
+        expect(toolDisplay).toHaveBeenCalledWith(
+          expect.objectContaining({
+            kind: 'approved',
+            toolCallId: DELEGATION,
+            delegatedToolCallId: 'call_delete_b',
+          }),
+          expect.anything(),
         );
       });
 

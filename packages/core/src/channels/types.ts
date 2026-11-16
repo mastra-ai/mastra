@@ -278,10 +278,11 @@ export type ToolDisplayEvent =
   | {
       kind: 'approved';
       toolCallId: string;
-      /** The sub-agent tool call this card answered, when the card came from a delegate. */
+      /**
+       * The sub-agent tool call this card answered, when the card came from a
+       * delegate. The tool itself is named by `toolName`/`displayName`.
+       */
       delegatedToolCallId?: string;
-      /** The paused sub-agent's tool name, when this approval came from a delegate. */
-      delegatedToolName?: string;
       toolName: string;
       displayName: string;
       argsSummary: string;
@@ -297,10 +298,11 @@ export type ToolDisplayEvent =
   | {
       kind: 'denied';
       toolCallId: string;
-      /** The sub-agent tool call this card answered, when the card came from a delegate. */
+      /**
+       * The sub-agent tool call this card answered, when the card came from a
+       * delegate. The tool itself is named by `toolName`/`displayName`.
+       */
       delegatedToolCallId?: string;
-      /** The paused sub-agent's tool name, when this approval came from a delegate. */
-      delegatedToolName?: string;
       toolName: string;
       displayName: string;
       argsSummary: string;

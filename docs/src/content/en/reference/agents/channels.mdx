@@ -343,11 +343,12 @@ button ids in the format the default action handler expects. See [Custom
 approval cards](#custom-approval-cards).
 
 Every `approval`, `approved`, and `denied` event carries `delegatedToolCallId`
-and `delegatedToolName` when a subagent asked for the approval inside a
-supervisor's delegation. `toolCallId` then stays the supervisor's delegation
-call, which is what resumes the run, while the delegated id names the
-subagent's own tool call. Build card ids from `delegatedToolCallId ??
-toolCallId` so each subagent approval card stays answerable on its own.
+when a subagent asked for the approval inside a supervisor's delegation, and
+the `approval` event also carries `delegatedToolName`. `toolCallId` then stays
+the supervisor's delegation call, which is what resumes the run, while the
+delegated id names the subagent's own tool call. Build card ids from
+`delegatedToolCallId ?? toolCallId` so each subagent approval card stays
+answerable on its own.
 
 ```typescript title="src/mastra/agents/streaming.ts"
 import { Agent } from '@mastra/core/agent'
