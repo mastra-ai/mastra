@@ -496,6 +496,14 @@ export class LibSQLFactoryStorage extends FactoryStorage {
     });
   }
 
+  async collectionExists(name: string): Promise<boolean> {
+    const result = await this.#client.execute({
+      sql: `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`,
+      args: [name],
+    });
+    return result.rows.length > 0;
+  }
+
   async close(): Promise<void> {
     await this.#client.close();
   }

@@ -130,6 +130,12 @@ export function describeFactoryStorageContract(
         expect(storage.getMastraStorage()).toBe(storage.getMastraStorage());
       });
 
+      it('reports whether a collection table exists', async () => {
+        expect(storage.collectionExists).toBeTypeOf('function');
+        expect(await storage.collectionExists!(CONTRACT_ITEMS.name)).toBe(true);
+        expect(await storage.collectionExists!('contract_never_created')).toBe(false);
+      });
+
       it('rejects operations on unregistered collections', async () => {
         await expect(storage.ops.findOne('no_such_collection', {})).rejects.toThrow(/no_such_collection/);
       });

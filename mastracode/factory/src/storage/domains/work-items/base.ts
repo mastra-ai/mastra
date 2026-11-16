@@ -24,6 +24,7 @@ import {
   recordWorkItemSplitComplete,
 } from '../../../work-items/split-migration.js';
 import type { LegacyWatermark, WorkItemSplitReport } from '../../../work-items/split-migration.js';
+import { ensureLegacyCollections } from '../../legacy-collections.js';
 import {
   BoardScopes,
   bumpBoardVersions,
@@ -1432,12 +1433,16 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async init(): Promise<void> {
     this.#legacyMode = process.env.MASTRA_FACTORY_WORK_ITEM_SPLIT === 'dry-run';
+    // Pre-split cards and the split's progress marker exist only on databases an earlier release
+    // wrote cards to; dry-run mode serves from the pre-split table, so it always needs it.
+    const legacySchemas = [WORK_ITEMS_SCHEMA, FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA];
+    let hasLegacyCards = true;
+    if (this.#legacyMode) await this.ensureCollections(legacySchemas);
+    else hasLegacyCards = await ensureLegacyCollections(this.storage, legacySchemas);
     await this.ensureCollections([
-      WORK_ITEMS_SCHEMA,
       FACTORY_WORK_ITEMS_SCHEMA,
       FACTORY_WORK_ITEM_SOURCES_SCHEMA,
       FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA,
-      FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA,
       FACTORY_BOARD_ITEMS_SCHEMA,
       FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA,
       FACTORY_BOARD_VERSIONS_SCHEMA,
@@ -1452,6 +1457,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     if (this.#legacyMode) {
       this.#split = { pending: false, since: null };
       await migrateWorkItemSplit(this.storage, { dryRun: true, ops: super.ops, log: logSplit });
+      return;
+    }
+    if (!hasLegacyCards) {
+      this.#split = { pending: false, since: null };
       return;
     }
     const [marker, newest] = await Promise.all([readWorkItemSplitMarker(super.ops), readLegacyWatermark(super.ops)]);
