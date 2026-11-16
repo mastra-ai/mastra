@@ -135,14 +135,24 @@ export class OrganizationService {
   }
 
   // Trusted setup API. No HTTP endpoint creates identities or generates credentials.
+  hasLocalProfile(profileId: string): Promise<boolean> {
+    if (this.identity.kind !== 'local') throw new BillingError('unsupported');
+    return this.storage.hasLocalProfile(profileId);
+  }
   provisionLocal(
     input: z.input<typeof profileSchema>,
+    options: { recoverCredential?: boolean } = {},
   ): Promise<{ identity: Identity; workspaceId: string; credential: string | null }> {
     if (this.identity.kind !== 'local') throw new BillingError('unsupported');
     const profile = parseInput(profileSchema, input);
+    const { recoverCredential } = parseInput(
+      z.strictObject({ recoverCredential: z.boolean().default(false) }),
+      options,
+    );
     return this.storage.provisionPrincipal(
       { issuer: 'local', subject: profile.profileId, displayName: profile.displayName },
       true,
+      recoverCredential,
     );
   }
   provisionJwt(input: z.input<typeof principalSchema>) {

@@ -44,9 +44,24 @@ export class OrganizationStorage implements IdentityDirectory {
     this.database.close();
   }
 
+  /** Trusted setup preflight; a completed profile manifest must be restored, not recreated. */
+  async hasLocalProfile(profileId: string): Promise<boolean> {
+    const subject = parseInput(identifierSchema, profileId);
+    return this.database.write(
+      async transaction =>
+        (
+          await transaction.execute({
+            sql: "SELECT id FROM identities WHERE issuer = 'local' AND subject = ?",
+            args: [subject],
+          })
+        ).rows.length > 0,
+    );
+  }
+
   async provisionPrincipal(
     input: z.input<typeof principalSchema>,
     local: boolean,
+    recoverCredential = false,
   ): Promise<{ identity: Identity; workspaceId: string; credential: string | null }> {
     const principal = parseInput(principalSchema, input);
     const credential = local ? generateSecret() : null;
@@ -66,7 +81,21 @@ export class OrganizationStorage implements IdentityDirectory {
           })
         ).rows[0];
         if (principal.workspaceId && principal.workspaceId !== String(workspace.id)) throw new BillingError('conflict');
-        return { identity: publicIdentity(existing), workspaceId: String(workspace.id), credential: null };
+        if (local && recoverCredential && credential) {
+          await transaction.execute({
+            sql: 'UPDATE local_credentials SET active = 0 WHERE identity_id = ?',
+            args: [existing.id],
+          });
+          await transaction.execute({
+            sql: 'INSERT INTO local_credentials (hash, identity_id, active) VALUES (?, ?, 1)',
+            args: [hashSecret(credential), existing.id],
+          });
+        }
+        return {
+          identity: publicIdentity(existing),
+          workspaceId: String(workspace.id),
+          credential: local && recoverCredential ? credential : null,
+        };
       }
       const identity = { id: randomUUID(), displayName: principal.displayName };
       const workspaceId = principal.workspaceId ?? randomUUID();

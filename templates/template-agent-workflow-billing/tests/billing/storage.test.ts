@@ -14,6 +14,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import { privateWorkflowFiles, verifyPrivateFiles, privateDirectory } from '../../src/billing/storage/private-files.js';
 import { join } from 'node:path';
 import { setupLocal } from '../../scripts/setup.js';
+import { OrganizationService } from '../../src/billing/organizations.js';
 import { readLocalProfiles } from '../../src/billing/providers/local/profiles.js';
 import { imageBoundary } from '../support/images.js';
 import { billingSocket } from '../support/http.js';
@@ -483,6 +484,72 @@ async function developmentFixture() {
     },
   };
 }
+
+it('setup recovers a provisioned profile after interruption without resetting existing balances', async () => {
+  const database = await temporaryDatabase();
+  cleanups.push(database.cleanup);
+  const environment = {
+    MASTRA_PROJECT_ROOT: database.directory,
+    BILLING_MODE: 'local',
+    BILLING_PROVIDER: 'local',
+    BILLING_DATABASE_URL: database.url,
+  };
+  const provision = OrganizationService.prototype.provisionLocal;
+  let interrupted: Awaited<ReturnType<OrganizationService['provisionLocal']>> | undefined;
+  const stop = vi.spyOn(OrganizationService.prototype, 'provisionLocal');
+  stop.mockImplementationOnce(async function (this: OrganizationService, ...args) {
+    interrupted = await provision.call(this, ...args);
+    throw new Error('Interrupted after committing the principal');
+  });
+  try {
+    await expect(setupLocal(environment)).rejects.toThrow('Interrupted after committing the principal');
+  } finally {
+    stop.mockRestore();
+  }
+  expect(interrupted?.credential).toEqual(expect.any(String));
+  const config = configuration();
+  config.localAccounts[0].workspaceId = interrupted!.workspaceId;
+  config.localAccounts[0].meters[0].balance = 30;
+  const initialized = await initializeBilling({ configuration: config, storage: { url: database.url } });
+  const account = await initialized.provider.ensureAccount({ workspaceId: interrupted!.workspaceId });
+  await initialized.provider.reportUsage(usage(account, { units: 7 }));
+  initialized.close();
+  const recovered = await setupLocal(environment);
+  expect(recovered.ready).toBe(true);
+  expect(recovered.profiles.owner).toMatchObject({
+    actorId: interrupted!.identity.id,
+    workspaceId: interrupted!.workspaceId,
+  });
+  expect(recovered.profiles.owner!.credential).not.toBe(interrupted!.credential);
+  const organizations = await configuredOrganizations(environment);
+  cleanups.push(() => organizations.close());
+  await expect(organizations.context({ credential: interrupted!.credential! })).rejects.toMatchObject({
+    code: 'unauthenticated',
+  });
+  expect(await organizations.context({ credential: recovered.profiles.owner!.credential })).toMatchObject({
+    actorId: interrupted!.identity.id,
+  });
+  expect(await setupLocal(environment)).toEqual(recovered);
+  const manifestPath = join(database.directory, 'data', 'local-profiles.json');
+  await unlink(manifestPath);
+  await expect(setupLocal(environment)).rejects.toMatchObject({ code: 'state_unavailable' });
+  await expect(stat(manifestPath)).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(await organizations.context({ credential: recovered.profiles.owner!.credential })).toMatchObject({
+    actorId: interrupted!.identity.id,
+  });
+  await writeFile(manifestPath, JSON.stringify(recovered), { mode: 0o600 });
+  const observer = await independentClient(database.url);
+  cleanups.push(() => observer.close());
+  expect(
+    (
+      await observer.execute({
+        sql: "SELECT balance, consumed FROM commercial_meters WHERE account_id = ? AND key = 'credits'",
+        args: [account.id],
+      })
+    ).rows,
+  ).toEqual([{ balance: 23n, consumed: 7n }]);
+  expect((await observer.execute('SELECT COUNT(*) AS count FROM identities')).rows[0].count).toBe(3n);
+});
 
 it('setup reports an existing lock without deleting it and resumes after explicit recovery', async () => {
   const f = await developmentFixture();

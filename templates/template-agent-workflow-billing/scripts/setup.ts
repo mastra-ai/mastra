@@ -40,7 +40,8 @@ export async function setupLocal(environment: NodeJS.ProcessEnv) {
     const databaseUrl = await billingDatabaseUrl(environment);
     const organizations = await configuredOrganizations(environment);
     try {
-      let manifest: LocalProfiles = (await readLocalProfiles(root, false)) ?? {
+      const savedManifest = await readLocalProfiles(root, false);
+      let manifest: LocalProfiles = savedManifest ?? {
         version: 1,
         databaseUrl,
         ready: false,
@@ -48,13 +49,24 @@ export async function setupLocal(environment: NodeJS.ProcessEnv) {
       };
       if (manifest.databaseUrl !== databaseUrl) throw new BillingError('conflict');
       const people = { owner: 'John', member: 'Emma', outsider: 'Alex' } as const;
-      for (const name of ['owner', 'member', 'outsider'] as const) {
+      const profileNames = ['owner', 'member', 'outsider'] as const;
+      if (!savedManifest) {
+        for (const name of profileNames)
+          if (await organizations.hasLocalProfile(`demo-${name}`)) throw new BillingError('state_unavailable');
+        // Persist recovery intent before the first principal can be committed.
+        await writeLocalProfiles(root, manifest);
+      }
+      for (const name of profileNames) {
         if (!manifest.profiles[name]) {
           if (manifest.ready) throw new BillingError('state_unavailable');
-          const provisioned = await organizations.provisionLocal({
-            profileId: `demo-${name}`,
-            displayName: people[name],
-          });
+          // Only an unfinished manifest may recover a credential lost after principal commit.
+          const provisioned = await organizations.provisionLocal(
+            {
+              profileId: `demo-${name}`,
+              displayName: people[name],
+            },
+            { recoverCredential: true },
+          );
           if (!provisioned.credential) throw new BillingError('state_unavailable');
           manifest.profiles[name] = {
             name: people[name],
