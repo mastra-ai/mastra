@@ -2281,7 +2281,7 @@ export class FactoryDecisionDispatcher {
       decision.closesIssue!.workItemId,
       causalChain,
       () => ({ phase: null }),
-      trusted || !trustKey
+      trusted
         ? undefined
         : metadata => {
             const listed = metadata[UNTRUSTED_PULL_REQUESTS_KEY];
@@ -2295,10 +2295,9 @@ export class FactoryDecisionDispatcher {
   }
 
   /** The key a card lists an untrusted attached pull request under (see `UNTRUSTED_PULL_REQUESTS_KEY`). */
-  #pullRequestTrustKey(decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>): string | undefined {
+  #pullRequestTrustKey(decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>): string {
     const source = externalSourceForDecision(decision);
-    const facts = workItemProviderAdapter(source).toSource(source, decision.metadata ?? null);
-    return facts ? pullRequestTrustKey(facts) : undefined;
+    return pullRequestTrustKey(workItemProviderAdapter(source).toSource(source, decision.metadata ?? null)!);
   }
 
   /**
