@@ -919,6 +919,171 @@ it('marks a coordinator lost when its renewal lands after a remote release and a
   expect(lost).toHaveBeenCalledTimes(1);
 });
 
+// The documented limit with a real resume(): the API process holds the suspended run's coordinator and makes the new
+// claim by resuming the run, and a worker in another process settled the suspension. The coordinator's held renewal
+// then lands after the resume's claim, sees a newer generation and marks the suspended run lost. This pins what the
+// resumed stream does then. (#30206)
+it('streams a resumed EventedAgent run to its finish when the suspended run is marked lost after the resume claimed it (#30206)', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  const directory = await mkdtemp(join(tmpdir(), 'mastra-limit-resume-'));
+  const socket = join(directory, 'pubsub.sock');
+  const storage = new InMemoryStore();
+  const workflows = (await storage.getStore('workflows'))!;
+
+  // Hold every renewal the heartbeats send while the first model call is pending.
+  const renew = workflows.renewRunOwnership.bind(workflows);
+  const renewal = Promise.withResolvers<void>();
+  let holding = false;
+  const held: Array<Promise<boolean>> = [];
+  vi.spyOn(workflows, 'renewRunOwnership').mockImplementation(args => {
+    if (!holding) return renew(args);
+    const result = renewal.promise.then(() => renew(args));
+    held.push(result.then(({ renewed }) => renewed));
+    return result;
+  });
+
+  // The first call asks to run `lookup`. The resumed call waits until the suspended run was marked lost.
+  const entered = Promise.withResolvers<void>();
+  const firstCall = Promise.withResolvers<void>();
+  const resumedCall = Promise.withResolvers<void>();
+  let calls = 0;
+  const model = new MockLanguageModelV2({
+    doStream: async () => {
+      const call = ++calls;
+      if (call === 1) {
+        entered.resolve();
+        await firstCall.promise;
+      } else {
+        await resumedCall.promise;
+      }
+      return {
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          ...(call === 1
+            ? [{ type: 'tool-call' as const, toolCallId: 'call-1', toolName: 'lookup', input: '{}' }]
+            : [
+                { type: 'text-start' as const, id: 'text' },
+                { type: 'text-delta' as const, id: 'text', delta: 'resumed answer' },
+                { type: 'text-end' as const, id: 'text' },
+              ]),
+          {
+            type: 'finish',
+            finishReason: call === 1 ? 'tool-calls' : 'stop',
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          },
+        ]),
+      };
+    },
+  });
+  const execute = vi.fn(async () => ({ found: true }));
+  const lookupConfig = {
+    id: 'lookup',
+    description: 'Look something up',
+    inputSchema: z.object({}),
+    requireApproval: true,
+    execute,
+  };
+
+  // The API process: this module registry. It runs no workers.
+  const apiPubsub = new UnixSocketPubSub(socket);
+  const apiAgent = createEventedAgent({
+    agent: new Agent({
+      id: 'agent',
+      name: 'agent',
+      instructions: 'Answer.',
+      model,
+      tools: { lookup: createTool(lookupConfig) },
+    }),
+    pubsub: apiPubsub,
+  });
+  const api = new Mastra({ agents: { agent: apiAgent }, storage, pubsub: apiPubsub, workers: false, logger: false });
+
+  // The worker process: a fresh module registry, sharing only storage and the socket.
+  vi.resetModules();
+  const workerFences = await import('./execution-fence');
+  expect(workerFences.ExecutionFence).not.toBe(ExecutionFence);
+  const { createEventedAgent: createWorkerAgent } = await import('./create-evented-agent');
+  const { Agent: WorkerAgent } = await import('../agent');
+  const { Mastra: WorkerMastra } = await import('../../mastra');
+  const { createTool: createWorkerTool } = await import('../../tools');
+  const { UnixSocketPubSub: WorkerPubSub } = await import('../../events/unix-socket-pubsub');
+  const workerPubsub = new WorkerPubSub(socket);
+  const worker = new WorkerMastra({
+    agents: {
+      agent: createWorkerAgent({
+        agent: new WorkerAgent({
+          id: 'agent',
+          name: 'agent',
+          instructions: 'Answer.',
+          model,
+          tools: { lookup: createWorkerTool(lookupConfig) },
+        }),
+        pubsub: workerPubsub,
+      }),
+    },
+    storage,
+    pubsub: workerPubsub,
+    logger: false,
+  });
+  onTestFinished(async () => {
+    renewal.resolve();
+    firstCall.resolve();
+    resumedCall.resolve();
+    await api.shutdown();
+    await worker.shutdown();
+    workerFences.__resetExecutionFencesForTests();
+    await apiPubsub.close();
+    await workerPubsub.close();
+    await rm(directory, { recursive: true, force: true });
+  });
+  await worker.startWorkers();
+
+  const started = await apiAgent.stream('Look it up', { requireToolApproval: true });
+  const { runId } = started;
+  void drainStream(started.fullStream);
+  await entered.promise;
+  const coordinator = ExecutionFence.getLocalActive(runId)!;
+  expect(coordinator).toBeDefined();
+  const lost = vi.fn();
+  coordinator.onLost(lost);
+
+  holding = true;
+  await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+  holding = false;
+  expect(held.length).toBeGreaterThanOrEqual(1);
+  firstCall.resolve();
+  await vi.waitFor(
+    async () =>
+      expect(await workflows.getRunOwnership({ runId })).toMatchObject({
+        ownerId: coordinator.executionId,
+        generation: coordinator.generation,
+        leaseExpiresAt: null,
+      }),
+    { timeout: 5_000 },
+  );
+  await coordinator.whenSettled;
+
+  // The resume claims the run before the coordinator's renewal lands.
+  const resumed = await apiAgent.resume(runId, { approved: true });
+  const claimed = await workflows.getRunOwnership({ runId });
+  expect(claimed?.generation).toBeGreaterThan(coordinator.generation!);
+  expect(claimed?.live).toBe(true);
+  renewal.resolve();
+  expect(await Promise.all(held)).not.toContain(true);
+  await vi.waitFor(() => expect(coordinator.isLost()).toBe(true));
+  expect(lost).toHaveBeenCalledTimes(1);
+
+  resumedCall.resolve();
+  const chunks = await Promise.race([
+    drainStream(resumed.fullStream),
+    new Promise<'still open'>(resolve => setTimeout(() => resolve('still open'), 5_000)),
+  ]);
+  if (chunks === 'still open') throw new Error('the resumed stream was still open after 5s');
+  expect(chunks.map(chunk => chunk.type)).toContain('finish');
+  expect(JSON.stringify(chunks)).toContain('resumed answer');
+  expect(execute).toHaveBeenCalledTimes(1);
+}, 30_000);
+
 // An abandoned release in this process is known at once: nothing will settle the run, so the coordinator's first failed
 // renewal after it reports the loss, as before #30206, without the grace a release made elsewhere gets. (#30206)
 it('marks a coordinator lost on its first failed renewal after this process abandoned the run (#30206)', async () => {

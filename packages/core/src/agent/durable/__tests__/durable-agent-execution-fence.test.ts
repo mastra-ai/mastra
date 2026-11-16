@@ -20,10 +20,13 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { Memory } from '../../../../../memory/src';
+import { ObservationalMemoryProcessor } from '../../../../../memory/src/processors/observational-memory';
 import { InMemoryServerCache } from '../../../cache/inmemory';
 import type { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
+import { ConsoleLogger } from '../../../logger';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { RequestContext } from '../../../request-context';
@@ -1348,6 +1351,135 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         if (chunks === 'still open') throw new Error('the resumed stream was still open after 5s');
         expect(chunks.map(chunk => chunk.type)).toContain('finish');
         expect(JSON.stringify(chunks)).toContain('answer 2');
+        expect(execute).toHaveBeenCalledTimes(1);
+        expect(lost).not.toHaveBeenCalled();
+        expect(suspendedFence.isLost()).toBe(false);
+
+        resumed.cleanup();
+        started.cleanup();
+      },
+    );
+
+    // The issue's second symptom: with observational memory on, the false loss also failed the resumed run's memory
+    // input step with the suspended run's "lost its execution lease" error. (#30206)
+    it.skipIf(backend !== 'storage')(
+      'with observational memory, a renewal that lands after the run suspends does not fail the resumed memory step (#30206)',
+      async () => {
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+        const logged: string[] = [];
+        for (const level of ['error', 'warn', 'info', 'debug', 'log'] as const) {
+          vi.spyOn(console, level).mockImplementation((...args: unknown[]) => {
+            logged.push(args.map(arg => (arg instanceof Error ? arg.message : String(arg))).join(' '));
+          });
+        }
+        const storage = createStorage(backend);
+        const firstCall = gate();
+        const { model, prompts } = recordingModel([firstCall.opened], 'lookup');
+        // Thresholds no message reaches, so the observer and reflector never call their model.
+        const observerModel = new MockLanguageModelV2({
+          doStream: async () => {
+            throw new Error('the observer model must not be called');
+          },
+        });
+        const memory = new Memory({
+          storage,
+          options: {
+            observationalMemory: {
+              enabled: true,
+              observation: { model: observerModel, messageTokens: 100_000, bufferTokens: false },
+              reflection: { model: observerModel, observationTokens: 100_000 },
+            },
+          },
+        });
+        const execute = vi.fn(async () => ({ found: true }));
+        const lookup = createTool({
+          id: 'lookup',
+          description: 'Look something up',
+          inputSchema: z.object({}),
+          requireApproval: true,
+          execute,
+        });
+        const durableAgent = createDurableAgent({
+          agent: new Agent({
+            id: 'fence-agent',
+            name: 'Fence Agent',
+            instructions: 'You are a helpful agent.',
+            model: model as LanguageModelV2,
+            memory,
+            tools: { lookup },
+          }),
+          pubsub,
+        });
+        new Mastra({
+          agents: { 'fence-agent': durableAgent as any },
+          logger: new ConsoleLogger({ level: 'debug' }),
+          storage,
+          pubsub,
+          recovery: { durableAgents: 'auto' },
+        });
+
+        // Shows the observational memory input step ran, in the first run and in the resumed one.
+        const omSteps = vi.spyOn(ObservationalMemoryProcessor.prototype, 'processInputStep');
+
+        const renewal = gate();
+        let holdNextRenewal = false;
+        let renewalSent = false;
+        let renewedAfterRelease: boolean | undefined;
+        const workflows = storage.stores.workflows!;
+        const renew = workflows.renewRunOwnership.bind(workflows);
+        vi.spyOn(workflows, 'renewRunOwnership').mockImplementation(async args => {
+          if (!holdNextRenewal) return renew(args);
+          holdNextRenewal = false;
+          renewalSent = true;
+          await renewal.opened;
+          const result = await renew(args);
+          renewedAfterRelease = result.renewed;
+          return result;
+        });
+
+        let suspended = false;
+        const started = await durableAgent.stream('Look it up', {
+          memory: { thread: THREAD, resource: RESOURCE },
+          requireToolApproval: true,
+          onSuspended: () => {
+            suspended = true;
+          },
+        });
+        const { runId } = started;
+        const suspendedFence = ExecutionFence.getLocalActive(runId)!;
+        const lost = vi.fn();
+        suspendedFence.onLost(lost);
+
+        await vi.waitFor(() => expect(prompts).toHaveLength(1));
+        holdNextRenewal = true;
+        await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+        expect(renewalSent).toBe(true);
+        firstCall.open();
+        await vi.waitFor(() => expect(suspended).toBe(true));
+        await suspendedFence.whenSettled;
+
+        renewal.open();
+        await vi.waitFor(() => expect(renewedAfterRelease).toBe(false));
+        await new Promise(resolve => setImmediate(resolve));
+        expect(omSteps).toHaveBeenCalled();
+        omSteps.mockClear();
+
+        const resumed = await durableAgent.resume(runId, { approved: true });
+        const events: string[] = [];
+        await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: unknown) => {
+          events.push(JSON.stringify(event));
+        });
+        const chunks = await Promise.race([
+          drain(resumed.fullStream),
+          new Promise<'still open'>(resolve => setTimeout(() => resolve('still open'), 5_000)),
+        ]);
+        const emitted = [JSON.stringify(chunks), ...events, ...logged];
+        expect(emitted.filter(text => text.includes('lost its execution lease'))).toEqual([]);
+        if (chunks === 'still open') throw new Error('the resumed stream was still open after 5s');
+        expect(chunks.map(chunk => chunk.type)).toContain('finish');
+        expect(chunks.map(chunk => chunk.type)).not.toContain('tripwire');
+        expect(JSON.stringify(chunks)).toContain('answer 2');
+        expect(omSteps).toHaveBeenCalled();
         expect(execute).toHaveBeenCalledTimes(1);
         expect(lost).not.toHaveBeenCalled();
         expect(suspendedFence.isLost()).toBe(false);

@@ -757,10 +757,14 @@ export class ExecutionFence implements RunFenceScope {
     for (const fence of renewingFencesByClaim.get(key) ?? []) fence.#releaseSeen = true;
   }
 
-  /** Tell the fences of the claim at `key` that are still renewing that the execution is releasing that claim. */
-  static #noteOwnRelease(key: string, released: Promise<boolean>): void {
+  /**
+   * Tell the fences of the claim at `key` that are still renewing that the execution is releasing that claim.
+   * `releasing` is the fence making the release, which records it itself.
+   */
+  static #noteOwnRelease(key: string, released: Promise<boolean>, releasing?: ExecutionFence): void {
     const confirmed = released.catch(() => false);
     for (const fence of renewingFencesByClaim.get(key) ?? []) {
+      if (fence === releasing) continue;
       fence.#noteReleaseStarted(confirmed);
       void confirmed.then(owned => {
         // The claim is gone: later renewals could only fail.
@@ -1137,7 +1141,7 @@ export class ExecutionFence implements RunFenceScope {
   async #release(): Promise<void> {
     const released = this.#backend.release(this.claim);
     this.#noteReleaseStarted(released.catch(() => false));
-    ExecutionFence.#noteOwnRelease(claimKey(this.runId, this.claim), released);
+    ExecutionFence.#noteOwnRelease(claimKey(this.runId, this.claim), released, this);
     try {
       await released;
     } catch (error) {
