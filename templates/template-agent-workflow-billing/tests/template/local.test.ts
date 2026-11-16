@@ -25,6 +25,25 @@ afterEach(async () => {
 });
 const semanticOnly = process.env.TEMPLATE_RUNTIME_ONLY === '1';
 
+it('the OpenAI smoke command reports import failures without exposing its selected API key', async () => {
+  const copy = await templateCopy();
+  cleanups.push(copy.cleanup);
+  await writeFile(join(copy.root, '.env'), '', { mode: 0o600 });
+  await unlink(join(copy.root, 'scripts/test-openai-smoke.ts'));
+  const selectedKey = 'test-openai-smoke.ts';
+  const result = await command(
+    copy.root,
+    ['run', 'test:openai'],
+    { ...sanitizedEnvironment(), OPENAI_API_KEY: selectedKey },
+    false,
+  );
+  expect(result.code).not.toBe(0);
+  expect(result.output).toContain('OpenAI smoke failed; no live verification is claimed.');
+  expect(result.output).toContain('Error:');
+  expect(result.output).toContain('[redacted]');
+  expect(result.output).not.toContain(selectedKey);
+});
+
 it('personal image quickstart is repeatable and shared billing remains isolated', async () => {
   const copy = await templateCopy(!semanticOnly);
   cleanups.push(copy.cleanup);
