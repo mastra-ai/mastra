@@ -1424,7 +1424,7 @@ export class AgentThreadStreamRuntime {
       // A durable run's steps register under its registry entry instead; abandoning the run already aborted them.
       const preparedRun = state.preparedRunsById.get(runId);
       const controller = preparedRun?.abortController ?? record.segmentAbortController;
-      const stepOwners = [controller?.signal, record.stepOwner?.()].filter(owner => owner !== undefined);
+      const stepOwners = this.#runStepOwners(state, record);
       const executing =
         (!!preparedRun && record.lifecycle !== 'suspended') || stepOwners.some(owner => hasRunningRunStep(owner));
       const abortController = executing ? controller : undefined;
@@ -4401,6 +4401,8 @@ export class AgentThreadStreamRuntime {
     record: AgentThreadRunRecord<any>,
   ): Promise<void> {
     const canStart = () =>
+      // A resume registers a new record under the run id; that one holds the thread now.
+      state.threadRunsById.get(record.runId) === record &&
       record.lifecycle === 'suspended' &&
       !this.#isApprovalSuspendedRun(state, record.runId) &&
       // Shutdown hands parked runs back as they are; it starts no new turns.
@@ -4412,8 +4414,25 @@ export class AgentThreadStreamRuntime {
       record.streamOptions.autoResumeSuspendedTools ??
       (await record.agent.getDefaultOptions({ requestContext: record.streamOptions.requestContext }))
         .autoResumeSuspendedTools;
-    if (!autoResume || !canStart()) return;
+    if (!autoResume) return;
+    // A step that raises a suspension can end its segment while a sibling tool call of that step still runs. The
+    // next turn waits for it rather than run beside it on the thread.
+    let owners = this.#runStepOwners(state, record);
+    while (canStart() && owners.some(owner => hasRunningRunStep(owner))) {
+      await Promise.all(owners.map(owner => new Promise<void>(resolve => whenRunStepsSettle(owner, resolve))));
+      owners = this.#runStepOwners(state, record);
+    }
+    if (!canStart()) return;
     this.#releaseSupersededParkedRun(state, this.#getPubSub(pubsub), key, record.runId);
+  }
+
+  /**
+   * The objects the steps of a run register under while they run: the abort signal of its prepared run or current
+   * segment, and a durable run's registry entry.
+   */
+  #runStepOwners(state: AgentThreadRuntimeState, record: AgentThreadRunRecord<any>): object[] {
+    const controller = state.preparedRunsById.get(record.runId)?.abortController ?? record.segmentAbortController;
+    return [controller?.signal, record.stepOwner?.()].filter(owner => owner !== undefined);
   }
 
   /**

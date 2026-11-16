@@ -161,15 +161,19 @@ describeForAllEngines(
      * - `replyFrom: 'claimed-owner'` claims the thread for the agent's runtime and sends the reply
      *   from a second runtime that cannot see the run, asking the claimed owner to wake, as a
      *   channel or schedule in another process does.
+     * - `sibling` has the model call a second, slow tool alongside the one that suspends; it runs
+     *   until the test releases it.
      */
     async function createStudioThread({
       suspendsIn,
       release = Promise.resolve(),
       replyFrom = 'same-runtime',
+      sibling,
     }: {
       suspendsIn: 'tool' | 'workflow';
       release?: Promise<void>;
       replyFrom?: 'same-runtime' | 'other-runtime' | 'claimed-owner';
+      sibling?: { release: Promise<void> };
     }) {
       const seen = {
         entered: false,
@@ -177,12 +181,34 @@ describeForAllEngines(
         preflightRuns: 0,
         resumes: 0,
         workflowRunIds: [] as string[],
+        siblingStarted: false,
+        siblingFinished: false,
+        /** Model requests carrying the reply that were sent while the sibling tool still ran. */
+        replyRequestsWhileSiblingRan: 0,
       };
+      const requestsWithReply = () =>
+        getMock()
+          .getRequests()
+          .filter(request => JSON.stringify(request.body.messages).includes('The user is Dero Israel')).length;
+      const slowTool = createTool({
+        id: 'slow',
+        description: 'Takes a while',
+        inputSchema: z.object({}),
+        execute: async () => {
+          seen.siblingStarted = true;
+          await sibling?.release;
+          seen.replyRequestsWhileSiblingRan = requestsWithReply();
+          seen.siblingFinished = true;
+          return { done: true };
+        },
+      });
       const findUserTool = createTool({
         id: 'find-user',
         description: 'Finds a user by name',
         inputSchema: z.object({ query: z.string() }),
-        suspendSchema: z.object({ message: z.string() }),
+        // A suspend schema makes the step run its tool calls one at a time; without one, the
+        // sibling runs beside the call that suspends.
+        ...(sibling ? {} : { suspendSchema: z.object({ message: z.string() }) }),
         resumeSchema: z.object({ name: z.string() }),
         execute: async (_inputData, context) => {
           if (!context?.agent?.resumeData) {
@@ -233,7 +259,9 @@ describeForAllEngines(
 
       const memory = new MockMemory();
       const shared = await createSharedAgent(getMock(), {
-        ...(suspendsIn === 'tool' ? { tools: { findUserTool } } : { workflows: { findUserTool: findUserWorkflow } }),
+        ...(suspendsIn === 'tool'
+          ? { tools: { findUserTool, ...(sibling ? { slow: slowTool } : {}) } }
+          : { workflows: { findUserTool: findUserWorkflow } }),
         memory,
         defaultOptions: { autoResumeSuspendedTools: true },
         engine,
@@ -275,7 +303,12 @@ describeForAllEngines(
           threadId,
           resourceId,
           fixtures: mock => {
-            mock.onMessage(/find/i, { toolCalls: [{ id: 'call-1', name: toolName, arguments: toolArgs }] });
+            mock.onMessage(/find/i, {
+              toolCalls: [
+                { id: 'call-1', name: toolName, arguments: toolArgs },
+                ...(sibling ? [{ id: 'call-slow', name: 'slow', arguments: {} }] : []),
+              ],
+            });
           },
           collectChunks: true,
         });
@@ -354,6 +387,38 @@ describeForAllEngines(
       expect((await first).chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
 
       const thread = await threadAfterReply();
+      expect(thread).toContain('The user is Dero Israel');
+      expect(seen.resumedWith).toBe('Dero Israel');
+      expect(thread).toContain('FINAL_REPLY Dero Israel');
+    });
+
+    // Technical: a step that raises a suspension ends its segment while a sibling tool call of
+    // that step still runs. The run counts as parked from then on, so the reply released the
+    // thread and the next turn ran beside the sibling call. The reply has to wait until the
+    // run's steps settle. (#30190)
+    it('starts the reply turn only after a sibling tool call of the suspended step has finished (#30190)', async () => {
+      let releaseSibling!: () => void;
+      const { seen, firstMessage, sendFollowUp, threadAfterReply } = await createStudioThread({
+        suspendsIn: 'tool',
+        sibling: { release: new Promise<void>(resolve => (releaseSibling = resolve)) },
+      });
+
+      const first = firstMessage();
+      await vi.waitFor(() => {
+        expect(seen.entered).toBe(true);
+        expect(seen.siblingStarted).toBe(true);
+      });
+      // Let the suspension land while the sibling still runs.
+      await new Promise(resolve => setTimeout(resolve, 200));
+      await sendFollowUp();
+      // Long enough for a turn the reply started to reach the model.
+      await new Promise(resolve => setTimeout(resolve, 300));
+      releaseSibling();
+      expect((await first).chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
+
+      const thread = await threadAfterReply();
+      expect(seen.siblingFinished).toBe(true);
+      expect(seen.replyRequestsWhileSiblingRan).toBe(0);
       expect(thread).toContain('The user is Dero Israel');
       expect(seen.resumedWith).toBe('Dero Israel');
       expect(thread).toContain('FINAL_REPLY Dero Israel');
