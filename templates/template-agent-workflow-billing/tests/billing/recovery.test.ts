@@ -160,10 +160,8 @@ describe('durable billing recovery', () => {
         const write = BillingDatabase.prototype.write;
         const recordsDatabase = (records as unknown as { database: BillingDatabase }).database;
         let paused = false;
-        const observe = vi.spyOn(BillingDatabase.prototype, 'write').mockImplementation(async function (
-          this: BillingDatabase,
-          work,
-        ) {
+        const observe = vi.spyOn(BillingDatabase.prototype, 'write');
+        observe.mockImplementation(async function (this: BillingDatabase, work) {
           const result = await write.call(this, work);
           if (this === recordsDatabase && !paused) {
             paused = true;
