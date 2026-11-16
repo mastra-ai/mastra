@@ -18,7 +18,7 @@ import { applyDocumentTheme } from '@modelcontextprotocol/ext-apps';
 import type { App, McpUiTheme } from '@modelcontextprotocol/ext-apps';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Component, useEffect, useMemo, useState } from 'react';
+import { Component, useLayoutEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { readOpened, readView } from './opened';
 import type { HostView, Opened } from './opened';
@@ -203,7 +203,8 @@ export function ObservabilityWidget() {
       };
     },
   });
-  useEffect(() => applyTheme(app?.getHostContext()?.theme), [app]);
+  // Before paint, so the first frame after connecting is already in the host's theme.
+  useLayoutEffect(() => applyTheme(app?.getHostContext()?.theme), [app]);
   const opened = useMemo(() => shown && readOpened(shown.content, shown.now, shown.view), [shown]);
 
   if (error) {
