@@ -342,6 +342,13 @@ to the built-in card so the user can still approve or deny the request. Keep the
 button ids in the format the default action handler expects. See [Custom
 approval cards](#custom-approval-cards).
 
+Every `approval`, `approved`, and `denied` event carries `delegatedToolCallId`
+and `delegatedToolName` when a subagent asked for the approval inside a
+supervisor's delegation. `toolCallId` then stays the supervisor's delegation
+call, which is what resumes the run, while the delegated id names the
+subagent's own tool call. Build card ids from `delegatedToolCallId ??
+toolCallId` so each subagent approval card stays answerable on its own.
+
 ```typescript title="src/mastra/agents/streaming.ts"
 import { Agent } from '@mastra/core/agent'
 import { createSlackAdapter } from '@chat-adapter/slack'
@@ -372,11 +379,21 @@ when the button ids are exactly:
 - Approve: `tool_approve:<toolCallId>`
 - Deny: `tool_deny:<toolCallId>`
 
-`<toolCallId>` is `event.toolCallId` from the `approval` event. Any other id,
-including one with extra whitespace, doesn't match a pending approval. The run
-stays suspended. The default handler must also stay enabled: don't set
+`<toolCallId>` identifies the card being answered. Use
+`event.delegatedToolCallId ?? event.toolCallId` from the `approval` event:
+`delegatedToolCallId` is set when a subagent asks for approval inside a
+supervisor's delegation, and it names the subagent's own tool call. Any other
+id, including one with extra whitespace, doesn't match a pending approval. The
+run stays suspended. The default handler must also stay enabled: don't set
 `handlers.onAction: false`, and if you provide your own `onAction`, call
 `defaultHandler()` so approval clicks are processed.
+
+Give each card its own id. A supervisor re-raises every subagent approval
+under one delegation call, so two subagent approvals in the same delegation
+share `event.toolCallId`. Cards that share an id can't be told apart: a
+repeated Approve on the first card answers the second one instead. A card that
+is no longer the delegation's newest is ignored, so only the pending card can
+be answered.
 
 A custom `toolDisplay` function replaces the built-in renderer for every tool
 event. The example below only renders approvals, so other tool calls post
@@ -399,6 +416,10 @@ const agent = new Agent({
         toolDisplay: event => {
           if (event.kind !== 'approval') return undefined
 
+          // A subagent's approval carries its own tool call id here, while
+          // `toolCallId` stays the supervisor's delegation call.
+          const cardId = event.delegatedToolCallId ?? event.toolCallId
+
           return {
             kind: 'post',
             message: {
@@ -410,13 +431,13 @@ const agent = new Agent({
                   children: [
                     {
                       type: 'button',
-                      id: `tool_approve:${event.toolCallId}`,
+                      id: `tool_approve:${cardId}`,
                       label: 'Genehmigen',
                       style: 'primary',
                     },
                     {
                       type: 'button',
-                      id: `tool_deny:${event.toolCallId}`,
+                      id: `tool_deny:${cardId}`,
                       label: 'Ablehnen',
                       style: 'danger',
                     },
