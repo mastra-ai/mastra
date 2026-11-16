@@ -1,7 +1,6 @@
 ---
 '@mastra/core': patch
 '@mastra/auth-supabase': patch
-'@mastra/factory': patch
 ---
 
-Normalizing a configured URL (Gateway base URL, Supabase URL) or reading a pull request number from a card key now takes linear time, so very long runs of `/` or digits in those values no longer stall it. The results are unchanged.
+Trimming trailing slashes from a configured Gateway base URL or Supabase URL now takes linear time, so a very long run of `/` in the URL no longer stalls it. The resulting URL is unchanged.
