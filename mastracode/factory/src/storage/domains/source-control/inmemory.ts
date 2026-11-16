@@ -365,7 +365,6 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         connectionId: input.connectionId,
         repositoryId: input.repositoryId,
         branch: input.branch ?? null,
-        sandboxProvider: input.sandboxProvider,
         setupCommand: input.setupCommand ?? null,
         teardownCommand: input.teardownCommand ?? null,
         position,

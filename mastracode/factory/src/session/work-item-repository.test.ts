@@ -28,7 +28,6 @@ async function seedRepositories(slugs: string[], integrationId: 'github' | 'gitl
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      sandboxProvider: 'local',
     });
     repositories.push({ repository, projectRepository });
   }
@@ -204,7 +203,6 @@ describe('resolveWorkItemRepository', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: reinstalled.id,
-      sandboxProvider: 'local',
     });
     expect(duplicate.inEnvironment).toBe(false);
     const listConnections = sourceControl.connections.list.bind(sourceControl.connections);
@@ -259,7 +257,6 @@ describe('resolveWorkItemRepository', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      sandboxProvider: 'local',
     });
     const args = { sourceControl, orgId: 'org-1', factoryProjectId: project.id };
 

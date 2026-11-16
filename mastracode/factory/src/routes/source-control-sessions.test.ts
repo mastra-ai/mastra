@@ -91,7 +91,6 @@ async function seedGitLabRepository() {
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    sandboxProvider: 'local',
   });
   return { seed, sourceControl, projectRepository, project };
 }
@@ -999,7 +998,6 @@ describe('source-control session routes', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      sandboxProvider: 'local',
     });
     const other = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Other' } });
     const otherConnection = await github.connections.create({
@@ -1012,7 +1010,6 @@ describe('source-control session routes', () => {
       orgId: 'org-1',
       connectionId: otherConnection.id,
       repositoryId: repository.id,
-      sandboxProvider: 'local',
     });
     const session = (sessionId: string, projectRepositoryId: string, userId: string, visibility: 'org' | 'private') =>
       ({

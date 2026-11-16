@@ -29,7 +29,6 @@ const repo = {
   installationId: 7,
   installationStorageId: 'inst-7',
   repositoryStorageId: 'repo-99',
-  sandboxProvider: 'local',
 };
 
 const gitlabRepository: GitLabRepository = {
@@ -41,7 +40,6 @@ const gitlabRepository: GitLabRepository = {
   owner: 'group',
   defaultBranch: 'main',
   private: true,
-  sandboxProvider: 'local',
 };
 
 function renderStep(props: Partial<VcsFactoryStepProps> = {}) {
@@ -446,7 +444,6 @@ describe('VCS Factory step', () => {
               projectPath: 'group/project',
               installationStorageId: 'gitlab-installation',
               defaultBranch: 'main',
-              sandboxProvider: 'local',
             },
           ],
         }),

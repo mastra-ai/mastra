@@ -208,7 +208,6 @@ describe('Platform GitHub event worker factory lifecycle', () => {
         orgId: 'org-1',
         connectionId: connection.id,
         repositoryId: repository.id,
-        sandboxProvider: 'local',
       });
       await github.sourceControlStorage.sessions.create({
         sessionId: 'session-1',
@@ -349,7 +348,6 @@ describe('Platform GitHub push rebuilds the environment template', () => {
         orgId: 'org-1',
         connectionId: connection.id,
         repositoryId: repository.id,
-        sandboxProvider: 'platform',
       });
       expect(link.inEnvironment).toBe(true);
 

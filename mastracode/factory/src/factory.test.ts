@@ -394,7 +394,6 @@ async function prepareThreadsWithTwoMemoryRows(auth: IMastraAuthProvider | null)
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    sandboxProvider: 'local',
   });
   await sourceControl.sessions.create({
     sessionId: 'session-1',
@@ -771,7 +770,6 @@ describe('MastraFactory.prepare', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      sandboxProvider: 'local',
     });
     await sourceControl.sessions.create({
       sessionId: 'session-1',
@@ -1633,7 +1631,6 @@ describe('MastraFactory.prepare', () => {
         orgId: 'org-1',
         connectionId: connection.id,
         repositoryId: repository.id,
-        sandboxProvider: 'local',
       });
       await sourceControl.sessions.create({
         sessionId: 'session-1',

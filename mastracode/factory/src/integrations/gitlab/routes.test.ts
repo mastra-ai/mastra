@@ -147,7 +147,6 @@ describe('GitLab UI routes', () => {
           connectionId: 'direct',
           accountLabel: 'gitlab.com',
           defaultBranch: 'main',
-          sandboxProvider: 'none',
         },
       ],
     });

@@ -49,7 +49,6 @@ describe('GitLab issue reconciler', () => {
         orgId: project.orgId,
         connectionId: connection.id,
         repositoryId: repository.id,
-        sandboxProvider: 'local',
       });
       await seeded.intake.saveConfig({
         orgId: project.orgId,

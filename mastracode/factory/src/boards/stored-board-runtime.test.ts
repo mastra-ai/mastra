@@ -587,7 +587,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           orgId,
           connectionId: connection.id,
           repositoryId: repository.id,
-          sandboxProvider: 'local',
         });
         return projectId;
       }
@@ -1261,7 +1260,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             orgId,
             connectionId: connection.id,
             repositoryId: repository.id,
-            sandboxProvider: 'local',
           });
 
           // The GitHub rules and dispatcher Factory runs, over the project's stored boards.

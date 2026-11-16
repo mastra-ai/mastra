@@ -193,7 +193,6 @@ async function harness(
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    sandboxProvider: 'local',
   });
 
   if (loop.storedWithSelfReview) {

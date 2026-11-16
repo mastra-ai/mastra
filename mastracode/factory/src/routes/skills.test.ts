@@ -374,7 +374,6 @@ describe('workspace skill invocation route', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      sandboxProvider: 'local',
     });
     await sourceControlStorage.sessions.create({
       sessionId,

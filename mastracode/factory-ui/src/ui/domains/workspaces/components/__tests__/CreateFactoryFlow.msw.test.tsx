@@ -45,7 +45,6 @@ const repo = {
   private: false,
   installationId: 7,
   installationStorageId: 'inst-7',
-  sandboxProvider: 'local',
 };
 
 function LocationProbe() {
@@ -462,7 +461,6 @@ describe('Create Factory wizard', () => {
               connectionId: 'direct',
               accountLabel: 'gitlab.com',
               defaultBranch: 'main',
-              sandboxProvider: 'local',
             },
           ],
         }),

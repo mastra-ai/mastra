@@ -19,7 +19,6 @@ const repositoryInput = {
 
 const projectRepositoryInput = {
   branch: null,
-  sandboxProvider: 'local',
 };
 
 describe('SourceControlStorage', () => {
@@ -219,7 +218,6 @@ describe('SourceControlStorage', () => {
       repositoryId: repository.id,
       ...projectRepositoryInput,
       branch: 'develop',
-      sandboxProvider: 'railway',
     });
 
     expect(firstLink).toMatchObject({
@@ -236,7 +234,7 @@ describe('SourceControlStorage', () => {
     expect(await github.projectRepositories.get({ orgId: 'org-1', id: firstLink.id })).toMatchObject({
       teardownCommand: 'docker compose down --remove-orphans',
     });
-    expect(secondLink).toMatchObject({ repositoryId: repository.id, branch: 'develop', sandboxProvider: 'railway' });
+    expect(secondLink).toMatchObject({ repositoryId: repository.id, branch: 'develop' });
     expect(firstLink.id).not.toBe(secondLink.id);
   });
 
@@ -1661,7 +1659,6 @@ describe('SourceControlStorageInMemory sessions', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      sandboxProvider: 'local',
     });
     const session = await store.sessions.create({
       sessionId: '00000000-0000-4000-8000-00000000aaaa',
@@ -1704,7 +1701,6 @@ describe('SourceControlStorageInMemory sessions', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      sandboxProvider: 'local',
     });
     const session = await store.sessions.create({
       sessionId: '00000000-0000-4000-8000-00000000bbbb',
@@ -1744,7 +1740,6 @@ describe('SourceControlStorageInMemory sessions', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      sandboxProvider: 'local',
     });
     const session = await store.sessions.create({
       sessionId: '00000000-0000-4000-8000-00000000aaab',
@@ -1771,7 +1766,6 @@ describe('SourceControlStorageInMemory sessions', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: otherRepository.id,
-      sandboxProvider: 'local',
     });
     await store.sessions.create({
       sessionId: '00000000-0000-4000-8000-00000000aaad',

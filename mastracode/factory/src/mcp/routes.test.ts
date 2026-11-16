@@ -161,7 +161,6 @@ async function setup() {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      sandboxProvider: 'local',
     });
     for (const session of sessions) {
       await sourceControl.sessions.create({

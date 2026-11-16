@@ -77,7 +77,6 @@ describe('Repositories settings', () => {
               installationStorageId: 'inst-1',
               accountLabel: 'gitlab.com',
               defaultBranch: 'main',
-              sandboxProvider: 'custom',
             },
           ],
         });
@@ -144,7 +143,6 @@ describe('Repositories settings', () => {
               private: true,
               installationId: 1,
               installationStorageId: 'inst-1',
-              sandboxProvider: 'custom',
             },
           ],
         }),
@@ -505,7 +503,6 @@ describe('Repositories settings', () => {
               private: false,
               installationId: 7,
               installationStorageId: 'inst-7',
-              sandboxProvider: 'none',
             },
           ],
         });

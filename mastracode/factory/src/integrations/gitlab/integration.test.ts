@@ -364,7 +364,6 @@ describe('GitLabIntegration', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      sandboxProvider: 'local',
     });
 
     await expect(

@@ -1,6 +1,5 @@
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import type { FactorySandbox } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 import type { IntakeIssue } from '../../capabilities/intake.js';
 import type { PullRequest } from '../../capabilities/version-control.js';
@@ -21,7 +20,6 @@ export interface BuildGitLabRoutesOptions {
   gitlab?: GitLabIntegrationBase;
   auth?: RouteAuth;
   intake?: IntakeStorage;
-  sandbox?: FactorySandbox;
   emitAudit?: AuditEmitter['emit'];
   webhookSecret?: string;
   ingestFactoryEvent?: (event: ParsedGitLabWebhook) => Promise<unknown>;
@@ -72,7 +70,6 @@ function gitlabProjectPayload(source: { id: string; name: string; metadata?: Rec
     connectionId,
     accountLabel: typeof source.metadata?.accountLabel === 'string' ? source.metadata.accountLabel : null,
     defaultBranch: typeof source.metadata?.defaultBranch === 'string' ? source.metadata.defaultBranch : 'main',
-    sandboxProvider: 'none',
   };
 }
 
@@ -394,7 +391,7 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
             return c.json({
               projects: sources.flatMap(source => {
                 const project = gitlabProjectPayload(source);
-                return project ? [{ ...project, sandboxProvider: options.sandbox ? 'custom' : 'none' }] : [];
+                return project ? [project] : [];
               }),
             });
           } catch (error) {
@@ -431,7 +428,6 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
               project: {
                 ...project,
                 installationStorageId: installation.id,
-                sandboxProvider: options.sandbox ? 'custom' : 'none',
               },
             });
           } catch (error) {

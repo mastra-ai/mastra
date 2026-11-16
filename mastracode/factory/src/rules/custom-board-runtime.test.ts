@@ -247,7 +247,6 @@ describe('custom board public runtime', () => {
           orgId: 'release-org',
           connectionId: connection.id,
           repositoryId: repository.id,
-          sandboxProvider: 'local',
         });
         const itemResponse = await post(`/web/factory/projects/${project.id}/work-items`, {
           board: 'release',

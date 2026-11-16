@@ -228,7 +228,6 @@ describe.each(['libsql', 'libsql-memory', ...(postgresUrl ? ['postgres'] : [])])
             connectionId: connection.id,
             repositoryId: repository.id,
             branch: 'main',
-            sandboxProvider: 'local',
           });
           await github.projectRepositories.update({ orgId: 'org-1', id: link.id, input: { position: ids.length + 1 } });
           ids.push(link.id);

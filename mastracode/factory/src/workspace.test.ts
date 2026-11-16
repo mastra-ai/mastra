@@ -282,7 +282,6 @@ function addProject(overrides: Record<string, unknown> = {}) {
     repoFullName: 'octocat/hello',
     repoId: 456,
     defaultBranch: 'main',
-    sandboxProvider: 'local',
     sandboxWorkdir: '/workspace/octocat/hello',
     setupCommand: null,
     teardownCommand: null,
@@ -2448,7 +2447,7 @@ describe('GitHub session workspace preparation', () => {
   // workspace — never a host-backed one, and never a provisioned sandbox.
   it('a chat-only session on a remote-sandbox deploy gets no workspace instead of an error', async () => {
     const workspace = createRemoteFactory();
-    addProject({ sandboxProvider: 'railway' });
+    addProject();
     // No session row: `sessions.getBySessionId` misses for the chat-only id.
 
     await expect(
@@ -2464,7 +2463,7 @@ describe('GitHub session workspace preparation', () => {
   // constructs its own sandbox through the callback.
   it('constructs a remote session sandbox keyed by the session id', async () => {
     const workspace = createRemoteFactory();
-    addProject({ sandboxProvider: 'railway' });
+    addProject();
     addSession({ id: 'session-a' });
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
@@ -2483,7 +2482,7 @@ describe('GitHub session workspace preparation', () => {
 
   it('attaches the session setup itself, so the callback never receives a hook to forward', async () => {
     const workspace = createRemoteFactory();
-    addProject({ sandboxProvider: 'railway' });
+    addProject();
     addSession({ id: 'session-a' });
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
@@ -2496,7 +2495,7 @@ describe('GitHub session workspace preparation', () => {
 
   it('attaches the setup hook once per instance, not once per open', async () => {
     const workspace = createRemoteFactory();
-    addProject({ sandboxProvider: 'railway' });
+    addProject();
     addSession({ id: 'session-a' });
 
     const context = createGithubRequestContext('project-1', 'session-a');
@@ -2511,7 +2510,7 @@ describe('GitHub session workspace preparation', () => {
 
   it('never threads a persisted sha into the sandbox callback', async () => {
     const workspace = createRemoteFactory();
-    addProject({ sandboxProvider: 'railway' });
+    addProject();
     addSession({ id: 'session-a' });
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
