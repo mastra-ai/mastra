@@ -435,6 +435,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     beforeDeleteDrop?: (indexName: string, physicalName: string) => Promise<void>;
     beforeDeleteFinalize?: (indexName: string) => Promise<void>;
     afterClaimRead?: (indexName: string) => Promise<void>; // called by claimLegacyIndex after its first registry read
+    /** Called by claimLegacyIndex after its IN_USE pre-check, right before it inserts a new entry. */
+    beforeClaimInsert?: (indexName: string) => Promise<void>;
+    /** Called by createIndex right after it reads the existing registry entry. */
+    afterCreateIndexRead?: (indexName: string) => Promise<void>;
     /** Called by createSearchIndex after the registry write and before provisioning; a throw simulates a provisioning failure. */
     beforeSearchIndexProvision?: (indexName: string) => Promise<void>;
   };
@@ -1146,6 +1150,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // Read before creating anything, so refusing a deleting entry has no side effects.
       const existingEntry = await this.readRegistryEntry(indexName);
       this.assertNotDeleting(existingEntry, 'CREATE_INDEX');
+      await this.testHooks?.afterCreateIndexRead?.(indexName);
       // Check if collection exists
       const collectionExists = await this.db.listCollections({ name: targetCollection }).hasNext();
       if (!collectionExists) {
@@ -1262,6 +1267,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         ...(resolvedAutoEmbed
           ? { 'autoEmbed.path': resolvedAutoEmbed.path, 'autoEmbed.model': resolvedAutoEmbed.model }
           : { autoEmbed: null }),
+        // Nothing was registered when this call read the entry. Every entry current code writes
+        // carries a claimToken, so one written since (a claim, another createIndex) fails the
+        // filter, and the upsert's insert hits 11000 instead of overwriting it.
+        ...(existingEntry ? {} : { claimToken: { $exists: false } }),
       };
       const claimToken = uuidv4();
       // A managed index adopts an existing collection when one already has its name; record
@@ -2818,6 +2827,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
       const textIndex = `${indexName}_search_index`;
       const claimToken = uuidv4();
+      await this.testHooks?.beforeClaimInsert?.(indexName);
       try {
         // insertOne, never an upsert: a registration written meanwhile must win, not be overwritten.
         await registry.insertOne({

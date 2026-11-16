@@ -695,7 +695,7 @@ describe('legacy ownership', () => {
         expect(await reg(coll)).toBeNull();
       });
 
-      it('T16:a managed delete refuses with IN_USE while a BYO index uses its collection', async () => {
+      it('T16: a managed delete refuses with IN_USE while a BYO index uses its collection', async () => {
         const { coll, entry } = await managed();
         await seedRegistry(db, {
           _id: `${coll}_byo`,
@@ -948,6 +948,7 @@ describe('legacy ownership', () => {
     afterEach(async () => {
       for (const p of pauses.splice(0)) p.release.resolve();
       (store as any).testHooks = undefined;
+      (other as any).testHooks = undefined;
       for (const n of names.splice(0)) {
         await db.collection(REGISTRY).deleteMany({ $or: [{ _id: n as any }, { collectionName: n }] });
         await db.dropCollection(n).catch(() => {});
@@ -990,13 +991,13 @@ describe('legacy ownership', () => {
       return { X, entry };
     }
 
-    /** Parks the claim right after its first registry read. */
-    function holdAfterRead() {
+    /** Parks `on` at the named test hook (by default the claim, right after its first registry read). */
+    function holdAfterRead(on: MongoDBVector = store, hook = 'afterClaimRead') {
       const reached = deferred();
       const release = deferred();
       pauses.push({ release });
-      (store as any).testHooks = {
-        afterClaimRead: async () => {
+      (on as any).testHooks = {
+        [hook]: async () => {
           reached.resolve();
           await release.promise;
         },
@@ -1130,6 +1131,60 @@ describe('legacy ownership', () => {
         expect(err.id).toBe(errId('CONFLICT'));
         expect(err.category).toBe('USER');
         expect(await reg(X)).toEqual(moved);
+      });
+
+      for (const byo of [false, true]) {
+        it(`a createIndex that read no entry refuses instead of overwriting a claim made since (${byo ? 'BYO' : 'managed'})`, async () => {
+          const X = await legacy();
+          const p = holdAfterRead(other, 'afterCreateIndexRead');
+          const create = other
+            .createIndex({ indexName: X, dimension: 4, ...(byo ? { collectionName: X } : {}) })
+            .catch(e => e);
+          await p.reached.promise;
+          await store.claimLegacyIndex({ indexName: X });
+          const claimed = await reg(X);
+          p.release.resolve();
+          const err = await create;
+          expect(err.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+          expect(await reg(X)).toEqual(claimed);
+          expect(claimed).toMatchObject({ isByo: false, ownsCollection: true, claimToken: expect.any(String) });
+          expect(await db.collection(X).countDocuments()).toBe(1);
+          expect(await searchIndexNames(db, X)).toContain(`${X}_vector_index`);
+        });
+      }
+
+      it('two racing createIndex calls: the one that read no entry refuses instead of overwriting the winner', async () => {
+        const X = uniqueName('claim');
+        names.push(X);
+        const p = holdAfterRead(other, 'afterCreateIndexRead');
+        const late = other.createIndex({ indexName: X, dimension: 4 }).catch(e => e);
+        await p.reached.promise;
+        await store.createIndex({ indexName: X, dimension: 4 });
+        const winner = await reg(X);
+        p.release.resolve();
+        expect((await late).id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+        expect(await reg(X)).toEqual(winner);
+        expect(winner?.ownsCollection).toBe(true);
+      });
+
+      it('a registration that starts using the collection during the insert rolls the claim back with IN_USE', async () => {
+        const X = await legacy();
+        const p = holdAfterRead(store, 'beforeClaimInsert');
+        const claim = store.claimLegacyIndex({ indexName: X }).catch(e => e);
+        await p.reached.promise;
+        await seedRegistry(db, {
+          _id: `${X}_byo`,
+          indexName: `${X}_byo`,
+          collectionName: X,
+          searchIndexName: `${X}_byo_vec`,
+          isByo: true,
+          allowWrites: false,
+        });
+        p.release.resolve();
+        const err = await claim;
+        expect(err.id).toBe(errId('IN_USE'));
+        expect(await reg(X)).toBeNull();
+        expect(await reg(`${X}_byo`)).not.toBeNull();
       });
 
       it('T11a: a competing managed registration on another collection wins and stays unchanged', async () => {

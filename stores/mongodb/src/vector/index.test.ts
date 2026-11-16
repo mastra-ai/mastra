@@ -2885,6 +2885,8 @@ describe('MongoDBVector autoEmbed', () => {
         collectionName: 'movies',
         'autoEmbed.path': 'fullplot',
         'autoEmbed.model': 'voyage-4',
+        // No entry was read, so the write must not land on one registered since.
+        claimToken: { $exists: false },
       });
     });
 
@@ -2907,6 +2909,8 @@ describe('MongoDBVector autoEmbed', () => {
         _id: 'movies',
         collectionName: 'movies',
         autoEmbed: null,
+        // No entry was read, so the write must not land on one registered since.
+        claimToken: { $exists: false },
       });
     });
 
