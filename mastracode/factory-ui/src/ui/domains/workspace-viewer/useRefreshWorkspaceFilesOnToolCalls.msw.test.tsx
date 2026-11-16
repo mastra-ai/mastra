@@ -1,4 +1,4 @@
-import type { QueryClient } from '@tanstack/react-query';
+import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import { describe, expect, it } from 'vitest';
 
 import { queryKeys } from '../../../api/keys';
@@ -33,39 +33,36 @@ function toolMessage(id: string, toolName: string, state: 'call' | 'result'): Ti
 }
 
 function seed(client: QueryClient) {
-  const keys = [
-    queryKeys.workspaceTree(WORKSPACE, 'src'),
+  const shown = [queryKeys.workspaceTree(WORKSPACE, 'src'), queryKeys.workspaceFile(WORKSPACE, 'src/a.ts')];
+  const leftForLater = [
     queryKeys.workspaceFileIndex(WORKSPACE),
-    queryKeys.workspaceFile(WORKSPACE, 'src/a.ts'),
     queryKeys.workspaceChanges(WORKSPACE),
     queryKeys.workspacePatches(WORKSPACE, 'branch'),
     queryKeys.workspacePatches(WORKSPACE, 'uncommitted'),
   ];
-  const otherSession = queryKeys.workspaceChanges('session-2');
-  for (const key of [...keys, otherSession]) client.setQueryData(key, {});
-  return {
-    stale: () => keys.map(key => client.getQueryState(key)?.isInvalidated),
-    otherSessionStale: () => client.getQueryState(otherSession)?.isInvalidated,
-  };
+  for (const key of [...shown, ...leftForLater]) client.setQueryData(key, {});
+  const stale = (keys: readonly QueryKey[]) => keys.map(key => client.getQueryState(key)?.isInvalidated);
+  return { shownStale: () => stale(shown), leftForLaterStale: () => stale(leftForLater) };
 }
 
-const NONE_STALE = [false, false, false, false, false, false];
-const ALL_STALE = [true, true, true, true, true, true];
+const SHOWN_FRESH = [false, false];
+const SHOWN_STALE = [true, true];
+const LEFT_FRESH = [false, false, false, false];
 
 describe('useRefreshWorkspaceFilesOnToolCalls', () => {
-  it('marks folders, the file index, the open file and every view of the changes stale when a file-changing tool finishes', () => {
+  it('marks the folders and the open file stale when a file-changing tool finishes, and leaves the file index and the changes for later', () => {
     const { client, rerender } = renderHookWithProviders(
       ({ entries }) => useRefreshWorkspaceFilesOnToolCalls(WORKSPACE, entries),
       { initialProps: { entries: [] as TimelineEntry[] } },
     );
-    const { stale, otherSessionStale } = seed(client);
+    const { shownStale, leftForLaterStale } = seed(client);
 
     rerender({ entries: [toolMessage('t1', 'write_file', 'call')] });
-    expect(stale()).toEqual(NONE_STALE);
+    expect(shownStale()).toEqual(SHOWN_FRESH);
 
     rerender({ entries: [toolMessage('t1', 'write_file', 'result')] });
-    expect(stale()).toEqual(ALL_STALE);
-    expect(otherSessionStale()).toBe(false);
+    expect(shownStale()).toEqual(SHOWN_STALE);
+    expect(leftForLaterStale()).toEqual(LEFT_FRESH);
   });
 
   it('treats a finished shell command as a possible file change', () => {
@@ -73,11 +70,11 @@ describe('useRefreshWorkspaceFilesOnToolCalls', () => {
       ({ entries }) => useRefreshWorkspaceFilesOnToolCalls(WORKSPACE, entries),
       { initialProps: { entries: [] as TimelineEntry[] } },
     );
-    const { stale } = seed(client);
+    const { shownStale } = seed(client);
 
     rerender({ entries: [toolMessage('t1', 'execute_command', 'result')] });
 
-    expect(stale()).toEqual(ALL_STALE);
+    expect(shownStale()).toEqual(SHOWN_STALE);
   });
 
   it('ignores reads, and tool calls already finished when the thread opened', () => {
@@ -85,10 +82,10 @@ describe('useRefreshWorkspaceFilesOnToolCalls', () => {
       ({ entries }) => useRefreshWorkspaceFilesOnToolCalls(WORKSPACE, entries),
       { initialProps: { entries: [toolMessage('old', 'write_file', 'result')] } },
     );
-    const { stale } = seed(client);
+    const { shownStale } = seed(client);
 
     rerender({ entries: [toolMessage('old', 'write_file', 'result'), toolMessage('t2', 'view', 'result')] });
 
-    expect(stale()).toEqual(NONE_STALE);
+    expect(shownStale()).toEqual(SHOWN_FRESH);
   });
 });

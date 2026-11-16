@@ -119,6 +119,10 @@ export const queryKeys = {
     [...queryKeys.boardFacts(factoryProjectId), 'activity', depth] as const,
   workItemFilterOptions: (factoryProjectId: string | undefined) =>
     [...queryKeys.boardFacts(factoryProjectId), 'filter-options'] as const,
+  // Apart from a session page's read of the same route, so the feed refreshes only the sidebar's.
+  sidebarPullRequestSubscriptionsAll: () => ['sidebar-pull-request-subscriptions'] as const,
+  sidebarPullRequestSubscriptions: (provider: string, sessionId: string, threadId: string) =>
+    [...queryKeys.sidebarPullRequestSubscriptionsAll(), provider, sessionId, threadId] as const,
   knowledgeGraph: (factoryProjectId: string | undefined) =>
     ['factory', 'knowledge-graph', factoryProjectId ?? null] as const,
   knowledgePage: (factoryProjectId: string | undefined, pageId: string | null, noteCursor?: string) =>

@@ -12,16 +12,12 @@ export interface PullRequestSubscription {
   url: string;
 }
 
-export function pullRequestSubscriptionsRootKey(provider: ChangeRequestProvider) {
-  return [provider, 'subscriptions'] as const;
-}
-
 export function pullRequestSubscriptionsQueryKey(
   sessionId: string,
   threadId: string | undefined,
   provider: ChangeRequestProvider = 'github',
 ) {
-  return [...pullRequestSubscriptionsRootKey(provider), sessionId, threadId] as const;
+  return [provider, 'subscriptions', sessionId, threadId] as const;
 }
 
 export function pullRequestSubscriptionsQuery(
@@ -64,7 +60,7 @@ function isPullRequestSubscription(value: unknown): value is PullRequestSubscrip
  * Change-request subscriptions for a thread. GitHub and GitLab serve the same
  * wire shape from their own routes, so the provider only picks the route.
  */
-async function listPullRequestSubscriptions(
+export async function listPullRequestSubscriptions(
   baseUrl: string,
   sessionId: string,
   threadId: string,

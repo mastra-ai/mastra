@@ -1,10 +1,11 @@
-import { queryOptions, useQueries } from '@tanstack/react-query';
+import { queryOptions, skipToken, useQueries } from '@tanstack/react-query';
 
+import { queryKeys } from '../api/keys';
 import type {
   ChangeRequestProvider,
   PullRequestSubscription,
 } from '../ui/domains/factory/services/githubSubscriptions';
-import { pullRequestSubscriptionsQuery } from '../ui/domains/factory/services/githubSubscriptions';
+import { listPullRequestSubscriptions } from '../ui/domains/factory/services/githubSubscriptions';
 
 export interface SessionPullRequestTarget {
   sessionId: string;
@@ -24,7 +25,10 @@ export function useSessionPullRequestSubscriptions({
   const queries = useQueries({
     queries: targets.map(target =>
       queryOptions({
-        ...pullRequestSubscriptionsQuery(baseUrl, target.sessionId, target.threadId, target.provider, enabled),
+        queryKey: queryKeys.sidebarPullRequestSubscriptions(target.provider, target.sessionId, target.threadId),
+        queryFn: enabled
+          ? () => listPullRequestSubscriptions(baseUrl, target.sessionId, target.threadId, target.provider)
+          : skipToken,
         // The feed provider refreshes this. A hidden tab holds no stream, so refresh on return.
         refetchOnWindowFocus: true,
       }),

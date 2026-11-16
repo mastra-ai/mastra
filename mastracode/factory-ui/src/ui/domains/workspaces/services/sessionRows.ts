@@ -5,7 +5,6 @@ import type { PullRequestStatus } from '../../factory/boardItems';
 import { itemBoard } from '../../factory/boardStages';
 import { CHANGE_REQUEST_TERMS, changeRequestStatus, isSettledChangeRequest } from '../../factory/changeRequestState';
 import type { CardChangeRequest } from '../../factory/changeRequestState';
-import type { PullRequestSubscription } from '../../factory/services/githubSubscriptions';
 import type { WorkItem, WorkItemSource } from '../../factory/services/workItems';
 import {
   getFactorySessionSource,
@@ -74,7 +73,6 @@ export interface SessionListRow {
   threadId?: string;
   pullRequest?: CardChangeRequest;
   pullRequestStatus?: PullRequestStatus;
-  subscriptions?: readonly PullRequestSubscription[];
   repository?: string;
   pinned: boolean;
   /** Every session of the card a card row stands for, so unpinning it clears a pin carried from another of them. */
@@ -175,8 +173,6 @@ export interface FactorySessionRowInput {
   context?: string;
   threadId: string | undefined;
   pullRequest: CardChangeRequest | undefined;
-  /** The session thread's subscriptions, fresher than the card's last sync. */
-  subscriptions?: readonly PullRequestSubscription[];
   repositorySlug: string | undefined;
   factoryId: string;
   routeSessionId: string | undefined;
@@ -193,7 +189,6 @@ export function buildFactorySessionRow({
   context,
   threadId,
   pullRequest,
-  subscriptions,
   repositorySlug,
   factoryId,
   routeSessionId,
@@ -204,7 +199,7 @@ export function buildFactorySessionRow({
 }: FactorySessionRowInput): SessionListRow {
   const url = `/factories/${factoryId}/workspaces/${session.sessionId}`;
   const ownedByViewer = isOwnedByViewer(session, viewer);
-  const pullRequestStatus = pullRequest && changeRequestStatus(pullRequest, subscriptions);
+  const pullRequestStatus = pullRequest && changeRequestStatus(pullRequest);
   return {
     session,
     origin: 'factory',
@@ -229,7 +224,6 @@ export function buildFactorySessionRow({
     threadId,
     pullRequest,
     pullRequestStatus,
-    subscriptions,
     repository: repositorySlug,
     pinned,
     createdAt: session.createdAt,

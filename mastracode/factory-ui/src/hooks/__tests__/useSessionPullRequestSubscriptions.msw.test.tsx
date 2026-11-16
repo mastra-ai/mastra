@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
@@ -7,6 +8,7 @@ import { pushableFeedStream } from '../../../e2e/ui/feed-stream';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { FeedEventsProvider } from '../../ui/domains/factory/context/FeedEventsProvider';
+import { pullRequestSubscriptionsQuery } from '../../ui/domains/factory/services/githubSubscriptions';
 import type { SessionPullRequestTarget } from '../useSessionPullRequestSubscriptions';
 import { useSessionPullRequestSubscriptions } from '../useSessionPullRequestSubscriptions';
 
@@ -30,7 +32,7 @@ function inner({ children }: { children: ReactNode }) {
   return <FeedEventsProvider factoryProjectId={PROJECT_ID}>{children}</FeedEventsProvider>;
 }
 
-async function renderQuietSidebarSession() {
+function countSubscriptionReads() {
   const stream = pushableFeedStream(PROJECT_ID);
   const reads = { count: 0 };
   server.use(
@@ -40,6 +42,11 @@ async function renderQuietSidebarSession() {
       return HttpResponse.json({ subscriptions: [openSubscription] });
     }),
   );
+  return { stream, reads };
+}
+
+async function renderQuietSidebarSession() {
+  const { stream, reads } = countSubscriptionReads();
   const { result } = renderHookWithProviders(
     () => useSessionPullRequestSubscriptions({ baseUrl: TEST_BASE_URL, targets: [target], enabled: true }),
     { inner },
@@ -74,6 +81,23 @@ describe('useSessionPullRequestSubscriptions', () => {
     const before = reads.count;
 
     await act(() => vi.advanceTimersByTimeAsync(SEVERAL_OLD_POLLS_MS));
+
+    expect(reads.count).toBe(before);
+  });
+
+  it("leaves a session page's own read of its subscriptions alone when the feed announces a change", async () => {
+    const { stream, reads } = countSubscriptionReads();
+    const { result } = renderHookWithProviders(
+      () => useQuery(pullRequestSubscriptionsQuery(TEST_BASE_URL, target.sessionId, target.threadId, 'github', true)),
+      { inner },
+    );
+    await waitFor(() => expect(stream.open).toBe(true));
+    await waitFor(() => expect(result.current.data).toHaveLength(1));
+    await act(() => vi.advanceTimersByTimeAsync(PAST_ONE_REFRESH_GAP_MS));
+    const before = reads.count;
+
+    stream.push();
+    await act(() => vi.advanceTimersByTimeAsync(PAST_ONE_REFRESH_GAP_MS));
 
     expect(reads.count).toBe(before);
   });

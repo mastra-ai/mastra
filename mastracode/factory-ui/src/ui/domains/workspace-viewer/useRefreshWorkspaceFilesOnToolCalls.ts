@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { hashKey, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
 import { queryKeys } from '../../../api/keys';
@@ -39,10 +39,11 @@ function finishedFileChanges(transcript: readonly TimelineEntry[]): string[] {
 }
 
 /**
- * Mark the Files tab's folders, the open file and the session's changes stale
- * whenever a tool that can change files finishes, so what's on screen
- * refetches (and anything else refetches when next shown). Tool calls already
- * in the transcript on mount don't count: the first fetch is already fresh.
+ * Mark the Files tab's folders and open file stale whenever a tool that can
+ * change files finishes, so what's on screen refetches (and anything else
+ * refetches when next shown). Tool calls already in the transcript on mount
+ * don't count: the first fetch is already fresh. The file index lists every
+ * path in one read, so it waits for the viewer to reach for Go to file.
  */
 export function useRefreshWorkspaceFilesOnToolCalls(
   workspacePath: string | undefined,
@@ -57,8 +58,11 @@ export function useRefreshWorkspaceFilesOnToolCalls(
     seen.current = { workspacePath, ids: new Set(ids) };
     if (!workspacePath || previous?.workspacePath !== workspacePath) return;
     if (!ids.some(id => !previous.ids.has(id))) return;
-    void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceTreeScope(workspacePath) });
+    const fileIndex = hashKey(queryKeys.workspaceFileIndex(workspacePath));
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.workspaceTreeScope(workspacePath),
+      predicate: query => query.queryHash !== fileIndex,
+    });
     void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFileScope(workspacePath) });
-    void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceChanges(workspacePath) });
   }, [queryClient, transcript, workspacePath]);
 }

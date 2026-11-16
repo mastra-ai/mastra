@@ -2,6 +2,8 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import type { ReactNode } from 'react';
 import { useLocation } from 'react-router';
 
+import { changeRequestStatus } from '../../factory/changeRequestState';
+import type { PullRequestSubscription } from '../../factory/services/githubSubscriptions';
 import { useAnswerParkedApproval } from '../hooks/useAnswerParkedApproval';
 import { updatePinnedSessions } from '../hooks/usePinnedSessions';
 import { useRegenerateSessionTitle } from '../hooks/useRegenerateSessionTitle';
@@ -14,6 +16,7 @@ import { SessionNavRow } from './SessionNavRow';
 export function SessionListItem({
   factoryId,
   row,
+  subscriptions,
   disabled,
   level,
   compact,
@@ -22,6 +25,8 @@ export function SessionListItem({
 }: {
   factoryId: string;
   row: SessionListRow;
+  /** The session thread's subscriptions, fresher than the card's last sync. */
+  subscriptions?: readonly PullRequestSubscription[];
   /** 1 for a card's child session, listed under the card's row. */
   level?: number;
   /** Single-line row; otherwise a second line shows its time and its change request. */
@@ -68,7 +73,7 @@ export function SessionListItem({
         board: row.board,
         threadId: row.threadId,
         repository: row.repository,
-        subscriptions: row.subscriptions,
+        subscriptions,
       }}
       onPinChange={pin => updatePinnedSessions(pinned => pinnedSessionsAfter(pinned, row, pin))}
       onDelete={row.ownedByViewer ? () => onDelete(row) : undefined}
@@ -83,7 +88,9 @@ export function SessionListItem({
       }
       changingVisibility={changing}
       pullRequest={row.pullRequest}
-      pullRequestStatus={row.pullRequestStatus}
+      pullRequestStatus={
+        row.pullRequest && subscriptions ? changeRequestStatus(row.pullRequest, subscriptions) : row.pullRequestStatus
+      }
       repository={row.repository}
       updatedAt={row.updatedAt}
       compact={compact}

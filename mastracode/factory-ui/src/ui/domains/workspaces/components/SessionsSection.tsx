@@ -9,16 +9,24 @@ import { useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { useSessionPullRequestSubscriptions } from '../../../../hooks/useSessionPullRequestSubscriptions';
+import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { useOpenNewUserSession } from '../hooks/useOpenNewUserSession';
 import { useSessionDeletion } from '../hooks/useSessionDeletion';
 import { useSessionFilters } from '../hooks/useSessionFilters';
 import { useSessionListRows } from '../hooks/useSessionListRows';
 import { useSessionListView } from '../hooks/useSessionListView';
 import { filterSessionRows } from '../services/sessionFilters';
-import { groupSessionRows, orderGroupHeadings, sessionGroupHeadings } from '../services/sessionGroups';
+import {
+  collapsedRowsKeepingActive,
+  groupSessionRows,
+  orderGroupHeadings,
+  sessionGroupHeadings,
+} from '../services/sessionGroups';
 import type { SessionGroupContext } from '../services/sessionGroups';
 import type { SessionListRow } from '../services/sessionRows';
 import { compareSessionRows } from '../services/sessionSort';
+import { sessionPullRequestTargets } from '../services/sessionWorkItems';
 import { DeleteSessionDialog } from './DeleteSessionDialog';
 import { SessionGroupList } from './SessionGroupList';
 import { SessionGroupMenu } from './SessionGroupMenu';
@@ -36,7 +44,7 @@ import { IconArrowTopBottom } from '@mastra/playground-ui/icons/central/IconArro
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 export function SessionsSection() {
-  const { factoryId } = useParams<{ factoryId: string }>();
+  const { factoryId, sessionId: routeSessionId } = useParams<{ factoryId: string; sessionId: string }>();
   const openNewUserSession = useOpenNewUserSession();
   const {
     view,
@@ -64,6 +72,12 @@ export function SessionsSection() {
   const defaultHeadings = sessionGroupHeadings(sortedRows, view.groupBy, groupContext);
   const menuGroups = orderGroupHeadings(defaultHeadings, groupOrderKeys);
   const groups = groupSessionRows(filteredRows, view.groupBy, menuGroups, hiddenGroupKeys);
+  const { baseUrl, sessionId: chatSessionId, sessionEnabled } = useChatSessionContext();
+  const subscriptionsBySessionId = useSessionPullRequestSubscriptions({
+    baseUrl,
+    targets: sessionPullRequestTargets(groups.flatMap(group => collapsedRowsKeepingActive(group.rows))),
+    enabled: sessionEnabled && Boolean(routeSessionId) && Boolean(chatSessionId),
+  });
 
   const emptyMessage = emptyListMessage({
     rowCount: rows.length,
@@ -165,6 +179,7 @@ export function SessionsSection() {
                   key={entry.session.sessionId}
                   factoryId={factoryId}
                   row={entry}
+                  subscriptions={subscriptionsBySessionId[entry.session.sessionId]}
                   level={level}
                   compact={view.compact}
                   disabled={deletion.deleting}

@@ -1,9 +1,10 @@
 import type { SessionPullRequestTarget } from '../../../../hooks/useSessionPullRequestSubscriptions';
-import { cardChangeRequest, changeRequestStatus, isSettledChangeRequest } from '../../factory/changeRequestState';
+import { cardChangeRequest, isSettledChangeRequest } from '../../factory/changeRequestState';
 import type { CardChangeRequest } from '../../factory/changeRequestState';
 import { relatedWorkItemIndex } from '../../factory/services/relationships';
 import type { WorkItem } from '../../factory/services/workItems';
 import { isPullRequestSource } from '../../factory/services/workItems';
+import type { SessionListRow } from './sessionRows';
 
 export interface SessionWorkItem {
   item: WorkItem;
@@ -42,15 +43,11 @@ export function sessionWorkItemIndex(workItems: readonly WorkItem[]): ReadonlyMa
   );
 }
 
-export function sessionPullRequestTargets(
-  sessionIds: readonly string[],
-  index: ReadonlyMap<string, SessionWorkItem>,
-): SessionPullRequestTarget[] {
-  return sessionIds.flatMap(sessionId => {
-    const entry = index.get(sessionId);
-    const pullRequest = entry?.pullRequest;
-    const status = pullRequest && changeRequestStatus(pullRequest);
-    if (!entry || !pullRequest || isSettledChangeRequest(status)) return [];
-    return [{ sessionId, threadId: entry.threadId, provider: pullRequest.provider }];
-  });
+export function sessionPullRequestTargets(rows: readonly SessionListRow[]): SessionPullRequestTarget[] {
+  return rows
+    .flatMap(row => [row, ...(row.childRows ?? [])])
+    .flatMap(({ session, threadId, pullRequest, pullRequestStatus }) => {
+      if (!threadId || !pullRequest || isSettledChangeRequest(pullRequestStatus)) return [];
+      return [{ sessionId: session.sessionId, threadId, provider: pullRequest.provider }];
+    });
 }
