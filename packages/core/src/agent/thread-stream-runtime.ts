@@ -4360,13 +4360,20 @@ export class AgentThreadStreamRuntime {
   }
 
   /**
-   * Another runtime ran the thread to an end while this process's run was
-   * parked on it. The parked run keeps its record and stays resumable, but it
-   * no longer holds the thread: otherwise every later send would be queued
-   * onto it, reported delivered, and never run. Queued work starts now, the
-   * way it does after a run finishes.
+   * A parked run that should no longer hold the thread: either another runtime
+   * ran the thread to an end while this process's run was parked on it, or a
+   * same-agent follow-up arrived for a run parked on a non-approval tool
+   * suspension (see `#sendSignal`). The parked run keeps its record and stays
+   * resumable, but it no longer holds the thread: otherwise every later send
+   * would be queued onto it, reported delivered, and never run. Queued work
+   * starts now, the way it does after a run finishes.
    */
-  #releaseSupersededParkedRun(state: AgentThreadRuntimeState, pubsub: PubSub, key: string, runId: string): void {
+  #releaseSupersededParkedRun(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    runId: string,
+  ): void {
     const record = state.threadRunsById.get(runId);
     if (!record || state.activeThreadRunIds.get(key) !== runId || !this.#isParkedRun(state, runId)) return;
     state.activeThreadRunIds.delete(key);
@@ -8195,6 +8202,26 @@ export class AgentThreadStreamRuntime {
         signal,
         accepted: Promise.resolve({ action: 'discard' as const }),
       };
+    }
+
+    // A same-agent run parked on a non-approval tool suspension cannot consume a follow-up: its
+    // loop is waiting on an explicit resume, and `autoResumeSuspendedTools` only fires from a
+    // fresh LLM turn. Release the parked run's thread reservation the way a superseded parked run
+    // is released — the record stays resumable, but the thread is freed — so the follow-up starts
+    // the next turn (and can then resume the suspended tool) instead of being queued onto a run
+    // that never resumes. Approval suspensions keep queueing (the approval API finishes the run,
+    // and the queued message drains then), and a signal from a different agent keeps its existing
+    // `thread-blocked` answer below.
+    if (
+      activeRecord &&
+      activeRecord.agent.id === agent.id &&
+      this.#isParkedRun(state, activeRecord.runId) &&
+      !this.#isApprovalSuspendedRun(state, activeRecord.runId)
+    ) {
+      key ??= this.#threadKey(activeRecord.resourceId, activeRecord.threadId);
+      this.#releaseSupersededParkedRun(state, pubsub, key, activeRecord.runId);
+      activeRecord = undefined;
+      runId = undefined;
     }
 
     if (runId) {
