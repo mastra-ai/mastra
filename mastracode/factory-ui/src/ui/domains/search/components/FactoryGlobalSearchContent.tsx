@@ -118,14 +118,16 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                     movingTo === undefined ? undefined : { stage: movingTo, label: phaseLabel(definition, movingTo) },
                   preparing: runs.preparingFor(item.id),
                 });
-                if (!canStartRun(owner.kind)) {
+                // Moves read from the phase the card sits in (its furthest, as its label shows), not its board's first.
+                const stage = currentItemStage(item, definition);
+                const [move] = definition && stage !== undefined ? cardMoves(item, stage, definition) : [];
+                // The palette reads no sessions or run queue, so only your own request in flight is
+                // certain here; the server refuses a move of a card busy otherwise.
+                if (move ? owner.kind === 'you' : !canStartRun(owner.kind)) {
                   closeSearch();
                   toast.error(BUSY_CARD_MOVE_REFUSAL);
                   return;
                 }
-                // Moves read from the phase the card sits in (its furthest, as its label shows), not its board's first.
-                const stage = currentItemStage(item, definition);
-                const [move] = definition && stage !== undefined ? cardMoves(item, stage, definition) : [];
                 if (move) {
                   closeSearch();
                   board.move(item.id, move.stage);

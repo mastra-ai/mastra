@@ -16,6 +16,7 @@ import {
   asProjectFromBeforeIntakeEvaluator,
   createFactoryStorageForTests,
   createIsolatedFactoryPostgresForTests,
+  finishQueuedRunsForTests,
 } from '../../storage/test-utils.js';
 import { workItemBranch, workItemBranchSource } from '../../work-item-branch.js';
 import { KeptCards } from '../kept-cards.js';
@@ -1010,6 +1011,7 @@ describe('GithubRules', () => {
     expect(
       (await workItems.listDeferredDecisions('org-1', project.id)).map(record => record.decision.type),
     ).toEqual(['signalActivity']);
+    await finishQueuedRunsForTests(workItems);
 
     const moved = await new FactoryTransitionService({ storage: workItems, configVersion, boards }).transition({
       orgId: 'org-1',
@@ -1300,6 +1302,7 @@ describe('GithubRules', () => {
             threadId = next;
           }),
           getSetting: vi.fn(async () => undefined),
+          getSettingOn: vi.fn(async () => undefined),
           setSetting: vi.fn(async () => {}),
           rename: vi.fn(async () => {}),
           requireId: vi.fn(() => {

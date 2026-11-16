@@ -193,6 +193,7 @@ function createSession(
         threadId = next;
       }),
       getSetting: vi.fn(async ({ key }: { key: string }) => settings[key]),
+      getSettingOn: vi.fn(async ({ key }: { threadId: string; key: string }) => settings[key]),
       setSetting: vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
         settings[key] = value;
       }),
@@ -2857,6 +2858,120 @@ describe('FactoryDecisionDispatcher', () => {
       expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: ['done'] });
       const decisions = await storage.listDeferredDecisions('org-1', PROJECT_ID);
       expect(decisions.find(entry => entry.decision.type === 'routeEvent')).toMatchObject({ status: 'succeeded' });
+    });
+  });
+
+  describe('a person moving a card while it has a run in flight', () => {
+    async function cardWithOpenRun(entry: Record<string, unknown>, live: boolean) {
+      const seed = await createFactoryStorageForTests();
+      const storage = seed.workItems;
+      const item = await createItem(storage);
+      const binding = await bindWorkRun(storage, item.id);
+      const { controller, session } = createSession(undefined, { streamActive: live });
+      await session.thread.setSetting({
+        key: FACTORY_OPEN_RUNS_SETTING,
+        value: [
+          {
+            kickoffId: 'running-kickoff',
+            bindingId: binding.id,
+            role: binding.role,
+            startedBy: 'factory-rule-dispatcher',
+            orgId: binding.orgId,
+            factoryProjectId: binding.factoryProjectId,
+            workItemId: binding.workItemId,
+            sessionId: binding.sessionId,
+            threadId: binding.threadId,
+            branch: binding.branch,
+            ...entry,
+          },
+        ],
+      });
+      controller.listActiveThreadRuns.mockReturnValue(live ? [{ runId: 'run-1', threadId: binding.threadId }] : []);
+      // The transition service asks the dispatcher, as the Factory wires them.
+      let dispatcher: FactoryDecisionDispatcher | undefined;
+      const transitionService = new FactoryTransitionService({
+        storage,
+        configVersion: 'rules-v1',
+        runInFlight: async card => (await dispatcher?.hasRunInFlightOnCard(card)) ?? false,
+      });
+      dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        boards: autoStartingBoards(),
+        transitionService,
+        storage,
+        audit: seed.audit,
+        ownerId: 'worker-1',
+      });
+      const card = (await storage.get({ orgId: 'org-1', id: item.id }))!;
+      const personMoves = (stage: string, identity: string) =>
+        transitionService.transition({
+          orgId: 'org-1',
+          factoryProjectId: PROJECT_ID,
+          workItemId: card.id,
+          board: 'work',
+          stage,
+          expectedRevision: card.revision,
+          actor: { type: 'human', id: 'user-1' },
+          ingress: { type: 'human', identity },
+          cause: 'board_drag',
+        });
+      return { storage, card, controller, session, binding, personMoves };
+    }
+
+    it('refuses the move while the run is live elsewhere and the session here has switched to another thread', async () => {
+      const { session, binding, personMoves } = await cardWithOpenRun(
+        { ownerId: 'worker-2', heartbeatAt: Date.now() },
+        false,
+      );
+      // The session's current thread is another one: only the binding's thread holds the run.
+      const ledger = await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING });
+      session.thread.getSetting.mockImplementation(async () => undefined);
+      session.thread.getSettingOn.mockImplementation(async ({ threadId }: { threadId: string; key: string }) =>
+        threadId === binding.threadId ? ledger : undefined,
+      );
+
+      await expect(personMoves('planning', 'other-thread')).resolves.toMatchObject({
+        status: 'rejected',
+        code: 'card_busy',
+      });
+    });
+
+    it('refuses the move into a working phase while the run is live here, and accepts it once the run ends', async () => {
+      const { storage, card, controller, personMoves } = await cardWithOpenRun({}, true);
+
+      await expect(personMoves('planning', 'while-running')).resolves.toMatchObject({
+        status: 'rejected',
+        code: 'card_busy',
+        reason: "Another run can't start while this card is busy.",
+      });
+      expect(await storage.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: card.stages });
+
+      controller.listActiveThreadRuns.mockReturnValue([]);
+      await expect(personMoves('planning', 'after-run')).resolves.toMatchObject({
+        status: 'accepted',
+        stage: 'planning',
+      });
+    });
+
+    it('refuses the move while the run is live on another dispatcher', async () => {
+      const { personMoves } = await cardWithOpenRun({ ownerId: 'worker-2', heartbeatAt: Date.now() }, false);
+
+      await expect(personMoves('planning', 'elsewhere')).resolves.toMatchObject({
+        status: 'rejected',
+        code: 'card_busy',
+      });
+    });
+
+    it('accepts the move when the open run is an orphan of a dead process', async () => {
+      const { personMoves } = await cardWithOpenRun({ ownerId: 'worker-2', heartbeatAt: Date.now() - 60_000 }, false);
+
+      await expect(personMoves('planning', 'orphan')).resolves.toMatchObject({ status: 'accepted' });
+    });
+
+    it('lets the person close the card while the run is live', async () => {
+      const { personMoves } = await cardWithOpenRun({}, true);
+
+      await expect(personMoves('done', 'close')).resolves.toMatchObject({ status: 'accepted', stage: 'done' });
     });
   });
 
@@ -9315,15 +9430,16 @@ describe('phase goals', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
     const current = await storage.get({ orgId: 'org-1', id: item.id });
 
+    // While the build runs, a person can only take the card to a resting or finishing phase.
     const moved = await transitionService.transition({
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       board: 'work',
-      stage: 'planning',
+      stage: 'canceled',
       expectedRevision: current!.revision,
       actor: { type: 'human', id: 'user-1' },
-      ingress: { type: 'human', identity: 'back-to-planning' },
+      ingress: { type: 'human', identity: 'pulled-mid-build' },
       cause: 'human_move',
     });
     expect(moved.status).toBe('accepted');
@@ -9340,10 +9456,10 @@ describe('phase goals', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       board: 'work',
-      stage: 'canceled',
+      stage: 'intake',
       expectedRevision: again!.revision,
       actor: { type: 'human', id: 'user-1' },
-      ingress: { type: 'human', identity: 'cancel' },
+      ingress: { type: 'human', identity: 'revive' },
       cause: 'human_move',
     });
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -9369,10 +9485,10 @@ describe('phase goals', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       board: 'work',
-      stage: 'planning',
+      stage: 'canceled',
       expectedRevision: current!.revision,
       actor: { type: 'human', id: 'user-1' },
-      ingress: { type: 'human', identity: 'back-to-planning' },
+      ingress: { type: 'human', identity: 'pulled-mid-build' },
       cause: 'human_move',
     });
 
@@ -9398,10 +9514,10 @@ describe('phase goals', () => {
         factoryProjectId: PROJECT_ID,
         workItemId: item.id,
         board: 'work',
-        stage: 'planning',
+        stage: 'canceled',
         expectedRevision: current!.revision,
         actor: { type: 'human', id: 'user-1' },
-        ingress: { type: 'human', identity: 'back-to-planning' },
+        ingress: { type: 'human', identity: 'pulled-mid-build' },
         cause: 'human_move',
       });
       return record;

@@ -1,4 +1,5 @@
 import type { ProjectListRepository } from '@mastra/factory/routes/contracts';
+import type { FactoryTransitionResultRejected } from '@mastra/factory/rules/types';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -1134,9 +1135,26 @@ describe('Global search', () => {
     );
   }
 
-  it('refuses to move a card into its lane while automation is already starting a run on it', async () => {
+  // The palette reads no sessions or run queue, so the server decides whether a busy card may move.
+  it("sends a busy card's move to the server and toasts the server's refusal", async () => {
     const requests = stubSearchApi();
     stubAutomationStartingRunOn('work-item-unstarted-review');
+    server.use(
+      http.post<{ itemId: string }, { stage: string }>(
+        `${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/work-items/:itemId/transition`,
+        async ({ params, request }) => {
+          requests.transitions.push({ itemId: params.itemId, body: { stage: (await request.json()).stage } });
+          const result: FactoryTransitionResultRejected = {
+            status: 'rejected',
+            transitionId: 'transition-busy',
+            itemId: params.itemId,
+            code: 'card_busy',
+            reason: 'Another run cannot start on this card yet.',
+          };
+          return HttpResponse.json({ result }, { status: 422 });
+        },
+      ),
+    );
     const user = userEvent.setup();
     const { client } = renderSearchRoute();
     await openWithShortcut();
@@ -1146,8 +1164,13 @@ describe('Global search', () => {
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
     await user.click(await screen.findByText('Bump the command palette dependencies'));
 
-    expect(await screen.findByText("Another run can't start while this card is busy.")).toBeInTheDocument();
-    expect(requests.transitions).toEqual([]);
+    expect(await screen.findByText('Another run cannot start on this card yet.')).toBeInTheDocument();
+    expect(requests.transitions).toEqual([
+      expect.objectContaining({
+        itemId: 'work-item-unstarted-review',
+        body: expect.objectContaining({ stage: 'pr-review' }),
+      }),
+    ]);
   });
 
   it('refuses to open a session on a custom-board card while automation is already starting a run on it', async () => {
