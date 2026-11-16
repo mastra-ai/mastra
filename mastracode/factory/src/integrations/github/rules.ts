@@ -21,6 +21,7 @@ import type { BoardRegistry } from '../../boards/index.js';
 import { toBoardSource } from '../../boards/project-boards.js';
 import type { ProjectBoardSource } from '../../boards/project-boards.js';
 import { cardLabels } from '../../boards/relocate.js';
+import { applyReroute, planReroute } from '../../boards/reroute.js';
 import type { PullRequest, PullRequestPage, VersionControl } from '../../capabilities/version-control.js';
 import { recordIntakeEvent } from '../../metrics/intake.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
@@ -34,7 +35,7 @@ import type {
   FactorySignalActivityDecision,
 } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
-import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
+import type { StoredBoardScope, StoredBoardsStorage } from '../../storage/domains/boards/base.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type {
@@ -49,6 +50,7 @@ import {
 import { primarySource } from '../../storage/domains/work-items/work-item-schema.js';
 import type { WorkItemSourceRow } from '../../storage/domains/work-items/work-item-schema.js';
 import { workItemBranch, workItemBranchSource } from '../../work-item-branch.js';
+import { providerExternalId } from '../../work-items/providers/base.js';
 import type { IntegrationContext, IntegrationHooks } from '../base.js';
 import { closingIssueNumbers } from '../closing-references.js';
 import { storageCards } from '../kept-cards.js';
@@ -450,6 +452,11 @@ export interface GithubRulesOptions {
   configVersion: string;
   /** The code boards, or the per-project source so a project's stored boards run its cards. */
   boards: BoardRegistry | ProjectBoardSource;
+  /**
+   * The project's stored intake routes, so a label change can re-place an untouched card the way
+   * the admin reroute does. Absent where a deployment stores no project boards.
+   */
+  intakeRoutes?: Pick<StoredBoardsStorage, 'listIntakeRoutes'>;
   /** Hands a push to a linked repository off for an environment build. */
   onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
 }
@@ -463,6 +470,65 @@ type CardSyncHandler = (
   repositoryName: string,
   project: ExternalRepositoryProjectTarget,
 ) => Promise<{ status: 'ignored' | 'committed' }>;
+
+/**
+ * Bring a card's stored label evidence in line with GitHub, and re-place the card when the labels
+ * now route it elsewhere. Labels live on the source row, which is what intake routing reads, so
+ * refreshing card metadata alone could never move a card.
+ *
+ * Only a card nobody has started follows the change — the same guard the admin reroute applies.
+ * Where a deployment stores no project boards there is no route to re-place a card from, so the
+ * evidence moves and the card stays put.
+ */
+async function refreshPullRequestLabels(
+  options: GithubRulesOptions,
+  card: Card,
+  source: WorkItemSourceRow,
+  labels: string[],
+): Promise<boolean> {
+  const sourceChanged = !sameStrings(source.labels, labels);
+  // An attached pull request's labels ride its own source: the card still reads as the issue it
+  // hangs off, so they never route it. Refresh the evidence and leave the card where it is.
+  if (card.externalSource?.type !== 'pull-request') {
+    if (!sourceChanged) return false;
+    await syncSourceLabels(options, card, source, labels);
+    return true;
+  }
+  if (!sourceChanged) return false;
+  await syncSourceLabels(options, card, source, labels);
+  if (!options.intakeRoutes) return true;
+  const scope = { orgId: card.orgId, factoryProjectId: card.factoryProjectId };
+  const boards = toBoardSource(options.boards);
+  await boards.load(scope);
+  // Reread the card so the routes see the labels this delivery just wrote.
+  const current = await options.storage.get({ orgId: card.orgId, id: card.id });
+  if (!current) return true;
+  const registry = boards.forProject(scope);
+  const routes = await options.intakeRoutes.listIntakeRoutes(scope);
+  await applyReroute({
+    moves: planReroute(routes, [current], registry),
+    workItems: options.storage,
+    registry,
+    userId: CARD_SYNC_USER_ID,
+  });
+  return true;
+}
+
+/** Write GitHub's current labels onto a source row; a row already carrying them is left alone. */
+function syncSourceLabels(
+  options: GithubRulesOptions,
+  card: Card,
+  source: WorkItemSourceRow,
+  labels: string[],
+): Promise<void> {
+  return options.storage.syncWorkItemSource({
+    orgId: card.orgId,
+    factoryProjectId: card.factoryProjectId,
+    provider: source.provider,
+    externalId: source.externalId,
+    patch: current => (sameStrings(current.labels, labels) ? null : { labels }),
+  });
+}
 
 /**
  * Whether a login is Factory itself. Prefers the resolved identity, which is
@@ -688,11 +754,56 @@ export class GithubRules {
     return Boolean(updated);
   }
 
+  /**
+   * `labeled` / `unlabeled` on a pull request are not rule events either: the card's stored label
+   * evidence is refreshed from the pull request's current labels, and a card nobody has started is
+   * re-placed by the intake routes that now match it, exactly as the admin reroute does. No card is
+   * created, and a card a run already owns stays where it is.
+   */
+  async #syncPullRequestLabels(
+    parsed: ParsedGithubWebhook,
+    repositoryId: number,
+    repositoryName: string,
+    project: ExternalRepositoryProjectTarget,
+  ): Promise<{ status: 'ignored' | 'committed' }> {
+    const pullRequest = object(parsed.payload.pull_request);
+    const pullRequestNumber = number(pullRequest?.number) ?? number(parsed.payload.number);
+    if (!pullRequestNumber || !pullRequest || !Array.isArray(pullRequest.labels)) return { status: 'ignored' };
+    const card = await this.#relatedItem(
+      project.orgId,
+      project.factoryProjectId,
+      repositoryId,
+      repositoryName,
+      undefined,
+      pullRequestNumber,
+      undefined,
+      null,
+    );
+    if (!card) return { status: 'ignored' };
+    const primary = card.externalSource;
+    const source =
+      primary && reconcilablePullRequestNumber(card, { id: repositoryId, fullName: repositoryName }) === pullRequestNumber
+        ? card.workItem.sources.find(row => row.externalId === providerExternalId(primary))
+        : attachedPullRequestSource(card, repositoryId, repositoryName, pullRequestNumber);
+    if (!source) return { status: 'ignored' };
+    try {
+      const changed = await refreshPullRequestLabels(this.options, card, source, labelNames(pullRequest.labels));
+      return { status: changed ? 'committed' : 'ignored' };
+    } catch (error) {
+      // The card changed under us (a run wrote it, or a concurrent delivery won). The next delivery
+      // or reconcile pass carries the same labels, so drop this one instead of 5xx-ing.
+      if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+      return { status: 'ignored' };
+    }
+  }
+
   /** `issues` and `pull_request` actions that are not rule events but still update an existing card. */
   #cardSyncHandler(parsed: ParsedGithubWebhook): CardSyncHandler | undefined {
     const action = string(parsed.payload.action);
     if (parsed.event === 'pull_request') {
-      return action === 'reopened' ? (...args) => this.#syncReopenedPullRequest(...args) : undefined;
+      if (action === 'reopened') return (...args) => this.#syncReopenedPullRequest(...args);
+      if (action === 'labeled' || action === 'unlabeled') return (...args) => this.#syncPullRequestLabels(...args);
+      return undefined;
     }
     if (parsed.event !== 'issues') return undefined;
     switch (action) {
@@ -1728,7 +1839,10 @@ export function sameStrings(left: unknown, right: string[] | undefined): boolean
  * a project mapped to multiple repositories must not reconcile one repo's
  * card against another repo's PR number.
  */
-function reconcilablePullRequestNumber(item: Card, repository: ReconcileRepository): number | undefined {
+function reconcilablePullRequestNumber(
+  item: Card,
+  repository: Pick<ReconcileRepository, 'id' | 'fullName'>,
+): number | undefined {
   if (item.externalSource?.type !== 'pull-request') return undefined;
   const url = item.externalSource.url;
   if (url) {
@@ -2051,8 +2165,9 @@ export function createGithubPullRequestReconciler(
       // installation) must not abort the sweep for the others.
       let cardsByNumber: Map<number, Card[]>;
       // Open pull requests attached to an issue's card. Their facts live on their own source, so
-      // the sweep only replays a missed close; the rules settle the source and the card.
-      let attachedOpen: Set<number>;
+      // the sweep refreshes those labels and replays a missed close; the rules settle the source
+      // and the card.
+      let attachedOpen: Map<number, Array<{ card: Card; source: WorkItemSourceRow }>>;
       let unanswered: Array<{ item: Card; author: string }>;
       try {
         const projects = await options.sourceControl.projectRepositories.listByExternalRepository({
@@ -2061,7 +2176,7 @@ export function createGithubPullRequestReconciler(
         });
         if (projects.length === 0) continue;
         cardsByNumber = new Map<number, Card[]>();
-        attachedOpen = new Set<number>();
+        attachedOpen = new Map();
         unanswered = [];
         for (const project of projects) {
           await rules.loadBoards(project);
@@ -2075,7 +2190,10 @@ export function createGithubPullRequestReconciler(
             if (item.externalSource?.type !== 'pull-request' && !isTerminalWorkItem(toBoardSource(options.boards).forProject(item), item)) {
               for (const source of pullRequestSources(item)) {
                 const number = attachedPullRequestNumber(source, repository);
-                if (number !== undefined && !['closed', 'merged'].includes(source.state ?? '')) attachedOpen.add(number);
+                if (number === undefined || ['closed', 'merged'].includes(source.state ?? '')) continue;
+                const entries = attachedOpen.get(number) ?? [];
+                entries.push({ card: item, source });
+                attachedOpen.set(number, entries);
               }
             }
             const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
@@ -2133,6 +2251,13 @@ export function createGithubPullRequestReconciler(
           }
           for (const card of cards) {
             if (state.state === 'closed') continue;
+            // Labels live on the source row, which is what intake routing reads. Refresh them and
+            // let a card nobody has started follow the change.
+            const primary = card.externalSource;
+            if (state.labels && primary) {
+              const source = card.workItem.sources.find(row => row.externalId === providerExternalId(primary));
+              if (source) await refreshPullRequestLabels(options, card, source, state.labels);
+            }
             const metadata = { ...card.workItem.metadata, ...card.metadata };
             const statusChanged =
               metadata.state !== state.state || metadata.draft !== state.draft || metadata.merged !== state.merged;
@@ -2202,7 +2327,7 @@ export function createGithubPullRequestReconciler(
           recordFailure(repository, error, pullRequestNumber);
         }
       }
-      for (const pullRequestNumber of attachedOpen) {
+      for (const [pullRequestNumber, attachments] of attachedOpen) {
         if (cardsByNumber.has(pullRequestNumber)) continue;
         try {
           const state = await fetchPullRequest({
@@ -2211,7 +2336,17 @@ export function createGithubPullRequestReconciler(
             number: pullRequestNumber,
           });
           summary.checked += 1;
-          if (state?.state !== 'closed') continue;
+          if (!state) continue;
+          if (state.state !== 'closed') {
+            // An attached pull request's labels ride its own source, so the sweep keeps them current
+            // without touching the issue card they hang off.
+            if (state.labels) {
+              for (const { card, source } of attachments) {
+                await refreshPullRequestLabels(options, card, source, state.labels);
+              }
+            }
+            continue;
+          }
           await rules.ingest(reconciledClosedEvent(repository, pullRequestNumber, state));
           await retireReconciledSubscriptions(options.integrationStorage, repository, pullRequestNumber, state.merged);
           if (state.merged) summary.merged += 1;
@@ -2431,6 +2566,7 @@ export function githubRulesOptions(
     storage: context.runtime.workItems,
     configVersion: context.runtime.configVersion,
     boards: context.runtime.boards,
+    ...(context.runtime.intakeRoutes ? { intakeRoutes: context.runtime.intakeRoutes } : {}),
     ...(context.hooks?.onRepositoryPush ? { onRepositoryPush: context.hooks.onRepositoryPush } : {}),
   };
 }

@@ -585,6 +585,7 @@ export function buildIntegrationContext(
     | 'users'
     | 'factoryStorage'
     | 'integrationStorage'
+    | 'storedBoards'
     | 'sourceControlStorage'
     | 'integrations'
   > & {
@@ -593,6 +594,12 @@ export function buildIntegrationContext(
     onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
     configVersion: string;
     boardRegistry: BoardRegistry | ProjectBoardSource;
+    /**
+     * The project-aware boards integration runtime reads, so a label-driven reroute plans against
+     * a project's stored boards. Falls back to `boardRegistry` when a call site has no stored
+     * boards to serve; new-card placement keeps using the code boards either way.
+     */
+    runtimeBoards?: BoardRegistry | ProjectBoardSource;
     /** Passed for the workers' context only: routes do not sweep. */
     keptCards?: CardSource;
     factoryReady: boolean;
@@ -647,7 +654,8 @@ export function buildIntegrationContext(
           runtime: {
             configVersion: deps.configVersion,
             workItems: deps.domains.workItems,
-            boards: deps.boardRegistry,
+            boards: deps.runtimeBoards ?? deps.boardRegistry,
+            ...(deps.storedBoards ? { intakeRoutes: deps.storedBoards.storage } : {}),
             ...(deps.keptCards ? { keptCards: deps.keptCards } : {}),
           },
         }
@@ -828,6 +836,9 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         ...deps,
         // Integrations evaluate code behaviors and place new cards with the code boards.
         boardRegistry: toBoardSource(deps.boardRegistry).codeRegistry,
+        // Runtime rerouting reads the project's stored boards instead, so a label change can move
+        // a card onto a board only that project has.
+        runtimeBoards: deps.boardRegistry,
         stateSigner: deps.stateSigner,
         emitAudit,
         ...(githubRegistration ? { sourceControlOwnerId: 'github' } : {}),
