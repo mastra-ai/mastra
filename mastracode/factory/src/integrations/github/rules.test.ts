@@ -312,6 +312,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub provider
       transitionService: new FactoryTransitionService({ storage: workItems, boards, configVersion }),
       storage: workItems,
       boards,
+      intakeEvaluator: 'route-list',
       ownerId: 'provider-ingest-worker',
     });
     const opened = issueOpened('provider-split-opened', '2020-01-01T00:00:00Z');
@@ -1219,6 +1220,7 @@ describe('GithubRules', () => {
       transitionService,
       storage: workItems,
       boards: autoStartingBoards(createTriageWorkRegistry()),
+      intakeEvaluator: 'route-list',
       ownerId: 'worker-guard',
     });
 
@@ -1252,6 +1254,7 @@ describe('GithubRules', () => {
       transitionService: new FactoryTransitionService({ storage: workItems, configVersion, boards }),
       storage: workItems,
       boards: autoStartingBoards(boards),
+      intakeEvaluator: 'route-list',
       ownerId: 'worker-guard',
     });
 
@@ -1361,6 +1364,7 @@ describe('GithubRules', () => {
       transitionService,
       storage: workItems,
       boards: autoStartingBoards(createTriageWorkRegistry()),
+      intakeEvaluator: 'route-list',
       ownerId: 'worker-1',
       primeCredentials,
       prepareBinding: async ({ record, item, role }) => {
@@ -5955,7 +5959,8 @@ describe('pull request cards on the Work board', () => {
       }),
       storage: harness.workItems,
       boards: autoStartingBoards(boards),
-      ...(withRoutes ? { intakeRoutes: harness.boards } : {}),
+      // Without intake rules to read, the route list, as before intake order.
+      ...(withRoutes ? { intakeRoutes: harness.boards } : { intakeEvaluator: 'route-list' as const }),
       ownerId: 'worker-1',
     });
     let tick = 0;

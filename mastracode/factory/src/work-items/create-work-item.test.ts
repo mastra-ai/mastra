@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
-import { describe, expect, it, onTestFinished } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
@@ -31,7 +31,10 @@ async function setup(routes: StoredIntakeRouteInput[] = []) {
     configVersion: 'cards-v1',
     boards,
   });
-  const create = (input: CreateWorkItemInput, { withRoutes = true } = {}) =>
+  const create = (
+    input: CreateWorkItemInput,
+    { withRoutes = true, evaluator }: { withRoutes?: boolean; evaluator?: 'route-list' } = {},
+  ) =>
     createFactoryWorkItem({
       workItems: seed.workItems,
       boards,
@@ -42,6 +45,7 @@ async function setup(routes: StoredIntakeRouteInput[] = []) {
       factoryProjectId: project.id,
       input,
       ...(withRoutes ? { intakeRoutes: seed.boards } : {}),
+      ...(evaluator ? { intakeEvaluator: evaluator } : {}),
     });
   return { create, seed, project };
 }
@@ -92,10 +96,13 @@ describe('createFactoryWorkItem with intake routes', () => {
     });
   });
 
-  it('places nothing without a routes reader', async () => {
+  it('places nothing without a routes reader when the route list is forced', async () => {
     const { create } = await setup([toPlanning]);
     expect(
-      await create({ title: 'Write the guide', metadata: { labels: ['docs'] } }, { withRoutes: false }),
+      await create(
+        { title: 'Write the guide', metadata: { labels: ['docs'] } },
+        { withRoutes: false, evaluator: 'route-list' },
+      ),
     ).toMatchObject({
       status: 'created',
       item: { board: 'work', stages: ['intake'] },
@@ -233,6 +240,28 @@ describe('createFactoryWorkItem under the intake order evaluator', () => {
     });
     expect(await seed.workItems.list(scope)).toEqual([]);
     expect(await create({ title: 'Write the guide', board: 'desk' })).toMatchObject({ status: 'created' });
+  });
+
+  it.each(['new', 'older'] as const)(
+    'refuses a card without a board on a %s project while its evaluator setting cannot be read, with nothing forced',
+    async age => {
+      const { create, seed, scope } = await setupDesk([docsToTriage], undefined, { withRules: false, age });
+      expect(await create({ title: 'Fix the build', metadata: { labels: ['bug'] } })).toMatchObject({
+        status: 'refused',
+        code: 'intake_board_required',
+      });
+      expect(await seed.workItems.list(scope)).toEqual([]);
+    },
+  );
+
+  it('refuses a card without a board when reading the evaluator setting fails', async () => {
+    const { create, seed, scope } = await setupDesk([docsToTriage], undefined, { age: 'older' });
+    vi.spyOn(seed.boards, 'intakeEvaluator').mockRejectedValueOnce(new Error('storage unavailable'));
+    expect(await create({ title: 'Fix the build', metadata: { labels: ['bug'] } })).toMatchObject({
+      status: 'refused',
+      code: 'intake_board_required',
+    });
+    expect(await seed.workItems.list(scope)).toEqual([]);
   });
 
   it('keeps filing an unmatched card on the first board under the old evaluator', async () => {

@@ -82,7 +82,10 @@ async function setup({
       transitionService,
       auditRecorder,
       sessions: { getSourceControlBySessionId: async () => sourceControl },
-      ...(intakeOrder ? { intakeRoutes: seed.boards, intakeEvaluator: 'intake-order' as const } : {}),
+      // Without intake rules to read, the route list, as before intake order.
+      ...(intakeOrder
+        ? { intakeRoutes: seed.boards, intakeEvaluator: 'intake-order' as const }
+        : { intakeEvaluator: 'route-list' as const }),
     },
   ) as Record<string, { requireApproval?: boolean; execute: (input: unknown, context: unknown) => Promise<unknown> }>;
   const run = <T>(name: string, input: unknown) => tools[name]!.execute(input, {}) as Promise<T>;

@@ -2200,8 +2200,9 @@ export class FactoryDecisionDispatcher {
     // board put it; routes place only what arrives from outside.
     if (record.workItemId !== null) return decision;
     if (!this.#intakeRoutes) {
-      // Intake order has no board of its own to fall back on: the arrival waits for the rules.
-      if (this.#intakeEvaluator === 'intake-order') throw new Error('Intake rules are unavailable right now.');
+      // Only a forced route list may file without the rules: unread, the project's setting could be
+      // intake order, which has no board to fall back on. The arrival waits for the rules.
+      if (this.#intakeEvaluator !== 'route-list') throw new Error('Intake rules are unavailable right now.');
       return decision;
     }
     const scope = { orgId: record.orgId, factoryProjectId: record.factoryProjectId };

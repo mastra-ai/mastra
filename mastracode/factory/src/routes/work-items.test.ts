@@ -95,6 +95,8 @@ function buildApp(
       projects: seed.projects,
       workItems: seed.workItems,
       boardRegistry,
+      // No intake rules to read: the route list, as before intake order.
+      intakeEvaluator: 'route-list',
       queueHealth: seed.queueHealth,
       transitionService: new FactoryTransitionService({
         configVersion: 'factory-config-v1',

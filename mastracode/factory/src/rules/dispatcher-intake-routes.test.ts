@@ -78,15 +78,26 @@ async function setup(
   });
   const configVersion = 'intake-routes-v1';
   const workItems = seeded.workItems;
-  const dispatcher = new FactoryDecisionDispatcher({
-    controller: {} as never,
-    transitionService: new FactoryTransitionService({ storage: workItems, configVersion, boards, audit: seeded.audit }),
-    storage: workItems,
-    boards,
-    ...(options.withRoutesReader === false ? {} : { intakeRoutes: seeded.boards }),
-    ...(options.intakeEvaluator ? { intakeEvaluator: options.intakeEvaluator } : {}),
-    ownerId: 'worker-routes',
-  });
+  const dispatcherWith = (withRoutesReader: boolean) =>
+    new FactoryDecisionDispatcher({
+      controller: {} as never,
+      transitionService: new FactoryTransitionService({
+        storage: workItems,
+        configVersion,
+        boards,
+        audit: seeded.audit,
+      }),
+      storage: workItems,
+      boards,
+      ...(withRoutesReader ? { intakeRoutes: seeded.boards } : {}),
+      ...(options.intakeEvaluator ? { intakeEvaluator: options.intakeEvaluator } : {}),
+      ownerId: 'worker-routes',
+    });
+  let dispatcher = dispatcherWith(options.withRoutesReader !== false);
+  /** A replica that boots with the boards domain working again takes over. */
+  const recover = () => {
+    dispatcher = dispatcherWith(true);
+  };
   let deliveries = 0;
   const route = (input: StoredIntakeRouteInput) => seeded.boards.createIntakeRoute(scope, input, 'admin');
   /** Commits one linked-card decision, as an integration's rules would, and lets the dispatcher apply it. */
@@ -133,7 +144,7 @@ async function setup(
       .map(decision => decision.status);
   };
   /** Gives the dispatcher another turn, a day later, so a decision waiting to retry runs again. */
-  const retry = () => dispatcher.runOnce(new Date('2030-01-02T00:00:00Z'));
+  const retry = (at = new Date('2030-01-02T00:00:00Z')) => dispatcher.runOnce(at);
   /** Commits a status event on an existing card, as an integration does when no rule decided anything, and dispatches it. */
   const deliverEvent = (cardId: string, event: BoardEventFacts, identity = `event-${(deliveries += 1)}`) =>
     deliverDecision(cardId, { type: 'routeEvent', idempotencyKey: `${identity}:event-route`, event }, identity);
@@ -194,6 +205,7 @@ async function setup(
     deliverEvent,
     deliverDecision,
     putAt,
+    recover,
     routeDecisions,
     stageAudits,
     runs,
@@ -694,8 +706,8 @@ describe('intake routes placing linked cards', () => {
     });
   });
 
-  it('places nothing without a routes reader, whatever the project stored', async () => {
-    const { route, deliver } = await setup({ withRoutesReader: false });
+  it('places nothing without a routes reader under a forced route list, whatever the project stored', async () => {
+    const { route, deliver } = await setup({ withRoutesReader: false, intakeEvaluator: 'route-list' });
     await route({ name: 'Everything to triage', target: { boardKey: 'work', phaseKey: 'triage' } });
 
     expect(placed(await deliver({ sourceKey: 'github-issue:1', metadata: { authorTrusted: true } }))).toEqual({
@@ -1087,8 +1099,8 @@ describe('intake routes moving existing cards on status events', () => {
     expect(after!.stageHistory.filter(entry => entry.by.startsWith('intake-route:'))).toHaveLength(1);
   });
 
-  it('moves nothing without a routes reader', async () => {
-    const { route, deliver, deliverEvent } = await setup({ withRoutesReader: false });
+  it('moves nothing without a routes reader under a forced route list', async () => {
+    const { route, deliver, deliverEvent } = await setup({ withRoutesReader: false, intakeEvaluator: 'route-list' });
     await route({ name: 'Done', on: ['work_item.closed'], target: { boardKey: 'work', phaseKey: 'done' } });
     const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
     expect((await deliverEvent(card.id, { type: 'work_item.closed', reason: 'completed' })).card).toMatchObject({
@@ -1357,6 +1369,33 @@ describe('intake by intake order', () => {
       status: 'retry',
       lastError: expect.stringContaining('Intake rules are unavailable'),
     });
+  });
+
+  it("files nothing while the project's evaluator setting cannot be read, then files it once the boards domain is back", async () => {
+    // As when the boards domain failed to initialize: no intake rules, no evaluator setting, nothing forced.
+    const seeded = await setup({ withRoutesReader: false, project: 'new' });
+    await seeded.boards.create(seeded.scope, docsBoard, 'admin');
+    await seeded.boards.createIntakeRoute(
+      seeded.scope,
+      { name: 'Docs', target: { boardKey: 'docs' }, when: DOCS },
+      'admin',
+    );
+    expect(await seeded.deliver({ sourceKey: 'github-issue:9', metadata: { labels: ['docs'] } })).toBeUndefined();
+    await seeded.retry();
+    expect(await seeded.workItems.list(seeded.scope)).toEqual([]);
+    const [waiting] = await seeded.workItems.listDeferredDecisions('org-1', seeded.project.id);
+    expect(waiting).toMatchObject({ status: 'retry', lastError: expect.stringContaining('unavailable') });
+
+    seeded.recover();
+    await seeded.retry(new Date('2030-01-09T00:00:00Z'));
+    const cards = await seeded.workItems.list(seeded.scope);
+    expect(cards.map(placed)).toEqual([{ board: 'docs', stages: ['inbox'] }]);
+  });
+
+  it("keeps an older project's arrival waiting too while its setting cannot be read", async () => {
+    const seeded = await setup({ withRoutesReader: false, withDefaultRoute: true });
+    expect(await seeded.deliver({ sourceKey: 'github-issue:9', metadata: { labels: ['bug'] } })).toBeUndefined();
+    expect(await seeded.workItems.list(seeded.scope)).toEqual([]);
   });
 
   it('still files an unmatched arrival on Work under the old evaluator, on a project from before the setting', async () => {

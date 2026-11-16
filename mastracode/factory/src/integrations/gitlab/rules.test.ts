@@ -765,6 +765,8 @@ describe('GitLabRules', () => {
         }),
         storage: seeded.workItems,
         boards: autoStartingBoards(boards),
+        // No intake rules to read: the route list, as before intake order.
+        intakeEvaluator: 'route-list',
         ownerId: 'worker-1',
       });
       // Run the dispatcher's poll tick right after the push's re-review
@@ -1216,6 +1218,8 @@ describe('merge request cards on the Work board', () => {
       }),
       storage: base.seeded.workItems,
       boards: autoStartingBoards(boards),
+      // No intake rules to read: the route list, as before intake order.
+      intakeEvaluator: 'route-list',
       ownerId: 'worker-1',
     });
     let tick = 0;

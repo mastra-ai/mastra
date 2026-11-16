@@ -20,6 +20,8 @@ const factory = new MastraFactory({
 });
 ```
 
+A project falls back to the old evaluator only when its setting was read and is empty; while it can't be read, arrivals wait and retry and a card created without a board is refused with `intake_board_required`.
+
 During a rolling deploy, replicas still on an older release decide every project by the old evaluator, so a new project's items can be routed that way until all replicas run this release.
 
 **Before you switch**

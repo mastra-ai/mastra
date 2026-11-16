@@ -90,18 +90,21 @@ export async function createFactoryWorkItem({
   // person chose. Under the old evaluator a card naming its stages skips the rules too.
   let boardId = input.board;
   let placement: { phase: string; routeId: string } | undefined;
-  if (boardId === undefined && !intakeRoutes && intakeEvaluator === 'intake-order') {
-    return {
-      status: 'refused',
-      code: 'intake_board_required',
-      message: 'Intake rules are unavailable right now. Pick the board to file it on.',
-    };
-  }
+  const unavailable = {
+    status: 'refused',
+    code: 'intake_board_required',
+    message: 'Intake rules are unavailable right now. Pick the board to file it on.',
+  } as const;
+  // Without the project's setting nothing says it may use the route list's first-board fallback.
+  if (boardId === undefined && !intakeRoutes && intakeEvaluator !== 'route-list') return unavailable;
   if (boardId === undefined) {
     const scope = { orgId, factoryProjectId };
-    const evaluator = intakeRoutes
-      ? await projectIntakeEvaluator(intakeEvaluator, intakeRoutes, scope)
-      : (intakeEvaluator ?? 'route-list');
+    let evaluator: IntakeEvaluator;
+    try {
+      evaluator = intakeRoutes ? await projectIntakeEvaluator(intakeEvaluator, intakeRoutes, scope) : 'route-list';
+    } catch {
+      return unavailable;
+    }
     const routed = intakeRoutes && (evaluator === 'intake-order' || input.stages === undefined);
     const [routes, order] = routed
       ? await Promise.all([
