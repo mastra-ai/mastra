@@ -10,6 +10,7 @@ We built this template to provide a starting point for billing in Mastra, with c
 
 ## Prerequisites
 
+- **macOS or Linux with Node.js 22.13+ or 24**. On Windows, use WSL2 or a Linux container and keep private state on its Linux filesystem. Native Windows is rejected before private state initialization.
 - **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` in `.env` for the bundled Image Assistant and Image Generation examples.
 - Set `BILLING_STUDIO_ENABLED=true` to enable the Image Assistant. Local setup creates the credential used to authenticate in Studio.
 - Optional **[Autumn credentials](https://app.useautumn.com)**: configure `AUTUMN_SECRET_KEY`, trusted customer/feature bindings, and JWT identity as described in the [Autumn guide](docs/autumn.md). The default local provider needs no Autumn credentials.

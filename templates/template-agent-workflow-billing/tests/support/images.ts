@@ -8,6 +8,7 @@ import { createClient } from '@libsql/client/node';
 import { crc32 } from '../../src/images/png-validation.js';
 import { setupLocal } from '../../scripts/setup.js';
 import { createBillingApplication } from '../../src/billing/application.js';
+import { Lifecycle } from '../../src/billing/lifecycle.js';
 import { imageBillingCatalog } from './image-application.js';
 import { createBillingApp } from '../../src/billing/server/routes.js';
 import { billingSocket } from './http.js';
@@ -244,106 +245,114 @@ export async function imageFixture(
   options: { ttl?: number; executionMs?: number; environment?: NodeJS.ProcessEnv } = {},
 ) {
   const root = await mkdtemp(join(tmpdir(), 'billed-images-'));
-  const boundary = await imageBoundary();
-  const environment = {
-    BILLING_PROJECT_ROOT: root,
-    MASTRA_PROJECT_ROOT: root,
-    BILLING_MODE: 'local',
-    BILLING_PROVIDER: 'local',
-    OPENAI_API_KEY: 'controlled',
-    OPENAI_BASE_URL: boundary.url,
-    ...options.environment,
-  };
-  const manifest = await setupLocal(environment);
-  const catalog = imageBillingCatalog(
-    environment,
-    Object.values(manifest.profiles).map(profile => profile!.workspaceId),
-  );
-  if (options.ttl) Object.assign(catalog.definitions[1].policy, { suspendedReservationTtlMs: options.ttl });
-  if (options.executionMs)
-    for (const resource of catalog.definitions)
-      Object.assign(resource.policy, {
-        reservationBudget: {
-          lifetimeMs: 3600000,
-          executionMs: options.executionMs,
-          finalizationMs: 1000,
-          expiryMarginMs: 1000,
+  const lifecycle = new Lifecycle();
+  lifecycle.own(() => rm(root, { recursive: true, force: true }));
+  try {
+    const boundary = await imageBoundary();
+    lifecycle.own(() => boundary.close());
+    const environment = {
+      BILLING_PROJECT_ROOT: root,
+      MASTRA_PROJECT_ROOT: root,
+      BILLING_MODE: 'local',
+      BILLING_PROVIDER: 'local',
+      OPENAI_API_KEY: 'controlled',
+      OPENAI_BASE_URL: boundary.url,
+      ...options.environment,
+    };
+    const manifest = await setupLocal(environment);
+    const catalog = imageBillingCatalog(
+      environment,
+      Object.values(manifest.profiles).map(profile => profile!.workspaceId),
+    );
+    if (options.ttl) Object.assign(catalog.definitions[1].policy, { suspendedReservationTtlMs: options.ttl });
+    if (options.executionMs)
+      for (const resource of catalog.definitions)
+        Object.assign(resource.policy, {
+          reservationBudget: {
+            lifetimeMs: 3600000,
+            executionMs: options.executionMs,
+            finalizationMs: 1000,
+            expiryMarginMs: 1000,
+          },
+        });
+    let application = await createBillingApplication({ environment, catalog });
+    lifecycle.own(() => application.close());
+    let socket = await billingSocket(
+      createBillingApp({
+        organizations: application.organizations,
+        execution: application.execution,
+        commercial: application.runtime.commercial,
+        artifacts: application.artifacts,
+      }),
+    );
+    lifecycle.own(() => socket.close());
+    const database = createClient({ url: manifest.databaseUrl, intMode: 'bigint' });
+    lifecycle.own(() => database.close());
+    const owner = manifest.profiles.owner!,
+      member = manifest.profiles.member!,
+      outsider = manifest.profiles.outsider!;
+    const base = `/billing/workspaces/${owner.workspaceId}`;
+    const call = async (path: string, body?: unknown, key = 'image-once', profile = owner) => {
+      const response = await fetch(`${socket.url}${path}`, {
+        method: body === undefined ? 'GET' : 'POST',
+        headers: {
+          authorization: `Bearer ${profile.credential}`,
+          'content-type': 'application/json',
+          'idempotency-key': key,
         },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
-  let application = await createBillingApplication({ environment, catalog });
-  let socket = await billingSocket(
-    createBillingApp({
-      organizations: application.organizations,
-      execution: application.execution,
-      commercial: application.runtime.commercial,
-      artifacts: application.artifacts,
-    }),
-  );
-  const database = createClient({ url: manifest.databaseUrl, intMode: 'bigint' });
-  const owner = manifest.profiles.owner!,
-    member = manifest.profiles.member!,
-    outsider = manifest.profiles.outsider!;
-  const base = `/billing/workspaces/${owner.workspaceId}`;
-  const call = async (path: string, body?: unknown, key = 'image-once', profile = owner) => {
-    const response = await fetch(`${socket.url}${path}`, {
-      method: body === undefined ? 'GET' : 'POST',
-      headers: {
-        authorization: `Bearer ${profile.credential}`,
-        'content-type': 'application/json',
-        'idempotency-key': key,
+      return { status: response.status, body: (await response.json()) as any };
+    };
+    return {
+      root,
+      environment,
+      manifest,
+      owner,
+      member,
+      outsider,
+      boundary,
+      base,
+      database,
+      call,
+      application: () => application,
+      url: () => socket.url,
+      generate: (key = 'image-once', prompt = 'A blue bird in a quiet forest') =>
+        call(`${base}/agents/image-agent/generate`, { prompt }, key),
+      start: async (key: string, brief = 'A blue bird in a quiet forest') => {
+        const created = await call(`${base}/workflows/image-kit/runs`, {}, key);
+        const id = created.body.executionId;
+        return {
+          id,
+          response: await call(
+            `${base}/workflows/image-kit/runs/${id}/start`,
+            { inputData: { brief } },
+            `${key}-start`,
+          ),
+        };
       },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-    return { status: response.status, body: (await response.json()) as any };
-  };
-  return {
-    root,
-    environment,
-    manifest,
-    owner,
-    member,
-    outsider,
-    boundary,
-    base,
-    database,
-    call,
-    application: () => application,
-    url: () => socket.url,
-    generate: (key = 'image-once', prompt = 'A blue bird in a quiet forest') =>
-      call(`${base}/agents/image-agent/generate`, { prompt }, key),
-    start: async (key: string, brief = 'A blue bird in a quiet forest') => {
-      const created = await call(`${base}/workflows/image-kit/runs`, {}, key);
-      const id = created.body.executionId;
-      return {
-        id,
-        response: await call(`${base}/workflows/image-kit/runs/${id}/start`, { inputData: { brief } }, `${key}-start`),
-      };
-    },
-    resume: (id: string, approved = true, key = 'approve-once') =>
-      call(`${base}/workflows/image-kit/runs/${id}/resume`, { step: 'approval', resumeData: { approved } }, key),
-    stop: async () => {
-      await socket.close();
-      await application.close();
-    },
-    restart: async () => {
-      await socket.close();
-      await application.close();
-      application = await createBillingApplication({ environment, catalog });
-      socket = await billingSocket(
-        createBillingApp({
-          organizations: application.organizations,
-          execution: application.execution,
-          commercial: application.runtime.commercial,
-          artifacts: application.artifacts,
-        }),
-      );
-    },
-    close: async () => {
-      database.close();
-      await socket.close();
-      await application.close();
-      await boundary.close();
-      await rm(root, { recursive: true, force: true });
-    },
-  };
+      resume: (id: string, approved = true, key = 'approve-once') =>
+        call(`${base}/workflows/image-kit/runs/${id}/resume`, { step: 'approval', resumeData: { approved } }, key),
+      stop: async () => {
+        await socket.close();
+        await application.close();
+      },
+      restart: async () => {
+        await socket.close();
+        await application.close();
+        application = await createBillingApplication({ environment, catalog });
+        socket = await billingSocket(
+          createBillingApp({
+            organizations: application.organizations,
+            execution: application.execution,
+            commercial: application.runtime.commercial,
+            artifacts: application.artifacts,
+          }),
+        );
+      },
+      close: () => lifecycle.close(),
+    };
+  } catch (error) {
+    return lifecycle.fail(error);
+  }
 }

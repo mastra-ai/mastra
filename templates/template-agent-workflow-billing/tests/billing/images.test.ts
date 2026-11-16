@@ -3,6 +3,8 @@ import { configurationFile } from '../support/configuration-files.js';
 import { AutumnBillingProvider } from '../../src/billing/providers/autumn/index.js';
 import { afterEach, expect, it, vi } from 'vitest';
 import filesystem from 'node:fs/promises';
+import { Server } from 'node:http';
+import { tmpdir } from 'node:os';
 import { syncBuiltinESMExports } from 'node:module';
 import { ExecutionArtifacts } from '../../src/billing/storage/artifacts.js';
 import { readFile, writeFile, unlink, symlink, link, stat, readdir } from 'node:fs/promises';
@@ -29,6 +31,33 @@ async function fixture(options?: Parameters<typeof imageFixture>[0]) {
   return f;
 }
 const artifacts = (response: any): Artifact[] => response.body.result.object.artifacts;
+
+it.each([
+  { stage: 'local setup', environment: { BILLING_MODE: 'production' }, code: 'invalid_configuration' },
+  { stage: 'application creation', environment: { BILLING_PORT: '0' }, code: 'invalid_input' },
+])('failed $stage releases the image boundary and temporary state', async ({ environment, code }) => {
+  const directory = await filesystem.mkdtemp(join(tmpdir(), 'image-fixture-cleanup-'));
+  vi.stubEnv('TMPDIR', directory);
+  // Observe real listening sockets without replacing their implementation.
+  const listening = vi.spyOn(Server.prototype, 'listen');
+  const servers = listening.mock.contexts as Server[];
+  try {
+    await expect(imageFixture({ environment })).rejects.toMatchObject({ code });
+    expect(servers.length).toBeGreaterThan(0);
+    expect(servers.every(server => !server.listening)).toBe(true);
+    expect(await readdir(directory)).toEqual([]);
+  } finally {
+    listening.mockRestore();
+    vi.unstubAllEnvs();
+    // A failing regression must also release any leaked servers before Vitest exits.
+    for (const server of servers) {
+      const closed = new Promise<void>(resolve => server.close(() => resolve()));
+      server.closeAllConnections();
+      await closed;
+    }
+    await filesystem.rm(directory, { recursive: true, force: true });
+  }
+});
 
 it('image agent persists one artifact and charges one credit exactly once', async () => {
   const f = await fixture();
