@@ -39,6 +39,10 @@ const inputGroupBaseClassName = cn(
   'has-[>[data-align=block-start]]:h-auto has-[>[data-align=block-start]]:flex-col',
   'has-[>[data-align=block-end]]:h-auto has-[>[data-align=block-end]]:flex-col',
   'has-[textarea]:h-auto',
+  // `flex-1` grows along whichever axis the parent runs, so in a flex column it stretches the
+  // height; a single-line group is capped at its rung (see `inputGroupMaxHeight`) and the
+  // vertical shapes release the cap.
+  'has-[textarea]:max-h-none has-[>[data-align=block-end]]:max-h-none has-[>[data-align=block-start]]:max-h-none',
   'has-[>[data-align=inline-start]]:[&>[data-slot=input-group-control]]:pl-0',
   'has-[>[data-align=inline-end]]:[&>[data-slot=input-group-control]]:pr-0',
   // In flex-col, flex-1 zeroes the control's height; force flex-none + w-full instead.
@@ -74,6 +78,12 @@ export type InputGroupProps = React.ComponentProps<'div'> & {
   size?: ControlSize;
 };
 
+const inputGroupMaxHeight: Record<ControlSize, string> = {
+  sm: 'max-h-control-sm',
+  md: 'max-h-control-md',
+  lg: 'max-h-control-lg',
+};
+
 function InputGroup({ className, size, ...props }: InputGroupProps) {
   // A wrapper's rung wins over the field's own: inside a ButtonsGroup the group owns the
   // height of every segment, so a field that kept its own type scale would sit at one rung
@@ -88,6 +98,7 @@ function InputGroup({ className, size, ...props }: InputGroupProps) {
       className={cn(
         inputGroupClassName,
         controlHeight[resolved],
+        inputGroupMaxHeight[resolved],
         controlSpacing[resolved],
         controlIconState,
         'has-[:disabled]:[--control-icon:var(--control-icon-rest)]',
