@@ -821,9 +821,9 @@ export class GitLabRules {
     for (const connectionId of connectionIds) {
       try {
         const factoryUser = await this.options.gitlab.getCurrentUsername?.(connectionId);
-        if (factoryUser !== undefined) return factoryUser.trim().toLowerCase() === normalized;
+        if (factoryUser?.trim().toLowerCase() === normalized) return true;
       } catch {
-        // Try another active credential; otherwise the change counts as a person's.
+        // Try the other active credentials; otherwise the change counts as a person's.
       }
     }
     return false;

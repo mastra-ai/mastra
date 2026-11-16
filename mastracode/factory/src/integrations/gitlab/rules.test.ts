@@ -1689,6 +1689,47 @@ describe("GitLab changes Factory's own connection makes", () => {
   });
 });
 
+describe("GitLab changes Factory's own connection makes, with several connections", () => {
+  it('checks every connection for the one acting as the event user', async () => {
+    const { seeded, project, service, gitlab } = await setup({ duplicateInstallation: true });
+    // The first connection acts as someone else; the second is the one that made the change.
+    vi.mocked(gitlab.getCurrentUsername!).mockResolvedValueOnce('other-bot');
+    await seeded.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'gitlab',
+          type: 'issue',
+          externalId: encodeIssueReference({ host: 'gitlab.example.com', projectId: PROJECT_ID, issueIid: 42 }),
+        },
+        title: 'Issue 42',
+        board: 'work',
+        stages: ['execute'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const delivery = issueOpened('by-second');
+    await service.ingest({
+      ...delivery,
+      payload: {
+        ...delivery.payload,
+        user_username: 'factory-bot',
+        user: { username: 'factory-bot' },
+        object_attributes: { ...delivery.payload.object_attributes, action: 'update' },
+        changes: { labels: { previous: [], current: [{ title: 'bug' }] } },
+      },
+    });
+
+    const [update] = (await seeded.workItems.listDeferredDecisions('org-1', project.id))
+      .map(record => record.decision)
+      .filter(decision => decision.type === 'routeEvent');
+    expect(update).toMatchObject({ fromCardSession: true });
+  });
+});
+
 describe('GitLab label and assignee changes on a card', () => {
   it("records the issue's current labels and assignees on its card, so routes reading them see the change", async () => {
     const { seeded, project, service } = await setup();

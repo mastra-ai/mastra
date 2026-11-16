@@ -556,7 +556,16 @@ export class GithubRules {
     if (found.externalSource?.type !== 'issue') return { status: 'ignored' };
     const labels = labelNames(issue?.labels);
     const before = cardLabels(found);
-    if (sameLabels(before, labels)) return { status: 'ignored' };
+    // GitHub can deliver webhooks out of order (a removal before the add it undoes): drop payloads
+    // older than the last applied one, as for assignees. Equal timestamps (one-second resolution) still apply.
+    const updatedAt = string(issue?.updated_at);
+    const payloadTime = timestamp(updatedAt);
+    const storedTime = timestamp(found.workItem.metadata?.githubLabelsUpdatedAt);
+    if (payloadTime !== undefined && storedTime !== undefined && payloadTime < storedTime) {
+      return { status: 'ignored' };
+    }
+    const advancesTime = payloadTime !== undefined && (storedTime === undefined || payloadTime > storedTime);
+    if (sameLabels(before, labels) && !advancesTime) return { status: 'ignored' };
     // Queued before the labels are recorded: if queueing fails, a redelivery still sees the change.
     const queued = await this.#commitUpdate(
       parsed,
@@ -571,7 +580,7 @@ export class GithubRules {
         orgId: found.orgId,
         id: found.id,
         userId: CARD_SYNC_USER_ID,
-        patch: { metadata: { labels } },
+        patch: { metadata: { labels, ...(payloadTime !== undefined ? { githubLabelsUpdatedAt: updatedAt } : {}) } },
         expectedSourceRevision: primarySource(found)?.revision,
       });
     } catch (error) {

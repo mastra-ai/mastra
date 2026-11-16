@@ -4465,6 +4465,25 @@ describe('GithubRules issue labels', () => {
     expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', board: 'work', stage: 'intake' });
   });
 
+  it('drops a label delivery older than the last one applied, so a late add never undoes a removal', async () => {
+    const { service, workItems, project } = await setupRoutes();
+    await createLinkedIssue(workItems, project.id);
+    const at = (delivery: ReturnType<typeof issueLabels>, updatedAt: string) => {
+      (delivery.payload.issue as Record<string, unknown>).updated_at = updatedAt;
+      return delivery;
+    };
+    // `ship` was added, then removed; GitHub delivers the removal first.
+    await service.ingest(at(issueLabels('unlabeled', [], 'ship-removed'), '2030-01-01T00:00:02Z'));
+    await expect(
+      service.ingest(at(issueLabels('labeled', ['ship'], 'ship-added'), '2030-01-01T00:00:01Z')),
+    ).resolves.toEqual({ status: 'ignored' });
+
+    const updates = (await workItems.listDeferredDecisions('org-1', project.id)).filter(
+      entry => entry.decision.type === 'routeEvent',
+    );
+    expect(updates).toEqual([]);
+  });
+
   it.each([
     ['labels', () => issueLabels('labeled', ['bug', 'ship'], 'label-retried')],
     ['assignees', () => issueAssignees('assigned', ['ada'], 'assign-retried')],
