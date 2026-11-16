@@ -1105,7 +1105,6 @@ describe('Board card pending states', () => {
     configGate.resolve();
 
     await waitFor(() => expect(transitionRequests).toEqual([ITEM_ID]));
-    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
     transitionGate.resolve();
     await waitForMutationsIdle(client);
   });

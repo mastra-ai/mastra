@@ -163,7 +163,7 @@ import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import { migrateSessionResources, privatizeOwnerResourceSessions } from './session/resource-migration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
-import { selfReviewApprovedHead } from './session/self-review-gate.js';
+import { recordRunRepositoryChoice, selfReviewApprovedHead } from './session/self-review-gate.js';
 import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
 import type { ReviewedChangeRequest } from './session/source-control-tools.js';
 import { createSourceControlTools, resolveReviewedChangeRequest } from './session/source-control-tools.js';
@@ -1985,12 +1985,18 @@ export class MastraFactory {
                 audit: auditDomain,
                 ...(workItemsStorage
                   ? {
-                      selfReviewApprovedHead: () =>
-                        selfReviewApprovedHead({
-                          requestContext,
-                          workItems: workItemsStorage,
-                          boards,
-                        }),
+                      workItem: {
+                        selfReviewApprovedHead: target =>
+                          selfReviewApprovedHead({ requestContext, workItems: workItemsStorage, boards, target }),
+                        recordRepository: (sourceControl, target) =>
+                          recordRunRepositoryChoice({
+                            requestContext,
+                            workItems: workItemsStorage,
+                            intake: intakeStorage,
+                            sourceControl,
+                            target,
+                          }),
+                      },
                     }
                   : {}),
               }),

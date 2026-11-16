@@ -19,11 +19,9 @@ import type { StageStep } from '../cardStageBar';
 import { useItemDecisions } from '../hooks/useBoardDecisions';
 import { useItemSessionStatuses } from '../hooks/useItemSessionStatuses';
 import { useBoardItems } from '../hooks/useBoardItems';
-import { useRepositoryChoice } from '../hooks/useRepositoryChoice';
 import { useSessionSubscriptions } from '../hooks/useSessionSubscriptions';
 import type { WorkItem } from '../services/workItems';
 import { BoardStageIcon, phaseIconKind } from './BoardIcons';
-import { RepositoryPickerDialog } from './RepositoryPickerDialog';
 
 const NO_SESSIONS: readonly string[] = [];
 
@@ -49,7 +47,6 @@ export function CardStageBar({
     currentUserId,
     onFailure: message => toast.error(message),
   });
-  const repositoryChoice = useRepositoryChoice(factory, board);
   const { session, links } = useSessionSubscriptions();
   const repository = session.repository;
   const subscriptions = links.subscriptions;
@@ -66,14 +63,7 @@ export function CardStageBar({
   const { current } = stages;
   const moving = evaluatingStages.has(item.id);
   const held = (phase: InstalledPhaseInfo) => !canMoveTo(owner.kind, phase.kind);
-  const moveTo = (stage: string) =>
-    void repositoryChoice.choose(
-      item.source,
-      { ...item.metadata, ...item.workItem?.metadata },
-      stage,
-      slug => move(item.id, stage, { repositorySlug: slug }),
-      () => move(item.id, stage),
-    );
+  const moveTo = (stage: string) => move(item.id, stage);
   const icon = (phase: InstalledPhaseInfo) => (
     <BoardStageIcon stage={phase.id} kind={phaseIconKind(board.id, phase.kind)} decorative />
   );
@@ -154,13 +144,6 @@ export function CardStageBar({
           />
         ) : null}
       </div>
-      {repositoryChoice.pending ? (
-        <RepositoryPickerDialog
-          repositories={factory.repositories}
-          onClose={repositoryChoice.cancel}
-          onSelect={repository => repositoryChoice.select(repository.slug)}
-        />
-      ) : null}
     </>
   );
 }
