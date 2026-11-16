@@ -591,7 +591,9 @@ export const createTimeTravelExecutionParams = (params: {
     steps,
     stepResults,
     nestedStepResults: nestedStepsContext as any,
-    state: initialState ?? snapshot.value ?? {},
+    // The evented engine records mid-run state as `context.__state`; its `value` keeps the run's start
+    // state, so reading only `value` replays the target with the state from before earlier steps ran (#30022).
+    state: initialState ?? snapshotContext?.__state ?? snapshot.value ?? {},
     resumeData,
     stepExecutionPath: snapshot?.stepExecutionPath,
   };

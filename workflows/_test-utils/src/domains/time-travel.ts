@@ -4,9 +4,9 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
-import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 import { MockRegistry } from '../mock-registry';
 import { seedWorkflowRun } from '../seed-run';
+import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 
 /**
  * Create all workflows needed for time travel tests.
@@ -1266,6 +1266,68 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
     createFalsyResumeWorkflow('tt-boolean-resume-workflow', z.boolean());
   }
 
+  // Test: timeTravel keeps the state earlier steps set (#30022)
+  {
+    const id = 'tt-state-from-earlier-steps';
+    const stateSchema = z.object({ order: z.number().optional() });
+    const chargeSawOrder = vi.fn();
+    const receiptSawOrder = vi.fn();
+    let chargeAttempts = 0;
+
+    const save = createStep({
+      id: 'save',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      stateSchema,
+      execute: async ({ setState }) => {
+        await setState({ order: 42 });
+        return {};
+      },
+    });
+    const charge = createStep({
+      id: 'charge',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      stateSchema,
+      execute: async ({ state }) => {
+        chargeSawOrder(state.order);
+        if (chargeAttempts++ === 0) {
+          throw new Error('transient failure');
+        }
+        return {};
+      },
+    });
+    const receipt = createStep({
+      id: 'receipt',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ order: z.number().optional() }),
+      stateSchema,
+      execute: async ({ state }) => {
+        receiptSawOrder(state.order);
+        return { order: state.order };
+      },
+    });
+
+    const workflow = createWorkflow({
+      id,
+      inputSchema: z.object({}),
+      outputSchema: z.object({ order: z.number().optional() }),
+      stateSchema,
+      steps: [save, charge, receipt],
+    });
+    workflow.then(save).then(charge).then(receipt).commit();
+
+    workflows[id] = {
+      workflow,
+      mocks: { chargeSawOrder, receiptSawOrder },
+      resetMocks: () => {
+        chargeSawOrder.mockClear();
+        receiptSawOrder.mockClear();
+        chargeAttempts = 0;
+      },
+    };
+  }
+
   return workflows;
 }
 
@@ -2015,6 +2077,30 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
           expect(replayed.status).toBe('success');
           expect(mocks.observeInput.mock.calls).toEqual([[input], [input]]);
         });
+      },
+    );
+
+    // A checkout saves the order in workflow state, then the charge fails. Recovering with timeTravel to the
+    // charge must replay it with the saved order, not the run's initialState. The evented engine records
+    // mid-run state in the snapshot's `context.__state` and leaves `value` at the start state, and time
+    // travel only read `value`. (#30022)
+    it.skipIf(skipTests.timeTravelPreviousRun || !timeTravel)(
+      'replays a failed step with the state the earlier steps set (#30022)',
+      async () => {
+        const { workflow, mocks, resetMocks } = registry!['tt-state-from-earlier-steps']!;
+        resetMocks?.();
+        const runId = `tt-state-from-earlier-steps-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        const started = await execute(workflow, {}, { runId, initialState: { order: 7 } });
+        expect(started.status).toBe('failed');
+        expect(mocks.chargeSawOrder.mock.calls).toEqual([[42]]);
+
+        const replayed = await timeTravel!(workflow, { step: 'charge', runId });
+
+        expect(replayed.status).toBe('success');
+        expect(mocks.chargeSawOrder.mock.calls).toEqual([[42], [42]]);
+        expect(mocks.receiptSawOrder.mock.calls).toEqual([[42]]);
+        expect(replayed.result).toEqual({ order: 42 });
       },
     );
 
