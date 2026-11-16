@@ -13822,10 +13822,10 @@
       "reason": "seed-rule-b"
     },
     "packages/core/src/loop/shared/steps/execute-tool-core.test.ts": {
-      "tier": "out",
+      "tier": "in",
       "since": "2026-11-16",
-      "last_failure": null,
-      "reason": "clean-30-days"
+      "last_failure": "2026-11-16",
+      "reason": "versioning-fail"
     },
     "packages/core/src/loop/shared/steps/is-task-complete-core.test.ts": {
       "tier": "out",
