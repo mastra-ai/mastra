@@ -52,9 +52,6 @@ async function seedFactoryWithRepository(options?: {
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'user-1',
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/sandbox/mastra',
   });
   const github = { id: 'github', sourceControlStorage: sourceControl } as unknown as GithubIntegration;
   return { seeded, sourceControl, project, projectRepository, installation, github };
@@ -202,9 +199,6 @@ describe('prepareFactoryRuleBinding', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: otherRepository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/other',
     });
     const prepare = vi.fn(async () => ({}) as never);
     const input = bindingInput(project.id);
@@ -760,9 +754,6 @@ describe('prepareFactoryRuleBinding', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: otherRepository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/other',
     });
     const planSession = await sourceControl.sessions.create({
       sessionId: 'sess-plan',
@@ -805,9 +796,6 @@ describe('prepareFactoryRuleBinding', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: doomedRepository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/old',
     });
     const orphaned = await sourceControl.sessions.create({
       sessionId: 'sess-orphaned',
@@ -871,9 +859,6 @@ describe('prepareFactoryRuleBinding', () => {
       orgId: 'org-1',
       connectionId: otherConnection.id,
       repositoryId: otherRepository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/other',
     });
     const foreign = await sourceControl.sessions.create({
       sessionId: 'sess-foreign',
@@ -1000,9 +985,6 @@ describe('prepareFactoryRuleBinding', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: second.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/hydra',
     });
     const createSession = vi.spyOn(sourceControl.sessions, 'create');
     const prepare = vi.fn<FactoryStartCoordinator['prepare']>();
@@ -1036,9 +1018,6 @@ describe('prepareFactoryRuleBinding', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: second.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/hydra',
     });
     const existing = await sourceControl.sessions.create({
       sessionId: 'sess-hydra',

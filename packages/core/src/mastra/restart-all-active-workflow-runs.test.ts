@@ -285,6 +285,7 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
       workflows: 'auto',
       workflowConcurrency: 5,
       workflowGraceMs: 2_000,
+      workflowScanIntervalMs: 60_000,
       durableAgents: 'off',
     });
     expect(
@@ -295,6 +296,13 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
     });
     expect(new Mastra({ logger: false, recovery: { workflowGraceMs: -1 } }).recoveryConfig).toMatchObject({
       workflowGraceMs: 2_000,
+    });
+    expect(new Mastra({ logger: false, recovery: { workflowScanIntervalMs: -1 } }).recoveryConfig).toMatchObject({
+      workflowScanIntervalMs: 60_000,
+    });
+    // A timer longer than 2^31 - 1 ms fires at once, which would turn the loop into a busy one.
+    expect(new Mastra({ logger: false, recovery: { workflowScanIntervalMs: 2 ** 40 } }).recoveryConfig).toMatchObject({
+      workflowScanIntervalMs: 2 ** 31 - 1,
     });
   });
 });

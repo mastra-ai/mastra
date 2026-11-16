@@ -27,8 +27,9 @@ export class ExecutionOwnershipGuard {
     this.#details = options.details;
     this.#remote = !options.subscribe;
     this.#unsubscribe = options.subscribe?.(error => this.#lose(error));
-    this.#armDeadline();
+    // A local claim's heartbeat reports its loss through `subscribe`; only a remote observer needs a deadline.
     if (this.#remote) {
+      this.#armDeadline();
       this.#poll = setInterval(() => {
         if (!this.#pending) void this.check().catch(() => {});
       }, EXECUTION_LEASE_RENEW_INTERVAL_MS);
@@ -88,7 +89,6 @@ export class ExecutionOwnershipGuard {
     while (this.#pending) await this.#pending;
     this.throwIfLost();
     if (this.#disposed) return;
-    if (!this.#remote) this.#armDeadline();
     const pending = this.#check();
     this.#pending = pending;
     try {
@@ -105,7 +105,6 @@ export class ExecutionOwnershipGuard {
         if (this.#disposed) return;
         this.throwIfLost();
         if (this.#remote) this.#armDeadline();
-        else if (this.#deadline) clearTimeout(this.#deadline);
         return;
       } catch (error) {
         this.throwIfLost();

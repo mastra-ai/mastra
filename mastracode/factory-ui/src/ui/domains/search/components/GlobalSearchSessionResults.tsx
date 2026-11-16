@@ -1,20 +1,22 @@
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
-import { GitBranch, GitPullRequest, SquareKanban } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
 import type { SessionSearchResult } from '../services/searchResults';
+import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
+import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
+import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
 
 function sessionResultIcon(kind: SessionSearchResult['kind']): ReactNode {
   switch (kind) {
     case 'work-session':
-      return <SquareKanban />;
+      return <IconKanbanView />;
     case 'review-session':
-      return <GitPullRequest />;
+      return <IconPullRequest />;
     case 'user-session':
-      return <GitBranch />;
+      return <IconBranch />;
   }
 }
 

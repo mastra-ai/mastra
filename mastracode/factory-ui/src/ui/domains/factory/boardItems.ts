@@ -1,12 +1,17 @@
+import { metadataLabels } from '@mastra/factory/work-items/card-labels';
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '@mastra/factory/rules/types';
 import { workItemBranch, workItemThreadTitle } from '@mastra/factory/work-item-branch';
+import { sourceExternalId } from '@mastra/factory/work-items/source-external-id';
 import { isValid } from 'date-fns';
 
 import type { InstalledPhaseInfo } from '../../../api/types';
-import { relativeTime } from '../../../lib/date/relativeTime';
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
 
-export const HIDDEN_CARD_LABELS = new Set([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
+const HIDDEN_CARD_LABELS = new Set([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
+
+export function cardLabels(metadata: Record<string, unknown>): string[] {
+  return metadataLabels(metadata).filter(label => !HIDDEN_CARD_LABELS.has(label.toLowerCase()));
+}
 
 export const SOURCE_LABELS: Record<WorkItemSource, string> = {
   'github-issue': 'Issue',
@@ -71,6 +76,10 @@ export function changeRequestNumberForItem(
 export function gitlabIdentifierForItem(item: Pick<WorkItem, 'source' | 'workItem' | 'metadata'>): string | undefined {
   const metadata = sourceMetadata(item);
   if (item.source === 'gitlab-issue' && typeof metadata.identifier === 'string') return metadata.identifier;
+  if (item.source === 'gitlab-issue') {
+    const iid = metadata.gitlabIssueIid;
+    return typeof iid === 'number' && Number.isSafeInteger(iid) && iid > 0 ? `#${iid}` : undefined;
+  }
   if (item.source !== 'gitlab-pr') return;
   const iid = metadata.gitlabMergeRequestIid;
   return typeof iid === 'number' && Number.isSafeInteger(iid) && iid > 0 ? `!${iid}` : undefined;
@@ -125,35 +134,6 @@ function nonEmptyString(value: unknown): string | undefined {
 }
 
 export type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';
-
-export const PULL_REQUEST_STATUS_LABELS: Record<PullRequestStatus, string> = {
-  draft: 'Draft pull request',
-  open: 'Open pull request',
-  closed: 'Closed pull request',
-  merged: 'Merged pull request',
-};
-
-export function pullRequestStatusForItem(item: Pick<WorkItem, 'workItem' | 'metadata' | 'stages'>): PullRequestStatus {
-  const metadata = sourceMetadata(item);
-  if (metadata.state === 'merged' || metadata.merged === true) return 'merged';
-  if (metadata.state === 'closed') return 'closed';
-  if (metadata.state === 'open') return metadata.draft === true ? 'draft' : 'open';
-  if (item.stages.includes('done')) return 'merged';
-  if (item.stages.includes('canceled')) return 'closed';
-  return metadata.draft === true ? 'draft' : 'open';
-}
-
-/** Status of a pull request attached to an issue card, read from that source alone. */
-export function pullRequestStatusForSource(source: {
-  state: string | null;
-  metadata: Record<string, unknown> | null;
-}): PullRequestStatus {
-  const metadata = source.metadata ?? {};
-  const state = source.state ?? metadata.state;
-  if (state === 'merged' || metadata.merged === true) return 'merged';
-  if (state === 'closed') return 'closed';
-  return metadata.draft === true ? 'draft' : 'open';
-}
 
 /**
  * Source key for a GitHub issue or pull request. Numbers repeat across a
@@ -210,17 +190,6 @@ export function workItemKey(item: Pick<WorkItem, 'source' | 'workItem' | 'metada
     jiraIdentifierForItem(item) ??
     incidentioIdentifierForItem(item)
   );
-}
-
-export function workItemMeta(item: WorkItem): readonly string[] {
-  const metadata = sourceMetadata(item);
-  const author = typeof metadata.author === 'string' ? metadata.author : undefined;
-  const assignee = typeof metadata.assignee === 'string' ? metadata.assignee : undefined;
-  const age = relativeTime(sourceCreatedAt(metadata) ?? item.createdAt);
-  const key = workItemKey(item);
-  if (key === undefined) return [SOURCE_LABELS[item.source], age];
-  const owner = githubNumberForItem(item) === undefined ? (assignee ?? author) : author;
-  return [key, ...(owner ? [owner] : []), age];
 }
 
 /**
@@ -355,6 +324,11 @@ export function persistedSourceKeys(items: readonly WorkItem[]): ReadonlySet<str
     if (candidateSourceKey) keys.add(candidateSourceKey);
     // The URL names the repository, covering cards filed before they were stamped with one.
     if (item.url && (item.source === 'github-issue' || item.source === 'github-pr')) keys.add(item.url);
+    // A pull request attached to an issue card is filed on that card.
+    for (const source of item.workItem?.sources ?? []) {
+      keys.add(sourceExternalId(source));
+      if (source.url) keys.add(source.url);
+    }
   }
   return keys;
 }

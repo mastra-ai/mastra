@@ -51,7 +51,6 @@ export const INTEGRATION_SUBSCRIPTIONS_SCHEMA: CollectionSchema = {
     session_id: { type: 'text', nullable: true },
     resource_id: { type: 'text', nullable: true },
     thread_id: { type: 'text', nullable: true },
-    session_scope: { type: 'text', nullable: true },
     status: { type: 'text' },
     data: { type: 'json' },
     created_at: { type: 'timestamp' },
@@ -99,7 +98,6 @@ export interface IntegrationSubscription<TData> {
   sessionId: string | null;
   resourceId: string | null;
   threadId: string | null;
-  sessionScope: string | null;
   status: string;
   data: TData;
   createdAt: Date;
@@ -112,7 +110,6 @@ export type CreateIntegrationSubscriptionInput<TData> = {
   sessionId?: string | null;
   resourceId?: string | null;
   threadId?: string | null;
-  sessionScope?: string | null;
   /** Defaults to `'active'`. */
   status?: string;
 } & ({} extends TData ? { data?: TData } : { data: TData });
@@ -183,7 +180,6 @@ interface SubscriptionRow extends Record<string, unknown> {
   session_id: string | null;
   resource_id: string | null;
   thread_id: string | null;
-  session_scope: string | null;
   status: string;
   data: unknown;
   created_at: Date;
@@ -271,7 +267,6 @@ export class IntegrationStorage extends FactoryStorageDomain {
       sessionId: row.session_id,
       resourceId: row.resource_id,
       threadId: row.thread_id,
-      sessionScope: row.session_scope,
       status: row.status,
       data: row.data as TSubscription,
       createdAt: row.created_at,
@@ -344,7 +339,6 @@ export class IntegrationStorage extends FactoryStorageDomain {
             session_id: input.sessionId ?? null,
             resource_id: input.resourceId ?? null,
             thread_id: input.threadId ?? null,
-            session_scope: input.sessionScope ?? null,
             status: input.status ?? 'active',
             data: input.data ?? {},
             created_at: now,

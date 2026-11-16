@@ -4,7 +4,6 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { BOARD_CARD_LAYOUT_CLASS } from '../boardLayout';
-import { EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
 
 import { useParams } from 'react-router';
@@ -28,6 +27,7 @@ import {
   sessionLink,
 } from '../cardPrimaryAction';
 import { useCardMorph } from '../hooks/useCardMorph';
+import { useBoardRepository } from '../hooks/useBoardRepository';
 import type { AuditEventPage } from '../services/audit';
 import type { FactoryDecisionSummary } from '../services/decisions';
 import { relationshipPath } from '../services/relationships';
@@ -42,6 +42,7 @@ import { WorkItemDetailsPanel } from './WorkItemDetailsPanel';
 import { WorkItemListRow } from './WorkItemListRow';
 import type { WorkItemMenuProps } from './WorkItemMenuItems';
 import { WorkItemMenuItems } from './WorkItemMenuItems';
+import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
 
 export function WorkItemCard({
   item,
@@ -104,6 +105,7 @@ export function WorkItemCard({
   const { factoryId = '' } = useParams<{ factoryId: string }>();
   const morph = useCardMorph();
   const catalog = useBoardCatalog(item.githubProjectId);
+  const repository = useBoardRepository(item.githubProjectId);
   const boardId = itemBoard(item);
   const definition = catalog.data?.find(board => board.id === boardId);
   // A board without a pull request loop advances cards through its own phases instead.
@@ -127,7 +129,7 @@ export function WorkItemCard({
   const activity = workItemActivity(item, activityPage);
   const state = boardCardState({
     proposal: proposedRun,
-    moving: movingCardStatus(evaluatingStage, definition, item),
+    moving: movingCardStatus(evaluatingStage, definition),
     preparing: startingLabel,
     retryRequested: decision !== undefined && retryingDecisionId === decision.id,
     decision,
@@ -191,12 +193,13 @@ export function WorkItemCard({
 
   const relatedLink = (related: WorkItem): ReactElement => {
     const relatedSession = itemThreadSession(related.sessions);
+    const link = { item: related, contextRepository: repository };
 
     if (relatedSession !== undefined) {
       return (
         <RelatedWorkItemLink
           key={related.id}
-          item={related}
+          {...link}
           href={`/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`}
           kind="session"
         />
@@ -204,12 +207,10 @@ export function WorkItemCard({
     }
 
     if (related.url !== null) {
-      return <RelatedWorkItemLink key={related.id} item={related} href={related.url} kind="external" />;
+      return <RelatedWorkItemLink key={related.id} {...link} href={related.url} kind="external" />;
     }
 
-    return (
-      <RelatedWorkItemLink key={related.id} item={related} href={relationshipPath(related, factoryId)} kind="board" />
-    );
+    return <RelatedWorkItemLink key={related.id} {...link} href={relationshipPath(related, factoryId)} kind="board" />;
   };
   const relatedLinks = relatedItems.map(relatedLink);
 
@@ -321,7 +322,7 @@ export function WorkItemCard({
                       aria-label={`Actions for ${item.title}`}
                       className={REVEAL_ON_CARD_HOVER}
                     >
-                      <EllipsisVertical size={13} aria-hidden />
+                      <IconDotGrid1x3Vertical size={13} aria-hidden />
                     </Button>
                   }
                 />

@@ -23,6 +23,7 @@ import { existsSync } from 'node:fs';
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
+import type { MastraCodeConfig } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
 import { getGlobalMcpPath } from '@mastra/code-sdk/mcp/config';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
@@ -95,6 +96,14 @@ import { createSessionAsRowOwner, prepareSessionRunContext } from './integration
 import { shareLinkedRepositoryChanges } from './linked-repositories-changed.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
+import {
+  FactoryMetrics,
+  installFactoryMetrics,
+  metricsService,
+  resolveMetricsConfig,
+  startFactoryMetrics,
+} from './metrics/index.js';
+import type { FactoryMetricsOptions } from './metrics/index.js';
 import { resolveDeploymentModelProviders } from './routes/config.js';
 import {
   createCustomProvidersPrimer,
@@ -145,7 +154,6 @@ import { hydrateSessionDefaultModel } from './session/default-model-hydration.js
 import { environmentSlugs, resolveSessionRepositories } from './session/environment-repositories.js';
 import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
 import { createSourceControlSessionLookup } from './session/factory-session.js';
-import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { liveSessionsTouchingTheFeed } from './session/live-sessions.js';
@@ -174,7 +182,6 @@ import type { StoredBoardInput, StoredBoardRecord, StoredBoardScope } from './st
 import { ChannelIdentityStorage } from './storage/domains/channel-identity/base.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
-import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
 import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
@@ -248,6 +255,8 @@ export interface MastraFactoryConfig {
    * one connection, every feature on.
    */
   storage: FactoryStorage;
+  /** Scorers for the mounted code agent. None run by default. */
+  scorers?: MastraCodeConfig['scorers'];
   /** Disable persistence of rich scorer results. Default: true. */
   disableScoreStorage?: boolean;
   /**
@@ -268,6 +277,13 @@ export interface MastraFactoryConfig {
    * leases. Omitted → in-process default.
    */
   pubsub?: PubSub;
+  /**
+   * Factory health metrics, sent through `mastra.metrics` (off by default: every record counts
+   * towards observability usage). Pick groups — `process`, `postgres`, `redis`, `sandbox`,
+   * `sessions`, `intake` — or `'all'`. Env overrides: `FACTORY_METRICS` (`all`, `0`, or a list
+   * like `sandbox,intake`), `FACTORY_METRICS_INTERVAL_MS`, `FACTORY_METRICS_MAX_PER_MIN`.
+   */
+  metrics?: FactoryMetricsOptions;
   /**
    * Browser-facing origin used to build integration OAuth/install callback
    * URLs and to derive the auth redirect URI. On the platform the SPA is
@@ -595,6 +611,8 @@ export class MastraFactory {
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   #channelShutdowns: Array<() => Promise<void>> = [];
   #shutdownPromise: Promise<void> | undefined;
+  readonly #metrics: FactoryMetrics;
+  #stopMetrics: (() => Promise<void>) | undefined;
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
   #environmentBuilds: EnvironmentBuildRunner | undefined;
   /** The background session resource migration; resolves `true` when it moved run bindings. */
@@ -628,6 +646,8 @@ export class MastraFactory {
     }
     this.#configVersion = assertFactoryConfigVersion(config.configVersion ?? DEFAULT_FACTORY_CONFIG_VERSION);
     this.#config = config;
+    this.#metrics = new FactoryMetrics(resolveMetricsConfig(config.metrics), metricsService());
+    installFactoryMetrics(this.#metrics);
   }
 
   /**
@@ -842,6 +862,10 @@ export class MastraFactory {
         const { PlatformLinearIntegration } = await import('./integrations/platform/linear/integration.js');
         integrations.push(new PlatformLinearIntegration());
       }
+      if (!integrations.some(integration => integration.id === 'vanta')) {
+        const { PlatformVantaIntegration } = await import('./integrations/platform/vanta/integration.js');
+        integrations.push(new PlatformVantaIntegration());
+      }
     }
     // Never let the key be a silent no-op: it only applies to the integration
     // the factory installs itself, so warn when it had nothing to apply to.
@@ -937,7 +961,6 @@ export class MastraFactory {
         return undefined;
       },
     );
-    const filesystemStorage = storage.registerDomain(new FilesystemStorage());
     const sourceControlStorage = storage.registerDomain(new SourceControlStorage());
     // Event polling keeps its repository list in memory; the bus tells the
     // polling replica about links made on another one.
@@ -956,7 +979,6 @@ export class MastraFactory {
       memorySettings: memorySettingsStorage,
       customProviders: customProvidersStorage,
       sandboxEnvs: sandboxEnvsStorage,
-      filesystem: filesystemStorage,
       projects: factoryProjectsStorage,
       queueHealth: queueHealthStorage,
       workItems: workItemsStorage,
@@ -1883,6 +1905,7 @@ export class MastraFactory {
           gitBranch: '',
         },
         storage: storage.getMastraStorage(),
+        ...(this.#config.scorers ? { scorers: this.#config.scorers } : {}),
         disableScoreStorage: this.#config.disableScoreStorage ?? true,
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
         // Factory owns Knowledge: without its own config, Knowledge stays off
@@ -2352,10 +2375,6 @@ export class MastraFactory {
 
     const notifyApprovalRequested = createSessionApprovalNotifier(sessionReports);
     prepared.base.controller.onSessionCreated(session => {
-      observeSessionFilesystem(session, {
-        filesystem: filesystemStorage,
-        sourceControl: { sessions: sourceControlSessions },
-      });
       observeSessionFirstMessage(session, {
         sourceControl: { sessions: sourceControlSessions },
       });
@@ -2542,11 +2561,27 @@ export class MastraFactory {
         ),
       );
     this.#dispatcher?.start();
+    this.#startMetrics();
     // Outside the Mastra logger, which production runs at WARN. Under
     // `mastra factory dev` the CLI's ready banner reports boot time instead.
     if (bootDiagnosticsEnabled && this.#prepareStartedAt !== undefined)
       logTiming(`boot ${Math.round(performance.now() - this.#prepareStartedAt)}ms`);
     if (process.env.MASTRA_FACTORY_DEV === 'true') void logIntegrationSummary(this.#integrations);
+  }
+
+  #startMetrics(): void {
+    if (this.#stopMetrics) return;
+    const getMastra = () => this.#prepared?.base.controller.getMastra();
+    this.#stopMetrics = startFactoryMetrics(
+      this.#metrics,
+      { getMetrics: () => getMastra()?.metrics, getLogger: () => getMastra()?.getLogger() },
+      {
+        storage: this.#config.storage.getMastraStorage(),
+        vector: this.#config.vector,
+        pubsub: this.#config.pubsub,
+        integrationIds: this.#integrations.map(integration => integration.id),
+      },
+    );
   }
 
   /** Stop Factory-owned background work and channel transports before the host process shuts down. */
@@ -2574,6 +2609,9 @@ export class MastraFactory {
             `[factory] unsubscribing from dispatcher wakes failed: ${error instanceof Error ? error.message : error}`,
           ),
         );
+      const stopMetrics = this.#stopMetrics;
+      this.#stopMetrics = undefined;
+      await stopMetrics?.().catch(() => undefined);
       const backfill = this.#workItemSplitBackfill;
       backfill?.controller.abort();
       const results = await Promise.allSettled([

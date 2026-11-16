@@ -48,7 +48,6 @@ import type { StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
-import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
@@ -137,7 +136,6 @@ export interface FactoryApiRoutesDeps {
     modelCredentials: ModelCredentialsStorage;
     memorySettings: MemorySettingsStorage;
     customProviders: CustomProvidersStorage;
-    filesystem: FilesystemStorage;
     modelDefaults: ModelDefaultsStorage;
     projects: FactoryProjectsStorage;
     queueHealth: QueueHealthStorage;
@@ -534,6 +532,7 @@ export async function prepareFactoryRuleBinding(
       ...(approver ? { startedBy: await starterOf(owner?.workItems, project, approver) } : {}),
       factoryProjectId: input.record.factoryProjectId,
       sessionId: preparedSession.sessionId,
+      expectedBindingId: input.expectedBindingId,
       modelScope,
       defaultModelId: modelScope === 'factory' ? (project.defaultModelId ?? undefined) : undefined,
       threadTitle: workItemThreadTitle({ source, title: input.item.title, metadata: input.item.workItem.metadata }),
@@ -835,20 +834,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     );
     return guardIntegrationRoutes({ ...registration, routes: integration.routes(context) });
   });
-  // Session persistence belongs to the linked source-control provider, not to
-  // GitHub. Replace legacy GitHub-owned handlers with one resolver spanning
-  // the legacy GitHub partition and every registered source-control partition.
-  const sharedSessionRouteKeys = new Set([
-    'GET /web/github/projects/:id/sessions',
-    'POST /web/github/projects/:id/sessions',
-    'GET /web/user-sessions/:sessionId',
-    'DELETE /web/user-sessions/:sessionId',
-    'POST /web/user-sessions/:sessionId/owner',
-    'POST /web/user-sessions/:sessionId/title',
-  ]);
-  const providerRoutes = integrationRoutes.filter(
-    route => !sharedSessionRouteKeys.has(route.method + ' ' + route.path),
-  );
   const sourceControlSessionRoutes =
     sourceControls.length === 0
       ? []
@@ -864,7 +849,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           // A local sandbox's destroy keeps the session directory, so recreate
           // couldn't deliver the fresh checkout it promises there.
           sandboxRecreateSupported: deps.sandbox !== undefined && deps.sandbox.provider !== 'local',
-          filesystem: deps.domains.filesystem,
           ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
           ...(deps.moveThread ? { moveThread: deps.moveThread } : {}),
           ...(githubStorage ? { githubRepositories: githubStorage.repositories } : {}),
@@ -1001,7 +985,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           sourceControls,
           ...(deps.onEnvironmentSaved ? { onEnvironmentSaved: deps.onEnvironmentSaved } : {}),
         })),
-    ...providerRoutes,
+    ...integrationRoutes,
     ...absentStubs,
     ...slackAbsentStubs,
     ...(deps.intakeReady
@@ -1065,7 +1049,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
-          configVersion: deps.configVersion,
           boards: deps.boardRegistry,
         })
       : []),

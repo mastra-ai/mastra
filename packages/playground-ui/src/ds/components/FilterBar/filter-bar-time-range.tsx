@@ -1,5 +1,4 @@
 /* eslint-disable react-refresh/only-export-components */
-import { CalendarIcon } from 'lucide-react';
 import { useRef } from 'react';
 import { FILTER_BAR_CONTROL_SIZE } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
@@ -7,6 +6,7 @@ import type { FilterBarField, FilterBarItem } from './types';
 import { useFilterBarItemKeys } from './use-filter-bar-item-keys';
 import { DateTimeRangePicker } from '@/ds/components/DateTimeRangePicker/date-time-range-picker';
 import type { DateTimeRangePickerProps } from '@/ds/components/DateTimeRangePicker/date-time-range-picker';
+import { IconCalendar1 } from '@/ds/icons/central/IconCalendar1';
 
 export const FILTER_BAR_TIME_RANGE_FIELD_ID = 'timeRange';
 
@@ -19,7 +19,7 @@ export const FILTER_BAR_TIME_RANGE_FIELD_ID = 'timeRange';
 export const FILTER_BAR_TIME_RANGE_FIELD: FilterBarField = {
   id: FILTER_BAR_TIME_RANGE_FIELD_ID,
   label: 'Time',
-  icon: CalendarIcon,
+  icon: IconCalendar1,
   type: 'text',
   operators: ['is'],
   hidden: true,

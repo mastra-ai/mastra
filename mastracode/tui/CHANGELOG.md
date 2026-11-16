@@ -1,5 +1,42 @@
 # mastracode
 
+## 0.50.1-alpha.3
+
+### Patch Changes
+
+- **Showed plugin failures in the session.** When a plugin fails to reload, Mastra Code now shows an error saying it is still running the previous version, and signal provider errors from plugins appear the same way instead of only on the console. ([#30412](https://github.com/mastra-ai/mastra/pull/30412))
+
+- Updated dependencies [[`02dbde1`](https://github.com/mastra-ai/mastra/commit/02dbde13cc09e9605279b46cb49f03f3b91dd48f), [`7f09a63`](https://github.com/mastra-ai/mastra/commit/7f09a63553cd382c5098fa25f8c42312a3d82494), [`5686fa1`](https://github.com/mastra-ai/mastra/commit/5686fa16edd60a1a30b97dbbdf97e852e588436b)]:
+  - @mastra/code-sdk@1.19.1-alpha.3
+
+## 0.50.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`7277766`](https://github.com/mastra-ai/mastra/commit/7277766d6c967c475675d58ff2d0e5c6d7be7c84), [`9eae968`](https://github.com/mastra-ai/mastra/commit/9eae9680d2be2c9596156c1426998c173f80618f), [`951a18b`](https://github.com/mastra-ai/mastra/commit/951a18b08571b87eae318bcd0f5970b8e70ca3c8), [`f4458ee`](https://github.com/mastra-ai/mastra/commit/f4458eea7f221a5b741a4846bba9b95139a8aef8), [`a3b4ef9`](https://github.com/mastra-ai/mastra/commit/a3b4ef9ecda76f961cb9992a2c8787d37d8ce1b3), [`547600d`](https://github.com/mastra-ai/mastra/commit/547600d004e08ecb8b08c84312b535ae5b016c92)]:
+  - @mastra/core@1.84.0-alpha.2
+  - @mastra/memory@1.41.2-alpha.1
+  - @mastra/code-sdk@1.19.1-alpha.2
+
+## 0.50.1-alpha.1
+
+### Patch Changes
+
+- Fixed `ask_user` questions not firing permission hooks. A pending question now fires `PermissionRequest` with `permission_kind: "ask_question"`, and answering or skipping it fires `PermissionResult` with decision `answered` or `dismissed`. Integrations that show a blocked state for approvals, such as terminal multiplexers, now also show it while a question waits for an answer. ([#30301](https://github.com/mastra-ai/mastra/pull/30301))
+
+  `PermissionResult` now reports the `run_id` of its `PermissionRequest`. With background tools enabled, the result was previously dropped when the user answered after the suspended run had ended.
+
+- Improved the error shown when a provider blocks a request. The CLI now suggests retrying, rephrasing, or switching models instead of only saying the content was filtered. ([#30294](https://github.com/mastra-ai/mastra/pull/30294))
+
+- Updated dependencies [[`2788a6d`](https://github.com/mastra-ai/mastra/commit/2788a6d959ec16c454d1ac6564d546f47be8f1eb), [`be9831d`](https://github.com/mastra-ai/mastra/commit/be9831d78983cace224cc60b617dcbbef993c6b6), [`1bac054`](https://github.com/mastra-ai/mastra/commit/1bac054f7a9089d112f2b4732caef0fe9801df71), [`f51098e`](https://github.com/mastra-ai/mastra/commit/f51098e60cbb47a9eac5e458d6d85cd4ef162926), [`51c340a`](https://github.com/mastra-ai/mastra/commit/51c340a7824530b348e157cb6f71094522e2b5c2), [`2788a6d`](https://github.com/mastra-ai/mastra/commit/2788a6d959ec16c454d1ac6564d546f47be8f1eb), [`0d22884`](https://github.com/mastra-ai/mastra/commit/0d228849b8c6867938860fb19a1e92a0a8c77f27), [`7b646a0`](https://github.com/mastra-ai/mastra/commit/7b646a07a8da8aa84ca2a0a4564369c9d2462af5), [`51c340a`](https://github.com/mastra-ai/mastra/commit/51c340a7824530b348e157cb6f71094522e2b5c2), [`7fd6830`](https://github.com/mastra-ai/mastra/commit/7fd6830a26ac38060fa02675b2daef82f2c0ef2e), [`99ec3bd`](https://github.com/mastra-ai/mastra/commit/99ec3bd582a79d85d4c0c09b50ed9ed0830c79d5), [`70f3eba`](https://github.com/mastra-ai/mastra/commit/70f3eba5ecb9870d21582455fb55137663766d50), [`a21d692`](https://github.com/mastra-ai/mastra/commit/a21d69244449f1d478ccb4b7b548e0e0bd202947), [`cb5f3a5`](https://github.com/mastra-ai/mastra/commit/cb5f3a5c7964e9304c9b2a9141ab971158fe16d4), [`af1d6bd`](https://github.com/mastra-ai/mastra/commit/af1d6bdfd25b5ad9c640802585d0478d6f79f00a), [`8ac8822`](https://github.com/mastra-ai/mastra/commit/8ac88228d67a5b3987084adeb40364a333347c97), [`3c1b528`](https://github.com/mastra-ai/mastra/commit/3c1b528b6eadf54528931e299e98f592a5d3e302), [`6d14d0e`](https://github.com/mastra-ai/mastra/commit/6d14d0edc4fb03e800d8d86e7e7fa00bf3943b56), [`8559e74`](https://github.com/mastra-ai/mastra/commit/8559e74767d2baf74e29f408e5dfa41a0d1007b0), [`7b9130f`](https://github.com/mastra-ai/mastra/commit/7b9130f50ec0d68daae4ef11bbfaf2d3bc9454ed), [`0278a5c`](https://github.com/mastra-ai/mastra/commit/0278a5ce834fad3cced73cfd19336a34d1bc8f10), [`ddb52d5`](https://github.com/mastra-ai/mastra/commit/ddb52d535d646870311766e6736efe17e7df5b65), [`a86a47c`](https://github.com/mastra-ai/mastra/commit/a86a47c7ef92aa3a48b6663336235a43b7535aaa), [`8559e74`](https://github.com/mastra-ai/mastra/commit/8559e74767d2baf74e29f408e5dfa41a0d1007b0), [`8559e74`](https://github.com/mastra-ai/mastra/commit/8559e74767d2baf74e29f408e5dfa41a0d1007b0), [`7b646a0`](https://github.com/mastra-ai/mastra/commit/7b646a07a8da8aa84ca2a0a4564369c9d2462af5), [`8acea4c`](https://github.com/mastra-ai/mastra/commit/8acea4cc5b97dcfd1e1179f9b40ca34c05f255cf)]:
+  - @mastra/libsql@1.30.1-alpha.0
+  - @mastra/code-sdk@1.19.1-alpha.1
+  - @mastra/core@1.84.0-alpha.1
+  - @mastra/observability@1.24.1-alpha.0
+  - @mastra/memory@1.41.2-alpha.0
+  - @mastra/pg@1.36.1-alpha.0
+  - @mastra/mcp@2.9.0
+
 ## 0.50.1-alpha.0
 
 ### Patch Changes

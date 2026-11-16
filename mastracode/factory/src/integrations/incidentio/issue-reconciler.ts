@@ -2,9 +2,11 @@ import { workItemPhaseSemantics } from '../../boards/index.js';
 import { toBoardSource } from '../../boards/project-boards.js';
 import type { Intake, IntakeIssue } from '../../capabilities/intake.js';
 import type { IntegrationContext } from '../base.js';
+import { withIntakeDiscovery } from '../intake-discovery.js';
 import { createIssueReconciler } from '../issue-reconciler.js';
 import type { IssueReconciler } from '../issue-reconciler.js';
 import type { IncidentioEventRules } from './default-rules.js';
+import { followUpIssues, scopeSourceIdsToProject } from './routes.js';
 import { IncidentioRules } from './rules.js';
 import type { IncidentioIssueIngress } from './rules.js';
 
@@ -28,8 +30,14 @@ function issueToIngress(itemRef: string, issue: IntakeIssue): IncidentioIssueIng
   };
 }
 
+/**
+ * One incident.io sweep: refresh carded items (metadata, closes), then list
+ * what every project's board shows so follow-ups nobody has carded yet get
+ * their card. incident.io sends Factory no events, so this is the only
+ * first-sight path.
+ */
 export function attachIncidentioIssueReconciler(
-  incidentio: { intake: Intake; rules: IncidentioEventRules },
+  incidentio: { intake: Intake; rules: IncidentioEventRules; isFollowUpSource(sourceId: string): boolean },
   context: IntegrationContext,
 ): IncidentioIssueReconciler | undefined {
   if (!context.runtime || !incidentio.intake.resolveIntakeDispatch) return undefined;
@@ -43,7 +51,7 @@ export function attachIncidentioIssueReconciler(
     incidentioRules: incidentio.rules,
   });
 
-  return createIssueReconciler({
+  const reconcile = createIssueReconciler({
     integrationId: 'incidentio',
     intake: incidentio.intake,
     projects: context.storage.projects,
@@ -81,5 +89,35 @@ export function attachIncidentioIssueReconciler(
         issues: [issueToIngress(item.externalSource?.externalId ?? issue.id, issue)],
       });
     },
+  });
+
+  return withIntakeDiscovery(reconcile, {
+    integrationId: 'incidentio',
+    intake: context.storage.intake,
+    projects: context.storage.projects,
+    open: async (project, selectedIds) => {
+      const bound = await scopeSourceIdsToProject({
+        intake: context.storage.intake,
+        orgId: project.orgId,
+        factoryProjectId: project.id,
+        selectedIds,
+      });
+      // A board shows follow-ups only, so incidents are never listed.
+      return bound
+        .filter(sourceId => incidentio.isFollowUpSource(sourceId))
+        .map(sourceId => async (cursor: string | undefined) => {
+          const page = await incidentio.intake.listItems({
+            orgId: project.orgId,
+            userId: 'factory-rule-dispatcher',
+            sourceIds: [sourceId],
+            ...(cursor ? { cursor } : {}),
+          });
+          return { issues: followUpIssues(page.items), nextCursor: page.nextCursor };
+        });
+    },
+    // incident.io lists follow-ups oldest first and cannot sort or filter them by
+    // status, so a page cap would never reach the newest ones.
+    maxPages: Number.POSITIVE_INFINITY,
+    ingest: input => rules.ingest(input),
   });
 }

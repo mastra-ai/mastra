@@ -227,6 +227,7 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
   // get consistent semantics across transports.
   #localCallbacks: Map<string, Set<EventCallback>> = new Map();
   #closed = false;
+  #writerReleased = false;
   #evictionPolicyChecked = false;
 
   constructor(options: ValkeyStreamsPubSubConfig = {}) {
@@ -949,7 +950,9 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
    * from other processes.
    */
   async releaseLease(key: string, owner: string): Promise<void> {
-    if (this.#closed) return;
+    // Not `#closed`: a nack during close() still republishes through the
+    // writer, and the redelivery must not find the lease still held.
+    if (this.#writerReleased) return;
     await this.#ensureWriterConnected();
     const script = `
       if redis.call("GET", KEYS[1]) == ARGV[1] then
@@ -1032,6 +1035,7 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
     // the caller with a ClosingError.
     await this.flush();
 
+    this.#writerReleased = true;
     if (this.#writeClient.isOpen) {
       try {
         await this.#writeClient.quit();

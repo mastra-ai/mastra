@@ -1,7 +1,7 @@
-import { MoreVerticalIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Button } from '@/ds/components/Button';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { IconDotGrid1x3Vertical } from '@/ds/icons/central/IconDotGrid1x3Vertical';
 
 export function WorkflowStepActions({ children }: { children: ReactNode }) {
   return (
@@ -15,7 +15,7 @@ export function WorkflowStepActions({ children }: { children: ReactNode }) {
             title="Step actions"
             className="nodrag nopan"
           >
-            <MoreVerticalIcon />
+            <IconDotGrid1x3Vertical />
           </Button>
         }
       />

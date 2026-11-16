@@ -219,6 +219,11 @@ describe('create --no-platform', () => {
     await create({ projectName: '', template: PLATFORM_TEMPLATE_REPO, noPlatform: true, analytics });
 
     expect(fs.statSync(cwd).ino).toBe(inode);
+    const degitTarget = tinyexec.x.mock.calls.find(
+      ([command, args]) => command === 'npx' && args[0] === 'degit',
+    )?.[1][2];
+    expect(path.dirname(path.dirname(degitTarget!))).toBe(cwd);
+    expect(fs.readdirSync(cwd).filter(entry => entry.startsWith('.create-factory-'))).toEqual([]);
     const pkg = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'));
     expect(pkg.name).toBe('my-great-mastra-project');
     expect(fs.existsSync(path.join(cwd, '.env'))).toBe(true);
@@ -253,6 +258,8 @@ describe('create --no-platform', () => {
     expect(prompt.placeholder).toBe('my-mastra-factory');
     expect(prompt.validate('')).toMatch(/current directory isn't empty/);
     expect(prompt.validate('template-fixture')).toMatch(/already exists and isn't empty/);
+    fs.writeFileSync(path.join(workDir, 'a-file'), '');
+    expect(prompt.validate('a-file/child')).toMatch(/can't be used as a project directory/);
     expect(fs.existsSync(path.join(workDir, 'named-factory', 'package.json'))).toBe(true);
   });
 
