@@ -312,7 +312,9 @@ describe('PlatformGithubIntegration in connect mode', () => {
       });
     }
     expect(
-      github.calls('/repos/acme/app/pulls', 'POST').map(request => (request.body as { body: string }).body.split('\n')[0]),
+      github
+        .calls('/repos/acme/app/pulls', 'POST')
+        .map(request => (request.body as { body: string }).body.split('\n')[0]),
     ).toEqual(['> Opened by @user-1', '> Opened by @hubot']);
 
     // A call that doesn't name its org still reaches the installation through the apps.

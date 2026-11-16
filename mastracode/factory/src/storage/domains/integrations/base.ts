@@ -152,6 +152,15 @@ export interface IntegrationStorageHandle<
     delete(id: string): Promise<boolean>;
     /** Targeted cleanup, always org-scoped. Returns the number of rows deleted. */
     deleteWhere(where: { orgId: string; targetKey?: string; sessionId?: string }): Promise<number>;
+    /**
+     * Moves the org's subscriptions `fn` maps to a new target (e.g. when the
+     * external object's key changes). Rows `fn` returns null for are left as
+     * they are. Returns the number of rows moved.
+     */
+    rekey(
+      orgId: string,
+      fn: (row: IntegrationSubscription<TSubscription>) => { targetKey: string; data: TSubscription } | null,
+    ): Promise<number>;
   };
   settings: {
     /** The `(org, user)` config, or `null` when never saved. */
@@ -387,6 +396,20 @@ export class IntegrationStorage extends FactoryStorageDomain {
             ...(where.targetKey !== undefined ? { target_key: where.targetKey } : {}),
             ...(where.sessionId !== undefined ? { session_id: where.sessionId } : {}),
           });
+        },
+        rekey: async (orgId, fn) => {
+          const rows = await db().findMany<SubscriptionRow>('integration_subscriptions', { ...scoped, org_id: orgId });
+          let moved = 0;
+          for (const row of rows) {
+            const next = fn(mapSubscription(row));
+            if (!next) continue;
+            moved += await db().updateMany(
+              'integration_subscriptions',
+              { ...scoped, id: row.id },
+              { target_key: next.targetKey, data: next.data, updated_at: new Date() },
+            );
+          }
+          return moved;
         },
       },
       settings: {

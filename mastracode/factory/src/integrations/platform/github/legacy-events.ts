@@ -56,7 +56,7 @@ export function legacyGithubTopicSubscription(config: LegacyGithubTopicConfig): 
         return;
       }
       const accepted = await acceptLegacyGithubEvent(config, parsed, event.timestamp);
-      if (!accepted) {
+      if (accepted.length === 0) {
         logger?.debug('Platform GitHub: github-app event is not for a legacy-mode linked repository', {
           eventId: event.id,
           deliveryId: parsed.deliveryId,
@@ -64,7 +64,8 @@ export function legacyGithubTopicSubscription(config: LegacyGithubTopicConfig): 
         remember(handled, parsed.deliveryId);
         return;
       }
-      await deliverGithubEvent(config.delivery, accepted.event, accepted.orgIds, logger);
+      for (const delivery of accepted)
+        await deliverGithubEvent(config.delivery, delivery.event, delivery.orgIds, logger);
       remember(handled, parsed.deliveryId);
     },
   };
@@ -81,8 +82,9 @@ export function parseLegacyGithubTopicEvent(event: TopicEvent): ParsedGithubWebh
 }
 
 /**
- * The event as Factory should handle it and the orgs it is for, or null when
- * it isn't Factory's. A legacy event for an org that switched before the event
+ * The event as Factory should handle it for each set of orgs it is for (none
+ * when it isn't Factory's): as published for the orgs still on the legacy app,
+ * and re-attributed for each switched org's new installation. A legacy event for an org that switched before the event
  * was published is dropped: the `connect` topic delivers that org's events.
  * One published before the switch still runs, attributed to the
  * `factory-github` installation its repository was re-pointed to.
@@ -91,10 +93,11 @@ async function acceptLegacyGithubEvent(
   config: Pick<LegacyGithubTopicConfig, 'repositories' | 'modes'>,
   event: ParsedGithubWebhook,
   timestamp: number,
-): Promise<{ event: ParsedGithubWebhook; orgIds: string[] } | null> {
+): Promise<{ event: ParsedGithubWebhook; orgIds: string[] }[]> {
   const repositoryId = githubEventRepositoryId(event);
   const installationId = githubEventInstallationId(event);
-  if (repositoryId === undefined || installationId === undefined) return null;
+  if (repositoryId === undefined || installationId === undefined) return [];
+  const deliveries: { event: ParsedGithubWebhook; orgIds: string[] }[] = [];
   const links = await config.repositories.forRepository(repositoryId);
 
   const legacy = new Set<string>();
@@ -106,7 +109,7 @@ async function acceptLegacyGithubEvent(
       }
     }
   }
-  if (legacy.size > 0) return { event, orgIds: [...legacy] };
+  if (legacy.size > 0) deliveries.push({ event, orgIds: [...legacy] });
   for (const link of links.filter(link => link.installationId !== installationId)) {
     const repointed = new Set<string>();
     for (const orgId of link.orgIds) {
@@ -120,10 +123,11 @@ async function acceptLegacyGithubEvent(
       if (moved) repointed.add(orgId);
     }
     if (repointed.size > 0) {
-      return { event: withGithubEventInstallation(event, link.installationId), orgIds: [...repointed] };
+      // Ingest keys a delivery by its installation too, so this copy is not taken for the one above.
+      deliveries.push({ event: withGithubEventInstallation(event, link.installationId), orgIds: [...repointed] });
     }
   }
-  return null;
+  return deliveries;
 }
 
 function remember(keys: Set<string>, key: string): void {

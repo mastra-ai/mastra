@@ -441,4 +441,62 @@ describe('legacy GitHub topic events', () => {
       );
     });
   });
+
+  it('hands a pre-switch event to both the legacy org and the org that switched, each under its own installation', async () => {
+    const subscriptions = [
+      { id: 'sub-legacy', orgId: 'org-legacy', status: 'open' },
+      { id: 'sub-switched', orgId: 'org-switched', status: 'open' },
+    ];
+    const woken: { installationId: unknown; subscriptions: string[] }[] = [];
+    const ingested: unknown[] = [];
+    const github = createGithub({
+      integrationStorage: { subscriptions: { listByTarget: async () => subscriptions } } as never,
+    });
+    const { route, dispatch } = setup({
+      github,
+      links: [
+        { installationId: 7, repositoryId: 101, orgId: 'org-legacy' },
+        { installationId: 900, repositoryId: 101, orgId: 'org-switched' },
+      ],
+      modes: {
+        'org-switched': {
+          version: 1,
+          mode: 'connect',
+          switchedAt: 10_000,
+          installations: [
+            {
+              accountLogin: 'acme',
+              installationId: 900,
+              connectionId: 'conn-github',
+              reviewsConnectionId: 'conn-reviews',
+              legacyInstallationIds: [7],
+            },
+          ],
+        },
+      },
+      ingestFactoryEvent: async event => {
+        ingested.push((event.payload.installation as { id: number }).id);
+        return { status: 'committed' } as never;
+      },
+    });
+    dispatch.mockImplementation(async (event, context) => {
+      const rows = await context.listSubscriptions({} as never, undefined);
+      woken.push({
+        installationId: (event.payload.installation as { id: number }).id,
+        subscriptions: rows.map(row => row.id),
+      });
+      return { delivered: rows.length, failed: 0, skipped: 0, ignored: false };
+    });
+
+    // Published before org-switched's switch, read after it.
+    await route(
+      topicEvent('pull_request', repositoryPayload('opened', { pull_request: { number: 5 } }), { timestamp: 5_000 }),
+    );
+
+    expect(ingested).toEqual([7, 900]);
+    expect(woken).toEqual([
+      { installationId: 7, subscriptions: ['sub-legacy'] },
+      { installationId: 900, subscriptions: ['sub-switched'] },
+    ]);
+  });
 });

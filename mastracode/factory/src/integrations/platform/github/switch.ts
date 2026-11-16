@@ -9,6 +9,8 @@ import type {
   SourceControlInstallationMoveConflict,
   SourceControlStorage,
 } from '../../../storage/domains/source-control/base.js';
+import { changeRequestTargetKey } from '../../github/subscriptions.js';
+import type { GithubSignalSubscriptionData } from '../../github/subscriptions.js';
 import type { PlatformConnection } from '../foundation/connect-binding.js';
 import { platformErrorMessage } from '../platform-connect.js';
 import { FACTORY_GITHUB_PROVIDER_KEY, FACTORY_REVIEWS_GITHUB_PROVIDER_KEY } from './connect-events.js';
@@ -248,6 +250,21 @@ export class PlatformGithubSwitch {
       if (!plan.ready) return { status: 'blocked', plan };
       const { conflicts } = await sourceControl.moveInstallations(ops, { ...scope, moves: plan.moves });
       if (conflicts.length > 0) return { status: 'conflict', conflicts };
+      // Pull request subscriptions are keyed by installation: move them with it, or they'd never wake again.
+      const moved = new Map<string, string>();
+      for (const installation of plan.installations) {
+        for (const legacyId of installation.legacyInstallationIds ?? []) {
+          moved.set(String(legacyId), String(installation.installationId));
+        }
+      }
+      await integrations
+        .forIntegration<unknown, unknown, GithubSignalSubscriptionData>(this.#options.integrationId, ops)
+        .subscriptions.rekey(input.orgId, row => {
+          const installationExternalId = moved.get(row.data.installationExternalId);
+          if (!installationExternalId) return null;
+          const data = { ...row.data, installationExternalId };
+          return { targetKey: changeRequestTargetKey(data), data };
+        });
       const saved = await modes.saveConnect(input.orgId, {
         switchedAt: (this.#options.now ?? Date.now)(),
         switchedBy: input.userId,
@@ -274,12 +291,17 @@ export class PlatformGithubSwitch {
     if (record.mode !== 'connect' || now - (this.#refreshedAt.get(orgId) ?? -Infinity) < REFRESH_INTERVAL_MS) {
       return record;
     }
-    this.#refreshedAt.set(orgId, now);
     const { installations: found } = planGithubSwitch({
       scans: await this.#scan(await this.#appConnections()),
       legacy: [],
     });
-    const recorded = record.installations ?? [];
+    // A failed scan is retried on the next load, not five minutes later.
+    this.#refreshedAt.set(orgId, now);
+    // Merge into the stored record, not a cached one another replica may have saved over since.
+    this.#options.modes.invalidate(orgId);
+    const fresh = await this.#options.modes.get(orgId);
+    if (fresh.mode !== 'connect') return fresh;
+    const recorded = fresh.installations ?? [];
     const merged = recorded.map(installation => {
       const current = found.find(candidate => candidate.installationId === installation.installationId);
       return current
@@ -298,10 +320,10 @@ export class PlatformGithubSwitch {
         before.reviewsConnectionId !== installation.reviewsConnectionId
       );
     });
-    if (!changed || record.switchedAt === undefined) return record;
+    if (!changed || fresh.switchedAt === undefined) return fresh;
     return this.#options.modes.saveConnect(orgId, {
-      switchedAt: record.switchedAt,
-      ...(record.switchedBy ? { switchedBy: record.switchedBy } : {}),
+      switchedAt: fresh.switchedAt,
+      ...(fresh.switchedBy ? { switchedBy: fresh.switchedBy } : {}),
       installations: merged,
     });
   }
