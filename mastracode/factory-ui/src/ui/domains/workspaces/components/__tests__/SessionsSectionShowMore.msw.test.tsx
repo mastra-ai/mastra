@@ -218,9 +218,12 @@ describe('Sessions sidebar show more', () => {
     expect(screen.getAllByRole('link', { name: /^factory\/pr-200\d+$/ })).toHaveLength(1);
   });
 
-  it.each([1, 30])(
-    'keeps open session %i visible across batches and after collapsing without duplicating it',
-    async index => {
+  it.each([
+    { index: 1, first: 26, second: 46, last: 2 },
+    { index: 30, first: 25, second: 45, last: 3 },
+  ])(
+    'keeps open session $index visible across batches and after collapsing without duplicating it',
+    async ({ index, first, second, last }) => {
       stubSessions(Array.from({ length: 48 }, (_, index) => reviewSession(index + 1)));
       const user = userEvent.setup();
 
@@ -233,10 +236,10 @@ describe('Sessions sidebar show more', () => {
       expect(within(group).getByRole('link', { name: activeName })).toHaveAttribute('aria-current', 'page');
 
       await user.click(within(group).getByRole('button', { name: 'Show 20 more' }));
-      await waitFor(() => expect(links()).toHaveLength(26));
+      await waitFor(() => expect(links()).toHaveLength(first));
       await user.click(within(group).getByRole('button', { name: 'Show 20 more' }));
-      await waitFor(() => expect(links()).toHaveLength(46));
-      await user.click(within(group).getByRole('button', { name: 'Show 2 more' }));
+      await waitFor(() => expect(links()).toHaveLength(second));
+      await user.click(within(group).getByRole('button', { name: `Show ${last} more` }));
       await waitFor(() => expect(links()).toHaveLength(48));
 
       await user.click(within(group).getByRole('button', { name: 'Show less' }));
