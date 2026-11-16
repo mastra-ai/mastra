@@ -833,6 +833,9 @@ describe('DurableAgent memory edge cases', () => {
       }
 
       await vi.waitFor(() => expect(generateTitle).toHaveBeenCalledTimes(1));
+      await vi.waitFor(async () =>
+        expect((await mockMemory.getThreadById({ threadId: 'thread-title-om' }))?.title).toBe('OM Thread Title'),
+      );
       result.cleanup();
     });
   });
