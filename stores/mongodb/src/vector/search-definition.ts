@@ -16,6 +16,12 @@ function canon(v: unknown): unknown {
 function normalizeMapping(m: unknown): unknown {
   if (!isObj(m)) return canon(m);
   const out: Document = { ...m };
+  // Atlas fills these string-field defaults when it stores a definition.
+  if (m.type === 'string') {
+    out.indexOptions ??= 'offsets';
+    out.store ??= true;
+    out.norms ??= 'include';
+  }
   if (m.type === 'document' && m.dynamic === undefined) out.dynamic = false;
   if (isObj(m.fields)) out.fields = normalizeFields(m.fields);
   return canon(out);

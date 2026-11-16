@@ -20,6 +20,7 @@ import packageJson from '../../package.json';
 
 import { MongoDBFilterTranslator } from './filter';
 import type { MongoDBFieldCondition, MongoDBVectorFilter } from './filter';
+import { searchDefinitionsEquivalent } from './search-definition';
 
 // Define necessary types and interfaces
 export interface MongoDBUpsertVectorParams extends Omit<UpsertVectorParams, 'vectors'> {
@@ -1372,14 +1373,17 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       } else {
         // Someone else's index: attach to it as-is, and refuse if it maps different fields.
         const [existing] = (await collection.listSearchIndexes(name).toArray()) as SearchIndexInfo[];
-        const mapping = (m?: Document) => JSON.stringify([m?.dynamic ?? false, Object.keys(m?.fields ?? {}).sort()]);
-        if (mapping(existing?.latestDefinition?.mappings) !== mapping(definition.mappings)) {
+        if (!searchDefinitionsEquivalent(existing?.latestDefinition, definition)) {
+          const hint =
+            !target.isByo && target.ownsTextIndex === undefined
+              ? ` If Mastra created this index (registered by an earlier version), call claimLegacyIndex({ indexName: "${indexName}" }) once, then retry.`
+              : '';
           throw new MastraError({
             id: createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { indexName, collectionName },
-            text: `Full-text search index "${name}" already exists on collection "${collectionName}" with a different mapping, and Mastra did not create it, so it will not be modified. Pass a different searchIndexName, or update or drop the existing index yourself.`,
+            text: `Full-text search index "${name}" already exists on collection "${collectionName}" with a different mapping, and Mastra did not create it, so it will not be modified. Pass a different searchIndexName, or update or drop the existing index yourself.${hint}`,
           });
         }
       }
