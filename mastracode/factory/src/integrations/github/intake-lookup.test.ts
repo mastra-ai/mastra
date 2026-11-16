@@ -97,7 +97,7 @@ describe('githubIntakeLookup', () => {
         'item.author': 'outsider',
         'item.assignees': ['ana'],
         'item.key': 'mastra-ai/mastra#12',
-        'author.trusted': false,
+        'item.trusted': false,
         'source.kind': 'issue',
         'source.repository': 'mastra-ai/mastra',
       }),
@@ -111,7 +111,7 @@ describe('githubIntakeLookup', () => {
       const result = await lookup.lookup(scope, url);
       expect(result).toMatchObject({
         status: 'found',
-        facts: { 'source.kind': 'pull_request', 'author.trusted': true, 'item.labels': ['docs'] },
+        facts: { 'source.kind': 'pull_request', 'item.trusted': true, 'pullRequest.trusted': true, 'item.labels': ['docs'] },
       });
     }
   });

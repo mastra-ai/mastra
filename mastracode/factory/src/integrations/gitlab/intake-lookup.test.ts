@@ -99,7 +99,7 @@ describe('gitlabIntakeLookup', () => {
         'item.author': 'outsider',
         'item.assignees': ['ana'],
         'item.key': 'acme/platform/api#3',
-        'author.trusted': false,
+        'item.trusted': false,
         'source.kind': 'issue',
         'source.provider': 'gitlab',
         'source.repository': 'acme/platform/api',
@@ -117,7 +117,8 @@ describe('gitlabIntakeLookup', () => {
         'source.kind': 'pull_request',
         'item.state': 'merged',
         'item.key': 'acme/platform/api!7',
-        'author.trusted': true,
+        'item.trusted': true,
+        'pullRequest.trusted': true,
       },
     });
   });

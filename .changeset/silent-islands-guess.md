@@ -13,4 +13,10 @@ Added a dry run and a "Where would this go?" tester for intake rules. A rule tha
 
 `POST /web/factory/projects/:id/intake/test` takes one item, by `url` or by the `itemId` of a recent card or Not routed item, and shows which board takes it and what every rule answered, including the condition each rule failed on and the item's value. A URL Factory hasn't seen is read once from a GitHub repository or GitLab project linked to the project; others are refused with `not_linked`.
 
+On a card, the tester also replays its recent status events, and one `event` passed in the request, through its board's card-move rules, and says for each whether the card moves, stays or is left to the integration, with every rule's answer. The dispatcher moves cards with the same code.
+
+```json
+{ "itemId": "<card-id>", "event": { "type": "work_item.updated", "labels": { "added": ["ship"], "removed": [] } } }
+```
+
 Neither request files a card, records a decision or writes to a provider. Both run the intake order evaluator's own code, so they answer exactly what filing under intake order would.

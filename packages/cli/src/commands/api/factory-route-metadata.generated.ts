@@ -1045,6 +1045,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "boards",
+      "event",
       "itemId",
       "order",
       "url"
@@ -10722,7 +10723,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "type": "boolean"
             },
             "when": {
-              "default": null,
               "anyOf": [
                 {
                   "type": "object",
@@ -10763,6 +10763,18 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 128
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "moveToBoardKey": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 128,
+                      "pattern": "^[a-z0-9][a-z0-9_-]*$"
                     },
                     {
                       "type": "null"
@@ -10845,14 +10857,22 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.key",
             "item.state",
             "item.assignees",
-            "author.trusted",
+            "item.trusted",
+            "pullRequest.trusted",
             "source.kind",
             "source.integration",
             "source.provider",
             "source.repository",
             "item.pullRequest",
+            "item.hasPullRequest",
+            "item.hasIssue",
+            "card.phase",
             "event.type",
             "event.reason",
+            "event.labels.added",
+            "event.labels.removed",
+            "event.assignees.added",
+            "event.assignees.removed",
             "pullRequest.closesIssue",
             "closedIssue.phase",
             "closedIssue.hasPullRequest"
@@ -10938,10 +10958,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "__schema9": {
           "type": "string",
           "enum": [
-            "work_item.created",
-            "work_item.closed",
+            "work_item.opened",
             "work_item.reopened",
+            "work_item.updated",
+            "work_item.closed",
             "pull_request.opened",
+            "pull_request.reopened",
+            "pull_request.updated",
             "pull_request.synchronized",
             "pull_request.review_requested",
             "pull_request.merged",
@@ -11257,6 +11280,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         },
         "itemId": {
           "$ref": "#/$defs/__schema15"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema16"
         }
       },
       "additionalProperties": false,
@@ -11306,7 +11332,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "type": "boolean"
             },
             "when": {
-              "default": null,
               "anyOf": [
                 {
                   "type": "object",
@@ -11347,6 +11372,18 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 128
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "moveToBoardKey": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 128,
+                      "pattern": "^[a-z0-9][a-z0-9_-]*$"
                     },
                     {
                       "type": "null"
@@ -11433,14 +11470,22 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.key",
             "item.state",
             "item.assignees",
-            "author.trusted",
+            "item.trusted",
+            "pullRequest.trusted",
             "source.kind",
             "source.integration",
             "source.provider",
             "source.repository",
             "item.pullRequest",
+            "item.hasPullRequest",
+            "item.hasIssue",
+            "card.phase",
             "event.type",
             "event.reason",
+            "event.labels.added",
+            "event.labels.removed",
+            "event.assignees.added",
+            "event.assignees.removed",
             "pullRequest.closesIssue",
             "closedIssue.phase",
             "closedIssue.hasPullRequest"
@@ -11526,10 +11571,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "__schema11": {
           "type": "string",
           "enum": [
-            "work_item.created",
-            "work_item.closed",
+            "work_item.opened",
             "work_item.reopened",
+            "work_item.updated",
+            "work_item.closed",
             "pull_request.opened",
+            "pull_request.reopened",
+            "pull_request.updated",
             "pull_request.synchronized",
             "pull_request.review_requested",
             "pull_request.merged",
@@ -11556,6 +11604,79 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         },
         "__schema15": {
           "$ref": "#/$defs/__schema3"
+        },
+        "__schema16": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "work_item.opened",
+                "work_item.reopened",
+                "work_item.updated",
+                "work_item.closed",
+                "pull_request.opened",
+                "pull_request.reopened",
+                "pull_request.updated",
+                "pull_request.synchronized",
+                "pull_request.review_requested",
+                "pull_request.merged",
+                "pull_request.closed"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "completed",
+                "canceled"
+              ]
+            },
+            "labels": {
+              "$ref": "#/$defs/__schema17"
+            },
+            "assignees": {
+              "$ref": "#/$defs/__schema17"
+            },
+            "pullRequestTrusted": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        "__schema17": {
+          "type": "object",
+          "properties": {
+            "added": {
+              "default": [],
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema18"
+              }
+            },
+            "removed": {
+              "default": [],
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema19"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "__schema18": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "__schema19": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
         }
       }
     },
@@ -11670,22 +11791,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     "failed": {
                       "type": "array",
                       "items": {
-                        "type": "object",
-                        "properties": {
-                          "field": {
-                            "type": "string"
-                          },
-                          "operator": {
-                            "type": "string"
-                          },
-                          "value": {},
-                          "actual": {}
-                        },
-                        "required": [
-                          "field",
-                          "operator",
-                          "actual"
-                        ]
+                        "$ref": "#/$defs/__schema0"
                       }
                     },
                     "to": {
@@ -11719,14 +11825,277 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "rules"
             ]
           }
+        },
+        "current": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "boardKey": {
+                  "type": "string"
+                },
+                "phase": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "routeId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "boardKey",
+                "phase",
+                "routeId"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "moves": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "decisionId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "event": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "work_item.opened",
+                      "work_item.reopened",
+                      "work_item.updated",
+                      "work_item.closed",
+                      "pull_request.opened",
+                      "pull_request.reopened",
+                      "pull_request.updated",
+                      "pull_request.synchronized",
+                      "pull_request.review_requested",
+                      "pull_request.merged",
+                      "pull_request.closed"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "completed",
+                      "canceled"
+                    ]
+                  },
+                  "labels": {
+                    "type": "object",
+                    "properties": {
+                      "added": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "removed": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "added",
+                      "removed"
+                    ]
+                  },
+                  "assignees": {
+                    "type": "object",
+                    "properties": {
+                      "added": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "removed": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "added",
+                      "removed"
+                    ]
+                  },
+                  "pullRequestTrusted": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              },
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "moves",
+                  "stays",
+                  "rule_default",
+                  "ignored"
+                ]
+              },
+              "to": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "boardKey": {
+                        "type": "string"
+                      },
+                      "phase": {
+                        "type": "string"
+                      },
+                      "routeId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "boardKey",
+                      "phase",
+                      "routeId"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "phase": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rules": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "routeId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "took",
+                        "lost",
+                        "no_match",
+                        "skipped",
+                        "disabled"
+                      ]
+                    },
+                    "failed": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    },
+                    "to": {
+                      "type": "object",
+                      "properties": {
+                        "boardKey": {
+                          "type": "string"
+                        },
+                        "routeId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "boardKey",
+                        "routeId"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "routeId",
+                    "name",
+                    "outcome"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "decisionId",
+              "at",
+              "event",
+              "outcome",
+              "to",
+              "phase",
+              "reason",
+              "rules"
+            ]
+          }
         }
       },
       "required": [
         "item",
         "placement",
         "reason",
-        "boards"
-      ]
+        "boards",
+        "current",
+        "moves"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "type": "string"
+            },
+            "operator": {
+              "type": "string"
+            },
+            "value": {},
+            "actual": {}
+          },
+          "required": [
+            "field",
+            "operator",
+            "actual"
+          ]
+        }
+      }
     }
   },
   "POST /web/factory/projects/:id/runs/start": {
