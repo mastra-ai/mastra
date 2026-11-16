@@ -13,6 +13,6 @@ const factory = new MastraFactory({
 });
 ```
 
-With the defaults a process holds up to 12 run slots. `GET /web/factory/projects/:id/run-queue` adds a `lane` to each run, `queuedByLane`, and `slots.interactive`; existing fields keep their meaning. The board's queue lists waiting replies first.
+With the defaults a process holds up to 12 run slots. `GET /web/factory/projects/:id/run-queue` adds a `lane` to each run, `queuedByLane`, and `slots.interactive`, and lists waiting replies before automated runs. A run's `position` now counts within its lane, so a waiting reply and the oldest automated run are both `1`. The other fields keep their meaning; `slots.inUse` counts automated slots, including any a reply borrowed.
 
 GitHub rule actors now carry `human: true` when GitHub reports the sender as a user.
