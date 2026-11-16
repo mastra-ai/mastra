@@ -1786,3 +1786,101 @@ describe('isExecutionFenceError', () => {
     expect(isExecutionFenceError(new Error('other'))).toBe(false);
   });
 });
+
+describe('ExecutionFence release orderings with a hung release (#30206)', () => {
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>(yes => {
+      resolve = yes;
+    });
+    return { promise, resolve };
+  }
+
+  async function sharedClaim() {
+    vi.useFakeTimers();
+    const storage = new InMemoryStore();
+    const store = await storage.getStore('workflows');
+    if (!store) throw new Error('workflows store missing');
+    const mastra = new Mastra({ storage, logger: false });
+    const claimRun = (mode: 'acquire' | 'takeover' = 'acquire') =>
+      ExecutionFence.claim({ leaseProvider: NoopLeaseProvider, workflowsStore: store, agentId, runId: 'run-1', mode });
+    const coordinator = await claimRun();
+    coordinator.stopHeartbeat();
+    const participant = await ExecutionFence.follow(mastra, 'run-1', coordinator.claim);
+    if (!participant) throw new Error('participant missing');
+    return { store, mastra, coordinator, participant, claimRun };
+  }
+
+  function hangNextRelease(store: WorkflowsStorage) {
+    const entered = deferred<void>();
+    vi.spyOn(store, 'releaseRunOwnership').mockImplementationOnce(async () => {
+      entered.resolve();
+      return new Promise<boolean>(() => {});
+    });
+    return entered.promise;
+  }
+
+  it('spends no grace once a later abandoned release confirms, even when an earlier one hangs (#30206)', async () => {
+    const { store, mastra, coordinator, participant } = await sharedClaim();
+    const entered = hangNextRelease(store);
+    void ExecutionFence.releaseSharedClaim(mastra, 'run-1', coordinator.claim, 'abandoned');
+    await entered;
+    await ExecutionFence.releaseSharedClaim(mastra, 'run-1', coordinator.claim, 'abandoned');
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    expect(participant.isLost()).toBe(true);
+  });
+
+  it('waits at most one renewal interval in total on overlapping settled and abandoned releases (#30206)', async () => {
+    const { store, mastra, coordinator, participant, claimRun } = await sharedClaim();
+    const entered = hangNextRelease(store);
+    void ExecutionFence.releaseSharedClaim(mastra, 'run-1', coordinator.claim, 'abandoned');
+    await entered;
+    const gate = deferred<void>();
+    const settledAtStore = deferred<void>();
+    const release = store.releaseRunOwnership.bind(store);
+    vi.spyOn(store, 'releaseRunOwnership').mockImplementationOnce(async args => {
+      const result = await release(args);
+      settledAtStore.resolve();
+      await gate.promise;
+      return result;
+    });
+    const settled = ExecutionFence.releaseSharedClaim(mastra, 'run-1', coordinator.claim, 'settled');
+    await settledAtStore.promise;
+    await claimRun('takeover');
+    const renewalGate = deferred<void>();
+    const renew = store.renewRunOwnership.bind(store);
+    vi.spyOn(store, 'renewRunOwnership').mockImplementationOnce(async args => {
+      await renewalGate.promise;
+      return renew(args);
+    });
+    // The renewal sent at 5s fails at 6s; the settled release answers true at 10s.
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS + 1000);
+    renewalGate.resolve();
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS - 1000);
+    gate.resolve();
+    await settled;
+    // One bounded wait ends by 11s and spends the grace, so the 15s renewal reports the takeover.
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS + 1000);
+    expect(participant.isLost()).toBe(true);
+  });
+
+  it('keeps a settled fence when its own release confirms after an earlier shared release hangs (#30206)', async () => {
+    const { store, mastra, coordinator, participant, claimRun } = await sharedClaim();
+    const entered = hangNextRelease(store);
+    void ExecutionFence.releaseSharedClaim(mastra, 'run-1', coordinator.claim, 'settled');
+    await entered;
+    const renewalGate = deferred<void>();
+    const renew = store.renewRunOwnership.bind(store);
+    vi.spyOn(store, 'renewRunOwnership').mockImplementationOnce(async args => {
+      await renewalGate.promise;
+      return renew(args);
+    });
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    expect(await participant.settle(async () => {})).toBe('owned');
+    const successor = await claimRun();
+    renewalGate.resolve();
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS + 1);
+    expect(participant.isLost()).toBe(false);
+    expect(await store.getRunOwnership({ runId: 'run-1' })).toMatchObject({ ownerId: successor.executionId });
+  });
+});

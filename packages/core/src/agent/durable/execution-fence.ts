@@ -62,11 +62,14 @@ const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, M
  * What a release of a claim answered, or false when it has not answered within one renewal interval. A release can
  * hang; a renewal result must never wait on one longer than that.
  */
-async function releaseAnswer(release: Promise<boolean> | undefined): Promise<boolean> {
+async function releaseAnswer(
+  release: Promise<boolean> | undefined,
+  deadline = Date.now() + EXECUTION_LEASE_RENEW_INTERVAL_MS,
+): Promise<boolean> {
   if (!release) return false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const unanswered = new Promise<boolean>(resolve => {
-    timer = setTimeout(() => resolve(false), EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    timer = setTimeout(() => resolve(false), Math.max(0, deadline - Date.now()));
     timer.unref?.();
   });
   try {
@@ -76,9 +79,21 @@ async function releaseAnswer(release: Promise<boolean> | undefined): Promise<boo
   }
 }
 
-/** True once either release confirmed the claim. A failed release left the claim held, so a later one can confirm it. */
+/**
+ * True as soon as either release confirmed the claim, and false once both answered without confirming it. A failed
+ * release left the claim held, so a later one can confirm it, and an earlier release that hangs must not hide that.
+ */
 function eitherConfirmed(earlier: Promise<boolean> | undefined, next: Promise<boolean>): Promise<boolean> {
-  return earlier ? earlier.then(confirmed => confirmed || next) : next;
+  if (!earlier) return next;
+  return new Promise<boolean>(resolve => {
+    let unanswered = 2;
+    for (const answer of [earlier, next]) {
+      void answer.then(confirmed => {
+        if (confirmed) resolve(true);
+        else if (--unanswered === 0) resolve(false);
+      });
+    }
+  });
 }
 
 export { MASTRA_DURABLE_EXECUTIONS_KEY };
@@ -1171,9 +1186,11 @@ export class ExecutionFence implements RunFenceScope {
    * process. A settled fence ignores it. An unsettled fence ignores it once, unless this process abandoned the claim.
    */
   async #releaseExplainsFailedRenewal(recordShowsRelease: boolean): Promise<boolean> {
-    if (!recordShowsRelease && !(await releaseAnswer(this.#ownRelease))) return false;
+    // One deadline for the whole decision, so waiting on both releases still takes at most one renewal interval.
+    const deadline = Date.now() + EXECUTION_LEASE_RENEW_INTERVAL_MS;
+    if (!recordShowsRelease && !(await releaseAnswer(this.#ownRelease, deadline))) return false;
     if (this.#settlement) return true;
-    if (this.#releaseSeen || (await releaseAnswer(this.#abandonedRelease))) return false;
+    if (this.#releaseSeen || (await releaseAnswer(this.#abandonedRelease, deadline))) return false;
     this.#releaseSeen = true;
     return true;
   }
