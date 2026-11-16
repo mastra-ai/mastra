@@ -484,6 +484,9 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     );
   }
 
+  /** `transferLease` checks the owner and swaps it under the per-key mutation lock every lease operation holds. */
+  readonly atomicTransfer = true;
+
   /**
    * Transfers a live lease without leaving the key unowned. The owner check and
    * replacement are serialized by the same per-key filesystem mutation lock.

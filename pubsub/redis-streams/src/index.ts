@@ -1340,6 +1340,9 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     return result === 1;
   }
 
+  /** `transferLease` checks the owner and swaps it in one Lua script. */
+  readonly atomicTransfer = true;
+
   /**
    * Atomically hand the lease from `fromOwner` to `toOwner`, refreshing the
    * TTL to the full `ttlMs`, without the key ever going empty.

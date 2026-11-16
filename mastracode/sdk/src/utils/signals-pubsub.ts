@@ -216,6 +216,8 @@ class SignalsPubSub extends PubSub {
       releaseLease: async (key, owner) => route(key).releaseLease(key, owner),
       renewLease: async (key, owner, ttlMs) => route(key).renewLease(key, owner, ttlMs),
       transferLease: async (key, fromOwner, toOwner, ttlMs) => route(key).transferLease(key, fromOwner, toOwner, ttlMs),
+      // Each key always routes to the same socket directory, whose UnixSocketPubSub transfers atomically.
+      atomicTransfer: true,
     };
   }
 

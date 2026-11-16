@@ -223,6 +223,83 @@ describe('ExecutionFence heartbeat', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(published).not.toHaveBeenCalled();
   });
+
+  // A renewal sent before the settle reaches the lease after it and renews nothing. With an atomic transfer, the
+  // release itself confirms nobody took the run over, so that late failure is not a loss. (#30206)
+  it('ignores a late failed renewal after its own release on a provider with an atomic transfer (#30206)', async () => {
+    vi.useFakeTimers();
+    const pubsub = new EventEmitterPubSub();
+    onTestFinished(() => pubsub.close());
+    expect(pubsub.atomicTransfer).toBe(true);
+    const fence = await claim(pubsub, 'run-1');
+    const renew = pubsub.renewLease.bind(pubsub);
+    const delivery = Promise.withResolvers<void>();
+    let renewed: boolean | undefined;
+    vi.spyOn(pubsub, 'renewLease').mockImplementationOnce(async (...args) => {
+      await delivery.promise;
+      renewed = await renew(...args);
+      return renewed;
+    });
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+
+    expect(await fence.settle(async () => {})).toBe('owned');
+    delivery.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(renewed).toBe(false);
+    expect(fence.isLost()).toBe(false);
+  });
+
+  // The lease contract lets a backend implement `transferLease` as a release followed by an acquire. Another owner
+  // can take the freed key between the two and give it back, and the acquire then succeeds: a successful transfer
+  // proves nothing, so a late failed renewal must still count as a loss. (#30206)
+  it('marks an execution lost when a takeover slips into a non-atomic transfer during its release (#30206)', async () => {
+    vi.useFakeTimers();
+    const pubsub = new EventEmitterPubSub();
+    onTestFinished(() => pubsub.close());
+    let releasing: string | undefined;
+    let takenOver = false;
+    const releaseLease = async (leaseKey: string, owner: string) => {
+      await pubsub.releaseLease(leaseKey, owner);
+      // Right after the settling execution frees the key, a successor claims the run and finishes with it.
+      if (owner !== releasing || takenOver) return;
+      takenOver = true;
+      expect((await pubsub.acquireLease(leaseKey, 'successor', EXECUTION_LEASE_TTL_MS)).acquired).toBe(true);
+      await pubsub.releaseLease(leaseKey, 'successor');
+    };
+    const nonAtomic: LeaseProvider = {
+      acquireLease: (leaseKey, owner, ttlMs) => pubsub.acquireLease(leaseKey, owner, ttlMs),
+      getLeaseOwner: leaseKey => pubsub.getLeaseOwner(leaseKey),
+      releaseLease,
+      renewLease: (leaseKey, owner, ttlMs) => pubsub.renewLease(leaseKey, owner, ttlMs),
+      async transferLease(leaseKey, fromOwner, toOwner, ttlMs) {
+        await releaseLease(leaseKey, fromOwner);
+        return (await pubsub.acquireLease(leaseKey, toOwner, ttlMs)).acquired;
+      },
+    };
+    const fence = await claim(nonAtomic, 'run-1');
+    releasing = fence.executionId;
+    // Hold the heartbeat's renewal until the settle is over.
+    const renew = pubsub.renewLease.bind(pubsub);
+    const delivery = Promise.withResolvers<void>();
+    vi.spyOn(pubsub, 'renewLease').mockImplementationOnce(async (...args) => {
+      await delivery.promise;
+      return renew(...args);
+    });
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+
+    await fence.settle(async () => {});
+    expect(takenOver).toBe(true);
+    delivery.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(fence.isLost()).toBe(true);
+    const published = vi.fn();
+    await pubsub.subscribe('run-1-stream', published);
+    await fencePubSub(pubsub, fence).publish('run-1-stream', { type: 'stale', runId: 'run-1', data: {} });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(published).not.toHaveBeenCalled();
+  });
 });
 
 describe('ExecutionFence.settle', () => {

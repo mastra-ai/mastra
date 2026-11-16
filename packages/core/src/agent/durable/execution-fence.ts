@@ -363,7 +363,7 @@ interface OwnershipBackend {
   isSuperseded(claim: DurableExecutionClaim): Promise<boolean>;
   /**
    * Release `claim`. Resolves true when the backend confirmed `claim` still held the run as it released it, so no
-   * other execution had claimed the run before then.
+   * other execution had claimed the run before then; false when it could not confirm that.
    */
   release(claim: DurableExecutionClaim): Promise<boolean>;
   /**
@@ -429,9 +429,14 @@ function leaseBackend(provider: LeaseProvider, agentId: string, runId: string): 
       const owner = await provider.getLeaseOwner(key);
       return owner !== undefined && owner !== claim.executionId;
     },
-    // `releaseLease` does not report whether it released anything. `transferLease` checks the owner and hands the
-    // lease to a marker owner in one step, so it confirms nobody took the run over first; the marker is then dropped.
+    // `releaseLease` does not report whether it released anything. With `atomicTransfer`, `transferLease` checks the
+    // owner and hands the lease to a marker owner in one step, so it confirms nobody took the run over first; the
+    // marker is then dropped. Any other transfer may release and re-acquire, so its success confirms nothing.
     async release(claim) {
+      if (provider.atomicTransfer !== true) {
+        await provider.releaseLease(key, claim.executionId);
+        return false;
+      }
       const marker = `${claim.executionId}:released`;
       const held = await provider
         .transferLease(key, claim.executionId, marker, RELEASED_LEASE_MARKER_TTL_MS)
