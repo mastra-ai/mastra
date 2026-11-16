@@ -29,6 +29,7 @@ import type { MastraWorker } from '@mastra/core/worker';
 import { createAppAuth } from '@octokit/auth-app';
 import { Octokit } from '@octokit/rest';
 
+import type { IntakeItemLookup } from '../../boards/intake-lookup.js';
 import type { IntegrationConnection } from '../../capabilities/connection.js';
 import type {
   CreateIntakeCommentInput,
@@ -50,6 +51,7 @@ import type {
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import type { GithubEventRules, GithubRuleOverrides } from './default-rules.js';
 import { resolveGithubRules } from './default-rules.js';
+import { githubIntakeLookup } from './intake-lookup.js';
 import { attachGithubIssueReconciler } from './issue-reconciler.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
 import { reconcileInterval, reconciliationEnabled } from './reconciliation-config.js';
@@ -211,6 +213,13 @@ export class GithubIntegration implements FactoryIntegration {
   get rules(): GithubEventRules {
     return this.#rules;
   }
+  readonly intakeLookup: IntakeItemLookup = githubIntakeLookup({
+    sourceControl: () => this.sourceControlStorage,
+    fetchIssueState: input => this.fetchIssueState(input),
+    fetchPullRequestState: input => this.fetchPullRequestState(input),
+    getRepositoryCollaboratorPermission: (installationId, repository, login) =>
+      this.getRepositoryCollaboratorPermission(installationId, repository, login),
+  });
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async ({ orgId }) => {

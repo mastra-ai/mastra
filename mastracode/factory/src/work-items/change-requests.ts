@@ -30,19 +30,74 @@ export function isOpenPullRequestSource(source: Pick<WorkItemSourceRow, 'state' 
 }
 
 /**
- * The pull request a PR review pass on this card reviews: the one the card's
- * `openPullRequestNumber` names, else the newest open one, else the newest one.
+ * Card metadata listing the attached pull requests whose author had no write access, as
+ * `<provider>:<externalId>`. Before any author's pull request could join a card only trusted
+ * ones did, so a source missing from the list is trusted.
  */
-export function reviewedPullRequest(
+export const UNTRUSTED_PULL_REQUESTS_KEY = 'untrustedPullRequests';
+
+/** The key {@link UNTRUSTED_PULL_REQUESTS_KEY} lists a source under. */
+export function pullRequestTrustKey(source: Pick<WorkItemSourceRow, 'provider' | 'externalId'>): string {
+  return `${source.provider}:${source.externalId}`;
+}
+
+/** Whether a pull request attached to the card was opened by someone with write access (or by Factory). */
+export function trustedPullRequestSource(
+  item: { readonly metadata?: Record<string, unknown> | null },
+  source: Pick<WorkItemSourceRow, 'provider' | 'externalId'>,
+): boolean {
+  const untrusted = item.metadata?.[UNTRUSTED_PULL_REQUESTS_KEY];
+  return !(Array.isArray(untrusted) && untrusted.includes(pullRequestTrustKey(source)));
+}
+
+function closedUnmerged(source: Pick<WorkItemSourceRow, 'state' | 'metadata'>): boolean {
+  return (
+    !isOpenPullRequestSource(source) &&
+    (source.state ?? source.metadata?.state) !== 'merged' &&
+    source.metadata?.merged !== true
+  );
+}
+
+/**
+ * The card's working pull request, the one its review passes and status checks follow: the one
+ * `openPullRequestNumber` names (its session's own, or the one a person picked), unless it closed
+ * without merging; else the first trusted open one linked, else the first trusted merged one. An
+ * outsider's pull request is never picked on its own. `except` leaves one pull request out.
+ */
+export function workingPullRequest(
   item: SourcedItem & { readonly metadata?: Record<string, unknown> | null },
+  except?: number,
 ): WorkItemSourceRow | undefined {
-  const sources = pullRequestSources(item);
+  const sources = pullRequestSources(item).filter(
+    source => !closedUnmerged(source) && (except === undefined || pullRequestSourceNumber(source) !== except),
+  );
   const pointer = item.metadata?.openPullRequestNumber;
   return (
     (typeof pointer === 'number' ? sources.find(source => pullRequestSourceNumber(source) === pointer) : undefined) ??
-    sources.findLast(isOpenPullRequestSource) ??
-    sources.at(-1)
+    sources.find(source => isOpenPullRequestSource(source) && trustedPullRequestSource(item, source)) ??
+    sources.find(source => trustedPullRequestSource(item, source))
   );
+}
+
+/**
+ * The pull request `openPullRequestNumber` names, unless it is one linked to the card that closed
+ * without merging: the card then works on its {@link workingPullRequest} instead. A pointer to a
+ * pull request the card has no source for (its session opened it) stands.
+ */
+export function pointedPullRequest(
+  item: SourcedItem & { readonly metadata?: Record<string, unknown> | null },
+): number | undefined {
+  const pointer = item.metadata?.openPullRequestNumber;
+  if (typeof pointer !== 'number') return undefined;
+  const source = pullRequestSources(item).find(entry => pullRequestSourceNumber(entry) === pointer);
+  return source && closedUnmerged(source) ? undefined : pointer;
+}
+
+/** The pull request a PR review pass on this card reviews: its {@link workingPullRequest}. */
+export function reviewedPullRequest(
+  item: SourcedItem & { readonly metadata?: Record<string, unknown> | null },
+): WorkItemSourceRow | undefined {
+  return workingPullRequest(item);
 }
 
 export const PULL_REQUEST_STATUSES = ['draft', 'open', 'closed', 'merged'] as const;
@@ -128,9 +183,18 @@ export function cardChangeRequests(card: ChangeRequestCard): CardChangeRequest[]
   return isPullRequestCard(card) ? [fromLegacyCard(card)] : [];
 }
 
-/** The card's own pull request, else the attached one its review looks at. */
+/**
+ * The card's own pull request, else the attached one to show on it: the one `openPullRequestNumber`
+ * names, else the newest open one, else the newest one. Unlike {@link reviewedPullRequest} it shows
+ * a closed or an outsider's pull request, since showing one starts no work on it.
+ */
 export function cardChangeRequest(card: ChangeRequestCard): CardChangeRequest | undefined {
   if (isPullRequestCard(card)) return cardChangeRequests(card)[0];
-  const attached = reviewedPullRequest(card);
+  const sources = pullRequestSources(card);
+  const pointer = card.metadata?.openPullRequestNumber;
+  const attached =
+    (typeof pointer === 'number' ? sources.find(source => pullRequestSourceNumber(source) === pointer) : undefined) ??
+    sources.findLast(isOpenPullRequestSource) ??
+    sources.at(-1);
   return attached ? fromSource(attached) : undefined;
 }

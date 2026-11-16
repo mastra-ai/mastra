@@ -13,6 +13,7 @@ export const githubWorkItemAdapter = externalAdapter('github', {
     'githubIssueNumber',
     'githubPullRequestNumber',
     'githubAssigneesUpdatedAt',
+    'githubLabelsUpdatedAt',
     'draft',
     'merged',
     'headBranch',

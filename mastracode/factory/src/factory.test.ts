@@ -3069,6 +3069,23 @@ describe('MastraFactory.prepare integrations', () => {
     expect(ctx.storage.sourceControlOwner).toBeUndefined();
   });
 
+  it('hands workers the Not routed lookup only when the boards domain is ready', async () => {
+    const contextFor = async (boardsReady: boolean) => {
+      const storage = fakeStorage();
+      if (!boardsReady) vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'boards');
+      const workers = vi.fn((_ctx: IntegrationContext) => [{ name: 'custom-poller' } as unknown as MastraWorker]);
+      await new MastraFactory({
+        secretEncryption,
+        storage,
+        integrations: [fakeIntegration({ id: 'custom', workers })],
+      }).prepare();
+      return workers.mock.calls[0]![0];
+    };
+
+    expect((await contextFor(true)).runtime?.notRouted).toBeDefined();
+    expect((await contextFor(false)).runtime?.notRouted).toBeUndefined();
+  });
+
   it('does not collect workers from integrations that are not ready', async () => {
     const storage = fakeStorage();
     vi.spyOn(storage, 'isDomainReady').mockReturnValue(false);
