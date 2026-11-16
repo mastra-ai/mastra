@@ -353,7 +353,11 @@ interface OwnershipBackend {
   renew(claim: DurableExecutionClaim): Promise<{ renewed: boolean; leaseExpiresAt?: Date | null }>;
   /** Whether another execution claimed the run after `claim`. Throws on backend errors. */
   isSuperseded(claim: DurableExecutionClaim): Promise<boolean>;
-  release(claim: DurableExecutionClaim): Promise<void>;
+  /**
+   * Release `claim`. Resolves true when the backend confirmed `claim` still held the run as it released it, so no
+   * other execution had claimed the run before then.
+   */
+  release(claim: DurableExecutionClaim): Promise<boolean>;
   /**
    * Release `claim` so the run can be recovered at once, and make storage
    * reject its remaining writes. Returns the claim that superseded it, when
@@ -413,8 +417,12 @@ function leaseBackend(provider: LeaseProvider, agentId: string, runId: string): 
       const owner = await provider.getLeaseOwner(key);
       return owner !== undefined && owner !== claim.executionId;
     },
+    // `releaseLease` does not report whether it released anything, so a renewal first confirms the lease is still
+    // held. A lease has no generation: a takeover landing between the two calls goes unseen.
     async release(claim) {
+      const held = await provider.renewLease(key, claim.executionId, EXECUTION_LEASE_TTL_MS).catch(() => false);
       await provider.releaseLease(key, claim.executionId);
+      return held;
     },
     // A lease has no generation to move past: releasing is all it can do.
     async abandon(claim, whileOwned) {
@@ -501,8 +509,9 @@ function storageBackend(store: WorkflowsStorage, runId: string): OwnershipBacken
       const record = await store.getRunOwnership({ runId });
       return !record || record.generation !== claim.generation;
     },
+    // Matches owner and generation atomically: false once another execution claimed the run.
     async release(claim) {
-      await store.releaseRunOwnership(fence(claim));
+      return store.releaseRunOwnership(fence(claim));
     },
     // Releasing alone keeps accepting the claim's writes until the next claim.
     // Claiming under a fresh owner first moves the generation past them; the
@@ -536,6 +545,11 @@ export type ExecutionSettlement = 'owned' | 'orphaned' | 'superseded';
 export const DURABLE_PARTICIPANT_FENCES = createRunScopeKey<Map<string, ExecutionFence>>('durable-participant-fences');
 const fencesByExecutionId = new Map<string, ExecutionFence>();
 const activeFenceByRunId = new Map<string, ExecutionFence>();
+/**
+ * Fences whose heartbeat is running or has a renewal in flight, by execution. A coordinator and its participants in
+ * one process share an execution, so a release by any of them reaches the others' late renewals.
+ */
+const renewingFencesByExecutionId = new Map<string, Set<ExecutionFence>>();
 
 /**
  * One execution's claim on a durable run. Inside {@link ExecutionFence.run},
@@ -569,10 +583,11 @@ export class ExecutionFence implements RunFenceScope {
   #heartbeat?: ReturnType<typeof setInterval>;
   #renewalInFlight = false;
   /**
-   * Set when settlement starts releasing the claim. A renewal sent before then can reach the backend after the
-   * release and come back unrenewed though nobody took the run over, so its result no longer means anything.
+   * Set when this execution starts releasing its claim, here or in another fence of the same execution. Resolves true
+   * once the backend confirmed the claim still held the run as it was released. A renewal sent before the release can
+   * reach the backend after it and come back unrenewed; only that confirmation shows nobody took the run over first.
    */
-  #releasing = false;
+  #ownRelease?: Promise<boolean>;
   #settlement?: Promise<ExecutionSettlement>;
   #settledAs?: ExecutionSettlement;
   #resolveSettled!: () => void;
@@ -691,11 +706,35 @@ export class ExecutionFence implements RunFenceScope {
     return fence;
   }
 
-  /** Release only the captured claim; a successor is never affected. */
-  static async releaseSharedClaim(mastra: Mastra, runId: string, claim: DurableExecutionClaim): Promise<void> {
+  /**
+   * Release only the captured claim; a successor is never affected. `settled`: the run's root settled, so a renewal
+   * this process's fences of the execution still have in flight is answered by the release, not a takeover.
+   * `abandoned`: nothing settled the run, and a live coordinator must see the loss.
+   */
+  static async releaseSharedClaim(
+    mastra: Mastra,
+    runId: string,
+    claim: DurableExecutionClaim,
+    reason: 'settled' | 'abandoned',
+  ): Promise<void> {
     if (!claim.agentId) return;
     const backend = await resolveRemoteBackend(mastra, claim.agentId, runId, claim);
-    await backend?.release(claim);
+    if (!backend) return;
+    const released = backend.release(claim);
+    if (reason === 'settled') ExecutionFence.#noteOwnRelease(claim.executionId, released);
+    await released;
+  }
+
+  /** Tell the fences of `executionId` that are still renewing that the execution is releasing its claim. */
+  static #noteOwnRelease(executionId: string, released: Promise<boolean>): void {
+    const confirmed = released.catch(() => false);
+    for (const fence of renewingFencesByExecutionId.get(executionId) ?? []) {
+      fence.#ownRelease ??= confirmed;
+      void confirmed.then(owned => {
+        // The claim is gone: later renewals could only fail.
+        if (owned) fence.stopHeartbeat();
+      });
+    }
   }
 
   /** Join an existing claim without acquiring ownership or advancing its generation. */
@@ -933,6 +972,15 @@ export class ExecutionFence implements RunFenceScope {
   stopHeartbeat(): void {
     if (this.#heartbeat) clearInterval(this.#heartbeat);
     this.#heartbeat = undefined;
+    this.#stopTrackingIfQuiet();
+  }
+
+  /** Forget this fence once its heartbeat can no longer report on the claim. */
+  #stopTrackingIfQuiet(): void {
+    if (this.#heartbeat || this.#renewalInFlight) return;
+    const fences = renewingFencesByExecutionId.get(this.executionId);
+    fences?.delete(this);
+    if (fences?.size === 0) renewingFencesByExecutionId.delete(this.executionId);
   }
 
   /** Cancel only this worker's invocations, keeping the shared claim valid for survivors. */
@@ -1048,9 +1096,11 @@ export class ExecutionFence implements RunFenceScope {
   }
 
   async #release(): Promise<void> {
-    this.#releasing = true;
+    const released = this.#backend.release(this.claim);
+    this.#ownRelease ??= released.catch(() => false);
+    ExecutionFence.#noteOwnRelease(this.executionId, released);
     try {
-      await this.#backend.release(this.claim);
+      await released;
     } catch (error) {
       this.#logger?.warn?.(`[DurableAgent] run ${this.runId}: failed to release the execution claim: ${error}`);
     }
@@ -1139,10 +1189,15 @@ export class ExecutionFence implements RunFenceScope {
   /**
    * Keep the claim alive between write checks. A `false` renewal marks the
    * fence lost, which notifies {@link onLost} listeners. Backend errors are
-   * tolerated until the local lease deadline. A renewal that returns after
-   * settlement began releasing the claim is ignored.
+   * tolerated until the local lease deadline. A failed renewal is ignored only
+   * when this execution released its claim and the backend confirmed the claim
+   * still held the run at that point: the renewal then failed because of the
+   * release. Without that confirmation another execution claimed the run first.
    */
   #startHeartbeat(): void {
+    let fences = renewingFencesByExecutionId.get(this.executionId);
+    if (!fences) renewingFencesByExecutionId.set(this.executionId, (fences = new Set()));
+    fences.add(this);
     this.#heartbeat = setInterval(() => {
       if (this.#settlement || this.#lossError) return;
       const now = Date.now();
@@ -1159,9 +1214,9 @@ export class ExecutionFence implements RunFenceScope {
       const startedAt = Date.now();
       void this.#backend
         .renew(this.claim)
-        .then(({ renewed, leaseExpiresAt }) => {
-          if (this.#releasing) return;
+        .then(async ({ renewed, leaseExpiresAt }) => {
           if (renewed) {
+            if (this.#ownRelease) return;
             // The lease runs at least a TTL from when the renewal was sent. A queued storage renewal ran later:
             // trust the store's expiry, less a clock skew allowance, but never past a TTL from now.
             const reported = leaseExpiresAt
@@ -1170,11 +1225,12 @@ export class ExecutionFence implements RunFenceScope {
             this.#leaseExpiresAt = Math.max(startedAt + EXECUTION_LEASE_TTL_MS, reported);
             return;
           }
+          if (await this.#ownRelease) return;
           this.#markLost(new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, this.#details()));
           return this.#noteTakeover();
         })
-        .catch(cause => {
-          if (this.#releasing) return;
+        .catch(async cause => {
+          if (await this.#ownRelease) return;
           if (Date.now() >= this.#leaseExpiresAt) {
             this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details(), cause));
             return;
@@ -1183,6 +1239,7 @@ export class ExecutionFence implements RunFenceScope {
         })
         .finally(() => {
           this.#renewalInFlight = false;
+          this.#stopTrackingIfQuiet();
         });
     }, EXECUTION_LEASE_RENEW_INTERVAL_MS);
     this.#heartbeat.unref?.();
@@ -1250,6 +1307,7 @@ export function __resetExecutionFencesForTests(): void {
   for (const fence of fencesByExecutionId.values()) fence.stopHeartbeat();
   fencesByExecutionId.clear();
   activeFenceByRunId.clear();
+  renewingFencesByExecutionId.clear();
 }
 
 /**

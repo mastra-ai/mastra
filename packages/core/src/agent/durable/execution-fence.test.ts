@@ -22,6 +22,7 @@ import {
   EXECUTION_UNVERIFIED_ERROR_ID,
   ExecutionFence,
   executionLeaseKey,
+  fencePubSub,
   getExecutionClaim,
   getRunFence,
   isExecutionFenceError,
@@ -873,6 +874,98 @@ describe('storage-backed ExecutionFence', () => {
     expect(lostDuringWrites).toBe(true);
     expect(fence.isLost()).toBe(true);
     await successor!.settle(async () => {});
+  });
+
+  // Whether a failed renewal came from the execution's own release is decided by what the backend said about the
+  // claim as it was released, never by when the renewal's response arrives. (#30206)
+  it.each(['storage', 'lease'] as const)(
+    'marks an execution lost when its renewal was rejected for a successor but returns only after the release (#30206, %s)',
+    async backend => {
+      vi.useFakeTimers();
+      const { workflowsStore } = await stores();
+      const pubsub = new EventEmitterPubSub();
+      const fence = backend === 'storage' ? await storageClaim(workflowsStore, 'run-1') : await claim(pubsub, 'run-1');
+      let takenOver!: () => void;
+      const afterTakeover = new Promise<void>(resolve => (takenOver = resolve));
+      let deliver!: () => void;
+      const delivery = new Promise<void>(resolve => (deliver = resolve));
+      let rejected!: (renewed: boolean) => void;
+      const renewedAtBackend = new Promise<boolean>(resolve => (rejected = resolve));
+      // Only the heartbeat's renewal is held: it reaches the backend after the takeover, and its response is
+      // delivered after the release.
+      if (backend === 'storage') {
+        const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+        vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementationOnce(async args => {
+          await afterTakeover;
+          const result = await renew(args);
+          rejected(result.renewed);
+          await delivery;
+          return result;
+        });
+      } else {
+        const renew = pubsub.renewLease.bind(pubsub);
+        vi.spyOn(pubsub, 'renewLease').mockImplementationOnce(async (...args) => {
+          await afterTakeover;
+          const renewed = await renew(...args);
+          rejected(renewed);
+          await delivery;
+          return renewed;
+        });
+      }
+
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+      let successor: ExecutionFence | undefined;
+      expect(
+        await fence.settle(async () => {
+          // A takeover lands while the terminal writes run, and the backend rejects the held renewal for it.
+          if (backend === 'storage') successor = await storageClaim(workflowsStore, 'run-1', 'takeover');
+          else await pubsub.transferLease(key('run-1'), fence.executionId, 'successor', EXECUTION_LEASE_TTL_MS);
+          takenOver();
+          expect(await renewedAtBackend).toBe(false);
+        }),
+      ).toBe('owned');
+      const lost = vi.fn();
+      fence.onLost(lost);
+      deliver();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(fence.isLost()).toBe(true);
+      expect(lost).toHaveBeenCalledTimes(1);
+      const published = vi.fn();
+      await pubsub.subscribe('run-1-stream', published);
+      await fencePubSub(pubsub, fence).publish('run-1-stream', { type: 'stale', runId: 'run-1', data: {} });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(published).not.toHaveBeenCalled();
+      await successor?.settle(async () => {});
+      await pubsub.close();
+    },
+  );
+
+  it('ignores a renewal that returns after the release even once the next execution claimed the run (#30206)', async () => {
+    vi.useFakeTimers();
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+    let unblock!: () => void;
+    const blocked = new Promise<void>(resolve => (unblock = resolve));
+    let renewed: boolean | undefined;
+    vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementationOnce(async args => {
+      await blocked;
+      const result = await renew(args);
+      renewed = result.renewed;
+      return result;
+    });
+
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    expect(await fence.settle(async () => {})).toBe('owned');
+    // A resume claims the released run before the renewal reaches the store, which then reports the resume's claim.
+    const next = await storageClaim(workflowsStore, 'run-1');
+    unblock();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(renewed).toBe(false);
+    expect(fence.isLost()).toBe(false);
+    await next.settle(async () => {});
   });
 
   it('a released claim can be acquired again under the next generation', async () => {
