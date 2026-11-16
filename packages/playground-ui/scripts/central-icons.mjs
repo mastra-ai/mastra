@@ -46,7 +46,7 @@ const scaleStroke = (value, strokeScale) => {
   if (strokeScale === 1) return value;
   const scaled = Number((Number(value) * strokeScale).toFixed(4));
   if (!Number.isFinite(scaled)) throw new Error(`Cannot scale strokeWidth ${String(value)}`);
-  return typeof value === 'string' ? String(scaled) : scaled;
+  return String(scaled);
 };
 
 const toJsx = (node, Fragment, strokeScale = 1) => {
