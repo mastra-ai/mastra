@@ -42,8 +42,8 @@ export function ConnectToolsSection() {
       {custom && (
         <Notice variant="info">
           <Notice.Message>
-            This Factory sets its session tools in code (<InlineCode>tools</InlineCode> option). These connections are
-            used only if that code includes them, and it may narrow their tools.
+            This Factory sets its session tools in code, with the <InlineCode>tools</InlineCode> option. These
+            connections are used only if that code includes them, and it may narrow their tools.
           </Notice.Message>
         </Notice>
       )}
