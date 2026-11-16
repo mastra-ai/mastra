@@ -36,7 +36,7 @@ import {
   ROUTE_AGAIN_KEY_PREFIX,
   routesHandleEvent,
 } from '../boards/intake-routing.js';
-import type { IntakeRoutesReader } from '../boards/intake-routing.js';
+import type { IntakeRoutesReader, SkippedEventRoute } from '../boards/intake-routing.js';
 import { autoApprovedExitTool, startsInAutoPhase } from '../boards/phase-automation.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
@@ -2348,6 +2348,34 @@ export class FactoryDecisionDispatcher {
     }
   }
 
+  /**
+   * Leaves a warning in the decision log for each card-move rule that matched but whose target
+   * couldn't take the card; a redelivery of the same event replaces it.
+   */
+  async #logSkippedRoutes(
+    record: FactoryDeferredDecisionRecord,
+    item: Card,
+    event: BoardEventFacts,
+    skipped: readonly SkippedEventRoute[],
+  ): Promise<void> {
+    if (!this.#intakeRoutes || skipped.length === 0) return;
+    const scope = { orgId: record.orgId, factoryProjectId: record.factoryProjectId };
+    const evaluator = await projectIntakeEvaluator(this.#intakeEvaluator, this.#intakeRoutes, scope);
+    for (const skip of skipped) {
+      await this.#intakeRoutes.recordIntakeDecision(scope, {
+        idempotencyKey: `rule-skipped:${record.idempotencyKey}:${skip.routeId}`,
+        outcome: 'rule_skipped',
+        evaluator,
+        boardKey: skip.boardKey,
+        routeId: skip.routeId,
+        reason: `The card-move rule matched ${event.type} but was skipped: ${skip.reason}.`,
+        sourceKey: item.externalSource?.externalId ?? null,
+        title: item.title,
+        url: item.externalSource?.url ?? null,
+      });
+    }
+  }
+
   /** Marks the item's Not routed record, if any, resolved: its card is filed. */
   async #resolveNotRouted(record: FactoryDeferredDecisionRecord, sourceKey: string): Promise<void> {
     await this.#intakeRoutes?.resolveNotRouted(
@@ -2580,14 +2608,13 @@ export class FactoryDecisionDispatcher {
         : [];
       if (!routesHandleEvent(routes, event, board)) return { item, board, fallback: true as const };
       const facts = { ...cardRuleFacts(item), ...(stage !== undefined ? { 'card.phase': stage } : {}) };
+      const skipped: SkippedEventRoute[] = [];
       const route = resolveEventRoute(routes, event, facts, board, {
         registry: boards,
         carriesPullRequest: hasPullRequest(item),
-        onSkip: skipped =>
-          console.warn(
-            `[factory] card-move rule ${skipped.routeId} matched ${event.type} on ${item.id} but was skipped: ${skipped.reason}`,
-          ),
+        onSkip: skip => skipped.push(skip),
       });
+      await this.#logSkippedRoutes(record, item, event, skipped);
       // A pull request event the rules already decided keeps that decision when no enabled route
       // takes the card: disabling or narrowing a route must not strand a merged card in review.
       if (!route)

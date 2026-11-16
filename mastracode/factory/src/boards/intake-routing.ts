@@ -377,6 +377,8 @@ export function routesHandleEvent(
 /** A card-move route that matched but can't take the card where it points, and why. */
 export interface SkippedEventRoute {
   routeId: string;
+  /** The board the rule points the card to. */
+  boardKey: string;
   reason: string;
 }
 
@@ -414,8 +416,8 @@ export function resolveEventRoute(
   for (const route of routes) {
     if (!route.enabled || !route.on.includes(event.type) || route.target.boardKey !== board.id) continue;
     if (!evaluateRuleGroup(route.when, facts)) continue;
-    const skip = (reason: string) => options.onSkip?.({ routeId: route.id, reason });
     const targetKey = route.target.moveToBoardKey ?? board.id;
+    const skip = (reason: string) => options.onSkip?.({ routeId: route.id, boardKey: targetKey, reason });
     const target = targetKey === board.id ? board : options.registry.get(targetKey);
     if (!target) {
       skip(`board "${targetKey}" is not installed`);

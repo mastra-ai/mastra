@@ -275,7 +275,7 @@ export const intakeOrderBodySchema = z
   });
 const intakeDecisionSchema = z.object({
   id: z.string(),
-  outcome: z.enum(['placed', 'not_routed']),
+  outcome: z.enum(['placed', 'not_routed', 'rule_skipped']),
   evaluator: z.enum(['route-list', 'intake-order']),
   boardKey: z.string().nullable(),
   routeId: z.string().nullable(),

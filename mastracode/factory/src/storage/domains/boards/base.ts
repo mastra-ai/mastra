@@ -155,7 +155,7 @@ export interface IntakeRouteTarget {
    */
   joinClosedIssue?: boolean;
   /**
-   * On a route moving existing cards (one naming events besides `work_item.created`), the board the
+   * On a route moving existing cards (one naming events besides `work_item.opened`), the board the
    * card moves to, at `phaseKey`. `boardKey` stays the board whose cards the route moves. Unset
    * keeps the card on `boardKey`.
    */
@@ -212,8 +212,8 @@ export type StoredBoardErrorCode =
 /** A board's most intake routes. */
 export const MAX_INTAKE_ROUTES_PER_BOARD = 100;
 
-/** How an arrival was decided. */
-export type IntakeDecisionOutcome = 'placed' | 'not_routed';
+/** How an arrival was decided; `rule_skipped` warns that a card-move rule matched but its target couldn't take the card. */
+export type IntakeDecisionOutcome = 'placed' | 'not_routed' | 'rule_skipped';
 
 /**
  * Which evaluator decides where an arrival goes: `route-list` is the old one, which projects created

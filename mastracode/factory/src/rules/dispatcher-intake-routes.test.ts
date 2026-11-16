@@ -1283,8 +1283,9 @@ describe('intake routes moving existing cards on status events', () => {
       expect(after!.stageHistory.filter(entry => entry.by.startsWith('intake-route:'))).toHaveLength(2);
     });
 
-    it("skips a matching rule whose target can't hold the card, with a warning, and takes the next one", async () => {
+    it("skips a matching rule whose target can't hold the card, with a warning in the decision log, and takes the next one", async () => {
       const { boards, scope, route, deliver, deliverEvent, putAt } = await setup();
+      const recorded = vi.spyOn(boards, 'recordIntakeDecision');
       await boards.create(scope, shipBoard, 'admin');
       const broken = await route({
         name: 'Gone phase',
@@ -1298,16 +1299,23 @@ describe('intake routes moving existing cards on status events', () => {
       });
       const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
       await putAt(card.id, 'execute');
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      try {
-        expect(placed((await deliverEvent(card.id, { type: 'pull_request.opened' })).card)).toEqual({
-          board: 'work',
-          stages: ['planning'],
-        });
-        expect(warn).toHaveBeenCalledWith(expect.stringContaining(`card-move rule ${broken.id} matched`));
-      } finally {
-        warn.mockRestore();
-      }
+      recorded.mockClear();
+
+      expect(placed((await deliverEvent(card.id, { type: 'pull_request.opened' })).card)).toEqual({
+        board: 'work',
+        stages: ['planning'],
+      });
+      const skips = (await Promise.all(recorded.mock.results.map(result => result.value))).filter(
+        record => record.outcome === 'rule_skipped',
+      );
+      expect(skips).toHaveLength(1);
+      expect(await boards.getIntakeDecision(scope, skips[0]!.id)).toMatchObject({
+        outcome: 'rule_skipped',
+        routeId: broken.id,
+        boardKey: 'ship',
+        reason: expect.stringContaining('"staging"'),
+        sourceKey: 'github-issue:1',
+      });
     });
   });
 
