@@ -21,6 +21,7 @@ import {
   createWorkItemBodySchema,
   decisionQuerySchema,
   FACTORY_ROUTE_CONTRACTS,
+  sessionRowsQuerySchema,
   transitionBodySchema,
   updateProjectBodySchema,
 } from './contracts.js';
@@ -50,6 +51,8 @@ function registeredFactoryRoutes() {
     workItems,
     queueHealth: {},
     liveSessions: {},
+    projectSessions: async () => [],
+    activeRuns: () => [],
   } as never).routes();
   const attention = buildAttentionRoutes({
     workItems: workItems as never,
@@ -232,6 +235,39 @@ describe('Factory route contracts', () => {
     expect(transitionBodySchema.safeParse({ board: 'work', stage: 'planning', expectedRevision: 0 }).success).toBe(
       false,
     );
+  });
+
+  it('parses a sidebar session-rows view, reading repeated pins and windows', () => {
+    expect(sessionRowsQuerySchema.parse({})).toEqual({
+      sort: 'activity',
+      groupBy: 'none',
+      owner: 'all',
+      pin: new Set(),
+      window: new Map(),
+    });
+    const view = sessionRowsQuerySchema.parse({
+      owner: 'owner:user-2',
+      children: 'true',
+      pin: ['session-1', 'session-2', 'session-1'],
+      window: ['board:work:25', 'user:500'],
+    });
+    expect(view.pin).toEqual(new Set(['session-1', 'session-2']));
+    expect(view.window).toEqual(
+      new Map([
+        ['board:work', 25],
+        ['user', 500],
+      ]),
+    );
+    expect(view.owner).toBe('owner:user-2');
+    for (const window of ['user:0', 'user:501', 'user:01', 'user:', ':5', 'user']) {
+      expect(sessionRowsQuerySchema.safeParse({ window: [window] }).success, window).toBe(false);
+    }
+    expect(sessionRowsQuerySchema.safeParse({ window: ['user:1'] }).success).toBe(true);
+    expect(sessionRowsQuerySchema.safeParse({ window: ['board:work:5', 'board:work:10'] }).success).toBe(false);
+    for (const owner of ['someone', 'owner:', 'mine ']) {
+      expect(sessionRowsQuerySchema.safeParse({ owner }).success, owner).toBe(false);
+    }
+    expect(sessionRowsQuerySchema.safeParse({ children: 'false' }).success).toBe(false);
   });
 
   it('accepts representative successful response envelopes', () => {

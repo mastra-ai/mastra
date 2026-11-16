@@ -364,17 +364,13 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         id: globalThis.crypto.randomUUID(),
         connectionId: input.connectionId,
         repositoryId: input.repositoryId,
-        createdByUserId: input.createdByUserId,
         branch: input.branch ?? null,
-        sandboxProvider: input.sandboxProvider,
-        sandboxWorkdir: input.sandboxWorkdir,
         setupCommand: input.setupCommand ?? null,
         teardownCommand: input.teardownCommand ?? null,
         position,
         inEnvironment,
         lastBuildStatus: 'unbuilt',
         lastBuildError: null,
-        lastBuiltAt: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -401,14 +397,12 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       id,
       status,
       error,
-      builtAt,
     }: SetProjectRepositoryBuildStatusInput): Promise<ProjectRepository | null> => {
       const row = await this.projectRepositories.get({ orgId, id });
       if (!row) return null;
       Object.assign(row, {
         lastBuildStatus: status,
         lastBuildError: error ?? null,
-        lastBuiltAt: builtAt ?? null,
         updatedAt: new Date(),
       });
       return row;

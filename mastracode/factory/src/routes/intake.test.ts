@@ -448,14 +448,14 @@ describe('intake configuration', () => {
       expect(await seed.intake.listBindings({ orgId: 'org1', integrationId: 'linear' })).toEqual([]);
     });
 
-    it('never writes the frozen pre-upgrade bindings collection', async () => {
+    it('never creates the frozen pre-upgrade bindings collection on a new database', async () => {
       const { platform, payments } = await factories();
       await put({ ...ops, factoryProjectId: platform.id });
       await put({ ...ops, factoryProjectId: payments.id, labels: ['payments'] });
       await put({ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: platform.id });
       await remove({ ...ops, factoryProjectId: payments.id });
 
-      expect(await seed.storage.ops.findMany('intake_source_bindings', {})).toEqual([]);
+      expect(await seed.storage.collectionExists?.('intake_source_bindings')).toBe(false);
     });
   });
 

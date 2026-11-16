@@ -2,14 +2,13 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { CopyInput } from '@mastra/playground-ui/components/CopyInput';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { LogOut } from 'lucide-react';
-
 import { useApiConfig } from '../../../../api/config';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { clearMastraCodeStorage, redirectToLogout } from '../../auth/services/auth';
 import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 
 import { SettingsSubsection } from './SettingsSubsection';
+import { IconArrowBoxLeft } from '@mastra/playground-ui/icons/central/IconArrowBoxLeft';
 
 const AUTH_PROVIDER_LABELS: Record<string, string> = {
   workos: 'WorkOS',
@@ -103,7 +102,7 @@ export function AccountSettingsSection() {
         <SettingsContainer>
           <SettingsRow label="Log out" description="End your session on this device.">
             <Button type="button" size="sm" aria-label="Log out of MastraCode" onClick={logOut}>
-              <LogOut aria-hidden="true" />
+              <IconArrowBoxLeft aria-hidden="true" />
               Log out
             </Button>
           </SettingsRow>

@@ -528,8 +528,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           orgId,
           factoryProjectId: projectId,
           workItemId: card.id,
-          ingress: { identity, triggerType: 'test' },
-          configVersion: 'factory-config-v1',
+          ingress: { identity },
           expectedRevision: current.revision,
           actor: { type: 'system', id: 'rules' },
           outcome: { status: 'accepted' },
@@ -588,9 +587,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           orgId,
           connectionId: connection.id,
           repositoryId: repository.id,
-          createdByUserId: 'admin-user',
-          sandboxProvider: 'local',
-          sandboxWorkdir: '/tmp/shipyard',
         });
         return projectId;
       }
@@ -787,6 +783,16 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           timeout: 20_000,
         });
         expect(runsOf(requests, 'factory-triage', card.title)).toEqual([]);
+        // A person moves the card on once Planning's run is over: a busy card holds its phase.
+        await vi.waitFor(
+          async () => {
+            const open = (
+              await replica.workItems.listDeferredDecisions(orgId, projectId, { workItemId: card.id })
+            ).filter(record => ['pending', 'retry', 'leased'].includes(record.status));
+            expect(open).toEqual([]);
+          },
+          { timeout: 20_000 },
+        );
 
         for (const stage of ['execute', 'done']) {
           const result = await move((await replica.workItems.get({ orgId, id: card.id }))!, stage);
@@ -1226,7 +1232,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           ]);
         }, 60_000);
 
-        it("files a work-less project's GitHub arrivals on the app's board, where its routes place them", async () => {
+        it("files a work-less project's GitHub arrivals on the app's board where its routes place them, and no others", async () => {
           stubModel();
           const orgId = `org-${randomUUID()}`;
           const replica = await boot(await isolatedDatabase(), orgId);
@@ -1264,9 +1270,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             orgId,
             connectionId: connection.id,
             repositoryId: repository.id,
-            createdByUserId: 'admin-user',
-            sandboxProvider: 'local',
-            sandboxWorkdir: '/workspace',
           });
 
           // The GitHub rules and dispatcher Factory runs, over the project's stored boards.
@@ -1336,18 +1339,22 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           });
 
           const cards = await workItems.list(scope);
-          // No route takes the issue: it lands on the project's first board, in its initial phase.
-          expect(cards.find(card => card.title === 'Disk alert')).toMatchObject({ board: 'ops', stages: ['inbox'] });
+          // A project created now places by intake order: no route takes the issue, so it is Not
+          // routed rather than filed on the first board.
           expect(cards.find(card => card.title === 'Raise the disk limit')).toMatchObject({
             board: 'ops',
             stages: ['review'],
           });
-          expect(cards).toHaveLength(2);
+          expect(cards).toHaveLength(1);
+          expect((await replica.boards.listNotRouted(scope)).notRouted).toMatchObject([{ title: 'Disk alert' }]);
 
-          // A card a person files without a board lands there too.
-          const filed = await replica.send('POST', `/web/factory/projects/${projectId}/work-items`, {
-            title: 'Rotate keys',
+          // A card a person files without a board no rule takes is refused until they pick one.
+          const path = `/web/factory/projects/${projectId}/work-items`;
+          expect(await replica.send('POST', path, { title: 'Rotate keys' })).toMatchObject({
+            status: 422,
+            json: { error: 'intake_board_required' },
           });
+          const filed = await replica.send('POST', path, { title: 'Rotate keys', board: 'ops' });
           expect(filed.status, JSON.stringify(filed.json)).toBe(200);
           expect(filed.json.workItem).toMatchObject({ board: 'ops', stages: ['inbox'] });
         }, 60_000);

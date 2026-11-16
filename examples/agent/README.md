@@ -4,21 +4,27 @@ This directory contains example agents demonstrating various Mastra features.
 
 ## Getting Started
 
-1. From the `mastra` repository root, change into this example directory and install dependencies:
+1. The example links the repository's packages, so build them first from the `mastra` repository root:
+
+   ```bash
+   pnpm setup
+   ```
+
+2. Change into this example directory and install dependencies:
 
    ```bash
    cd examples/agent
    pnpm install --ignore-workspace
    ```
 
-2. Set up environment variables:
+3. Set up environment variables:
 
    ```bash
    cp .env.example .env
    # Edit .env with your API keys
    ```
 
-3. Run the example:
+4. Run the example:
    ```bash
    pnpm start
    ```

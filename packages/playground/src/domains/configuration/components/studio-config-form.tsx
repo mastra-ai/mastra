@@ -3,8 +3,8 @@ import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { SaveIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useStudioConfig } from '../context/studio-config-state';
 import type { StudioConfig } from '../types';
@@ -82,7 +82,7 @@ export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProp
         ))}
         <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />
 
-        <Button type="submit" className="mt-4 ml-auto" icon={<SaveIcon />}>
+        <Button type="submit" className="mt-4 ml-auto" icon={<IconFloppyDisk1 />}>
           Save configuration
         </Button>
       </Form>

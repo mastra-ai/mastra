@@ -12,6 +12,11 @@ import {
   dataset,
   items,
 } from '@/domains/datasets/components/dataset-detail/__tests__/fixtures/dataset-items';
+import {
+  noAgents,
+  noScorers,
+  noWorkflows,
+} from '@/domains/experiments/components/__tests__/fixtures/target-registries';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -34,6 +39,11 @@ function mockDataset(
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/versions`, () =>
       HttpResponse.json({ versions, pagination: { total: versions.length, page: 0, perPage: 10, hasMore: false } }),
     ),
+    // The experiment target pickers load these. Left unhandled, each request fails and the client
+    // retries it with backoff past the end of the test, after jsdom is gone.
+    http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
+    http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
+    http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
   );
 }
 

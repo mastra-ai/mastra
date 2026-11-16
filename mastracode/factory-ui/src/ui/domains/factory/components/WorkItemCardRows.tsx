@@ -8,18 +8,21 @@ import type { BoardCardStatus } from '../boardCardState';
 import { boardLoop, boardOf } from '../boardFlow';
 import type { BoardInfo } from '../boardFlow';
 import type { CardAction } from '../cardPrimaryAction';
-import { sourceMetadata, workItemMeta } from '../boardItems';
-import { itemStageLabel } from '../boardStages';
+import { sourceMetadata } from '../boardItems';
+import { phaseLabel } from '../boardStages';
 import { reviewVerdict, selfReviewVerdict } from '../reviewVerdict';
 import { reasonSummary } from '../reworkReason';
 import type { ReworkReason } from '../reworkReason';
 import type { ReviewVerdict } from '../reviewVerdict';
+import { useBoardRepository } from '../hooks/useBoardRepository';
 import type { AuditActorProfile } from '../services/audit';
+import { workItemMeta } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
 import { CardActions, CardStatus, MetadataLabels, SourceTitle, WorkItemSourceIcon } from './BoardCardParts';
 import { WorkItemActivity } from './WorkItemActivity';
+import { SourceStateBadge } from './SourceStateBadge';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 // The card and its open copy render these same rows, so opening moves none of them.
@@ -54,6 +57,7 @@ export function WorkItemCardRows({
   rework?: ReworkReason;
 }) {
   const board = boardOf(useBoardCatalog(item.githubProjectId).data, item);
+  const repository = useBoardRepository(item.githubProjectId);
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const verdict = columnReviewVerdict(item, columnStage, board);
 
@@ -64,7 +68,7 @@ export function WorkItemCardRows({
         <div className={cn('flex min-w-0 items-center gap-1.5', open ? 'pr-44' : 'pr-16')}>
           <Txt as="span" variant="meta" tone="faint" className="min-w-0 truncate">
             <Metadata singleLine>
-              {workItemMeta(item).map((part, index, parts) => (
+              {workItemMeta(item, repository).map((part, index, parts) => (
                 <Metadata.Item
                   key={index}
                   className={index === 0 || index === parts.length - 1 ? 'shrink-0' : undefined}
@@ -83,11 +87,7 @@ export function WorkItemCardRows({
           </Txt>
         </div>
       </div>
-      {item.workItem?.provider !== 'factory' && item.workItem?.state && (
-        <Badge size="xs" variant="neutral" className="self-start" aria-label={`Source state: ${item.workItem.state}`}>
-          {item.workItem.state}
-        </Badge>
-      )}
+      <SourceStateBadge item={item} className="self-start" />
       <MetadataLabels metadata={sourceMetadata(item)} />
       {otherStages.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
@@ -99,7 +99,7 @@ export function WorkItemCardRows({
               key={stage}
               className="border-border rounded-full border px-2 py-0.5"
             >
-              {itemStageLabel(item, stage, board)}
+              {phaseLabel(board, stage)}
             </Txt>
           ))}
         </div>

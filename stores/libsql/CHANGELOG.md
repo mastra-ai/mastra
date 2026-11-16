@@ -1,5 +1,26 @@
 # @mastra/libsql
 
+## 1.31.0-alpha.1
+
+### Minor Changes
+
+- Added `collectionExists(name)` to Factory storage so a domain can tell whether a table already exists before registering it. Supported by `LibSQLFactoryStorage` and `PgFactoryStorage`; it is an optional capability, so other backends keep working unchanged. ([#30488](https://github.com/mastra-ai/mastra/pull/30488))
+
+  ```ts
+  if (!storage.collectionExists || (await storage.collectionExists('work_items'))) {
+    await storage.ensureCollections([WORK_ITEMS_SCHEMA]);
+  }
+  ```
+
+### Patch Changes
+
+- Fixed factory storage on existing databases after a column is removed from a collection schema. The column is no longer required, so new rows that leave it out are accepted, and the values already stored in it are kept. Previously, LibSQL could also discard such a column's data while rebuilding a table. ([#30495](https://github.com/mastra-ai/mastra/pull/30495))
+
+- Fixed background task updates and deletes on a local LibSQL file database stalling for up to five seconds (and sometimes failing with `SQLITE_BUSY: database is locked`) when they ran alongside workflow run writes, for example while shutting down Mastra with background tasks still running. ([#30504](https://github.com/mastra-ai/mastra/pull/30504))
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b)]:
+  - @mastra/core@1.84.0-alpha.3
+
 ## 1.30.1-alpha.0
 
 ### Patch Changes

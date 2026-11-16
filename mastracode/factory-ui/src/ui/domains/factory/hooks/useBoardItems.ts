@@ -2,11 +2,7 @@ import { boardLoop, boardOf } from '../boardFlow';
 import { useRef, useState } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import {
-  useDeleteWorkItemMutation,
-  useTransitionWorkItemMutation,
-  useUpdateWorkItemMutation,
-} from '../../../../hooks/useWorkItems';
+import { useDeleteWorkItemMutation, useTransitionWorkItemMutation } from '../../../../hooks/useWorkItems';
 import type { DragPayload } from '../boardDrag';
 import { itemBoard, pullRequestMayEnter } from '../boardStages';
 import type { BoardKind } from '../boardStages';
@@ -16,7 +12,6 @@ import type { BoardStageId } from '../stages';
 interface MoveOptions {
   /** What the server records as the reason for the move; a drag says so, a card button does not. */
   cause?: string;
-  repositorySlug?: string;
 }
 
 /** The moves that rewrite a board's persisted cards, for a caller that holds the cards it acts on. */
@@ -36,7 +31,6 @@ export function useBoardItems({
   onFailure?: (message: string) => void;
 }) {
   const catalog = useBoardCatalog(factoryProjectId);
-  const update = useUpdateWorkItemMutation(factoryProjectId);
   const transition = useTransitionWorkItemMutation(factoryProjectId, currentUserId);
   const remove = useDeleteWorkItemMutation(factoryProjectId);
   const [transitionReasons, setTransitionReasons] = useState<Record<string, string>>({});
@@ -83,26 +77,7 @@ export function useBoardItems({
       if (!phase || (phase.id !== toStage && !phase.transitions.some(target => target.to === toStage))) return;
     }
     movingRef.current.add(id);
-    const release = () => movingRef.current.delete(id);
-    if (!options.repositorySlug) {
-      requestTransition(item, toStage, options, release);
-      return;
-    }
-    // The patch bumps the revision, so the move has to ride the item it returned.
-    void update
-      .mutateAsync({
-        id,
-        patch: {
-          metadata: item.workItem
-            ? { repository: options.repositorySlug }
-            : { ...item.metadata, repository: options.repositorySlug },
-        },
-      })
-      .then(patched => requestTransition(patched, toStage, options, release))
-      .catch(error => {
-        release();
-        onFailure?.(error instanceof Error ? error.message : 'The card could not be updated.');
-      });
+    requestTransition(item, toStage, options, () => movingRef.current.delete(id));
   };
 
   const handleDrop = (payload: DragPayload, toStage: BoardStageId, cause = 'board_drag') => {

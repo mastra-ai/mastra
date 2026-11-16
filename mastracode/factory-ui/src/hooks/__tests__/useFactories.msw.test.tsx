@@ -28,8 +28,6 @@ const repo: GithubRepo = {
   private: false,
   installationId: 7,
   installationStorageId: 'inst-7',
-  sandboxProvider: 'local',
-  sandboxWorkdir: '/workspace/hello',
 };
 
 const gitlabRepo: GitLabRepository = {
@@ -41,8 +39,6 @@ const gitlabRepo: GitLabRepository = {
   owner: 'acme',
   defaultBranch: 'main',
   private: true,
-  sandboxProvider: 'local',
-  sandboxWorkdir: '/workspace/app',
 };
 
 function stubRepositoryLink() {
@@ -55,7 +51,6 @@ function stubRepositoryLink() {
         projectRepository: {
           id: 'ghp_1',
           branch: 'main',
-          sandboxWorkdir: '/workspace/hello',
           repository: { slug: 'octo/hello', defaultBranch: 'main' },
         },
       }),
@@ -92,8 +87,6 @@ describe('useLinkRepositoryMutation', () => {
             projectPath: 'acme/app',
             installationStorageId: 'gitlab-inst-1',
             defaultBranch: 'main',
-            sandboxProvider: 'local',
-            sandboxWorkdir: '/workspace/app',
           },
         });
       }),
@@ -112,7 +105,6 @@ describe('useLinkRepositoryMutation', () => {
             projectRepository: {
               id: 'glp-1',
               branch: 'main',
-              sandboxWorkdir: '/workspace/app',
               repository: { slug: 'acme/app', defaultBranch: 'main' },
             },
           });
@@ -132,8 +124,6 @@ describe('useLinkRepositoryMutation', () => {
       {
         repository: { externalId: '10', slug: 'acme/app' },
         branch: 'main',
-        sandboxProvider: 'local',
-        sandboxWorkdir: '/workspace/app',
       },
     ]);
     expect(saved).toEqual([{ gitlab: { enabled: true, sourceIds: ['gitlab-project:encoded'] } }]);
@@ -206,7 +196,6 @@ describe('useLinkRepositoryMutation', () => {
     const projectRepository = {
       id: 'ghp_1',
       branch: 'main',
-      sandboxWorkdir: '/workspace/hello',
       repository: { slug: 'octo/hello', defaultBranch: 'main' },
     };
     server.use(
@@ -348,7 +337,6 @@ describe('useFactoriesQuery', () => {
             externalId: '99',
             slug: 'octo/hello',
             gitBranch: 'release',
-            sandboxWorkdir: '/workspace/octo/hello',
           },
           {
             projectRepositoryId: 'glp_1',
@@ -356,7 +344,6 @@ describe('useFactoriesQuery', () => {
             externalId: '10',
             slug: 'acme/app',
             gitBranch: 'trunk',
-            sandboxWorkdir: '/workspace/acme/app',
           },
           {
             projectRepositoryId: 'ghp_2',
@@ -364,7 +351,6 @@ describe('useFactoriesQuery', () => {
             externalId: undefined,
             slug: 'Acme',
             gitBranch: undefined,
-            sandboxWorkdir: '/workspace/unused',
           },
         ],
       },

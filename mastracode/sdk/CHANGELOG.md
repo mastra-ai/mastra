@@ -1,5 +1,46 @@
 # @mastra/code-sdk
 
+## 1.19.1-alpha.4
+
+### Patch Changes
+
+- **Held plugin errors until someone listens.** `PluginManager.onPluginError` now receives errors reported before it subscribed, such as a plugin signal provider failing to start while Mastra Code boots. They still go to `console.warn` when reported, the first listener gets the 20 most recent, and later listeners only see new ones. ([#30428](https://github.com/mastra-ai/mastra/pull/30428))
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`6c647e6`](https://github.com/mastra-ai/mastra/commit/6c647e6faee5a6182d99e2352808df1b57558b67), [`adc0a70`](https://github.com/mastra-ai/mastra/commit/adc0a70bf835d1f81f7bf0af11b247ca115a6683), [`cd2a326`](https://github.com/mastra-ai/mastra/commit/cd2a326988ced13509902dfa50339afcffdbf95e), [`0170d70`](https://github.com/mastra-ai/mastra/commit/0170d700a411ce2b5e64a82bc1133716ae75cbd6), [`1072f7c`](https://github.com/mastra-ai/mastra/commit/1072f7c6268db5fb515460fdcdda173592bce450), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b), [`b666fdb`](https://github.com/mastra-ai/mastra/commit/b666fdbf03a95a8fbe4cf02d150f4576dad6512f)]:
+  - @mastra/core@1.84.0-alpha.3
+  - @mastra/libsql@1.31.0-alpha.1
+  - @mastra/pg@1.37.0-alpha.1
+  - @mastra/memory@1.41.2-alpha.2
+  - @mastra/mcp@2.10.0-alpha.0
+  - @mastra/client-js@1.60.1-alpha.3
+
+## 1.19.1-alpha.3
+
+### Patch Changes
+
+- Fixed `mastracode` crashing on startup after a fresh install. `@mastra/code-sdk` now requires `@mastra/core` 1.84 or newer, the first version with the knowledge scope helpers it imports. Before, npm could install `@mastra/core` 1.83, and `mastracode --help` failed with "does not provide an export named 'encodeKnowledgeScopeId'". ([#30425](https://github.com/mastra-ai/mastra/pull/30425))
+
+- `@mastra/code-sdk` now ships its own copy of the Knowledge scope id encoder instead of importing `encodeKnowledgeScopeId` from `@mastra/core`. If npm installs an older `@mastra/core`, `mastracode` still starts instead of crashing with "does not provide an export named 'encodeKnowledgeScopeId'". A test keeps the copy's output identical to core's. ([#30427](https://github.com/mastra-ai/mastra/pull/30427))
+
+- **Kept a plugin running when its reload fails.** A reload that fails for a plugin that was working (a bad update, a throwing resolver) now keeps the plugin's last good tools, signal providers and version stamp, and records the error as `reloadError` instead of removing the plugin. Disabling, blocking or uninstalling it still removes everything, and the next successful load replaces the kept one. ([#30412](https://github.com/mastra-ai/mastra/pull/30412))
+
+  **Added plugin error notifications.** `PluginManager.onPluginError` reports each distinct reload failure once, along with signal provider errors from running plugins. With no listener, errors still go to `console.warn`.
+
+  ```ts
+  const unsubscribe = pluginManager.onPluginError(({ pluginId, message }) => {
+    console.error(`[${pluginId}] ${message}`);
+  });
+  ```
+
+## 1.19.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`7277766`](https://github.com/mastra-ai/mastra/commit/7277766d6c967c475675d58ff2d0e5c6d7be7c84), [`9eae968`](https://github.com/mastra-ai/mastra/commit/9eae9680d2be2c9596156c1426998c173f80618f), [`951a18b`](https://github.com/mastra-ai/mastra/commit/951a18b08571b87eae318bcd0f5970b8e70ca3c8), [`f4458ee`](https://github.com/mastra-ai/mastra/commit/f4458eea7f221a5b741a4846bba9b95139a8aef8), [`a3b4ef9`](https://github.com/mastra-ai/mastra/commit/a3b4ef9ecda76f961cb9992a2c8787d37d8ce1b3), [`547600d`](https://github.com/mastra-ai/mastra/commit/547600d004e08ecb8b08c84312b535ae5b016c92)]:
+  - @mastra/core@1.84.0-alpha.2
+  - @mastra/memory@1.41.2-alpha.1
+  - @mastra/client-js@1.60.1-alpha.2
+
 ## 1.19.1-alpha.1
 
 ### Patch Changes

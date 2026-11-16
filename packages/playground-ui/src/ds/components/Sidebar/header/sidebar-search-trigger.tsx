@@ -1,9 +1,9 @@
-import { SearchIcon } from 'lucide-react';
 import { forwardRef } from 'react';
 import type { ReactNode } from 'react';
 import { SidebarButtonHint } from './sidebar-button-hint';
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 
 export type SidebarSearchTriggerProps = Omit<ButtonProps, 'variant' | 'size' | 'tooltip' | 'children'> & {
   /** Tooltip label, and the accessible name unless `aria-label` is set. Defaults to `Search`. */
@@ -31,7 +31,7 @@ export const SidebarSearchTrigger = forwardRef<HTMLButtonElement, SidebarSearchT
         tooltipPosition="bottom"
         {...props}
       >
-        {children ?? <SearchIcon />}
+        {children ?? <IconMagnifyingGlass />}
       </Button>
     );
   },

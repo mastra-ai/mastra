@@ -1,24 +1,25 @@
+import type { CardContextSession } from '@mastra/factory/work-items/card-context-sessions';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { EllipsisVertical, Minimize2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useId } from 'react';
 import { useParams } from 'react-router';
 
 import type { BoardCardStatus } from '../boardCardState';
-import type { CardContextSession } from '../boardItems';
 import type { BoardLayout } from '../boardLayout';
 import type { CardAction } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
 import type { ReworkReason } from '../reworkReason';
 import type { AuditEventPage } from '../services/audit';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { timelineEvents, workItemActivity } from '../workItemActivity';
 import { CardDetailsPanel } from './CardDetailsPanel';
 import { WorkItemCardRows } from './WorkItemCardRows';
 import { WorkItemExternalLink } from './WorkItemExternalLink';
 import { WorkItemTray } from './WorkItemTray';
+import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
+import { IconMinimize45 } from '@mastra/playground-ui/icons/central/IconMinimize45';
 
 export function WorkItemDetailsPanel({
   item,
@@ -38,7 +39,7 @@ export function WorkItemDetailsPanel({
   columnStage: BoardStageId;
   projectRepositoryId: string;
   activityPage?: AuditEventPage;
-  contextSessions: readonly CardContextSession[];
+  contextSessions: readonly CardContextSession<WorkItemSessionRef>[];
   rework?: ReworkReason;
   morph: CardMorph;
   relatedLinks: ReactNode;
@@ -82,13 +83,13 @@ export function WorkItemDetailsPanel({
                 aria-label={`Collapse ${item.title}`}
                 onClick={morph.closeDetails}
               >
-                <Minimize2 size={13} aria-hidden />
+                <IconMinimize45 aria-hidden />
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger
                   render={
                     <Button type="button" variant="ghost" size="icon-sm" aria-label={`All actions for ${item.title}`}>
-                      <EllipsisVertical size={13} aria-hidden />
+                      <IconDotGrid1x3Vertical aria-hidden />
                     </Button>
                   }
                 />

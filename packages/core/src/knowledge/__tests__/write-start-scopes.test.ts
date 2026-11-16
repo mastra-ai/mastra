@@ -241,4 +241,24 @@ describe('Knowledge write-run start with changed declarations', () => {
     const [t1, t2] = await store.getScopesByAddress(['team:t1', 'team:t2']);
     expect([t1?.description, t2?.description]).toEqual(['Teams', 'Every team']);
   });
+
+  it('creates a child scope added to the declaration after its parent exists', async () => {
+    const store = (await new InMemoryStore().getStore('knowledge'))!;
+    await store.init();
+    const runtime = (children: { name: string }[]) =>
+      new KnowledgeScopeRuntime(
+        { 'team:$teamId': { children } },
+        async () => store,
+        () => {},
+      );
+    await runtime([]).materializeScopes(['team:t1'], ['team:t1'], provenance);
+    expect(await store.getScopesByAddress(['team:t1/internal'])).toEqual([]);
+
+    await runtime([{ name: 'internal' }]).materializeScopes(['team:t1'], ['team:t1'], provenance);
+
+    const [t1] = await store.getScopesByAddress(['team:t1']);
+    const [internal] = await store.getScopesByAddress(['team:t1/internal']);
+    expect(internal).toBeDefined();
+    expect(internal!.parentId).toBe(t1!.id);
+  });
 });

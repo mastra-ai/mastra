@@ -1,7 +1,6 @@
 import { useMastraClient } from '@mastra/react';
 import { traceSpansQueryOptions, useTraceSpans } from '@mastra/react/hooks/traces';
 import { useQueries } from '@tanstack/react-query';
-import { ExternalLinkIcon, MessageSquareReplyIcon, MessageSquareTextIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { FeedbackOptions } from './feedback-options';
 import { TraceScoresTab } from '@/domains/scores';
@@ -16,6 +15,9 @@ import { useTracesListSource } from '@/domains/traces/hooks/use-traces-list-sour
 import type { UseTracesListSourceArgs } from '@/domains/traces/hooks/use-traces-list-source';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
+import { IconChatBubble7 } from '@/ds/icons/central/IconChatBubble7';
+import { IconChatBubble7Plus } from '@/ds/icons/central/IconChatBubble7Plus';
+import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 import { Icon } from '@/ds/icons/Icon';
 import { ScorersIcon } from '@/ds/icons/ScorersIcon';
 import { useLinkComponent } from '@/lib/framework';
@@ -159,7 +161,7 @@ function ThreadTraceRowContent({
       <ThreadTrace.Divider label={`Turn ${turn}`}>
         {traceHref && (
           <>
-            <Button render={<Link href={traceHref} />} variant="ghost" size="sm" icon={<ExternalLinkIcon />}>
+            <Button render={<Link href={traceHref} />} variant="ghost" size="sm" icon={<IconSquareArrowTopRight />}>
               Go to trace
             </Button>
             <span aria-hidden className="h-4 w-px bg-border" />
@@ -168,14 +170,14 @@ function ThreadTraceRowContent({
         <ThreadTrace.TabList>
           <ThreadTrace.Tab value="messages">
             <Icon size="xs">
-              <MessageSquareTextIcon />
+              <IconChatBubble7 />
             </Icon>
             Messages
           </ThreadTrace.Tab>
           {withFeedback && (
             <ThreadTrace.Tab value="feedback">
               <Icon size="xs">
-                <MessageSquareReplyIcon />
+                <IconChatBubble7Plus />
               </Icon>
               Feedback
             </ThreadTrace.Tab>
