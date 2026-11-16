@@ -1,11 +1,11 @@
 import { Popover as PopoverPrimitive } from '@base-ui/react/popover';
-import { TextQuote } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react';
 
 import type { NewChatAnnotation } from './chat-annotations';
 import { useAnnotationSelection } from './use-annotation-selection';
 import { Button } from '@/ds/components/Button';
+import { IconOpenQuote1 } from '@/ds/icons/central/IconOpenQuote1';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -110,7 +110,7 @@ export function AnnotationSelectionToolbar({ containerRef, onAnnotate }: Annotat
               type="button"
               variant="ghost"
               size="sm"
-              icon={<TextQuote />}
+              icon={<IconOpenQuote1 />}
               onClick={addToChat}
               onKeyDown={returnFocus}
             >

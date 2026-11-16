@@ -87,10 +87,13 @@ export function useLinkRepositoryMutation() {
     mutationFn: async ({
       factoryProjectId,
       repo,
+      selectIntake = true,
       onLinked,
     }: {
       factoryProjectId: string;
       repo: SourceControlRepository;
+      /** Callers whose own switch decides the selection (onboarding's Work step) link with this off. */
+      selectIntake?: boolean;
       onLinked?: (linked: LinkedRepositoryPayload) => Promise<void>;
     }) => {
       const gitlab = isGitLabRepository(repo);
@@ -107,13 +110,15 @@ export function useLinkRepositoryMutation() {
       // goes straight from "Linking…" to linked instead of flashing "Link" first.
       const refreshed = invalidateFactoryRepositories(queryClient, factoryProjectId);
       try {
-        const config = await fetchIntakeConfig(baseUrl);
-        if (gitlab) {
-          const gitlabSelection = selectIntakeSource(config.gitlab, repo.id);
-          if (gitlabSelection !== config.gitlab) await saveGitlabSelection.mutateAsync(gitlabSelection);
-        } else {
-          const githubSelection = selectIntakeSource(config.github, repo.fullName);
-          if (githubSelection !== config.github) await saveGithubSelection.mutateAsync(githubSelection);
+        if (selectIntake) {
+          const config = await fetchIntakeConfig(baseUrl);
+          if (gitlab) {
+            const gitlabSelection = selectIntakeSource(config.gitlab, repo.id);
+            if (gitlabSelection !== config.gitlab) await saveGitlabSelection.mutateAsync(gitlabSelection);
+          } else {
+            const githubSelection = selectIntakeSource(config.github, repo.fullName);
+            if (githubSelection !== config.github) await saveGithubSelection.mutateAsync(githubSelection);
+          }
         }
       } finally {
         await refreshed;

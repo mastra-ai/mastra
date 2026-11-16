@@ -27,7 +27,7 @@
     "tools/create-batch.ts": "4664898ffb7be0f17adfa6e613f32ae2352e43a9003215fd6c1a3265fea7d0f0",
     "tools/create-chat-completion.ts": "a67af6f083c679ffc1d22e2e6b9d263acf2c294a40a62958e232f4206b43d651",
     "tools/create-embedding.ts": "95e883bc4dffca6bcf9798eed767e4acbcf153916d681544f41ff34b7c01f724",
-    "tools/create-image.ts": "2a51c158a194be380545e0febe0f873b5ff7c924c001913b33720603a2bd34e7",
+    "tools/create-image.ts": "21e37b711d0eab3488eaa68e0c474c749b43da2c132892e7e30849ffd8f68892",
     "tools/create-moderation.ts": "a1436ebdba671976ae8bd0bbc62d0232f04fc677c2e8773a581fa8b30b3b294c",
     "tools/create-response.ts": "70918d3853149b64ce49aa159c5eccf710123d53f308e804e455970c254f2be6",
     "tools/create-vector-store.ts": "fc4c4896906d599b6873755c96d5ac32428b292c3bc967da0eb6aa72e4691484",

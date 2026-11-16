@@ -55,8 +55,9 @@ export function SidebarSectionsContent({
 
   return (
     <>
-      {sections.map(section => {
+      {sections.map((section, index) => {
         const showSeparator = section.links.length > 0 && section.separator;
+        const isFirst = index === 0;
         const headerId = section.title ? `${baseId}-${section.key}` : undefined;
         const moreLinks = section.moreLinks ?? [];
         const activeCandidates = [...section.links, ...moreLinks];
@@ -69,7 +70,13 @@ export function SidebarSectionsContent({
             aria-label={!headerId ? section.key : undefined}
           >
             {showSeparator ? <SidebarNavSeparator className="[&:after]:border-border" /> : null}
-            {section.title ? (
+            {/* The list opens with rows, never a title: the first group's title is for screen readers only. */}
+            {section.title && isFirst ? (
+              <header id={headerId} className="sr-only">
+                {section.title}
+              </header>
+            ) : null}
+            {section.title && !isFirst ? (
               <SidebarNavHeader id={headerId} href={section.href} isActive={section.isHeaderActive}>
                 {section.title}
               </SidebarNavHeader>

@@ -1,11 +1,11 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check } from 'lucide-react';
 import { useId } from 'react';
 import { ONBOARDING_SECTIONS } from '../../services/onboardingSteps';
 import type { OnboardingSection } from '../../services/onboardingSteps';
 import { ONBOARDING_FRAME_RADIUS } from './onboardingLayout';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 
 export interface ChangeSectionProps {
   onChange: () => void;
@@ -67,7 +67,7 @@ export function OnboardingDoneRow({
         disabled={changeDisabled}
         onClick={onChange}
         className={cn(
-          'state-layer flex min-h-14 w-full cursor-pointer items-center gap-3 px-4 py-3 text-start before:transition-none disabled:cursor-not-allowed',
+          'state-layer flex min-h-14 w-full cursor-pointer items-center gap-3 px-4 py-3 text-start disabled:cursor-not-allowed',
           ONBOARDING_FRAME_RADIUS,
           focusRingInset,
         )}
@@ -76,7 +76,7 @@ export function OnboardingDoneRow({
           className="bg-foreground text-background grid size-6 shrink-0 place-items-center rounded-full"
           aria-hidden="true"
         >
-          <Check className="size-3.5" />
+          <IconCheckmark2Medium className="size-3.5" />
         </span>
         <Txt as="span" tone="muted" className="w-20 shrink-0">
           {label}

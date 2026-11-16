@@ -36,6 +36,7 @@ import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webh
 import { IncidentioIntegration } from '@mastra/factory/integrations/incidentio/integration';
 import { JiraIntegration } from '@mastra/factory/integrations/jira/integration';
 import { PlatformJiraIntegration } from '@mastra/factory/integrations/platform/jira/integration';
+import { PlatformVantaIntegration } from '@mastra/factory/integrations/platform/vanta/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
@@ -50,6 +51,13 @@ function positiveInt(raw: string | undefined): number | undefined {
   if (!raw) return undefined;
   const parsed = Number(raw);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) return undefined;
+  return parsed;
+}
+
+function nonNegativeInt(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) return undefined;
   return parsed;
 }
 
@@ -267,6 +275,9 @@ const jira =
 const incidentioApiKey = process.env.INCIDENT_IO_API_KEY?.trim();
 const incidentio = incidentioApiKey ? new IncidentioIntegration({ apiKey: incidentioApiKey }) : undefined;
 
+// Vanta vulnerability intake through Platform-managed (MastraConnect) Vanta connections.
+const vanta = platformCredentialsConfigured ? new PlatformVantaIntegration() : undefined;
+
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
 // (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, DATABASE_URL, …) never leak into
 // commands run against untrusted repo checkouts. PATH is always added by the
@@ -373,6 +384,7 @@ const integrations = [
   ...(linear ? [linear] : []),
   ...(jira ? [jira] : []),
   ...(incidentio ? [incidentio] : []),
+  ...(vanta ? [vanta] : []),
   ...(slack ? [slack] : []),
 ];
 
@@ -422,10 +434,12 @@ export const factory = new MastraFactory({
   deploymentModelProviders: process.env.FACTORY_DEPLOYMENT_MODEL_PROVIDERS?.split(','),
   sandbox,
   browser,
-  // Per-replica cap on concurrent Factory background dispatches. Unset means
-  // the dispatcher default; invalid and non-positive values are ignored.
+  // Per-replica caps on concurrent Factory background dispatches, and the
+  // reserve for people's replies on top of it. Unset means the dispatcher
+  // default; invalid values are ignored (and a non-positive run cap too).
   dispatcher: {
     maxInFlight: positiveInt(process.env.MASTRACODE_DISPATCH_MAX_IN_FLIGHT),
+    maxInteractiveInFlight: nonNegativeInt(process.env.MASTRACODE_DISPATCH_MAX_INTERACTIVE_IN_FLIGHT),
   },
   // Agent state (threads, messages, memory, OM, recall vectors) lives in the
   // single app Postgres alongside the github/app tables — one shared DB (and

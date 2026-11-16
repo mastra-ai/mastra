@@ -10,7 +10,7 @@ import {
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { actOnFactoryDecision, fetchFactoryDecisions } from '../ui/domains/factory/services/decisions';
+import { actOnFactoryDecision, fetchFactoryDecisions, fetchRunQueue } from '../ui/domains/factory/services/decisions';
 import type {
   FactoryDecisionAction,
   FactoryDecisionPage,
@@ -34,6 +34,20 @@ export function factoryDecisionStatusQueryOptions(
 export function useFactoryDecisionStatus(githubProjectId: string | undefined, statuses: FactoryDecisionStatus[]) {
   const { baseUrl } = useApiConfig();
   return useQuery(factoryDecisionStatusQueryOptions(baseUrl, githubProjectId, statuses));
+}
+
+/** Automated runs waiting for a run slot; the feed refreshes it with the board's decisions. */
+export function runQueueQueryOptions(baseUrl: string, githubProjectId: string | undefined) {
+  return queryOptions({
+    queryKey: queryKeys.factoryRunQueue(githubProjectId),
+    queryFn: githubProjectId ? () => fetchRunQueue(baseUrl, githubProjectId) : skipToken,
+    staleTime: 1_000,
+  });
+}
+
+export function useRunQueue(githubProjectId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  return useQuery(runQueueQueryOptions(baseUrl, githubProjectId));
 }
 
 /** Release, turn down, or requeue one queued effect. */

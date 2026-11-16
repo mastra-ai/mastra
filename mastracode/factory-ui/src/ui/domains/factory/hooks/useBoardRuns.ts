@@ -2,40 +2,22 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
+import { useApiConfig } from '../../../../api/config';
 import { useStartFactoryRun } from '../../../../hooks/useStartFactoryRun';
 import { useCardRepositorySlug } from './useCardRepositorySlug';
 import { itemSessionSpec, itemThreadSession } from '../boardItems';
 import { repositoryMatchesCardSource } from '../boardRepository';
-import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
+import { listWorkItems } from '../services/workItems';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 
 const PREPARING_SESSION_LABEL = 'Preparing session…';
 
 /** Opening the chat session a card carries, and minting one when it has none yet. */
-export function useBoardRuns({
-  factoryProjectId,
-  refetchItems,
-}: {
-  factoryProjectId: string;
-  /**
-   * A fresh read of the cards a click can land on. It is given the id of the card clicked, and may
-   * send that card alone: the card is taken as deleted when the read succeeds without it.
-   */
-  refetchItems: (
-    itemId: string,
-  ) => Promise<{ isSuccess: true; data: WorkItem[] } | { isSuccess: false; error: unknown }>;
-}) {
+export function useBoardRuns({ factoryProjectId }: { factoryProjectId: string }) {
+  const { baseUrl } = useApiConfig();
   const { start, startingItemIds, enabled, repositories } = useStartFactoryRun();
   const repositorySlugFor = useCardRepositorySlug(repositories);
   const navigate = useNavigate();
-  const [repositorySelection, setRepositorySelection] = useState<{
-    item: WorkItem;
-    branch: string;
-    threadTitle: string;
-  }>();
-  const repositoryChoices = repositorySelection
-    ? repositories.filter(repository => repositoryMatchesCardSource(repository, repositorySelection.item.source))
-    : [];
 
   // A card click refetches items before it can decide whether to open an
   // existing thread or mint a new session. That wait is a round trip long and
@@ -65,16 +47,18 @@ export function useBoardRuns({
     navigate(`/factories/${factoryProjectId}/workspaces/${session.sessionId}/threads/${session.threadId}`);
   };
 
-  // Refetch failures here used to be silent: an expired auth cookie made every
-  // board click a no-op with no feedback. Toast so the click never dies quietly.
+  // The clicked card alone, read fresh: it may have gained a session since it was listed, or been
+  // deleted. A failed read used to be silent: an expired auth cookie made every board click a
+  // no-op with no feedback. Toast so the click never dies quietly.
   const refreshItem = async (itemId: string) => {
-    const refreshedItems = await refetchItems(itemId);
-    if (!refreshedItems.isSuccess) {
-      const cause = refreshedItems.error;
+    let cards: WorkItem[];
+    try {
+      cards = (await listWorkItems(baseUrl, factoryProjectId, undefined, { workItemId: [itemId] })).workItems;
+    } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : 'Failed to refresh the board. Try reloading the page.');
       return;
     }
-    const item = refreshedItems.data.find(candidate => candidate.id === itemId);
+    const item = cards.find(candidate => candidate.id === itemId);
     if (!item) {
       toast.error('This card no longer exists. The board may be out of date.');
       return;
@@ -104,19 +88,13 @@ export function useBoardRuns({
         ...refreshed.metadata,
         ...refreshed.workItem?.metadata,
       });
-      const hasLinkedTarget = compatibleRepositories.some(repository => repository.slug === targetSlug);
-      if (!targetSlug && compatibleRepositories.length > 1) {
-        setRepositorySelection({ item: refreshed, ...spec });
-        return 'repository-selection-required' as const;
-      }
-      if (targetSlug && !hasLinkedTarget) {
+      if (targetSlug && !compatibleRepositories.some(repository => repository.slug === targetSlug)) {
         toast.error(`Repository ${targetSlug} is not linked to this Factory with a provider matching this card`);
         return;
       }
       await start.mutateAsync({
         branch: spec.branch,
         threadTitle: spec.threadTitle,
-        repositorySlug: targetSlug ?? compatibleRepositories[0]?.slug,
         workItem: {
           id: refreshed.id,
           role: 'chat',
@@ -132,37 +110,9 @@ export function useBoardRuns({
     }
   };
 
-  const selectRepository = async (repository: LinkedRepositoryPayload) => {
-    if (!repositorySelection) return;
-    const { item, branch, threadTitle } = repositorySelection;
-    setRepositorySelection(undefined);
-    try {
-      await start.mutateAsync({
-        branch,
-        threadTitle,
-        repositorySlug: repository.slug,
-        workItem: {
-          id: item.id,
-          role: 'chat',
-          source: item.source,
-          sourceKey: item.sourceKey,
-          title: item.title,
-          metadata: item.metadata,
-          workItem: item.workItem,
-        },
-      });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to start the run');
-    }
-  };
-
   return {
     enabled,
     error: start.error,
-    repositoryChoices,
-    repositorySelection,
-    selectRepository,
-    closeRepositorySelection: () => setRepositorySelection(undefined),
     preparingFor: (itemId: string): string | undefined =>
       preparingItems[itemId] ?? (startingItemIds.includes(itemId) ? PREPARING_SESSION_LABEL : undefined),
     openThread,

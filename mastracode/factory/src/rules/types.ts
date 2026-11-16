@@ -10,6 +10,9 @@ export type WorkItemSource =
   | 'linear-issue'
   | 'jira-issue'
   | 'incidentio-follow-up'
+  | 'github-dependabot-alert'
+  | 'vanta-vulnerability'
+  | 'detail-finding'
   | 'manual';
 
 export function externalSourceForWorkItem(
@@ -32,7 +35,13 @@ export function externalSourceForWorkItem(
                 ? ['jira', 'issue']
                 : source === 'incidentio-follow-up'
                   ? ['incidentio', 'issue']
-                  : ['factory', 'manual'];
+                  : source === 'github-dependabot-alert'
+                    ? ['github', 'dependabot-alert']
+                    : source === 'vanta-vulnerability'
+                      ? ['vanta', 'vulnerability']
+                      : source === 'detail-finding'
+                        ? ['detail', 'finding']
+                        : ['factory', 'manual'];
   return { integrationId, type, externalId: sourceKey, ...(url ? { url } : {}) };
 }
 
@@ -64,10 +73,13 @@ export function workItemSource(source: ExternalWorkItemSource | null): WorkItemS
   if (source.integrationId === 'gitlab') return source.type === 'pull-request' ? 'gitlab-pr' : 'gitlab-issue';
   if (source.integrationId === 'jira') return 'jira-issue';
   if (source.integrationId === 'incidentio') return 'incidentio-follow-up';
+  if (source.integrationId === 'vanta') return 'vanta-vulnerability';
+  if (source.integrationId === 'detail') return 'detail-finding';
   // Only GitHub, GitLab, Linear, Jira, and incident.io have provider-specific
   // rules; anything else (a Slack thread, say) is a plain work item, not a
   // mislabeled GitHub issue.
   if (source.integrationId !== 'github') return 'manual';
+  if (source.type === 'dependabot-alert') return 'github-dependabot-alert';
   return source.type === 'pull-request' ? 'github-pr' : 'github-issue';
 }
 
@@ -123,6 +135,9 @@ export const FACTORY_RULE_SOURCES = [
   'linearIssue',
   'jiraIssue',
   'incidentioFollowUp',
+  'dependabotAlert',
+  'vantaVulnerability',
+  'detailFinding',
   'manual',
 ] as const;
 export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
@@ -168,6 +183,11 @@ export type FactoryJiraEventName = (typeof FACTORY_JIRA_EVENTS)[number];
 export const FACTORY_INCIDENTIO_EVENTS = ['followUpObserved', 'followUpClosed'] as const;
 export type FactoryIncidentioEventName = (typeof FACTORY_INCIDENTIO_EVENTS)[number];
 
+export const FACTORY_DEPENDABOT_EVENTS = ['alertObserved', 'alertClosed'] as const;
+export type FactoryDependabotEventName = (typeof FACTORY_DEPENDABOT_EVENTS)[number];
+export const FACTORY_VANTA_EVENTS = ['vulnerabilityObserved', 'vulnerabilityClosed'] as const;
+export type FactoryVantaEventName = (typeof FACTORY_VANTA_EVENTS)[number];
+
 export type FactoryRuleJsonValue =
   | null
   | boolean
@@ -197,12 +217,23 @@ export interface FactoryRuleItemContext {
 export type FactoryRuleActor =
   | { type: 'human'; id: string }
   | { type: 'agent'; bindingId: string; role: string }
-  | { type: 'github'; login: string; trusted: boolean; factoryAuthored: boolean }
+  | {
+      type: 'github';
+      login: string;
+      trusted: boolean;
+      factoryAuthored: boolean;
+      /**
+       * Whether GitHub typed the sender as a person (`User`), not an app or bot.
+       * Absent on events Factory synthesizes itself and on actors recorded before
+       * it existed: neither says a person sent them.
+       */
+      human?: boolean;
+    }
   | { type: 'gitlab'; username: string; trusted: boolean; factoryAuthored: boolean }
   | { type: 'system'; id: string };
 
 export interface FactoryRuleIngressIdentity {
-  type: 'human' | 'agent' | 'toolResult' | 'github' | 'gitlab' | 'linear' | 'jira' | 'incidentio' | 'rule';
+  type: 'human' | 'agent' | 'toolResult' | 'github' | 'gitlab' | 'linear' | 'jira' | 'incidentio' | 'vanta' | 'rule';
   id: string;
 }
 
@@ -561,6 +592,70 @@ export interface FactoryIncidentioRuleContext extends FactoryRuleContextBase {
   };
 }
 
+export interface FactoryDependabotRuleContext extends FactoryRuleContextBase {
+  /** The status change this sync reports, named the same for every provider; absent for other events. */
+  boardEvent?: BoardEventFacts;
+  item?: FactoryRuleItemContext;
+  board?: FactoryRuleBoard;
+  itemRevision?: number;
+  /** Where the card's board sends it when its tracked source closes. */
+  boardClosure?: FactoryRuleBoardClosure;
+  /** What the card's current phase means on its board; absent without a card or when the board does not declare the phase. */
+  phase?: FactoryRulePhaseContext;
+  /** Where a new card is filed before the project's intake routes place it. */
+  intake?: FactoryRuleIntakeTarget;
+  event: FactoryDependabotEventName;
+  alert: {
+    /** Stable alert reference — `owner/repo#dependabot-<number>`. */
+    id: string;
+    number: number;
+    repository: string;
+    title: string;
+    url: string;
+    /** `open`, `dismissed`, `fixed`, or `auto_dismissed`. */
+    state: string;
+    severity: string | null;
+    packageName: string | null;
+    ecosystem: string | null;
+    manifestPath: string | null;
+    /** Markdown writeup for the card's description. */
+    description: string | null;
+    ghsaId: string | null;
+    cveId: string | null;
+    labels: readonly string[];
+    createdAt: string;
+    updatedAt: string;
+  };
+}
+
+export interface FactoryVantaRuleContext extends FactoryRuleContextBase {
+  boardEvent?: BoardEventFacts;
+  item?: FactoryRuleItemContext;
+  board?: FactoryRuleBoard;
+  itemRevision?: number;
+  boardClosure?: FactoryRuleBoardClosure;
+  phase?: FactoryRulePhaseContext;
+  intake?: FactoryRuleIntakeTarget;
+  event: FactoryVantaEventName;
+  vulnerability: {
+    /** Vanta vulnerability id — one card per vulnerability, not per advisory. */
+    id: string;
+    /** Advisory name, e.g. `CVE-2026-118764` or `AIKIDO-2026-54683`. */
+    name: string;
+    title: string;
+    description: string | null;
+    url: string | null;
+    /** `open`, or `resolved` once Vanta no longer lists it as active. */
+    state: 'open' | 'resolved';
+    severity: string | null;
+    packageIdentifier: string | null;
+    fixable: boolean | null;
+    remediateBy: string | null;
+    labels: readonly string[];
+    createdAt: string;
+  };
+}
+
 export type FactoryRuleHandler<TContext> = (
   context: Readonly<TContext>,
 ) => FactoryRuleDecision | void | Promise<FactoryRuleDecision | void>;
@@ -574,7 +669,9 @@ export type FactoryRuleRejectionCode =
   | 'rule_error'
   | 'causal_depth_exceeded'
   | 'repeated_transition'
-  | 'approval_required';
+  | 'approval_required'
+  /** A person moved a card into a phase that may start a run while a run is in flight on it or queued for it. */
+  | 'card_busy';
 
 export interface FactoryRuleRejectDecision {
   type: 'reject';
@@ -660,6 +757,8 @@ export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisi
   source: WorkItemSource;
   sourceKey: string;
   title: string;
+  /** The new card's own description. Only seeds a card being created; an existing card's is left alone. */
+  description?: string;
   url: string | null;
   stage: FactoryRuleStage;
   /**
@@ -810,6 +909,12 @@ export function factoryRuleSourceForWorkItem(source: WorkItemSource): FactoryRul
       return 'jiraIssue';
     case 'incidentio-follow-up':
       return 'incidentioFollowUp';
+    case 'github-dependabot-alert':
+      return 'dependabotAlert';
+    case 'vanta-vulnerability':
+      return 'vantaVulnerability';
+    case 'detail-finding':
+      return 'detailFinding';
     case 'manual':
       return 'manual';
   }

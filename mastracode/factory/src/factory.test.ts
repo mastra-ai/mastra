@@ -332,6 +332,31 @@ beforeEach(() => {
   runEndReports.length = 0;
 });
 
+describe('mounted code agent scorers', () => {
+  it('leaves scorers unset by default', async () => {
+    const config = await prepareFactory({ storage: fakeStorage() });
+
+    expect(config).not.toHaveProperty('scorers');
+  });
+
+  it('forwards caller-provided scorers', async () => {
+    const scorers = () => ({});
+    const config = await prepareFactory({ storage: fakeStorage(), scorers });
+
+    expect(config.scorers).toBe(scorers);
+  });
+
+  it('discards score results by default and allows opting in', async () => {
+    const disabled = await prepareFactory({ storage: fakeStorage(), auth: null });
+    expect(disabled.disableScoreStorage).toBe(true);
+
+    vi.clearAllMocks();
+
+    const enabled = await prepareFactory({ storage: fakeStorage(), auth: null, disableScoreStorage: false });
+    expect(enabled.disableScoreStorage).toBe(false);
+  });
+});
+
 /** Serve stored threads by id for the rest of the test. */
 function threadsById(threads: Record<string, { id: string; resourceId: string; metadata: Record<string, unknown> }>) {
   controllerMock.queryThreadById.mockImplementation(
@@ -369,9 +394,6 @@ async function prepareThreadsWithTwoMemoryRows(auth: IMastraAuthProvider | null)
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'user-1',
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/sandbox/mastra',
   });
   await sourceControl.sessions.create({
     sessionId: 'session-1',
@@ -525,16 +547,6 @@ describe('MastraFactory.prepare', () => {
     expect(config.subagents).toEqual([]);
   });
 
-  it('disables rich score storage by default and allows opting in', async () => {
-    const disabled = await prepareFactory({ storage: fakeStorage(), auth: null });
-    expect(disabled.disableScoreStorage).toBe(true);
-
-    vi.clearAllMocks();
-
-    const enabled = await prepareFactory({ storage: fakeStorage(), auth: null, disableScoreStorage: false });
-    expect(enabled.disableScoreStorage).toBe(false);
-  });
-
   it('loads authoritative memory settings before dynamic memory resolves for each invocation', async () => {
     const storage = fakeStorage();
     const config = await prepareFactory({ storage, auth: null });
@@ -666,10 +678,31 @@ describe('MastraFactory.prepare', () => {
     ).resolves.toBe('anthropic/factory-observer');
   });
 
-  it('uses the platform bot co-author identity', async () => {
+  it('defaults the commit co-author to the platform bot', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
 
     expect(config.coAuthor).toEqual({ name: 'mastra-platform[bot]' });
+  });
+
+  it('forwards a configured commit co-author identity', async () => {
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      auth: null,
+      coAuthor: { name: 'Acme Bot', email: 'bot@acme.dev' },
+    });
+
+    expect(config.coAuthor).toEqual({ name: 'Acme Bot', email: 'bot@acme.dev' });
+  });
+
+  it('forwards a partial commit co-author identity unchanged', async () => {
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      auth: null,
+      coAuthor: { name: 'Acme Bot' },
+    });
+
+    // The SDK fills the email it was not given; Factory only forwards.
+    expect(config.coAuthor).toEqual({ name: 'Acme Bot' });
   });
 
   it('warns and falls back to plaintext when auth is enabled without secret encryption', async () => {
@@ -758,9 +791,6 @@ describe('MastraFactory.prepare', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/mastra',
     });
     await sourceControl.sessions.create({
       sessionId: 'session-1',
@@ -936,7 +966,10 @@ describe('MastraFactory.prepare', () => {
   });
 
   it('forwards the configured dispatcher concurrency cap to the decision dispatcher', async () => {
-    const prepared = await prepareFactory({ storage: fakeStorage(), dispatcher: { maxInFlight: 7 } });
+    const prepared = await prepareFactory({
+      storage: fakeStorage(),
+      dispatcher: { maxInFlight: 7, maxInteractiveInFlight: 3 },
+    });
     (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
 
     const onFactoryRuntime = assembleFactoryApiRoutesSpy.mock.calls[0]![0].onFactoryRuntime;
@@ -945,6 +978,7 @@ describe('MastraFactory.prepare', () => {
 
     expect(dispatcherOptions).toHaveLength(1);
     expect(dispatcherOptions[0]?.maxInFlight).toBe(7);
+    expect(dispatcherOptions[0]?.maxInteractiveInFlight).toBe(3);
   });
 
   it('registers and initializes factory domains through the storage lifecycle', async () => {
@@ -964,7 +998,6 @@ describe('MastraFactory.prepare', () => {
       'queue-health',
       'integrations',
       'projects',
-      'filesystem',
       'source-control',
       'channel-identity',
       'skill-overrides',
@@ -1623,9 +1656,6 @@ describe('MastraFactory.prepare', () => {
         orgId: 'org-1',
         connectionId: connection.id,
         repositoryId: repository.id,
-        createdByUserId: 'user-1',
-        sandboxProvider: 'local',
-        sandboxWorkdir: '/sandbox/mastra',
       });
       await sourceControl.sessions.create({
         sessionId: 'session-1',
@@ -2208,6 +2238,52 @@ describe('MastraFactory.prepare', () => {
       const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
       const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
       expect(paths).toContain('/web/jira/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('exposes Vanta intake with Platform credentials without explicit registration', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    try {
+      const config = await prepareFactory({ storage: fakeStorage() });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).toContain('/web/vanta/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('does not register Platform Vanta without Platform credentials', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
+    try {
+      const config = await prepareFactory({ storage: fakeStorage() });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).not.toContain('/web/vanta/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('keeps an explicit Vanta integration instead of registering Platform Vanta', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    try {
+      const config = await prepareFactory({
+        storage: fakeStorage(),
+        integrations: [
+          fakeIntegration({
+            id: 'vanta',
+            routes: () => [{ path: '/web/custom-vanta', method: 'GET', handler: () => new Response() }],
+          }),
+        ],
+      });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).toContain('/web/custom-vanta');
+      expect(paths).not.toContain('/web/vanta/status');
     } finally {
       vi.unstubAllEnvs();
     }

@@ -65,6 +65,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
       'SLACK_APP_SIGNING_SECRET',
       'SLACK_APP_TOKEN',
       'MASTRACODE_DISPATCH_MAX_IN_FLIGHT',
+      'MASTRACODE_DISPATCH_MAX_INTERACTIVE_IN_FLIGHT',
     ]) {
       vi.stubEnv(name, '');
     }
@@ -107,10 +108,11 @@ describe('platform entry (src/mastra/index.ts)', () => {
 
   it('forwards the dispatcher concurrency environment setting to the factory', { timeout: 60_000 }, async () => {
     vi.stubEnv('MASTRACODE_DISPATCH_MAX_IN_FLIGHT', '7');
+    vi.stubEnv('MASTRACODE_DISPATCH_MAX_INTERACTIVE_IN_FLIGHT', '0');
     await import('./index.js');
 
     expect(factoryConfigs).toHaveLength(1);
-    expect(factoryConfigs[0]?.dispatcher).toEqual({ maxInFlight: 7 });
+    expect(factoryConfigs[0]?.dispatcher).toEqual({ maxInFlight: 7, maxInteractiveInFlight: 0 });
   });
 
   it('uses the installed GitHub rules to retriage linked issue updates without moving their stage', async () => {

@@ -6,7 +6,15 @@ import type { LeaseProvider, PubSub } from '../events/pubsub';
 import type { EventCallback } from '../events/types';
 import { AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
 import { parseMemoryRequestContext } from '../memory/types';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
+import {
+  MASTRA_AUTH_TOKEN_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_SCOPES_KEY,
+  MASTRA_THREAD_ID_KEY,
+  RequestContext,
+  withoutLiveRequestKeys,
+} from '../request-context';
+import { getRequestContextInputSource } from '../request-context/input-source';
 import type { MastraModelOutput } from '../stream/base/output';
 import { getChunkProducedAt } from '../stream/base/produced-at';
 import { isSignalChunkExcluded } from '../stream/signal-exclusions';
@@ -26,6 +34,7 @@ import type { AgentExecutionOptions } from './agent.types';
 import { DurableStepIds } from './durable/constants';
 import type { MessageListInput } from './message-list';
 import { createRecentRequests } from './recent-requests';
+import { liveRequestEntries, restoreRequestContext, snapshotRequestContextEntries } from './request-context-snapshot';
 import {
   clearRunLeaseFence,
   hasRunningRunStep,
@@ -352,6 +361,54 @@ function releaseReplyTopic(pubsub: PubSub, replyTopic: string, cb: EventCallback
     .catch(() => {})
     .then(() => pubsub.clearTopic(replyTopic))
     .catch(() => {});
+}
+
+/**
+ * The caller's request context as it crosses to a claimed owner in another process. Scopes are
+ * dropped: they don't cross processes (a message naming scopes is refused before it gets here).
+ * The caller's signed-in user is dropped too: the owner's run acts as the owner's own user.
+ */
+function snapshotWireRequestContext(requestContext: RequestContext | undefined): Record<string, unknown> | undefined {
+  const entries = snapshotRequestContextEntries(getRequestContextInputSource(requestContext) ?? requestContext);
+  if (!entries) return undefined;
+  const { [MASTRA_SCOPES_KEY]: _scopes, ...rest } = withoutLiveRequestKeys(entries);
+  return Object.keys(rest).length > 0 ? rest : undefined;
+}
+
+/**
+ * The caller's request context, as a claimed owner's run uses it. The caller's thread and
+ * resource keys would override the owner's `memory` (Agent reads them first), so the run would
+ * execute and save on the caller's thread: the owner's own values (usually none) replace them.
+ * An owner with its own auth token keeps it; an owner without one acts with the caller's.
+ * The caller's context is returned as-is when nothing differs.
+ */
+function claimedOwnerRequestContext(caller: RequestContext, owner: RequestContext | undefined): RequestContext {
+  // An owner with its own token runs as its own signed-in user: its whole live identity (token,
+  // user, roles, permissions) replaces the caller's, as on the remote path. An owner without one
+  // keeps the caller's whole identity, so the two are never mixed.
+  const ownerHasToken = owner?.getRaw(MASTRA_AUTH_TOKEN_KEY) !== undefined;
+  const ownerLive = ownerHasToken ? liveRequestEntries(owner) : [];
+  const swapLive = ownerHasToken && !sameEntries(liveRequestEntries(caller), ownerLive);
+  const replaced = [MASTRA_THREAD_ID_KEY, MASTRA_RESOURCE_ID_KEY]
+    .map(key => [key, owner?.getRaw(key)] as const)
+    .filter(([key, value]) => caller.getRaw(key) !== value);
+  if (!swapLive && replaced.length === 0) return caller;
+  // Copy the input form, so a schema-transformed tool view is validated as its inputs again.
+  const source = Object.fromEntries((getRequestContextInputSource(caller) ?? caller).entries());
+  const restored: RequestContext = new RequestContext<unknown>(
+    swapLive ? [...Object.entries(withoutLiveRequestKeys(source)), ...ownerLive] : Object.entries(source),
+  );
+  for (const [key, value] of replaced) {
+    if (value === undefined) restored.deleteRaw(key);
+    else restored.setRaw(key, value);
+  }
+  return restored;
+}
+
+/** Two entry lists hold the same keys with identical values. */
+function sameEntries(a: [string, unknown][], b: [string, unknown][]): boolean {
+  const right = new Map(b);
+  return a.length === b.length && a.every(([key, value]) => right.has(key) && right.get(key) === value);
 }
 
 /** Unions scope lists, dropping duplicates. */
@@ -895,6 +952,12 @@ type AgentThreadStreamRuntimeEvent =
        * sender can't see that run, so `signal` carries its `ifIdle` attributes.
        */
       joinSignal?: SerializableAgentSignal;
+      /**
+       * JSON-safe snapshot of the caller's request context (see `snapshotRequestContextEntries`), so the owner's
+       * run resolves request-scoped model, instructions and memory as the caller's would. Absent from senders
+       * before this field, and when the caller passed no context.
+       */
+      requestContextEntries?: Record<string, unknown>;
     };
 
 type AgentThreadIdleSignalAcceptanceEvent =
@@ -1889,6 +1952,17 @@ export class AgentThreadStreamRuntime {
   }
 
   #abortLeaseLostRun(state: AgentThreadRuntimeState, runId: string): void {
+    const record = state.threadRunsById.get(runId);
+    // A parked run calls neither the model nor tools, so there is nothing to stop, and aborting it would delete the
+    // snapshot it resumes from. It gets no lost fence either: its resumed tool calls would throw on it. Its resume
+    // must hold the lease again, so every resume calls reacquireParkedRunLease before it runs, which refuses the
+    // resume when a successor now holds the thread. The in-place continuation is dropped so the resume registers
+    // again. A run that is still suspending, or a partly resumed run whose sibling suspensions are pending, is still
+    // executing (its lifecycle is not 'suspended'), so it is stopped.
+    if (record?.lifecycle === 'suspended') {
+      record.continuation = undefined;
+      return;
+    }
     state.leaseLostRunIds.add(runId);
     // Tool calls the step already queued check the fence after this, so they must keep failing until the
     // run ends, not find no fence and run beside the successor.
@@ -1898,7 +1972,6 @@ export class AgentThreadStreamRuntime {
     state.leaseFences.set(runId, lost);
     setRunLeaseFence(runId, lost);
     const preparedRun = state.preparedRunsById.get(runId);
-    const record = state.threadRunsById.get(runId);
     // A step already running (a model request or a tool call) finishes, fails or is aborted first: stopping it
     // mid-way would lose its work, and the fence above already keeps the run from starting a tool. The run stops as
     // soon as the step settles, before another can start. One that never ends is stopped after a grace period, so it
@@ -2720,6 +2793,8 @@ export class AgentThreadStreamRuntime {
           data.joinActiveRun === true && data.joinSignal?.id === data.signal.id
             ? createSignal(data.joinSignal)
             : undefined,
+          undefined,
+          data.requestContextEntries,
         );
         if (!active || state.claimedThreadOwners.get(key)?.unsubscribe !== unsubscribe) return;
         if (!accepted) {
@@ -3031,6 +3106,7 @@ export class AgentThreadStreamRuntime {
     waitForIdle = false,
     joinSignal?: CreatedAgentSignal,
     messageScopes?: string[],
+    remoteRequestContextEntries?: Record<string, unknown>,
   ): Promise<{ runId: string; error?: string; blocked?: boolean; output?: MastraModelOutput<OUTPUT> } | undefined> {
     // A message naming scopes joins only a run started with exactly those scopes; otherwise
     // it falls through to the queued idle start below, which runs after the run in flight.
@@ -3132,10 +3208,21 @@ export class AgentThreadStreamRuntime {
       //
       // Scopes cross over with the request context for the same reason: they say
       // what the caller acts as. They are unioned with any owner scopes.
+      //
+      // A caller in another process sends a snapshot instead of the live context.
+      // It never holds an auth token, so the owner's own token is kept.
+      //
+      // Either way the run keeps the owner's thread and resource, and the owner's
+      // own auth token when it has one (see `claimedOwnerRequestContext`).
+      const callerRequestContext = remoteRequestContextEntries
+        ? restoreRequestContext(remoteRequestContextEntries, ownerStreamOptions?.requestContext)
+        : incomingStreamOptions?.requestContext;
+      const incomingRequestContext =
+        callerRequestContext && claimedOwnerRequestContext(callerRequestContext, ownerStreamOptions?.requestContext);
       streamOptions =
-        incomingStreamOptions?.requestContext === undefined
+        incomingRequestContext === undefined
           ? ownerStreamOptions
-          : { ...ownerStreamOptions, requestContext: incomingStreamOptions.requestContext };
+          : { ...ownerStreamOptions, requestContext: incomingRequestContext };
       if (incomingStreamOptions?.scopes?.length) {
         streamOptions = {
           ...streamOptions,
@@ -3428,6 +3515,7 @@ export class AgentThreadStreamRuntime {
     const checkLease = async () => {
       const forwarded = state.forwardedIdleSignalsByThread.get(key);
       if (!forwarded) return;
+      const streamBeforeRead = state.activeThreadStreamIds.get(key);
       // Bounded, so a read that never returns frees the in-flight guard and the next tick retries.
       const owner = await this.#readLeaseOwnerInTime(provider, key);
       const holder = owner === undefined ? undefined : forwardedSignalRunId(owner);
@@ -3439,6 +3527,18 @@ export class AgentThreadStreamRuntime {
       }
       for (const runId of ended) {
         if (this.#requeueUnadmittedForwards(state, key, runId)) {
+          // The lease has dropped that run, so a remote run this runtime saw register but never saw end (its observer
+          // unsubscribed) no longer holds the thread; left marked active, it would keep the drain waiting. A run that
+          // registered here, or a new stream that took the slot while the lease was read, is not that remote run.
+          // The drain still runs either way: it waits while any run holds the thread.
+          if (
+            !state.threadRunsById.has(runId) &&
+            state.activeThreadStreamIds.get(key) === streamBeforeRead &&
+            state.activeThreadRunIds.get(key) === runId
+          ) {
+            state.activeThreadRunIds.delete(key);
+            state.activeThreadStreamIds.delete(key);
+          }
           await this.#drainPendingIdleSignals(state, pubsub, key, runId);
         }
       }
@@ -3535,8 +3635,10 @@ export class AgentThreadStreamRuntime {
     targetSourceId: string,
     waitForIdle: boolean,
     joinSignal?: CreatedAgentSignal,
+    requestContext?: RequestContext,
   ): Promise<string> {
     const requestId = globalThis.crypto.randomUUID();
+    const requestContextEntries = snapshotWireRequestContext(requestContext);
     const replyTopic = `${this.#threadTopic(key)}.idle-acceptance.${requestId}`;
 
     return new Promise<string>((resolve, reject) => {
@@ -3569,12 +3671,13 @@ export class AgentThreadStreamRuntime {
         AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
       );
 
-      // This event can reach a claimed owner in another process. It carries the
-      // signal, the request/reply ids and the timeout — not `requestContext`,
-      // which is an open map that may hold non-serializable values and has no
-      // wire contract. A remote owner therefore starts the run with its own
-      // options, so the caller-context handling in `#startClaimedIdleRun` covers
-      // a locally claimed owner only.
+      // This event can reach a claimed owner in another process. Besides the
+      // signal, the request/reply ids and the timeout, it carries a JSON-safe
+      // snapshot of the caller's request context, so the owner's run sees the
+      // caller's request-scoped values as a locally claimed owner's does (see
+      // `#startClaimedIdleRun`). The live context is an open map that may hold
+      // non-serializable values; the snapshot keeps only what survives JSON and
+      // never the auth token.
       void pubsub
         .subscribe(replyTopic, onReply)
         .then(() => {
@@ -3599,6 +3702,7 @@ export class AgentThreadStreamRuntime {
             expiresAt,
             ...(waitForIdle ? {} : { joinActiveRun: true }),
             ...(!waitForIdle && joinSignal ? { joinSignal: this.#serializeSignal(joinSignal) } : {}),
+            ...(requestContextEntries ? { requestContextEntries } : {}),
           });
         })
         .catch(error => finish({ error: getErrorFromUnknown(error) }));
@@ -3613,6 +3717,7 @@ export class AgentThreadStreamRuntime {
     discovery: Promise<string | undefined>,
     waitForIdle = false,
     joinSignal?: CreatedAgentSignal,
+    requestContext?: RequestContext,
   ): Promise<SendAgentSignalAccepted<OUTPUT>> {
     const claimedOwnerSourceId = await discovery;
     if (!claimedOwnerSourceId) {
@@ -3628,6 +3733,7 @@ export class AgentThreadStreamRuntime {
       claimedOwnerSourceId,
       waitForIdle,
       joinSignal,
+      requestContext,
     );
     return { action: 'deliver', runId: acceptedRunId };
   }
@@ -4889,6 +4995,45 @@ export class AgentThreadStreamRuntime {
     // Drain its native output so completion and subsequent approvals advance.
     void output.consumeStream();
     return true;
+  }
+
+  /**
+   * A parked run whose lease lapsed keeps its record (its snapshot is still needed) but holds no
+   * lease, renewal or deadline. A resume can start executing before it re-registers, and non-strict
+   * registration runs on even when another owner holds the lease, so the resume must take the lease
+   * here, before it calls the model or tools. The lease is taken under the owner the run held it with,
+   * since its renewals use that owner. It is a no-op when this process has no parked record of the run
+   * for the thread, or the parked run still holds (and renews) its lease.
+   *
+   * @throws AgentThreadLeaseConflictError when another run now holds the thread, so the resume is
+   * refused and the run stays parked.
+   */
+  async reacquireParkedRunLease(runId: string, pubsub?: PubSub): Promise<void> {
+    const state = this.#getState(pubsub);
+    const record = state.threadRunsById.get(runId);
+    if (record?.lifecycle !== 'suspended' || state.leaseRenewalTimers.has(runId)) return;
+    const key = this.#threadKey(record.resourceId, record.threadId);
+    if (state.activeThreadRunIds.get(key) !== runId) return;
+    const resolvedPubSub = this.#getPubSub(pubsub);
+    const owner = record.leaseOwner ?? this.#threadLeaseOwner(resolvedPubSub, runId, record.generation);
+    const lease = await this.#acquireThreadLease(resolvedPubSub, key, runId, owner);
+    if (!lease.acquired) throw new AgentThreadLeaseConflictError(runId, lease.owner ?? 'another owner');
+    // The run may have been aborted (and its record dropped) while the lease was being taken. Give back
+    // only this lease; a newer registration of the run owns and renews its own.
+    if (
+      state.threadRunsById.get(runId) !== record ||
+      record.lifecycle !== 'suspended' ||
+      state.activeThreadRunIds.get(key) !== runId
+    ) {
+      if (!state.threadRunsById.has(runId)) {
+        void this.#getLeaseProvider(resolvedPubSub)
+          .releaseLease(key, owner)
+          .catch(() => {});
+      }
+      return;
+    }
+    this.#startLeaseRenewal(resolvedPubSub, key, runId, owner);
+    record.leaseOwner = owner;
   }
 
   closeRunContinuation<OUTPUT>(ownerOutput: MastraModelOutput<OUTPUT>, pubsub?: PubSub): boolean {
@@ -8148,6 +8293,9 @@ export class AgentThreadStreamRuntime {
             globalThis.crypto.randomUUID(),
             signal,
             claimedOwnerDiscovery,
+            false,
+            undefined,
+            target.ifIdle?.streamOptions?.requestContext,
           );
           void accepted.catch(() => {});
           return { signal, accepted };
@@ -8323,6 +8471,7 @@ export class AgentThreadStreamRuntime {
             discovery,
             waitForIdle,
             joinSignal,
+            target.ifIdle?.streamOptions?.requestContext,
           );
         } finally {
           if (state.claimedThreadOwnerDiscoveries.get(reservedKey) === discovery) {

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import type { DashboardDefinition, DashboardQuery, DashboardWidget } from '@mastra/client-js';
+import type { QueryClient } from '@tanstack/react-query';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { PinIcon, PinOffIcon } from 'lucide-react';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
@@ -43,14 +43,24 @@ import type {
 import { metricsWidget, modelsWidget as models } from './equality-harness';
 import { kpisWidget, scoresWidget } from './fixtures/metrics-widgets';
 import { MetricsCard, onCardHover } from '@/ds/components/MetricsCard';
+import { IconPin } from '@/ds/icons/central/IconPin';
+import { IconUnpin } from '@/ds/icons/central/IconUnpin';
 import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
+import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const agentRunsWidget = metricsWidget('agent-runs');
 const distinctIdsWidget = metricsWidget('distinct-ids');
 const modelsWidget = models();
 
 const LOAD_ERROR = "Couldn't load this data. Try again in a moment.";
+
+/**
+ * The widget shows its error once one request fails, while its other requests may still be in the
+ * client's own retries and backoff. Wait for all of them, however many retries the client makes and
+ * however long they take, so Retry sends every failed request again.
+ */
+const waitForRetriesSettled = (queryClient: QueryClient) =>
+  waitFor(() => expect(queryClient.isFetching()).toBe(0), { timeout: 5000 });
 
 /** A kind defined entirely outside the renderer: one line of text per view. */
 const noteKind = defineWidgetKind({
@@ -122,7 +132,7 @@ const pinning =
         onClick={() => onPin(widget, !pinned)}
         className={pinned ? undefined : onCardHover}
       >
-        {pinned ? <PinOffIcon /> : <PinIcon />}
+        {pinned ? <IconUnpin /> : <IconPin />}
       </MetricsCard.Action>
     );
   };
@@ -272,9 +282,8 @@ describe('DashboardRenderer', () => {
       });
       const { container, queryClient } = renderDashboard(definition(distinctIdsWidget));
       const widget = cell(container, 'distinct-ids');
-      // The client retries an aggregate itself before the widget sees the error.
       expect(await within(widget).findByText(LOAD_ERROR, undefined, { timeout: 5000 })).toBeDefined();
-      await waitForMutationsIdle(queryClient);
+      await waitForRetriesSettled(queryClient);
       failing = false;
       fireEvent.click(within(widget).getByRole('button', { name: 'Retry' }));
       expect(await within(widget).findAllByText('Resources', undefined, { timeout: 5000 })).not.toHaveLength(0);
@@ -296,13 +305,12 @@ describe('DashboardRenderer', () => {
       const { container, queryClient } = renderDashboard(definition(modelsWidget));
       const widget = cell(container, 'models');
       expect(await within(widget).findByText(LOAD_ERROR, undefined, { timeout: 5000 })).toBeDefined();
-      // The table's other request may still be retrying; Retry once both have failed.
-      await waitForMutationsIdle(queryClient);
+      await waitForRetriesSettled(queryClient);
       failing = false;
       fireEvent.click(within(widget).getByRole('button', { name: 'Retry' }));
       // The header row, then one per model.
-      await waitFor(() => expect(within(widget).getAllByRole('row')).toHaveLength(3));
-    });
+      await waitFor(() => expect(within(widget).getAllByRole('row')).toHaveLength(3), { timeout: 5000 });
+    }, 15_000);
 
     it('renders a widget that threw again once the page filters change', () => {
       const page = (environment?: string) => (

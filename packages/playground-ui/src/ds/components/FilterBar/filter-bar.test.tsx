@@ -1362,15 +1362,17 @@ describe('FilterBar', () => {
       initial,
       onChange,
       maxDepth,
+      fields = FIELDS,
     }: {
       initial: FilterBarExpression;
       onChange?: (expression: FilterBarExpression) => void;
       maxDepth?: number;
+      fields?: FilterBarField[];
     }) {
       const [value, setValue] = useState<FilterBarExpression>(initial);
       return (
         <FilterBar
-          fields={FIELDS}
+          fields={fields}
           operators={OPERATORS}
           value={value}
           maxDepth={maxDepth}
@@ -1401,6 +1403,47 @@ describe('FilterBar', () => {
         { id: 'd', fieldId: 'traceId', operatorId: 'is', value: 'abc' },
       ],
     };
+
+    describe('when a field is restricted to the root', () => {
+      it('offers the field in the root picker', async () => {
+        render(
+          <ExpressionHarness
+            initial={EXPRESSION}
+            fields={[...FIELDS, { id: 'search', label: 'Contains text', operators: ['is'], rootOnly: true }]}
+          />,
+        );
+        getInput().focus();
+        expect(await screen.findByRole('option', { name: 'Contains text' })).toBeTruthy();
+      });
+
+      it('omits the field from the nested field editor', async () => {
+        render(
+          <ExpressionHarness
+            initial={EXPRESSION}
+            fields={[...FIELDS, { id: 'search', label: 'Contains text', operators: ['is'], rootOnly: true }]}
+          />,
+        );
+        const editor = await openPopover();
+        fireEvent.click(within(editor).getAllByRole('combobox', { name: 'Field: Tags' })[0]);
+        await screen.findByRole('option', { name: 'Trace ID' });
+        expect(screen.queryByRole('option', { name: 'Contains text' })).toBeNull();
+      });
+
+      it('omits the field from the nested condition picker', async () => {
+        render(
+          <ExpressionHarness
+            initial={EXPRESSION}
+            fields={[...FIELDS, { id: 'search', label: 'Contains text', operators: ['is'], rootOnly: true }]}
+          />,
+        );
+        const editor = await openPopover();
+        fireEvent.click(within(editor).getByRole('button', { name: 'Condition' }));
+        const add = within(editor).getByPlaceholderText('Add condition');
+        fireEvent.focus(add);
+        fireEvent.change(add, { target: { value: 'Contains text' } });
+        expect(screen.queryByRole('option', { name: 'Contains text' })).toBeNull();
+      });
+    });
 
     describe('when the value is a flat list', () => {
       it('offers no advanced filter option and no chip', async () => {

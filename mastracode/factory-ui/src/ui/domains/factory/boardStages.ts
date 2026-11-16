@@ -1,4 +1,5 @@
-import { boardIdOf, boardLoop, phaseKindOf } from './boardFlow';
+import type { InstalledPhaseInfo } from '../../../api/types';
+import { boardIdOf, boardLoop, phaseKindOf, phaseOf } from './boardFlow';
 import type { BoardInfo } from './boardFlow';
 import { cardHasPullRequest, isPullRequestSource } from './services/workItems';
 import type { WorkItem } from './services/workItems';
@@ -6,10 +7,6 @@ import { stageLabel } from './stages';
 import type { BoardStage, BoardStageId } from './stages';
 
 export type BoardKind = string;
-
-export function belongsToBoard(item: WorkItem, kind: BoardKind): boolean {
-  return itemBoard(item) === kind;
-}
 
 /** Whether `item` shows in the `stage` column; a card in no known column shows in the first one, where cards start. */
 export function itemAppearsInStage(
@@ -25,24 +22,20 @@ export function boardLoadingStages({
   stages,
   itemsPending,
   intakePending,
-  triagePending,
   board,
 }: {
   stages: ReadonlyArray<BoardStage>;
   itemsPending: boolean;
   intakePending: boolean;
-  triagePending: boolean;
-  /** The board on show; its rest and triage phases wait on the intake feed. */
+  /** The board on show; its initial phase waits on the intake setup. */
   board?: BoardInfo;
 }): ReadonlySet<BoardStageId> {
   const loading = new Set<BoardStageId>();
   if (itemsPending) {
     for (const stage of stages) loading.add(stage.id);
   }
-  const loop = boardLoop(board);
   const rest = board?.initialPhase ?? stages[0]?.id;
   if (intakePending && rest !== undefined) loading.add(rest);
-  if (triagePending && loop?.triage) loading.add(loop.triage.phase);
   return loading;
 }
 
@@ -74,8 +67,13 @@ export function pullRequestMayEnter(
   return stage !== review || cardHasPullRequest(item);
 }
 
-export function itemStageLabel(item: WorkItem, stage: string, board: BoardInfo | undefined): string {
-  return itemStageOptions(item, board).find(candidate => candidate.id === stage)?.label ?? stageLabel(stage);
+export function phaseName(phase: Pick<InstalledPhaseInfo, 'name' | 'title'>): string {
+  return phase.name ?? phase.title;
+}
+
+export function phaseLabel(board: BoardInfo | undefined, stage: string): string {
+  const phase = phaseOf(board, stage);
+  return phase ? phaseName(phase) : stageLabel(stage);
 }
 
 /** Furthest phase the item currently sits in; items with no known phase read as the board's first, like its columns. */
@@ -90,5 +88,5 @@ export function currentItemStage(item: WorkItem, board: BoardInfo | undefined): 
 
 export function currentItemStageLabel(item: WorkItem, board: BoardInfo | undefined): string {
   const stage = currentItemStage(item, board);
-  return stage === undefined ? '' : itemStageLabel(item, stage, board);
+  return stage === undefined ? '' : phaseLabel(board, stage);
 }

@@ -42,6 +42,7 @@ import {
   heartbeatSessionOpenRun,
   isOpenRunLiveElsewhere,
   listSessionOpenRuns,
+  listThreadOpenRuns,
   recordSessionRunStart,
   waitForSessionRunAudit,
 } from '../session/run-audit.js';
@@ -52,10 +53,12 @@ import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import {
   externalSourceKey,
   FACTORY_RULE_MATERIALIZATION_KEY,
+  FactoryRunBindingSupersededError,
   WorkItemSourceConflictError,
   WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
 import type {
+  FactoryDecisionProvenance,
   FactoryDeferredDecisionRecord,
   FactoryDispatchFailureCode,
   FactoryPendingStartRecord,
@@ -71,6 +74,7 @@ import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import { isStatusEventDecision } from './event-rules.js';
 import { endPhaseGoal, PHASE_GOAL_METADATA_KEY, phaseGoalOf, startPhaseGoal } from './phase-goal.js';
+import { isRunBearingDecision } from './run-bearing.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
 import { authorTrusted, externalSourceForWorkItem, workItemSource } from './types.js';
@@ -108,16 +112,29 @@ const SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS = 6 * 60 * 60_000;
 // Dispatches can legitimately run for minutes. Woken skill invocations hold
 // capacity until their agent run reaches a terminal state; binding preparation
 // also runs detached from the poll loop under this concurrency cap.
-const MAX_IN_FLIGHT = 25;
-/**
- * Decisions that may start or wake an agent run, or wait for one to end, and so
- * hold a run slot. A transition's message is queued as a separate sendMessage,
- * so a transition stays bookkeeping, and so does a status event's route move:
- * it never waits for a run inline, it hands itself back until the run ends.
- */
-const isRunBearingDecision = (decision: Record<string, unknown>): boolean =>
-  decision.type === 'invokeSkill' || decision.type === 'sendMessage' || decision.type === 'signalActivity';
+const MAX_IN_FLIGHT = 10;
 const isBookkeepingDecision = (decision: Record<string, unknown>): boolean => !isRunBearingDecision(decision);
+/**
+ * A wake a person is waiting on: a reply a person sent on the card's pull
+ * request or issue, which GitHub typed as a `User` (not an app or bot) with
+ * write access, that Factory did not write itself, and that came straight from
+ * the webhook rather than from a move or decision it caused. Everything else,
+ * including actors with no record of being a person, stays automated.
+ */
+export const isInteractiveDecision = (
+  decision: Record<string, unknown>,
+  { actor, causalChain }: FactoryDecisionProvenance,
+): boolean =>
+  (decision.type === 'sendMessage' || decision.type === 'signalActivity') &&
+  decision.idleBehavior !== 'persist' &&
+  causalChain.length === 0 &&
+  actor?.type === 'github' &&
+  actor.human === true &&
+  actor.trusted === true &&
+  actor.factoryAuthored === false;
+const isAutomatedRunDecision = (decision: Record<string, unknown>, provenance: FactoryDecisionProvenance): boolean =>
+  isRunBearingDecision(decision) && !isInteractiveDecision(decision, provenance);
+const MAX_INTERACTIVE_IN_FLIGHT = 2;
 const BOOKKEEPING_MAX_IN_FLIGHT = 4;
 // Staleness sweep: legacy/leaked active bindings (item deleted, transition
 // path bypassed, or pre-dating terminal-stage revocation) are revoked on a
@@ -188,9 +205,11 @@ function reviewSeatSkill(decision: unknown): { skillName?: unknown } | undefined
 
 // Rescheduling a failure that can never succeed only delays the moment a person sees why.
 function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailureCode): boolean {
+  const failure = factoryDispatchFailureMetadata(failureCode);
   return (
     attempts >= (failureCode === 'run_incomplete' ? 2 : MAX_ATTEMPTS) ||
-    !factoryDispatchFailureMetadata(failureCode).canRetry
+    !failure.canRetry ||
+    failure.autoRetry === false
   );
 }
 
@@ -221,14 +240,18 @@ function watchRun(
   session: Pick<DispatcherSession, 'subscribe' | 'respondToToolSuspension'>,
   {
     timeoutMs,
-    approvePlans,
+    autoApprovedTool,
+    autoApproving,
     requestContext,
     onAgentEnd,
     label,
     runStillActive,
   }: {
     timeoutMs: number;
-    approvePlans: boolean;
+    /** The tool this run answers itself when it pauses on it; any other pause waits for a person. */
+    autoApprovedTool?: string;
+    /** Where the run says which paused calls it is about to answer. */
+    autoApproving?: Set<string>;
     /** The run's own request context; resuming an approved plan resolves the session's workspace with it. */
     requestContext?: RequestContext;
     onAgentEnd?: () => Promise<boolean>;
@@ -242,6 +265,8 @@ function watchRun(
   let endReason: 'complete' | 'aborted' | 'error' | 'suspended' | undefined;
   let supersededAtEnd: Promise<boolean> | undefined;
   let parked: { toolName: string; toolCallId: string } | undefined;
+  let approvals = 0;
+  const announced = new Set<string>();
   // Latest observational-memory failure seen on this run. The stream aborts the
   // run when observation/reflection fails, but the abort itself carries no
   // reason — so without this the true cause (e.g. a provider rejecting the OM
@@ -278,6 +303,11 @@ function watchRun(
     }
     if (event.type === 'tool_suspended') {
       parked = { toolName: event.toolName, toolCallId: event.toolCallId };
+      // Said before the run ends on it, so nobody is asked to answer what this run answers itself.
+      if (event.toolName === autoApprovedTool && approvals < MAX_PLAN_APPROVALS) {
+        announced.add(event.toolCallId);
+        autoApproving?.add(event.toolCallId);
+      }
       return;
     }
     if (event.type === 'tool_suspension_cancelled' && parked?.toolCallId === event.toolCallId) {
@@ -305,19 +335,27 @@ function watchRun(
     endReason: () => endReason,
     /** The tool the run is parked on, when it ended suspended. */
     parked: () => parked,
-    close: unsubscribe,
+    close: () => {
+      // A watch that gives up answers nothing more, so its pauses wait for a person again.
+      for (const toolCallId of announced) autoApproving?.delete(toolCallId);
+      unsubscribe();
+    },
     /** The run's own verdict, thrown as what the dispatcher should record. */
     async settle(): Promise<void> {
       let observed = await wait();
       // Past the cap the plan stays parked: the person it waits for sees it in the inbox.
-      if (approvePlans) {
-        for (let approvals = 0; parked?.toolName === 'submit_plan' && approvals < MAX_PLAN_APPROVALS; approvals += 1) {
-          const { toolCallId } = parked;
-          parked = undefined;
-          arm();
+      while (autoApprovedTool && parked?.toolName === autoApprovedTool && approvals < MAX_PLAN_APPROVALS) {
+        const { toolCallId } = parked;
+        parked = undefined;
+        // Counted before the resumed run can pause again, so its next pause is judged against the cap.
+        approvals += 1;
+        arm();
+        try {
           await session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId, requestContext });
-          observed = await wait();
+        } finally {
+          autoApproving?.delete(toolCallId);
         }
+        observed = await wait();
       }
       if (!observed) {
         // A completed decision with no observed run end is exactly the
@@ -441,6 +479,7 @@ export interface FactoryBindingPreparationInput {
   record: FactoryDeferredDecisionRecord;
   item: Card;
   role: string;
+  expectedBindingId?: string;
 }
 
 export type FactoryReviewStatusPhase = 'queued' | 'reviewing' | 'retrying' | 'completed' | 'failed' | 'cancelled';
@@ -503,6 +542,11 @@ export interface FactoryDecisionDispatcherOptions {
   /** `false` spends a linked-card decision unfiled: its Factory project was deleted after the decision committed. */
   factoryProjectExists?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   maxInFlight?: number;
+  /**
+   * Run slots this process keeps for wakes a person is waiting on (see
+   * `isInteractiveDecision`), on top of `maxInFlight`. Defaults to 2.
+   */
+  maxInteractiveInFlight?: number;
   /** How often the stale-binding sweep runs. Defaults to 10 minutes. */
   staleBindingSweepIntervalMs?: number;
   /** Active bindings older than this are revoked by the sweep. Defaults to 24 hours. */
@@ -691,6 +735,7 @@ export class FactoryDecisionDispatcher {
   readonly #intakeRoutes?: IntakeRoutesReader;
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
+  readonly #autoApproving = new Set<string>();
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #reconcileRunBinding?: FactoryDecisionDispatcherOptions['reconcileRunBinding'];
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
@@ -716,6 +761,7 @@ export class FactoryDecisionDispatcher {
   readonly #resolveLinkedWorkItemParentId?: FactoryDecisionDispatcherOptions['resolveLinkedWorkItemParentId'];
   readonly #factoryProjectExists?: FactoryDecisionDispatcherOptions['factoryProjectExists'];
   readonly #maxInFlight: number;
+  readonly #maxInteractiveInFlight: number;
   readonly #staleBindingSweepIntervalMs: number;
   readonly #staleBindingTtlMs: number;
   #lastStaleBindingSweepAt?: Date;
@@ -735,6 +781,8 @@ export class FactoryDecisionDispatcher {
   #timer?: ReturnType<typeof setTimeout>;
   /** Starts and run-bearing decisions; capped by `maxInFlight`. */
   readonly #runInFlight = new Set<Promise<void>>();
+  /** Wakes a person is waiting on; capped by `maxInteractiveInFlight`, borrowing free run slots past it. */
+  readonly #interactiveInFlight = new Set<Promise<void>>();
   /** Fast board bookkeeping (transitions, linked-card upserts); its own small cap. */
   readonly #bookkeepingInFlight = new Set<Promise<void>>();
   /** Background work awaited on stop but outside both caps. */
@@ -760,6 +808,11 @@ export class FactoryDecisionDispatcher {
     this.#factoryProjectExists = options.factoryProjectExists;
     const maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
     this.#maxInFlight = Number.isFinite(maxInFlight) && maxInFlight > 0 ? Math.floor(maxInFlight) : MAX_IN_FLIGHT;
+    const maxInteractiveInFlight = options.maxInteractiveInFlight ?? MAX_INTERACTIVE_IN_FLIGHT;
+    this.#maxInteractiveInFlight =
+      Number.isFinite(maxInteractiveInFlight) && maxInteractiveInFlight >= 0
+        ? Math.floor(maxInteractiveInFlight)
+        : MAX_INTERACTIVE_IN_FLIGHT;
     this.#staleBindingSweepIntervalMs = positiveMs(
       options.staleBindingSweepIntervalMs,
       STALE_BINDING_SWEEP_INTERVAL_MS,
@@ -786,7 +839,12 @@ export class FactoryDecisionDispatcher {
     this.#unsubscribeClaimableWork = undefined;
     this.#clearTimer();
     await this.#loop;
-    await Promise.allSettled([...this.#runInFlight, ...this.#bookkeepingInFlight, ...this.#backgroundInFlight]);
+    await Promise.allSettled([
+      ...this.#runInFlight,
+      ...this.#interactiveInFlight,
+      ...this.#bookkeepingInFlight,
+      ...this.#backgroundInFlight,
+    ]);
     this.#started = false;
     this.#stopping = false;
   }
@@ -817,6 +875,19 @@ export class FactoryDecisionDispatcher {
     if (this.#reconcileOwed) return;
     this.#reconcileOwed = true;
     this.wake();
+  }
+
+  /**
+   * Run slots this process holds now, out of its caps. Per process: other
+   * replicas keep their own. `inUse` counts automated slots, including any a
+   * person's wake borrowed once the interactive reserve was full.
+   */
+  runSlots(): { inUse: number; cap: number; interactive: { inUse: number; cap: number } } {
+    return {
+      inUse: this.#runInFlight.size,
+      cap: this.#maxInFlight,
+      interactive: { inUse: this.#interactiveInFlight.size, cap: this.#maxInteractiveInFlight },
+    };
   }
 
   async runOnce(now = new Date()): Promise<void> {
@@ -863,6 +934,7 @@ export class FactoryDecisionDispatcher {
     // activity, plus one trailing pass after it stops.
     const active =
       this.#runInFlight.size > 0 ||
+      this.#interactiveInFlight.size > 0 ||
       this.#bookkeepingInFlight.size > 0 ||
       this.#controller.listActiveThreadRuns().length > 0 ||
       (this.#lastBoundThreadRunAt !== undefined &&
@@ -884,7 +956,14 @@ export class FactoryDecisionDispatcher {
       console.error('Factory decision dispatch cycle failed', sanitizeDispatchError(error));
       return POLL_MS;
     }
-    if (full || this.#runInFlight.size > 0 || this.#bookkeepingInFlight.size > 0) return POLL_MS;
+    if (
+      full ||
+      this.#runInFlight.size > 0 ||
+      this.#interactiveInFlight.size > 0 ||
+      this.#bookkeepingInFlight.size > 0
+    ) {
+      return POLL_MS;
+    }
 
     const dueTimes: number[] = [];
     if (this.#reconcileOwed) {
@@ -915,9 +994,9 @@ export class FactoryDecisionDispatcher {
     // Run slots are held for whole agent runs (minutes), so bookkeeping that
     // only mirrors the board is claimed from its own pool and never waits
     // behind them.
-    const runCapacity = this.#maxInFlight - this.#runInFlight.size;
-    if (runCapacity > 0) {
-      const limit = Math.min(BATCH_SIZE, runCapacity);
+    const startCapacity = this.#maxInFlight - this.#runInFlight.size;
+    if (startCapacity > 0) {
+      const limit = Math.min(BATCH_SIZE, startCapacity);
       // Starts are claimed before deferred decisions: a pending start is a user
       // waiting on a brand-new session, while a deferred decision is a background
       // continuation of one that is already running. A deep decision queue must
@@ -928,21 +1007,45 @@ export class FactoryDecisionDispatcher {
         leaseExpiresAt,
         limit,
       });
-      const decisionsLimit = limit - starts.length;
-      full = decisionsLimit <= 0;
-      const decisions =
-        decisionsLimit > 0
-          ? await this.#storage.claimDeferredDecisions({
-              ownerId: this.#ownerId,
-              now,
-              leaseExpiresAt,
-              limit: decisionsLimit,
-              decisionFilter: isRunBearingDecision,
-            })
-          : [];
-      full ||= starts.length + decisions.length >= limit;
+      full ||= starts.length >= limit;
+      dispatches.push(...starts.map(start => this.#track(this.#runInFlight, this.#dispatchPendingStart(start, now))));
+    }
+    // A person's wake comes next, into its own reserve and then into any free
+    // run slot, so it never waits behind hours of automated runs. Each claimed
+    // wake is tracked in the pool whose slot it took.
+    const reserveCapacity = Math.max(0, this.#maxInteractiveInFlight - this.#interactiveInFlight.size);
+    const interactiveCapacity = reserveCapacity + Math.max(0, this.#maxInFlight - this.#runInFlight.size);
+    if (interactiveCapacity > 0) {
+      const limit = Math.min(BATCH_SIZE, interactiveCapacity);
+      const decisions = await this.#storage.claimDeferredDecisions({
+        ownerId: this.#ownerId,
+        now,
+        leaseExpiresAt,
+        limit,
+        decisionFilter: isInteractiveDecision,
+      });
+      full ||= decisions.length >= limit;
       dispatches.push(
-        ...starts.map(start => this.#track(this.#runInFlight, this.#dispatchPendingStart(start, now))),
+        ...decisions.map((decision, index) =>
+          this.#track(
+            index < reserveCapacity ? this.#interactiveInFlight : this.#runInFlight,
+            this.#dispatchDecision(decision, now),
+          ),
+        ),
+      );
+    }
+    const runCapacity = this.#maxInFlight - this.#runInFlight.size;
+    if (runCapacity > 0) {
+      const limit = Math.min(BATCH_SIZE, runCapacity);
+      const decisions = await this.#storage.claimDeferredDecisions({
+        ownerId: this.#ownerId,
+        now,
+        leaseExpiresAt,
+        limit,
+        decisionFilter: isAutomatedRunDecision,
+      });
+      full ||= decisions.length >= limit;
+      dispatches.push(
         ...decisions.map(decision => this.#track(this.#runInFlight, this.#dispatchDecision(decision, now))),
       );
     }
@@ -1118,7 +1221,6 @@ export class FactoryDecisionDispatcher {
     if (runStillActive()) {
       const run = watchRun(session, {
         timeoutMs: this.#skillCompletionObservationTimeoutMs,
-        approvePlans: false,
         label: 'Factory skill run',
         runStillActive,
       });
@@ -1541,7 +1643,8 @@ export class FactoryDecisionDispatcher {
           );
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
-            approvePlans: await this.#plansAreAutoApproved(record),
+            autoApprovedTool: await this.#autoApprovedExitTool(record),
+            autoApproving: this.#autoApproving,
             requestContext,
             onAgentEnd: () => this.#roleSuperseded(record, decision.role),
             label: 'Factory skill run',
@@ -1730,7 +1833,14 @@ export class FactoryDecisionDispatcher {
         return;
       }
       case 'notify': {
-        const binding = await this.#requireBinding(record);
+        const selected = await this.#requireBinding(record);
+        if (
+          (await this.#roleSuperseded(record, selected.role)) ||
+          (await this.#decisionOvertaken(record, selected.role))
+        ) {
+          throw new FactoryDecisionSuperseded();
+        }
+        const binding = await this.#requireOrPrepareBinding(record, selected.role, selected.id);
         // A notification can wake the idle session, so it runs as the session's
         // owner like any other Factory-started run, never as nobody.
         const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
@@ -1889,6 +1999,7 @@ export class FactoryDecisionDispatcher {
             externalSource: externalSourceForDecision(decision),
             parentWorkItemId,
             title: decision.title,
+            ...(decision.description ? { description: decision.description } : {}),
             board: decision.board,
             stages: [entryStage],
             sessions: {},
@@ -2267,8 +2378,7 @@ export class FactoryDecisionDispatcher {
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
       workItemId: item.id,
-      ingress: { identity: `decision:${messageKey}@${moved.revision}`, triggerType: 'transition.message' },
-      configVersion: this.#transitionService.configVersion,
+      ingress: { identity: `decision:${messageKey}@${moved.revision}` },
       expectedRevision: moved.revision,
       actor: record.actor ?? { type: 'system', id: 'factory-rule-dispatcher' },
       outcome: { status: 'accepted' },
@@ -2552,8 +2662,12 @@ export class FactoryDecisionDispatcher {
   async #requireOrPrepareBinding(
     record: FactoryDeferredDecisionRecord,
     role: string,
+    expectedBindingId?: string,
   ): Promise<FactoryRunBindingRecord> {
     const binding = await this.#findBinding(record, role);
+    if (expectedBindingId && binding?.id !== expectedBindingId) {
+      return this.#sameRoleReplacement(record, role, expectedBindingId);
+    }
     if (binding) {
       const session = await this.#controller.getSession(binding.sessionId);
       if (session) return binding;
@@ -2565,8 +2679,36 @@ export class FactoryDecisionDispatcher {
       );
     }
     const item = await this.#requireItem(record);
-    await this.#prepareBinding({ record, item, role });
+    try {
+      await this.#prepareBinding({ record, item, role, expectedBindingId });
+    } catch (error) {
+      if (error instanceof FactoryRunBindingSupersededError) {
+        if (expectedBindingId) return this.#sameRoleReplacement(record, role, expectedBindingId);
+        throw new FactoryDecisionSuperseded();
+      }
+      throw error;
+    }
     return this.#requireBinding(record, role);
+  }
+
+  async #sameRoleReplacement(
+    record: FactoryDeferredDecisionRecord,
+    role: string,
+    expectedBindingId: string,
+  ): Promise<FactoryRunBindingRecord> {
+    const replacement = await this.#findBinding(record, role);
+    if (
+      !replacement ||
+      replacement.id === expectedBindingId ||
+      (await this.#roleSuperseded(record, role)) ||
+      (await this.#decisionOvertaken(record, role))
+    ) {
+      throw new FactoryDecisionSuperseded();
+    }
+    if (!(await this.#controller.getSession(replacement.sessionId))) {
+      throw new FactoryDispatchError('session_unavailable', 'Bound Factory session not found.');
+    }
+    return replacement;
   }
 
   async #findSession(
@@ -2580,10 +2722,10 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
-   * Whether the run answers its plan approvals itself: the card's phase ends with an auto-approved
-   * `submit_plan`. Otherwise a plan waits for a person.
+   * The tool whose pauses the run answers itself: the exit tool of the card's phase, where the
+   * board approves it without a person for this card. Any other pause waits for a person.
    */
-  async #plansAreAutoApproved({
+  async #autoApprovedExitTool({
     orgId,
     factoryProjectId,
     workItemId,
@@ -2591,20 +2733,49 @@ export class FactoryDecisionDispatcher {
     orgId: string;
     factoryProjectId: string;
     workItemId: string | null;
-  }): Promise<boolean> {
+  }): Promise<string | undefined> {
     const item = workItemId ? await this.#storage.get({ orgId, id: workItemId }) : null;
-    return (
-      item !== null &&
-      autoApprovedExitTool(await this.#boards.load({ orgId, factoryProjectId }), item) === 'submit_plan'
+    return item ? autoApprovedExitTool(await this.#boards.load({ orgId, factoryProjectId }), item) : undefined;
+  }
+
+  /** Whether a run this dispatcher watches is about to approve `toolCallId` itself, so no person needs asking. */
+  autoApproves(toolCallId: string): boolean {
+    return this.#autoApproving.has(toolCallId);
+  }
+
+  /**
+   * Whether a run is in flight on any of the card's active seats, as the board shows it: a run the
+   * registry here holds on a seat's thread, whoever started it, or one live on another dispatcher.
+   * A read-only probe: it never switches a session's thread.
+   */
+  async hasRunInFlightOnCard({
+    orgId,
+    factoryProjectId,
+    workItemId,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    workItemId: string;
+  }): Promise<boolean> {
+    const bindings = (await this.#storage.listRunBindings(orgId, factoryProjectId, workItemId)).filter(
+      binding => binding.status === 'active',
     );
+    const liveThreads = new Set(this.#controller.listActiveThreadRuns().map(active => active.threadId));
+    for (const binding of bindings) {
+      if (liveThreads.has(binding.threadId)) return true;
+      const session = await this.#controller.getSession(binding.sessionId);
+      if (session && (await this.#hasRunInFlight(session, binding))) return true;
+    }
+    return false;
   }
 
   /**
    * Whether a run is in flight on `binding`: live here, or live on another dispatcher. An open-run
-   * entry with nothing live behind it is an orphan of a dead process and does not count.
+   * entry with nothing live behind it is an orphan of a dead process and does not count. Reads the
+   * binding's own thread, which the session may have switched away from.
    */
   async #hasRunInFlight(session: BoundDispatcherSession, binding: FactoryRunBindingRecord): Promise<boolean> {
-    const open = (await listSessionOpenRuns(session)).filter(entry => entry.bindingId === binding.id);
+    const open = (await listThreadOpenRuns(session, binding.threadId)).filter(entry => entry.bindingId === binding.id);
     if (open.length === 0) return false;
     if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) return true;
     return this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
@@ -2627,7 +2798,6 @@ export class FactoryDecisionDispatcher {
     while (true) {
       const openRun = watchRun(session, {
         timeoutMs: this.#skillCompletionObservationTimeoutMs,
-        approvePlans: false,
         label,
         runStillActive,
       });
@@ -2849,7 +3019,8 @@ export class FactoryDecisionDispatcher {
           const since = new Date();
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
-            approvePlans: await this.#plansAreAutoApproved({ ...record, workItemId: binding.workItemId }),
+            autoApprovedTool: await this.#autoApprovedExitTool({ ...record, workItemId: binding.workItemId }),
+            autoApproving: this.#autoApproving,
             requestContext,
             label: 'Factory kickoff run',
             runStillActive: () =>

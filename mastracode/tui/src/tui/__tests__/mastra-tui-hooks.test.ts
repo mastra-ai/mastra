@@ -60,6 +60,7 @@ function createBareTui(hookManager?: Record<string, unknown>) {
   tui.state = {
     hookManager,
     assistantRenderRegistry: new AssistantRenderRegistry(),
+    editor: {},
     ui: { stop: vi.fn(), requestRender: vi.fn() },
     idleCounter: { setTimingState: vi.fn(), update: vi.fn() },
   };
@@ -357,7 +358,7 @@ describe('MastraTUI hook wiring', () => {
     expect(runPermissionRequest).not.toHaveBeenCalled();
   });
 
-  it('does not fire PermissionRequest on ask_user suspension', async () => {
+  it('does not fire PermissionRequest from the queued handler on ask_user suspension', async () => {
     const runPermissionRequest = vi.fn().mockResolvedValue(createHookResult());
     const tui = createBareTui({ runPermissionRequest });
 

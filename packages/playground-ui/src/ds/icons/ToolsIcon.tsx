@@ -1,4 +1,4 @@
-import { Bolt } from 'lucide-react';
 import type { LucideProps } from 'lucide-react';
+import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
 
-export const ToolsIcon = (props: LucideProps) => <Bolt size={16} {...props} />;
+export const ToolsIcon = (props: LucideProps) => <IconSettingsGear1 size={16} {...props} />;

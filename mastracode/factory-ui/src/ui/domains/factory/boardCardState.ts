@@ -1,3 +1,5 @@
+import { phaseMayStartRun } from '@mastra/factory/boards/busy-card';
+
 import type { InstalledPhaseInfo } from '../../../api/types';
 import type { SessionRowStatus } from '../workspaces/services/sessionStatus';
 import type { FactoryDecisionSummary } from './services/decisions';
@@ -33,6 +35,8 @@ export interface BoardCardStateInput {
   retryRequested?: boolean;
   /** Rule effect the server is still working through, or gave up on. */
   decision?: FactoryDecisionSummary;
+  /** The effect's place in the run queue while it waits for a run slot. */
+  queuePosition?: number;
   /** Why the server refused the last move. */
   transitionReason?: string;
   /** What the run registry and workspace records say about the card's bound sessions. */
@@ -59,7 +63,12 @@ export function boardCardState(input: BoardCardStateInput): BoardCardState {
       wick: sessionStatus,
     };
   }
-  const automation = decision === undefined ? undefined : automationOnCard(decision, sessionStatus);
+  const automation =
+    decision !== undefined
+      ? automationOnCard(decision, sessionStatus, input.queuePosition)
+      : input.queuePosition !== undefined
+        ? queuedOnCard(input.queuePosition)
+        : undefined;
   const refusedMove: BoardCardStatus | undefined =
     transitionReason === undefined ? undefined : { kind: 'error', label: transitionReason };
   const sessionOwner: BoardCardOwner | undefined =
@@ -71,7 +80,7 @@ export function boardCardState(input: BoardCardStateInput): BoardCardState {
   };
 }
 
-export const BUSY_CARD_MOVE_REFUSAL = "Another run can't start while this card is busy.";
+export { BUSY_CARD_MOVE_REFUSAL } from '@mastra/factory/boards/busy-card';
 
 export function canStartRun(ownerKind: BoardCardOwner['kind']): boolean {
   return ownerKind === 'free';
@@ -83,10 +92,6 @@ export function canMoveTo(
 ): boolean {
   if (ownerKind === 'you') return false;
   return canStartRun(ownerKind) || !phaseMayStartRun(phaseKind);
-}
-
-function phaseMayStartRun(phaseKind: InstalledPhaseInfo['kind'] | undefined): boolean {
-  return phaseKind !== 'resting' && phaseKind !== 'terminal';
 }
 
 function sessionIsLive(sessionStatus: SessionRowStatus | undefined): boolean {
@@ -107,6 +112,7 @@ function yourRequest(input: BoardCardStateInput): { statusLabel: string; progres
 function automationOnCard(
   decision: FactoryDecisionSummary,
   sessionStatus: SessionRowStatus | undefined,
+  queuePosition: number | undefined,
 ): { status?: BoardCardStatus; owner: BoardCardOwner } {
   const copy = automationCopy(decision);
   const detail = decision.lastError ?? undefined;
@@ -128,9 +134,17 @@ function automationOnCard(
       owner: { kind: 'automation', progressLabel: 'Retrying…' },
     };
   }
+  if (queuePosition !== undefined) return queuedOnCard(queuePosition);
   const owner: BoardCardOwner = { kind: 'automation', progressLabel: copy.progressLabel };
   if (runAnnouncedByWick(decision, sessionStatus)) return { owner };
   return { status: { kind: 'busy', label: copy.busy }, owner };
+}
+
+function queuedOnCard(position: number): { status: BoardCardStatus; owner: BoardCardOwner } {
+  return {
+    status: { kind: 'busy', label: `Queued (#${position})` },
+    owner: { kind: 'automation', progressLabel: 'Queued' },
+  };
 }
 
 function statusWhenNothingInFlight(input: BoardCardStateInput): BoardCardStatus {

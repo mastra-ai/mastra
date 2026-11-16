@@ -281,6 +281,17 @@ describe('normalizePlanPath', () => {
     expect(normalizePlanPath('.artifacts/plans/issue.md', undefined)).toBe('.artifacts/plans/issue.md');
   });
 
+  it('passes through a checkout-relative artifacts path unchanged', () => {
+    expect(normalizePlanPath('mastra/.artifacts/plans/issue.md', undefined)).toBe('mastra/.artifacts/plans/issue.md');
+    expect(
+      normalizePlanPath(
+        '/workspace/mastra/.artifacts/plans/issue.md',
+        '/workspace/mastra/.artifacts',
+        'mastra/.artifacts',
+      ),
+    ).toBe('mastra/.artifacts/plans/issue.md');
+  });
+
   it('normalizes an absolute path inside the artifacts root', () => {
     expect(normalizePlanPath('/leadrvision/.artifacts/plans/issue.md', ROOT)).toBe('.artifacts/plans/issue.md');
   });

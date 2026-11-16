@@ -22,6 +22,7 @@ import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import { WorkItemRelationError } from '../storage/domains/work-items/base.js';
 import type { UpdateWorkItemInput, Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { workItemNumber } from '../work-items/card-number.js';
 import { createFactoryWorkItem } from '../work-items/create-work-item.js';
 import type { FactoryAuditEmit } from '../work-items/create-work-item.js';
 import {
@@ -30,15 +31,7 @@ import {
   retryFactoryDecision,
 } from '../work-items/decision-actions.js';
 import type { FactoryDecisionActionResult } from '../work-items/decision-actions.js';
-import {
-  MAX_TEXT,
-  findWorkItem,
-  workItemRefSchema,
-  truncate,
-  workItemNotFound,
-  workItemNumber,
-  workItemStage,
-} from './read-tools.js';
+import { MAX_TEXT, findWorkItem, workItemRefSchema, truncate, workItemNotFound, workItemStage } from './read-tools.js';
 import { requirePerson } from './scope.js';
 import type { FactoryToolScope } from './scope.js';
 
@@ -139,7 +132,7 @@ export function createFactoryWorkItemTools(
         : `${slug} is not linked to this Factory, and it has no linked repositories.`,
     );
   };
-  const follow = (item: Card, reason: 'created' | 'subscribed') =>
+  const follow = (item: Card, reason: 'created' | 'moved' | 'subscribed') =>
     deps.workItems.subscribeToWorkItem({
       ...project,
       workItemId: item.id,
@@ -154,7 +147,7 @@ export function createFactoryWorkItemTools(
     factory_create_work_item: createTool({
       id: 'factory_create_work_item',
       description:
-        "File a new work item on this Factory's Work board (or wherever the project's intake routes send it) for the person you are working with. It enters its board's first phase, or the phase an intake route names, and this session follows it. Check factory_list_work_items for an existing item first. Name the repository when the Factory links more than one; runs refuse to start on a card that doesn't say which.",
+        "File a new work item on this Factory's Work board (or wherever the project's intake routes send it) for the person you are working with. It enters its board's first phase, or the phase an intake route names, and this session follows it. Check factory_list_work_items for an existing item first. Name the repository when you know it; a run on a card that names none determines it from the card.",
       inputSchema: z
         .object({
           title: z.string().trim().min(1).max(512).describe('Short title, as it should read on the card.'),
@@ -239,7 +232,21 @@ export function createFactoryWorkItemTools(
               }),
         });
         if (result.status === 'rejected') throw new Error(`The move was refused (${result.code}): ${result.reason}`);
-        return { workItemId: item.id, stage: result.stage, revision: result.revision };
+        // The move can start a phase session the Factory owns. Following the card is what lets
+        // this session hear when that run waits on someone, and answer it from here.
+        // The card has moved by now: a failed follow is reported with the move, not instead of it.
+        const moved = { workItemId: item.id, stage: result.stage, revision: result.revision };
+        try {
+          await follow(item, 'moved');
+        } catch (error) {
+          return {
+            ...moved,
+            warnings: [
+              `This session does not follow it yet: ${error instanceof Error ? error.message : String(error)}`,
+            ],
+          };
+        }
+        return moved;
       },
     }),
 

@@ -1,8 +1,7 @@
 import { z } from 'zod';
 
 import { BOARD_LAYOUTS, DEFAULT_BOARD_LAYOUT } from './boardLayout';
-import { BOARD_SORTS } from './boardOrder';
-import { DEFAULT_BOARD_SORT } from './boardSort';
+import { BOARD_SORTS, DEFAULT_BOARD_SORT } from './boardSort';
 
 /** Query parameter holding the selected saved view, so a refresh or a reopen from the sidebar keeps it. */
 export const BOARD_VIEW_QUERY = 'view';
