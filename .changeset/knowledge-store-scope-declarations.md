@@ -4,7 +4,7 @@
 
 Knowledge storage can supply scope declarations, access rules included.
 
-A store returns declarations from `getScopeDeclarations()` (none by default). Knowledge reads them at the start of every call and merges them under its config's: the config wins on a key both declare, and a declaration that doesn't compile is skipped with a warning.
+A store returns declarations from `getScopeDeclarations()` (none by default). Knowledge merges them under its config's: the config wins on a key both declare, and a declaration that doesn't compile is skipped with a warning. The store's answer is reused for 30 seconds and read again after `renameScopeDeclaration`, so a declaration the store adds applies within that window without a store read on every call.
 
 ```ts
 class ImportingKnowledgeStorage extends InMemoryKnowledgeStorage {

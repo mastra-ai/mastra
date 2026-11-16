@@ -8,7 +8,6 @@ packages:
   - packages/_vendored/*
   - packages/_internals/*
   - packages/*
-  - platform/*
   - embedders/*
   - agent-sdks/*
   - deployers/*

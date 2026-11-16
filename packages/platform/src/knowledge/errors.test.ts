@@ -89,3 +89,31 @@ it('keeps the HTTP status when the error body is JSON null', async () => {
   }).getStorage();
   await expect(storage.listPages({ read: 'all' })).rejects.toThrow('Knowledge request failed (500): null');
 });
+
+async function storageAnswering(status: number, body: unknown) {
+  const server = createServer((_req, res) => {
+    res.writeHead(status, { 'content-type': 'application/problem+json' });
+    res.end(JSON.stringify(body));
+  });
+  servers.push(server);
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Expected a TCP port');
+  return new PlatformKnowledge({
+    apiUrl: `http://127.0.0.1:${address.port}`,
+    instanceId: 'instance',
+    accessToken: 'token',
+  }).getStorage();
+}
+
+it('reads no scope declarations from a service without the getScopeDeclarations operation', async () => {
+  const storage = await storageAnswering(404, { title: 'Not Found', detail: 'Knowledge operation not found' });
+  await expect(storage.getScopeDeclarations()).resolves.toEqual({});
+});
+
+it('still fails getScopeDeclarations for a missing instance or a server error', async () => {
+  const missing = await storageAnswering(404, { title: 'Not Found', detail: 'Knowledge instance not found' });
+  await expect(missing.getScopeDeclarations()).rejects.toThrow('Knowledge instance not found');
+  const broken = await storageAnswering(500, { title: 'Internal Server Error' });
+  await expect(broken.getScopeDeclarations()).rejects.toThrow('Internal Server Error');
+});

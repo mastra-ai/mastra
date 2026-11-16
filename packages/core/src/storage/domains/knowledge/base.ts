@@ -193,9 +193,9 @@ export abstract class KnowledgeStorage extends StorageDomain implements Knowledg
 
   /**
    * Scope declarations the store supplies itself, such as the scopes a hosted store's importers write
-   * to, with their access rules. Knowledge reads them at the start of
-   * every call and merges them under its config's, so a declaration the store adds or changes applies
-   * from the next call; a key the config declares keeps the config's declaration. None by default.
+   * to, with their access rules. Knowledge merges them under its config's, reusing the answer for a
+   * short window, so a declaration the store adds or changes applies within it; a key the config
+   * declares keeps the config's declaration. None by default.
    *
    * @experimental
    */

@@ -1,10 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { setRunAgentScopes } from '../../agent/scopes';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { KnowledgeDeclarationError, knowledgeMemoryScopes } from '../declarations';
 import type { KnowledgeScopeDeclarations } from '../declarations';
 import { Knowledge } from '../index';
+import { KNOWLEDGE_STORE_DECLARATIONS_TTL_MS } from '../scope-runtime';
 
 const host = { author: 'host' };
 const imports = [{ principal: 'imports:all', role: 'viewer' as const }];
@@ -78,7 +79,28 @@ describe('Knowledge scope declarations a store supplies', () => {
     expect((await call('knowledge_read', {})).scopes.map((scope: any) => scope.address)).toEqual(['docs:eng']);
   });
 
-  it('reads the store on every call, so a declaration it adds later applies on the next', async () => {
+  it('reads the store once for calls inside the reuse window, and again after a rename', async () => {
+    const { knowledge, call, declaring } = await setup();
+    await call('knowledge_search', { query: 'Roadmap' });
+    await call('knowledge_read', { page: 'linear:acme:conn_1#roadmap' });
+    await knowledge.readScopeFor(['imports:all']);
+    expect(declaring).toHaveBeenCalledTimes(1);
+    await expect(knowledge.renameScopeDeclaration('gone:$id', 'docs:$team')).resolves.toBe(0);
+    await call('knowledge_search', { query: 'Roadmap' });
+    expect(declaring).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads the store again after a failed read', async () => {
+    const { knowledge, declaring } = await setup();
+    declaring.mockRejectedValueOnce(new Error('service down'));
+    await expect(knowledge.readScopeFor(['imports:all'])).rejects.toThrow('service down');
+    await expect(knowledge.readScopeFor(['imports:all'])).resolves.toMatchObject({ addresses: [] });
+    expect(declaring).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads the store again once the reuse window passes, so a declaration it adds later applies', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    onTestFinished(() => void vi.useRealTimers());
     const { storage, call, declaring } = await setup();
     expect((await call('knowledge_search', { query: 'Spec' })).results).toEqual([]);
     // An importer added after the project started: declared on the store, then written.
@@ -90,6 +112,8 @@ describe('Knowledge scope declarations a store supplies', () => {
       provenance: host,
     });
     await storage.createPage({ parentId: scope.id, key: 'spec', name: 'Spec', provenance: host });
+    expect((await call('knowledge_search', { query: 'Spec' })).results).toEqual([]);
+    vi.advanceTimersByTime(KNOWLEDGE_STORE_DECLARATIONS_TTL_MS);
     expect((await call('knowledge_search', { query: 'Spec' })).results.map((hit: any) => hit.page.ref)).toEqual([
       'notion:acme:conn_2#spec',
     ]);

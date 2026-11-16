@@ -155,17 +155,25 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
         error.message = message;
         throw error;
       }
-      throw new Error(message);
+      throw Object.assign(new Error(message), { status: response.status });
     }
     return decode<{ result?: unknown }>(text).result;
   }
 
   /**
    * The scope declarations the instance supplies, such as the ones its importers write to, with their
-   * access rules. Anything but a declaration record is a broken response, not "none".
+   * access rules. A service that doesn't have the operation yet (404 for the operation, not the
+   * instance) supplies none. Anything else but a declaration record is a broken response, not "none".
    */
   override async getScopeDeclarations(): Promise<KnowledgeScopeDeclarations> {
-    const result = await this.request('getScopeDeclarations');
+    let result: unknown;
+    try {
+      result = await this.request('getScopeDeclarations');
+    } catch (error) {
+      const status = (error as { status?: unknown }).status;
+      if (status === 404 && (error as Error).message !== 'Knowledge instance not found') return {};
+      throw error;
+    }
     if (!result || typeof result !== 'object' || Array.isArray(result)) {
       throw new Error('Knowledge service answered getScopeDeclarations without a declaration record');
     }

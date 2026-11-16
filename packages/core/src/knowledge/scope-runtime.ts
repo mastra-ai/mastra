@@ -34,6 +34,9 @@ type HeldPrincipals = Map<string, Array<{ principal: string; params: ScopeMatch[
 type KnownScopes = { looked: Set<string>; byAddress: Map<string, KnowledgePage>; byId: Map<string, KnowledgePage> };
 type MaterializeRun = { held: HeldPrincipals; known?: KnownScopes };
 
+/** How long the store's scope declarations are reused before {@link KnowledgeScopeRuntime.resolve} reads them again. */
+export const KNOWLEDGE_STORE_DECLARATIONS_TTL_MS = 30_000;
+
 /** Declaration-backed access and lazy scope creation shared by the Knowledge lifecycle and tools. @internal */
 export class KnowledgeScopeRuntime {
   readonly #config: KnowledgeScopeDeclarations;
@@ -41,6 +44,8 @@ export class KnowledgeScopeRuntime {
   /** The last resolved declarations, keyed by what the store supplied. */
   #resolved: { stored: string; compiled: CompiledKnowledgeScopes };
   #declarationsChecked?: Promise<void>;
+  /** The store's declarations as last read, shared by concurrent calls until they expire. */
+  #stored?: { readAt: number; declarations: Promise<KnowledgeScopeDeclarations> };
 
   constructor(
     declarations: KnowledgeScopeDeclarations,
@@ -58,13 +63,15 @@ export class KnowledgeScopeRuntime {
   }
 
   /**
-   * Re-reads the store's scope declarations and merges them under the config's: a key the config
-   * declares keeps the config's declaration. Called once at the start of every call, so a declaration
-   * the store adds or changes applies from the next call. A store declaration that doesn't compile
-   * next to the others is skipped with a warning. Recompiles only when the store's answer changes.
+   * Reads the store's scope declarations and merges them under the config's: a key the config
+   * declares keeps the config's declaration. Called once at the start of every call. The store's
+   * answer is reused for {@link KNOWLEDGE_STORE_DECLARATIONS_TTL_MS}, so a declaration the store adds
+   * or changes applies within that window, and right away after {@link invalidate}. A store
+   * declaration that doesn't compile next to the others is skipped with a warning. Recompiles only
+   * when the store's answer changes.
    */
   async resolve(): Promise<CompiledKnowledgeScopes> {
-    const stored = await (await this.getStorage()).getScopeDeclarations();
+    const stored = await this.#readStored();
     const key = JSON.stringify(stored);
     if (key === this.#resolved.stored) return this.#resolved.compiled;
     let merged = this.#config;
@@ -110,6 +117,28 @@ export class KnowledgeScopeRuntime {
     this.#resolved = { stored: key, compiled };
     this.#declarationsChecked = undefined;
     return compiled;
+  }
+
+  /** Makes the next {@link resolve} read the store's declarations again. */
+  invalidate(): void {
+    this.#stored = undefined;
+  }
+
+  #readStored(): Promise<KnowledgeScopeDeclarations> {
+    const now = Date.now();
+    if (this.#stored && now - this.#stored.readAt < KNOWLEDGE_STORE_DECLARATIONS_TTL_MS) {
+      return this.#stored.declarations;
+    }
+    const entry = {
+      readAt: now,
+      declarations: this.getStorage().then(storage => storage.getScopeDeclarations()),
+    };
+    this.#stored = entry;
+    // A failed read isn't kept, so the next call tries again.
+    entry.declarations.catch(() => {
+      if (this.#stored === entry) this.#stored = undefined;
+    });
+    return entry.declarations;
   }
 
   validatePrincipals(principals: readonly string[]): void {
@@ -182,6 +211,7 @@ export class KnowledgeScopeRuntime {
       },
     });
     this.#declarationsChecked = undefined;
+    this.invalidate();
     return renamed;
   }
 
