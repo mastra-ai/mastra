@@ -23,8 +23,8 @@ import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '
 import { Notice } from '@/ds/components/Notice';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
-import { IconChevronLeft } from '@/ds/icons/central/IconChevronLeft';
-import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconChevronLeftMedium } from '@/ds/icons/central/IconChevronLeftMedium';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 import { IconClipboard2 } from '@/ds/icons/central/IconClipboard2';
 import { IconDotGrid1x3Horizontal } from '@/ds/icons/central/IconDotGrid1x3Horizontal';
 import { Icon } from '@/ds/icons/Icon';
@@ -269,7 +269,7 @@ export function FeedbackThread({
       {(hasMore || currentPage > 0) && (
         <div className="flex items-center gap-2">
           <Button
-            icon={<IconChevronLeft />}
+            icon={<IconChevronLeftMedium />}
             size="sm"
             variant="ghost"
             disabled={currentPage === 0}
@@ -278,7 +278,7 @@ export function FeedbackThread({
             Previous
           </Button>
           <Button
-            icon={<IconChevronRight />}
+            icon={<IconChevronRightMedium />}
             size="sm"
             variant="ghost"
             disabled={!hasMore}

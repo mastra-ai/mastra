@@ -19,9 +19,9 @@ import { Notice } from '@/ds/components/Notice';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
 import { IconArrowInbox } from '@/ds/icons/central/IconArrowInbox';
-import { IconBubbleSparkle } from '@/ds/icons/central/IconBubbleSparkle';
-import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
 import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
+import { IconChatBubble7 } from '@/ds/icons/central/IconChatBubble7';
+import { IconChatBubble7Plus } from '@/ds/icons/central/IconChatBubble7Plus';
 import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { IconFloppyDisk1 } from '@/ds/icons/central/IconFloppyDisk1';
@@ -193,7 +193,7 @@ export function TraceDataPanelView({
         label: (
           <>
             <Icon size="xs">
-              <IconBubbleText />
+              <IconChatBubble7 />
             </Icon>
             <span className="@max-[501px]:sr-only">Messages</span>
           </>
@@ -207,7 +207,7 @@ export function TraceDataPanelView({
         label: (
           <>
             <Icon size="xs">
-              <IconBubbleSparkle />
+              <IconChatBubble7Plus />
             </Icon>
             <span className="@max-[501px]:sr-only">
               Feedback{feedbackTabBadge != null && <> ({feedbackTabBadge})</>}

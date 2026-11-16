@@ -21,12 +21,12 @@ import { movePhase } from '../boardDraft';
 import { AddPhaseButton } from './AddPhaseButton';
 import { IconArrowRightLeft } from '@mastra/playground-ui/icons/central/IconArrowRightLeft';
 import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
-import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
 import { IconDotGrid2x3 } from '@mastra/playground-ui/icons/central/IconDotGrid2x3';
 import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
 import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 
 /**
  * The factory's skills no phase runs, then the board switcher and the open board's pages: General, Card moves,
@@ -106,7 +106,7 @@ function BoardSwitcher({ factoryId, boardId }: { factoryId: string; boardId: str
         <Txt tone="ink" as="span" variant="body" className="min-w-0 flex-1 truncate text-left">
           {title}
         </Txt>
-        <IconChevronBottom aria-hidden size={14} className="text-muted-foreground shrink-0" />
+        <IconChevronDownMedium aria-hidden size={14} className="text-muted-foreground shrink-0" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">
         {boards.map(other => (

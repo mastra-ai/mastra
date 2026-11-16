@@ -4,7 +4,7 @@ import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ACTIVITY_PERIOD_LABELS } from '../../periodActivity';
 import type { ActivityPeriod } from '../../periodActivity';
-import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 
 const PERIOD_OPTIONS = (['today', 'week', 'month'] as const).map(value => ({
   value,
@@ -33,7 +33,7 @@ export function ActivityPeriodMenu({
         }
       >
         {ACTIVITY_PERIOD_LABELS[period]}
-        <IconChevronBottom aria-hidden className="size-3.5" />
+        <IconChevronDownMedium aria-hidden className="size-3.5" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end">
         <DropdownMenu.RadioOptions
