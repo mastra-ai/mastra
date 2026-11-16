@@ -59,6 +59,8 @@ type Ctx = {
   concurrency: number;
   /** Runs inside input validation (of the approval step, or of the nested workflow per item). */
   validate: (input: any) => Promise<void>;
+  /** The approval step accepts a resume without data (it then suspends again). */
+  optionalResume?: boolean;
 };
 
 /** An approval step: suspends until resumed; a resumed call in generation `blockIn` waits on `gate`. */
@@ -70,6 +72,7 @@ function approvalStep(
     seen,
     gate,
     validate,
+    optionalResume,
     blockIn = 1,
   }: Omit<Ctx, 'id' | 'concurrency'> & { id: string; blockIn?: number },
 ) {
@@ -80,7 +83,7 @@ function approvalStep(
       return true;
     }),
     outputSchema: z.object({ k: z.number(), approved: z.boolean() }),
-    resumeSchema: z.object({ approved: z.boolean() }),
+    ...(optionalResume ? {} : { resumeSchema: z.object({ approved: z.boolean() }) }),
     suspendSchema: z.object({ ask: z.number() }),
     execute: async ({ inputData, resumeData, suspendData, suspend }: any) => {
       seen.push({ generation, k: inputData.k, resumeData, suspendData });
@@ -231,6 +234,8 @@ type Row = {
   waiters?: number;
   window?: Window;
   race?: Race;
+  /** Resume without resume data. */
+  noData?: boolean;
 };
 
 const byIndex = (k: number) => () => ({ step: 'approve', forEachIndex: k });
@@ -251,6 +256,7 @@ async function crash(id: string, row: Row) {
       seen,
       gate,
       concurrency: row.concurrency ?? 3,
+      optionalResume: row.noData,
       validate: async input => {
         if (generation === 2 && row.race?.holds(input)) await validation.wait();
       },
@@ -270,7 +276,11 @@ async function crash(id: string, row: Row) {
     }
     const started = await (await suspender.createRun({ runId })).start({ inputData: row.shape.inputData });
     expect(started.status).toBe('suspended');
-    return (await workflow.createRun({ runId })).resume({ ...row.resume(child), resumeData: APPROVED });
+    const resumedRun = (await workflow.createRun({ runId })).resume({
+      ...row.resume(child),
+      ...(row.noData ? {} : { resumeData: APPROVED }),
+    });
+    return resumedRun;
   });
   if (row.window) await original.held;
   else await vi.waitFor(() => expect(gate.waiters).toBe(row.waiters ?? 1));
@@ -283,7 +293,7 @@ async function crash(id: string, row: Row) {
     // Outside a window, also once the run records the step as active, which is what a restart reruns.
     return (
       record?.status === 'running' &&
-      record.resumePayload !== undefined &&
+      (!!row.noData || record.resumePayload !== undefined) &&
       (!!row.window || !!snapshot?.activeStepsPath?.[stepId])
     );
   };
@@ -403,7 +413,7 @@ describe('restart while a resumed foreach item runs', () => {
     expect(calls(seen, 2, from).filter(c => c.resumeData !== undefined)).toEqual([resumed(k)]);
   });
 
-  const nestedWindows: (Row & { gen2: Call[] })[] = [
+  const nestedWindows: (Row & { gen2: Call[]; statuses?: string[] })[] = [
     ...[beforeClaim, afterClaim].flatMap(window =>
       [
         { by: 'label', resume: byLabel(1) },
@@ -424,6 +434,18 @@ describe('restart while a resumed foreach item runs', () => {
       race: outerRace,
       gen2: [resumed(1), fresh(4), fresh(5)],
     })),
+    {
+      // A resume without data continues the named item, which suspends again. Through a second
+      // instance: the one that suspended the run doesn't store a resume without data as running.
+      name: 'foreach inside a nested workflow, by label with no resume data, after the nested run claims its resume',
+      shape: inChild,
+      resume: byLabel(1),
+      noData: true,
+      elsewhere: true,
+      window: afterClaim,
+      gen2: [{ k: 1, resumeData: undefined, suspendData: { ask: 1 } }],
+      statuses: [S, S, S],
+    },
   ];
 
   it.each(nestedWindows)('gives the decision only to the resumed inner item: $name', async row => {
@@ -433,7 +455,7 @@ describe('restart while a resumed foreach item runs', () => {
 
     expect(calls(seen, 2)).toEqual(row.gen2);
     expect(result.status).toBe('suspended');
-    if (row.shape.statuses) expect(await statuses(result)).toEqual([S, OK, S]);
+    if (row.shape.statuses) expect(await statuses(result)).toEqual(row.statuses ?? [S, OK, S]);
   });
 
   // Runs stored before targets were recorded carry the payload but no target.

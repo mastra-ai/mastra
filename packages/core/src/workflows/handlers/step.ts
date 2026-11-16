@@ -703,10 +703,10 @@ export async function executeStep(
         [HAND_BACK_STATE_SYMBOL]: isNestedWorkflow ? setState : undefined,
         // No target means the restarted resume's target is unknown (a record stored before targets
         // were): the nested workflow then leaves the nested run suspended. A restart of a step that
-        // was never resumed has no payload and sends nothing.
+        // was never resumed has no target and no payload, and sends nothing.
         [RESTART_RESUME_SYMBOL]:
-          restartsResume && resumeDataToUse !== undefined && step.component === 'WORKFLOW'
-            ? (nestedResumeTarget ?? { received: receivedState })
+          restartsResume && step.component === 'WORKFLOW'
+            ? (nestedResumeTarget ?? (resumeDataToUse !== undefined ? { received: receivedState } : undefined))
             : undefined,
         engine: engine.getEngineContext(),
         abortSignal: abortController?.signal,
