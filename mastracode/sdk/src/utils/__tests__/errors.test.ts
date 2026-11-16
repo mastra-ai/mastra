@@ -119,4 +119,93 @@ describe('parseError', () => {
     expect(parsed.type).toBe('content_filter');
     expect(parsed.detail).toBe(providerMessage);
   });
+
+  describe('Mastra Gateway refusals', () => {
+    const gatewayBaseUrl = 'https://gateway.example.test';
+
+    function gatewayError(status: number, code: string, message = code, url = `${gatewayBaseUrl}/v1/chat/completions`) {
+      return Object.assign(new Error(message), {
+        statusCode: status,
+        url,
+        responseBody: JSON.stringify({ error: { type: 'gateway_error', code, message } }),
+      });
+    }
+
+    it('words a gateway 402 as a credit or budget refusal and keeps the gateway code', () => {
+      const parsed = parseError(gatewayError(402, 'organization_budget_unbounded_request'), { gatewayBaseUrl });
+
+      expect(parsed.type).toBe('quota');
+      expect(parsed.source).toBe('gateway');
+      expect(parsed.message).toBe('The Mastra Gateway refused this request because of your credits or a budget.');
+      expect(parsed.message).not.toContain('provider account');
+      expect(parsed.detail).toBe('organization_budget_unbounded_request');
+      expect(parsed.retryable).toBe(false);
+    });
+
+    it('shows a readable gateway message alongside its code', () => {
+      const parsed = parseError(
+        gatewayError(402, 'organization_budget_insufficient', 'The organization budget cannot cover this request.'),
+        { gatewayBaseUrl: `${gatewayBaseUrl}/v1/` },
+      );
+
+      expect(parsed.detail).toBe(
+        'The organization budget cannot cover this request. (organization_budget_insufficient)',
+      );
+    });
+
+    it.each(['no_eligible_route', 'model_not_allowed'])(
+      'words a gateway 403 %s as a policy or routing refusal',
+      code => {
+        const parsed = parseError(gatewayError(403, code), { gatewayBaseUrl });
+
+        expect(parsed.type).toBe('auth');
+        expect(parsed.source).toBe('gateway');
+        expect(parsed.message).toBe(
+          "The Mastra Gateway's policy or routing does not allow this model or feature for your key.",
+        );
+        expect(parsed.detail).toBe(code);
+      },
+    );
+
+    it('reads the gateway status and body from a wrapped cause', () => {
+      const error = new Error('Agent stream failed', { cause: gatewayError(402, 'organization_credits_exhausted') });
+
+      const parsed = parseError(error, { gatewayBaseUrl });
+
+      expect(parsed.source).toBe('gateway');
+      expect(parsed.detail).toBe('organization_credits_exhausted');
+    });
+
+    it('keeps the provider wording for the same errors from another origin', () => {
+      const quota = parseError(
+        gatewayError(402, 'insufficient_quota', 'Payment Required', 'https://api.openai.com/v1/responses'),
+        {
+          gatewayBaseUrl,
+        },
+      );
+      const denied = parseError(
+        gatewayError(403, 'permission_denied', 'forbidden', 'https://api.anthropic.com/v1/messages'),
+        {
+          gatewayBaseUrl,
+        },
+      );
+
+      expect(quota.source).toBeUndefined();
+      expect(quota.message).toBe('Usage quota exhausted for this provider account.');
+      expect(denied.source).toBeUndefined();
+      expect(denied.message).toBe('Access denied. You may not have permission to use this model.');
+    });
+
+    it('keeps the access-denied wording for a gateway 403 without a gateway code', () => {
+      const error = Object.assign(new Error('forbidden'), {
+        status: 403,
+        requestUrl: `${gatewayBaseUrl}/v1/responses`,
+      });
+
+      const parsed = parseError(error, { gatewayBaseUrl });
+
+      expect(parsed.source).toBeUndefined();
+      expect(parsed.message).toBe('Access denied. You may not have permission to use this model.');
+    });
+  });
 });

@@ -22,6 +22,13 @@ export interface ParsedError {
   retryDelay?: number;
   /** Original error for debugging */
   originalError: Error;
+  /** Set when the Mastra Gateway itself refused the request, rather than the model provider */
+  source?: 'gateway';
+}
+
+export interface ParseErrorOptions {
+  /** Base URL of the configured Mastra Gateway. Failed requests to its origin are worded as gateway refusals. */
+  gatewayBaseUrl?: string;
 }
 
 export type ErrorType =
@@ -93,6 +100,84 @@ function extractRequestUrl(error: unknown): string | undefined {
     }
   }
 
+  return undefined;
+}
+
+function originOf(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    return new URL(url).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+/**
+ * The code and message from a Mastra Gateway error body, `{ "error": { "type", "code", "message" } }`.
+ * The message may only repeat the code, so both are kept.
+ */
+function gatewayErrorOf(error: unknown): { code?: string; message?: string } {
+  for (const candidate of [error, isRecord(error) ? error['cause'] : undefined]) {
+    if (!isRecord(candidate)) continue;
+    let body = candidate['data'];
+    if (!isRecord(body) && typeof candidate['responseBody'] === 'string') {
+      try {
+        body = JSON.parse(candidate['responseBody']);
+      } catch {
+        body = undefined;
+      }
+    }
+    const inner = isRecord(body) ? body['error'] : undefined;
+    if (isRecord(inner)) return { code: nonEmptyString(inner['code']), message: nonEmptyString(inner['message']) };
+  }
+  return {};
+}
+
+function describeGatewayError({ code, message }: { code?: string; message?: string }): string | undefined {
+  if (message && code && message !== code) return `${message} (${code})`;
+  return message ?? code;
+}
+
+/** A refusal by the Mastra Gateway itself, worded for the gateway instead of the provider account. */
+function parseGatewayRefusal(
+  error: unknown,
+  status: unknown,
+  requestUrl: string | undefined,
+  err: Error,
+  fallbackDetail: string | undefined,
+): ParsedError | undefined {
+  const gatewayError = gatewayErrorOf(error);
+  const detail = describeGatewayError(gatewayError) ?? fallbackDetail;
+  if (status === 402) {
+    return {
+      message: 'The Mastra Gateway refused this request because of your credits or a budget.',
+      detail,
+      requestUrl,
+      type: 'quota',
+      retryable: false,
+      originalError: err,
+      source: 'gateway',
+    };
+  }
+  if (status === 403 && gatewayError.code) {
+    return {
+      message: "The Mastra Gateway's policy or routing does not allow this model or feature for your key.",
+      detail,
+      requestUrl,
+      type: 'auth',
+      retryable: false,
+      originalError: err,
+      source: 'gateway',
+    };
+  }
   return undefined;
 }
 
@@ -170,7 +255,7 @@ function errorTypeOf(error: unknown, message: string, status: unknown): ErrorTyp
   return 'unknown';
 }
 
-export function parseError(error: unknown): ParsedError {
+export function parseError(error: unknown, options: ParseErrorOptions = {}): ParsedError {
   const err = toError(error);
   const errorObj = (typeof error === 'object' && error !== null ? error : {}) as Record<string, unknown>;
   const detail = summarizeErrorDetail(error);
@@ -181,8 +266,16 @@ export function parseError(error: unknown): ParsedError {
     return { message: err.message, detail, requestUrl, type: 'auth', retryable: false, originalError: err };
   }
 
+  const status = errorObj.statusCode ?? errorObj.status;
+  const gatewayOrigin = originOf(options.gatewayBaseUrl);
+  if (gatewayOrigin && originOf(requestUrl) === gatewayOrigin) {
+    const cause = isRecord(errorObj.cause) ? errorObj.cause : {};
+    const refusal = parseGatewayRefusal(error, status ?? cause.statusCode ?? cause.status, requestUrl, err, detail);
+    if (refusal) return refusal;
+  }
+
   const message = err.message.toLowerCase();
-  const type = errorTypeOf(error, message, errorObj.statusCode ?? errorObj.status);
+  const type = errorTypeOf(error, message, status);
 
   switch (type) {
     case 'quota':
@@ -205,7 +298,7 @@ export function parseError(error: unknown): ParsedError {
     case 'auth':
       return {
         message:
-          (errorObj.statusCode ?? errorObj.status) === 403
+          status === 403
             ? 'Access denied. You may not have permission to use this model.'
             : 'Authentication failed. Check the credential configured for this provider.',
         detail,

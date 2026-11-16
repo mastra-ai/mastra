@@ -42,8 +42,13 @@ function withGatewayAuthHeader(apiKey: string, headers?: Record<string, string>)
  */
 export function gatewayServesObservationalMemory(apiKey: string | undefined): boolean {
   if (typeof apiKey !== 'string' || apiKey.length === 0) return false;
-  if (apiKey.startsWith('msk-gateway-') || apiKey.startsWith('mskv2_')) return false;
+  if (isOrganizationKey(apiKey)) return false;
   return apiKey.startsWith('msk_');
+}
+
+/** Organization keys (`msk-gateway-…`, including regional ones such as `msk-gateway-eu_…`, and `mskv2_…`) belong to Gateway v2. */
+function isOrganizationKey(apiKey: string): boolean {
+  return apiKey.startsWith('msk-gateway-') || apiKey.startsWith('mskv2_');
 }
 
 export class MastraGateway extends MastraModelGateway {
@@ -78,7 +83,7 @@ export class MastraGateway extends MastraModelGateway {
     // The v2 prefixes (`msk-gateway-`, `mskv2_`) do not start with `msk_`.
     if (key?.startsWith('msk_')) return false;
     if (process.env['MASTRA_GATEWAY_VERSION'] === 'v2') return true;
-    return !!key && (key.startsWith('msk-gateway-') || key.startsWith('mskv2_'));
+    return !!key && isOrganizationKey(key);
   }
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
@@ -168,23 +173,28 @@ export class MastraGateway extends MastraModelGateway {
     const baseURL = `${this.getBaseUrl()}/v1`;
     const fullModelId = `${providerId}/${modelId}`;
 
-    if (this.config?.customFetch && providerId === 'anthropic') {
+    // Passing a provider sign-in through the gateway (customFetch sets Authorization, the gateway key
+    // travels in GATEWAY_AUTH_HEADER) only works on the v1 gateway. Gateway v2 reads its key from
+    // Authorization and cannot forward a provider credential, so v2 always takes the API key path.
+    const passThroughFetch = this.isV2() ? undefined : this.config?.customFetch;
+
+    if (passThroughFetch && providerId === 'anthropic') {
       // Anthropic OAuth path: use native Anthropic SDK (sends /messages, not /chat/completions)
       return createAnthropic({
         apiKey: 'oauth-gateway-placeholder',
         baseURL,
         headers: withGatewayAuthHeader(apiKey, headers),
-        fetch: this.config.customFetch as any,
+        fetch: passThroughFetch as any,
       })(modelId) as unknown as GatewayLanguageModel;
     }
 
-    if (this.config?.customFetch) {
+    if (passThroughFetch) {
       // Non-Anthropic OAuth path: gateway key in GATEWAY_AUTH_HEADER, customFetch owns Authorization
       return createOpenRouter({
         apiKey: 'oauth-gateway-placeholder',
         baseURL,
         headers: withGatewayAuthHeader(apiKey, headers),
-        fetch: this.config.customFetch,
+        fetch: passThroughFetch,
         // Strict mode adds stream_options.include_usage to streaming requests only,
         // so routes that report usage in a separate final chunk still return it.
         compatibility: 'strict',

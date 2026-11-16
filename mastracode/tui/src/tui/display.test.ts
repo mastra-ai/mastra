@@ -5,6 +5,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { showError, showFormattedError, showInfo, showLines, showProgress } from './display.js';
 import type { TUIState } from './state.js';
 
+vi.mock('@mastra/code-sdk/onboarding/settings', async importOriginal => ({
+  ...(await importOriginal<typeof import('@mastra/code-sdk/onboarding/settings')>()),
+  loadSettings: () => ({ memoryGateway: { baseUrl: 'https://gateway.example.test' } }),
+}));
+
 function createState(): TUIState {
   return {
     chatContainer: new Container(),
@@ -94,6 +99,48 @@ describe('showFormattedError', () => {
     expect(text).toContain('safety system blocked this request');
     expect(text).toContain('rejected as a result of our safety system');
     expect(text).toContain('Hint: Retry, rephrase, or use /model to switch models');
+  });
+
+  function apiError(status: number, url: string, code: string) {
+    return Object.assign(new Error(code), {
+      statusCode: status,
+      url,
+      responseBody: JSON.stringify({ error: { type: 'gateway_error', code, message: code } }),
+    });
+  }
+
+  it('points a gateway credit refusal at Mastra billing instead of the provider account', () => {
+    const state = createState();
+
+    showFormattedError(
+      state,
+      apiError(402, 'https://gateway.example.test/v1/chat/completions', 'organization_budget_insufficient'),
+    );
+
+    const text = renderedText(state);
+    expect(text).toContain('The Mastra Gateway refused this request because of your credits or a budget.');
+    expect(text).toContain('organization_budget_insufficient');
+    expect(text).toContain('Mastra billing');
+    expect(text).not.toContain('provider account');
+  });
+
+  it('suggests another model for a gateway policy refusal instead of /connect', () => {
+    const state = createState();
+
+    showFormattedError(state, apiError(403, 'https://gateway.example.test/v1/chat/completions', 'no_eligible_route'));
+
+    const text = renderedText(state);
+    expect(text).toContain('does not allow this model or feature for your key');
+    expect(text).toContain('Hint: Use /models to choose another model');
+    expect(text).not.toContain('/connect');
+  });
+
+  it('keeps the /connect hint for a provider 403', () => {
+    const state = createState();
+
+    showFormattedError(state, apiError(403, 'https://api.anthropic.com/v1/messages', 'permission_error'));
+
+    expect(renderedText(state)).toContain('Hint: Use /connect to authenticate with a provider');
   });
 });
 

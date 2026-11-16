@@ -305,6 +305,16 @@ export function hasProviderEnvironmentKey(providerId: string): boolean {
 /** Servers call custom endpoints too: a redirect could aim that call at an address the saved URL never named. */
 const fetchWithoutRedirects: typeof fetch = (input, init) => fetch(input, { ...init, redirect: 'error' });
 
+/**
+ * Whether the Mastra gateway can carry a provider sign-in for this gateway key, with the provider
+ * token in `Authorization` and the gateway key in `GATEWAY_AUTH_HEADER`. Only the v1 gateway
+ * (project keys) supports that. Gateway v2 (organization keys) reads its key from `Authorization`
+ * and cannot forward a provider credential, so a v2 key always takes the gateway's own route.
+ */
+export function mastraGatewayPassesProviderSignIn(mastraGatewayApiKey: string | undefined): boolean {
+  return !new MastraGateway({ apiKey: mastraGatewayApiKey }).isV2();
+}
+
 export class MastraCodeGateway extends MastraModelGateway {
   readonly id = MASTRACODE_GATEWAY_ID;
   readonly name = 'MastraCode Gateway';
@@ -604,7 +614,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     const thinkingMiddleware = createAnthropicThinkingMiddleware(bareModelId, this.#thinkingLevel);
 
     if (this.#routeThroughMastraGateway) {
-      if (storedCred?.type === 'oauth') {
+      if (storedCred?.type === 'oauth' && mastraGatewayPassesProviderSignIn(args.apiKey)) {
         const anthropic = createAnthropic({
           apiKey: 'oauth-gateway-placeholder',
           baseURL: `${this.#mastraGatewayBaseUrl}/v1`,
@@ -678,7 +688,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     const storedCred = this.#credentials.get('openai-codex');
 
     if (this.#routeThroughMastraGateway) {
-      if (storedCred?.type === 'oauth') {
+      if (storedCred?.type === 'oauth' && mastraGatewayPassesProviderSignIn(args.apiKey)) {
         const resolvedModelId = remapOpenAIModelForCodexOAuth(`openai/${args.modelId}`);
         const resolvedBareModelId = resolvedModelId.substring(OPENAI_PREFIX.length);
         const effectiveLevel = getEffectiveThinkingLevel(args.modelId, this.#thinkingLevel ?? 'medium');

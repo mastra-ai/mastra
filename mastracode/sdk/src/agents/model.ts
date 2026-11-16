@@ -35,6 +35,7 @@ import {
   MastraCodeGateway,
   getGlobalAuthStorage,
   hasProviderEnvironmentKey,
+  mastraGatewayPassesProviderSignIn,
   reloadAuthStorage,
   stripMastraGatewayPrefix,
 } from './mastracode-gateway.js';
@@ -358,9 +359,10 @@ function mastraGatewayApiKey(tenantCredentialStore: CredentialStore | undefined)
 /**
  * Which provider-executed web search tool fits the transport a model resolves to:
  * - `anthropic` / `openai`: the native provider API (direct keys, and Claude or
- *   Codex OAuth, which keep the native API even through the Mastra gateway).
- * - `mastra-gateway`: a `mastra/` alias with a gateway key and no OAuth, which
- *   `resolveModelForRequest` sends to the gateway's OpenRouter chat endpoint.
+ *   Codex OAuth, which keep the native API through a v1 Mastra gateway key).
+ * - `mastra-gateway`: a `mastra/` alias with a gateway key and no OAuth, or with a
+ *   v2 gateway key, which `resolveModelForRequest` sends to the gateway's
+ *   OpenRouter chat endpoint.
  * Other providers have no built-in search. Mirrors the routing in
  * `resolveModelForRequest` and `MastraCodeGateway`, so the registered tool and
  * the prompt guidance follow the request the model will actually make.
@@ -412,8 +414,10 @@ export function resolveProviderWebSearchRoute(
     tenantCredentialStore ?? getGlobalAuthStorage(),
     options?.requestContext,
   );
-  if (credentialStore.get(NATIVE_OAUTH_CREDENTIAL_IDS[providerId])?.type === 'oauth') return providerId;
-  return mastraGatewayApiKey(tenantCredentialStore) ? 'mastra-gateway' : providerId;
+  const gatewayKey = mastraGatewayApiKey(tenantCredentialStore);
+  const hasOAuth = credentialStore.get(NATIVE_OAUTH_CREDENTIAL_IDS[providerId])?.type === 'oauth';
+  if (hasOAuth && (!gatewayKey || mastraGatewayPassesProviderSignIn(gatewayKey))) return providerId;
+  return gatewayKey ? 'mastra-gateway' : providerId;
 }
 
 /**

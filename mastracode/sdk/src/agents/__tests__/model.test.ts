@@ -183,6 +183,11 @@ vi.mock('@mastra/core/llm', () => ({
     this.apiKey = config?.apiKey;
     this.baseUrl = config?.baseUrl;
     this.customFetch = config?.customFetch;
+    // Mirrors the key classification of the real gateway: organization keys belong to Gateway v2.
+    this.isV2 = vi.fn(() => {
+      const key = config?.apiKey ?? process.env.MASTRA_GATEWAY_API_KEY;
+      return !!key && (key.startsWith('msk-gateway-') || key.startsWith('mskv2_'));
+    });
     this.resolveLanguageModel = vi.fn((args: Record<string, unknown>) => ({
       __provider: 'mastra-gateway-delegate',
       args,
@@ -1196,6 +1201,76 @@ describe('resolveModel', () => {
       expect(result.__provider).toBe('openai-direct');
       expect(result.modelId).toBe('gpt-4o');
       expect(openaiCodexProvider).not.toHaveBeenCalled();
+    });
+
+    describe('with a Gateway v2 organization key', () => {
+      function useGatewayKey(key: string) {
+        mockAuthStorageInstance.getStoredApiKey.mockImplementation((providerId: string) =>
+          providerId === 'mastra-gateway' ? key : undefined,
+        );
+      }
+
+      function signInWithOAuth() {
+        mockAuthStorageInstance.get.mockReturnValue({
+          type: 'oauth',
+          access: 'oauth-access-token',
+          refresh: 'oauth-refresh-token',
+          expires: Date.now() + 60_000,
+        });
+      }
+
+      it.each(['msk-gateway-us_org_key', 'msk-gateway-eu_org_key', 'mskv2_org_key'])(
+        'sends a Claude OAuth model to the gateway with the %s key instead of the stored sign-in',
+        key => {
+          useGatewayKey(key);
+          signInWithOAuth();
+
+          const result = resolveModel('mastra/anthropic/claude-opus-4.6') as Record<string, unknown>;
+
+          expect(result.__provider).toBe('mastra-gateway-delegate');
+          expect(result.args).toEqual({
+            providerId: 'anthropic',
+            modelId: 'claude-opus-4-6',
+            apiKey: key,
+            headers: undefined,
+          });
+          expect(createAnthropic).not.toHaveBeenCalled();
+          expect(buildAnthropicOAuthFetch).not.toHaveBeenCalled();
+          expect(opencodeClaudeMaxProvider).not.toHaveBeenCalled();
+        },
+      );
+
+      it('sends a Codex OAuth model to the gateway with the gateway key instead of the stored sign-in', () => {
+        useGatewayKey('msk-gateway-eu_org_key');
+        signInWithOAuth();
+
+        const result = resolveModel('mastra/openai/gpt-4o') as Record<string, unknown>;
+
+        expect(result.__provider).toBe('mastra-gateway-delegate');
+        expect(result.args).toEqual({
+          providerId: 'openai',
+          modelId: 'gpt-4o',
+          apiKey: 'msk-gateway-eu_org_key',
+          headers: undefined,
+        });
+        expect(createOpenAI).not.toHaveBeenCalled();
+        expect(buildOpenAICodexOAuthFetch).not.toHaveBeenCalled();
+        expect(openaiCodexProvider).not.toHaveBeenCalled();
+      });
+
+      it('keeps the Claude OAuth pass-through for a v1 project key', () => {
+        useGatewayKey('msk_project_key');
+        signInWithOAuth();
+
+        const result = resolveModel('mastra/anthropic/claude-sonnet-4') as Record<string, unknown>;
+
+        expect(result.__provider).toBe('anthropic-direct');
+        expect(buildAnthropicOAuthFetch).toHaveBeenCalled();
+        const opts = vi.mocked(createAnthropic).mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+        expect((opts?.headers as Record<string, string>)?.['X-Memory-Gateway-Authorization']).toBe(
+          'Bearer msk_project_key',
+        );
+      });
     });
 
     it('routes explicit mastra-prefixed anthropic API key model through gateway without customFetch', () => {
