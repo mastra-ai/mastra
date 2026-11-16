@@ -1079,7 +1079,7 @@ A deployment that answers an event itself keeps routes out of it: a handler or `
 | Jira        | same as Linear                                                               | no                     | never                                                     |
 | incident.io | same as Linear                                                               | no                     | never                                                     |
 
-Linear, Jira and incident.io diff each sync against the labels and assignee the previous sync recorded on the card. The first sync after upgrading only records them, so existing cards don't all fire at once.
+Linear, Jira and incident.io diff each sync against the labels and assignee the previous sync recorded on the card. The first sync after upgrading only records them, so existing cards don't all fire at once. Each sync records when the provider last changed the item, in the same write that queues the update, so a sync older than the one recorded, or one racing a newer sync, never rolls the card's labels back or reports a change in reverse. GitLab does the same with each hook's `updated_at`, and a redelivered hook writes nothing.
 
 #### Activity reaches the card's session
 

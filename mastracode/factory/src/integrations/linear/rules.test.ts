@@ -174,6 +174,78 @@ describe('LinearRules', () => {
     expect((await workItems.get({ orgId: 'org-1', id: card.id }))!.stages).toEqual(['done']);
   });
 
+  it('records a sighting that changed nothing as seen, so an older one arriving later is still ignored', async () => {
+    const { project, service, workItems } = await setup();
+    const scope = { orgId: 'org-1', factoryProjectId: project.id };
+    const card = (
+      await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          title: issue.title,
+          stages: ['planning'],
+          sessions: {},
+          externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42', url: issue.url },
+          metadata: { linearIssueId: issue.id, labels: ['bug'], assignee: 'ada', linearAssignee: 'ada' },
+        },
+      })
+    ).item;
+    const sync = (updatedAt: string, labels: string[]) =>
+      service.ingest({ ...scope, userId: 'user-1', issues: [{ ...issue, labels, updatedAt }] });
+    const updates = async () =>
+      (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: card.id }))
+        .filter(record => record.decision.type === 'routeEvent')
+        .map(record => record.decision.event);
+    await sync('2026-07-01T00:00:00Z', ['bug']);
+    await sync('2026-07-03T00:00:00Z', ['bug']);
+    // A sighting from before the unchanged one arrives late, with a label since removed.
+    await sync('2026-07-02T00:00:00Z', ['bug', 'ship']);
+
+    expect(await updates()).toEqual([]);
+    expect((await workItems.get({ orgId: 'org-1', id: card.id }))!.workItem.labels).toEqual(['bug']);
+  });
+
+  it('lets only the newer of two syncs racing for the same card record its change', async () => {
+    const { project, service, workItems } = await setup();
+    const scope = { orgId: 'org-1', factoryProjectId: project.id };
+    const card = (
+      await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          title: issue.title,
+          stages: ['planning'],
+          sessions: {},
+          externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42', url: issue.url },
+          metadata: { linearIssueId: issue.id, labels: ['bug'], assignee: 'ada', linearAssignee: 'ada' },
+        },
+      })
+    ).item;
+    const sync = (updatedAt: string, labels: string[]) =>
+      service.ingest({ ...scope, userId: 'user-1', issues: [{ ...issue, labels, updatedAt }] });
+    const updates = async () =>
+      (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: card.id }))
+        .filter(record => record.decision.type === 'routeEvent')
+        .map(record => record.decision.event);
+    await sync('2026-07-01T00:00:00Z', ['bug']);
+    // The older sync reads the card, then the newer one commits before the older one does.
+    const commit = workItems.commitRuleEvaluation.bind(workItems);
+    let raced = false;
+    vi.spyOn(workItems, 'commitRuleEvaluation').mockImplementation(async input => {
+      if (!raced && input.ingress.triggerType === 'linear.issueUpdated') {
+        raced = true;
+        await sync('2026-07-03T00:00:00Z', ['bug', 'ship']);
+      }
+      return commit(input);
+    });
+    await sync('2026-07-02T00:00:00Z', ['bug', 'wip']);
+
+    expect(await updates()).toEqual([{ type: 'work_item.updated', labels: { added: ['ship'], removed: [] } }]);
+    expect((await workItems.get({ orgId: 'org-1', id: card.id }))!.workItem.labels).toEqual(['bug', 'ship']);
+  });
+
   it('ignores a sighting older than the last one, so the change it predates is never reported again', async () => {
     const { project, service, workItems } = await setup();
     const scope = { orgId: 'org-1', factoryProjectId: project.id };

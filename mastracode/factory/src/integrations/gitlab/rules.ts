@@ -1058,6 +1058,12 @@ export class GitLabRules {
       ];
     }
 
+    // The item's current labels and assignees go on its own card in the same write as the update,
+    // so routes reading `item.labels` or `item.assignees` see them; a redelivery writes nothing.
+    const lists =
+      update?.type === 'work_item.updated' && input.item
+        ? currentLists(input.item, input.parsed.payload)
+        : undefined;
     const committed = await this.options.storage.commitRuleEvaluation({
       orgId: input.orgId,
       factoryProjectId: input.factoryProjectId,
@@ -1069,6 +1075,7 @@ export class GitLabRules {
       decisions,
       causalChain: [],
       now: new Date(),
+      ...(lists ? { cardMetadata: { userId: 'factory-rule-dispatcher', metadata: lists } } : {}),
     });
     if (committed.status === 'stale') {
       // Nothing was persisted: re-read the item and evaluate again at its fresh revision.
@@ -1079,36 +1086,32 @@ export class GitLabRules {
       if (input.item && !fresh) return { status: 'missing' };
       return this.#evaluate({ ...input, item: fresh ?? undefined }, attempt + 1);
     }
-    if (update?.type === 'work_item.updated' && input.item && committed.status !== 'missing') {
-      await this.#recordCurrentLists(input.item, object(input.parsed.payload.changes));
-    }
     return { status: committed.status };
   }
+}
 
-  /**
-   * Writes an item's current labels and assignees to its own card once its update is queued, so
-   * routes reading `item.labels` or `item.assignees` see them. A lost race leaves them for the
-   * next hook: the update itself is already queued.
-   */
-  async #recordCurrentLists(item: Card, changes: Record<string, unknown> | undefined): Promise<void> {
-    const labels = object(changes?.labels);
-    const assignees = object(changes?.assignees);
-    try {
-      await this.options.storage.syncCard({
-        orgId: item.orgId,
-        id: item.id,
-        userId: 'factory-rule-dispatcher',
-        patch: {
-          metadata: {
-            ...(labels ? { labels: labelNames(labels.current) } : {}),
-            ...(assignees ? { assignees: usernames(assignees.current) } : {}),
-          },
-        },
-      });
-    } catch (error) {
-      if (!(error instanceof WorkItemUpdateConflictError)) throw error;
-    }
+/**
+ * The labels and assignees a hook reports as current, with when GitLab changed them. A list from a
+ * hook older than the one that last wrote it is left out, so a late hook can't roll it back.
+ */
+function currentLists(item: Card, payload: Record<string, unknown>): Record<string, unknown> | undefined {
+  const changes = object(payload.changes);
+  const updatedAt = string(object(payload.object_attributes)?.updated_at);
+  const at = updatedAt === undefined ? Number.NaN : Date.parse(updatedAt);
+  const metadata: Record<string, unknown> = {};
+  for (const [list, names, key] of [
+    ['labels', labelNames, 'gitlabLabelsUpdatedAt'],
+    ['assignees', usernames, 'gitlabAssigneesUpdatedAt'],
+  ] as const) {
+    const change = object(changes?.[list]);
+    if (!change) continue;
+    const stored = item.metadata?.[key] ?? item.workItem.metadata?.[key];
+    const storedAt = typeof stored === 'string' ? Date.parse(stored) : Number.NaN;
+    if (!Number.isNaN(at) && !Number.isNaN(storedAt) && at < storedAt) continue;
+    metadata[list] = names(change.current);
+    if (!Number.isNaN(at)) metadata[key] = updatedAt;
   }
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
 export function attachGitLabRules(

@@ -1772,6 +1772,69 @@ describe('GitLab label and assignee changes on a card', () => {
   });
 });
 
+describe('GitLab label changes arriving again or out of order', () => {
+  async function labelledCard() {
+    const { seeded, project, service } = await setup();
+    const card = (
+      await seeded.workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'gitlab',
+            type: 'issue',
+            externalId: encodeIssueReference({ host: 'gitlab.example.com', projectId: PROJECT_ID, issueIid: 42 }),
+            url: 'https://gitlab.example.com/acme/app/-/issues/42',
+          },
+          title: 'Issue 42',
+          board: 'work',
+          stages: ['execute'],
+          sessions: {},
+          metadata: { labels: ['bug'] },
+        },
+      })
+    ).item;
+    const relabel = (deliveryId: string, updatedAt: string, previous: string[], current: string[]) => {
+      const delivery = issueOpened(deliveryId);
+      return service.ingest({
+        ...delivery,
+        payload: {
+          ...delivery.payload,
+          object_attributes: { ...delivery.payload.object_attributes, action: 'update', updated_at: updatedAt },
+          changes: {
+            labels: {
+              previous: previous.map(title => ({ title })),
+              current: current.map(title => ({ title })),
+            },
+          },
+        },
+      });
+    };
+    const labels = async () => (await seeded.workItems.get({ orgId: 'org-1', id: card.id }))!.workItem.labels;
+    return { relabel, labels };
+  }
+
+  it('keeps the newer labels when an earlier hook is delivered again', async () => {
+    const { relabel, labels } = await labelledCard();
+    await relabel('add-ship', '2030-01-01T00:00:01Z', ['bug'], ['bug', 'ship']);
+    await relabel('remove-ship', '2030-01-01T00:00:02Z', ['bug', 'ship'], ['bug']);
+
+    await expect(relabel('add-ship', '2030-01-01T00:00:01Z', ['bug'], ['bug', 'ship'])).resolves.toMatchObject({
+      status: 'replayed',
+    });
+    expect(await labels()).toEqual(['bug']);
+  });
+
+  it('keeps the newer labels when the earlier hook arrives after them', async () => {
+    const { relabel, labels } = await labelledCard();
+    await relabel('remove-ship', '2030-01-01T00:00:02Z', ['bug', 'ship'], ['bug']);
+    await relabel('add-ship', '2030-01-01T00:00:01Z', ['bug'], ['bug', 'ship']);
+
+    expect(await labels()).toEqual(['bug']);
+  });
+});
+
 describe('GitLab merge request changes on a card the merge request only shares a branch with', () => {
   it("sends no pull_request.updated to the card whose session builds on the merge request's branch", async () => {
     const { seeded, project, service } = await setup();

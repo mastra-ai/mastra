@@ -171,7 +171,27 @@ export interface CommitFactoryRuleEvaluationInput {
   now: Date;
   /** Consent-bearing actor behind the evaluation; their id pre-approves the skill runs it queues. */
   consentedBy?: string;
+  /**
+   * Card metadata written in the same transaction as the decisions, while the card is still at
+   * `expectedRevision`: what the evaluation saw of its source, so a change is never queued without
+   * being recorded, nor recorded over what a concurrent, newer evaluation saw. Otherwise `stale`.
+   */
+  cardMetadata?: { userId: string; metadata: Record<string, unknown> };
 }
+
+interface SyncCardInput {
+  orgId: string;
+  id: string;
+  userId: string;
+  patch: { title?: string; metadata?: Record<string, unknown> | null };
+  expectedSourceRevision?: number;
+  fillOnly?: boolean;
+  /** The card's revision the patch was worked out against: a card that moved on is refused. */
+  expectedRevision?: number;
+}
+
+/** Thrown inside a transaction to roll it back when the card is no longer at the revision a write expected. */
+class CardRevisionMoved extends Error {}
 
 export type CommitFactoryRuleEvaluationResult =
   | { status: 'committed'; result: Record<string, unknown> }
@@ -1716,86 +1736,84 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /** Apply source facts and their process stamps in one transaction. */
-  async syncCard({
-    orgId,
-    id,
-    userId,
-    patch,
-    expectedSourceRevision,
-    fillOnly = false,
-  }: {
-    orgId: string;
-    id: string;
-    userId: string;
-    patch: { title?: string; metadata?: Record<string, unknown> | null };
-    expectedSourceRevision?: number;
-    fillOnly?: boolean;
-  }): Promise<{ item: Card; previous: WorkItemPriorState } | null> {
-    return this.#withTransaction(async ops => {
-      let previous = emptyPrior();
-      let stamped: Date | undefined;
-      const row = await this.#cards(ops, { transaction: true }).updateAtomic({ org_id: orgId, id }, async current => {
-        previous = priorState(current);
-        const item = toWorkItem(current);
-        const source = primarySource(item);
-        if (this.#legacyMode || !source) {
-          const metadata = fillOnly
-            ? Object.fromEntries(
-                Object.entries(patch.metadata ?? {}).filter(([key]) => current.metadata?.[key] === undefined),
-              )
-            : patch.metadata;
-          if (fillOnly && patch.title === undefined && Object.keys(metadata ?? {}).length === 0) return null;
-          return applyUpdate({ current, userId, input: { ...patch, metadata } });
-        }
-        const adapter = workItemProviderAdapter(item.externalSource);
-        const split = splitCardMetadata(patch.metadata, adapter.providerMetadataKeys);
-        if (Object.keys(split.provider ?? {}).length > 0) {
-          stamped = await this.#syncWorkItemSource(ops, {
-            orgId,
-            factoryProjectId: item.factoryProjectId,
-            provider: source.provider,
-            externalId: source.externalId,
-            expectedRevision: expectedSourceRevision,
-            patch: currentSource => {
-              const providerPatch = fillOnly
-                ? Object.fromEntries(
-                    Object.entries(split.provider ?? {}).filter(([key]) => currentSource.metadata?.[key] === undefined),
-                  )
-                : split.provider;
-              if (fillOnly && Object.keys(providerPatch ?? {}).length === 0) return null;
-              const facts = adapter.toSource(item.externalSource, { ...currentSource.metadata, ...providerPatch });
-              if (!facts) throw new Error('An external source must produce provider facts.');
-              return {
-                key: facts.key,
-                url: facts.url,
-                state: facts.state,
-                labels: facts.labels,
-                author: facts.author,
-                metadata: facts.metadata,
-              };
-            },
-          });
-        }
-        const boardPatch = Object.fromEntries(
-          Object.entries(split.board ?? {}).filter(([key, value]) =>
-            fillOnly
-              ? item.metadata?.[key] === undefined
-              : JSON.stringify(item.metadata?.[key]) !== JSON.stringify(value),
-          ),
-        );
-        if (patch.title === undefined && Object.keys(boardPatch).length === 0) return null;
-        return applyUpdate({
-          current,
-          userId,
-          input: { ...(patch.title !== undefined ? { title: patch.title } : {}), metadata: boardPatch },
+  async syncCard(input: SyncCardInput): Promise<{ item: Card; previous: WorkItemPriorState } | null> {
+    try {
+      return await this.#withTransaction(ops => this.#syncCardIn(ops, input));
+    } catch (error) {
+      if (error instanceof CardRevisionMoved) throw new WorkItemUpdateConflictError('revision');
+      throw error;
+    }
+  }
+
+  /** `syncCard` inside a transaction; `expectedRevision` makes it throw `CardRevisionMoved` if the card moved on. */
+  async #syncCardIn(
+    ops: FactoryStorageOps,
+    { orgId, id, userId, patch, expectedSourceRevision, fillOnly = false, expectedRevision }: SyncCardInput,
+  ): Promise<{ item: Card; previous: WorkItemPriorState } | null> {
+    let previous = emptyPrior();
+    let stamped: Date | undefined;
+    const row = await this.#cards(ops, { transaction: true }).updateAtomic({ org_id: orgId, id }, async current => {
+      if (expectedRevision !== undefined && current.revision !== expectedRevision) throw new CardRevisionMoved();
+      previous = priorState(current);
+      const item = toWorkItem(current);
+      const source = primarySource(item);
+      if (this.#legacyMode || !source) {
+        const metadata = fillOnly
+          ? Object.fromEntries(
+              Object.entries(patch.metadata ?? {}).filter(([key]) => current.metadata?.[key] === undefined),
+            )
+          : patch.metadata;
+        if (fillOnly && patch.title === undefined && Object.keys(metadata ?? {}).length === 0) return null;
+        return applyUpdate({ current, userId, input: { ...patch, metadata } });
+      }
+      const adapter = workItemProviderAdapter(item.externalSource);
+      const split = splitCardMetadata(patch.metadata, adapter.providerMetadataKeys);
+      if (Object.keys(split.provider ?? {}).length > 0) {
+        stamped = await this.#syncWorkItemSource(ops, {
+          orgId,
+          factoryProjectId: item.factoryProjectId,
+          provider: source.provider,
+          externalId: source.externalId,
+          expectedRevision: expectedSourceRevision,
+          patch: currentSource => {
+            const providerPatch = fillOnly
+              ? Object.fromEntries(
+                  Object.entries(split.provider ?? {}).filter(([key]) => currentSource.metadata?.[key] === undefined),
+                )
+              : split.provider;
+            if (fillOnly && Object.keys(providerPatch ?? {}).length === 0) return null;
+            const facts = adapter.toSource(item.externalSource, { ...currentSource.metadata, ...providerPatch });
+            if (!facts) throw new Error('An external source must produce provider facts.');
+            return {
+              key: facts.key,
+              url: facts.url,
+              state: facts.state,
+              labels: facts.labels,
+              author: facts.author,
+              metadata: facts.metadata,
+            };
+          },
         });
+      }
+      const boardPatch = Object.fromEntries(
+        Object.entries(split.board ?? {}).filter(([key, value]) =>
+          fillOnly
+            ? item.metadata?.[key] === undefined
+            : JSON.stringify(item.metadata?.[key]) !== JSON.stringify(value),
+        ),
+      );
+      if (patch.title === undefined && Object.keys(boardPatch).length === 0) return null;
+      return applyUpdate({
+        current,
+        userId,
+        input: { ...(patch.title !== undefined ? { title: patch.title } : {}), metadata: boardPatch },
       });
-      if (!row) return null;
-      const item = toWorkItem(row);
-      // `row` was read before the source's sync stamped it; a write of the card itself stamps later.
-      const changedAt = stamped && !(item.changedAt && item.changedAt > stamped) ? stamped : item.changedAt;
-      return { item: { ...item, changedAt }, previous };
     });
+    if (!row) return null;
+    const item = toWorkItem(row);
+    // `row` was read before the source's sync stamped it; a write of the card itself stamps later.
+    const changedAt = stamped && !(item.changedAt && item.changedAt > stamped) ? stamped : item.changedAt;
+    return { item: { ...item, changedAt }, previous };
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -2586,6 +2604,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         // A lost revision race is not a verdict on the event: persisting it would
         // make every redelivery replay an empty result, so record nothing.
         if (item !== null && item.revision !== input.expectedRevision) return { status: 'stale' as const };
+        if (item !== null && input.cardMetadata && input.expectedRevision !== null) {
+          await this.#syncCardIn(ops, {
+            orgId: input.orgId,
+            id: item.id,
+            userId: input.cardMetadata.userId,
+            patch: { metadata: input.cardMetadata.metadata },
+            expectedRevision: input.expectedRevision,
+          });
+        }
         const outcome = input.outcome.status;
         const code = input.outcome.code ?? null;
         const reason = input.outcome.reason ?? null;
@@ -2637,11 +2664,20 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         }
         return { status: 'committed' as const, result };
       });
+    const attempt = async (): Promise<CommitFactoryRuleEvaluationResult> => {
+      try {
+        return await commit();
+      } catch (error) {
+        // Another write moved the card between the revision check and the locked card write.
+        if (error instanceof CardRevisionMoved) return { status: 'stale' };
+        throw error;
+      }
+    };
     try {
-      return await commit();
+      return await attempt();
     } catch (error) {
       if (!(error instanceof UniqueViolationError)) throw error;
-      return commit();
+      return attempt();
     }
   }
 

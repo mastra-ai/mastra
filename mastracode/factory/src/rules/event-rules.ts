@@ -242,52 +242,81 @@ export async function commitObservedChange(
   },
 ): Promise<CardUpdateStatus> {
   const assignees = input.assignee ? [input.assignee] : [];
-  const seen = observedItem(input.item);
-  // A late or replayed sighting older than the one recorded would report its change in reverse.
   const observedAt = Date.parse(input.observedAt);
-  if (seen?.observedAt !== undefined && observedAt < seen.observedAt) return 'unchanged';
-  const change = seen && {
-    labels: listChange(seen.labels, input.labels),
-    assignees: listChange(seen.assignees, assignees),
+  const metadata = {
+    ...input.metadata,
+    labels: [...input.labels],
+    assignees,
+    assignee: input.assignee,
+    [OBSERVED_ITEM_METADATA_KEY]: { labels: [...input.labels], assignees, observedAt: input.observedAt },
   };
-  if (change && [change.labels, change.assignees].every(side => !side.added.length && !side.removed.length)) {
-    return 'unchanged';
-  }
-  // Queued before the new labels and assignees are recorded as seen: if queueing fails, the next
-  // sighting still diffs against the old ones and hands the change over.
-  const status = change
-    ? await commitCardUpdate(storage, {
+  let item = input.item;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const seen = observedItem(item);
+    // A late or replayed sighting older than the one recorded would report its change in reverse.
+    if (seen?.observedAt !== undefined && observedAt < seen.observedAt) return 'unchanged';
+    // The sighting already recorded: nothing to hand over, nothing new to record.
+    if (
+      seen?.observedAt === observedAt &&
+      sameNames(seen.labels, input.labels) &&
+      sameNames(seen.assignees, assignees)
+    ) {
+      return 'unchanged';
+    }
+    const event =
+      seen &&
+      updateEventFacts('work_item.updated', {
+        labels: listChange(seen.labels, input.labels),
+        assignees: listChange(seen.assignees, assignees),
+      });
+    // Both writes hold only while the card is at the revision this diff was worked out against,
+    // so a concurrent sighting can't record over (or report against) what this one saw.
+    if (!event) {
+      // Nothing to hand over, but the sighting is still recorded, so an older one arriving later is ignored.
+      try {
+        await storage.syncCard({
+          orgId: input.orgId,
+          id: item.id,
+          userId: CARD_SYNC_USER_ID,
+          patch: { metadata },
+          expectedRevision: item.revision,
+        });
+        return 'unchanged';
+      } catch (error) {
+        if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+      }
+    } else {
+      // Queued and recorded as seen in one write: a failure leaves neither, so the next sighting hands it over.
+      const identity = `${input.ingressId}:update`;
+      const committed = await storage.commitRuleEvaluation({
         orgId: input.orgId,
         factoryProjectId: input.factoryProjectId,
-        item: input.item,
-        ingress: { identity: `${input.ingressId}:update`, triggerType: input.triggerType },
+        workItemId: item.id,
+        ingress: { identity, triggerType: input.triggerType },
         configVersion: input.configVersion,
+        expectedRevision: item.revision,
         actor: input.actor,
-        event: updateEventFacts('work_item.updated', change),
-        fromCardSession: false,
-      })
-    : 'unchanged';
-  if (status === 'ignored') return status;
-  try {
-    await storage.syncCard({
-      orgId: input.orgId,
-      id: input.item.id,
-      userId: 'factory-rule-dispatcher',
-      patch: {
-        metadata: {
-          ...input.metadata,
-          labels: [...input.labels],
-          assignees,
-          assignee: input.assignee,
-          [OBSERVED_ITEM_METADATA_KEY]: { labels: [...input.labels], assignees, observedAt: input.observedAt },
-        },
-      },
-    });
-  } catch (error) {
-    // A concurrent write won; the change is queued, and the next sighting diffs against what it left.
-    if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+        outcome: { status: 'accepted' },
+        decisions: [{ ...cardUpdateDecision(identity, event, false) }],
+        causalChain: [],
+        now: new Date(),
+        cardMetadata: { userId: CARD_SYNC_USER_ID, metadata },
+      });
+      if (committed.status === 'committed' || committed.status === 'replayed') return committed.status;
+      if (committed.status === 'missing') return 'ignored';
+    }
+    // Another write moved the card: diff again against what it left.
+    const current = await storage.get({ orgId: input.orgId, id: item.id });
+    if (!current) return 'ignored';
+    item = current;
   }
-  return status;
+  return 'ignored';
+}
+
+const CARD_SYNC_USER_ID = 'factory-rule-dispatcher';
+
+function sameNames(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((name, index) => name === b[index]);
 }
 
 /**
