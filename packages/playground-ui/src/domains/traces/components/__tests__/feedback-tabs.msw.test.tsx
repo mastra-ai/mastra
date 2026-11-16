@@ -148,6 +148,56 @@ describe('feedback tabs composer', () => {
   });
 });
 
+describe('feedback tabs pending comment', () => {
+  it.each(['trace', 'span'])(
+    'shows a %s comment the list does not return yet as sending, without actions',
+    async scope => {
+      // The POST is accepted but the list never returns the row (eventually consistent storage).
+      server.use(
+        http.get(FEEDBACK_URL, () => HttpResponse.json(listFeedbackResponse([]))),
+        http.post(FEEDBACK_URL, () => HttpResponse.json({ success: true })),
+      );
+      render(
+        scope === 'span' ? (
+          <SpanFeedbackTab traceId={TRACE_ID} spanId={SPAN_ID} />
+        ) : (
+          <TraceFeedbackTab traceId={TRACE_ID} />
+        ),
+        { wrapper },
+      );
+      await screen.findByText('No feedback yet');
+
+      submit('not stored yet');
+
+      await screen.findByText('not stored yet');
+      expect(screen.getByText('Sending…')).toBeTruthy();
+      expect(screen.queryByText('Needs review')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Feedback actions' })).toBeNull();
+    },
+  );
+
+  it('gives the comment its actions once the list returns it', async () => {
+    let stored: ReturnType<typeof feedbackRecord>[] = [];
+    server.use(
+      http.get(FEEDBACK_URL, () => HttpResponse.json(listFeedbackResponse(stored))),
+      http.post(FEEDBACK_URL, async ({ request }) => {
+        const { feedback } = (await request.json()) as { feedback: { feedbackId: string } };
+        stored = [feedbackRecord({ feedbackId: feedback.feedbackId, feedbackType: 'comment', value: 'now stored' })];
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
+    await screen.findByText('No feedback yet');
+
+    submit('now stored');
+
+    // The post-submit refetch returns the stored record, which replaces the pending one.
+    await screen.findByRole('button', { name: 'Feedback actions' });
+    expect(screen.getAllByText('now stored')).toHaveLength(1);
+    expect(screen.queryByText('Sending…')).toBeNull();
+  });
+});
+
 describe('feedback tabs delete', () => {
   it('confirms a span feedback deletion, shows its pending state, and refetches the list', async () => {
     const onDelete = vi.fn<(body: unknown) => void>();

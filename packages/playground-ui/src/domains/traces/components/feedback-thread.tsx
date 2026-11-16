@@ -1,4 +1,5 @@
-import type { FeedbackItem, ListFeedbackResponse } from '@mastra/client-js';
+import type { FeedbackItem } from '@mastra/client-js';
+import type { FeedbackListItem, FeedbackListResponse } from '@mastra/react/hooks/feedback';
 import { useState } from 'react';
 import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
 import { feedbackAuthorLabel } from '@/domains/traces/utils/feedback-author';
@@ -32,7 +33,8 @@ import { TrashIcon } from '@/ds/icons/TrashIcon';
 import { formatDate } from '@/utils/date-format';
 
 type FeedbackThreadProps = {
-  feedbackData?: ListFeedbackResponse | null;
+  /** Rows flagged `isPending` are not stored yet: they show "Sending…" and get no actions. */
+  feedbackData?: FeedbackListResponse | null;
   isLoadingFeedbackData?: boolean;
   onPageChange?: (page: number) => void;
   /** Rejecting (or throwing) keeps the draft in the composer so it can be retried. */
@@ -72,7 +74,7 @@ function formatBody(fb: FeedbackItem): string {
 
 type FeedbackItemsProps = Pick<FeedbackThreadProps, 'onMarkReviewed' | 'pendingFeedbackId'> & {
   variant: CommentVariant;
-  items: FeedbackItem[];
+  items: FeedbackListItem[];
   onRequestDelete?: (feedbackId: string) => void;
   isDeleting: boolean;
 };
@@ -94,9 +96,16 @@ function FeedbackItems({
       <CommentItemTimestamp dateTime={ts.toISOString()}>{formatDate(ts, 'date-time')}</CommentItemTimestamp>
     );
     const feedbackId = fb.feedbackId;
-    const status = <FeedbackReviewStatusBadge status={fb.reviewStatus} />;
-    const canMarkReviewed = Boolean(onMarkReviewed && feedbackId && fb.reviewStatus !== 'reviewed');
-    const canDelete = Boolean(onRequestDelete && feedbackId);
+    // A pending comment has no stored record yet, so there is nothing to review or delete.
+    const status = fb.isPending ? (
+      <Txt as="span" variant="meta" tone="muted" data-slot="feedback-pending">
+        Sending…
+      </Txt>
+    ) : (
+      <FeedbackReviewStatusBadge status={fb.reviewStatus} />
+    );
+    const canMarkReviewed = Boolean(onMarkReviewed && feedbackId && !fb.isPending && fb.reviewStatus !== 'reviewed');
+    const canDelete = Boolean(onRequestDelete && feedbackId && !fb.isPending);
     const actions = feedbackId && (canMarkReviewed || canDelete) && (
       <CommentItemActions>
         <DropdownMenu>

@@ -14,14 +14,21 @@ import { useEffect, useMemo } from 'react';
  */
 
 type ListFeedbackResponse = Awaited<ReturnType<MastraClient['listFeedback']>>;
-export type FeedbackListItem = ListFeedbackResponse['feedback'][number];
+type ServerFeedbackItem = ListFeedbackResponse['feedback'][number];
+
+/**
+ * A row of `useTraceFeedback` / `useSpanFeedback`. `isPending` marks a comment shown before the
+ * server returns it: it has no stored record yet, so review/delete actions should not target it.
+ */
+export type FeedbackListItem = ServerFeedbackItem & { isPending?: boolean };
+export type FeedbackListResponse = Omit<ListFeedbackResponse, 'feedback'> & { feedback: FeedbackListItem[] };
 
 /** How long a pending comment stays visible if the server never returns it (e.g. a lost write). */
 export const OPTIMISTIC_FEEDBACK_TTL_MS = 60_000;
 
-type PendingFeedback = { item: FeedbackListItem; expiresAt: number };
+type PendingFeedback = { item: ServerFeedbackItem; expiresAt: number };
 
-const NO_PENDING: FeedbackListItem[] = [];
+const NO_PENDING: ServerFeedbackItem[] = [];
 
 const pendingFeedbackKey = (traceId: string, spanId?: string) => ['feedback-optimistic', traceId, spanId || null];
 
@@ -40,7 +47,7 @@ function removePendingFeedback(
 
 export function addPendingFeedback(
   queryClient: QueryClient,
-  { traceId, spanId, item }: { traceId: string; spanId?: string; item: FeedbackListItem },
+  { traceId, spanId, item }: { traceId: string; spanId?: string; item: ServerFeedbackItem },
 ) {
   queryClient.setQueryData<PendingFeedback[]>(pendingFeedbackKey(traceId, spanId), (entries = []) => [
     ...entries.filter(entry => entry.item.feedbackId !== item.feedbackId),
@@ -55,13 +62,19 @@ export function discardPendingFeedback(
   removePendingFeedback(queryClient, traceId, spanId, entry => entry.item.feedbackId === feedbackId);
 }
 
-const timeOf = (item: FeedbackListItem) => new Date(item.timestamp).getTime();
+const timeOf = (item: ServerFeedbackItem) => new Date(item.timestamp).getTime();
 
-/** Prepends pending comments the server does not return yet (newest first) and counts them in the total. */
-export function mergePendingFeedback(data: ListFeedbackResponse, pending: FeedbackListItem[]): ListFeedbackResponse {
+/**
+ * Prepends pending comments the server does not return yet (newest first, flagged `isPending`)
+ * and counts them in the total.
+ */
+export function mergePendingFeedback(data: ListFeedbackResponse, pending: ServerFeedbackItem[]): FeedbackListResponse {
   if (pending.length === 0) return data;
   const serverIds = new Set(data.feedback.map(item => item.feedbackId));
-  const missing = pending.filter(item => !serverIds.has(item.feedbackId)).sort((a, b) => timeOf(b) - timeOf(a));
+  const missing = pending
+    .filter(item => !serverIds.has(item.feedbackId))
+    .sort((a, b) => timeOf(b) - timeOf(a))
+    .map(item => ({ ...item, isPending: true }));
   if (missing.length === 0) return data;
   return {
     ...data,
@@ -89,7 +102,7 @@ export function usePendingFeedback({
   traceId: string;
   spanId?: string;
   enabled: boolean;
-}): FeedbackListItem[] {
+}): ServerFeedbackItem[] {
   const queryClient = useQueryClient();
   const queryKey = pendingFeedbackKey(traceId, spanId);
   // Read-only view of a client-side cache entry written by useCreateFeedback; never fetched.

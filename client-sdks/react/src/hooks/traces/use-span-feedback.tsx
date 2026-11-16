@@ -6,6 +6,7 @@ import { useCallback } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
 import { getFeedbackRefetchInterval } from '../feedback/feedback-refetch-interval';
 import { mergePendingFeedback, settlePendingFeedback, usePendingFeedback } from '../feedback/optimistic-feedback';
+import type { FeedbackListResponse } from '../feedback/optimistic-feedback';
 import type { MastraQueryOptions } from '../shared/query-options';
 
 type SpanFeedbackResponse = Awaited<ReturnType<MastraClient['listFeedback']>>;
@@ -25,7 +26,7 @@ type UseSpanFeedbackProps<TData> = {
  *
  * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
  */
-export const useSpanFeedback = <TData = SpanFeedbackResponse,>({
+export const useSpanFeedback = <TData = FeedbackListResponse,>({
   traceId = '',
   spanId = '',
   page,

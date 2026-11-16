@@ -5,6 +5,7 @@ import { useCallback } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
 import { getFeedbackRefetchInterval } from '../feedback/feedback-refetch-interval';
 import { mergePendingFeedback, settlePendingFeedback, usePendingFeedback } from '../feedback/optimistic-feedback';
+import type { FeedbackListResponse } from '../feedback/optimistic-feedback';
 import type { MastraQueryOptions } from '../shared/query-options';
 
 type TraceFeedbackResponse = Awaited<ReturnType<MastraClient['listFeedback']>>;
@@ -22,7 +23,7 @@ type UseTraceFeedbackProps<TData> = {
  *
  * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
  */
-export const useTraceFeedback = <TData = TraceFeedbackResponse,>({
+export const useTraceFeedback = <TData = FeedbackListResponse,>({
   traceId = '',
   page,
   queryOptions,
@@ -39,7 +40,7 @@ export const useTraceFeedback = <TData = TraceFeedbackResponse,>({
     (data: TraceFeedbackResponse) => {
       const merged = mergePendingFeedback(data, pending);
       const feedback = merged.feedback.filter(item => !item.spanId);
-      const traceLevel: TraceFeedbackResponse = merged.pagination
+      const traceLevel: FeedbackListResponse = merged.pagination
         ? { ...merged, feedback, pagination: { ...merged.pagination, total: feedback.length } }
         : { ...merged, feedback };
       return callerSelect ? callerSelect(traceLevel) : (traceLevel as TData);
