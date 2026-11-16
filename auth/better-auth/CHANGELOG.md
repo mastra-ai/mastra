@@ -1,5 +1,12 @@
 # @mastra/auth-better-auth
 
+## 1.1.12-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#30464](https://github.com/mastra-ai/mastra/pull/30464))
+  - Updated dependency [`better-auth@^1.7.22` ↗︎](https://www.npmjs.com/package/better-auth/v/1.7.22) (from `^1.7.18`, in `dependencies`)
+
 ## 1.1.11
 
 ### Patch Changes

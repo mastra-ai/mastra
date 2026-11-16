@@ -1,5 +1,14 @@
 # @mastra/client-js
 
+## 1.60.1-alpha.3
+
+### Patch Changes
+
+- Stop the JavaScript client from repeating state-changing requests by default. A failed `POST`, `PUT`, `PATCH`, or `DELETE` is now sent a single time, so a server error cannot duplicate a side effect such as an agent generation or workflow start. Read requests (`GET`, `HEAD`, `OPTIONS`) still retry three times, and the observability queries that only read server state keep that read default even though they travel as `POST`: `aggregateTraces()`, `aggregateSpans()`, `queryTraceThreads()`, and `querySpans()`. Any other request retries again when `retries` is set explicitly on the client or the call. ([#30434](https://github.com/mastra-ai/mastra/pull/30434))
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b)]:
+  - @mastra/core@1.84.0-alpha.3
+
 ## 1.60.1-alpha.2
 
 ### Patch Changes
