@@ -809,6 +809,97 @@ describeForAllEngines(
       expect(seenOnResume).toEqual([{ awaiting: 'analyst-approval', topic: 'near' }]);
     }, 30_000);
 
+    // Technical: two deferred tools from one turn share the finished run's claim. Answering the
+    // first finishes it and wakes the agent to report it, which runs on the thread again. The
+    // second tool's late suspend still carries the first run's claim and must still park. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      'parks the second of two deferred tools after the first was answered and reported (#30182)',
+      async () => {
+        let releaseAlpha!: () => void;
+        let releaseBeta!: () => void;
+        const gates: Record<string, Promise<void>> = {
+          alpha: new Promise<void>(resolve => (releaseAlpha = resolve)),
+          beta: new Promise<void>(resolve => (releaseBeta = resolve)),
+        };
+        const memory = new MockMemory();
+        const thread = { threadId: 'bg-suspend-sibling-thread', resourceId: 'bg-suspend-sibling-user' };
+        const prompt = 'Research alpha and beta';
+        const tool = createTool({
+          id: 'research-with-approval',
+          description: 'Research a topic after analyst approval',
+          inputSchema: z.object({ topic: z.string() }),
+          outputSchema: z.object({ summary: z.string() }),
+          background: { enabled: true },
+          execute: async ({ topic }, options) => {
+            const resumeData = options?.agent?.resumeData as { notes?: string } | undefined;
+            if (!resumeData) {
+              await gates[topic];
+              return options?.agent?.suspend?.({ awaiting: 'analyst-approval', topic }) as any;
+            }
+            return { summary: `Research on "${topic}": ${resumeData.notes}` };
+          },
+        });
+        const { chunks, mastra, output } = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt,
+          tools: { researchWithApproval: tool },
+          agentBackgroundTasks: { tools: { researchWithApproval: true } },
+          backgroundTasks: BG_CONFIG,
+          memory,
+          ...thread,
+          stopWhen: stepCountIs(3),
+          collectChunks: true,
+          fixtures: llm =>
+            onReportTurns(llm, prompt, {
+              dispatch: {
+                toolCalls: [
+                  { id: 'call-bg-1', name: 'researchWithApproval', arguments: { topic: 'alpha' } },
+                  { id: 'call-bg-2', name: 'researchWithApproval', arguments: { topic: 'beta' } },
+                ],
+              },
+              ack: 'Waiting for the analyst.',
+              report: 'Alpha answered.',
+            }),
+        });
+        expect(await output.text).toBe('Waiting for the analyst.');
+        const manager = mastra.backgroundTaskManager!;
+        const started = chunks!.filter(c => c.type === 'background-task-started') as Array<Chunk & { runId: string }>;
+        expect(started).toHaveLength(2);
+        const tasks = await Promise.all(started.map(c => manager.getTask(c.payload.taskId as string)));
+        const taskFor = (topic: string) => tasks.find(t => (t?.args as { topic?: string })?.topic === topic)!.id;
+        const alpha = taskFor('alpha');
+        const beta = taskFor('beta');
+        await waitForRunToRelease(mastra, started[0].runId);
+
+        releaseAlpha();
+        await waitFor(
+          () => manager.getTask(alpha),
+          (t: any) => t?.status === 'suspended',
+        );
+        await manager.resume(alpha, { notes: 'looks promising' });
+        await waitFor(
+          () => manager.getTask(alpha),
+          (t: any) => t?.status === 'completed',
+        );
+        // The wake run reported the first tool and ended.
+        await waitFor(storedText(memory, thread), s => s.includes('Alpha answered.'));
+        await waitForRunToRelease(mastra, started[0].runId);
+
+        releaseBeta();
+        const parked = (await waitFor(
+          () => manager.getTask(beta),
+          (t: any) => t?.status !== 'pending' && t?.status !== 'running',
+        )) as any;
+        expect({ status: parked.status, error: parked.error?.message }).toEqual({
+          status: 'suspended',
+          error: undefined,
+        });
+        expect(parked.suspendPayload).toEqual({ awaiting: 'analyst-approval', topic: 'beta' });
+      },
+      30_000,
+    );
+
     // Technical: the late suspend above is only allowed while no other execution has claimed the
     // run. Once a successor claims it, the old execution's suspension must not reach memory or
     // park the task, and the successor's claim must stay as it was. (#30182)
@@ -1147,43 +1238,23 @@ describeForAllEngines(
       30_000,
     );
 
-    // Resolves once the next ownership read after this call has returned, which is the late
-    // suspend's check when nothing else reads the record meanwhile.
-    function nextOwnershipRead() {
-      let signalRead!: () => void;
-      const read = new Promise<void>(resolve => (signalRead = resolve));
-      const getRunOwnership = WorkflowsInMemory.prototype.getRunOwnership;
-      const spy = vi
-        .spyOn(WorkflowsInMemory.prototype, 'getRunOwnership')
-        .mockImplementation(async function (this: WorkflowsInMemory, args) {
-          try {
-            return await getRunOwnership.call(this, args);
-          } finally {
-            signalRead();
-          }
-        });
-      onTestFinished(() => spy.mockRestore());
-      return read;
-    }
-
     // Technical: settlement releases the claim, and only once storage's release call returns
-    // does the run count as released. The late suspend checked ownership in between: storage
+    // did the run count as released. The late suspend checked ownership in between: storage
     // already showed the claim released, so the strict check failed and marked the execution
-    // lost though nobody had taken over, and the task failed before it suspended. (#30182)
+    // lost though nobody had taken over. Waiting for the release's reply instead left the task
+    // running for as long as that reply took, forever on a stalled connection. Here the reply is
+    // held until the task has settled. (#30182)
     it.runIf(isDurableEngineVariant(engine))(
-      'parks a deferred tool that asks for input while the finished run is still releasing its claim (#30182)',
+      "parks a deferred tool that asks for input while the finished run's claim release has not returned (#30182)",
       async () => {
         const run = await startResearchDuringCleanup('bg-suspend-during-claim-release-thread', {
           hold: 'claim-release',
         });
         const released = await run.workflows.getRunOwnership({ runId: run.runId });
         expect(released?.live).toBe(false);
-        const checked = nextOwnershipRead();
         run.release();
         try {
-          // The suspend read the released claim while the release was still in flight.
-          await checked;
-          run.finishCleanup();
+          // The release's reply is still held: the task settles without it.
           const parked = await run.settledTask();
           expect({ status: parked.status, error: parked.error?.message }).toEqual({
             status: 'suspended',
@@ -1208,11 +1279,11 @@ describeForAllEngines(
       30_000,
     );
 
-    // Technical: waiting out an in-flight release must not let a superseded execution through:
-    // a successor that claimed the run during the release still makes the late suspend fail
-    // without writing. (#30182)
+    // Technical: accepting a late suspend before the release's reply returns must not let a
+    // superseded execution through: a successor that claimed the run during the release still
+    // makes the late suspend fail without writing. (#30182)
     it.runIf(isDurableEngineVariant(engine))(
-      "doesn't park a deferred tool that asks for input after another execution took over a run still releasing its claim (#30182)",
+      "doesn't park a deferred tool that asks for input after another execution took over a run whose claim release has not returned (#30182)",
       async () => {
         const run = await startResearchDuringCleanup('bg-suspend-claim-release-takeover-thread', {
           hold: 'claim-release',
@@ -1225,11 +1296,8 @@ describeForAllEngines(
           expectedGeneration: released!.generation,
         });
         expect(successor.acquired).toBe(true);
-        const checked = nextOwnershipRead();
         run.release();
         try {
-          await checked;
-          run.finishCleanup();
           const settled = await run.settledTask();
           expect({ status: settled.status, error: settled.error?.message }).toEqual({
             status: 'failed',
@@ -1535,9 +1603,10 @@ describeForAllEngines(
 
     // Technical: the same in-flight release as above, on the worker's participant fence: an
     // evented worker on a shared transport releases the run's claim itself, and a late suspend
-    // that read the released claim before that release returned marked the execution lost. (#30182)
+    // that read the released claim before that release returned marked the execution lost, or
+    // waited on the release's reply. The reply is held until the task has settled. (#30182)
     it.runIf(engine === 'evented')(
-      'parks a deferred tool that asks for input while a shared evented run is still releasing its claim (#30182)',
+      "parks a deferred tool that asks for input while a shared evented run's claim release has not returned (#30182)",
       async () => {
         const directory = await mkdtemp(join(tmpdir(), 'mastra-30182-'));
         const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
@@ -1546,11 +1615,8 @@ describeForAllEngines(
           pubsub,
         });
         const released = await run.workflows.getRunOwnership({ runId: run.runId });
-        const checked = nextOwnershipRead();
         run.release();
         try {
-          await checked;
-          run.finishCleanup();
           const parked = await run.settledTask();
           expect({ status: parked.status, error: parked.error?.message }).toEqual({
             status: 'suspended',

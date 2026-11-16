@@ -1221,10 +1221,10 @@ function holdNextCall<T extends object, K extends keyof T & string>(
 }
 
 // A background task can write after its run settled: `verifyNotSuperseded` is the check for those
-// writes. Before the claim is released it is `verify`; after, it only refuses once another
-// execution claimed the run. While the release is in flight, a check that fails waits for the
-// release before deciding. Storage can also show a release this fence didn't make or couldn't
-// confirm; a lease can't tell a release from a lapse (#30182).
+// writes. With ownership in storage it only refuses once another execution claimed the run, released
+// or lapsed or not, and never waits for a release in flight. A lease can't tell a release from a lapse
+// that another execution claimed and released since, so a lease-backed claim is `verify` until a
+// release of it starts here (#30182).
 describe.each([
   {
     backend: 'storage',
@@ -1241,7 +1241,8 @@ describe.each([
       const own = { runId: 'run-1', generation: fence.generation!, ownerId: fence.executionId };
       return {
         fence,
-        showsRelease: true,
+        // Storage keeps the claim's generation: a lapse or a release it didn't see still accepts the write.
+        storageBacked: true,
         dropClaim: async () => void (await workflowsStore.releaseRunOwnership(own)),
         // The store lost the claim's record: nobody can say who holds the run.
         loseClaim: () => workflowsStore.dangerouslyClearAll(),
@@ -1270,7 +1271,7 @@ describe.each([
       const fence = await claim(pubsub, 'run-1');
       return {
         fence,
-        showsRelease: false,
+        storageBacked: false,
         dropClaim: () => pubsub.releaseLease(key('run-1'), fence.executionId),
         loseClaim: () => pubsub.releaseLease(key('run-1'), fence.executionId),
         failRenewals: () => vi.spyOn(pubsub, 'renewLease').mockRejectedValue(new Error('redis unreachable')),
@@ -1283,16 +1284,24 @@ describe.each([
     },
   },
 ])('ExecutionFence.verifyNotSuperseded ($backend)', ({ setup }) => {
-  it('before settlement, is verify: passes while owned, and refuses a claim that expired though nobody took it', async () => {
+  it('before settlement, passes while owned; after the claim expired, passes only when storage holds the claim', async () => {
     vi.useFakeTimers();
-    const { fence, failRenewals } = await setup();
+    const { fence, failRenewals, claimSuccessor, storageBacked } = await setup();
     await expect(fence.verifyNotSuperseded()).resolves.toBeUndefined();
 
     // Renewals can't reach the backend until the claim's lease runs out.
     failRenewals();
     await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS + EXECUTION_LEASE_RENEW_INTERVAL_MS);
     expect(fence.isLost()).toBe(true);
-    await expect(fence.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_UNVERIFIED_ERROR_ID });
+    if (storageBacked) {
+      // Nobody claimed the run, so storage would still accept the claim's write.
+      await expect(fence.verifyNotSuperseded()).resolves.toBeUndefined();
+      await claimSuccessor();
+      await expect(fence.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+    } else {
+      // Without a release here, a missing lease may be one another execution claimed and released: verify's rule.
+      await expect(fence.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_UNVERIFIED_ERROR_ID });
+    }
   });
 
   it('after settlement released the claim, passes while no other execution claimed the run', async () => {
@@ -1318,23 +1327,24 @@ describe.each([
     // The claim is still held, so the check passes as verify would.
     await expect(fence.verifyNotSuperseded()).resolves.toBeUndefined();
 
-    // The unreleased claim is gone with nobody shown taking the run: verify's rule, not the post-release one.
+    // The unreleased claim is gone and nothing shows who holds the run now: storage lost the record,
+    // and a lease without a release here gets verify's rule.
     await loseClaim();
     await expect(fence.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
     expect(fence.isLost()).toBe(true);
   });
 
-  it('while settlement is releasing the claim, waits for the release and passes while no other execution claimed the run', async () => {
+  it("while settlement is releasing the claim, passes without waiting for the release's reply while no other execution claimed the run", async () => {
     const { fence, holdNextRelease } = await setup();
     const release = holdNextRelease();
     const settled = fence.settle(async () => {});
     await release.applied;
 
-    // The backend already shows the claim released; the strict check alone would mark the execution lost.
-    const check = fence.verifyNotSuperseded();
-    release.finish();
-    await expect(check).resolves.toBeUndefined();
+    // The backend already shows the claim released and its reply is still held, as on a stalled
+    // connection: the check neither marks the execution lost nor waits for the reply.
+    await expect(fence.verifyNotSuperseded()).resolves.toBeUndefined();
     expect(fence.isLost()).toBe(false);
+    release.finish();
     expect(await settled).toBe('owned');
   });
 
@@ -1345,31 +1355,31 @@ describe.each([
     await release.applied;
     await claimSuccessor();
 
-    const check = fence.verifyNotSuperseded();
+    await expect(fence.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
     release.finish();
-    await expect(check).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
     await settled;
   });
 
-  it('when the release in flight fails, passes only if the backend shows this claim released', async () => {
-    const { fence, dropClaim, holdNextRelease, showsRelease } = await setup();
+  it('once the release in flight fails, passes only while storage holds the claim', async () => {
+    const { fence, dropClaim, holdNextRelease, storageBacked } = await setup();
     // The claim was released already, as another worker would; settlement still tries to release it.
     await dropClaim();
     const release = holdNextRelease({ fail: true });
     const settled = fence.settle(async () => {});
     await release.applied;
-
-    const check = fence.verifyNotSuperseded();
+    // While the release is in flight, it counts.
+    await expect(fence.verifyNotSuperseded()).resolves.toBeUndefined();
     release.finish();
-    if (showsRelease) {
-      // Storage still holds this exact claim, released: no other execution took the run.
-      await expect(check).resolves.toBeUndefined();
+    await settled;
+
+    if (storageBacked) {
+      // Storage still holds this claim's generation, released: no other execution took the run.
+      await expect(fence.verifyNotSuperseded()).resolves.toBeUndefined();
     } else {
-      // A missing lease may have lapsed: verify's rule.
-      await expect(check).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+      // The release failed, so a missing lease may be one another execution claimed and released: verify's rule.
+      await expect(fence.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
       expect(fence.isLost()).toBe(true);
     }
-    await settled;
   });
 
   it('refuses after settling as superseded', async () => {
@@ -1395,17 +1405,16 @@ describe('ExecutionFence.verifyNotSuperseded on a lease-backed participant', () 
     return { pubsub, mastra, coordinator, participant };
   }
 
-  it("waits for this worker's shared release in flight, then passes while nobody claimed the run", async () => {
+  it("counts this worker's shared release in flight without waiting for its reply, and passes while nobody claimed the run", async () => {
     const { pubsub, mastra, coordinator, participant } = await setup();
     const release = holdNextCall(pubsub, 'releaseLease', { apply: true, fail: false });
     const releasing = ExecutionFence.releaseSharedClaim(mastra, 'run-1', coordinator.claim);
     await release.applied;
     expect(await pubsub.getLeaseOwner(key('run-1'))).toBeUndefined();
 
-    const check = participant.verifyNotSuperseded();
-    release.finish();
-    await expect(check).resolves.toBeUndefined();
+    await expect(participant.verifyNotSuperseded()).resolves.toBeUndefined();
     expect(participant.isLost()).toBe(false);
+    release.finish();
     await releasing;
   });
 
@@ -1418,9 +1427,33 @@ describe('ExecutionFence.verifyNotSuperseded on a lease-backed participant', () 
   });
 });
 
-// Storage keeps a released claim's record with its lease cleared, so it can show a release this fence
-// didn't see: one made by another process, or one storage applied but whose response was lost (#30182).
-describe('ExecutionFence.verifyNotSuperseded with a release only storage shows', () => {
+// A lease has no generation and no storage fence behind the check: once a lapsed lease was claimed and
+// released by another execution, the lease looks exactly as it would after this execution's own release.
+// Only a release this process started lets a late write through (#30182).
+describe('ExecutionFence.verifyNotSuperseded on a lapsed lease', () => {
+  it('refuses a late write after a recovery claimed the lapsed lease and released it', async () => {
+    vi.useFakeTimers();
+    const pubsub = new EventEmitterPubSub();
+    const fence = await claim(pubsub, 'run-1');
+    // Renewals can't reach the lease provider until the lease runs out, as a dropped connection would.
+    const renewals = vi.spyOn(pubsub, 'renewLease').mockRejectedValue(new Error('redis unreachable'));
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS + EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    expect(fence.isLost()).toBe(true);
+    renewals.mockRestore();
+
+    // Another process recovers the run, finishes it and releases the lease.
+    expect((await pubsub.acquireLease(key('run-1'), 'recovery', EXECUTION_LEASE_TTL_MS)).acquired).toBe(true);
+    await pubsub.releaseLease(key('run-1'), 'recovery');
+    expect(await pubsub.getLeaseOwner(key('run-1'))).toBeUndefined();
+
+    await expect(fence.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_UNVERIFIED_ERROR_ID });
+  });
+});
+
+// Storage keeps a released or lapsed claim's record and generation, so a late write is checked against
+// the store, not against what this fence saw: a release made by another process, one storage applied but
+// whose response was lost, or a lapse. Only another execution's claim refuses it (#30182).
+describe('ExecutionFence.verifyNotSuperseded with ownership in storage', () => {
   async function setup() {
     const storage = new InMemoryStore();
     const workflowsStore = (await storage.getStore('workflows')) as WorkflowsStorage;
@@ -1488,7 +1521,7 @@ describe('ExecutionFence.verifyNotSuperseded with a release only storage shows',
     expect(participant.isLost()).toBe(true);
   });
 
-  it("stays strict on a participant fence when its release failed and the claim's lease lapsed", async () => {
+  it("passes on a participant fence whose release failed and whose claim's lease lapsed, until another execution claims the run", async () => {
     vi.useFakeTimers();
     const { storage, workflowsStore, coordinator } = await setup();
     coordinator.stopHeartbeat();
@@ -1506,8 +1539,17 @@ describe('ExecutionFence.verifyNotSuperseded with a release only storage shows',
     expect(record).toMatchObject({ ownerId: coordinator.executionId, live: false });
     expect(record?.leaseExpiresAt).not.toBeNull();
 
-    // An expired claim is not a released one.
-    await expect(participant.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_UNVERIFIED_ERROR_ID });
+    // Storage would still accept the expired claim's write: nobody claimed the run.
+    vi.mocked(workflowsStore.renewRunOwnership).mockRestore();
+    await expect(participant.verifyNotSuperseded()).resolves.toBeUndefined();
+    const successor = await workflowsStore.claimRunOwnership({
+      runId: 'run-1',
+      ownerId: 'successor',
+      leaseMs: 60_000,
+      expectedGeneration: coordinator.generation,
+    });
+    expect(successor.acquired).toBe(true);
+    await expect(participant.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
   });
 
   it('counts a release storage applied but whose response failed as released', async () => {
@@ -1526,9 +1568,9 @@ describe('ExecutionFence.verifyNotSuperseded with a release only storage shows',
     await expect(coordinator.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
   });
 
-  // Reads of the claim during one check: the first two fail as a dropped connection would, which
-  // exhausts the first read's retry. `before` and `after` run around the third read.
-  function failTwoReads(
+  // Reads of the claim during one check: the first fails as a dropped connection would, and the
+  // check retries it. `before` and `after` run around the retried read.
+  function failFirstRead(
     workflowsStore: WorkflowsStorage,
     { before, after }: { before?: () => Promise<unknown>; after?: () => Promise<unknown> },
   ) {
@@ -1536,19 +1578,19 @@ describe('ExecutionFence.verifyNotSuperseded with a release only storage shows',
     let reads = 0;
     return vi.spyOn(workflowsStore, 'getRunOwnership').mockImplementation(async args => {
       reads++;
-      if (reads <= 2) throw new Error('connection reset');
-      if (reads === 3) await before?.();
+      if (reads === 1) throw new Error('connection reset');
+      if (reads === 2) await before?.();
       const record = await read(args);
-      if (reads === 3) await after?.();
+      if (reads === 2) await after?.();
       return record;
     });
   }
 
-  it('passes when another process releases the claim between the reads of one check', async () => {
+  it('passes when another process releases the claim while one check reads it', async () => {
     const { workflowsStore, coordinator, own } = await setup();
     coordinator.stopHeartbeat();
-    // The check's next read still finds the claim live; another worker releases it just after.
-    const reads = failTwoReads(workflowsStore, {
+    // The check's retried read still finds the claim live; another worker releases it just after.
+    const reads = failFirstRead(workflowsStore, {
       after: async () => expect(await workflowsStore.releaseRunOwnership(own)).toBe(true),
     });
 
@@ -1574,7 +1616,7 @@ describe('ExecutionFence.verifyNotSuperseded with a release only storage shows',
     const released = new Promise<void>(resolve => (signalReleased = resolve));
     let resumeRead!: () => void;
     const readResumed = new Promise<void>(resolve => (resumeRead = resolve));
-    const reads = failTwoReads(workflowsStore, {
+    const reads = failFirstRead(workflowsStore, {
       after: async () => {
         expect(await workflowsStore.releaseRunOwnership(own)).toBe(true);
         signalReleased();
@@ -1609,7 +1651,7 @@ describe('ExecutionFence.verifyNotSuperseded with a release only storage shows',
     const takenOver = new Promise<void>(resolve => (signalTakenOver = resolve));
     let resumeRead!: () => void;
     const readResumed = new Promise<void>(resolve => (resumeRead = resolve));
-    failTwoReads(workflowsStore, {
+    failFirstRead(workflowsStore, {
       after: async () => {
         await workflowsStore.claimRunOwnership({ runId: 'run-1', ownerId: 'successor', leaseMs: 60_000, force: true });
         signalTakenOver();
@@ -1632,11 +1674,11 @@ describe('ExecutionFence.verifyNotSuperseded with a release only storage shows',
     });
   });
 
-  it('refuses when another execution claims the run between the reads of one check', async () => {
+  it('refuses when another execution claims the run while one check reads it', async () => {
     const { workflowsStore, coordinator, own } = await setup();
     coordinator.stopHeartbeat();
-    // Another worker releases the claim and a successor claims the run before the check's next read.
-    failTwoReads(workflowsStore, {
+    // Another worker releases the claim and a successor claims the run before the check's retried read.
+    failFirstRead(workflowsStore, {
       before: async () => {
         expect(await workflowsStore.releaseRunOwnership(own)).toBe(true);
         await workflowsStore.claimRunOwnership({ runId: 'run-1', ownerId: 'successor', leaseMs: 60_000 });
