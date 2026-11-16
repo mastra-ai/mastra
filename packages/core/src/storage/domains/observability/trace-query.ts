@@ -1440,6 +1440,13 @@ export function planPredicate(
       return undefined;
     }
     state.literalUnits += 1;
+    if (state.literalUnits > TRACE_QUERY_MAX_LITERAL_UNITS) {
+      addPredicateComplexityIssue(
+        [...path, 'right', 'literal'],
+        `Trace queries are limited to ${TRACE_QUERY_MAX_LITERAL_UNITS} literal units`,
+        state,
+      );
+    }
     return { type: 'tokens', field: predicate.left.path, operator: 'hasAllTokens', value: predicate.right.literal };
   }
 

@@ -32,6 +32,26 @@ const cases = [
 
 describe.each(cases)('%s token predicates', (_, plan, related) => {
   const wrap = (predicate: unknown) => (related ? { spans: { some: predicate } } : predicate);
+  it.each(['first', 'last'])('enforces the literal budget with the token predicate %s', position => {
+    const memberships = Array.from({ length: 10 }, (_, index) => ({
+      op: 'in',
+      value: { path: 'name' },
+      set: Array.from({ length: index === 9 ? 99 : 100 }, (_, value) => `span-${value}`),
+    }));
+    const search = token('input', 'tacos');
+    const where = () =>
+      wrap({ op: 'and', args: position === 'first' ? [search, ...memberships] : [...memberships, search] });
+
+    expect(() => plan(where())).not.toThrow();
+    memberships[9]!.set.push('span-99');
+    expect(() => plan(where())).toThrow(
+      expect.objectContaining({
+        issues: expect.arrayContaining([
+          expect.objectContaining({ message: 'Trace queries are limited to 1000 literal units' }),
+        ]),
+      }),
+    );
+  });
   it('preserves same-span conjunctions and selected fields', () => {
     const result = plan(wrap(conjunction));
     const expected = {
