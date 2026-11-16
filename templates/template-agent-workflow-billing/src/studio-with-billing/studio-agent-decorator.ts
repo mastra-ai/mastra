@@ -26,15 +26,18 @@ export class StudioAgentRuntime {
     approved: boolean,
   ) => Promise<{ replayed: boolean; runId: string; declineReason?: string }>;
   constructor(readonly integration: StudioBillingIntegration) {}
-  bind(conversation: StudioConversation, fresh = false) {
+  requestLocal(conversation: StudioConversation) {
     const previous = this.threads.get(conversation.owner.threadId);
-    const active =
-      previous && !previous.controller.signal.aborted && !fresh
-        ? { ...conversation, controller: previous.controller }
-        : conversation;
+    return previous && !previous.controller.signal.aborted
+      ? { ...conversation, controller: previous.controller }
+      : conversation;
+  }
+  bind(conversation: StudioConversation, fresh = false) {
+    const active = fresh ? conversation : this.requestLocal(conversation);
     this.threads.set(active.owner.threadId, active);
     return active;
   }
+
   /** Retire only the subscription and conversation that owned the completed stream. */
   async release(conversation: StudioConversation, subscription: symbol) {
     const { threadId } = conversation.owner;

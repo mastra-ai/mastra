@@ -1,3 +1,5 @@
+import { ipcWorker } from '../support/ipc-worker.js';
+import { lossyProxy } from '../support/lossy-proxy.js';
 import { configuredOrganizations } from '../../src/billing/configuration/environment.js';
 import { ConversationStorage } from '../../src/billing/storage/conversations.js';
 import { removeConversationMigration } from '../support/billing.js';
@@ -269,9 +271,9 @@ describe('local billing storage', () => {
     cleanups.push(() => reopened.close());
     const history = await observer.execute('SELECT version, checksum FROM billing_migrations');
     expect(history.rows).toEqual(
-      [1n, 2n, 3n, 4n].map(version => ({ version, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) })),
+      [1n, 2n, 3n, 4n, 5n].map(version => ({ version, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) })),
     );
-    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(4n);
+    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(5n);
     const foreignDatabase = await temporaryDatabase();
     cleanups.push(foreignDatabase.cleanup);
     const foreignClient = await independentClient(foreignDatabase.url);
@@ -677,3 +679,38 @@ it('native invocation claims survive concurrent replay and reject changed input 
   ]);
   expect((await observer.execute('SELECT COUNT(*) AS count FROM billing_executions')).rows).toEqual([{ count: 0n }]);
 });
+
+it('IPC close waits for the live worker to release its resources and routes concurrent rounds', async () => {
+  const worker = ipcWorker<{ type: string; round?: number; pid: number; value: string }>(
+    new URL('../support/ipc-lifecycle-worker.mjs', import.meta.url),
+    [],
+  );
+  cleanups.push(worker.close);
+  const ready = await worker.wait('ready');
+  worker.send({ type: 'echo', round: 1, value: 'first' });
+  worker.send({ type: 'echo', round: 2, value: 'second' });
+  expect(await worker.wait('echoed', 2)).toMatchObject({ value: 'second' });
+  expect(await worker.wait('echoed', 1)).toMatchObject({ value: 'first' });
+  await worker.close();
+  expect(() => process.kill(ready.pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }));
+  await expect(worker.wait('missing')).rejects.toThrow('IPC worker exited');
+});
+
+it.each(['success', 'request failure', 'body failure'] as const)(
+  'lossy forwarding closes sockets and reports %s through its awaited path',
+  async scenario => {
+    const upstream = await billingSocket({ fetch: () => new Response('upstream response') });
+    cleanups.push(upstream.close);
+    const target = scenario === 'request failure' ? `${upstream.url}/unreachable` : upstream.url;
+    if (scenario === 'request failure') await upstream.close();
+    const proxy = await lossyProxy(async () => {
+      const remote = await fetch(target);
+      if (scenario === 'body failure') await remote.body!.cancel();
+      await remote.arrayBuffer();
+    });
+    cleanups.push(proxy.close);
+    await expect(fetch(proxy.url, { signal: AbortSignal.timeout(1000) })).rejects.toThrow('fetch failed');
+    if (scenario === 'success') await proxy.completed();
+    else await expect(proxy.completed()).rejects.toThrow();
+  },
+);

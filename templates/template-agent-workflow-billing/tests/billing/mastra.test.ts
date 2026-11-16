@@ -1,5 +1,6 @@
+import { MeasurementCollector } from '../../src/billing/runtime/measurement.js';
 import { createTool } from '@mastra/core/tools';
-import { getEventListeners } from 'node:events';
+import { getEventListeners, once } from 'node:events';
 import { Memory } from '@mastra/memory';
 import { StudioAgentRuntime } from '../../src/studio-with-billing/studio-agent-decorator.js';
 import { studioChatProxy } from '../../src/studio-with-billing/studio-chat-proxy.js';
@@ -2593,3 +2594,181 @@ it('a completed subscription preserves a replacement conversation controller', a
   expect(replacement.controller.signal.aborted).toBe(true);
   await f.runtime.settled(f.owner.threadId);
 });
+
+it.each([false, true])(
+  'completion capture and replay share the projection contract (output schema: %s)',
+  async structured => {
+    const f = await catalogFixture();
+    const definition = f.catalog.definitions[1];
+    const application = await createBillingApplication({
+      environment: f.environment,
+      catalog: {
+        configuration: f.catalog.configuration,
+        definitions: [
+          {
+            ...definition,
+            adapter: {
+              ...definition.adapter,
+              ...(structured ? { outputSchema: z.object({ asset: z.string() }) } : {}),
+              completion: async () => ({ text: 'done', finishReason: 'stop', object: { asset: 'a' } }),
+            },
+          },
+        ],
+      },
+    });
+    cleanups.push(application.close);
+    const billing = await application.organizations.context({ credential: f.first.credential! });
+    const first = await application.runtime.billing
+      .agent('catalog-extra')
+      .generate('[success]', { billing, idempotencyKey: 'projection' });
+    if (first.kind === 'nested') throw new Error('Expected root execution');
+    expect(first.billing).toMatchObject({
+      executionStatus: structured ? 'completed' : 'failed',
+      billedUnits: structured ? 5 : 0,
+    });
+    const replay = await application.runtime.billing
+      .agent('catalog-extra')
+      .generate('[success]', { billing, idempotencyKey: 'projection' });
+    expect(replay).toMatchObject({
+      kind: 'replay',
+      result: structured ? { text: 'done', object: { asset: 'a' } } : null,
+      billing: { replayed: true, billedUnits: structured ? 5 : 0 },
+    });
+    expect(f.model.requests).toHaveLength(1);
+  },
+);
+
+it.each([undefined, 'https://unused.example/snapshots'])(
+  'supplied snapshot storage skips unused local paths (%s)',
+  async workflowDatabaseUrl => {
+    const database = await temporaryDatabase();
+    cleanups.push(database.cleanup);
+    const databaseUrl = pathToFileURL(join(database.directory, 'workflow.db')).href;
+    const organizations = await configuredOrganizations({
+      BILLING_MODE: 'local',
+      BILLING_PROVIDER: 'local',
+      BILLING_DATABASE_URL: databaseUrl,
+    });
+    cleanups.push(() => organizations.close());
+    const storage = new LibSQLStore({
+      id: 'application-owned',
+      url: pathToFileURL(join(database.directory, 'owned.db')).href,
+    });
+    cleanups.push(() => storage.close());
+    const runtime = await initializeMastraBilling({
+      organizations,
+      configuration: { provider: 'local', resourcePolicies: [], billingKeys: { meters: [] } },
+      agents: {},
+      workflows: {},
+      databaseUrl,
+      workflowDatabaseUrl,
+      storage,
+    });
+    await runtime.close();
+    const memory = new Memory({ storage, options: { semanticRecall: false, workingMemory: { enabled: false } } });
+    await memory.createThread({ threadId: 'still-owned', resourceId: 'application' });
+    expect(await memory.getThreadById({ threadId: 'still-owned' })).toMatchObject({
+      id: 'still-owned',
+      resourceId: 'application',
+    });
+  },
+);
+
+it('dispatch that monopolizes a turn past its cutoff expires before returning a result', async () => {
+  const { runtime } = await fixture();
+  const identity = await runtime.organizations.accountingIdentity(runtime.billingContext);
+  for (let round = 0; round < 20; round++) {
+    let cancellations = 0;
+    const collector = new MeasurementCollector(
+      'deadline-check',
+      1,
+      identity,
+      runtime.configuration.resourcePolicies[0],
+      runtime.accounting,
+      runtime.workflowStorage,
+      false,
+      async () => {
+        cancellations++;
+      },
+    );
+    const deadline = Date.now() + 2;
+    const result = await collector.runWithinDeadline(deadline, async () => {
+      while (Date.now() <= deadline + 2) {
+        /* Keep the timer from running in this turn. */
+      }
+      return 'late';
+    });
+    expect(result).toEqual({ status: 'expired_during_execution' });
+    expect(collector.deadlineExpired).toBe(true);
+    expect(collector.controller.signal.aborted).toBe(true);
+    expect(cancellations).toBe(1);
+  }
+});
+
+it('saved conversation history stays request-local and preserves an active subscription', async () => {
+  const f = await conversationFixture();
+  f.runtime.request.run(f.conversation, () =>
+    f.agent.abortThreadStream({ threadId: f.owner.threadId, resourceId: f.owner.resourceId }),
+  );
+  await f.runtime.settled(f.owner.threadId);
+  const app = new Hono();
+  app.use(
+    '*',
+    studioChatProxy(f.runtime, '/api', async (_context, next) => next()),
+  );
+  app.get('/api/memory/threads/:threadId/messages', context =>
+    context.json({ messages: [], threadId: context.req.param('threadId') }),
+  );
+  for (let round = 0; round < 20; round++) {
+    const owner = await f.integration.conversations.thread(f.context, f.agent.id, `saved-history-${round}`, true);
+    const response = await app.request(`/api/memory/threads/${owner.threadId}/messages?agentId=${f.agent.id}`, {
+      headers: { authorization: `Bearer ${f.first.credential}` },
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ threadId: owner.threadId });
+    expect(() => f.agent.abortThreadStream({ threadId: owner.threadId, resourceId: owner.resourceId })).toThrow(
+      expect.objectContaining({ code: 'forbidden' }),
+    );
+  }
+  const active = f.runtime.bind({ billing: f.context, owner: f.owner, controller: new AbortController() });
+  f.runtime.subscriptions.set(f.owner.threadId, Symbol());
+  await app.request(`/api/memory/threads/${f.owner.threadId}/messages?agentId=${f.agent.id}`, {
+    headers: { authorization: `Bearer ${f.first.credential}` },
+  });
+  f.agent.abortThreadStream({ threadId: f.owner.threadId, resourceId: f.owner.resourceId });
+  expect(active.controller.signal.aborted).toBe(true);
+  f.runtime.subscriptions.delete(f.owner.threadId);
+  await f.runtime.settled(f.owner.threadId);
+});
+
+it.each([false, true])(
+  'failed settlement releases full model outputs (later replay: %s)',
+  async replay => {
+    const { runtime, model, database } = await fixture();
+    const options = {
+      databaseUrl: database.url,
+      directory: database.directory,
+      modelUrl: model.url,
+      credential: runtime.credential,
+      workspaceId: runtime.billingContext.workspaceId,
+      configuration: runtime.configuration,
+    };
+    await runtime.close();
+    const child = fork(
+      fileURLToPath(new URL('../support/output-cache-worker.mjs', import.meta.url)),
+      [JSON.stringify(options), String(replay)],
+      { execArgv: ['--expose-gc'], stdio: ['ignore', 'pipe', 'pipe', 'ipc'] },
+    );
+    const exited = once(child, 'exit');
+    cleanups.push(async () => {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      await exited;
+    });
+    const [message] = await once(child, 'message');
+    expect(message).toMatchObject({ type: 'result', code: 'storage_unavailable', retained: false });
+    const [code] = await exited;
+    expect(code).toBe(0);
+    expect(model.requests).toHaveLength(1);
+  },
+  30000,
+);

@@ -134,6 +134,7 @@ export class AgentResource<Output, Native extends AnyAgent = AnyAgent> {
   async complete(scope: ExecutionScope, result: FullOutput<Output>) {
     if (!this.completion) return result;
     const projection = await this.completion(scope);
+    this.envelope(projection);
     const completed = { ...result, ...projection } as FullOutput<Output>;
     this.projections.set(completed, projection);
     return completed;

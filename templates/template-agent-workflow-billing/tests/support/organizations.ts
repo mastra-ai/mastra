@@ -1,4 +1,5 @@
-import { spawn, fork } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import { ipcWorker } from './ipc-worker.js';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { setTimeout } from 'node:timers/promises';
@@ -138,44 +139,5 @@ interface WorkerMessage {
   status?: string;
 }
 export function organizationWriter(url: string) {
-  const child = fork(fileURLToPath(new URL('./organization-worker.mjs', import.meta.url)), [url], {
-    execArgv: [],
-    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-  });
-  const inbox: WorkerMessage[] = [];
-  const waiters: {
-    type: string;
-    round?: number;
-    resolve: (message: WorkerMessage) => void;
-    reject: (error: Error) => void;
-  }[] = [];
-  let stderr = '';
-  let exited = false;
-  child.stderr?.on('data', chunk => {
-    stderr += String(chunk);
-  });
-  child.on('message', (message: WorkerMessage) => {
-    const index = waiters.findIndex(waiter => waiter.type === message.type && waiter.round === message.round);
-    if (index === -1) inbox.push(message);
-    else waiters.splice(index, 1)[0].resolve(message);
-  });
-  child.on('exit', code => {
-    exited = true;
-    for (const waiter of waiters.splice(0)) waiter.reject(new Error(`Organization writer exited (${code}): ${stderr}`));
-  });
-  return {
-    send: (message: object) => child.send(message),
-    wait: (type: string, round?: number): Promise<WorkerMessage> => {
-      const index = inbox.findIndex(message => message.type === type && message.round === round);
-      if (index !== -1) return Promise.resolve(inbox.splice(index, 1)[0]);
-      if (exited) return Promise.reject(new Error(`Organization writer exited: ${stderr}`));
-      return new Promise((resolve, reject) => waiters.push({ type, round, resolve, reject }));
-    },
-    close: async () => {
-      if (!exited) {
-        child.kill();
-        await once(child, 'exit');
-      }
-    },
-  };
+  return ipcWorker<WorkerMessage>(new URL('./organization-worker.mjs', import.meta.url), [url]);
 }

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { z } from 'zod';
 import { withinExecution } from './execution-scope.js';
 import type { FullOutput } from '@mastra/core/stream';
@@ -20,7 +21,7 @@ export const agentExecutionInputSchema = z.strictObject({
 export type AgentExecutionInput = z.infer<typeof agentExecutionInputSchema>;
 
 export class AgentExecution<Agents extends AgentRegistry> {
-  private readonly immediateAgents = new Map<string, FullOutput<any>>();
+  private readonly invocationOutput = new AsyncLocalStorage<{ result?: FullOutput<any> }>();
   constructor(
     private readonly options: {
       organizations: OrganizationService;
@@ -54,34 +55,38 @@ export class AgentExecution<Agents extends AgentRegistry> {
             parentExecutionId: parent.executionId,
           };
         }
-        // Callbacks and signals are per-invocation behavior, never persisted or fingerprinted.
-        const identity = await this.options.organizations.accountingIdentity(billing);
-        const response = await this.context.identity.run(identity, () =>
-          this.context.agentOptions.run(safe, () =>
-            this.options.gateway.execute(billing, {
-              resourceId: id,
-              operation: 'generate',
-              idempotencyKey: input.idempotencyKey,
-              input: { prompt: input.prompt, adapterVersion: resource.definition },
-            }),
-          ),
-        );
-        const immediate = response.billing.replayed
-          ? undefined
-          : this.immediateAgents.get(response.billing.executionId);
-        if (!response.billing.replayed) this.immediateAgents.delete(response.billing.executionId);
-        if (immediate && !response.billing.replayed)
-          return {
-            kind: 'immediate',
-            result: immediate,
-            projection: resource.project(immediate),
-            billing: response.billing,
-          };
-        return {
-          kind: 'replay',
-          result: response.result === null ? null : resource.parseProjection(response.result),
-          billing: response.billing,
-        };
+        const capture: { result?: FullOutput<any> } = {};
+        return this.invocationOutput.run(capture, async () => {
+          try {
+            // Callbacks and signals are per-invocation behavior, never persisted or fingerprinted.
+            const identity = await this.options.organizations.accountingIdentity(billing);
+            const response = await this.context.identity.run(identity, () =>
+              this.context.agentOptions.run(safe, () =>
+                this.options.gateway.execute(billing, {
+                  resourceId: id,
+                  operation: 'generate',
+                  idempotencyKey: input.idempotencyKey,
+                  input: { prompt: input.prompt, adapterVersion: resource.definition },
+                }),
+              ),
+            );
+            const immediate = response.billing.replayed ? undefined : capture.result;
+            if (immediate && !response.billing.replayed)
+              return {
+                kind: 'immediate',
+                result: immediate,
+                projection: resource.project(immediate),
+                billing: response.billing,
+              };
+            return {
+              kind: 'replay',
+              result: response.result === null ? null : resource.parseProjection(response.result),
+              billing: response.billing,
+            };
+          } finally {
+            delete capture.result;
+          }
+        });
       },
     });
   }
@@ -221,7 +226,8 @@ export class AgentExecution<Agents extends AgentRegistry> {
       const result = execution.value;
       if (collector.stepCount === 0) await collector.missing();
       const projection = resource.storedProjection(result);
-      this.immediateAgents.set(executionId, result);
+      const capture = this.invocationOutput.getStore();
+      if (capture) capture.result = result;
       return {
         status: collector.captureFailed
           ? 'uncertain'

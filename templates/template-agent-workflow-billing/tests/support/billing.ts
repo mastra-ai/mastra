@@ -78,8 +78,23 @@ export async function independentClient(url: string) {
   return client;
 }
 
+export async function removeUnreflectedMigration(client: { execute: import('@libsql/client').Client['execute'] }) {
+  for (const trigger of [
+    'billing_unreflected_debits_valid_insert',
+    'billing_unreflected_debits_no_update',
+    'billing_unreflected_debits_verified_delete',
+    'billing_outbox_track_unreflected',
+    'immutable_usage_reflect_debit',
+  ])
+    await client.execute(`DROP TRIGGER IF EXISTS ${trigger}`);
+  await client.execute('DROP TABLE IF EXISTS billing_unreflected_debits');
+  await client.execute('DELETE FROM billing_migrations WHERE version = 5');
+  await client.execute('PRAGMA user_version = 4');
+}
+
 /** Build a recognized historical fixture; never run against application databases. */
 export async function removeConversationMigration(client: { execute: import('@libsql/client').Client['execute'] }) {
+  await removeUnreflectedMigration(client);
   for (const table of [
     'billing_studio_approvals',
     'billing_studio_operations',

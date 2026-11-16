@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
-import { once } from 'node:events';
+import { lossyProxy } from '../support/lossy-proxy.js';
 import { randomUUID } from 'node:crypto';
 import { Autumn } from 'autumn-js';
 import { it } from 'vitest';
@@ -157,7 +156,7 @@ async function proveSandbox(scenario: 'lifecycle' | 'recovery') {
     const pending = await reserve(1);
     assert.equal(pending.result.status, 'reserved');
     let forwarded = 0;
-    const proxy = createServer(async (req, res) => {
+    const proxy = await lossyProxy(async req => {
       const chunks: Buffer[] = [];
       for await (const chunk of req) chunks.push(Buffer.from(chunk));
       forwarded++;
@@ -168,16 +167,10 @@ async function proveSandbox(scenario: 'lifecycle' | 'recovery') {
         signal: AbortSignal.timeout(10000),
       });
       await remote.arrayBuffer();
-      req.socket.destroy();
-      res.destroy();
     });
-    proxy.listen(0, '127.0.0.1');
-    await once(proxy, 'listening');
-    const address = proxy.address();
-    assert.ok(address && typeof address !== 'string');
     const lossy = await AutumnBillingProvider.open(
       { url: database.url },
-      { secretKey, bindings, serverURL: `http://127.0.0.1:${address.port}`, timeoutMs: 10000 },
+      { secretKey, bindings, serverURL: proxy.url, timeoutMs: 10000 },
     );
     const payload = provider.reservations.prepareFinalization(
       { reservation: pending.request, action: 'confirm', units: 1 },
@@ -191,10 +184,10 @@ async function proveSandbox(scenario: 'lifecycle' | 'recovery') {
     try {
       assert.equal((await lossy.reservations.finalize(payload)).status, 'uncertain');
       assert.equal(forwarded, 1);
+      await proxy.completed();
     } finally {
       lossy.close();
-      proxy.closeAllConnections();
-      await new Promise<void>(resolve => proxy.close(() => resolve()));
+      await proxy.close();
     }
     const evidenceDeadline = Date.now() + 120000;
     let recovered = await provider.reservations.reconcileFinalization(payload);

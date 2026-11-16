@@ -403,6 +403,36 @@ const studioStatements = [
   `CREATE TRIGGER billing_studio_approval_accepted_monotonic BEFORE UPDATE OF accepted ON billing_studio_approvals WHEN OLD.accepted = 1 BEGIN SELECT RAISE(ABORT, 'Native approval acknowledgement is retained'); END`,
   `CREATE TRIGGER billing_studio_approvals_no_delete BEFORE DELETE ON billing_studio_approvals BEGIN SELECT RAISE(ABORT, 'Native approval decisions are retained'); END`,
 ];
+// Derived pending set: immutable account and payload equality is the only
+// evidence that permits removing a debit from admission accounting.
+const unreflectedStatements = [
+  `CREATE TABLE billing_unreflected_debits (
+    event_id TEXT PRIMARY KEY REFERENCES billing_outbox(id),
+    account_id TEXT NOT NULL REFERENCES billing_accounts(id),
+    meter TEXT NOT NULL,
+    units INTEGER NOT NULL CHECK (units BETWEEN 0 AND 9007199254740991)
+  ) STRICT`,
+  `CREATE INDEX billing_unreflected_debits_account_meter ON billing_unreflected_debits(account_id, meter)`,
+  `CREATE TRIGGER billing_unreflected_debits_valid_insert BEFORE INSERT ON billing_unreflected_debits
+    WHEN NOT EXISTS (SELECT 1 FROM billing_outbox o JOIN billing_ledger l ON l.execution_id = o.execution_id
+      WHERE o.id = NEW.event_id AND l.account_id = NEW.account_id AND l.meter = NEW.meter AND l.units = NEW.units
+      AND NOT EXISTS (SELECT 1 FROM immutable_usage u WHERE u.id = o.id AND u.account_id = l.account_id AND u.payload = o.payload))
+    BEGIN SELECT RAISE(ABORT, 'Unreflected debit must match immutable accounting'); END`,
+  `CREATE TRIGGER billing_unreflected_debits_no_update BEFORE UPDATE ON billing_unreflected_debits
+    BEGIN SELECT RAISE(ABORT, 'Unreflected debit terms are immutable'); END`,
+  `CREATE TRIGGER billing_unreflected_debits_verified_delete BEFORE DELETE ON billing_unreflected_debits
+    WHEN NOT EXISTS (SELECT 1 FROM immutable_usage u JOIN billing_outbox o ON o.id = u.id
+      WHERE u.id = OLD.event_id AND u.account_id = OLD.account_id AND u.payload = o.payload)
+    BEGIN SELECT RAISE(ABORT, 'Unreflected debit requires matching reflection'); END`,
+  `CREATE TRIGGER billing_outbox_track_unreflected AFTER INSERT ON billing_outbox
+    BEGIN INSERT INTO billing_unreflected_debits (event_id, account_id, meter, units)
+      SELECT NEW.id, l.account_id, l.meter, l.units FROM billing_ledger l WHERE l.execution_id = NEW.execution_id
+      AND l.account_id IS NOT NULL AND l.meter IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM immutable_usage u WHERE u.id = NEW.id AND u.account_id = l.account_id AND u.payload = NEW.payload); END`,
+  `CREATE TRIGGER immutable_usage_reflect_debit AFTER INSERT ON immutable_usage
+    BEGIN DELETE FROM billing_unreflected_debits WHERE event_id = NEW.id AND account_id = NEW.account_id
+      AND EXISTS (SELECT 1 FROM billing_outbox o WHERE o.id = NEW.id AND o.payload = NEW.payload); END`,
+];
 const checksum = (statements: readonly string[]) => createHash('sha256').update(statements.join('\n')).digest('hex');
 const normalizedSql = (sql: string) => sql.replace(/\s+/g, ' ').trim();
 async function validateCatalog(transaction: Transaction, statements: readonly string[]) {
@@ -428,7 +458,10 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
       args: [checksum(schemaStatements), new Date().toISOString()],
     });
   } else {
-    if (![1n, 2n, 3n, 4n].includes(version as bigint) || !catalog.rows.some(row => row.name === 'billing_migrations'))
+    if (
+      ![1n, 2n, 3n, 4n, 5n].includes(version as bigint) ||
+      !catalog.rows.some(row => row.name === 'billing_migrations')
+    )
       throw new BillingError('storage_incompatible');
     const history = (await transaction.execute('SELECT version, checksum FROM billing_migrations ORDER BY version'))
       .rows;
@@ -438,7 +471,8 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
       history[0].checksum !== checksum(schemaStatements) ||
       (Number(version) >= 2 && (history[1].version !== 2n || history[1].checksum !== checksum(imageStatements))) ||
       (Number(version) >= 3 && (history[2].version !== 3n || history[2].checksum !== checksum(creditStatements))) ||
-      (version === 4n && (history[3].version !== 4n || history[3].checksum !== checksum(studioStatements)))
+      (Number(version) >= 4 && (history[3].version !== 4n || history[3].checksum !== checksum(studioStatements))) ||
+      (version === 5n && (history[4].version !== 5n || history[4].checksum !== checksum(unreflectedStatements)))
     )
       throw new BillingError('storage_incompatible');
     // Validate the complete recognized old schema before the first migration write.
@@ -448,7 +482,13 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
         ? schemaStatements
         : version === 2n
           ? [...schemaStatements, ...imageStatements]
-          : [...schemaStatements, ...imageStatements, ...creditStatements, ...(version === 4n ? studioStatements : [])],
+          : [
+              ...schemaStatements,
+              ...imageStatements,
+              ...creditStatements,
+              ...(Number(version) >= 4 ? studioStatements : []),
+              ...(version === 5n ? unreflectedStatements : []),
+            ],
     );
   }
   if (Number(version) < 2) {
@@ -476,10 +516,23 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
     });
     await transaction.execute('PRAGMA user_version = 4');
   }
+  if (Number(version) < 5) {
+    for (const sql of unreflectedStatements) await transaction.execute(sql);
+    await transaction.execute(`INSERT INTO billing_unreflected_debits (event_id, account_id, meter, units)
+      SELECT o.id, l.account_id, l.meter, l.units FROM billing_outbox o JOIN billing_ledger l ON l.execution_id = o.execution_id
+      WHERE l.account_id IS NOT NULL AND l.meter IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM immutable_usage u WHERE u.id = o.id AND u.account_id = l.account_id AND u.payload = o.payload)`);
+    await transaction.execute({
+      sql: 'INSERT INTO billing_migrations VALUES (5, ?, ?)',
+      args: [checksum(unreflectedStatements), new Date().toISOString()],
+    });
+    await transaction.execute('PRAGMA user_version = 5');
+  }
   await validateCatalog(transaction, [
     ...schemaStatements,
     ...imageStatements,
     ...creditStatements,
     ...studioStatements,
+    ...unreflectedStatements,
   ]);
 }

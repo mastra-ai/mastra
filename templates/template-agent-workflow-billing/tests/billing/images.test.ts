@@ -335,7 +335,7 @@ it('recognized v1 image migration preserves financial workflow and request ident
   expect(await snapshot()).toEqual(before);
   await f.database.execute('DROP TABLE unexpected_data');
   await f.restart();
-  expect((await f.database.execute('PRAGMA user_version')).rows[0].user_version).toBe(4n);
+  expect((await f.database.execute('PRAGMA user_version')).rows[0].user_version).toBe(5n);
   expect(await snapshot()).toEqual(before);
   expect((await f.call(`${f.base}/workflows/image-kit/runs`, {}, 'pre-migration-kit')).body.executionId).toBe(id);
   expect(f.boundary.images).toHaveLength(0);

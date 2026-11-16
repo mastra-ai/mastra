@@ -38,18 +38,24 @@ export class MeasurementCollector {
     const remaining = deadline - Date.now();
     if (remaining <= 0) return { status: 'expired_before_dispatch' };
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const expiry = new Promise<{ status: 'expired_during_execution' }>(resolve => {
-      timer = setTimeout(() => {
+    const expire = () => {
+      if (!this.expired) {
         // The native operation may ignore cancellation or have reached an
         // external service. Preserve uncertainty until termination is known.
         this.expired = true;
-        resolve({ status: 'expired_during_execution' });
         this.controller.abort();
         if (this.cancel) void this.cancel().catch(() => {});
-      }, remaining);
+      }
+      return { status: 'expired_during_execution' as const };
+    };
+    const expiry = new Promise<{ status: 'expired_during_execution' }>(resolve => {
+      timer = setTimeout(() => resolve(expire()), remaining);
     });
     try {
-      return await Promise.race([dispatch().then(value => ({ status: 'finished' as const, value })), expiry]);
+      return await Promise.race([
+        dispatch().then(value => (Date.now() >= deadline ? expire() : { status: 'finished' as const, value })),
+        expiry,
+      ]);
     } finally {
       clearTimeout(timer);
     }

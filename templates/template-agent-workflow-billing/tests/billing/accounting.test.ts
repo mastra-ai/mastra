@@ -1,3 +1,4 @@
+import { removeUnreflectedMigration } from '../support/billing.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { agentExecutionInputSchema } from '../../src/billing/runtime/agent-execution.js';
 import { BillingGateway } from '../../src/billing/runtime/gateway.js';
@@ -892,3 +893,112 @@ it('late measurements complete an incomplete usage execution exactly once', asyn
     expect((await totals(f)).holds[0].active).toBe(0n);
   }
 });
+
+it.each(['matching', 'changed payload', 'other account'] as const)(
+  'pending debits release capacity only for exact reflection: %s',
+  async reflection => {
+    const f = await fixture(charges[3]);
+    await seedHistory(f, 8);
+    const events = (await totals(f)).events.map(row => JSON.parse(String(row.payload)) as UsageEvent);
+    const account = events[0].account;
+    const foreign = await f.provider.ensureAccount({ workspaceId: f.bob.workspaceId });
+    await f.observer.execute({
+      sql: 'INSERT INTO commercial_meters SELECT ?, key, funding, balance, consumed, period_start, period_end FROM commercial_meters WHERE account_id = ?',
+      args: [foreign.id, account.id],
+    });
+    await f.observer.batch(
+      events.map((event, index) => ({
+        sql: 'INSERT INTO immutable_usage (id, account_id, meter, execution_id, policy_version, units, occurred_at, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        args: [
+          event.id,
+          index === 0 && reflection === 'other account' ? foreign.id : account.id,
+          event.meter,
+          event.executionId,
+          event.policyVersion,
+          event.units,
+          event.occurredAt,
+          JSON.stringify(
+            index === 0 && reflection === 'changed payload' ? { ...event, units: event.units + 1 } : event,
+          ),
+        ],
+      })),
+      'write',
+    );
+    expect((await f.observer.execute('SELECT units FROM billing_unreflected_debits')).rows).toEqual(
+      reflection === 'matching' ? [] : [{ units: 2n }],
+    );
+    await f.observer.execute({
+      sql: "UPDATE commercial_meters SET funding = 'prepaid', balance = 3 WHERE account_id = ? AND key = 'tasks'",
+      args: [account.id],
+    });
+    f.config.resourcePolicies[0].policy.charge = { type: 'per-task', meter: 'tasks', units: 2, funding: 'prepaid' };
+    const identity = await f.organizations.accountingIdentity(f.context);
+    const admission = f.storage.admit(
+      {
+        identity,
+        runtimeId: 'reflection-check',
+        resourceId: 'assistant',
+        operation: 'generate',
+        key: 'after-reflection',
+        fingerprint: 'reflection-check',
+      },
+      f.config.resourcePolicies[0],
+      await f.provider.getState(account),
+      undefined,
+      f.provider.bindUsage('tasks'),
+    );
+    if (reflection === 'matching') expect(await admission).toMatchObject({ status: 'admitted' });
+    else await expect(admission).rejects.toMatchObject({ code: 'insufficient_credits' });
+  },
+);
+
+it('migration indexes only pending debits and preserves retained financial history', async () => {
+  const f = await fixture(charges[3]);
+  const events = await seedHistory(f, 1000);
+  await f.observer.batch(
+    events.map(event => ({
+      sql: 'INSERT INTO immutable_usage (id, account_id, meter, execution_id, policy_version, units, occurred_at, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      args: [
+        event.id,
+        event.account.id,
+        event.meter,
+        event.executionId,
+        event.policyVersion,
+        event.units,
+        event.occurredAt,
+        JSON.stringify(event),
+      ],
+    })),
+    'write',
+  );
+  const history = async () =>
+    Promise.all(
+      ['billing_ledger', 'billing_outbox', 'immutable_usage'].map(
+        async table => (await f.observer.execute(`SELECT * FROM ${table} ORDER BY rowid`)).rows,
+      ),
+    );
+  const before = await history();
+  await removeUnreflectedMigration(f.observer);
+  const oldMigrations = (await f.observer.execute('SELECT version, checksum FROM billing_migrations ORDER BY version'))
+    .rows;
+  const reopened = await LocalBillingStorage.open({ url: f.database.url });
+  try {
+    expect(await history()).toEqual(before);
+    expect(
+      (await f.observer.execute('SELECT version, checksum FROM billing_migrations WHERE version < 5 ORDER BY version'))
+        .rows,
+    ).toEqual(oldMigrations);
+    expect((await f.observer.execute('SELECT units FROM billing_unreflected_debits')).rows).toEqual([{ units: 2n }]);
+    const plan = await f.observer.execute({
+      sql: 'EXPLAIN QUERY PLAN SELECT units FROM billing_unreflected_debits WHERE account_id = ? AND meter = ?',
+      args: [events[0].account.id, events[0].meter],
+    });
+    expect(
+      plan.rows.some(
+        row => String(row.detail).includes('SEARCH') && String(row.detail).includes('account_id=? AND meter=?'),
+      ),
+    ).toBe(true);
+  } finally {
+    reopened.close();
+  }
+}, 30000);

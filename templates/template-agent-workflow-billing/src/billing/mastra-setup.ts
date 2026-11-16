@@ -53,11 +53,14 @@ export async function initializeMastraBilling<
 }) {
   const files = parseInput(z.strictObject({ databaseUrl: localFile, workflowDatabaseUrl: localFile.optional() }), {
     databaseUrl: options.databaseUrl,
-    workflowDatabaseUrl: options.workflowDatabaseUrl,
+    workflowDatabaseUrl: options.storage ? undefined : options.workflowDatabaseUrl,
   });
-  const workflowUrl =
-    files.workflowDatabaseUrl ?? pathToFileURL(resolve(dirname(fileURLToPath(files.databaseUrl)), 'workflow.db')).href;
-  if (fileURLToPath(workflowUrl) === fileURLToPath(files.databaseUrl)) throw new BillingError('invalid_configuration');
+  const workflowUrl = options.storage
+    ? undefined
+    : (files.workflowDatabaseUrl ??
+      pathToFileURL(resolve(dirname(fileURLToPath(files.databaseUrl)), 'workflow.db')).href);
+  if (workflowUrl && fileURLToPath(workflowUrl) === fileURLToPath(files.databaseUrl))
+    throw new BillingError('invalid_configuration');
   const commercial = await initializeBilling({
     storage: { url: files.databaseUrl },
     configuration: options.configuration,
@@ -67,15 +70,15 @@ export async function initializeMastraBilling<
   const lifecycle = new Lifecycle();
   lifecycle.own(commercial.close);
   try {
-    await privateWorkflowFiles(fileURLToPath(workflowUrl));
+    if (workflowUrl) await privateWorkflowFiles(fileURLToPath(workflowUrl));
     const accounting = await AccountingStorage.open({ url: files.databaseUrl }, options.organizations.storage);
     lifecycle.own(() => accounting.close());
     const workflowStorage = await WorkflowStorage.open({ url: files.databaseUrl }, options.organizations.storage);
     lifecycle.own(() => workflowStorage.close());
-    const snapshots = options.storage ?? new LibSQLStore({ id: 'billing-workflow-snapshots', url: workflowUrl });
+    const snapshots = options.storage ?? new LibSQLStore({ id: 'billing-workflow-snapshots', url: workflowUrl! });
     if (!options.storage) lifecycle.own(() => snapshots.close());
     await snapshots.init();
-    await privateWorkflowFiles(fileURLToPath(workflowUrl));
+    if (workflowUrl) await privateWorkflowFiles(fileURLToPath(workflowUrl));
     const billing = new MastraBilling({
       organizations: options.organizations,
       accounting,

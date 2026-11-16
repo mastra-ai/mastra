@@ -353,7 +353,8 @@ export function studioChatProxy(
       );
       const stopping = suffix === '/threads/abort' || /^\/runs\/[^/]+\/abort$/.test(suffix);
       if (!stopping) await runtime.settled(threadId);
-      const conversation = runtime.bind({ billing, owner, controller: new AbortController() });
+      const selected = { billing, owner, controller: new AbortController() };
+      const conversation = method === 'GET' ? runtime.requestLocal(selected) : runtime.bind(selected);
       if (method === 'POST') {
         body.threadId = threadId;
         body.resourceId = resourceId;

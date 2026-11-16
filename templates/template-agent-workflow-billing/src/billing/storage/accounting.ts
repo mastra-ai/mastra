@@ -614,7 +614,7 @@ export class AccountingStorage {
     return this.database.write(async transaction =>
       (
         await transaction.execute({
-          sql: 'SELECT o.id FROM billing_outbox o JOIN billing_ledger l ON l.execution_id = o.execution_id LEFT JOIN immutable_usage u ON u.id = o.id AND u.account_id = l.account_id AND u.payload = o.payload WHERE l.account_id = ? AND u.id IS NULL ORDER BY o.id LIMIT 1000',
+          sql: 'SELECT event_id AS id FROM billing_unreflected_debits WHERE account_id = ? ORDER BY event_id LIMIT 1000',
           args: [accountId],
         })
       ).rows.map(row => String(row.id)),
@@ -670,17 +670,14 @@ export class AccountingStorage {
             ).rows;
             const debits = (
               await transaction.execute({
-                sql: 'SELECT l.units, o.id, o.payload, u.payload AS reflected_payload FROM billing_ledger l JOIN billing_outbox o ON o.execution_id = l.execution_id LEFT JOIN immutable_usage u ON u.id = o.id AND u.account_id = l.account_id WHERE l.account_id = ? AND l.meter = ?',
+                sql: 'SELECT units FROM billing_unreflected_debits WHERE account_id = ? AND meter = ?',
                 args: [accountId, charge.meter],
               })
             ).rows;
-            // The local driver proves the exact immutable payload was reflected
-            // in the same SQL/versioned snapshot; ingestion alone is insufficient.
+            // Indexed pending debits retain their hold until immutable reflection
+            // matches both the original account and the exact outbox payload.
             const held = holds.reduce((sum, row) => sum + BigInt(String(row.units)), 0n);
-            const unreflected = debits.reduce(
-              (sum, row) => sum + (row.payload === row.reflected_payload ? 0n : BigInt(String(row.units))),
-              0n,
-            );
+            const unreflected = debits.reduce((sum, row) => sum + BigInt(String(row.units)), 0n);
             if (BigInt(meter.confirmedBalance!) - held - unreflected < BigInt(units))
               throw new BillingError('insufficient_credits');
           }
