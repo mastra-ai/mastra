@@ -404,7 +404,7 @@ overrides:
   # uuid <11.1.1 is pinned by transitive parents on old majors (msal-node/google-gax/etc.
   # declare uuid ^8-^10). 11.x keeps the APIs those parents use.
   uuid@<11.1.1: 11.1.1
-  '@babel/core@>=7.0.0 <7.29.6': 8.0.7
+  '@babel/core@>=7.0.0 <7.29.6': 8.1.2
   # Vanta 2026-10-21: AIKIDO-2026-930319 (powershell-utils <0.2.1); open 11.0.4 moves to wsl-utils 1 + powershell-utils ^0.2.1
   open@>=11.0.0 <11.0.4: 11.0.4
   sharp@<0.35.5: 0.35.5
