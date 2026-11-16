@@ -7,6 +7,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   jira: 'Jira',
   linear: 'Linear',
   vanta: 'Vanta',
+  'mastra-alerts': 'Mastra Alerts',
 };
 
 function displayName(id: string): string {
