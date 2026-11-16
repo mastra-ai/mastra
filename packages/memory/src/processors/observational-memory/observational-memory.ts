@@ -21,7 +21,6 @@ import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../..';
 import { WORKING_MEMORY_STATE_ID } from '../working-memory-state/processor';
-import { OBSERVATIONAL_MEMORY_STATE_ID } from './state-processor';
 import { getMarkerActivationTTL, resolveActivationTTL } from './activation-ttl';
 import { resolveAutoModelId } from './auto-model';
 import { BufferingCoordinator } from './buffering-coordinator';
@@ -340,6 +339,7 @@ import type { CompressionLevel } from './reflector-agent';
 import { isReflectionApplied, ReflectorRunner } from './reflector-runner';
 import { isOmReproCaptureEnabled, writeObserverExchangeReproCapture } from './repro-capture';
 import { RETRY_CONFIG } from './retry';
+import { OBSERVATIONAL_MEMORY_STATE_ID } from './state-processor';
 import {
   calculateDynamicThreshold,
   calculateProjectedMessageRemoval,
