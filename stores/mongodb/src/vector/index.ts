@@ -798,7 +798,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       work = await this.runDeleteTransaction(indexName, async session => {
         attempt++;
         const own = await registry.findOne({ _id: indexName }, { session });
-        if (!own) return 'gone' as const;
+        // Missing, or recreated elsewhere since our first read: the registration we were asked
+        // to delete is already finished, and the replacement is not ours to touch.
+        if (!own || own.collectionName !== entry.collectionName || !(own.isByo || own.ownsCollection === false))
+          return 'gone' as const;
         // Another call committed this delete's decision since our first read: continue its attempt.
         if (own.deleting && own.deleteToken) return { drop: recordedDropSet(own), deleteToken: own.deleteToken };
         const live = { collectionName: own.collectionName, _id: { $ne: indexName }, deleting: { $ne: true } };

@@ -531,6 +531,42 @@ describe('legacy ownership', () => {
       }
     });
 
+    for (const recreated of [
+      { label: 'BYO', fields: { isByo: true, allowWrites: false } },
+      { label: 'managed', fields: { isByo: false, allowWrites: true, ownsCollection: true } },
+    ]) {
+      it(`a stale delete leaves X alone after it is recreated on another collection (${recreated.label})`, async () => {
+        const { coll, X } = await fixture({ A: 'search' }, { X: { textSearchIndexName: 'A', ownsTextIndex: true } });
+        const c2 = uniqueName('share');
+        colls.push(c2);
+        await seedCollection(db, c2, [{ title: 'b' }]);
+        await createRawSearchIndex(db, c2, 'Z', dyn, 'search');
+        const newX = {
+          _id: X,
+          indexName: X,
+          collectionName: c2,
+          searchIndexName: `${c2}_vec`,
+          ownsVectorIndex: false,
+          textSearchIndexName: 'Z',
+          ownsTextIndex: true,
+          rev: 7,
+          ...recreated.fields,
+        };
+        (a as any).testHooks = {
+          // Between the pre-read and T1: another call finishes X, then the app recreates it on c2.
+          insideDeleteTransaction: async (_: string, attempt: number) => {
+            if (attempt !== 1) return;
+            await db.collection(REGISTRY).deleteOne({ _id: X as any });
+            await seedRegistry(db, newX);
+          },
+        };
+        await a.deleteIndex({ indexName: X });
+        expect(await reg(X)).toEqual(newX);
+        expect(await searchIndexNames(db, c2)).toEqual(['Z']);
+        expect(await searchIndexNames(db, coll)).toEqual(['A']);
+      });
+    }
+
     it('T15: a retired-name drop that fails mid-delete is finished by a retry', async () => {
       const { coll, X } = await fixture(
         { A: 'search', B: 'search' },
