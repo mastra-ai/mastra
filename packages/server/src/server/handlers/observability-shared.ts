@@ -826,6 +826,7 @@ export function getObservabilityStorageCapabilities(
       coreFeatures.has(OBSERVABILITY_DELTA_POLLING_FEATURE) && declares(OBSERVABILITY_DELTA_POLLING_STORAGE_FEATURE),
     traceQuery,
     traceQueryAggregatedRoots: false,
+    // OSS Server never opts into token search; handle tokens explicitly in scalar-field walkers before enabling it.
     traceAggregateTokenSearch: false,
     traceQueryTokenSearch: false,
     traceQueryRootDuration:
@@ -860,6 +861,7 @@ export function getObservabilityStorageCapabilities(
     threadQueryRows:
       threadQuery && typeof coreStorage.planThreadRowsQuery === 'function' && declares('thread-query-rows'),
     spanQuery,
+    // OSS Server never opts into token search; the same scalar-field walker prerequisite applies here.
     spanAggregateTokenSearch: false,
     spanQueryTokenSearch: false,
     spanQueryDurationSort:
