@@ -322,7 +322,14 @@ export async function runStaticDriver({
         toolCallId: chunk.payload.toolCallId,
         toolName: chunk.payload.toolName,
         args: chunk.payload.args,
+        delegatedToolCallId: chunk.payload.delegatedToolCallId,
+        delegatedToolName: chunk.payload.delegatedToolName,
       });
+      // A supervisor re-raises a sub-agent's approval under its own delegation
+      // call, so several sub-agent approvals in one delegation share
+      // `toolCallId`. Give each its own card id (the sub-agent's own call) for
+      // the buttons and the stash, while the delegation id stays the resume key.
+      const cardId = enr.delegatedToolCallId ?? enr.toolCallId;
       const approvalMessage = renderToolEvent({
         kind: 'approval',
         toolName: enr.toolName,
@@ -330,15 +337,25 @@ export async function runStaticDriver({
         argsSummary: enr.argsSummary,
         args: enr.args,
         toolCallId: enr.toolCallId,
+        delegatedToolCallId: enr.delegatedToolCallId,
+        delegatedToolName: enr.delegatedToolName,
       });
-      const existingMessageId = toolMessageIds.get(enr.toolCallId) ?? getPendingApproval(enr.toolCallId)?.messageId;
+      // A delegated card never reuses the delegation's running card, which may
+      // already show an earlier sub-agent approval ("Approved"); it gets its own
+      // message. Ordinary approvals still edit the running card in place.
+      const existingMessageId = enr.delegatedToolCallId
+        ? getPendingApproval(cardId)?.messageId
+        : (toolMessageIds.get(enr.toolCallId) ?? getPendingApproval(enr.toolCallId)?.messageId);
       const finalMessageId =
         approvalMessage != null ? await editOrPost(existingMessageId, approvalMessage) : existingMessageId;
-      // Stash by toolCallId so the click handler can resume the correct
-      // run directly. The persisted-metadata path keys by toolName and
+      // Stash by card id so the click handler can resolve that exact card and
+      // resume its run. The persisted-metadata path keys by toolName and
       // collides on parallel same-tool approvals.
-      onApprovalPosted(enr.toolCallId, {
+      onApprovalPosted(cardId, {
         messageId: finalMessageId,
+        toolCallId: enr.toolCallId,
+        delegatedToolCallId: enr.delegatedToolCallId,
+        delegatedToolName: enr.delegatedToolName,
         displayName: enr.displayName,
         argsSummary: enr.argsSummary,
         startedAt: Date.now(),

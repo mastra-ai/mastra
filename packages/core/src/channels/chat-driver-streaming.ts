@@ -748,7 +748,14 @@ export async function runStreamingDriver({
         toolCallId: chunk.payload.toolCallId,
         toolName: chunk.payload.toolName,
         args: chunk.payload.args,
+        delegatedToolCallId: chunk.payload.delegatedToolCallId,
+        delegatedToolName: chunk.payload.delegatedToolName,
       });
+      // A supervisor re-raises a sub-agent's approval under its own delegation
+      // call, so several sub-agent approvals in one delegation share
+      // `toolCallId`. Give each its own card id (the sub-agent's own call) for
+      // the buttons and the stash, while the delegation id stays the resume key.
+      const cardId = enr.delegatedToolCallId ?? enr.toolCallId;
       const taskTitle = formatTaskTitle(enr.displayName, enr.argsSummary, enr.args);
       // Only park the plan row in modes where tool calls are already rendered
       // in the plan. Non-plan modes (`'cards'`/`'text'`/`'hidden'`) would
@@ -770,11 +777,13 @@ export async function runStreamingDriver({
       // instead; nullish / blank / `stream` results fall back to the built-in
       // card so the approval always stays actionable (mirrors the static
       // driver's `renderToolEvent`).
-      let approvalMessage: PostableMessage = formatToolApproval(enr.displayName, enr.argsSummary, enr.toolCallId, true);
+      let approvalMessage: PostableMessage = formatToolApproval(enr.displayName, enr.argsSummary, cardId, true);
       if (toolDisplayFn) {
         const approvalEvent: ToolDisplayEvent = {
           kind: 'approval',
           toolCallId: enr.toolCallId,
+          delegatedToolCallId: enr.delegatedToolCallId,
+          delegatedToolName: enr.delegatedToolName,
           toolName: enr.toolName,
           displayName: enr.displayName,
           argsSummary: enr.argsSummary,
@@ -788,10 +797,13 @@ export async function runStreamingDriver({
       // Prefer editing the running tool-card posted by `tool-call` (cards
       // mode stashes it in `toolMessageIds`) so the approval buttons replace
       // the running card in-place. Fall back to a re-posted approval message
-      // and finally to a fresh post when neither exists.
-      const runningCardMessageId = toolMessageIds.get(enr.toolCallId);
-      const existing = getPendingApproval(enr.toolCallId);
-      let messageId: string | undefined = runningCardMessageId ?? existing?.messageId;
+      // and finally to a fresh post when neither exists. A delegated card
+      // never reuses the delegation's running card, which may already show an
+      // earlier sub-agent approval ("Approved"); it gets its own message.
+      const existingMessageId = enr.delegatedToolCallId
+        ? getPendingApproval(cardId)?.messageId
+        : (toolMessageIds.get(enr.toolCallId) ?? getPendingApproval(enr.toolCallId)?.messageId);
+      let messageId: string | undefined = existingMessageId;
       if (messageId) {
         try {
           await adapter.editMessage(chatThread.id, messageId, approvalMessage);
@@ -805,9 +817,14 @@ export async function runStreamingDriver({
       }
       // Keep `toolMessageIds` in sync so the eventual `tool-result` edits the
       // same message (whether we edited the existing card or had to repost).
-      if (messageId) toolMessageIds.set(enr.toolCallId, messageId);
-      onApprovalPosted(enr.toolCallId, {
+      // Delegated cards stay out of it: the delegation's own running card must
+      // not be repointed at a sub-agent's approval message.
+      if (messageId && !enr.delegatedToolCallId) toolMessageIds.set(enr.toolCallId, messageId);
+      onApprovalPosted(cardId, {
         messageId,
+        toolCallId: enr.toolCallId,
+        delegatedToolCallId: enr.delegatedToolCallId,
+        delegatedToolName: enr.delegatedToolName,
         displayName: enr.displayName,
         argsSummary: enr.argsSummary,
         startedAt: Date.now(),

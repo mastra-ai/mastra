@@ -39,6 +39,8 @@ export interface PendingApprovalRecord {
    * Identifies the card (button id and stash key); `toolCallId` resumes it.
    */
   delegatedToolCallId?: string;
+  /** The sub-agent tool's name, when this card came from a delegate. */
+  delegatedToolName?: string;
 }
 
 /**

@@ -104,7 +104,7 @@ async function drive(
   channels: AgentChannels,
   chunks: any[],
   chatThread: any,
-  approvalContext?: { toolCallId: string; messageId: string },
+  approvalContext?: { toolCallId: string; messageId: string; delegatedToolCallId?: string },
   requestContext: Map<string, unknown> = new Map(),
 ) {
   const render = (channels as any)._buildRenderContext(chatThread, 'test', { approvalContext });
@@ -2129,6 +2129,24 @@ describe('ChatChannelOutputProcessor', () => {
       const edits = calls.filter(c => c.kind === 'editMessage');
       expect(edits).toHaveLength(1);
       expect((edits[0] as Extract<Call, { kind: 'editMessage' }>).messageId).toBe('seeded-card');
+    });
+
+    it('seeds a delegated approval under the sub-agent call id but keeps the resume id', async () => {
+      const { channels, chatThread } = makeChannels({ streaming: false });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'on it' } },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+        { toolCallId: 'call_delegate_1', messageId: 'delegated-card', delegatedToolCallId: 'call_delete_b' },
+      );
+      expect((channels as any).pendingApprovalCards.get('call_delete_b')).toMatchObject({
+        messageId: 'delegated-card',
+        toolCallId: 'call_delegate_1',
+        delegatedToolCallId: 'call_delete_b',
+      });
     });
 
     it('skips channel-emitted tool reactions (add_reaction / remove_reaction)', async () => {

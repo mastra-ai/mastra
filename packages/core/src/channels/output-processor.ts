@@ -46,7 +46,13 @@ export interface ChatChannelRenderContext {
   generativeUI?: boolean;
   /** Buffered-text behavior on abort. Absent means `'flush'` (driver-level default). */
   onAbort?: 'flush' | 'discard';
-  approvalContext?: { toolCallId: string; messageId: string };
+  approvalContext?: {
+    /** The tool call that resumes the run (the supervisor's delegation call for a delegated approval). */
+    toolCallId: string;
+    messageId: string;
+    /** The sub-agent's own paused call, when the approval came from a delegate. */
+    delegatedToolCallId?: string;
+  };
 }
 
 /** Chunks that carry reply text, kept out of the channel by `textDisplay: 'hidden'`. */
@@ -261,12 +267,18 @@ export class ChatChannelOutputProcessor {
 
     // Seed the approval-card stash on resumed runs so the driver can resolve
     // `messageId` for the incoming `tool-result` even though it never saw the
-    // pre-suspension `tool-call`.
+    // pre-suspension `tool-call`. The stash is keyed by the card id (the
+    // sub-agent's own call for a delegated approval); `toolCallId` stays the
+    // resume key the incoming `tool-result` looks the record up with.
     if (render.approvalContext) {
-      const existing = render.getPendingApproval(render.approvalContext.toolCallId);
-      render.onApprovalPosted(render.approvalContext.toolCallId, {
+      const { toolCallId, messageId, delegatedToolCallId } = render.approvalContext;
+      const cardId = delegatedToolCallId ?? toolCallId;
+      const existing = render.getPendingApproval(cardId);
+      render.onApprovalPosted(cardId, {
         ...existing,
-        messageId: render.approvalContext.messageId,
+        messageId,
+        toolCallId,
+        delegatedToolCallId,
         displayName: existing?.displayName ?? '',
         argsSummary: existing?.argsSummary ?? '',
         startedAt: existing?.startedAt ?? Date.now(),
