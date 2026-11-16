@@ -7249,11 +7249,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       ]);
     });
 
-    it('reads a reopened pull request open again on its own card and on the issue card that also holds it', async () => {
+    it('reads a reopened pull request open again on its Review card and on the Work card that wrote it', async () => {
       const h = await harness('write');
-      await h.issueCard(42, 'intake');
+      const work = await h.issueCard(42, 'intake');
       await h.ingest(openedPullRequest(17, 'Fixes #42'));
-      await h.ingest(openedPullRequest(17, 'Fixes #42', 'delivery-close-17', 'closed'));
       await h.workItems.upsert({
         orgId: 'org-1',
         userId: 'user-1',
@@ -7265,16 +7264,18 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             externalId: 'github-pr:17',
             url: 'https://github.com/acme/repo/pull/17',
           },
+          parentWorkItemId: work.id,
           title: 'PR 17',
-          stages: ['canceled'],
+          stages: ['review'],
           sessions: {},
-          metadata: { state: 'closed', merged: false },
+          metadata: { state: 'open', merged: false },
         },
       });
       const pullRequestStates = async () =>
         (await h.cards()).flatMap(card =>
           card.workItem.sources.filter(source => source.sourceType === 'pull-request').map(source => source.state),
         );
+      await h.ingest(openedPullRequest(17, 'Fixes #42', 'delivery-close-17', 'closed'));
       expect(await pullRequestStates()).toEqual(['closed', 'closed']);
 
       await h.ingest(openedPullRequest(17, 'Fixes #42', 'delivery-reopen-17', 'reopened'));
