@@ -181,6 +181,13 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       "How HTTP requests from 2025-era clients (those that open with `initialize`, such as VS Code and Cursor) are served. `'reject'` (default) answers them with an unsupported-protocol-version error. `'stateless'` answers each request without a session: listing and calling tools, reading resources and getting prompts work, `GET` and `DELETE` session requests get `405`, and features that need 2026-07-28 (suspend/resume, `subscriptions/listen`, events) aren't available to these clients.",
   },
   {
+    name: 'maxRequestBodySize',
+    type: 'number',
+    isOptional: true,
+    description:
+      'Upper bound, in bytes, on the HTTP request body the server reads from the request stream. A larger body is answered with a `413` JSON-RPC error before it is parsed, so no tool runs. It bounds only the body the server reads itself: when body-parsing middleware supplies the parsed body, this bound does not apply, so set the size limit on that parser as well. Defaults to `4194304` (4 MiB). Raise it on servers that receive large `tools/call` payloads, such as base64-encoded documents. Must be a positive number. Not applied to `stdio`, which has no request bodies.',
+  },
+  {
     name: 'toolResult',
     type: 'MCPServerToolResultOptions',
     isOptional: true,
@@ -1759,7 +1766,7 @@ const server = new MCPServer({
 
 A client that doesn't declare the extension sees the server as if it had no apps. The server hides its `ui://` resources, app links on tools and tool results, app-only tools, and the MCP Apps capability from that client.
 
-The declaration is read on every request. Clients on the 2026-07-28 protocol send it with each request. Clients on older protocol versions declare it once, at `initialize`. Over stateless HTTP, the `initialize` answer to such a client carries an `Mcp-Session-Id` that the client sends back on every later request, so the server keeps recognizing it as an app client without storing the id or granting any access through it. Because clients that don't declare the extension get no session id, their stateless traffic is unchanged.
+The declaration is read on every request. Clients on the 2026-07-28 protocol send it with each request. Clients on older protocol versions declare it once, at `initialize`. Over stateless HTTP, the server answers that `initialize` with an `Mcp-Session-Id`, and the client sends it back on every later request. The id tells the server the client renders apps. The server doesn't store the id, and the id grants no access. Clients that don't declare the extension get no session id, and their stateless traffic stays the same.
 
 ## Events (experimental)
 

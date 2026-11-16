@@ -1,5 +1,69 @@
 # @mastra/code-sdk
 
+## 1.19.1-alpha.4
+
+### Patch Changes
+
+- **Held plugin errors until someone listens.** `PluginManager.onPluginError` now receives errors reported before it subscribed, such as a plugin signal provider failing to start while Mastra Code boots. They still go to `console.warn` when reported, the first listener gets the 20 most recent, and later listeners only see new ones. ([#30428](https://github.com/mastra-ai/mastra/pull/30428))
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`6c647e6`](https://github.com/mastra-ai/mastra/commit/6c647e6faee5a6182d99e2352808df1b57558b67), [`adc0a70`](https://github.com/mastra-ai/mastra/commit/adc0a70bf835d1f81f7bf0af11b247ca115a6683), [`cd2a326`](https://github.com/mastra-ai/mastra/commit/cd2a326988ced13509902dfa50339afcffdbf95e), [`0170d70`](https://github.com/mastra-ai/mastra/commit/0170d700a411ce2b5e64a82bc1133716ae75cbd6), [`1072f7c`](https://github.com/mastra-ai/mastra/commit/1072f7c6268db5fb515460fdcdda173592bce450), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b), [`b666fdb`](https://github.com/mastra-ai/mastra/commit/b666fdbf03a95a8fbe4cf02d150f4576dad6512f)]:
+  - @mastra/core@1.84.0-alpha.3
+  - @mastra/libsql@1.31.0-alpha.1
+  - @mastra/pg@1.37.0-alpha.1
+  - @mastra/memory@1.41.2-alpha.2
+  - @mastra/mcp@2.10.0-alpha.0
+  - @mastra/client-js@1.60.1-alpha.3
+
+## 1.19.1-alpha.3
+
+### Patch Changes
+
+- Fixed `mastracode` crashing on startup after a fresh install. `@mastra/code-sdk` now requires `@mastra/core` 1.84 or newer, the first version with the knowledge scope helpers it imports. Before, npm could install `@mastra/core` 1.83, and `mastracode --help` failed with "does not provide an export named 'encodeKnowledgeScopeId'". ([#30425](https://github.com/mastra-ai/mastra/pull/30425))
+
+- `@mastra/code-sdk` now ships its own copy of the Knowledge scope id encoder instead of importing `encodeKnowledgeScopeId` from `@mastra/core`. If npm installs an older `@mastra/core`, `mastracode` still starts instead of crashing with "does not provide an export named 'encodeKnowledgeScopeId'". A test keeps the copy's output identical to core's. ([#30427](https://github.com/mastra-ai/mastra/pull/30427))
+
+- **Kept a plugin running when its reload fails.** A reload that fails for a plugin that was working (a bad update, a throwing resolver) now keeps the plugin's last good tools, signal providers and version stamp, and records the error as `reloadError` instead of removing the plugin. Disabling, blocking or uninstalling it still removes everything, and the next successful load replaces the kept one. ([#30412](https://github.com/mastra-ai/mastra/pull/30412))
+
+  **Added plugin error notifications.** `PluginManager.onPluginError` reports each distinct reload failure once, along with signal provider errors from running plugins. With no listener, errors still go to `console.warn`.
+
+  ```ts
+  const unsubscribe = pluginManager.onPluginError(({ pluginId, message }) => {
+    console.error(`[${pluginId}] ${message}`);
+  });
+  ```
+
+## 1.19.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`7277766`](https://github.com/mastra-ai/mastra/commit/7277766d6c967c475675d58ff2d0e5c6d7be7c84), [`9eae968`](https://github.com/mastra-ai/mastra/commit/9eae9680d2be2c9596156c1426998c173f80618f), [`951a18b`](https://github.com/mastra-ai/mastra/commit/951a18b08571b87eae318bcd0f5970b8e70ca3c8), [`f4458ee`](https://github.com/mastra-ai/mastra/commit/f4458eea7f221a5b741a4846bba9b95139a8aef8), [`a3b4ef9`](https://github.com/mastra-ai/mastra/commit/a3b4ef9ecda76f961cb9992a2c8787d37d8ce1b3), [`547600d`](https://github.com/mastra-ai/mastra/commit/547600d004e08ecb8b08c84312b535ae5b016c92)]:
+  - @mastra/core@1.84.0-alpha.2
+  - @mastra/memory@1.41.2-alpha.1
+  - @mastra/client-js@1.60.1-alpha.2
+
+## 1.19.1-alpha.1
+
+### Patch Changes
+
+- Fixed provider safety rejections losing their cause. Errors now show the provider's own wording (for example Anthropic's "Your request was rejected as a result of our safety system") and the request URL, and note that these are often false positives on code or security-like text. ([#30294](https://github.com/mastra-ai/mastra/pull/30294))
+
+- Fixed scheduled and notification runs pausing every tool call for approval when YOLO is off. These runs now follow the woken thread's own permission rules, so allowed tools run without pausing. On regular agents, independent tool calls run concurrently. Durable and evented agents still run them one at a time unless YOLO is on. ([#30151](https://github.com/mastra-ai/mastra/pull/30151))
+
+- Fixed `ask_user` questions not firing permission hooks. A pending question now fires `PermissionRequest` with `permission_kind: "ask_question"`, and answering or skipping it fires `PermissionResult` with decision `answered` or `dismissed`. Integrations that show a blocked state for approvals, such as terminal multiplexers, now also show it while a question waits for an answer. ([#30301](https://github.com/mastra-ai/mastra/pull/30301))
+
+  `PermissionResult` now reports the `run_id` of its `PermissionRequest`. With background tools enabled, the result was previously dropped when the user answered after the suspended run had ended.
+
+- Stop registering the built-in outcome and efficiency scorers on every Mastra Code session. No scorers run by default; pass `scorers` to `createMastraCode` to opt into evaluation. Existing `@mastra/code-sdk/evals` exports and `disableScoreStorage` remain available. ([#30363](https://github.com/mastra-ai/mastra/pull/30363))
+
+- Updated dependencies [[`2788a6d`](https://github.com/mastra-ai/mastra/commit/2788a6d959ec16c454d1ac6564d546f47be8f1eb), [`1bac054`](https://github.com/mastra-ai/mastra/commit/1bac054f7a9089d112f2b4732caef0fe9801df71), [`f51098e`](https://github.com/mastra-ai/mastra/commit/f51098e60cbb47a9eac5e458d6d85cd4ef162926), [`51c340a`](https://github.com/mastra-ai/mastra/commit/51c340a7824530b348e157cb6f71094522e2b5c2), [`2788a6d`](https://github.com/mastra-ai/mastra/commit/2788a6d959ec16c454d1ac6564d546f47be8f1eb), [`0d22884`](https://github.com/mastra-ai/mastra/commit/0d228849b8c6867938860fb19a1e92a0a8c77f27), [`51c340a`](https://github.com/mastra-ai/mastra/commit/51c340a7824530b348e157cb6f71094522e2b5c2), [`7fd6830`](https://github.com/mastra-ai/mastra/commit/7fd6830a26ac38060fa02675b2daef82f2c0ef2e), [`99ec3bd`](https://github.com/mastra-ai/mastra/commit/99ec3bd582a79d85d4c0c09b50ed9ed0830c79d5), [`70f3eba`](https://github.com/mastra-ai/mastra/commit/70f3eba5ecb9870d21582455fb55137663766d50), [`a21d692`](https://github.com/mastra-ai/mastra/commit/a21d69244449f1d478ccb4b7b548e0e0bd202947), [`cb5f3a5`](https://github.com/mastra-ai/mastra/commit/cb5f3a5c7964e9304c9b2a9141ab971158fe16d4), [`8ac8822`](https://github.com/mastra-ai/mastra/commit/8ac88228d67a5b3987084adeb40364a333347c97), [`3c1b528`](https://github.com/mastra-ai/mastra/commit/3c1b528b6eadf54528931e299e98f592a5d3e302), [`6d14d0e`](https://github.com/mastra-ai/mastra/commit/6d14d0edc4fb03e800d8d86e7e7fa00bf3943b56), [`8559e74`](https://github.com/mastra-ai/mastra/commit/8559e74767d2baf74e29f408e5dfa41a0d1007b0), [`7b9130f`](https://github.com/mastra-ai/mastra/commit/7b9130f50ec0d68daae4ef11bbfaf2d3bc9454ed), [`0278a5c`](https://github.com/mastra-ai/mastra/commit/0278a5ce834fad3cced73cfd19336a34d1bc8f10), [`2087fdc`](https://github.com/mastra-ai/mastra/commit/2087fdccb8d7bfb609a1b5014b116fe188c5bfba), [`0d22884`](https://github.com/mastra-ai/mastra/commit/0d228849b8c6867938860fb19a1e92a0a8c77f27), [`a86a47c`](https://github.com/mastra-ai/mastra/commit/a86a47c7ef92aa3a48b6663336235a43b7535aaa), [`8559e74`](https://github.com/mastra-ai/mastra/commit/8559e74767d2baf74e29f408e5dfa41a0d1007b0), [`8559e74`](https://github.com/mastra-ai/mastra/commit/8559e74767d2baf74e29f408e5dfa41a0d1007b0), [`7b646a0`](https://github.com/mastra-ai/mastra/commit/7b646a07a8da8aa84ca2a0a4564369c9d2462af5), [`8acea4c`](https://github.com/mastra-ai/mastra/commit/8acea4cc5b97dcfd1e1179f9b40ca34c05f255cf)]:
+  - @mastra/libsql@1.30.1-alpha.0
+  - @mastra/core@1.84.0-alpha.1
+  - @mastra/observability@1.24.1-alpha.0
+  - @mastra/memory@1.41.2-alpha.0
+  - @mastra/pg@1.36.1-alpha.0
+  - @mastra/client-js@1.60.1-alpha.1
+  - @mastra/mcp@2.9.0
+
 ## 1.19.1-alpha.0
 
 ### Patch Changes

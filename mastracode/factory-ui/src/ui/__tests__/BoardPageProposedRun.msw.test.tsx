@@ -153,7 +153,7 @@ function stubBoardEndpoints({
           {
             id: FACTORY_ID,
             name: 'Acme Factory',
-            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main' })],
           },
         ],
       }),
@@ -208,12 +208,6 @@ function stubBoardEndpoints({
     http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
-      HttpResponse.json({ issues: [], nextPage: null }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs`, () =>
-      HttpResponse.json({ pullRequests: [], nextPage: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions })),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
@@ -282,7 +276,6 @@ describe('Board card with a proposed run', () => {
       http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
         HttpResponse.json({ enabled: true, connected: true, workspace: { id: 'workspace-1' } }),
       ),
-      http.get(`${TEST_BASE_URL}/web/linear/issues`, () => HttpResponse.json({ issues: [], nextCursor: null })),
     );
     const { client } = renderBoard('work', `/factories/${FACTORY_ID}/work?item=${ITEM_ID}`);
 

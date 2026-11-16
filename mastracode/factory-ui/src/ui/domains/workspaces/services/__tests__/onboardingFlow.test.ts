@@ -91,8 +91,6 @@ describe('Factory onboarding flow', () => {
         private: false,
         installationId: 7,
         installationStorageId: 'inst-7',
-        sandboxProvider: 'local',
-        sandboxWorkdir: '/workspace/hello',
       },
       modelScope: 'hybrid',
       model: { providerId: 'openai', method: 'api_key', modelId: '' },
@@ -109,6 +107,12 @@ describe('Factory onboarding flow', () => {
     };
     persistOnboardingDraft(draft);
     expect(readOnboardingDraft()).toEqual(draft);
+  });
+
+  it('keeps the code-host sync choice the Work step stored', () => {
+    persistOnboardingDraft({ modelScope: 'factory', codeHostSync: false });
+
+    expect(readOnboardingDraft()).toEqual({ modelScope: 'factory', codeHostSync: false });
   });
 
   it('resumes the open Model section for its pending Factory', () => {

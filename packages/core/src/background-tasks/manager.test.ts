@@ -734,6 +734,55 @@ describe('BackgroundTaskManager', () => {
       expect(result?.status).toBe('timed_out');
       expect(result?.error?.message).toContain('timed out');
     });
+
+    it('never times out a task with timeoutMs 0', async () => {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const executeFn = vi.fn(
+        (_args: any, opts: { abortSignal: AbortSignal }) =>
+          new Promise((resolve, reject) => {
+            opts.abortSignal.addEventListener('abort', () => reject(opts.abortSignal.reason));
+            void gate.then(() => resolve('done'));
+          }),
+      );
+
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const { task } = await manager.enqueue(
+          { toolName: 'long-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', timeoutMs: 0, runId: 'run-1' },
+          ctx(executeFn),
+        );
+        await vi.waitFor(() => expect(executeFn).toHaveBeenCalled());
+
+        // Well past both this manager's default (5s) and the global one (300s).
+        await vi.advanceTimersByTimeAsync(600_000);
+        release();
+
+        await vi.waitFor(async () =>
+          expect(await manager.getTask(task.id)).toMatchObject({ status: 'completed', result: 'done' }),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('reports a tool abort error as a failure, not a timeout', async () => {
+      const executeFn = vi.fn(async () => {
+        throw new DOMException('Upstream request aborted', 'AbortError');
+      });
+
+      const { task } = await manager.enqueue(
+        { toolName: 'fetch-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', timeoutMs: 0, runId: 'run-1' },
+        ctx(executeFn),
+      );
+
+      await vi.waitFor(async () =>
+        expect(await manager.getTask(task.id)).toMatchObject({
+          status: 'failed',
+          error: { message: 'Upstream request aborted' },
+        }),
+      );
+    });
   });
 
   describe('retry', () => {

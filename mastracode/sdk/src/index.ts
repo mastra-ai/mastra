@@ -97,7 +97,6 @@ import {
 import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
 import { CODE_AGENT_ID, DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID, validateConfigDirName } from './constants.js';
-import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
 import {
   resolveAgentStreamsOff,
   resolveExperimentalAgent,
@@ -362,6 +361,8 @@ export interface MastraCodeConfig {
    * LibSQL fallback — if the injected store fails, that's a hard error.
    */
   storage?: StorageConfig | MastraCompositeStore;
+  /** Scorers for the code agent. None run by default. */
+  scorers?: Parameters<typeof createCodingAgent>[0]['scorers'];
   /** Disable persistence of rich scorer results. Default: true. */
   disableScoreStorage?: boolean;
   /** Backend for an injected custom storage instance. Inferred for LibSQLStore and PostgresStore. */
@@ -959,10 +960,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const loadedPlugins = pluginManager ? await pluginManager.reload() : [];
   const pluginTools = pluginManager?.getPluginTools() ?? {};
 
-  // Scorers (live evaluation with sampling)
-  const outcomeScorer = createOutcomeScorer();
-  const efficiencyScorer = createEfficiencyScorer();
-
   // Notification delivery. Every local Mastra Code process shares one database,
   // so one notification store and one dispatch schedule, and whichever process
   // wins a scheduled fire cannot run another project's thread. When Mastra Code
@@ -1342,6 +1339,14 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           ...(agentConnectionsSignalProvider ? [agentConnectionsSignalProvider.id] : []),
           ...(githubSignals ? [githubSignals.id] : []),
         ],
+        // A provider failing mid-session is a plugin problem the user should see,
+        // so it goes where plugin reload failures go rather than to the console.
+        onError: (message, error, pluginId) =>
+          pluginManager.reportPluginError({
+            pluginId,
+            message:
+              error === undefined ? message : `${message} ${error instanceof Error ? error.message : String(error)}`,
+          }),
       })
     : undefined;
   let unsubscribePluginReload: (() => void) | undefined;
@@ -1493,16 +1498,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       scheduleTools,
     ),
     hooks: createToolHooks(hookManager, config?.postToolObserver),
-    scorers: {
-      outcome: {
-        scorer: outcomeScorer,
-        sampling: { type: 'none' },
-      },
-      efficiency: {
-        scorer: efficiencyScorer,
-        sampling: { type: 'ratio', rate: 0.3 },
-      },
-    },
+    ...(config?.scorers ? { scorers: config.scorers } : {}),
     // TaskSignalProvider bundles the task tools + TaskStateProcessor: it merges
     // the tools into the toolset and registers the task state-signal processor,
     // so the task list persists across turns and survives OM truncation.

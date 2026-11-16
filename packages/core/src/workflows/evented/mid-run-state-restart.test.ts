@@ -165,6 +165,54 @@ describe('evented mid-run state recording', () => {
     expect(nextB.mock.calls[0]![0].state).toEqual({ first: 1, second: 1 });
   });
 
+  // On v1 the state is stored like a step result, so a state with its own `status` and `output`
+  // must still be replaced whole, not merged with the earlier state.
+  it('restarts a crashed run with a parallel group state that replaced status and output', async () => {
+    const storage = new MockStore();
+    const workflowId = 'mid-run-state-status-output';
+    const runId = `mid-run-state-status-output-${Date.now()}`;
+    const stateSchema = z.object({ status: z.string(), output: z.array(z.number()) });
+
+    const build = (nextExecute: StateStepExecute) => {
+      const stateStep = (id: string, execute: StateStepExecute) =>
+        createStep({ id, inputSchema: looseObject, outputSchema: looseObject, stateSchema, execute: execute as any });
+      const seed = stateStep('seed', async ({ setState }) => {
+        await setState({ status: 'failed', output: [1, 2, 3] });
+        return {};
+      });
+      const branch1 = stateStep('branch1', async ({ setState }) => {
+        await setState({ status: 'ok', output: [9] });
+        return {};
+      });
+      const branch2 = stateStep('branch2', async () => ({}));
+      return createWorkflow({ id: workflowId, inputSchema: looseObject, outputSchema: looseObject, stateSchema })
+        .then(seed)
+        .parallel([branch1, branch2])
+        .then(stateStep('next', nextExecute))
+        .commit();
+    };
+
+    const nextStarted = Promise.withResolvers<void>();
+    const workflowA = build(async () => {
+      nextStarted.resolve();
+      await new Promise<never>(() => {});
+      return {};
+    });
+    await makeHost(workflowA, storage);
+    const runA = await workflowA.createRun({ runId });
+    runA.start({ inputData: {}, initialState: { status: 'new', output: [] } }).catch(() => {});
+    await nextStarted.promise;
+
+    const nextB = vi.fn<StateStepExecute>(async ({ state }) => ({ seen: state }));
+    const workflowB = build(nextB);
+    await makeHost(workflowB, storage);
+
+    const result = await (await workflowB.createRun({ runId })).restart();
+
+    expect(result.status).toBe('success');
+    expect(nextB.mock.calls[0]![0].state).toEqual({ status: 'ok', output: [9] });
+  });
+
   it('restarts a crashed run with the state set by every foreach iteration', async () => {
     const storage = new MockStore();
     const workflowId = 'mid-run-state-foreach';

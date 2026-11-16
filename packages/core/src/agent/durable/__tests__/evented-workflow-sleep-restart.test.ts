@@ -11,8 +11,7 @@
  *
  * The sleep duration is only checked on the non-mechanism cells: restart and
  * redelivery can re-enter the sleep, so those cells assert the result and exact
- * execution log instead, with stale-detecting known differences for
- * COR-1307/COR-1394's completed-transition replay.
+ * execution log instead.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -253,17 +252,7 @@ describe('T58 wf-evented-redeliver', () => {
         const { event } = await redeliverAndDrain(driver, match, mode);
         expect(event.data).toEqual(original.data);
         expect(event.data).toMatchObject({ workflowId, runId, executionPath: [0] });
-        expectRedeliveryParity(
-          { executed },
-          { executed: ['before', 'after'] },
-          mode === 'same-id'
-            ? undefined
-            : {
-                reason:
-                  'COR-1307 / COR-1394: a completed transition drives the sleep chain again on fresh-ID or expired replay.',
-                expect: correct => ({ ...correct, executed: [...correct.executed, ...correct.executed] }),
-              },
-        );
+        expectRedeliveryParity({ executed }, { executed: ['before', 'after'] });
       } finally {
         await mastra.stopWorkers();
         driver.dispose();

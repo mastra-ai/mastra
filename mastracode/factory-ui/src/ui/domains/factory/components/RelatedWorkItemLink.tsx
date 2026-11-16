@@ -3,15 +3,17 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
-import { MessageSquare } from 'lucide-react';
 import { Link } from 'react-router';
 
-import { externalLinkLabel, PULL_REQUEST_STATUS_LABELS, pullRequestStatusForItem } from '../boardItems';
-import { relationshipLabel, workItemReferenceLabel } from '../services/relationships';
+import { externalLinkLabel } from '../boardItems';
+import { cardChangeRequest, changeRequestStatus, changeRequestStatusLabel } from '../changeRequestState';
+import type { PullRequestSubscription } from '../services/githubSubscriptions';
+import { relatedCardName, relationshipLabel, workItemReference } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import { isPullRequestSource } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
+import { IconChatBubble7 } from '@mastra/playground-ui/icons/central/IconChatBubble7';
 
 const RELATED_ITEM_LINK_CLASS = `hover:text-foreground relative z-10 flex w-fit max-w-full items-center gap-1 rounded-sm hover:underline ${focusRing}`;
 
@@ -19,38 +21,43 @@ export function RelatedWorkItemLink({
   item,
   href,
   kind,
+  contextRepository,
+  subscriptions,
 }: {
   item: WorkItem;
   href: string;
   kind: 'board' | 'external' | 'session';
+  contextRepository?: string;
+  subscriptions?: readonly PullRequestSubscription[];
 }) {
   const live = kind === 'session';
   const external = kind === 'external';
-  const reference = workItemReferenceLabel(item);
-  const relation = relationshipLabel(item);
-  const titleSuffix = reference === undefined ? '' : `: ${item.title}`;
-  const pullRequestStatus = isPullRequestSource(item.source) ? pullRequestStatusForItem(item) : undefined;
-  const statusLabel = pullRequestStatus === undefined ? undefined : PULL_REQUEST_STATUS_LABELS[pullRequestStatus];
-  let ariaLabel = `Open ${relation}${titleSuffix}`;
-  if (live) ariaLabel = `Open live session for ${relation}${titleSuffix}`;
-  if (external) ariaLabel = `${externalLinkLabel(item.source)}: ${relation}${titleSuffix}`;
+  const reference = workItemReference(item, contextRepository);
+  const relation = relationshipLabel(item, contextRepository);
+  const name = relatedCardName(item, contextRepository);
+  const pullRequest = isPullRequestSource(item.source) ? cardChangeRequest(item) : undefined;
+  const pullRequestStatus = pullRequest && changeRequestStatus(pullRequest, subscriptions);
+  const statusLabel =
+    pullRequest && pullRequestStatus ? changeRequestStatusLabel(pullRequest.provider, pullRequestStatus) : undefined;
+  let ariaLabel = `Open ${name}`;
+  if (live) ariaLabel = `Open live session for ${name}`;
+  if (external) ariaLabel = `${externalLinkLabel(item.source)}: ${name}`;
   if (statusLabel !== undefined) ariaLabel = `${ariaLabel}, ${statusLabel}`;
 
   const content = (
     <>
-      {pullRequestStatus === undefined ? (
-        <SourceIcon source={item.source} className="size-3" />
+      {pullRequest && pullRequestStatus ? (
+        <PullRequestStatusIcon status={pullRequestStatus} provider={pullRequest.provider} size={12} decorative />
       ) : (
-        <PullRequestStatusIcon status={pullRequestStatus} size={12} decorative />
+        <SourceIcon source={item.source} className="size-3" />
       )}
       <Txt as="span" variant="meta" className="min-w-0 flex-1 truncate">
         {reference ?? item.title}
       </Txt>
       {live && (
-        <MessageSquare
+        <IconChatBubble7
           data-live-session-indicator
-          size={11}
-          className="text-badge-green-indicator shrink-0"
+          className="text-badge-green-indicator size-icon-xs shrink-0"
           aria-hidden
         />
       )}

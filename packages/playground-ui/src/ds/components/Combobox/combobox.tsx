@@ -1,5 +1,4 @@
 import { Combobox as BaseCombobox } from '@base-ui/react/combobox';
-import { X } from 'lucide-react';
 import * as React from 'react';
 import {
   ComboboxChip,
@@ -22,6 +21,7 @@ import type { ButtonSize } from '@/ds/components/Button/Button';
 import { keepOwnAccessibleName, useFieldAriaIds } from '@/ds/components/Field/field-control-aria';
 import { FieldBlock } from '@/ds/components/FormFieldBlocks/block/field-block';
 import { fieldErrorId } from '@/ds/components/FormFieldBlocks/block/field-error-id';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { deprecatedErrorAria } from '@/ds/primitives/form-element';
 import type { PortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
@@ -221,7 +221,7 @@ function ComboboxClearFooter({ label, onClear }: { label: string; onClear: () =>
         size="sm"
         className="w-full justify-start"
         onClick={onClear}
-        icon={<X />}
+        icon={<IconCrossMedium />}
       >
         {label}
       </Button>

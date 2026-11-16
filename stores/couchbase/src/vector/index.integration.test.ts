@@ -218,7 +218,7 @@ describe('Integration Testing CouchbaseVector', async () => {
       expect(
         index_definition.params.mapping?.types?.[`${test_scopeName}.${test_collectionName}`]?.properties?.embedding
           ?.fields?.[0]?.similarity,
-      ).toBe('l2_norm'); // similiarity(=="l2_norm") is mapped to euclidean in couchbase
+      ).toBe('l2_norm'); // similarity(=="l2_norm") is mapped to euclidean in couchbase
     }, 50000);
 
     it('should list indexes', async () => {
@@ -229,7 +229,7 @@ describe('Integration Testing CouchbaseVector', async () => {
     it('should describe index', async () => {
       const stats = await couchbase_client.describeIndex({ indexName: test_indexName });
       expect(stats.dimension).toBe(dimension);
-      expect(stats.metric).toBe('euclidean'); // similiarity(=="l2_norm") is mapped to euclidean in couchbase
+      expect(stats.metric).toBe('euclidean'); // similarity(=="l2_norm") is mapped to euclidean in couchbase
       expect(typeof stats.count).toBe('number');
     }, 50000);
 

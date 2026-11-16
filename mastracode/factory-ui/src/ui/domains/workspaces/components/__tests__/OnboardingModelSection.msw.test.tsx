@@ -102,6 +102,61 @@ describe('Model provider onboarding', () => {
     });
   });
 
+  describe('when the server already has a Mastra Gateway key', () => {
+    it.each(['factory', 'user'] as const)(
+      'uses the injected key for %s setup without connecting another key',
+      async modelScope => {
+        registerAuthHandler();
+        const connect = vi.fn();
+        const providers: ProviderInfo[] = [
+          { provider: 'mastra', envVar: 'MASTRA_GATEWAY_API_KEY', source: 'deployment', serverKey: true },
+        ];
+        server.use(
+          http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ orgKeyAdmin: true, providers })),
+          http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+            HttpResponse.json({
+              models: [
+                {
+                  id: 'mastra/anthropic/claude-opus-5.5',
+                  provider: 'mastra',
+                  modelName: 'anthropic/claude-opus-5.5',
+                  hasApiKey: true,
+                },
+              ],
+            }),
+          ),
+          http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+            HttpResponse.json({ modelId: null, thinkingLevel: null }),
+          ),
+          http.post(`${TEST_BASE_URL}/web/config/providers/mastra/connect`, () => {
+            connect();
+            return HttpResponse.json({ ok: true });
+          }),
+        );
+        const user = userEvent.setup();
+        const { onCreate } = renderModelSection({ draft: { modelScope } });
+
+        await chooseProvider(user, 'Mastra Gateway');
+
+        expect(screen.queryByRole('button', { name: 'Connect Mastra Gateway' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(await screen.findByRole('combobox')).toHaveValue('Claude Opus 5.5');
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Create factory' })).toBeEnabled());
+        await user.click(screen.getByRole('button', { name: 'Create factory' }));
+        expect(onCreate).toHaveBeenCalledWith({
+          repository: modelSectionRepository,
+          modelScope,
+          [modelScope === 'user' ? 'personal' : 'model']: {
+            providerId: 'mastra',
+            modelId: 'mastra/anthropic/claude-opus-5.5',
+            method: 'api_key',
+          },
+        });
+        expect(connect).not.toHaveBeenCalled();
+      },
+    );
+  });
+
   describe('when Factory is signed in with a Mastra account', () => {
     function registerGatewayHandlers({
       remainingCredits,

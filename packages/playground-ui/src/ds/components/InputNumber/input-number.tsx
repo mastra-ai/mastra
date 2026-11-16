@@ -1,9 +1,10 @@
 import { NumberField as NumberFieldPrimitive } from '@base-ui/react/number-field';
-import { MinusIcon, PlusIcon } from 'lucide-react';
 import * as React from 'react';
 
 import { buttonVariants } from '@/ds/components/Button/Button';
 import { inputGroupClassName, inputGroupControlClassName } from '@/ds/components/InputGroup/input-group';
+import { IconMinusMedium } from '@/ds/icons/central/IconMinusMedium';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { Icon } from '@/ds/icons/Icon';
 import { ControlSizeContext, controlHeight } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
@@ -70,7 +71,7 @@ function InputNumberDecrement({ className, children, ...props }: InputNumberDecr
       className={cn(inputNumberButtonClassName, className)}
       {...props}
     >
-      <Icon size="sm">{children ?? <MinusIcon />}</Icon>
+      <Icon size="sm">{children ?? <IconMinusMedium />}</Icon>
     </NumberFieldPrimitive.Decrement>
   );
 }
@@ -86,7 +87,7 @@ function InputNumberIncrement({ className, children, ...props }: InputNumberIncr
       className={cn(inputNumberButtonClassName, className)}
       {...props}
     >
-      <Icon size="sm">{children ?? <PlusIcon />}</Icon>
+      <Icon size="sm">{children ?? <IconPlusMedium />}</Icon>
     </NumberFieldPrimitive.Increment>
   );
 }

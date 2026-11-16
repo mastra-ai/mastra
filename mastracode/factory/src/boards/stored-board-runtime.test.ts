@@ -528,8 +528,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           orgId,
           factoryProjectId: projectId,
           workItemId: card.id,
-          ingress: { identity, triggerType: 'test' },
-          configVersion: 'factory-config-v1',
+          ingress: { identity },
           expectedRevision: current.revision,
           actor: { type: 'system', id: 'rules' },
           outcome: { status: 'accepted' },
@@ -588,9 +587,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           orgId,
           connectionId: connection.id,
           repositoryId: repository.id,
-          createdByUserId: 'admin-user',
-          sandboxProvider: 'local',
-          sandboxWorkdir: '/tmp/shipyard',
         });
         return projectId;
       }
@@ -787,6 +783,16 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           timeout: 20_000,
         });
         expect(runsOf(requests, 'factory-triage', card.title)).toEqual([]);
+        // A person moves the card on once Planning's run is over: a busy card holds its phase.
+        await vi.waitFor(
+          async () => {
+            const open = (
+              await replica.workItems.listDeferredDecisions(orgId, projectId, { workItemId: card.id })
+            ).filter(record => ['pending', 'retry', 'leased'].includes(record.status));
+            expect(open).toEqual([]);
+          },
+          { timeout: 20_000 },
+        );
 
         for (const stage of ['execute', 'done']) {
           const result = await move((await replica.workItems.get({ orgId, id: card.id }))!, stage);
@@ -1264,9 +1270,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             orgId,
             connectionId: connection.id,
             repositoryId: repository.id,
-            createdByUserId: 'admin-user',
-            sandboxProvider: 'local',
-            sandboxWorkdir: '/workspace',
           });
 
           // The GitHub rules and dispatcher Factory runs, over the project's stored boards.

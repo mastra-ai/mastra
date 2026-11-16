@@ -225,6 +225,8 @@ export interface FactoryIntegration {
   readonly additionalIntakes?: ReadonlyArray<{ id: string; intake: Pick<Intake, 'listSources' | 'listItems'> }>;
   /** Repository, installation, and pull-request capability. */
   readonly versionControl?: VersionControl;
+  /** Whether at least one account is connected, for the dev-server startup summary. */
+  hasActiveConnections?(): Promise<boolean>;
   /**
    * Bind the integration's generic persistence handle. Called once by the
    * factory during `prepare()` (before routes/tools/workers are collected),

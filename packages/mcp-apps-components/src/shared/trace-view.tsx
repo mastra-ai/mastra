@@ -159,7 +159,8 @@ export function OpenedTrace({ app, trace, spanId }: { app: App; trace: LightTrac
 
   return (
     <AppState context={context} studioPath={studioPath}>
-      <div className="flex flex-col">
+      {/* Scrolls inside a frame with a bounded height: fullscreen, or the explorer's fixed card. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <DataPanel variant="inline" title={`Trace ${trace.traceId}`} className={IN_CARD}>
           <DataPanel.Header>
             <DataPanel.HeaderContent>

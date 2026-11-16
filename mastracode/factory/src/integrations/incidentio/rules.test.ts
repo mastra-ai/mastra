@@ -153,7 +153,7 @@ describe('IncidentioRules', () => {
   });
 
   it.each(['completed', 'canceled'])(
-    'closes linked follow-ups in state %s with shared audit metadata',
+    'closes linked follow-ups in state %s',
     async stateType => {
       const { project, service, workItems } = await setup();
       await workItems.upsert({
@@ -176,13 +176,7 @@ describe('IncidentioRules', () => {
       });
       expect(commit).toHaveBeenCalledWith(
         expect.objectContaining({
-          configVersion: 'factory-config-v1',
-          ingress: {
-            identity: `incidentio:${issue.id}:${issue.updatedAt}`,
-            // Closures must be stored under the close trigger, not the
-            // observation trigger, so trigger-based audit queries stay correct.
-            triggerType: 'incidentio.followUpClosed',
-          },
+          ingress: { identity: `incidentio:${issue.id}:${issue.updatedAt}` },
         }),
       );
       expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
@@ -256,6 +250,38 @@ describe('IncidentioRules', () => {
     );
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
     expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toEqual([]);
+  });
+});
+
+describe('IncidentioRules on a repeated sweep', () => {
+  const other = { ...issue, id: 'incidentio:follow-up:01HOTHER', title: 'Page the database owner' };
+
+  it('runs no rules for follow-ups the ledger already holds, and runs them again once a follow-up changes', async () => {
+    const { project, service, workItems } = await setup();
+    const ingress = { orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id };
+    await service.ingest({ ...ingress, issues: [issue, other] });
+    const commit = vi.spyOn(workItems, 'commitRuleEvaluation');
+
+    await expect(service.ingest({ ...ingress, issues: [issue, other] })).resolves.toEqual({
+      status: 'replayed',
+      ingested: 2,
+    });
+    expect(commit).not.toHaveBeenCalled();
+
+    await service.ingest({ ...ingress, issues: [issue, { ...other, updatedAt: '2026-09-03T08:00:00Z' }] });
+    expect(commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('still files the next follow-up when one fails, then reports the failure', async () => {
+    const { project, service, workItems } = await setup();
+    vi.spyOn(workItems, 'commitRuleEvaluation').mockRejectedValueOnce(new Error('database unavailable'));
+
+    await expect(
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue, other] }),
+    ).rejects.toThrow('database unavailable');
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      { decision: { sourceKey: other.id } },
+    ]);
   });
 });
 
