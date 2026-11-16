@@ -39,7 +39,8 @@ describe('CopyField', () => {
       layoutWith(400);
       renderField();
 
-      expect(screen.getByRole('group', { name: 'organization ID' }).textContent).toContain(ORG_ID);
+      // One match: tests and find-in-page see the value once, not once per layer.
+      expect(screen.getAllByText(ORG_ID)).toHaveLength(1);
       expect(screen.queryByText(/…/)).toBeNull();
     });
   });

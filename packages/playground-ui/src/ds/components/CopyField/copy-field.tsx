@@ -48,14 +48,14 @@ export function CopyField({ value, label, size, disabled, className }: CopyField
             disabled && 'cursor-not-allowed',
           )}
         >
-          {/* The untruncated value sizes the box (so it hugs short values); the visible line fits inside it. */}
+          {/* The whole value sizes the box (so it hugs short values); the visible line fits inside it. */}
           <span ref={ref} className="grid min-w-0 grid-cols-[minmax(0,max-content)]">
+            {/* Drawn as CSS content, so it's never selected and never found as a second copy of the text. */}
             <span
               aria-hidden
-              className="invisible col-start-1 row-start-1 h-0 overflow-hidden whitespace-pre select-none"
-            >
-              {value}
-            </span>
+              data-value={value}
+              className="invisible col-start-1 row-start-1 h-0 overflow-hidden whitespace-pre select-none before:content-[attr(data-value)]"
+            />
             <span
               aria-hidden={truncated || undefined}
               className="col-start-1 row-start-1 overflow-hidden whitespace-pre"
