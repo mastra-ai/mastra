@@ -1783,11 +1783,7 @@ export class BackgroundTaskManager {
     result: Parameters<typeof workflowRunError>[0],
   ): Promise<void> {
     if (result.status !== 'success') await this.failUnsettledTask(taskId, action, workflowRunError(result));
-    // Finished before the run's slot is released, so the next queued task's
-    // claim can't overlap this delete. On LibSQL that claim waits for the
-    // delete's transaction while blocking the event loop the delete needs to
-    // commit, and fails with SQLITE_BUSY.
-    await this.#deleteEndedRun(workflow, taskId);
+    this.#deleteEndedRun(workflow, taskId);
   }
 
   /**
@@ -1796,17 +1792,13 @@ export class BackgroundTaskManager {
    * one left running for recovery can be restarted by another worker, whose
    * suspended snapshot a late delete from here would remove.
    */
-  async #deleteEndedRun(
-    workflow: { deleteWorkflowRunById(runId: string): Promise<void> },
-    taskId: string,
-  ): Promise<void> {
-    try {
-      const task = await (await this.getStorage()).getTask(taskId);
-      if (task && !isTerminalStatus(task.status)) return;
-      await workflow.deleteWorkflowRunById(taskId);
-    } catch (error) {
-      this.#mastra?.getLogger?.()?.warn(`Failed to delete workflow run for background task ${taskId}:`, error as any);
-    }
+  #deleteEndedRun(workflow: { deleteWorkflowRunById(runId: string): Promise<void> }, taskId: string): void {
+    this.#trackSettlingRun(
+      (async () => {
+        const task = await (await this.getStorage()).getTask(taskId);
+        if (!task || isTerminalStatus(task.status)) this.#deleteSettledRun(workflow, taskId);
+      })(),
+    );
   }
 
   #deleteSettledRun(workflow: { deleteWorkflowRunById(runId: string): Promise<void> }, taskId: string): void {
