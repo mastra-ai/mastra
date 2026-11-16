@@ -201,7 +201,8 @@ export class ConnectGithubTransport implements GithubTransport {
     number: number,
     body: { commitTitle?: string; commitMessage?: string; method?: 'merge' | 'squash' | 'rebase' },
   ): Promise<{ merged: boolean; message: string; sha: string | null }> {
-    const raw = await this.#write(call, 'mergePullRequest', 'default', octokit =>
+    // Merges carry identity (merged_by, the merge commit's author), so the person's own token is preferred.
+    const raw = await this.#userPreferredWrite(call, 'mergePullRequest', 'default', octokit =>
       this.#get<{ merged: boolean; message: string; sha?: string | null }>(
         octokit,
         'PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge',
@@ -353,7 +354,7 @@ export class ConnectGithubTransport implements GithubTransport {
     number: number,
     body: { body?: string; commitId?: string; event?: GithubReviewEvent },
   ): Promise<GithubReview> {
-    const raw = await this.#write(call, 'createReview', 'review', (octokit, attribution) =>
+    const raw = await this.#userPreferredWrite(call, 'createReview', 'review', (octokit, attribution) =>
       this.#get<RawReview>(octokit, 'POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews', {
         ...repo(call),
         pull_number: number,
@@ -396,7 +397,7 @@ export class ConnectGithubTransport implements GithubTransport {
   }
 
   async dismissReview(call: GithubCall, number: number, reviewId: number, message: string): Promise<GithubReview> {
-    const raw = await this.#write(call, 'dismissReview', 'review', (octokit, attribution) =>
+    const raw = await this.#reviewWrite(call, number, reviewId, 'dismissReview', (octokit, attribution) =>
       this.#get<RawReview>(octokit, 'PUT /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/dismissals', {
         ...repo(call),
         pull_number: number,
@@ -573,17 +574,27 @@ export class ConnectGithubTransport implements GithubTransport {
   // —— The acting user ——
 
   /** The user's GitHub login, when they have their own GitHub token. */
-  async userLogin(userId: string): Promise<string | null> {
+  async userLogin(userId: string, signal?: AbortSignal): Promise<string | null> {
     const user = await this.#tokens.userToken(this.#orgId, userId);
     if (!user) return null;
-    return this.#login(user.token);
+    return this.#login(user.token, signal);
   }
 
   /** Runs `fn` with the user's own token; null when they have none. */
-  async asUser<T>(userId: string, operation: string, fn: (octokit: Octokit) => Promise<T>): Promise<T | null> {
+  async asUser<T>(
+    userId: string,
+    operation: string,
+    fn: (octokit: Octokit) => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T | null> {
     const user = await this.#tokens.userToken(this.#orgId, userId);
     if (!user) return null;
-    return this.#withToken(operation, { tokenClass: 'user', key: userId, value: user.token }, undefined, fn);
+    return this.#withToken(operation, { tokenClass: 'user', key: userId, value: user.token }, signal, fn);
+  }
+
+  /** Runs `fn` with the `factory-github` installation's token. */
+  asApp<T>(operation: string, fn: (octokit: Octokit) => Promise<T>, signal?: AbortSignal): Promise<T> {
+    return this.#run(operation, 'default', signal, fn);
   }
 
   // —— Token routing ——
@@ -599,8 +610,10 @@ export class ConnectGithubTransport implements GithubTransport {
   }
 
   /**
-   * A write: with an acting user who has their own GitHub token, as that user; otherwise
-   * as the app, naming the user in the body.
+   * A write, as the app, naming the acting user in the body. This is what the
+   * legacy platform does for every write a person's identity doesn't change on
+   * GitHub, and it keeps Factory's own comments and pull requests recognisable
+   * to its self-loop guards.
    */
   async #write<T>(
     call: GithubCall,
@@ -608,12 +621,33 @@ export class ConnectGithubTransport implements GithubTransport {
     tokenClass: 'default' | 'review',
     fn: (octokit: Octokit, attribution: string | undefined) => Promise<T>,
   ): Promise<T> {
+    const attribution = call.actingUserId ? await this.#attribution(call.actingUserId, call.signal) : undefined;
+    return this.#run(operation, tokenClass, call.signal, octokit => fn(octokit, attribution));
+  }
+
+  /**
+   * A write whose identity GitHub records (a review, a merge): as the acting
+   * user when they have their own GitHub token, otherwise as the app naming
+   * them. The legacy platform prefers the person for the same operations.
+   */
+  async #userPreferredWrite<T>(
+    call: GithubCall,
+    operation: string,
+    tokenClass: 'default' | 'review',
+    fn: (octokit: Octokit, attribution: string | undefined) => Promise<T>,
+  ): Promise<T> {
     if (call.actingUserId) {
-      const done = await this.asUser(call.actingUserId, operation, octokit => fn(octokit, undefined));
+      const done = await this.asUser(call.actingUserId, operation, octokit => fn(octokit, undefined), call.signal);
       if (done !== null) return done;
-      return this.#run(operation, tokenClass, call.signal, octokit => fn(octokit, `@${call.actingUserId}`));
     }
-    return this.#run(operation, tokenClass, call.signal, octokit => fn(octokit, undefined));
+    return this.#write(call, operation, tokenClass, fn);
+  }
+
+  /** How a write names the person it was made for: their GitHub login when known, else their Factory id. */
+  async #attribution(userId: string, signal: AbortSignal | undefined): Promise<string> {
+    const user = await this.#tokens.userToken(this.#orgId, userId).catch(() => null);
+    const login = user ? await this.#login(user.token, signal).catch(() => null) : null;
+    return `@${login ?? userId}`;
   }
 
   /**
@@ -636,7 +670,7 @@ export class ConnectGithubTransport implements GithubTransport {
     }
     const author = review.user?.login;
     if (this.#isFactoryLogin(author)) {
-      const attribution = call.actingUserId ? `@${call.actingUserId}` : undefined;
+      const attribution = call.actingUserId ? await this.#attribution(call.actingUserId, call.signal) : undefined;
       return this.#run(operation, 'review', call.signal, octokit => fn(octokit, attribution));
     }
     const user = call.actingUserId ? await this.#tokens.userToken(this.#orgId, call.actingUserId) : null;
@@ -644,7 +678,7 @@ export class ConnectGithubTransport implements GithubTransport {
       throw new GithubReviewAuthorRequiredError(
         'Only the review author can modify this review: connect GitHub or add a GitHub token in Factory.',
       );
-    const login = await this.#login(user.token);
+    const login = await this.#login(user.token, call.signal);
     if (!author || login.toLowerCase() !== author.toLowerCase()) {
       throw new GithubReviewAuthorRequiredError(
         'Only the original review author can update, submit, or delete this review, using their own GitHub connection or token.',
@@ -668,7 +702,7 @@ export class ConnectGithubTransport implements GithubTransport {
       });
     const found = await orNull(this.#run('getReview', 'review', call.signal, read));
     if (found || !call.actingUserId) return found;
-    return orNull(this.asUser(call.actingUserId, 'getReview', read));
+    return orNull(this.asUser(call.actingUserId, 'getReview', read, call.signal));
   }
 
   async #run<T>(
@@ -732,10 +766,10 @@ export class ConnectGithubTransport implements GithubTransport {
     return response.data as T;
   }
 
-  async #login(token: string): Promise<string> {
+  async #login(token: string, signal?: AbortSignal): Promise<string> {
     const cached = this.#logins.get(token);
     if (cached) return cached;
-    const user = await this.#call(token, undefined, octokit => this.#get<{ login: string }>(octokit, 'GET /user', {}));
+    const user = await this.#call(token, signal, octokit => this.#get<{ login: string }>(octokit, 'GET /user', {}));
     this.#logins.clear();
     this.#logins.set(token, user.login);
     return user.login;
