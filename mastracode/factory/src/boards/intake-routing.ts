@@ -1,11 +1,18 @@
-import { evaluateRuleGroup } from '../rules/rule-group.js';
-import type { RuleFacts, RuleGroup } from '../rules/rule-group.js';
+import { evaluateRuleGroup, explainRuleGroup } from '../rules/rule-group.js';
+import type { FailedRuleCondition, RuleFacts, RuleGroup } from '../rules/rule-group.js';
 import { externalSourceForWorkItem } from '../rules/types.js';
 import type { FactoryCommitDecision } from '../rules/types.js';
 import type { IntakeEvaluator, StoredBoardsStorage, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import type { BoardEventFacts, RouteArrivals } from './board-events.js';
-import { arrivalKind, arrivalKinds, eventRuleFacts, isPullRequestEvent, LEGACY_ARRIVAL_EVENT } from './board-events.js';
+import {
+  arrivalKind,
+  arrivalKinds,
+  eventMovesCard,
+  eventRuleFacts,
+  isPullRequestEvent,
+  LEGACY_ARRIVAL_EVENT,
+} from './board-events.js';
 import { cardRuleFacts } from './card-facts.js';
 import { deriveIntakeOrder, reconcileIntakeOrder } from './intake-order.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
@@ -21,7 +28,7 @@ type IntakeRoute = Pick<StoredIntakeRouteRecord, 'id' | 'enabled' | 'when' | 'on
   target: Pick<StoredIntakeRouteRecord['target'], 'boardKey' | 'phaseKey' | 'joinClosedIssue'> & {
     moveToBoardKey?: string | null;
   };
-};
+} & Partial<Pick<StoredIntakeRouteRecord, 'name'>>;
 
 /** Whether the route places new cards, rather than only moving existing ones on later events. */
 export function placesNewCards(route: RouteArrivals): boolean {
@@ -34,6 +41,18 @@ export function placesNewCards(route: RouteArrivals): boolean {
  */
 export function placesArrival(route: RouteArrivals, facts: RuleFacts): boolean {
   return arrivalKinds(route).has(arrivalKind(facts));
+}
+
+/**
+ * Why a route that files only issues, or only pull requests, passes over this arrival, put as the
+ * `source.kind` condition it amounts to; undefined when the route files this kind.
+ */
+function arrivalKindFailure(route: { on: readonly string[] }, facts: RuleFacts): FailedRuleCondition | undefined {
+  if (placesArrival(route, facts)) return undefined;
+  const actual = (facts['source.kind'] as FailedRuleCondition['actual'] | undefined) ?? null;
+  return arrivalKind(facts) === 'pull_request'
+    ? { field: 'source.kind', operator: 'not_equals', value: 'pull_request', actual }
+    : { field: 'source.kind', operator: 'equals', value: 'pull_request', actual };
 }
 
 /**
@@ -310,35 +329,109 @@ function placedOn(resolution: IntakeResolution): string | null {
   return resolution.outcome === 'placed' ? resolution.board : null;
 }
 
+/** How one intake rule answered an item, in the order intake asked it. */
+export type IntakeRuleVerdict =
+  /** It took the item: the first enabled rule, in intake order, that matched and whose phase takes it. */
+  | { outcome: 'took' }
+  /** It matched and its phase takes the item, but a rule asked earlier took it first. */
+  | { outcome: 'lost'; to: { boardKey: string; routeId: string } }
+  /** Its condition failed; `failed` names the conditions it failed on. */
+  | { outcome: 'no_match'; failed: FailedRuleCondition[] }
+  /** It matched, but its phase can't hold this kind of item (such as an issue in a pull request review phase). */
+  | { outcome: 'phase_refuses' }
+  /** It is switched off. */
+  | { outcome: 'disabled' };
+
+export type IntakeRuleTrace = IntakeRuleVerdict & {
+  routeId: string;
+  name: string | null;
+  /** The phase the item would land in from this rule. */
+  phase: string;
+};
+
+export interface IntakeBoardTrace {
+  boardKey: string;
+  name: string;
+  /** The board's rules that place new items, top to bottom. */
+  rules: IntakeRuleTrace[];
+}
+
+export interface IntakeTrace {
+  resolution: IntakeResolution;
+  /** Boards in the order intake asked them; with `full`, every board, even after one took the item. */
+  boards: IntakeBoardTrace[];
+}
+
 /**
- * Boards in intake order, and inside each board its own rules top to bottom: the first enabled
- * placing rule that matches and whose phase can take the card decides. Nothing names a board to
- * fall back to; an arrival no board takes is Not routed.
+ * Asks boards in intake order, and inside each board its own rules top to bottom: the first
+ * enabled placing rule that matches and whose phase can take the card decides. Nothing names a
+ * board to fall back to; an arrival no board takes is Not routed. Filing stops at the winner;
+ * `full` keeps asking every rule after it, so the dry run and tester can show which rules
+ * matched but lost. Both read the same verdicts, so what they show is what filing does.
  */
-function resolveByIntakeOrder({ routes, order, facts, registry }: IntakeQuery): IntakeResolution {
-  const checked: string[] = [];
+export function traceIntakeOrder(
+  { routes, order, facts, registry }: Omit<IntakeQuery, 'evaluator'>,
+  options: { full?: boolean } = {},
+): IntakeTrace {
+  const boards: IntakeBoardTrace[] = [];
+  let resolution: Extract<IntakeResolution, { outcome: 'placed' }> | undefined;
+  let winner: { boardKey: string; routeId: string } | undefined;
   // A code board isn't stored, so the stored order can lack it; it slots in as a new board does.
   const boardKeys = [...registry.keys()];
   const stored = order.length > 0 ? order : deriveIntakeOrder(routes, boardKeys);
   for (const boardKey of reconcileIntakeOrder(stored, boardKeys, routes)) {
     const board = registry.get(boardKey);
     if (!board) continue;
-    checked.push(board.name);
+    const trace: IntakeBoardTrace = { boardKey: board.id, name: board.name, rules: [] };
+    boards.push(trace);
     for (const route of routes) {
-      if (route.target.boardKey !== boardKey || route.target.joinClosedIssue) continue;
-      if (!route.enabled || !placesArrival(route, facts) || !evaluateRuleGroup(route.when, facts)) continue;
+      if (route.target.boardKey !== boardKey || route.target.joinClosedIssue || !placesNewCards(route)) continue;
       const phase = landingPhase(board, route.target.phaseKey);
-      if (!placementTakesCard(board, phase, facts)) continue;
-      return { outcome: 'placed', board: board.id, phase, routeId: route.id };
+      const rule = { routeId: route.id, name: route.name ?? null, phase };
+      if (!route.enabled) {
+        trace.rules.push({ ...rule, outcome: 'disabled' });
+        continue;
+      }
+      const kindFailed = arrivalKindFailure(route, facts);
+      if (kindFailed) {
+        trace.rules.push({ ...rule, outcome: 'no_match', failed: [kindFailed] });
+        continue;
+      }
+      const explained = explainRuleGroup(route.when, facts);
+      if (!explained.matched) {
+        trace.rules.push({ ...rule, outcome: 'no_match', failed: explained.failed });
+        continue;
+      }
+      if (!placementTakesCard(board, phase, facts)) {
+        trace.rules.push({ ...rule, outcome: 'phase_refuses' });
+        continue;
+      }
+      if (winner) {
+        trace.rules.push({ ...rule, outcome: 'lost', to: winner });
+        continue;
+      }
+      trace.rules.push({ ...rule, outcome: 'took' });
+      winner = { boardKey: board.id, routeId: route.id };
+      resolution = { outcome: 'placed', board: board.id, phase, routeId: route.id };
+      if (!options.full) return { resolution, boards };
     }
   }
+  if (resolution) return { resolution, boards };
+  const checked = boards.map(board => board.name);
   return {
-    outcome: 'not_routed',
-    reason:
-      checked.length > 0
-        ? `No board's intake rules match it (checked ${checked.join(', ')}).`
-        : 'The project has no board to take it.',
+    resolution: {
+      outcome: 'not_routed',
+      reason:
+        checked.length > 0
+          ? `No board's intake rules match it (checked ${checked.join(', ')}).`
+          : 'The project has no board to take it.',
+    },
+    boards,
   };
+}
+
+function resolveByIntakeOrder(query: IntakeQuery): IntakeResolution {
+  return traceIntakeOrder(query).resolution;
 }
 
 /**
@@ -390,21 +483,39 @@ export interface SkippedEventRoute {
   reason: string;
 }
 
+/** A card move: the board, phase and rule an event sends the card to. */
+export interface EventMove {
+  board: string;
+  phase: string;
+  routeId: string;
+}
+
+/** What one card-move rule answered for an event. */
+export type EventRuleVerdict =
+  | { outcome: 'took' }
+  | { outcome: 'lost'; to: { boardKey: string; routeId: string } }
+  | { outcome: 'no_match'; failed: FailedRuleCondition[] }
+  | { outcome: 'skipped'; reason: string }
+  | { outcome: 'disabled' };
+
+export type EventRuleTrace = { routeId: string; name: string | null } & EventRuleVerdict;
+
 /**
- * Where a status event moves an existing card: the first enabled route on the card's board whose
- * `on` names the event, whose `when` matches the card and the event, and whose target can hold the
- * card. The target is the route's own board unless it names another (`moveToBoardKey`); a route
- * without a phase moves the card to the target board's first phase. A matching route whose target
- * is gone or can't take the card is skipped and reported through `onSkip`. Undefined leaves the
- * card where it is.
+ * Every rule on the card's board whose `on` names the event, top to bottom, and what each
+ * answered: the first enabled one whose `when` matches the card and the event, and whose target
+ * can hold the card, moves it. The target is the route's own board unless it names another
+ * (`moveToBoardKey`); a route without a phase moves the card to the target board's first phase.
+ * A matching route whose target is gone or can't take the card is skipped and reported through
+ * `onSkip`. Filing stops at the winner; `full` keeps asking, so the tester shows what it beat.
  */
-export function resolveEventRoute(
+export function traceEventRoute(
   routes: readonly IntakeRoute[],
   event: BoardEventFacts,
   cardFacts: RuleFacts,
   board: InstalledBoard,
   options: { registry: BoardRegistry; carriesPullRequest?: boolean; onSkip?: (skipped: SkippedEventRoute) => void },
-): { board: string; phase: string; routeId: string } | undefined {
+  { full = false }: { full?: boolean } = {},
+): { move: EventMove | undefined; rules: EventRuleTrace[] } {
   const { 'pullRequest.trusted': workingPullRequestTrusted, ...rest } = cardFacts;
   // On a pull request event, `pullRequest.trusted` is that pull request's author, not the card's
   // working pull request's; an event that doesn't say is untrusted.
@@ -429,12 +540,35 @@ export function resolveEventRoute(
     !SETTLING_PULL_REQUEST_EVENTS.has(event.type) &&
     cardFacts['source.kind'] !== 'pull_request' &&
     pullRequestTrusted !== true;
+  const rules: EventRuleTrace[] = [];
+  let move: EventMove | undefined;
   for (const route of routes) {
-    if (!route.enabled || !route.on.includes(event.type) || route.target.boardKey !== board.id) continue;
-    if (untrustedLinkedPullRequest && !testsField(route.when, 'pullRequest.trusted')) continue;
-    if (!evaluateRuleGroup(route.when, facts)) continue;
+    if (!route.on.includes(event.type) || route.target.boardKey !== board.id) continue;
+    const named = { routeId: route.id, name: route.name ?? null };
+    if (!route.enabled) {
+      rules.push({ ...named, outcome: 'disabled' });
+      continue;
+    }
+    // Not a skip the dispatcher logs: the rule was never meant for this pull request.
+    if (untrustedLinkedPullRequest && !testsField(route.when, 'pullRequest.trusted')) {
+      rules.push({
+        ...named,
+        outcome: 'skipped',
+        reason: "the pull request's author is an outsider, and this rule doesn't test pullRequest.trusted",
+      });
+      continue;
+    }
+    const { matched, failed } = explainRuleGroup(route.when, facts);
+    if (!matched) {
+      rules.push({ ...named, outcome: 'no_match', failed });
+      continue;
+    }
     const targetKey = route.target.moveToBoardKey ?? board.id;
-    const skip = (reason: string) => options.onSkip?.({ routeId: route.id, boardKey: targetKey, reason });
+    const skip = (reason: string) => {
+      // Filing never reaches a rule past the winner, so only those before it are logged.
+      if (!move) options.onSkip?.({ routeId: route.id, boardKey: targetKey, reason });
+      rules.push({ ...named, outcome: 'skipped', reason });
+    };
     const target = targetKey === board.id ? board : options.registry.get(targetKey);
     if (!target) {
       skip(`board "${targetKey}" is not installed`);
@@ -449,7 +583,88 @@ export function resolveEventRoute(
       skip(`phase "${phase}" on board "${target.id}" can't hold this card`);
       continue;
     }
-    return { board: target.id, phase, routeId: route.id };
+    // A rule that could have taken the card, had an earlier one not.
+    if (move) {
+      rules.push({ ...named, outcome: 'lost', to: { boardKey: move.board, routeId: move.routeId } });
+      continue;
+    }
+    move = { board: target.id, phase, routeId: route.id };
+    rules.push({ ...named, outcome: 'took' });
+    if (!full) break;
   }
-  return undefined;
+  return { move, rules };
+}
+
+/** Where a status event moves an existing card, by {@link traceEventRoute}; undefined leaves it where it is. */
+export function resolveEventRoute(
+  routes: readonly IntakeRoute[],
+  event: BoardEventFacts,
+  cardFacts: RuleFacts,
+  board: InstalledBoard,
+  options: { registry: BoardRegistry; carriesPullRequest?: boolean; onSkip?: (skipped: SkippedEventRoute) => void },
+): EventMove | undefined {
+  return traceEventRoute(routes, event, cardFacts, board, options).move;
+}
+
+/**
+ * What a status event does to a card: `moves` it where a route sends it; `stays` when a route on
+ * its board handles the event but none moves it anywhere new; `rule_default` when the
+ * integration's own move (`fallback`, if any) applies because no route handles the event, or a
+ * pull request event's route didn't take the card; `ignored` when the event can't move a card in
+ * its state (a reopen of an unfinished card, a close of a finished one) or its board is gone.
+ */
+export type EventMovePlan = { rules: EventRuleTrace[] } & (
+  | { outcome: 'moves'; move: EventMove }
+  | { outcome: 'stays' }
+  | { outcome: 'rule_default'; phase: string | null }
+  | { outcome: 'ignored'; reason: string }
+);
+
+/** Decides a status event on a card the way the dispatcher files it; the tester replays events through it. */
+export function planEventMove(
+  input: {
+    routes: readonly IntakeRoute[];
+    event: BoardEventFacts;
+    item: Card;
+    registry: BoardRegistry;
+    /** The integration's own move for this event, when it proposed one. */
+    fallback?: { stage: string };
+    onSkip?: (skipped: SkippedEventRoute) => void;
+  },
+  options: { full?: boolean } = {},
+): EventMovePlan {
+  const { routes, event, item, registry, fallback } = input;
+  const board = registry.get(boardForWorkItem(item));
+  if (!board) return { outcome: 'ignored', reason: "The card's board isn't installed.", rules: [] };
+  const stage = item.stages.length === 1 ? item.stages[0] : undefined;
+  const finished = stage !== undefined && board.isTerminal(stage);
+  if (!eventMovesCard(event.type, finished)) {
+    return {
+      outcome: 'ignored',
+      reason: finished ? "A finished card doesn't move on this event." : 'Only a finished card moves on this event.',
+      rules: [],
+    };
+  }
+  const defaulted = { outcome: 'rule_default' as const, phase: fallback?.stage ?? null };
+  if (!routesHandleEvent(routes, event, board)) return { ...defaulted, rules: [] };
+  const facts = { ...cardRuleFacts(item), ...(stage !== undefined ? { 'card.phase': stage } : {}) };
+  const { move, rules } = traceEventRoute(
+    routes,
+    event,
+    facts,
+    board,
+    { registry, carriesPullRequest: hasPullRequest(item), ...(input.onSkip && { onSkip: input.onSkip }) },
+    options,
+  );
+  // A pull request event the rules already decided keeps that decision when no enabled route
+  // takes the card: disabling or narrowing a route must not strand a merged card in review.
+  if (!move) return fallback && isPullRequestEvent(event.type) ? { ...defaulted, rules } : { outcome: 'stays', rules };
+  const crossesBoards = move.board !== board.id;
+  // A route that agrees with the rule's own pull request move keeps it whole: its message, and
+  // the re-entry that restarts a review in the phase the card already sits in.
+  if (!crossesBoards && fallback && isPullRequestEvent(event.type) && move.phase === fallback.stage) {
+    return { ...defaulted, rules };
+  }
+  if (!crossesBoards && stage === move.phase) return { outcome: 'stays', rules };
+  return { outcome: 'moves', move, rules };
 }

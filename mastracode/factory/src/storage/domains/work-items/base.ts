@@ -1088,6 +1088,11 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
         name: 'factory_deferred_decisions_tenant_evaluation_idx',
         columns: ['org_id', 'factory_project_id', 'evaluation_id'],
       },
+      // One card's decisions: the update fold, overtaken status events and the intake tester.
+      {
+        name: 'factory_deferred_decisions_tenant_work_item_idx',
+        columns: ['org_id', 'factory_project_id', 'work_item_id', 'created_at'],
+      },
     ],
   },
   {
@@ -2734,20 +2739,28 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   async listDeferredDecisions(
     orgId: string,
     factoryProjectId: string,
-    filter: { statuses?: readonly string[]; workItemId?: string } = {},
+    /** `newest`: only that many of the most recent, still oldest first. */
+    filter: { statuses?: readonly string[]; workItemId?: string; newest?: number } = {},
   ): Promise<FactoryDeferredDecisionRecord[]> {
-    return (
-      await this.#db.findMany<GovernanceDbRow>(
-        'factory_deferred_decisions',
-        {
-          org_id: orgId,
-          factory_project_id: factoryProjectId,
-          ...(filter.statuses ? { status: { in: [...filter.statuses] } } : {}),
-          ...(filter.workItemId ? { work_item_id: filter.workItemId } : {}),
-        },
-        { orderBy: [['created_at', 'asc']] },
-      )
-    ).map(toDeferredDecision);
+    const rows = await this.#db.findMany<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      {
+        org_id: orgId,
+        factory_project_id: factoryProjectId,
+        ...(filter.statuses ? { status: { in: [...filter.statuses] } } : {}),
+        ...(filter.workItemId ? { work_item_id: filter.workItemId } : {}),
+      },
+      filter.newest === undefined
+        ? { orderBy: [['created_at', 'asc']] }
+        : {
+            orderBy: [
+              ['created_at', 'desc'],
+              ['id', 'desc'],
+            ],
+            limit: filter.newest,
+          },
+    );
+    return (filter.newest === undefined ? rows : rows.toReversed()).map(toDeferredDecision);
   }
 
   async listDecisionsForEvaluations(

@@ -5,13 +5,12 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { GoalObjectiveRecord } from '@mastra/core/storage';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
-import { combineUpdates, eventMovesCard, isPullRequestEvent, isUpdateEvent } from '../boards/board-events.js';
+import { isUpdateEvent } from '../boards/board-events.js';
 import type { BoardEventFacts } from '../boards/board-events.js';
 import {
   boardFlow,
   boardForWorkItem,
   cardBoardFlow,
-  cardRuleFacts,
   hasPullRequest,
   isPullRequestCard,
   isTerminalWorkItem,
@@ -32,11 +31,10 @@ import {
   INTAKE_ROUTE_METADATA_KEY,
   landingPhase,
   placedByIntakeRoute,
-  resolveEventRoute,
+  planEventMove,
   resolveIntake,
   projectIntakeEvaluator,
   ROUTE_AGAIN_KEY_PREFIX,
-  routesHandleEvent,
 } from '../boards/intake-routing.js';
 import type { IntakeRoutesReader, SkippedEventRoute } from '../boards/intake-routing.js';
 import { autoApprovedExitTool, startsInAutoPhase } from '../boards/phase-automation.js';
@@ -85,6 +83,7 @@ import { isRunBearingDecision } from './run-bearing.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
 import { authorTrusted, externalSourceForWorkItem, workItemSource } from './types.js';
+import { eventRouteIngress, foldUpdate, updateGroup } from './update-fold.js';
 import {
   assertFactoryDecisionTarget,
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
@@ -168,8 +167,6 @@ class FactoryDecisionPostponed extends Error {
  * label or assignee changes within this window becomes one event.
  */
 export const UPDATE_BURST_MS = 5_000;
-
-const FOLDABLE_UPDATE_STATUSES = new Set(['pending', 'retry', 'leased', 'superseded']);
 
 // How often a decision that cannot act yet (a route move waiting on the card's run) is tried again.
 const POSTPONE_MS = 10_000;
@@ -2630,7 +2627,7 @@ export class FactoryDecisionDispatcher {
     causalChain: FactoryRuleCausalEntry[],
     fallback?: Extract<FactoryCommitDecision, { type: 'transition' }>,
   ): Promise<void> {
-    const identity = `event-route:${record.idempotencyKey}`;
+    const identity = eventRouteIngress(record.idempotencyKey);
     if (await this.#storage.getTransitionResultByIngress(record.orgId, record.factoryProjectId, identity)) return;
     if (await this.#statusEventOvertaken(record)) throw new FactoryDecisionSuperseded();
     const resolve = async () => {
@@ -2638,33 +2635,22 @@ export class FactoryDecisionDispatcher {
       const boards = await this.#boards.load(record);
       const board = boards.get(boardForWorkItem(item));
       if (!board) return undefined;
-      const stage = item.stages.length === 1 ? item.stages[0] : undefined;
-      const finished = stage !== undefined && board.isTerminal(stage);
-      if (!eventMovesCard(event.type, finished)) return undefined;
       const routes = this.#intakeRoutes
         ? await this.#intakeRoutes.listIntakeRoutes({ orgId: record.orgId, factoryProjectId: record.factoryProjectId })
         : [];
-      if (!routesHandleEvent(routes, event, board)) return { item, board, fallback: true as const };
-      const facts = { ...cardRuleFacts(item), ...(stage !== undefined ? { 'card.phase': stage } : {}) };
       const skipped: SkippedEventRoute[] = [];
-      const route = resolveEventRoute(routes, event, facts, board, {
+      const plan = planEventMove({
+        routes,
+        event,
+        item,
         registry: boards,
-        carriesPullRequest: hasPullRequest(item),
+        ...(fallback && { fallback: { stage: fallback.stage } }),
         onSkip: skip => skipped.push(skip),
       });
       await this.#logSkippedRoutes(record, item, event, skipped);
-      // A pull request event the rules already decided keeps that decision when no enabled route
-      // takes the card: disabling or narrowing a route must not strand a merged card in review.
-      if (!route)
-        return fallback && isPullRequestEvent(event.type) ? { item, board, fallback: true as const } : undefined;
-      // A route that agrees with the rule's own pull request move keeps it whole: its message, and
-      // the re-entry that restarts a review in the phase the card already sits in.
-      const crossesBoards = route.board !== board.id;
-      if (!crossesBoards && fallback && isPullRequestEvent(event.type) && route.phase === fallback.stage) {
-        return { item, board, fallback: true as const };
-      }
-      if (!crossesBoards && stage === route.phase) return undefined;
-      return { item, board, route, target: boards.get(route.board)! };
+      if (plan.outcome === 'rule_default') return { item, board, fallback: true as const };
+      if (plan.outcome !== 'moves') return undefined;
+      return { item, board, route: plan.move, target: boards.get(plan.move.board)! };
     };
     const first = await resolve();
     if (!first) return;
@@ -2734,39 +2720,17 @@ export class FactoryDecisionDispatcher {
     now: Date,
   ): Promise<BoardEventFacts | undefined> {
     if (!record.workItemId) return undefined;
-    const sameGroup = (other: FactoryDeferredDecisionRecord) => {
-      const candidate = other.decision as { type?: unknown; event?: BoardEventFacts; fromCardSession?: unknown };
-      return (
-        candidate.type === 'routeEvent' &&
-        candidate.event?.type === decision.event.type &&
-        candidate.event.pullRequest === decision.event.pullRequest &&
-        (candidate.fromCardSession === true) === (decision.fromCardSession === true)
-      );
-    };
-    const group = (
+    const group = updateGroup(
       await this.#storage.listDeferredDecisions(record.orgId, record.factoryProjectId, {
         workItemId: record.workItemId,
-      })
-    )
-      .filter(sameGroup)
-      .toSorted((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
-    const index = group.findIndex(other => other.id === record.id);
+      }),
+      decision,
+    );
+    const { superseded, since, event } = await foldUpdate(group, record.id, other =>
+      this.#moveCommitted(record, other),
+    );
     // A newer update not given up on carries this one's change: it folded it, or will.
-    if (group.slice(index + 1).some(other => other.status !== 'failed' && other.status !== 'dismissed')) {
-      throw new FactoryDecisionSuperseded();
-    }
-    const earlier = group.slice(0, index);
-    // The group last moved the card at the newest one that succeeded, or whose move committed even
-    // though its decision never finished (it is left to retry): its change is already applied.
-    let last = earlier.findLastIndex(other => other.status === 'succeeded');
-    for (let at = earlier.length - 1; at > last; at--) {
-      const identity = `event-route:${earlier[at]!.idempotencyKey}`;
-      if (await this.#storage.getTransitionResultByIngress(record.orgId, record.factoryProjectId, identity)) {
-        last = at;
-        break;
-      }
-    }
-    const since = earlier.slice(last + 1);
+    if (superseded) throw new FactoryDecisionSuperseded();
     // An older one still leased may be moving the card right now, so wait for it. One claimed in
     // the same batch as this one (same owner, same lease, before any renewal) sees this one and
     // gives way. Lease renewal rewrites `updatedAt`, so it can't tell when the older one was claimed.
@@ -2781,11 +2745,13 @@ export class FactoryDecisionDispatcher {
       const item = await this.#requireItem(record);
       if (await this.#cardRunInFlight(record, item)) throw new FactoryDecisionPostponed();
     }
-    const folded = since.filter(other => FOLDABLE_UPDATE_STATUSES.has(other.status));
-    return combineUpdates([
-      ...folded.map(other => (other.decision as { event: BoardEventFacts }).event),
-      decision.event,
-    ]);
+    return event;
+  }
+
+  /** Whether `other`'s card move committed, even if its decision never finished. */
+  async #moveCommitted(record: FactoryDeferredDecisionRecord, other: FactoryDeferredDecisionRecord): Promise<boolean> {
+    const identity = eventRouteIngress(other.idempotencyKey);
+    return Boolean(await this.#storage.getTransitionResultByIngress(record.orgId, record.factoryProjectId, identity));
   }
 
   /**

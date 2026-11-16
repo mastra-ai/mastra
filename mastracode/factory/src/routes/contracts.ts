@@ -3,7 +3,13 @@ import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { validateSkillContent } from '@mastra/core/skills';
 import { z } from 'zod';
 
-import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem, ROUTE_EVENTS } from '../boards/board-events.js';
+import {
+  CLOSE_REASONS,
+  INTAKE_ROUTE_RULE_FIELDS,
+  routeEventsProblem,
+  ROUTE_EVENTS,
+  STATUS_EVENTS,
+} from '../boards/board-events.js';
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
 import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
@@ -308,6 +314,227 @@ const intakeRouteAgainResponseSchema = z.object({
   boardKey: z.string(),
   phaseKey: z.string(),
   routeId: z.string(),
+});
+/** A board's rules as edited, not saved yet: they stand in for all of that board's rules. */
+const intakeDraftBoardSchema = z
+  .object({
+    boardKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH),
+    routes: z
+      .array(
+        z
+          .object({
+            /** The saved rule this edits, so its counts line up; omitted for a new rule. */
+            id: uuidSchema.optional(),
+            name: intakeRouteFields.name,
+            enabled: intakeRouteFields.enabled.default(true),
+            when: intakeRouteFields.when.default(null),
+            target: z
+              .object({
+                phaseKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH).nullable().optional(),
+                /** On a card-move rule: the board the card moves to; unset keeps it on this board. */
+                moveToBoardKey: intakeRouteTargetSchema.shape.moveToBoardKey,
+                /** On a pull request rule: join the card of the issue it closes, as the saved rule does. */
+                joinClosedIssue: z.boolean().optional(),
+              })
+              .strict(),
+            on: intakeRouteFields.on.optional(),
+          })
+          .strict(),
+      )
+      .max(MAX_INTAKE_ROUTES_PER_BOARD),
+  })
+  .strict();
+const intakeDraftFields = {
+  /** Unsaved rules, board by board; boards not named run their saved rules. */
+  boards: z
+    .array(intakeDraftBoardSchema)
+    .max(MAX_PROJECT_INTAKE_ROUTES)
+    .refine(boards => new Set(boards.map(board => board.boardKey)).size === boards.length, {
+      message: 'Each board may appear only once.',
+    })
+    .optional(),
+  /** An unsaved intake order; omitted, the saved one. */
+  order: intakeOrderBodySchema.shape.boardKeys.optional(),
+};
+export const intakeDryRunBodySchema = z.object(intakeDraftFields).strict();
+const intakePlacementSchema = z.object({ boardKey: z.string(), routeId: z.string(), phase: z.string() });
+const intakeKeysByBoardSchema = z.array(z.object({ boardKey: z.string(), keys: z.array(z.string()) }));
+const intakeDryRunResponseSchema = z.object({
+  /**
+   * The evaluator that files this project's items. Both endpoints always answer as `intake-order`;
+   * under `route-list` filing can land items elsewhere, such as on the default board.
+   */
+  evaluator: z.enum(['route-list', 'intake-order']),
+  /** How many of the project's newest items (at most 200) were decided, from their stored facts. */
+  sampled: z.number().int(),
+  /** Every board in intake order, with what it and each of its rules would take. */
+  boards: z.array(
+    z.object({
+      boardKey: z.string(),
+      name: z.string(),
+      /** Keys of the items the board would take. */
+      takes: z.array(z.string()),
+      /** Items its rules matched that another board took first, by that board. */
+      lostTo: intakeKeysByBoardSchema,
+      rules: z.array(
+        z.object({
+          /** A rule not saved yet reads `draft:<boardKey>:<index>`. */
+          routeId: z.string(),
+          name: z.string().nullable(),
+          enabled: z.boolean(),
+          takes: z.array(z.string()),
+          /** Items it matched but an earlier rule took, by the board that took them. */
+          lost: intakeKeysByBoardSchema,
+          /** Cards it actually filed in the last 30 days. */
+          filed: z.number().int(),
+        }),
+      ),
+    }),
+  ),
+  /** Keys of the items no board would take. */
+  notRouted: z.array(z.string()),
+  /** With unsaved rules or order: how many items land somewhere other than the saved ones put them. */
+  changed: z.number().int().optional(),
+  items: z.array(
+    z.object({
+      key: z.string(),
+      /** The card's id, or the Not routed decision's. */
+      id: z.string(),
+      kind: z.enum(['card', 'not_routed']),
+      title: z.string(),
+      url: z.string().nullable(),
+      placement: intakePlacementSchema.nullable(),
+      /** Every rule that matched and could take it, in the order intake asked them; the first won. */
+      matched: z.array(z.object({ boardKey: z.string(), routeId: z.string() })),
+      /** With unsaved rules or order: where the saved ones put it. */
+      before: intakePlacementSchema.nullable().optional(),
+    }),
+  ),
+  /** Whether the caller may run unsaved rules or order. */
+  canEdit: z.boolean(),
+});
+/** The most labels or assignees one test event may name on each side. */
+const MAX_TEST_EVENT_NAMES = 100;
+const itemChangeSchema = z
+  .object({
+    added: z.array(z.string().min(1).max(500)).max(MAX_TEST_EVENT_NAMES).default([]),
+    removed: z.array(z.string().min(1).max(500)).max(MAX_TEST_EVENT_NAMES).default([]),
+  })
+  .strict();
+/** A status event as card-move rules read it. */
+const intakeTestEventSchema = z
+  .object({
+    type: z.enum(STATUS_EVENTS),
+    /** On `work_item.closed`. */
+    reason: z.enum(CLOSE_REASONS).optional(),
+    /** On an update: the labels and assignees it changed. */
+    labels: itemChangeSchema.optional(),
+    assignees: itemChangeSchema.optional(),
+    /** On a pull request event: whether that pull request's author is trusted. */
+    pullRequestTrusted: z.boolean().optional(),
+  })
+  .strict();
+export const intakeTestBodySchema = z
+  .object({
+    ...intakeDraftFields,
+    /** An issue or pull request URL; one the Factory has never seen is fetched once, read-only, from a linked source. */
+    url: z.string().trim().url().max(2000).optional(),
+    /** A recent item: a card's id, or a Not routed decision's. */
+    itemId: uuidSchema.optional(),
+    /** A status event to try on the item's card, as if it had just happened; its recent events are replayed either way. */
+    event: intakeTestEventSchema.optional(),
+  })
+  .strict()
+  .refine(body => (body.url === undefined) !== (body.itemId === undefined), {
+    message: 'Send either a url or an itemId.',
+  });
+const failedConditionSchema = z.object({
+  field: z.string(),
+  operator: z.string(),
+  value: z.unknown().optional(),
+  /** The item's value for the field; null when it has none. */
+  actual: z.unknown(),
+});
+const intakeTestResponseSchema = z.object({
+  item: z.object({
+    title: z.string(),
+    url: z.string().nullable(),
+    /** `card` and `not_routed` are items the Factory has; `fetched` was read from its provider for this test. */
+    kind: z.enum(['card', 'not_routed', 'fetched']),
+    id: z.string().nullable(),
+  }),
+  placement: intakePlacementSchema.nullable(),
+  /** Why no board takes it. */
+  reason: z.string().nullable(),
+  /** What this answer leaves out, such as a fetched pull request joining an existing card instead. */
+  note: z.string().nullable(),
+  /**
+   * The evaluator that files this project's items. Both endpoints always answer as `intake-order`;
+   * under `route-list` filing can land items elsewhere, such as on the default board.
+   */
+  evaluator: z.enum(['route-list', 'intake-order']),
+  /** Every board in intake order and every placing rule on it, with what it answered. */
+  boards: z.array(
+    z.object({
+      boardKey: z.string(),
+      name: z.string(),
+      rules: z.array(
+        z.object({
+          routeId: z.string(),
+          name: z.string().nullable(),
+          phase: z.string(),
+          /** `took` decides; `lost` matched after the rule that took it; `phase_refuses` matched but its phase can't hold the item. */
+          outcome: z.enum(['took', 'lost', 'no_match', 'phase_refuses', 'disabled']),
+          /** With `no_match`: the conditions it failed on. */
+          failed: z.array(failedConditionSchema).optional(),
+          /** With `lost`: the rule that took it. */
+          to: z.object({ boardKey: z.string(), routeId: z.string() }).optional(),
+        }),
+      ),
+    }),
+  ),
+  /** On a card: where it is now, and the intake rule that filed it, if one did. */
+  current: z.object({ boardKey: z.string(), phase: z.string().nullable(), routeId: z.string().nullable() }).nullable(),
+  /**
+   * On a card: the event sent in the request, then its recent status events newest first, each
+   * replayed against today's rules (or the draft) and the card as it is now.
+   */
+  moves: z.array(
+    z.object({
+      /** The stored event's decision; null for the event sent in the request. */
+      decisionId: z.string().nullable(),
+      at: z.string().nullable(),
+      event: z.object({
+        type: z.enum(STATUS_EVENTS),
+        reason: z.enum(CLOSE_REASONS).optional(),
+        labels: z.object({ added: z.array(z.string()), removed: z.array(z.string()) }).optional(),
+        assignees: z.object({ added: z.array(z.string()), removed: z.array(z.string()) }).optional(),
+        pullRequestTrusted: z.boolean().optional(),
+      }),
+      /**
+       * `moves` to `to`; `stays` where it is; `rule_default` leaves it to the integration's own move
+       * (to `phase`, when there is one) because no rule takes it; `ignored` when the event can't move
+       * a card in its state, with `reason`; `unknown` when an update burst reaches back past the
+       * history read, with `reason`.
+       */
+      outcome: z.enum(['moves', 'stays', 'rule_default', 'ignored', 'unknown']),
+      to: z.object({ boardKey: z.string(), phase: z.string(), routeId: z.string() }).nullable(),
+      phase: z.string().nullable(),
+      reason: z.string().nullable(),
+      /** Every rule on the card's board that handles the event, top to bottom. */
+      rules: z.array(
+        z.object({
+          routeId: z.string(),
+          name: z.string().nullable(),
+          /** `skipped` matched but its target board or phase can't take the card, with `reason`. */
+          outcome: z.enum(['took', 'lost', 'no_match', 'skipped', 'disabled']),
+          failed: z.array(failedConditionSchema).optional(),
+          to: z.object({ boardKey: z.string(), routeId: z.string() }).optional(),
+          reason: z.string().optional(),
+        }),
+      ),
+    }),
+  ),
 });
 const workItemPathSchema = z.object({ id: uuidSchema });
 const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema });
@@ -1601,6 +1828,23 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: 'Run intake again for an item no board took, filing it where the rules now say',
     pathSchema: intakeDecisionPathSchema,
     responseSchema: intakeRouteAgainResponseSchema,
+  },
+  intakeDryRun: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/intake/dry-run',
+    description:
+      "Run a Factory project's intake rules, saved or unsaved, over its newest 200 items without filing anything",
+    pathSchema: projectPathSchema,
+    bodySchema: intakeDryRunBodySchema,
+    responseSchema: intakeDryRunResponseSchema,
+  },
+  intakeTest: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/intake/test',
+    description: 'Show where intake would file one item, and what every rule answered, without filing it',
+    pathSchema: projectPathSchema,
+    bodySchema: intakeTestBodySchema,
+    responseSchema: intakeTestResponseSchema,
   },
   workItemList: {
     method: 'GET',

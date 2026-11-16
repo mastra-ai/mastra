@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { BoardEventFacts } from '../boards/board-events.js';
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { arrivalRuleFacts } from '../boards/intake-routing.js';
 import { ProjectBoardCache } from '../boards/project-boards.js';
 import { autoStartingBoards, createTriageWorkRegistry } from '../boards/test-utils.js';
 import {
@@ -15,6 +16,7 @@ import {
 import type { IntakeEvaluator, StoredIntakeRouteInput } from '../storage/domains/boards/base.js';
 import { asProjectFromBeforeIntakeEvaluator, createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryDecisionDispatcher } from './dispatcher.js';
+import type { RuleGroup } from './rule-group.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision } from './types.js';
 
@@ -1583,6 +1585,96 @@ describe('intake routes moving existing cards when labels or assignees change', 
     expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['intake'] });
   });
 
+  it('replays, as dispatch does, only the change after a move that committed but never finished', async () => {
+    const { card, commitUpdate, dispatcher, workItems, putAt, boards, scope } = await shipRoute();
+
+    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:10:00Z');
+    const complete = vi
+      .spyOn(workItems, 'completeDeferredDecision')
+      .mockRejectedValueOnce(new Error('connection lost'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:10Z'));
+    complete.mockRestore();
+    await putAt(card.id, 'intake');
+    await commitUpdate(card.id, labels(['bug']), '2030-01-01T00:20:00Z');
+
+    const { IntakeCheck } = await import('../routes/intake-check.js');
+    const registry = (
+      await new ProjectBoardCache({ codeRegistry: createTriageWorkRegistry(), storage: boards, recheckMs: 0 }).describe(
+        scope,
+      )
+    ).registry;
+    const { moves } = await new IntakeCheck({ storage: boards, workItems }).test(scope, registry, { itemId: card.id });
+    expect(moves[0]).toMatchObject({
+      event: { type: 'work_item.updated', labels: { added: ['bug'], removed: [] } },
+      outcome: 'stays',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:30:00Z'));
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['intake'] });
+  });
+
+  it('replays an update that already moved the card as it moved it, though a newer one waits', async () => {
+    const { card, commitUpdate, dispatcher, workItems, shipping, ...harness } = await shipRoute();
+    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:10:00Z');
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:05Z'));
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['done'] });
+    await commitUpdate(card.id, labels(['bug']), '2030-01-01T00:20:00Z');
+
+    const { IntakeCheck } = await import('../routes/intake-check.js');
+    const registry = (
+      await new ProjectBoardCache({
+        codeRegistry: createTriageWorkRegistry(),
+        storage: harness.boards,
+        recheckMs: 0,
+      }).describe(harness.scope)
+    ).registry;
+    const { moves } = await new IntakeCheck({ storage: harness.boards, workItems }).test(harness.scope, registry, {
+      itemId: card.id,
+    });
+    // Replayed against the card as it is now, already Done: the ship rule still takes it, so it stays.
+    expect(moves.map(move => [move.event.labels?.added, move.outcome])).toEqual([
+      [['bug'], 'stays'],
+      [['ship'], 'stays'],
+    ]);
+    expect(moves[1]!.rules).toEqual([{ routeId: shipping.id, name: 'Ship it', outcome: 'took' }]);
+  });
+
+  it("replays two linked pull requests' label changes apart, as dispatch does, never netting one against the other", async () => {
+    const { card, commitUpdate, dispatcher, workItems, boards, scope, route } = await shipRoute();
+    const shipping = await route({
+      name: 'Pull request shipping',
+      on: ['pull_request.updated'],
+      when: ADDED('ship'),
+      target: { boardKey: 'work', phaseKey: 'done' },
+    });
+    const prUpdate = (pullRequest: string, added: string[], removed: string[]) => ({
+      type: 'pull_request.updated' as const,
+      pullRequest,
+      pullRequestTrusted: true,
+      labels: { added, removed },
+    });
+    // Folded together these net out to nothing; apart, the first pull request's change moves the card.
+    await commitUpdate(card.id, prUpdate('github:1:pull-request:8', ['ship'], []), '2030-01-01T00:10:00Z');
+    await commitUpdate(card.id, prUpdate('github:1:pull-request:9', [], ['ship']), '2030-01-01T00:10:01Z');
+
+    const { IntakeCheck } = await import('../routes/intake-check.js');
+    const registry = (
+      await new ProjectBoardCache({ codeRegistry: createTriageWorkRegistry(), storage: boards, recheckMs: 0 }).describe(
+        scope,
+      )
+    ).registry;
+    const { moves } = await new IntakeCheck({ storage: boards, workItems }).test(scope, registry, { itemId: card.id });
+    expect(moves.map(move => [move.event.pullRequest, move.outcome, move.to?.phase ?? null])).toEqual([
+      ['github:1:pull-request:9', 'stays', null],
+      ['github:1:pull-request:8', 'moves', 'done'],
+    ]);
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:30:00Z'));
+    const moved = await workItems.get({ orgId: 'org-1', id: card.id });
+    expect(moved).toMatchObject({ stages: ['done'] });
+    expect(moved!.stageHistory.at(-1)).toMatchObject({ by: `intake-route:${shipping.id}` });
+  });
+
   it('moves only from the phase a card.phase filter names', async () => {
     const { card, commitUpdate, dispatcher, workItems, putAt } = await shipRoute({ from: 'triage' });
 
@@ -1900,5 +1992,389 @@ describe('intake by intake order', () => {
     const seeded = await setup({ withRoutesReader: false, withDefaultRoute: true });
     expect(await seeded.deliver({ sourceKey: 'github-issue:9', metadata: { labels: ['bug'] } })).toBeUndefined();
     expect(await seeded.workItems.list(seeded.scope)).toEqual([]);
+  });
+});
+
+/**
+ * The dry run and the "Where would this go?" tester against real filing and dispatch: each row is
+ * predicted first, then filed or dispatched for real, and the two must agree.
+ */
+describe('the intake tester and dry run answer what filing and dispatch do', () => {
+  async function harness(options: Parameters<typeof setup>[0] = {}) {
+    const seeded = await setup(options);
+    await seeded.boards.create(seeded.scope, docsBoard, 'admin');
+    const { IntakeCheck } = await import('../routes/intake-check.js');
+    const registry = async () =>
+      (
+        await new ProjectBoardCache({
+          codeRegistry: createTriageWorkRegistry(),
+          storage: seeded.boards,
+          recheckMs: 0,
+        }).describe(seeded.scope)
+      ).registry;
+    // An item Factory hasn't seen yet: the lookup reads the facts intake will read when it arrives.
+    let pending: LinkedDecision | undefined;
+    const check = new IntakeCheck({
+      storage: seeded.boards,
+      workItems: seeded.workItems,
+      lookups: [
+        {
+          lookup: async (_scope, url) =>
+            pending?.url === url
+              ? {
+                  status: 'found',
+                  title: pending.title,
+                  url,
+                  facts: await arrivalRuleFacts(pending, {
+                    factoryProjectId: seeded.scope.factoryProjectId,
+                    registry: await registry(),
+                    card: id => seeded.workItems.get({ orgId: 'org-1', id }),
+                  }),
+                }
+              : undefined,
+        },
+      ],
+    });
+    const test = async (body: Parameters<typeof check.test>[2]) => check.test(seeded.scope, await registry(), body);
+    const dryRun = async () => check.dryRun(seeded.scope, await registry(), {});
+    const arrive = async (arrival: Arrival) => {
+      pending = {
+        type: 'upsertLinkedWorkItem',
+        idempotencyKey: `predict-${arrival.sourceKey}`,
+        board: 'work',
+        source: 'github-issue',
+        title: arrival.sourceKey,
+        stage: 'intake',
+        url: `https://example.com/${arrival.sourceKey}`,
+        metadata: {},
+        ...arrival,
+      } as LinkedDecision;
+      const predicted = await test({ url: pending.url! });
+      const card = await seeded.deliver(arrival);
+      return { predicted, filed: card ? placed(card) : null };
+    };
+    return { ...seeded, test, dryRun, arrive };
+  }
+  type Arrival = Partial<LinkedDecision> & { sourceKey: string };
+  type Outcome = 'took' | 'lost' | 'no_match' | 'phase_refuses' | 'disabled' | 'skipped';
+  const outcomes = (rules: readonly { name: string | null; outcome: string }[]) =>
+    Object.fromEntries(rules.map(rule => [rule.name, rule.outcome]));
+  const labelIs = (field: string, value: string): RuleGroup => ({
+    operator: 'AND',
+    conditions: [{ field: field as 'item.labels', operator: 'contains', value }],
+  });
+  const pr = (sourceKey: string, metadata: Record<string, unknown> = {}): Arrival => ({
+    sourceKey,
+    source: 'github-pr',
+    metadata: { state: 'open', ...metadata },
+  });
+
+  const ARRIVALS: {
+    name: string;
+    project?: 'new';
+    rules?: StoredIntakeRouteInput[];
+    order?: string[];
+    before?: Arrival[];
+    item: Arrival;
+    filed: { board: string; stages: string[] } | null;
+    trace?: Record<string, Outcome>;
+    failed?: Record<string, unknown[]>;
+  }[] = [
+    {
+      name: 'an issue goes to the first board in intake order whose rule takes it, beating later matches',
+      rules: [
+        { name: 'Docs', when: labelIs('item.labels', 'docs'), target: { boardKey: 'docs', phaseKey: null } },
+        { name: 'Trusted', when: TRUSTED, target: { boardKey: 'work', phaseKey: 'triage' } },
+        { name: 'Bugs', when: labelIs('item.labels', 'bug'), target: { boardKey: 'work', phaseKey: null } },
+        { name: 'Off', enabled: false, when: null, target: { boardKey: 'work', phaseKey: null } },
+      ],
+      order: ['docs', 'work'],
+      item: { sourceKey: 'github-issue:1', metadata: { labels: ['docs', 'bug'], authorTrusted: true } },
+      filed: { board: 'docs', stages: ['inbox'] },
+      trace: { Docs: 'took', Trusted: 'lost', Bugs: 'lost', Off: 'disabled' },
+    },
+    {
+      name: 'an issue no rule takes is Not routed, each rule naming why',
+      rules: [
+        { name: 'Docs', when: labelIs('item.labels', 'docs'), target: { boardKey: 'docs', phaseKey: null } },
+        // PR review holds only pull requests: the rule matches, its phase refuses.
+        { name: 'Review', when: null, target: { boardKey: 'work', phaseKey: 'pr-review' } },
+      ],
+      item: { sourceKey: 'github-issue:2', metadata: { labels: ['question'] } },
+      filed: null,
+      trace: { Docs: 'no_match', Review: 'phase_refuses' },
+      failed: { Docs: [{ field: 'item.labels', operator: 'contains', value: 'docs', actual: ['question'] }] },
+    },
+    {
+      name: "a new project's card-less pull request from a trusted author goes to Work › PR review",
+      project: 'new',
+      item: pr('github-pr:3', { authorTrusted: true }),
+      filed: { board: 'work', stages: ['pr-review'] },
+    },
+    {
+      name: "a new project's card-less pull request from an outside author waits in Work › Intake",
+      project: 'new',
+      item: pr('github-pr:4', { authorTrusted: false }),
+      filed: { board: 'work', stages: ['intake'] },
+    },
+    {
+      name: "an older project's legacy rule naming both arrivals files a pull request; an issue-only rule passes it over",
+      rules: [
+        { name: 'Issues', on: ['work_item.opened'], when: null, target: { boardKey: 'work', phaseKey: null } },
+        { name: 'Anything new', on: ['work_item.created'], when: null, target: { boardKey: 'docs', phaseKey: null } },
+      ],
+      item: pr('github-pr:5'),
+      filed: { board: 'docs', stages: ['inbox'] },
+      trace: { Issues: 'no_match', 'Anything new': 'took' },
+    },
+    {
+      // Labelled or reopened while open, the integration takes the pull request in again as opened.
+      name: 'a Not routed pull request is filed once it is labelled or reopened, where the tester says',
+      rules: [
+        {
+          name: 'Ship it',
+          on: ['pull_request.opened'],
+          when: labelIs('item.labels', 'ship'),
+          target: { boardKey: 'docs', phaseKey: null },
+        },
+      ],
+      before: [pr('github-pr:6', { labels: [] })],
+      item: pr('github-pr:6', { labels: ['ship'] }),
+      filed: { board: 'docs', stages: ['inbox'] },
+      trace: { 'Ship it': 'took' },
+    },
+  ];
+
+  it.each(ARRIVALS)('$name', async row => {
+    const seeded = await harness(
+      row.project ? { project: 'new', withDefaultRoute: true } : { intakeEvaluator: 'intake-order' },
+    );
+    for (const rule of row.rules ?? []) await seeded.route(rule);
+    if (row.order) await seeded.boards.setIntakeOrder(seeded.scope, row.order, { boards: ['work', 'docs'] });
+    for (const arrival of row.before ?? []) {
+      expect((await seeded.arrive(arrival)).predicted.placement).toBeNull();
+      expect(await seeded.workItems.list(seeded.scope)).toEqual([]);
+    }
+
+    const { predicted, filed } = await seeded.arrive(row.item);
+    expect(filed).toEqual(row.filed);
+    expect(predicted.placement && { board: predicted.placement.boardKey, stages: [predicted.placement.phase] }).toEqual(
+      filed,
+    );
+    const rules = predicted.boards.flatMap(board => board.rules);
+    if (row.trace) expect(outcomes(rules)).toMatchObject(row.trace);
+    for (const [name, failed] of Object.entries(row.failed ?? {})) {
+      expect(rules.find(rule => rule.name === name)).toMatchObject({ failed });
+    }
+
+    const dry = await seeded.dryRun();
+    expect(dry.sampled).toBe(1);
+    expect(dry.items[0]).toMatchObject({ key: row.item.sourceKey, placement: predicted.placement });
+    if (!filed) expect(dry.notRouted).toEqual([row.item.sourceKey]);
+  });
+
+  type Pending = BoardEventFacts | { transition: string; event: BoardEventFacts };
+  const update = (added: string[], removed: string[] = []): BoardEventFacts => ({
+    type: 'work_item.updated',
+    labels: { added, removed },
+  });
+  const CARD_RULES: StoredIntakeRouteInput[] = [
+    {
+      name: 'Docs added',
+      on: ['work_item.updated'],
+      when: labelIs('event.labels.added', 'docs'),
+      target: { boardKey: 'work', moveToBoardKey: 'docs', phaseKey: null },
+    },
+    {
+      name: 'Docs to triage',
+      on: ['work_item.updated'],
+      when: labelIs('event.labels.added', 'docs'),
+      target: { boardKey: 'work', phaseKey: 'triage' },
+    },
+    {
+      name: 'Closed as completed',
+      on: ['work_item.closed'],
+      when: CLOSED_AS('completed'),
+      target: { boardKey: 'work', phaseKey: 'done' },
+    },
+    { name: 'Reopened', on: ['work_item.reopened'], when: null, target: { boardKey: 'work', phaseKey: 'intake' } },
+    {
+      name: 'Shipping pull requests',
+      on: ['pull_request.updated'],
+      when: labelIs('event.labels.added', 'ship'),
+      target: { boardKey: 'work', moveToBoardKey: 'docs', phaseKey: null },
+    },
+  ];
+  const MOVES: {
+    name: string;
+    card?: Arrival;
+    at?: string;
+    project?: 'new';
+    attachPullRequest?: true;
+    pending: Pending[];
+    outcome: 'moves' | 'stays' | 'rule_default' | 'ignored';
+    to?: string;
+    rules?: Record<string, Outcome>;
+    failed?: Record<string, unknown[]>;
+    maxReads?: number;
+    maxDispatchReads?: number;
+  }[] = [
+    {
+      name: 'a label added moves the card to the board its rule names, beating a later match',
+      pending: [update(['docs'])],
+      outcome: 'moves',
+      to: 'docs/inbox',
+      rules: { 'Docs added': 'took', 'Docs to triage': 'lost' },
+    },
+    {
+      name: 'an update no rule matches leaves the card where it is',
+      pending: [update(['bug'])],
+      outcome: 'stays',
+      rules: { 'Docs added': 'no_match' },
+      failed: { 'Docs added': [{ field: 'event.labels.added', operator: 'contains', value: 'docs', actual: ['bug'] }] },
+    },
+    {
+      name: 'closing as completed moves it to Done',
+      pending: [{ type: 'work_item.closed', reason: 'completed' }],
+      outcome: 'moves',
+      to: 'work/done',
+    },
+    {
+      name: 'closing as canceled matches no rule',
+      pending: [{ type: 'work_item.closed', reason: 'canceled' }],
+      outcome: 'stays',
+      rules: { 'Closed as completed': 'no_match' },
+    },
+    {
+      name: 'reopening a card that is not finished is ignored',
+      pending: [{ type: 'work_item.reopened' }],
+      outcome: 'ignored',
+    },
+    {
+      name: 'reopening a finished card moves it back',
+      at: 'done',
+      pending: [{ type: 'work_item.reopened' }],
+      outcome: 'moves',
+      to: 'work/intake',
+    },
+    {
+      // Replayed one by one, these would make three moves; dispatch folds them into one net change.
+      name: 'a burst of updates folds into its net change, as dispatch folds it',
+      pending: [update(['docs']), update(['bug']), update([], ['bug'])],
+      outcome: 'moves',
+      to: 'docs/inbox',
+    },
+    {
+      // Each earlier update is read about once, not once per later update.
+      name: 'a long burst replays as one update',
+      pending: Array.from({ length: 30 }, (_, n) => update([`label-${n}`])),
+      outcome: 'stays',
+      maxReads: 30,
+      // Dispatch, too: the 29 older updates give way to the newest without reading anything.
+      maxDispatchReads: 30,
+    },
+    {
+      name: 'a burst that ends where it started moves nothing',
+      pending: [update(['bug']), update([], ['bug'])],
+      outcome: 'ignored',
+    },
+    {
+      name: "a pull request card's label change moves it by a pull_request.updated rule",
+      card: pr('github-pr:1'),
+      pending: [{ type: 'pull_request.updated', labels: { added: ['ship'], removed: [] } }],
+      outcome: 'moves',
+      to: 'docs/inbox',
+      rules: { 'Shipping pull requests': 'took' },
+    },
+    {
+      name: "an issue card goes to PR review when its own pull request opens, by the integration's move",
+      project: 'new',
+      card: { sourceKey: 'github-issue:1', metadata: { authorTrusted: true } },
+      attachPullRequest: true,
+      pending: [{ transition: 'pr-review', event: { type: 'pull_request.opened', pullRequestTrusted: true } }],
+      outcome: 'rule_default',
+      to: 'work/pr-review',
+    },
+  ];
+
+  it.each(MOVES)('$name', async row => {
+    const seeded = await harness(row.project ? { project: 'new', withDefaultRoute: true } : {});
+    for (const rule of CARD_RULES) await seeded.route(rule);
+    const delivered = (await seeded.deliver(row.card ?? { sourceKey: 'github-issue:1' }))!;
+    if (row.at) await seeded.putAt(delivered.id, row.at);
+    if (row.attachPullRequest) {
+      await seeded.workItems.attachSource({
+        orgId: 'org-1',
+        id: delivered.id,
+        source: { integrationId: 'github', type: 'pull-request', externalId: 'github:1:pull-request:8', url: null },
+        metadata: { githubPullRequestNumber: 8, state: 'open' },
+      });
+    }
+    for (const [index, entry] of row.pending.entries()) {
+      const at = new Date(Date.UTC(2030, 0, 1, 0, 0, index)).toISOString();
+      if (!('transition' in entry)) {
+        await seeded.commitUpdate(delivered.id, entry, at);
+        continue;
+      }
+      const card = (await seeded.workItems.get({ orgId: 'org-1', id: delivered.id }))!;
+      await seeded.workItems.commitRuleEvaluation({
+        ...seeded.scope,
+        workItemId: card.id,
+        ingress: { identity: `move-${index}` },
+        configVersion: 'intake-routes-v1',
+        expectedRevision: card.revision,
+        actor: { type: 'system', id: 'rules' },
+        outcome: { status: 'accepted' },
+        decisions: [
+          {
+            type: 'transition',
+            idempotencyKey: `move-${index}`,
+            board: 'work',
+            stage: entry.transition,
+            event: entry.event,
+          },
+        ],
+        causalChain: [],
+        now: new Date(at),
+      });
+    }
+    const before = placed((await seeded.workItems.get({ orgId: 'org-1', id: delivered.id }))!)!;
+
+    const reads = vi.spyOn(seeded.workItems, 'getTransitionResultByIngress');
+    const { moves } = await seeded.test({ itemId: delivered.id });
+    expect(moves).toHaveLength(1);
+    if (row.maxReads) expect(reads.mock.calls.length).toBeLessThanOrEqual(row.maxReads);
+    reads.mockRestore();
+    const [replay] = moves;
+    expect(replay!.outcome).toBe(row.outcome);
+    if (row.rules) expect(outcomes(replay!.rules)).toMatchObject(row.rules);
+    for (const [name, failed] of Object.entries(row.failed ?? {})) {
+      expect(replay!.rules.find(rule => rule.name === name)).toMatchObject({ failed });
+    }
+
+    const dispatchReads = vi.spyOn(seeded.workItems, 'getTransitionResultByIngress');
+    await seeded.retry();
+    // Dispatch claims a few decisions per run: run until the burst is drained.
+    for (let run = 0; row.maxDispatchReads && run < 20; run++) {
+      const queued = await seeded.workItems.listDeferredDecisions('org-1', seeded.scope.factoryProjectId, {
+        workItemId: delivered.id,
+        statuses: ['pending', 'retry'],
+      });
+      if (queued.length === 0) break;
+      await seeded.retry();
+    }
+    if (row.maxDispatchReads) expect(dispatchReads.mock.calls.length).toBeLessThanOrEqual(row.maxDispatchReads);
+    dispatchReads.mockRestore();
+    const after = (await seeded.workItems.get({ orgId: 'org-1', id: delivered.id }))!;
+    const landed =
+      replay!.outcome === 'moves'
+        ? { board: replay!.to!.boardKey, stages: [replay!.to!.phase] }
+        : replay!.outcome === 'rule_default'
+          ? { board: before.board, stages: [replay!.phase!] }
+          : before;
+    expect(placed(after)).toEqual(landed);
+    if (row.to) expect(`${landed.board}/${landed.stages[0]}`).toBe(row.to);
+    if (replay!.outcome === 'moves')
+      expect(after.stageHistory.at(-1)).toMatchObject({ by: `intake-route:${replay!.to!.routeId}` });
   });
 });
