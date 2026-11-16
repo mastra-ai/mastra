@@ -28,7 +28,8 @@ const ACTIVITY_RANK: Record<SessionRow['status'], number> = {
 
 const SESSION_ROW_ORDER: Record<SessionRowsView['sort'], (a: SessionRow, b: SessionRow) => number> = {
   activity: (a, b) =>
-    ACTIVITY_RANK[a.status] - ACTIVITY_RANK[b.status] || b.session.createdAt.localeCompare(a.session.createdAt),
+    ACTIVITY_RANK[a.cardStatus ?? a.status] - ACTIVITY_RANK[b.cardStatus ?? b.status] ||
+    b.session.createdAt.localeCompare(a.session.createdAt),
   updated: (a, b) => b.updatedAt.localeCompare(a.updatedAt),
   created: (a, b) => b.session.createdAt.localeCompare(a.session.createdAt),
 };

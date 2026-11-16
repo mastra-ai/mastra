@@ -203,9 +203,28 @@ describe('a card with its sessions revealed', () => {
   });
 
   it('keeps the card listed while one of its sessions is open', () => {
-    const rows = [...Array.from({ length: 6 }, (_, index) => row(`a-${index}`, { status: 'working' })), ...revealed];
+    const rows = [
+      ...Array.from({ length: 6 }, (_, index) =>
+        row(`a-${index}`, { status: 'working' }, { createdAt: '2026-09-04T11:00:00.000Z' }),
+      ),
+      ...revealed,
+    ];
 
     expect(listed(rows, { open: 'triage' }).groups[0]?.rows.at(-1)?.session.sessionId).toBe('work');
+  });
+
+  it('sorts a card by what its sessions carry, so newer idle rows do not push it out of the window', () => {
+    const newerIdle = Array.from({ length: 5 }, (_, index) =>
+      row(`idle-${index}`, {}, { createdAt: '2026-09-04T11:00:00.000Z' }),
+    );
+
+    expect(sessionIds([...newerIdle, ...revealed], { sort: 'activity' })).toEqual([
+      'work',
+      'idle-4',
+      'idle-3',
+      'idle-2',
+      'idle-1',
+    ]);
   });
 });
 
