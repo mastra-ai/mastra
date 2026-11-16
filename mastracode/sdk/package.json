@@ -93,7 +93,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@ai-sdk/provider": "^4.0.35",
+    "@ai-sdk/provider": "^4.0.38",
     "@copilotkit/aimock": "^1.46.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
