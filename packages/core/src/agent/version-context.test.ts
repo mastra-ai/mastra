@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { VersionOverrides } from '../../mastra/types';
-import { MASTRA_VERSIONS_KEY, RequestContext } from '../../request-context';
-import { resolveInvocationVersions } from './invocation';
+import type { VersionOverrides } from '../mastra/types';
+import { MASTRA_VERSIONS_KEY, RequestContext } from '../request-context';
+import { resolveVersionContext } from './version-context';
 
-describe('invocation version context', () => {
+describe('version context', () => {
   it('keeps caller selections above request and host defaults without changing the original request', () => {
     const context = new RequestContext();
     const requestVersions: VersionOverrides = {
@@ -11,7 +11,7 @@ describe('invocation version context', () => {
       defaultStatus: 'draft',
     };
     context.set(MASTRA_VERSIONS_KEY, requestVersions);
-    const resolved = resolveInvocationVersions(
+    const resolved = resolveVersionContext(
       context,
       requestVersions,
       {
@@ -37,7 +37,7 @@ describe('invocation version context', () => {
 
   it('does not introduce a selector when none was configured', () => {
     const context = new RequestContext();
-    expect(resolveInvocationVersions(context, undefined, undefined, undefined)).toBeUndefined();
+    expect(resolveVersionContext(context, undefined, undefined, undefined)).toBeUndefined();
     expect(context.has(MASTRA_VERSIONS_KEY)).toBe(false);
   });
 });

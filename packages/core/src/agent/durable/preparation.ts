@@ -42,7 +42,6 @@ import { SaveQueueManager } from '../save-queue';
 import { applyResolvedAgentScopes, incomingAgentScopes, resolveAgentScopes } from '../scopes';
 import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
 import { mastraDBMessageToSignal, signalSpanAttributes } from '../signals';
-import { resolveInvocationVersions } from '../streams/invocation';
 import { TripWire } from '../trip-wire';
 import type {
   AgentInstructions,
@@ -53,6 +52,7 @@ import type {
   ToolsetsInput,
   ToolsInput,
 } from '../types';
+import { resolveVersionContext } from '../version-context';
 import {
   applyClientToolModelOutput,
   fireClientToolOutputHooks,
@@ -366,7 +366,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 3. Merge version overrides (Mastra defaults < requestContext < call-site)
   const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
-  resolveInvocationVersions(
+  resolveVersionContext(
     requestContext,
     requestVersions,
     mastra?.getVersionOverrides?.(),

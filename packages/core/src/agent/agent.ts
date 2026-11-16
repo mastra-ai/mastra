@@ -225,7 +225,9 @@ import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { createStoredMessageLoader } from './message-list/memory-message-refs';
 import { modelSpanAttributes } from './model-span-attributes';
+import { drainAgentOutput, successfulAgentOutput } from './output';
 import { buildResumeSpanInput } from './resume-span-input';
+import { resolveRunId } from './run-id';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
 import { SaveQueueManager } from './save-queue';
 import {
@@ -245,12 +247,6 @@ import { publishAbortRequest, requestAcknowledgedAbort } from './streams/abort-t
 import { AgentStreamBus } from './streams/bus';
 import { agentStreamsConfig, areAgentStreamsEnabled } from './streams/config';
 import { AGENT_STREAM_TOPIC } from './streams/constants';
-import {
-  drainInvocationOutput,
-  resolveInvocationRunId,
-  successfulInvocationOutput,
-  resolveInvocationVersions,
-} from './streams/invocation';
 import { createAgentStreamPublisher } from './streams/publisher';
 import type { AgentStreamPublisher } from './streams/publisher';
 import { readAgentRunRecord } from './streams/run-records';
@@ -313,6 +309,7 @@ import type {
   ZodSchema,
 } from './types';
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
+import { resolveVersionContext } from './version-context';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 import type { AgentCapabilities } from './workflows/prepare-stream/schema';
 
@@ -9119,7 +9116,7 @@ export class Agent<
     const requestContext = options.requestContext || new RequestContext();
 
     const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
-    const mergedVersions = resolveInvocationVersions(
+    const mergedVersions = resolveVersionContext(
       requestContext,
       requestVersions,
       this.#mastra?.getVersionOverrides(),
@@ -10208,7 +10205,7 @@ export class Agent<
     // is invisible to signals: a signal sent mid-turn finds an idle thread and wakes a second run that
     // never sees this turn. The wait also reserves the thread for this runId.
     const threadStreamPubSub = this.getPubSub();
-    mergedOptions.runId ??= resolveInvocationRunId(undefined, () =>
+    mergedOptions.runId ??= resolveRunId(undefined, () =>
       this.#mastra?.generateId({
         idType: 'run',
         source: 'agent',
@@ -10285,7 +10282,7 @@ export class Agent<
         threadStreamPubSub,
       );
 
-      return await drainInvocationOutput(result.result);
+      return await drainAgentOutput(result.result);
     } catch (error) {
       // Release the thread reservation taken by waitForCrossAgentThreadRun so
       // a failed setup does not block subsequent runs on this thread.
@@ -11193,7 +11190,7 @@ export class Agent<
     }
 
     const threadStreamPubSub = this.getPubSub();
-    mergedOptions.runId ??= resolveInvocationRunId(undefined, () =>
+    mergedOptions.runId ??= resolveRunId(undefined, () =>
       this.#mastra?.generateId({
         idType: 'run',
         source: 'agent',
@@ -11883,7 +11880,7 @@ export class Agent<
       throw error;
     }
 
-    return successfulInvocationOutput(fullOutput);
+    return successfulAgentOutput(fullOutput);
   }
 
   /**
