@@ -237,7 +237,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       name: PULL_REQUEST_INTAKE_ROUTE.name,
       position: 2,
       on: ['pull_request.opened'],
-      when: null,
+      when: PULL_REQUEST_INTAKE_ROUTE.when,
       target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false },
       createdBy: 'factory',
       problems: [],
@@ -377,7 +377,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       [{ boardKey: 'work', moveToBoardKey: 'stepwise', phaseKey: 'nope' }, 'unknown_phase'],
     ] as const;
     for (const [target, error] of moves) {
-      expect(await replicaA.send('POST', base, { name: 'Bad', on: ['pull_request.synchronized'], target })).toMatchObject({
+      expect(
+        await replicaA.send('POST', base, { name: 'Bad', on: ['pull_request.synchronized'], target }),
+      ).toMatchObject({
         status: 422,
         body: { error },
       });

@@ -11,14 +11,29 @@ export function placesArrivals(route: OrderRoute): boolean {
 }
 
 /**
- * Whether the board's intake list takes every new card that reaches it: unconditional rules file
- * both issues and pull requests, in one rule or two.
+ * The kinds of new card a placing route takes whatever they are: every kind it handles when it has
+ * no condition, or the one kind its condition names when that is all it tests (`source.kind equals
+ * pull_request` on a pull request route, so as a card move it leaves issues' cards alone).
+ */
+export function kindsTakenWhole(route: Pick<OrderRoute, 'when' | 'on' | 'pullRequestOpenedMovesOnly'>): string[] {
+  const kinds = [...arrivalKinds(route)];
+  if (route.when === null) return kinds;
+  const { operator, conditions } = route.when;
+  if (operator !== 'AND' || conditions.length !== 1) return [];
+  const [only] = conditions;
+  if (!only || !('field' in only) || only.field !== 'source.kind' || only.operator !== 'equals') return [];
+  return kinds.filter(kind => kind === only.value);
+}
+
+/**
+ * Whether the board's intake list takes every new card that reaches it: rules that test nothing
+ * but the card's kind file both issues and pull requests, in one rule or two.
  */
 export function endsInCatchAll(routes: readonly OrderRoute[], boardKey: string): boolean {
   const kinds = new Set(
     routes
-      .filter(route => route.target.boardKey === boardKey && placesArrivals(route) && route.when === null)
-      .flatMap(route => [...arrivalKinds(route)]),
+      .filter(route => route.target.boardKey === boardKey && placesArrivals(route))
+      .flatMap(route => kindsTakenWhole(route)),
   );
   return kinds.size === 2;
 }

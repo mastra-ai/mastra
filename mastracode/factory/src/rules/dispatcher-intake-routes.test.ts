@@ -276,8 +276,8 @@ describe('intake routes placing linked cards', () => {
 
     it("takes a waiting issue's card to Review for a trusted pull request, once, by the seeded card-move rule", async () => {
       const seeded = await setup({ withDefaultRoute: true });
-      const linkedRoute = (await seeded.boards.listIntakeRoutes(seeded.scope)).find(route =>
-        route.on.includes('pull_request.opened'),
+      const linkedRoute = (await seeded.boards.listIntakeRoutes(seeded.scope)).find(
+        route => route.name === 'Trusted pull requests take a waiting issue to Review',
       )!;
       const issue = (await seeded.deliver({ sourceKey: 'github-issue:42', metadata: { authorTrusted: true } }))!;
 
@@ -1289,19 +1289,19 @@ describe('intake routes moving existing cards on status events', () => {
       await boards.create(scope, shipBoard, 'admin');
       const broken = await route({
         name: 'Gone phase',
-        on: ['pull_request.opened'],
+        on: ['pull_request.synchronized'],
         target: { boardKey: 'work', moveToBoardKey: 'ship', phaseKey: 'staging' },
       });
       await route({
         name: 'Plan again',
-        on: ['pull_request.opened'],
+        on: ['pull_request.synchronized'],
         target: { boardKey: 'work', phaseKey: 'planning' },
       });
       const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
       await putAt(card.id, 'execute');
       recorded.mockClear();
 
-      expect(placed((await deliverEvent(card.id, { type: 'pull_request.opened' })).card)).toEqual({
+      expect(placed((await deliverEvent(card.id, { type: 'pull_request.synchronized' })).card)).toEqual({
         board: 'work',
         stages: ['planning'],
       });

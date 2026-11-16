@@ -144,10 +144,13 @@ export function updateEventFacts(
 export function combineUpdates(events: readonly BoardEventFacts[]): BoardEventFacts | undefined {
   const [first] = events;
   if (!first || !isUpdateEvent(first.type)) return undefined;
-  return updateEventFacts(first.type, {
+  const combined = updateEventFacts(first.type, {
     labels: combineChanges(events.flatMap(event => (event.labels ? [event.labels] : []))),
     assignees: combineChanges(events.flatMap(event => (event.assignees ? [event.assignees] : []))),
   });
+  // The folded change stands for every pull request in it, so it is trusted only when each one is.
+  if (!combined || events.some(event => event.pullRequestTrusted === undefined)) return combined;
+  return { ...combined, pullRequestTrusted: events.every(event => event.pullRequestTrusted === true) };
 }
 
 /**

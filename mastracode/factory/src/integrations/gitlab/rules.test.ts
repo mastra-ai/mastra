@@ -2323,8 +2323,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
     it("follows the project's card-move rule for linked merge requests: edited, it moves a planned issue", async () => {
       const h = await harness();
       const scope = { orgId: 'org-1', factoryProjectId: h.project.id };
-      const route = (await h.seeded.boards.listIntakeRoutes(scope)).find(entry =>
-        entry.on.includes('pull_request.opened'),
+      const route = (await h.seeded.boards.listIntakeRoutes(scope)).find(
+        entry => entry.name === 'Trusted pull requests take a waiting issue to Review',
       )!;
       await h.seeded.boards.updateIntakeRoute(
         scope,

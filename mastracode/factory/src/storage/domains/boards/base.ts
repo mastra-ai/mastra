@@ -6,7 +6,7 @@ import type { FactoryStorageOps } from '@mastra/core/storage';
 import { arrivalKinds, DEFAULT_ROUTE_EVENTS, routeEventsProblem } from '../../../boards/board-events.js';
 import type { ArrivalKind, RouteArrivals, RouteEvent } from '../../../boards/board-events.js';
 import type { FactoryPhaseTool } from '../../../boards/define-board.js';
-import { deriveIntakeOrder, reconcileIntakeOrder } from '../../../boards/intake-order.js';
+import { deriveIntakeOrder, kindsTakenWhole, reconcileIntakeOrder } from '../../../boards/intake-order.js';
 import { DEFAULT_INTAKE_ROUTES, LINKED_PULL_REQUEST_ROUTE_KEY } from '../../../boards/work-routes.js';
 import { currentRuleGroup } from '../../../rules/rule-group.js';
 import type { RuleGroup } from '../../../rules/rule-group.js';
@@ -1495,7 +1495,9 @@ function boardRouteCount(rows: readonly IntakeRouteRow[], boardKey: string): num
 /** Whether `row` files every new issue, or pull request, that reaches it, as the seeded "Everything else" route does. */
 function catchesEveryNewCard(row: IntakeRouteRow, kind: ArrivalKind): boolean {
   return (
-    row.enabled && row.when_condition === null && arrivalKinds(routeArrivals(row)).has(kind) && !row.join_closed_issue
+    row.enabled &&
+    !row.join_closed_issue &&
+    kindsTakenWhole({ when: row.when_condition, ...routeArrivals(row) }).includes(kind)
   );
 }
 

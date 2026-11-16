@@ -890,15 +890,16 @@ export class GithubRules {
           ? before.assignees
           : applied(before.assignees),
     };
+    const event = updateEventFacts('pull_request.updated', {
+      labels: listChange(before.labels, after.labels),
+      assignees: listChange(before.assignees, after.assignees),
+    });
     const queued = await this.#commitUpdate(
       parsed,
       repositoryName,
       project,
       item,
-      updateEventFacts('pull_request.updated', {
-        labels: listChange(before.labels, after.labels),
-        assignees: listChange(before.assignees, after.assignees),
-      }),
+      event && { ...event, pullRequestTrusted: authorTrusted(item.metadata) },
     );
     // Queued before the new lists are recorded: if queueing fails, a redelivery still sees the change.
     if (queued === 'ignored') return { status: 'ignored' };

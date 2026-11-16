@@ -142,7 +142,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     expect(pullRequests).toMatchObject({
       name: PULL_REQUEST_INTAKE_ROUTE.name,
       position: 2,
-      when: null,
+      when: PULL_REQUEST_INTAKE_ROUTE.when,
       on: ['pull_request.opened'],
       target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false },
       createdBy: 'factory',
@@ -302,11 +302,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     const where = { org_id: scope.orgId, factory_project_id: scope.factoryProjectId };
     await boards.listIntakeRoutes(scope);
     await storage.ops.updateMany('factory_intake_route_locks', where, { seeded_defaults: null });
-    for (const name of [
-      OUTSIDE_PULL_REQUEST_INTAKE_ROUTE.name,
-      PULL_REQUEST_INTAKE_ROUTE.name,
-      ...LATER_ROUTE_NAMES,
-    ]) {
+    for (const name of [OUTSIDE_PULL_REQUEST_INTAKE_ROUTE.name, PULL_REQUEST_INTAKE_ROUTE.name, ...LATER_ROUTE_NAMES]) {
       await storage.ops.deleteMany('factory_intake_routes', { ...where, name });
     }
     // The outside-authors route as it was first stored: before routes named events.
@@ -355,11 +351,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
 
     const added = (await boards.listIntakeRoutes(scope)).find(row => row.name === PULL_REQUEST_INTAKE_ROUTE.name)!;
     await boards.deleteIntakeRoute(scope, added.id, { expectedRevision: added.revision });
-    expect(await names(boards, scope)).toEqual([
-      DEFAULT_INTAKE_ROUTE.name,
-      'Mine',
-      ...LATER_ROUTE_NAMES,
-    ]);
+    expect(await names(boards, scope)).toEqual([DEFAULT_INTAKE_ROUTE.name, 'Mine', ...LATER_ROUTE_NAMES]);
   });
 
   it('adds the pull request route once when two clients read an older project at once', async () => {
@@ -400,6 +392,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     for (const { name } of [
       ...PULL_REQUEST_EVENT_ROUTES,
       CLOSED_CANCELED_ROUTE,
+      LINKED_PULL_REQUEST_ROUTE,
       CATCH_ALL_INTAKE_ROUTE,
       OUTSIDE_PULL_REQUEST_INTAKE_ROUTE,
     ]) {
@@ -407,9 +400,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     }
     const placeAt = async (name: string, position: number) =>
       storage.ops.updateMany('factory_intake_routes', { ...where, name }, { position });
-    await placeAt(PULL_REQUEST_INTAKE_ROUTE.name, 2);
-    await placeAt(CLOSED_COMPLETED_ROUTE.name, 3);
-    await placeAt(REOPENED_ROUTE.name, 4);
+    await placeAt(PULL_REQUEST_INTAKE_ROUTE.name, 1);
+    await placeAt(CLOSED_COMPLETED_ROUTE.name, 2);
+    await placeAt(REOPENED_ROUTE.name, 3);
 
     const expected = [
       DEFAULT_INTAKE_ROUTE.name,
@@ -417,6 +410,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       CLOSED_COMPLETED_ROUTE.name,
       REOPENED_ROUTE.name,
       ...PULL_REQUEST_EVENT_ROUTES.map(({ name }) => name),
+      LINKED_PULL_REQUEST_ROUTE.name,
       CATCH_ALL_INTAKE_ROUTE.name,
     ];
     expect(await names(boards, scope)).toEqual(expected);
@@ -437,7 +431,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     await storage.ops.updateMany(
       'factory_intake_routes',
       { ...where, name: PULL_REQUEST_INTAKE_ROUTE.name },
-      { position: 2 },
+      { position: 1 },
     );
     // A route the admin added since keeps its place ahead of them.
     await storage.ops.insertOne('factory_intake_routes', {
@@ -445,7 +439,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       ...where,
       name: 'Mine',
       enabled: true,
-      position: 3,
+      position: 2,
       when_condition: null,
       board_key: 'work',
       phase_key: null,
@@ -456,11 +450,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       updated_at: new Date(),
     });
 
-    const placement = [
-      DEFAULT_INTAKE_ROUTE.name,
-      PULL_REQUEST_INTAKE_ROUTE.name,
-      'Mine',
-    ];
+    const placement = [DEFAULT_INTAKE_ROUTE.name, PULL_REQUEST_INTAKE_ROUTE.name, 'Mine'];
     expect(await names(boards, scope)).toEqual([...placement, ...LATER_ROUTE_NAMES]);
     expect(await names(boards, scope)).toEqual([...placement, ...LATER_ROUTE_NAMES]);
 

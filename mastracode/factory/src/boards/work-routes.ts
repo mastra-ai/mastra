@@ -34,7 +34,7 @@ export const OUTSIDE_PULL_REQUEST_INTAKE_ROUTE: StoredIntakeRouteInput = {
     conditions: [
       { field: 'source.integration', operator: 'in', value: ['github', 'gitlab'] },
       { field: 'source.kind', operator: 'equals', value: 'pull_request' },
-      { field: 'author.trusted', operator: 'equals', value: false },
+      { field: 'item.trusted', operator: 'equals', value: false },
     ],
   },
   target: { boardKey: 'work', phaseKey: 'intake' },
@@ -43,13 +43,13 @@ export const OUTSIDE_PULL_REQUEST_INTAKE_ROUTE: StoredIntakeRouteInput = {
 /**
  * Pull requests with no card are reviewed in Work › Review. It comes after
  * `OUTSIDE_PULL_REQUEST_INTAKE_ROUTE`, so a pull request from outside the write-access circle
- * still waits in Intake. As a card move it sends an issue card whose pull request opens to Review,
- * where the pull request rules send it anyway.
+ * still waits in Intake. It tests `source.kind` so that, as a card move, it never sends an issue's
+ * card anywhere when a pull request links to it: `LINKED_PULL_REQUEST_ROUTE` decides that move.
  */
 export const PULL_REQUEST_INTAKE_ROUTE: StoredIntakeRouteInput = {
   name: 'Pull requests go to Review',
   on: ['pull_request.opened'],
-  when: null,
+  when: { operator: 'AND', conditions: [{ field: 'source.kind', operator: 'equals', value: 'pull_request' }] },
   target: { boardKey: 'work', phaseKey: 'pr-review' },
 };
 
