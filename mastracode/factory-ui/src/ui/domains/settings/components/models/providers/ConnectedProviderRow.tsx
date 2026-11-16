@@ -6,7 +6,8 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsItem, SettingsItemIcon } from '@mastra/playground-ui/new/settings';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { Box, MoreHorizontal } from 'lucide-react';
+import { IconBox } from '@mastra/playground-ui/icons/central/IconBox';
+import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
 import {
@@ -101,7 +102,7 @@ export function ConnectedProviderRow({
   };
 
   const brandIcon = (
-    <ProviderBrandIcon provider={provider.provider} fallback={<Box className="text-muted-foreground size-4" />} />
+    <ProviderBrandIcon provider={provider.provider} fallback={<IconBox className="text-muted-foreground size-4" />} />
   );
   const statusText = <Status presentation={pending ?? status} />;
   const menu = credential ? (
@@ -173,7 +174,7 @@ function CredentialMenu({
       <DropdownMenu.Trigger
         render={
           <Button variant="ghost" size="icon-sm" aria-label={`${displayName} actions`} disabled={disabled}>
-            <MoreHorizontal />
+            <IconDotGrid1x3Horizontal />
           </Button>
         }
       />

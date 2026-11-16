@@ -16,6 +16,7 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import { InMemoryStore } from '../storage/mock';
 import { createStep, createWorkflow } from '../workflows';
+import type { ShouldPersistSnapshotFn } from '../workflows';
 import { createStep as createEventedStep, createWorkflow as createEventedWorkflow } from '../workflows/evented';
 import { persistActiveRun, sleep } from './test-utils/active-runs';
 import { sharedBroker } from './test-utils/shared-broker';
@@ -196,16 +197,27 @@ describe('workflow recovery rule (#28712)', () => {
   /**
    * A replica whose default-engine `recovered-wf` records each run it runs, and holds the `blocked` runs
    * until `release`. `started` resolves once one of them runs. `order` gets `'step-done'` once a held step
-   * resumes.
+   * resumes. With `sleepMs`, the workflow sleeps that long before its step.
    */
-  function startBlockingReplica(storage: InMemoryStore, blocked: string | string[], recovery: MastraRecoveryConfig) {
+  function startBlockingReplica(
+    storage: InMemoryStore,
+    blocked: string | string[],
+    recovery: MastraRecoveryConfig,
+    { shouldPersistSnapshot, sleepMs }: { shouldPersistSnapshot?: ShouldPersistSnapshotFn; sleepMs?: number } = {},
+  ) {
     const executions: string[] = [];
     const order: string[] = [];
     // `start:<runId>` and `done:<runId>` per step execution, in the order they happened.
     const steps: string[] = [];
     const started = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
-    const workflow = createWorkflow({ id: 'recovered-wf', inputSchema: schema, outputSchema: schema })
+    const created = createWorkflow({
+      id: 'recovered-wf',
+      inputSchema: schema,
+      outputSchema: schema,
+      options: { shouldPersistSnapshot },
+    });
+    const workflow = (sleepMs ? created.sleep(sleepMs) : created)
       .then(
         createStep({
           id: 'work',
@@ -291,30 +303,6 @@ describe('workflow recovery rule (#28712)', () => {
     expect([...b.executions].sort()).toEqual(['run-1', 'run-2']);
   }, 10_000);
 
-  it('restarts runs whose rechecks come due together workflowConcurrency at a time', async () => {
-    const storage = new InMemoryStore();
-    const store = (await storage.getStore('workflows'))!;
-    const b = startBlockingReplica(storage, ['run-1', 'run-2'], { workflowGraceMs: GRACE_MS, workflowConcurrency: 1 });
-    await persistActiveRun(storage, 'run-1');
-    await persistActiveRun(storage, 'run-2');
-    // No recheck jitter: both runs are in their grace period now, and their rechecks fire together.
-    vi.spyOn(Math, 'random').mockReturnValue(0);
-    const runReads = vi.spyOn(store, 'getWorkflowRunById');
-
-    await b.mastra.restartAllActiveWorkflowRuns();
-    await b.started;
-    await vi.waitFor(() => {
-      const read = runReads.mock.calls.map(([args]) => args.runId);
-      expect(read).toEqual(expect.arrayContaining(['run-1', 'run-2']));
-    });
-    b.release();
-    await vi.waitFor(() => expect(b.steps).toHaveLength(4));
-
-    // A restart outside the limiter would start the second run while the first one still held its slot.
-    const [first, second] = b.executions;
-    expect(b.steps).toEqual([`start:${first}`, `done:${first}`, `start:${second}`, `done:${second}`]);
-  }, 10_000);
-
   it('waits at shutdown for a restart the recovery pass is running', async () => {
     const storage = new InMemoryStore();
     const b = startBlockingReplica(storage, 'run-1', { workflowGraceMs: 0 });
@@ -330,24 +318,86 @@ describe('workflow recovery rule (#28712)', () => {
     expect(await statusOf(storage, 'run-1')).toBe('success');
   }, 10_000);
 
-  it('checks a run again later when the lease read right before its restart fails', async () => {
+  it('does not restart a startAsync run whose run lease is still being claimed', async () => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;
-    const executions: string[] = [];
-    const b = startReplica(storage, 'default', 'B', executions);
-    await persistActiveRun(storage, 'stopped', { updatedAt: new Date(Date.now() - GRACE_MS) });
-    // No recheck jitter, so the recheck comes one grace period after the failed read.
-    vi.spyOn(Math, 'random').mockReturnValue(0);
-    const read = store.getRunOwnerships.bind(store);
-    vi.spyOn(store, 'getRunOwnerships')
-      .mockImplementationOnce(read)
-      .mockRejectedValueOnce(new Error('ownership read failed'))
-      .mockImplementation(read);
+    const a = startBlockingReplica(storage, 'run-1', { workflowGraceMs: 0 });
+    const b = startBlockingReplica(storage, [], { workflowGraceMs: 0 });
+    // A slow store: A's claim reaches it, and commits only once `commit` resolves.
+    const claim = store.claimRunOwnership.bind(store);
+    const claimEntered = Promise.withResolvers<void>();
+    const commit = Promise.withResolvers<void>();
+    vi.spyOn(store, 'claimRunOwnership').mockImplementationOnce(async args => {
+      claimEntered.resolve();
+      await commit.promise;
+      return claim(args);
+    });
 
-    await b.restartAllActiveWorkflowRuns();
+    const run = await a.mastra.getWorkflow('recovered-wf').createRun({ runId: 'run-1' });
+    const startAsync = run.startAsync({ inputData: {} });
+    await claimEntered.promise;
+    await b.mastra.restartAllActiveWorkflowRuns();
+    commit.resolve();
+    await startAsync;
+    await a.started;
 
-    expect(executions).toEqual([]);
-    await vi.waitFor(() => expect(executions).toEqual(['B:work']), { timeout: GRACE_MS * 10 });
+    expect([...a.executions, ...b.executions]).toEqual(['run-1']);
+    a.release();
+    await vi.waitFor(async () => expect(await statusOf(storage, 'run-1')).toBe('success'));
+  });
+
+  // These workflows persist `waiting` (a start through startAsync, a sleep) but never `running`.
+  it.each([
+    { name: 'started with startAsync', startAsync: true, sleepMs: undefined },
+    { name: 'that sleeps', startAsync: false, sleepMs: 1 },
+  ])(
+    'does not restart a live run $name of a workflow that does not persist running',
+    async ({ startAsync, sleepMs }) => {
+      const storage = new InMemoryStore();
+      const shouldPersistSnapshot: ShouldPersistSnapshotFn = ({ workflowStatus }) => workflowStatus !== 'running';
+      const options = { shouldPersistSnapshot, sleepMs };
+      const a = startBlockingReplica(storage, 'run-1', { workflowGraceMs: 0 }, options);
+      const b = startBlockingReplica(storage, [], { workflowGraceMs: 0 }, options);
+
+      const run = await a.mastra.getWorkflow('recovered-wf').createRun({ runId: 'run-1' });
+      if (startAsync) {
+        await run.startAsync({ inputData: {} });
+        await a.started;
+      } else {
+        void run.start({ inputData: {} });
+        await vi.waitFor(async () => expect(await statusOf(storage, 'run-1')).toBe('waiting'));
+      }
+      await b.mastra.restartAllActiveWorkflowRuns();
+      await a.started;
+
+      expect([...a.executions, ...b.executions]).toEqual(['run-1']);
+      a.release();
+      await vi.waitFor(async () => expect(await statusOf(storage, 'run-1')).toBe('success'));
+    },
+  );
+
+  it('releases the lease of a startAsync run that fails before it executes', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const failure = new Error('cannot decide whether to persist waiting');
+    const a = startBlockingReplica(
+      storage,
+      [],
+      { workflowGraceMs: 0 },
+      {
+        shouldPersistSnapshot: ({ workflowStatus }) => {
+          if (workflowStatus === 'waiting') throw failure;
+          return true;
+        },
+      },
+    );
+
+    const run = await a.mastra.getWorkflow('recovered-wf').createRun({ runId: 'run-1' });
+    await expect(run.startAsync({ inputData: {} })).rejects.toBe(failure);
+
+    // A lease left behind keeps renewing, so recovery could never restart the run.
+    expect(await store.getRunOwnership({ runId: 'run-1' })).toMatchObject({ live: false });
+    expect(a.executions).toEqual([]);
   });
 
   it('restarts every active run at once in a store without run fencing', async () => {

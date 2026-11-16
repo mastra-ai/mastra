@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Settings } from 'lucide-react';
 import { Button } from '../Button';
 import { Field, FieldLabel } from '../Field';
 import { Input } from '../Input';
 import { Popover, PopoverContent, PopoverTrigger } from './popover';
+import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
 
 const meta: Meta<typeof Popover> = {
   title: 'Feedback/Popover',
@@ -60,7 +60,7 @@ export const Variants: Story = {
           ))}
           <Popover>
             <PopoverTrigger variant={variant} size="icon-md" tooltip="Settings">
-              <Settings />
+              <IconSettingsGear1 />
             </PopoverTrigger>
             <PopoverContent>
               <p className="text-body">Popover content.</p>
@@ -88,7 +88,7 @@ export const WithIconTrigger: Story = {
   render: () => (
     <Popover>
       <PopoverTrigger variant="ghost" size="icon-md" tooltip="Settings">
-        <Settings />
+        <IconSettingsGear1 />
       </PopoverTrigger>
       <PopoverContent className="w-80">
         <div className="grid gap-4">

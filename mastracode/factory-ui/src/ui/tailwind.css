@@ -3,6 +3,13 @@
 @import '@mastra/playground-ui/sources.css';
 @import '@mastra/playground-ui/fonts.css';
 
+/* The session panel's one animated value: registered to interpolate, not inherited so animating it never restyles the transcript. */
+@property --panel-reveal {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
 /* The board card's corner. It is not a free number: a card is a rounded box with
  * a capsule pill sitting in its bottom corner, and the two only look concentric
  * while the card's radius is the pill's plus the padding between them —

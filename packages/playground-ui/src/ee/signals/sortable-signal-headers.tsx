@@ -7,7 +7,6 @@ import {
   useMouseSensor,
   useTouchSensor,
 } from '@hello-pangea/dnd';
-import { GripVertical } from 'lucide-react';
 import { useState } from 'react';
 
 import { getSignalColor } from './signal-colors';
@@ -16,6 +15,7 @@ import type { TraceSignalName } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
+import { IconDotGrid2x3 } from '@/ds/icons/central/IconDotGrid2x3';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
@@ -166,7 +166,7 @@ export function SortableSignalHeaders({
                               style={{ left: '100%' }}
                               title={`Drag to reorder the ${label} column`}
                             >
-                              <GripVertical aria-hidden="true" className="size-3.5" />
+                              <IconDotGrid2x3 aria-hidden="true" className="size-3.5" />
                             </div>
                           </div>
                         </div>

@@ -1,4 +1,3 @@
-import { ChevronDown } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { TopicTraceSummary } from '../types';
 import { getVisibleTraceSummaries } from '../utils';
@@ -6,6 +5,7 @@ import { Button } from '@/ds/components/Button';
 import { DataList } from '@/ds/components/DataList/data-list';
 import { useDataListKeyboard } from '@/ds/components/DataList/use-data-list-keyboard';
 import { SearchInput } from '@/ds/components/SearchInput';
+import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
 
 export interface TopicTraceSummaryListProps {
   traces: TopicTraceSummary[];
@@ -67,7 +67,7 @@ export function TopicTraceSummaryList({
       </DataList>
 
       {visible.hasMore ? (
-        <Button icon={<ChevronDown />} size="sm" onClick={() => setPage(currentPage => currentPage + 1)}>
+        <Button icon={<IconChevronBottom />} size="sm" onClick={() => setPage(currentPage => currentPage + 1)}>
           Load more traces ({visible.traces.length} of {visible.total})
         </Button>
       ) : null}

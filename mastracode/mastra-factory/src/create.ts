@@ -86,7 +86,11 @@ export async function create(args: CreateArgs): Promise<void> {
       validate: value => {
         const name = value?.trim() ?? '';
         if (!name && !cwdIsUsable) return `The current directory isn't empty. Enter a name for a new directory.`;
-        if (!canScaffoldInto(path.resolve(name))) return `Directory ${name || '.'} already exists and isn't empty`;
+        try {
+          if (!canScaffoldInto(path.resolve(name))) return `Directory ${name || '.'} already exists and isn't empty`;
+        } catch {
+          return `${name || '.'} can't be used as a project directory`;
+        }
         return undefined;
       },
     }));

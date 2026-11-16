@@ -24,8 +24,6 @@ const draft = {
     private: false,
     installationId: 7,
     installationStorageId: 'inst-7',
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/workspace/hello',
   },
   workConfirmed: true,
   modelScope: 'factory',
@@ -151,7 +149,8 @@ describe('Factory root route', () => {
     renderFactoryRoute('/onboarding');
 
     try {
-      await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
+      // The seeded draft already has a repository, which is a source on its own.
+      await user.click(await screen.findByRole('button', { name: 'Continue' }));
       await screen.findByRole('button', { name: 'Create factory' });
     } finally {
       clearOnboarding();

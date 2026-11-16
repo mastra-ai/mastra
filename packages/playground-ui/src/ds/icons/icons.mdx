@@ -1,0 +1,48 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as IconStories from './icons.stories';
+
+<Meta of={IconStories} />
+
+# Icons
+
+Interface icons come from [Central Icons](https://iconists.co/central) in one style: round, outlined, 2px corners, 2px stroke. Brand and product logos, such as `OpenAIIcon` or `AgentIcon`, stay as their own components. `lucide-react` remains only where Central has no matching glyph, and for filled icons such as a favorited star, because a filled glyph would need a second Central style.
+
+Each Central icon is its own module. Wrap it in `Icon` for the standard sizes.
+
+```tsx
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
+
+<Icon size="sm">
+  <IconMagnifyingGlass />
+</Icon>;
+```
+
+Icons are decorative (`aria-hidden`) unless you pass `aria-label`. Prefer labelling the button or link that contains them.
+
+<Canvas of={IconStories.CentralIcons} />
+
+## Adding an icon
+
+This is for Mastra team members. The icons are committed to the repo, so installing, building, and releasing need no license key. Only adding or updating icons does.
+
+1. Find the icon in the [Central icon list](https://iconists.co/central) or the Central Figma library, and note its name, such as `IconArrowRight`.
+2. Get Mastra's Central Icons license key from the `CENTRAL MASTRA` item in 1Password.
+3. From `packages/playground-ui`, run the generator with the key and the names to add:
+
+   ```bash
+   CENTRAL_LICENSE_KEY=<key> pnpm icons:central IconArrowRight IconCalendar
+   ```
+
+   It checks the key with Central, installs the pinned package in a temporary directory, writes one module per icon to `src/ds/icons/central/`, and adds the names to `central-icons.json`. Run it with no names to regenerate the current set, for example after raising `version` in `central-icons.json`.
+
+4. Commit `src/ds/icons/central/`. Don't edit the generated files by hand.
+5. Platform picks up new icons when it bumps `@mastra/playground-ui`. Add Platform's icons here too, never in the Platform repo.
+
+## License
+
+Central Icons are not covered by this package's Apache-2.0 license. Mastra uses them under its Central Icons Enterprise license. See [CENTRAL-ICONS-LICENSE.md](https://github.com/mastra-ai/mastra/blob/main/packages/playground-ui/CENTRAL-ICONS-LICENSE.md) and Iconists' [license terms](https://iconists.co/license).
+
+- Only add icons from this one style, and only icons a screen uses.
+- Never offer the icons on their own, such as an icon set, a download, or a copy-SVG gallery.
+- Never commit the license key or put it in CI. Nothing in CI needs it.

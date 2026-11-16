@@ -12,6 +12,7 @@ export type WorkItemSource =
   | 'incidentio-follow-up'
   | 'github-dependabot-alert'
   | 'vanta-vulnerability'
+  | 'detail-finding'
   | 'manual';
 
 export function externalSourceForWorkItem(
@@ -38,7 +39,9 @@ export function externalSourceForWorkItem(
                     ? ['github', 'dependabot-alert']
                     : source === 'vanta-vulnerability'
                       ? ['vanta', 'vulnerability']
-                      : ['factory', 'manual'];
+                      : source === 'detail-finding'
+                        ? ['detail', 'finding']
+                        : ['factory', 'manual'];
   return { integrationId, type, externalId: sourceKey, ...(url ? { url } : {}) };
 }
 
@@ -71,6 +74,7 @@ export function workItemSource(source: ExternalWorkItemSource | null): WorkItemS
   if (source.integrationId === 'jira') return 'jira-issue';
   if (source.integrationId === 'incidentio') return 'incidentio-follow-up';
   if (source.integrationId === 'vanta') return 'vanta-vulnerability';
+  if (source.integrationId === 'detail') return 'detail-finding';
   // Only GitHub, GitLab, Linear, Jira, and incident.io have provider-specific
   // rules; anything else (a Slack thread, say) is a plain work item, not a
   // mislabeled GitHub issue.
@@ -133,6 +137,7 @@ export const FACTORY_RULE_SOURCES = [
   'incidentioFollowUp',
   'dependabotAlert',
   'vantaVulnerability',
+  'detailFinding',
   'manual',
 ] as const;
 export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
@@ -653,7 +658,9 @@ export type FactoryRuleRejectionCode =
   | 'rule_error'
   | 'causal_depth_exceeded'
   | 'repeated_transition'
-  | 'approval_required';
+  | 'approval_required'
+  /** A person moved a card into a phase that may start a run while a run is in flight on it or queued for it. */
+  | 'card_busy';
 
 export interface FactoryRuleRejectDecision {
   type: 'reject';
@@ -895,6 +902,8 @@ export function factoryRuleSourceForWorkItem(source: WorkItemSource): FactoryRul
       return 'dependabotAlert';
     case 'vanta-vulnerability':
       return 'vantaVulnerability';
+    case 'detail-finding':
+      return 'detailFinding';
     case 'manual':
       return 'manual';
   }

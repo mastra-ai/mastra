@@ -1,5 +1,5 @@
-import { AlertCircleIcon } from 'lucide-react';
 import { Skeleton } from '@/ds/components/Skeleton';
+import { IconExclamationCircle } from '@/ds/icons/central/IconExclamationCircle';
 
 export type WorkflowGraphPlaceholderProps = { isLoading: true } | { isLoading?: false; workflowName: string };
 
@@ -15,7 +15,7 @@ export function WorkflowGraphPlaceholder(props: WorkflowGraphPlaceholderProps) {
   return (
     <div className="grid h-full place-items-center">
       <div className="flex flex-col items-center gap-2">
-        <AlertCircleIcon />
+        <IconExclamationCircle />
         <div>We couldn&apos;t find {props.workflowName} workflow.</div>
       </div>
     </div>

@@ -1,10 +1,11 @@
+import type { UpdateStoredAgentParams } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import { useAutosaveAgent } from '../use-autosave-agent';
 import { authEnabledCapabilities } from './fixtures/auth';
@@ -16,6 +17,9 @@ vi.mock('@mastra/playground-ui/utils/toast', () => ({
 
 const BASE_URL = 'http://localhost:4111';
 const AGENT_ID = 'autosave-agent';
+// Long enough that no test can miss the transient `saved` status while polling
+// for it; tests that check the return to `idle` advance fake time past it.
+const SAVED_DISPLAY_MS = 60_000;
 
 const baseFormValues: AgentBuilderEditFormValues = {
   name: 'Initial',
@@ -30,7 +34,7 @@ const baseFormValues: AgentBuilderEditFormValues = {
 const renderAutosave = ({
   defaultValues = baseFormValues,
   debounceMs = 50,
-  savedDisplayMs = 30,
+  savedDisplayMs = SAVED_DISPLAY_MS,
 }: {
   defaultValues?: AgentBuilderEditFormValues;
   debounceMs?: number;
@@ -79,6 +83,10 @@ describe('useAutosaveAgent', () => {
     server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authEnabledCapabilities)));
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   describe('when the hook mounts without edits', () => {
     it('does not PATCH the agent', async () => {
       let calls = 0;
@@ -109,7 +117,7 @@ describe('useAutosaveAgent', () => {
         }),
       );
 
-      const { result, form } = renderAutosave({ debounceMs: 30, savedDisplayMs: 500 });
+      const { form } = renderAutosave({ debounceMs: 30 });
 
       await act(async () => {
         form().setValue('name', 'Renamed', { shouldDirty: true });
@@ -117,8 +125,25 @@ describe('useAutosaveAgent', () => {
 
       await waitFor(() => expect(calls).toBe(1));
       expect(lastBody.name).toBe('Renamed');
+    });
+
+    it('shows saved for the display window, then returns to idle', async () => {
+      server.use(http.patch(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, () => HttpResponse.json({ id: AGENT_ID })));
+      // Fake time drives the display window; it still advances with real time so
+      // the debounce, MSW and React Testing Library's own timers keep running.
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+
+      const { result, form } = renderAutosave({ debounceMs: 30 });
+
+      await act(async () => {
+        form().setValue('name', 'Renamed', { shouldDirty: true });
+      });
+
       await waitFor(() => expect(result.current.status).toBe('saved'));
-      await waitFor(() => expect(result.current.status).toBe('idle'));
+      await act(() => vi.advanceTimersByTimeAsync(SAVED_DISPLAY_MS - 1_000));
+      expect(result.current.status).toBe('saved');
+      await act(() => vi.advanceTimersByTimeAsync(1_000));
+      expect(result.current.status).toBe('idle');
     });
   });
 
@@ -151,13 +176,15 @@ describe('useAutosaveAgent', () => {
 
   describe('when the server fails the save', () => {
     it('reports an error and recovers via retry', async () => {
-      let attempt = 0;
+      // Fail every request until retry() is called, so the test does not depend
+      // on how many times the client re-sends a failed PATCH on its own.
+      let failing = true;
+      const savedNames: string[] = [];
       server.use(
-        http.patch(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, () => {
-          attempt += 1;
-          // The mastra client retries 5xx up to 3 times. Fail the whole first
-          // save (4 attempts) then succeed on the retry().
-          if (attempt <= 4) return HttpResponse.json({ error: 'boom' }, { status: 500 });
+        http.patch<never, UpdateStoredAgentParams>(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, async ({ request }) => {
+          if (failing) return HttpResponse.json({ error: 'boom' }, { status: 500 });
+          const body = await request.json();
+          savedNames.push(body.name ?? '');
           return HttpResponse.json({ id: AGENT_ID });
         }),
       );
@@ -170,13 +197,16 @@ describe('useAutosaveAgent', () => {
 
       await waitFor(() => expect(result.current.status).toBe('error'), { timeout: 5_000 });
       expect(result.current.lastError).toBeInstanceOf(Error);
+      expect(savedNames).toEqual([]);
 
+      failing = false;
       await act(async () => {
         result.current.retry();
       });
 
       await waitFor(() => expect(result.current.status).toBe('saved'), { timeout: 5_000 });
-      expect(attempt).toBeGreaterThanOrEqual(5);
+      expect(result.current.lastError).toBeNull();
+      expect(savedNames).toEqual(['Boom']);
     });
   });
 

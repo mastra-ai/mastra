@@ -42,6 +42,7 @@ import {
   heartbeatSessionOpenRun,
   isOpenRunLiveElsewhere,
   listSessionOpenRuns,
+  listThreadOpenRuns,
   recordSessionRunStart,
   waitForSessionRunAudit,
 } from '../session/run-audit.js';
@@ -52,6 +53,7 @@ import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import {
   externalSourceKey,
   FACTORY_RULE_MATERIALIZATION_KEY,
+  FactoryRunBindingSupersededError,
   WorkItemSourceConflictError,
   WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
@@ -71,6 +73,7 @@ import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import { isStatusEventDecision } from './event-rules.js';
 import { endPhaseGoal, PHASE_GOAL_METADATA_KEY, phaseGoalOf, startPhaseGoal } from './phase-goal.js';
+import { isRunBearingDecision } from './run-bearing.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
 import { authorTrusted, externalSourceForWorkItem, workItemSource } from './types.js';
@@ -109,14 +112,6 @@ const SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS = 6 * 60 * 60_000;
 // capacity until their agent run reaches a terminal state; binding preparation
 // also runs detached from the poll loop under this concurrency cap.
 const MAX_IN_FLIGHT = 10;
-/**
- * Decisions that may start or wake an agent run, or wait for one to end, and so
- * hold a run slot. A transition's message is queued as a separate sendMessage,
- * so a transition stays bookkeeping, and so does a status event's route move:
- * it never waits for a run inline, it hands itself back until the run ends.
- */
-export const isRunBearingDecision = (decision: Record<string, unknown>): boolean =>
-  decision.type === 'invokeSkill' || decision.type === 'sendMessage' || decision.type === 'signalActivity';
 const isBookkeepingDecision = (decision: Record<string, unknown>): boolean => !isRunBearingDecision(decision);
 const BOOKKEEPING_MAX_IN_FLIGHT = 4;
 // Staleness sweep: legacy/leaked active bindings (item deleted, transition
@@ -462,6 +457,7 @@ export interface FactoryBindingPreparationInput {
   record: FactoryDeferredDecisionRecord;
   item: Card;
   role: string;
+  expectedBindingId?: string;
 }
 
 export type FactoryReviewStatusPhase = 'queued' | 'reviewing' | 'retrying' | 'completed' | 'failed' | 'cancelled';
@@ -1757,7 +1753,14 @@ export class FactoryDecisionDispatcher {
         return;
       }
       case 'notify': {
-        const binding = await this.#requireBinding(record);
+        const selected = await this.#requireBinding(record);
+        if (
+          (await this.#roleSuperseded(record, selected.role)) ||
+          (await this.#decisionOvertaken(record, selected.role))
+        ) {
+          throw new FactoryDecisionSuperseded();
+        }
+        const binding = await this.#requireOrPrepareBinding(record, selected.role, selected.id);
         // A notification can wake the idle session, so it runs as the session's
         // owner like any other Factory-started run, never as nobody.
         const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
@@ -2295,8 +2298,7 @@ export class FactoryDecisionDispatcher {
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
       workItemId: item.id,
-      ingress: { identity: `decision:${messageKey}@${moved.revision}`, triggerType: 'transition.message' },
-      configVersion: this.#transitionService.configVersion,
+      ingress: { identity: `decision:${messageKey}@${moved.revision}` },
       expectedRevision: moved.revision,
       actor: record.actor ?? { type: 'system', id: 'factory-rule-dispatcher' },
       outcome: { status: 'accepted' },
@@ -2580,8 +2582,12 @@ export class FactoryDecisionDispatcher {
   async #requireOrPrepareBinding(
     record: FactoryDeferredDecisionRecord,
     role: string,
+    expectedBindingId?: string,
   ): Promise<FactoryRunBindingRecord> {
     const binding = await this.#findBinding(record, role);
+    if (expectedBindingId && binding?.id !== expectedBindingId) {
+      return this.#sameRoleReplacement(record, role, expectedBindingId);
+    }
     if (binding) {
       const session = await this.#controller.getSession(binding.sessionId);
       if (session) return binding;
@@ -2593,8 +2599,36 @@ export class FactoryDecisionDispatcher {
       );
     }
     const item = await this.#requireItem(record);
-    await this.#prepareBinding({ record, item, role });
+    try {
+      await this.#prepareBinding({ record, item, role, expectedBindingId });
+    } catch (error) {
+      if (error instanceof FactoryRunBindingSupersededError) {
+        if (expectedBindingId) return this.#sameRoleReplacement(record, role, expectedBindingId);
+        throw new FactoryDecisionSuperseded();
+      }
+      throw error;
+    }
     return this.#requireBinding(record, role);
+  }
+
+  async #sameRoleReplacement(
+    record: FactoryDeferredDecisionRecord,
+    role: string,
+    expectedBindingId: string,
+  ): Promise<FactoryRunBindingRecord> {
+    const replacement = await this.#findBinding(record, role);
+    if (
+      !replacement ||
+      replacement.id === expectedBindingId ||
+      (await this.#roleSuperseded(record, role)) ||
+      (await this.#decisionOvertaken(record, role))
+    ) {
+      throw new FactoryDecisionSuperseded();
+    }
+    if (!(await this.#controller.getSession(replacement.sessionId))) {
+      throw new FactoryDispatchError('session_unavailable', 'Bound Factory session not found.');
+    }
+    return replacement;
   }
 
   async #findSession(
@@ -2630,11 +2664,38 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
+   * Whether a run is in flight on any of the card's active seats, as the board shows it: a run the
+   * registry here holds on a seat's thread, whoever started it, or one live on another dispatcher.
+   * A read-only probe: it never switches a session's thread.
+   */
+  async hasRunInFlightOnCard({
+    orgId,
+    factoryProjectId,
+    workItemId,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    workItemId: string;
+  }): Promise<boolean> {
+    const bindings = (await this.#storage.listRunBindings(orgId, factoryProjectId, workItemId)).filter(
+      binding => binding.status === 'active',
+    );
+    const liveThreads = new Set(this.#controller.listActiveThreadRuns().map(active => active.threadId));
+    for (const binding of bindings) {
+      if (liveThreads.has(binding.threadId)) return true;
+      const session = await this.#controller.getSession(binding.sessionId);
+      if (session && (await this.#hasRunInFlight(session, binding))) return true;
+    }
+    return false;
+  }
+
+  /**
    * Whether a run is in flight on `binding`: live here, or live on another dispatcher. An open-run
-   * entry with nothing live behind it is an orphan of a dead process and does not count.
+   * entry with nothing live behind it is an orphan of a dead process and does not count. Reads the
+   * binding's own thread, which the session may have switched away from.
    */
   async #hasRunInFlight(session: BoundDispatcherSession, binding: FactoryRunBindingRecord): Promise<boolean> {
-    const open = (await listSessionOpenRuns(session)).filter(entry => entry.bindingId === binding.id);
+    const open = (await listThreadOpenRuns(session, binding.threadId)).filter(entry => entry.bindingId === binding.id);
     if (open.length === 0) return false;
     if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) return true;
     return this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
