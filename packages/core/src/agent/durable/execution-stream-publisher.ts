@@ -7,11 +7,13 @@ import type { Agent } from '../agent';
 import { AGENT_STREAM_TOPIC } from '../streams/constants';
 import { createAgentStreamPublisher } from '../streams/publisher';
 import type { AgentStreamPublisher } from '../streams/publisher';
+import { readAgentRunRecord } from '../streams/run-records';
 import {
   assertExecutionGenerationCurrent,
   assertExecutionNotSuperseded,
   DurableExecutionFenceError,
   EXECUTION_SUPERSEDED_ERROR_ID,
+  EXECUTION_UNVERIFIED_ERROR_ID,
   isExecutionFenceError,
   setExecutionClaim,
 } from './execution-fence';
@@ -108,6 +110,32 @@ export function getExecutionStreamPublisher({
         return;
       }
       await assertExecutionNotSuperseded({ runId, agentId, mastra, requestContext });
+    },
+    assertRecordOwnership: async () => {
+      if (fence?.executionId !== publisherId || fence.settlement !== 'owned') return;
+      let current;
+      try {
+        current = await readAgentRunRecord(
+          bus.getRunRecordCache(usesSharedRunLog),
+          agentId,
+          runId,
+          durableReplayOwnerKey(agentId, runId),
+        );
+      } catch {
+        throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, {
+          runId,
+          agentId,
+          executionId: publisherId,
+        });
+      }
+      // Releasing a successor's lease does not give an older reader its record back.
+      if (current?.publisherId && current.publisherId !== publisherId) {
+        throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, {
+          runId,
+          agentId,
+          executionId: publisherId,
+        });
+      }
     },
     assertCleanupOwnership: async () => {
       // Owned deadline settlement revokes execution writes but keeps the run's topics.

@@ -502,7 +502,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       }
     });
 
-    it.each(['takeover', 'unverified'])(
+    it.each(['takeover', 'released-takeover', 'unverified'])(
       'a held terminal preserves shared state and only completes a nonsuperseded reader when ownership is %s (COR-1560)',
       async ownership => {
         const storage = createStorage(backend);
@@ -566,7 +566,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
           await fence.whenSettled;
           expect(fence.settlement).toBe('owned');
           expect(terminal).toBeDefined();
-          if (ownership === 'takeover') {
+          if (ownership !== 'unverified') {
             await foreign.hold(agent.id, runId, 'replacement-reader');
             const record =
               backend === 'storage'
@@ -580,11 +580,15 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
               claim: { executionId: 'replacement-reader', agentId: agent.id, generation: record?.generation },
             })!;
             await replacement.ready;
+            if (ownership === 'released-takeover') {
+              await replacement.settle('finished');
+              await foreign.free(agent.id, runId, 'replacement-reader');
+            }
           }
           const expected = await agent.__getRunRecord(runId);
           expect(expected).toMatchObject({
-            status: 'running',
-            publisherId: ownership === 'takeover' ? 'replacement-reader' : fence.executionId,
+            status: ownership === 'released-takeover' ? 'finished' : 'running',
+            publisherId: ownership !== 'unverified' ? 'replacement-reader' : fence.executionId,
           });
           if (ownership === 'unverified') {
             const unavailable = new Error('ownership backend unavailable');

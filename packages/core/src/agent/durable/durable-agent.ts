@@ -1086,6 +1086,9 @@ export class DurableAgent<
     });
     return async (status: 'suspended' | 'finished', generation: number | undefined) => {
       if (generation !== executionFence.generation || !executionFence.ownsRunTopics()) return;
+      const currentFence = getRunRegistryEntry(runId, this.#mastra)?.executionFence;
+      // A continuation can finish an earlier reader after resume replaced its execution.
+      if (currentFence && currentFence !== executionFence) return;
       try {
         await publisher?.settle(status);
       } catch (error) {

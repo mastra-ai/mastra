@@ -82,6 +82,8 @@ export interface CreateAgentStreamPublisherOptions {
   publisherId?: string;
   /** Verify the execution claim before publishing or changing shared stream state. */
   assertOwnership?: () => Promise<void>;
+  /** Additional authority required for shared record mutations, not event publication. */
+  assertRecordOwnership?: () => Promise<void>;
   /** Cleanup can retain topic authority after an owned deadline revokes execution writes. */
   assertCleanupOwnership?: () => Promise<void>;
   /** Forward a remote abort to the worker's execution controller. */
@@ -115,6 +117,7 @@ export function createAgentStreamPublisher({
   role = 'lifecycle',
   publisherId = globalThis.crypto.randomUUID(),
   assertOwnership,
+  assertRecordOwnership,
   assertCleanupOwnership = assertOwnership,
   onAbortRequested,
   listenForAbort = true,
@@ -160,6 +163,7 @@ export function createAgentStreamPublisher({
   const writeRecord = (status: 'running' | 'suspended' | 'finished') => async () => {
     if (!record || role === 'producer') return;
     await assertOwnership?.();
+    await assertRecordOwnership?.();
     const { cache, key, ...owner } = record;
     try {
       if (owner.resourceId === undefined || owner.threadId === undefined) {
