@@ -15670,10 +15670,10 @@
       "reason": "seed-rule-b"
     },
     "packages/core/src/loop/workflows/agentic-execution/goal-step.test.ts": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": "2026-09-08",
-      "reason": "seed-rule-b"
+      "tier": "in",
+      "since": "2026-11-16",
+      "last_failure": "2026-11-16",
+      "reason": "versioning-fail"
     },
     "packages/core/src/loop/workflows/agentic-execution/index.test.ts": {
       "tier": "out",
