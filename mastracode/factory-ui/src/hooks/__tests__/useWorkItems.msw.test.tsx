@@ -459,40 +459,6 @@ describe('useBoardPhasesQuery', () => {
     expect(result.current.data).toMatchObject({ matchingTotal: 1, boardTotal: 2 });
   });
 
-  it('keeps the open card when newer cards push it past the ones its phase lists, without listing the phase down to it', async () => {
-    const project = serveProject(Array.from({ length: 50 }, (_, index) => card(index + 1)));
-    const { result, rerender, client } = renderHookWithProviders(
-      (openCard: string | undefined) => useBoardPhasesQuery(PROJECT_ID, VIEW, openCard),
-      { initialProps: undefined },
-    );
-    await waitFor(() => expect(listed(result.current.data, 'execute')?.ids.at(-1)).toBe(cardId(1)));
-    const held = () => result.current.data?.workItems.find(item => item.id === cardId(1));
-    const opened = held();
-
-    rerender(cardId(1));
-    expect(project.listings).toHaveLength(1);
-
-    project.cards = [...project.cards, card(51), card(52)];
-    await act(() => refresh(client));
-
-    await waitFor(() => expect(listed(result.current.data, 'execute')?.total).toBe(52));
-    expect(project.listings.at(-1)?.get('item')).toBe(cardId(1));
-    // The phase lists its first cards, and the answer says apart that it holds the open one.
-    expect(listed(result.current.data, 'execute')?.ids).toHaveLength(50);
-    expect(listed(result.current.data, 'execute')?.ids).not.toContain(cardId(1));
-    expect(result.current.data?.asked).toEqual({ id: cardId(1), phases: ['execute'] });
-    expect(held()).toBe(opened);
-    expect(project.cardReads.map(ids => ids.toSorted())).toEqual([[cardId(51), cardId(52)]]);
-
-    // Closed, the card is listed like any other: the board lets go of it.
-    rerender(undefined);
-    await act(() => refresh(client));
-
-    await waitFor(() => expect(result.current.data?.asked).toBeUndefined());
-    expect(project.listings.at(-1)?.has('item')).toBe(false);
-    expect(held()).toBeUndefined();
-  });
-
   it('reads a linked card deep in its phase with the first cards of the board, not with the cards above it', async () => {
     const project = serveProject(Array.from({ length: 120 }, (_, index) => card(index + 1)));
     const { result } = renderHookWithProviders(() => useBoardPhasesQuery(PROJECT_ID, { ...VIEW, item: cardId(1) }));

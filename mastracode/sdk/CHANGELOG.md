@@ -1,5 +1,24 @@
 # @mastra/code-sdk
 
+## 1.19.1-alpha.5
+
+### Patch Changes
+
+- Fixed plan feedback stopping the run. Sending feedback on a submitted plan now lets the agent revise the plan and submit it again, instead of ending with "Plan rejected by user". Rejecting a plan without feedback still stops the run and waits for your next message. ([#30524](https://github.com/mastra-ai/mastra/pull/30524))
+
+- `execute_command` now resolves relative paths against the workspace directory, not the sandbox's own default working directory. ([#30210](https://github.com/mastra-ai/mastra/pull/30210))
+
+  On a SandboxFilesystem the file tools resolve paths against the workspace root, but shell commands started wherever the sandbox was rooted, so a file written by a relative shell path (`cat > .artifacts/plans/x.md`) landed in a different directory than the same path passed to `write_file` — in a Factory session the plan card then could not load the plan the shell had written.
+
+  `@mastra/core` adds an optional `WorkspaceFilesystem.getCommandCwd()` that reports the sandbox directory shell commands should default to, and `execute_command` uses it for both foreground and background commands: an omitted `cwd` now starts in that directory, and a relative `cwd` is resolved against it. Filesystems that do not report a root (host or in-memory filesystems, CompositeFilesystem mounts, third-party implementations) keep the previous behaviour exactly, and an explicit absolute `cwd` still wins.
+
+- Updated dependencies [[`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`88f94f2`](https://github.com/mastra-ai/mastra/commit/88f94f237acc406efb774367f5ba7bdeaac8e88d), [`7517474`](https://github.com/mastra-ai/mastra/commit/7517474b395a44ca6b7573a16d307ca7964ab3a8), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`d929736`](https://github.com/mastra-ai/mastra/commit/d9297364354b6a9c5dc0b870c2cea1e305f5faa1), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`037b9b7`](https://github.com/mastra-ai/mastra/commit/037b9b75a89388b5ecd7ca72799d29107180f211), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913)]:
+  - @mastra/libsql@1.31.0-alpha.2
+  - @mastra/core@1.84.0-alpha.4
+  - @mastra/client-js@1.60.1-alpha.4
+  - @mastra/pg@1.37.0-alpha.2
+  - @mastra/mcp@2.10.0-alpha.0
+
 ## 1.19.1-alpha.4
 
 ### Patch Changes
