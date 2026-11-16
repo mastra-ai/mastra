@@ -399,6 +399,8 @@ export interface RevokeStaleFactoryRunBindingsInput {
   now: Date;
   /** Exempts an over-age binding from the age test only; the item-state checks still apply. */
   keep?: (binding: FactoryRunBindingRecord) => Promise<boolean>;
+  /** Called for each binding this sweep revoked. */
+  onRevoked?: (binding: FactoryRunBindingRecord) => void;
 }
 
 export interface RevokeFactoryRunBindingsForWorkItemInput {
@@ -3644,7 +3646,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         bindingId: binding.id,
         revokedAt: input.now,
       });
-      if (result) revoked += 1;
+      if (!result) continue;
+      revoked += 1;
+      input.onRevoked?.(binding);
     }
     return revoked;
   }
