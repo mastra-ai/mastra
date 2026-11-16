@@ -23,17 +23,16 @@ on:
         required: false
 
 jobs:
+  # Unit tests need no container or secrets and take seconds per package, so all selected
+  # packages run in one job rather than one runner each (checkout, setup and build apiece).
   test-unit:
+    name: test-unit
     if: ${{ github.repository == 'mastra-ai/mastra' && inputs.workspace_packages != '[]' }}
     runs-on: starsling-ubuntu-26.04
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: remote:r
-    strategy:
-      fail-fast: false
-      matrix:
-        package: ${{ fromJson(inputs.workspace_packages) }}
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
@@ -44,12 +43,24 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Build packages
-        run: pnpm turbo build --filter "@mastra/${{ matrix.package }}"
+      - name: Select packages
+        id: filters
+        env:
+          WORKSPACE_PACKAGES: ${{ inputs.workspace_packages }}
+        run: |
+          if jq -e 'any(test("^[a-zA-Z0-9_-]+$") | not)' <<< "$WORKSPACE_PACKAGES" > /dev/null; then
+            echo "::error::Invalid workspace package names: $WORKSPACE_PACKAGES"
+            exit 1
+          fi
+          echo "args=$(jq -r 'map("--filter @mastra/" + .) | join(" ")' <<< "$WORKSPACE_PACKAGES")" >> "$GITHUB_OUTPUT"
 
-      - name: Run ${{ matrix.package }} unit tests
-        run: pnpm test:unit
-        working-directory: workspaces/${{ matrix.package }}
+      - name: Build packages
+        run: pnpm turbo build ${{ steps.filters.outputs.args }}
+
+      # Each package runs its own `test:unit` script, four at a time.
+      # --no-bail runs every package; the summary at the end names any that failed.
+      - name: Run unit tests
+        run: pnpm -r --workspace-concurrency=4 --no-bail --no-sort ${{ steps.filters.outputs.args }} run test:unit
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
 

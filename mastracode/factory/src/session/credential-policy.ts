@@ -8,15 +8,16 @@ import { tenantOrgId } from '../routes/provider-credentials.js';
 import type { ModelDefaultRecord, ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { SourceControlSessionLookup } from './factory-session.js';
+import { threadRunBinding } from './session-threads.js';
+import type { ThreadRunBindings } from './session-threads.js';
 
 const FACTORY_PROJECT_ID = new RegExp(UUID_PATTERN);
 
 export interface FactoryModelPolicyDependencies {
   projects: Pick<FactoryProjectsStorage, 'getById'>;
   sourceControl: Pick<SourceControlSessionLookup, 'getBySessionId'>;
-  workItems: Pick<WorkItemsStorage, 'findRunBindingByThread'>;
+  workItems: ThreadRunBindings;
 }
 
 /** Resolve billing authority from authenticated identity and durable bindings, never session state. */
@@ -39,16 +40,14 @@ export async function resolveFactoryModelPolicy(
   const { sessionId, resourceId } = controller;
 
   const sourceSession = await deps.sourceControl.getBySessionId(sessionId);
-  const binding =
-    principal.orgId && controller.threadId
-      ? await deps.workItems.findRunBindingByThread({
-          orgId: principal.orgId,
-          resourceId,
-          sessionId,
-          threadId: controller.threadId,
-          rejectAmbiguous: true,
-        })
-      : null;
+  const binding = principal.orgId
+    ? await threadRunBinding(deps.workItems, {
+        orgId: principal.orgId,
+        resourceId,
+        sessionId,
+        threadId: controller.threadId,
+      })
+    : null;
   if (!sourceSession) {
     if (!binding && (resourceId === principal.userId || resourceId.startsWith('channel:')))
       return { tenant: principal };

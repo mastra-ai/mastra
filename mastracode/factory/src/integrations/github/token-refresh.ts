@@ -7,7 +7,8 @@ const GITHUB_TOKEN_INJECTOR_RESOLVER_CONTEXT_KEY = 'factoryGithubTokenInjectorRe
 const GITHUB_PAT_KIND_CONTEXT_KEY = 'factoryGithubPatKind';
 const GITHUB_REFRESH_TARGET_CONTEXT_KEY = 'factoryGithubRefreshTarget';
 
-type GithubTokenInjector = (token: string) => void;
+/** `pat` marks an org PAT, which is never replaced for age. */
+type GithubTokenInjector = (token: string, pat?: boolean) => void;
 type GithubTokenInjectorResolver = () => GithubTokenInjector;
 
 /** The authorized GitHub repository behind the request's Factory session. */

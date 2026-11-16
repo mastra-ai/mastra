@@ -268,6 +268,12 @@ function sourceChangeRequestMessage(agentId: string, userName?: string, changeMe
 export const LIST_STORED_AGENTS_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/agents',
+  mcp: {
+    toolset: 'stored_agents',
+    name: 'list_stored_agents',
+    description: 'List agents created in the editor or agent builder that you can see.',
+    requires: capabilities => capabilities.storedAgents,
+  },
   responseType: 'json',
   queryParamSchema: listStoredAgentsQuerySchema,
   responseSchema: listStoredAgentsResponseSchema,
@@ -530,6 +536,12 @@ export const OPEN_STORED_AGENT_CHANGE_REQUEST_ROUTE = createRoute({
 export const GET_STORED_AGENT_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/agents/:storedAgentId',
+  mcp: {
+    toolset: 'stored_agents',
+    name: 'get_stored_agent',
+    description: "Get a stored agent's full configuration.",
+    requires: capabilities => capabilities.storedAgents,
+  },
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   queryParamSchema: statusQuerySchema,
@@ -585,6 +597,13 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
 > = createRoute({
   method: 'POST',
   path: '/stored/agents',
+  mcp: {
+    toolset: 'stored_agents',
+    name: 'create_stored_agent',
+    description:
+      'Create an agent (instructions, model, tools, memory). Call list_available_models first. The new agent can be called with call_agent right away.',
+    requires: capabilities => capabilities.storedAgents,
+  },
   responseType: 'json',
   bodySchema: createStoredAgentBodySchema,
   responseSchema: createStoredAgentResponseSchema,
@@ -801,6 +820,12 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
 > = createRoute({
   method: 'PATCH',
   path: '/stored/agents/:storedAgentId',
+  mcp: {
+    toolset: 'stored_agents',
+    name: 'update_stored_agent',
+    description: 'Update a stored agent. Only the fields you pass change.',
+    requires: capabilities => capabilities.storedAgents,
+  },
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   bodySchema: updateStoredAgentBodySchema,
@@ -1022,9 +1047,12 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         const { versions } = await agentsStore.listVersions({ agentId: storedAgentId, perPage: 1 });
         const latestVersion = versions[0];
         if (latestVersion) {
+          // Same as create: publishing a version also publishes the agent, otherwise a
+          // draft agent keeps status 'draft' with a live active version.
           await agentsStore.update({
             id: storedAgentId,
             activeVersionId: latestVersion.id,
+            status: 'published',
           });
         }
       }
@@ -1103,8 +1131,34 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
           ?.warn?.('Failed to cascade-delete favorites for agent', { storedAgentId, error: cascadeError });
       }
 
+      // A record with the id of a code-defined agent is only an override; the code agent and the workspace it
+      // registered stay. Check before clearCache, which unregisters stored agents.
+      let overridesCodeAgent = false;
+      try {
+        overridesCodeAgent = mastra.getAgentById(storedAgentId).source !== 'stored';
+      } catch {
+        // Not registered: a stored agent that hasn't been loaded yet.
+      }
+
       // Clear the cached agent instance
       mastra.getEditor()?.agent.clearCache(storedAgentId);
+
+      // The agent registered its workspace on first use. With the record gone, GET /workspaces can't check who may
+      // see it, so unregister it. The record is already gone, so a cleanup failure is logged rather than failing the
+      // delete.
+      try {
+        if (!overridesCodeAgent && typeof mastra.listWorkspaces === 'function') {
+          for (const [workspaceId, entry] of Object.entries(mastra.listWorkspaces())) {
+            if (entry.source === 'agent' && entry.agentId === storedAgentId) {
+              await mastra.removeWorkspace(workspaceId);
+            }
+          }
+        }
+      } catch (cleanupError) {
+        mastra
+          .getLogger?.()
+          ?.warn?.('Failed to unregister workspace of deleted agent', { storedAgentId, error: cleanupError });
+      }
 
       return { success: true, message: `Agent ${storedAgentId} deleted successfully` };
     } catch (error) {

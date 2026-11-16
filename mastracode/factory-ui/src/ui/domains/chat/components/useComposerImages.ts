@@ -1,5 +1,5 @@
-import { useRef } from 'react';
-import type { ChangeEvent, ClipboardEvent, DragEvent } from 'react';
+import { toast } from '@mastra/playground-ui/components/Toaster';
+import type { ClipboardEvent, DragEvent } from 'react';
 
 import type { PendingImage } from '../context/ComposerImagesContext';
 import { useComposerImagesState } from '../context/useComposerImagesState';
@@ -24,7 +24,6 @@ function readFileAsBase64(file: File): Promise<string> {
 
 export function useComposerImages({ disabled }: { disabled: boolean }) {
   const { images, setImages } = useComposerImagesState();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const addImageFiles = async (fileList: Iterable<File>) => {
     const imageFiles = Array.from(fileList).filter(
@@ -40,7 +39,7 @@ export function useComposerImages({ disabled }: { disabled: boolean }) {
     });
     if (accepted.length === 0) return;
 
-    const additions = await Promise.all(
+    const read = await Promise.allSettled(
       accepted.map(
         async (file): Promise<PendingImage> => ({
           id: `pending-image-${pendingImageSequence++}`,
@@ -50,7 +49,9 @@ export function useComposerImages({ disabled }: { disabled: boolean }) {
         }),
       ),
     );
-    setImages(current => [...current, ...additions]);
+    const additions = read.flatMap(result => (result.status === 'fulfilled' ? [result.value] : []));
+    if (additions.length < read.length) toast.error("Couldn't read an image. Try attaching it again.");
+    if (additions.length > 0) setImages(current => [...current, ...additions]);
   };
 
   const removeImage = (id: string) => {
@@ -73,10 +74,9 @@ export function useComposerImages({ disabled }: { disabled: boolean }) {
     void addImageFiles(files);
   };
 
-  const onFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
-    if (!disabled) void addImageFiles(event.target.files ?? []);
-    event.target.value = '';
+  const addFiles = (files: File[]) => {
+    if (!disabled) void addImageFiles(files);
   };
 
-  return { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange };
+  return { images, setImages, removeImage, onPaste, onDrop, addFiles };
 }

@@ -14,7 +14,7 @@ import type {
   SSOLoginConfig,
 } from '@internal/auth';
 import { getRequestHeader } from '@internal/auth';
-import type { MastraAuthProviderOptions } from '@internal/auth/provider';
+import type { MastraAuthOAuthMetadata, MastraAuthProviderOptions } from '@internal/auth/provider';
 import { MastraAuthProvider } from '@internal/auth/provider';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
@@ -244,6 +244,11 @@ export class MastraAuthOkta
       console.error('Okta token verification failed:', err);
       return null;
     }
+  }
+
+  /** The Okta authorization server is the authorization server for MCP clients. */
+  getOAuthMetadata(): MastraAuthOAuthMetadata {
+    return { authorizationServers: [this.issuer] };
   }
 
   /**

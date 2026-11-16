@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { AttachFilePopover } from '../attach-file-popover';
+import { AttachFileMenu } from '../attach-file-menu';
 import { ComposerAttachments } from '../attachment';
 import { ComposerAttachmentsProvider } from '../composer-attachments';
 
@@ -10,14 +10,13 @@ describe('composer attachment previews', () => {
     it('removes the named file while preserving the other preview and its content', async () => {
       render(
         <ComposerAttachmentsProvider>
-          <AttachFilePopover />
+          <AttachFileMenu />
           <ComposerAttachments />
         </ComposerAttachmentsProvider>,
       );
       fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
-      const picker = document.querySelector<HTMLInputElement>('input[type="file"]');
-      if (!picker) throw new Error('File picker is missing');
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Files' }));
+      const picker = screen.getByLabelText('Files');
       const csv = 'name,score\nZoë,12';
       const leads = new File([csv], 'leads.csv', { type: 'text/csv' });
       const discarded = new File(['discard'], 'discard.txt', { type: 'text/plain' });

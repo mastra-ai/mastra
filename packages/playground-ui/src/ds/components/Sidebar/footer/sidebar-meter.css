@@ -1,0 +1,60 @@
+/* Credits card (Sidebar.Meter): one card in both states, 70px tall, 34px in the rail, where the label and status
+ * lines fold away and the amount shrinks to the rail's size, centred on the card. */
+[data-slot='sidebar-meter'] {
+  height: 70px;
+}
+
+/* The amount is as wide as its text (a placeholder, as wide as its bar). In the rail it moves to a fixed point, the
+ * 40px card's centre (10px from its content edge), back by half its own width, so it's centred whatever the number. */
+[data-slot='sidebar-meter'] [data-meter-value] > * {
+  position: relative;
+  left: 0;
+  width: fit-content;
+}
+
+[data-slot='sidebar-meter'] [data-meter-value] > [data-meter-skeleton] {
+  width: 48px;
+}
+
+[data-slot='sidebar-meter'] [data-meter-value] [data-meter-skeleton] > :last-child {
+  width: 100%;
+}
+
+[data-slot='sidebar-meter'][data-state='collapsed'] {
+  height: 34px;
+}
+
+[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-fold] {
+  height: 0;
+  margin: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+
+[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-value] {
+  margin-top: 0;
+}
+
+[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-value] > * {
+  left: 10px;
+  translate: -50% 0;
+  font-size: var(--text-meta);
+}
+
+[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-value] > [data-meter-skeleton] {
+  width: 20px;
+}
+
+[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-value] [data-meter-skeleton] > :last-child {
+  height: 8px;
+}
+
+/* With a rail amount (`railValue`), the card shows it in the rail instead of the full amount. */
+[data-slot='sidebar-meter'] [data-meter-rail],
+[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-full] {
+  display: none;
+}
+
+[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-rail] {
+  display: inline;
+}

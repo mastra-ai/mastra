@@ -96,19 +96,21 @@ describe('buildUrl', () => {
   });
 
   it('uses a custom API prefix instead of the default /api', () => {
-    expect(buildUrl('https://example.com', '/agents', {}, undefined, '/api/mastra-studio')).toBe(
+    expect(buildUrl('https://example.com', '/agents', {}, undefined, { apiPrefix: '/api/mastra-studio' })).toBe(
       'https://example.com/api/mastra-studio/agents',
     );
   });
 
   it('does not duplicate a custom prefix already present on the base URL', () => {
-    expect(buildUrl('https://example.com/api/mastra-studio', '/agents', {}, undefined, '/api/mastra-studio')).toBe(
-      'https://example.com/api/mastra-studio/agents',
-    );
+    expect(
+      buildUrl('https://example.com/api/mastra-studio', '/agents', {}, undefined, { apiPrefix: '/api/mastra-studio' }),
+    ).toBe('https://example.com/api/mastra-studio/agents');
   });
 
   it('omits any prefix when given an empty string', () => {
-    expect(buildUrl('https://example.com', '/agents', {}, undefined, '')).toBe('https://example.com/agents');
+    expect(buildUrl('https://example.com', '/agents', {}, undefined, { apiPrefix: '' })).toBe(
+      'https://example.com/agents',
+    );
   });
 });
 
@@ -179,6 +181,54 @@ describe('requestApi', () => {
       headers: {},
       signal: expect.any(AbortSignal),
     });
+  });
+
+  it('sends a list of values as one query parameter per value on origin-placed routes', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ workItems: [] }));
+
+    await requestApi({
+      baseUrl: 'https://example.com',
+      headers: {},
+      timeoutMs: 1000,
+      descriptor: descriptor({
+        method: 'GET',
+        path: '/web/factory/projects/:id/work-items',
+        routePlacement: 'origin',
+      }),
+      pathParams: { id: 'project-1' },
+      input: {
+        source: ['a', 'b'],
+        numbers: [1, 2],
+        flags: [true],
+        filter: { stage: 'intake' },
+        ranges: [{ from: 1 }],
+        none: [],
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://example.com/web/factory/projects/project-1/work-items?source=a&source=b&numbers=1&numbers=2&flags=true' +
+        '&filter=%7B%22stage%22%3A%22intake%22%7D&ranges=%5B%7B%22from%22%3A1%7D%5D&none=%5B%5D',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('keeps a list of values JSON-encoded on Mastra API routes', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ spans: [] }));
+
+    await requestApi({
+      baseUrl: 'https://example.com',
+      headers: {},
+      timeoutMs: 1000,
+      descriptor: descriptor({ method: 'GET', path: '/observability/traces' }),
+      pathParams: {},
+      input: { tags: ['a', 'b'] },
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://example.com/api/observability/traces?tags=%5B%22a%22%2C%22b%22%5D',
+      expect.objectContaining({ method: 'GET' }),
+    );
   });
 
   it('sends non-GET query/body split input with JSON content type', async () => {

@@ -8,6 +8,8 @@ import { MemoryRouter, Route, Routes, useParams } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import EditDatasetPage from '../index';
+import { buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
+import { noScorers } from '@/domains/experiments/components/__tests__/fixtures/target-registries';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -50,6 +52,10 @@ beforeEach(() => {
   server.use(
     http.get(`${BASE_URL}/api/workflows`, () => HttpResponse.json(emptyWorkflows)),
     http.get(`${BASE_URL}/api/datasets/ds-1`, () => HttpResponse.json(baseDataset)),
+    // The tag and scorer pickers load these. Left unhandled, each request fails and the client
+    // retries it with backoff past the end of the test, after jsdom is gone.
+    http.get(`${BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse([]))),
+    http.get(`${BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
   );
 });
 

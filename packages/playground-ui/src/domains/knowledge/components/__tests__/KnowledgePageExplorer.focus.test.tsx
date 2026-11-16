@@ -101,7 +101,7 @@ beforeAll(() => {
   };
 });
 
-const tree = () => screen.getByRole('tree');
+const tree = () => screen.getByRole('tree', { name: 'Knowledge pages' });
 const treeNames = () =>
   within(tree())
     .getAllByRole('treeitem')
@@ -115,7 +115,7 @@ describe('KnowledgePageExplorer scope focus', () => {
 
     const focus = screen.getByTestId('knowledge-scope-focus');
     expect(focus.textContent).toContain('Team');
-    expect(focus.textContent).toContain('team:support');
+    expect(focus.textContent).toContain('Support team');
     await waitFor(() => expect(within(tree()).queryByText('Refunds')).toBeNull());
     expect(within(tree()).getByText('Macros')).toBeTruthy();
     // Labelled circles and dots alike.

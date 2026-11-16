@@ -11,7 +11,7 @@ export function MetricsLineChartLegend({
   className?: string;
 }) {
   return (
-    <div className={cn('flex flex-wrap items-center gap-x-4 gap-y-1', className)}>
+    <div data-slot="chart-legend" className={cn('flex flex-wrap items-center gap-x-4 gap-y-1', className)}>
       {series.map(s => (
         <div key={s.dataKey} className="inline-flex items-center gap-1.5">
           {s.dashed ? (

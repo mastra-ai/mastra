@@ -39,7 +39,7 @@ program
   )
   .option('--no-platform', 'Skip Mastra platform provisioning and scaffold the self-hosted template')
   .option('--org <org>', 'Mastra organization id or name — skips the interactive org picker')
-  .option('--region <region>', 'Platform project region (eu or us); prompts when omitted')
+  .option('--region <region>', 'Platform project region (eu or us); defaults to us')
   .version(pkg.version, '-v, --version')
   .action(async (projectNameArg: string | undefined, args: CreateArgs) => {
     const region = args.region ? String(args.region) : undefined;

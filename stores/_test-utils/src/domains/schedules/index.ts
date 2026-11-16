@@ -65,6 +65,24 @@ export function createSchedulesTests({ storage }: SchedulesTestOptions) {
         expect(fetched!.lastFireAt).toBe(sched.lastFireAt);
         expect(fetched!.lastRunId).toBe('run_abc');
       });
+
+      it('round-trips runAt and endAt', async () => {
+        if (!scheduleStore) return;
+        await scheduleStore.createSchedule(
+          createSampleSchedule({ id: 'once', cron: '', runAt: 5_000, nextFireAt: 5_000 }),
+        );
+        await scheduleStore.createSchedule(createSampleSchedule({ id: 'bounded', endAt: 9_000_000_000_000 }));
+
+        const once = await scheduleStore.getSchedule('once');
+        expect(once!.runAt).toBe(5_000);
+        expect(once!.endAt).toBeUndefined();
+        const bounded = await scheduleStore.getSchedule('bounded');
+        expect(bounded!.endAt).toBe(9_000_000_000_000);
+        expect(bounded!.runAt).toBeUndefined();
+
+        const patched = await scheduleStore.updateSchedule('bounded', { endAt: undefined });
+        expect(patched.endAt).toBeUndefined();
+      });
     });
 
     describe('listSchedules', () => {

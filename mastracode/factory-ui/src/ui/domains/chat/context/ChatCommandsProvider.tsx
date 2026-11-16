@@ -1,5 +1,5 @@
 import { createContext, useContext, useRef, useState } from 'react';
-import type { ReactNode, RefObject } from 'react';
+import type { Dispatch, ReactNode, RefObject, SetStateAction } from 'react';
 import { flushSync } from 'react-dom';
 
 import type { SlashCommand } from '../services/commands';
@@ -14,10 +14,11 @@ export interface ChatCommandsApi {
   composerDraft: string;
   composerPreview: ComposerPreview | undefined;
   composerInputRef: RefObject<HTMLTextAreaElement | null>;
-  setComposerDraft: (draft: string) => void;
+  setComposerDraft: Dispatch<SetStateAction<string>>;
   showComposerPreview: (text: string) => void;
   clearComposerPreview: (text: string) => void;
   prefillComposer: (draft: string) => void;
+  restoreComposerDraft: (draft: string) => void;
   submitComposer: (draft: string) => void;
   commands: SlashCommand[];
   runComposerCommand: (text: string) => Promise<boolean>;
@@ -39,6 +40,11 @@ export function ChatCommandsProvider({ children, initialDraft = '' }: { children
     setComposerDraft(draft);
     requestAnimationFrame(() => composerInputRef.current?.focus());
   };
+  // Gives back a message that never sent without dropping what was typed since.
+  const restoreComposerDraft = (draft: string) => {
+    setComposerDraft(current => (current.trim() ? `${draft}\n\n${current}` : draft));
+    requestAnimationFrame(() => composerInputRef.current?.focus());
+  };
   // Committed before submitting so the composer's own Send path, gates included, reads it.
   const submitComposer = (draft: string) => {
     flushSync(() => setComposerDraft(draft));
@@ -54,6 +60,7 @@ export function ChatCommandsProvider({ children, initialDraft = '' }: { children
     showComposerPreview,
     clearComposerPreview,
     prefillComposer,
+    restoreComposerDraft,
     submitComposer,
     commands,
     runComposerCommand,

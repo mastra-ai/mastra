@@ -1,12 +1,13 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createLifecycleTestRegistry } from '../boards/test-utils.js';
+import { createBoardRegistry } from '../boards/index.js';
+import { createPolicyTestRegistry } from '../boards/test-utils.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
-import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
 import { FactoryTransitionService } from './transition-service.js';
+import type { FactoryRuleActor } from './types.js';
 
 const { primeTenant } = vi.hoisted(() => ({ primeTenant: vi.fn() }));
 vi.mock('../routes/tenant-credentials.js', async importOriginal => {
@@ -461,14 +462,11 @@ describe('FactoryStartCoordinator', () => {
     const transitionService = new FactoryTransitionService({
       storage,
       configVersion: 'rules-v1',
-      boards: createLifecycleTestRegistry({
-        execute: {
-          issue: {
-            onEnter: async () => {
-              bindingsDuringRule = (await storage.listRunBindings('org-1', PROJECT_ID)).length;
-            },
-          },
-        },
+      boards: createPolicyTestRegistry(async context => {
+        if (context.toStage === 'execute') {
+          bindingsDuringRule = (await storage.listRunBindings('org-1', PROJECT_ID)).length;
+        }
+        return undefined;
       }),
     });
     const { controller, sendMessage } = makeController();
@@ -486,6 +484,68 @@ describe('FactoryStartCoordinator', () => {
     expect(bindingsDuringRule).toBe(1);
     expect(sendMessage).not.toHaveBeenCalled();
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
+  });
+
+  describe('who a start that moves the card is recorded as', () => {
+    const FACTORY = `factory-project:${PROJECT_ID}`;
+
+    async function startOnFactorySession(startedBy?: FactoryRuleActor) {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const audit = vi.fn(async (_event: { actorId: string; actorType: string }) => null);
+      const transitionService = new FactoryTransitionService({
+        storage,
+        configVersion: 'rules-v1',
+        boards: createPolicyTestRegistry(async () => undefined),
+        audit: { record: audit } as never,
+      });
+      const transition = vi.spyOn(transitionService, 'transition');
+      const sourceControl = makeSourceControl();
+      // The Factory owns the session the run starts in.
+      const session = await sourceControl.sessions.getBySessionId('session-1');
+      (session as { userId: string }).userId = FACTORY;
+      const coordinator = new FactoryStartCoordinator(
+        makeController().controller as never,
+        storage,
+        transitionService,
+        sourceControl as never,
+      );
+      const prepared = await coordinator.prepare({
+        ...startRequest(),
+        userId: FACTORY,
+        destinationStage: 'execute',
+        ...(startedBy ? { startedBy } : {}),
+      });
+      const item = await storage.get({ orgId: 'org-1', id: prepared.workItemId });
+      const entered = item?.stageHistory.find(entry => entry.stage === 'execute');
+      const [recorded] = audit.mock.calls.map(([event]) => ({ actorId: event.actorId, actorType: event.actorType }));
+      return { movedAs: transition.mock.calls[0]![0].actor, enteredBy: entered?.by, recorded };
+    }
+
+    it('names the person who started the work, not the Factory that owns the session', async () => {
+      await expect(startOnFactorySession({ type: 'human', id: 'user-mover' })).resolves.toEqual({
+        movedAs: { type: 'human', id: 'user-mover' },
+        enteredBy: 'user-mover',
+        recorded: { actorId: 'user-mover', actorType: 'human' },
+      });
+    });
+
+    it('names the Factory as a system, never a person, when nobody started the work', async () => {
+      await expect(startOnFactorySession()).resolves.toEqual({
+        movedAs: { type: 'system', id: FACTORY },
+        enteredBy: FACTORY,
+        recorded: { actorId: FACTORY, actorType: 'system' },
+      });
+    });
+
+    it('names the agent that started the work as an agent, never a person', async () => {
+      await expect(
+        startOnFactorySession({ type: 'agent', bindingId: 'binding-earlier', role: 'triage' }),
+      ).resolves.toEqual({
+        movedAs: { type: 'agent', bindingId: 'binding-earlier', role: 'triage' },
+        enteredBy: 'agent:binding-earlier',
+        recorded: { actorId: 'agent:binding-earlier', actorType: 'agent' },
+      });
+    });
   });
 
   it('binds the controller session to the exact Factory session thread', async () => {
@@ -560,6 +620,54 @@ describe('FactoryStartCoordinator', () => {
       }),
     );
   });
+
+  it.each([
+    ['pr-review', 'pr-review', true],
+    ['review', 'review', false],
+    // Started from Intake: the card reaches PR review only after the session is ready.
+    ['intake', 'pr-review', true],
+  ] as const)(
+    "treats an issue card's checkout from %s into %s as untrusted only when it reviews an attached pull request",
+    async (stage, destinationStage, untrusted) => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item } = await storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: {
+          board: 'work',
+          title: 'Fix issue 1',
+          stages: [stage],
+          externalSource: { integrationId: 'github', type: 'issue', externalId: '1' },
+          metadata: { authorTrusted: true },
+        },
+      });
+      // A maintainer's pull request: trusted author, but its branch can still carry anyone's AGENTS.md.
+      await storage.attachSource({
+        orgId: 'org-1',
+        id: item.id,
+        source: { integrationId: 'github', type: 'pull-request', externalId: 'github:10:pull-request:34' },
+        metadata: { githubPullRequestNumber: 34, state: 'open', authorTrusted: true },
+      });
+      const { controller, session } = makeController();
+      const coordinator = new FactoryStartCoordinator(
+        controller as never,
+        storage,
+        new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards: createBoardRegistry() }),
+        makeSourceControl() as never,
+        undefined,
+        undefined,
+        createBoardRegistry(),
+      );
+
+      await coordinator.prepare({ ...startRequest({ role: 'review', id: item.id }), destinationStage });
+
+      const flagged = session.state.set.mock.calls.some(
+        ([state]) => (state as { untrustedCheckout?: boolean }).untrustedCheckout === true,
+      );
+      expect(flagged).toBe(untrusted);
+    },
+  );
 
   it('falls back to intake metadata for baseRef when the session record has no base branch', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
@@ -640,9 +748,9 @@ describe('FactoryStartCoordinator', () => {
     const transitionService = new FactoryTransitionService({
       storage,
       configVersion: 'rules-v1',
-      boards: createLifecycleTestRegistry({
-        execute: { issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Blocked' }) } },
-      }),
+      boards: createPolicyTestRegistry(context =>
+        context.toStage === 'execute' ? { type: 'reject', code: 'forbidden', reason: 'Blocked' } : undefined,
+      ),
     });
     const { controller, sendMessage } = makeController();
     const coordinator = new FactoryStartCoordinator(

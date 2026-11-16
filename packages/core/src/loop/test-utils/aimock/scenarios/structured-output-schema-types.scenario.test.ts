@@ -77,4 +77,35 @@ describeForAllEngines('AIMock loop scenario: structured output schema types', en
     const object = await (output as unknown as { object: Promise<unknown> }).object;
     expect(object).toEqual({ winners: [{ winner: 'Barack Obama', year: '2012' }] });
   });
+
+  // JSON Schema `format` is enforced, so a date-time without a timezone fails the whole run
+  // instead of reaching the caller. Unlike a tool call, there is no retry for the model.
+  it('rejects JSON Schema output whose value breaks a declared format', async () => {
+    const { chunks, output } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      errorProcessors: [],
+      prompt: 'When does the launch start?',
+      stopWhen: stepCountIs(1),
+      structuredOutput: {
+        schema: {
+          type: 'object',
+          properties: { startsAt: { type: 'string', format: 'date-time' } },
+          required: ['startsAt'],
+        },
+      },
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: JSON.stringify({ startsAt: '2024-01-01T10:00:00' }) });
+      },
+    });
+
+    const errorChunk = chunks?.find((c: any) => c?.type === 'error');
+    const errorMessage = ((errorChunk as any)?.payload?.error as Error)?.message || '';
+    expect(errorMessage).toContain('Structured output validation failed');
+    expect(errorMessage).toContain('startsAt');
+
+    const object = (output as unknown as { object: Promise<unknown> }).object;
+    await expect(object).rejects.toThrow('Structured output validation failed');
+  });
 });

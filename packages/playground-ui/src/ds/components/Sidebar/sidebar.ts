@@ -9,7 +9,7 @@ import { SidebarSearchTrigger } from './header/sidebar-search-trigger';
 import { SidebarNav } from './nav/sidebar-nav';
 import { SidebarNavHeader } from './nav/sidebar-nav-header';
 import { SidebarNavLabel } from './nav/sidebar-nav-label';
-import { SidebarNavLink } from './nav/sidebar-nav-link';
+import { SidebarNavAction, SidebarNavLink } from './nav/sidebar-nav-link';
 import { SidebarNavList } from './nav/sidebar-nav-list';
 import { SidebarNavSection } from './nav/sidebar-nav-section';
 import { SidebarNavSeparator } from './nav/sidebar-nav-separator';
@@ -32,6 +32,7 @@ export const Sidebar = Object.assign(SidebarRoot, {
   MobileTrigger: SidebarMobileTrigger,
   Nav: SidebarNav,
   NavHeader: SidebarNavHeader,
+  NavAction: SidebarNavAction,
   NavLabel: SidebarNavLabel,
   NavLink: SidebarNavLink,
   NavList: SidebarNavList,

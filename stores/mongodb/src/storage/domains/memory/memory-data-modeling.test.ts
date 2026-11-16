@@ -36,8 +36,8 @@ describe('MemoryStorageMongoDB — index definitions and metadata storage', () =
 
       // Threads: id + two resource-scoped compounds; standalone resourceId/createdAt/updatedAt dropped.
       const threads = await keysFor('mastra_threads');
-      expect(threads).toContain(JSON.stringify({ resourceId: 1, createdAt: -1 }));
-      expect(threads).toContain(JSON.stringify({ resourceId: 1, updatedAt: -1 }));
+      expect(threads).toContain(JSON.stringify({ resourceId: 1, createdAt: -1, id: -1 }));
+      expect(threads).toContain(JSON.stringify({ resourceId: 1, updatedAt: -1, id: -1 }));
       expect(threads).not.toContain(JSON.stringify({ resourceId: 1 }));
       expect(threads).not.toContain(JSON.stringify({ createdAt: -1 }));
       expect(threads).not.toContain(JSON.stringify({ updatedAt: -1 }));

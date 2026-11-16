@@ -399,9 +399,10 @@ describe('Resume API', () => {
         logger: false,
       });
 
-      await expect(durableAgent.resume('missing-cold-run', { approved: true })).rejects.toThrow(
-        'No registry entry found for run missing-cold-run. Cannot resume.',
-      );
+      await expect(durableAgent.resume('missing-cold-run', { approved: true })).rejects.toMatchObject({
+        id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND',
+        message: 'No registry entry found for run missing-cold-run. Cannot resume.',
+      });
     });
 
     it('does not rehydrate a persisted run owned by another agent', async () => {

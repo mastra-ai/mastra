@@ -76,6 +76,9 @@ export type GithubPRSubscription = {
   lastObservedCommentUrl?: string;
   lastObservedCommentAuthor?: string;
   lastObservedCommentIsBot?: boolean;
+  /** Independent comment watermark: review replies need not update the PR timestamp. */
+  lastObservedCommentsAt?: string;
+  lastObservedCommentKeys?: string[];
   lastNotificationAt?: string;
   lastNotificationKind?: string;
   lastNotificationPriority?: 'medium' | 'high';
@@ -101,6 +104,10 @@ export type GithubSignalsSyncInput = {
   cwd?: string;
   abortSignal?: AbortSignal;
   includeComments?: boolean;
+  /** Inclusive local snapshot cutoff; does not add GitHub API requests. */
+  commentsSince?: string;
+  /** Comment URLs already delivered at exactly `commentsSince`; skipped so a page can move past them. */
+  commentsSeenAtSince?: string[];
 };
 
 export type GithubSignalsSyncResult = {
@@ -125,7 +132,11 @@ export type GithubPullRequestCommentSnapshot = {
   isBot?: boolean;
   body?: string;
   url?: string;
+  createdAt?: string;
   updatedAt?: string;
+  path?: string;
+  line?: number;
+  threadId?: string;
 };
 
 type GithubPullRequestCheckInput = GithubPullRequestCheckSnapshot & {
@@ -155,7 +166,7 @@ export type GithubPullRequestSnapshot = {
   latestCommentBody?: string;
   latestCommentUrl?: string;
   latestCommentUpdatedAt?: string;
-  /** Recent comments newest-first, used to fall back when the latest comment is unauthorized noise. */
+  /** Issue comments, submitted reviews and inline replies, newest-first. */
   latestComments?: GithubPullRequestCommentSnapshot[];
 };
 
@@ -466,6 +477,16 @@ function getGithubMetadata(threadMetadata: Record<string, unknown> | undefined):
       ...(typeof rawSubscription.lastObservedCommentIsBot === 'boolean'
         ? { lastObservedCommentIsBot: rawSubscription.lastObservedCommentIsBot }
         : {}),
+      ...(readString(rawSubscription.lastObservedCommentsAt)
+        ? { lastObservedCommentsAt: readString(rawSubscription.lastObservedCommentsAt)! }
+        : {}),
+      ...(Array.isArray(rawSubscription.lastObservedCommentKeys)
+        ? {
+            lastObservedCommentKeys: rawSubscription.lastObservedCommentKeys.filter(
+              (key): key is string => typeof key === 'string',
+            ),
+          }
+        : {}),
       ...(readString(rawSubscription.lastNotificationAt)
         ? { lastNotificationAt: readString(rawSubscription.lastNotificationAt)! }
         : {}),
@@ -649,6 +670,107 @@ function getCommentExcerpt(body: string): string {
   return excerpt.length > 240 ? `${excerpt.slice(0, 237)}...` : excerpt;
 }
 
+const MAX_COMMENT_NOTIFICATIONS = 10;
+// Comments read per poll; later comments stay past the cursor and arrive on the next poll.
+const COMMENT_PAGE_SIZE = 25;
+const COMMENT_BODY_MAX_CHARS = 200_000;
+// One page of maximum-size bodies, allowing for JSON escaping.
+const COMMENT_QUERY_MAX_BUFFER = COMMENT_PAGE_SIZE * COMMENT_BODY_MAX_CHARS * 6 + 1024 * 1024;
+
+function snapshotComments(snapshot: GithubPullRequestSnapshot): GithubPullRequestCommentSnapshot[] {
+  return (
+    snapshot.latestComments ?? [
+      {
+        author: snapshot.latestCommentAuthor,
+        authorType: snapshot.latestCommentAuthorType,
+        isBot: snapshot.latestCommentIsBot,
+        body: snapshot.latestCommentBody,
+        url: snapshot.latestCommentUrl,
+        updatedAt: snapshot.latestCommentUpdatedAt,
+      },
+    ]
+  );
+}
+
+function commentKey(comment: GithubPullRequestCommentSnapshot): string {
+  return comment.url ?? snapshotHash({ author: comment.author, body: comment.body, createdAt: comment.createdAt });
+}
+
+function newSnapshotComments(subscription: GithubPRSubscription, snapshot: GithubPullRequestSnapshot) {
+  const since = subscription.lastObservedCommentsAt ?? subscription.lastObservedGithubUpdatedAt;
+  if (!since) return [];
+  const checkpoint = Date.parse(since);
+  const seen = new Set(subscription.lastObservedCommentKeys ?? []);
+  return snapshotComments(snapshot).filter(comment => {
+    if (!comment.updatedAt) return false;
+    const time = Date.parse(comment.updatedAt);
+    if (time < checkpoint || !Number.isFinite(time)) return false;
+    if (time === checkpoint && (!subscription.lastObservedCommentsAt || seen.has(commentKey(comment)))) return false;
+    if (
+      comment.isBot &&
+      comment.createdAt &&
+      (Date.parse(comment.createdAt) < checkpoint ||
+        (Date.parse(comment.createdAt) === checkpoint && seen.has(commentKey(comment))))
+    )
+      return false;
+    if (comment.isBot && comment.url === subscription.lastObservedCommentUrl && subscription.lastObservedCommentIsBot)
+      return false;
+    return true;
+  });
+}
+
+function checkpointComments(subscription: GithubPRSubscription, snapshot: GithubPullRequestSnapshot) {
+  let at = subscription.lastObservedCommentsAt ?? subscription.lastObservedGithubUpdatedAt ?? snapshot.githubUpdatedAt;
+  let keys = new Set(subscription.lastObservedCommentKeys ?? []);
+  for (const comment of snapshotComments(snapshot)) {
+    if (!comment.updatedAt || !Number.isFinite(Date.parse(comment.updatedAt))) continue;
+    if (!at || Date.parse(comment.updatedAt) > Date.parse(at)) {
+      at = comment.updatedAt;
+      keys = new Set();
+    }
+    if (Date.parse(comment.updatedAt) === Date.parse(at)) keys.add(commentKey(comment));
+  }
+  if (at) {
+    subscription.lastObservedCommentsAt = at;
+    subscription.lastObservedCommentKeys = [...keys];
+  }
+}
+
+function holdCommentCheckpoint(
+  target: GithubPRSubscription,
+  subscription: GithubPRSubscription,
+  snapshot: GithubPullRequestSnapshot,
+) {
+  if (subscription.lastObservedCommentsAt) {
+    target.lastObservedCommentsAt = subscription.lastObservedCommentsAt;
+    target.lastObservedCommentKeys = subscription.lastObservedCommentKeys ?? [];
+    return;
+  }
+  const since = subscription.lastObservedGithubUpdatedAt;
+  if (!since) return;
+  // The PR cursor still advances, so pin the comment cursor where this poll started. Comments at
+  // exactly that time were already observed by the previous poll.
+  target.lastObservedCommentsAt = since;
+  target.lastObservedCommentKeys = snapshotComments(snapshot)
+    .filter(comment => comment.updatedAt && Date.parse(comment.updatedAt) === Date.parse(since))
+    .map(commentKey);
+}
+
+function withComment(
+  snapshot: GithubPullRequestSnapshot,
+  comment: GithubPullRequestCommentSnapshot,
+): GithubPullRequestSnapshot {
+  return {
+    ...snapshot,
+    latestCommentAuthor: comment.author,
+    latestCommentAuthorType: comment.authorType,
+    latestCommentIsBot: comment.isBot,
+    latestCommentBody: comment.body,
+    latestCommentUrl: comment.url,
+    latestCommentUpdatedAt: comment.updatedAt,
+  };
+}
+
 function getCommentNotificationSummary(pr: string, snapshot: GithubPullRequestSnapshot): string | undefined {
   if (!snapshot.latestCommentAuthor || !snapshot.latestCommentBody) return undefined;
   return `${snapshot.latestCommentAuthor} commented on ${pr}: ${getCommentExcerpt(snapshot.latestCommentBody)}`;
@@ -716,7 +838,7 @@ function classifyGithubCommentActivityNotification(input: {
   subscription: GithubPRSubscription;
   snapshot: GithubPullRequestSnapshot;
 }): GithubActivityNotificationPlan | undefined {
-  if (isBotOnlyActivity(input.snapshot) || hasNoisyLatestBotComment(input.snapshot)) return undefined;
+  if (hasNoisyLatestBotComment(input.snapshot)) return undefined;
   const pr = `${input.subscription.owner}/${input.subscription.repo}#${input.subscription.number}`;
   const summary = getCommentNotificationSummary(pr, input.snapshot);
   if (!summary) return undefined;
@@ -807,10 +929,6 @@ export function normalizeGithubChecksForSnapshot(input: {
   return [...byKey.values()]
     .map(({ source: _source, ...check }) => check)
     .sort((a, b) => `${a.name}:${a.detailsUrl ?? ''}`.localeCompare(`${b.name}:${b.detailsUrl ?? ''}`));
-}
-
-function isBotOnlyActivity(snapshot: GithubPullRequestSnapshot): boolean {
-  return snapshot.latestCommentIsBot === true && (!snapshot.ciState || snapshot.ciState === 'unknown');
 }
 
 function isKnownMergeableState(state: string | undefined): state is string {
@@ -953,7 +1071,7 @@ function classifyGithubActivityNotification(input: {
     };
   }
   if (input.snapshot.ciState === 'pending' && input.subscription.lastObservedCiState === 'pending') return undefined;
-  if (isBotOnlyActivity(input.snapshot) || hasNoisyLatestBotComment(input.snapshot)) return undefined;
+  if (hasNoisyLatestBotComment(input.snapshot)) return undefined;
   const commentSummary = getCommentNotificationSummary(pr, input.snapshot);
   return {
     kind: 'pull-request-activity',
@@ -1065,11 +1183,11 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
     return join(defaultDirs[0]!, 'gitcrawl.db');
   }
 
-  async #queryDb<T>(sql: string): Promise<T[]> {
+  async #queryDb<T>(sql: string, maxBuffer = 10 * 1024 * 1024): Promise<T[]> {
     this.#dbPathPromise ??= this.#resolveDbPath();
     const dbPath = await this.#dbPathPromise;
     try {
-      const { stdout } = await execFileAsync('sqlite3', ['-json', dbPath, sql], { maxBuffer: 10 * 1024 * 1024 });
+      const { stdout } = await execFileAsync('sqlite3', ['-json', dbPath, sql], { maxBuffer });
       return JSON.parse(stdout || '[]') as T[];
     } catch (error) {
       // Drop the cached path so a fixed or moved database is picked up on the next poll.
@@ -1184,15 +1302,52 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
       is_bot?: number;
       body?: string;
       html_url?: string;
+      created_at?: string;
       updated_at?: string;
-    }>(`select c.author_login, c.author_type, c.is_bot, c.body, json_extract(c.raw_json, '$.html_url') as html_url,
-                 coalesce(c.updated_at_gh, c.created_at_gh, json_extract(c.raw_json, '$.submitted_at')) as updated_at
+      path?: string;
+      line?: number;
+      review_thread_id?: string;
+    }>(
+      `select * from (
+          select c.author_login, c.author_type, c.is_bot, substr(c.body, 1, ${COMMENT_BODY_MAX_CHARS}) as body,
+                 json_extract(c.raw_json, '$.html_url') as html_url,
+                 coalesce(c.created_at_gh, json_extract(c.raw_json, '$.submitted_at')) as created_at,
+                 coalesce(c.updated_at_gh, c.created_at_gh, json_extract(c.raw_json, '$.submitted_at')) as updated_at,
+                 json_extract(c.raw_json, '$.path') as path, json_extract(c.raw_json, '$.line') as line,
+                 null as review_thread_id
             from comments c
             join threads t on t.id=c.thread_id
             join repositories r on r.id=t.repo_id
            where r.owner=${owner} and r.name=${repo} and t.number=${number}
-           order by coalesce(c.updated_at_gh, c.created_at_gh, json_extract(c.raw_json, '$.submitted_at')) desc
-           limit 20`);
+          union all
+          select case when json_extract(c.value, '$.author.__typename')='Bot' and substr(json_extract(c.value, '$.author.login'), -5) != '[bot]'
+                      then json_extract(c.value, '$.author.login') || '[bot]'
+                      else json_extract(c.value, '$.author.login') end,
+                 json_extract(c.value, '$.author.__typename'),
+                 json_extract(c.value, '$.author.__typename')='Bot', substr(json_extract(c.value, '$.body'), 1, ${COMMENT_BODY_MAX_CHARS}),
+                 json_extract(c.value, '$.url'), json_extract(c.value, '$.createdAt'),
+                 coalesce(json_extract(c.value, '$.updatedAt'), json_extract(c.value, '$.createdAt')),
+                 rt.path, rt.line, rt.review_thread_id
+            from pull_request_review_threads rt
+            join threads t on t.id=rt.thread_id
+            join repositories r on r.id=t.repo_id
+            join json_each(rt.comments_json) c
+           where r.owner=${owner} and r.name=${repo} and t.number=${number}
+        ) ${
+          input.commentsSince
+            ? `where julianday(updated_at) >= julianday(${sqlString(input.commentsSince)})${
+                input.commentsSeenAtSince?.length
+                  ? ` and not (julianday(updated_at) = julianday(${sqlString(input.commentsSince)}) and html_url in (${input.commentsSeenAtSince.map(sqlString).join(', ')}))`
+                  : ''
+              }
+        order by julianday(updated_at) asc, html_url asc limit ${COMMENT_PAGE_SIZE}`
+            : 'order by julianday(updated_at) desc, html_url desc limit 20'
+        }`,
+      COMMENT_QUERY_MAX_BUFFER,
+    );
+    // Since-cursor pages are read oldest-first so the cursor stops at the last row read; the rest
+    // arrive on the next poll. Callers expect newest-first.
+    if (input.commentsSince) latestComments.reverse();
     const latestComment = latestComments[0];
 
     const checks = normalizeGithubChecksForSnapshot({
@@ -1275,7 +1430,11 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
         isBot: comment.is_bot === 1,
         body: sanitizeCommentBody(readString(comment.body)),
         url: readString(comment.html_url),
+        createdAt: readString(comment.created_at),
         updatedAt: readString(comment.updated_at),
+        path: readString(comment.path),
+        line: readNumber(comment.line),
+        threadId: readString(comment.review_thread_id),
       })),
     };
   }
@@ -1891,6 +2050,10 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           number: subscription.number,
           cwd: this.#options.cwd,
           includeComments: options.includeComments,
+          commentsSince: subscription.lastObservedCommentsAt ?? subscription.lastObservedGithubUpdatedAt,
+          ...(subscription.lastObservedCommentsAt && subscription.lastObservedCommentKeys?.length
+            ? { commentsSeenAtSince: subscription.lastObservedCommentKeys }
+            : {}),
         };
         const syncResult = await this.#syncClient.syncPullRequest(syncInput);
         if (!isCurrentGeneration()) return 0;
@@ -1907,16 +2070,36 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           }
         }
         if (!isCurrentGeneration()) return 0;
-        if (snapshot)
+        const perCommentDelivery = snapshot?.latestComments !== undefined;
+        const commentCheckpoint = { ...subscription };
+        let comments: GithubPullRequestCommentSnapshot[] = [];
+        if (snapshot) {
+          comments = newSnapshotComments(subscription, snapshot);
+          checkpointComments(commentCheckpoint, snapshot);
+          let authorizationUnavailable = false;
+          const rawSnapshot = snapshot;
           snapshot = await this.#filterUnauthorizedLatestComment(
             subscription.owner,
             subscription.repo,
-            snapshot,
+            perCommentDelivery && subscription.lastObservedGithubUpdatedAt
+              ? { ...snapshot, latestComments: comments }
+              : snapshot,
             isCurrentGeneration,
+            () => {
+              authorizationUnavailable = true;
+            },
           );
+          comments = perCommentDelivery ? (snapshot.latestComments ?? []) : [];
+          if (perCommentDelivery && authorizationUnavailable) {
+            // Hold this poll's comments and leave them past the cursor, so a failed permission
+            // lookup is retried next poll instead of being treated as a denial.
+            holdCommentCheckpoint(commentCheckpoint, subscription, rawSnapshot);
+            comments = [];
+          }
+        }
         if (!isCurrentGeneration()) return 0;
         const nextSubscription: GithubPRSubscription = {
-          ...subscription,
+          ...commentCheckpoint,
           updatedAt: now,
           lastSyncAt: now,
           lastSyncStatus: syncResult.ok ? 'success' : 'error',
@@ -1957,6 +2140,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           !previousHeadSha;
         const changed =
           isFirstObservation ||
+          comments.length > 0 ||
           (syncResult.ok &&
             snapshot &&
             (legacyAggregateChanged ||
@@ -1987,6 +2171,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
             previousGithubUpdatedAt,
             previousContentHash,
             latestCommentChanged,
+            comments: perCommentDelivery && !isFirstObservation ? comments : undefined,
             headChanged,
             reviewStateChanged,
             terminalState,
@@ -2157,6 +2342,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     user: string | undefined,
     metadata: { authorType?: string; isBot?: boolean } = {},
     isCurrentGeneration?: () => boolean,
+    onLookupFailure?: () => void,
   ): Promise<boolean> {
     if (!user) return false;
     const normalizedUser = user.toLowerCase();
@@ -2168,17 +2354,23 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       const authorizedBots = this.#options.authorizedBots ?? DEFAULT_AUTHORIZED_BOTS;
       if (authorizedBots.some(bot => bot.toLowerCase() === normalizedUser)) return true;
 
-      const appOwner = await this.#appOwnerResolver.getOwner(user, isCurrentGeneration);
+      const appOwner = await this.#appOwnerResolver.getOwner(user, isCurrentGeneration, onLookupFailure);
       if (!appOwner || (isCurrentGeneration && !isCurrentGeneration())) return false;
       if (appOwner.type === 'Organization') return appOwner.login.toLowerCase() === owner.toLowerCase();
       if (appOwner.type !== 'User') return false;
 
-      const permission = await this.#loadAuthorPermission(owner, repo, appOwner.login, isCurrentGeneration);
+      const permission = await this.#loadAuthorPermission(
+        owner,
+        repo,
+        appOwner.login,
+        isCurrentGeneration,
+        onLookupFailure,
+      );
       if (isCurrentGeneration && !isCurrentGeneration()) return false;
       const authorizedPermissions = this.#options.authorizedPermissions ?? DEFAULT_AUTHORIZED_PERMISSIONS;
       return !!permission && authorizedPermissions.includes(permission);
     }
-    const permission = await this.#loadAuthorPermission(owner, repo, user, isCurrentGeneration);
+    const permission = await this.#loadAuthorPermission(owner, repo, user, isCurrentGeneration, onLookupFailure);
     if (isCurrentGeneration && !isCurrentGeneration()) return false;
     const authorizedPermissions = this.#options.authorizedPermissions ?? DEFAULT_AUTHORIZED_PERMISSIONS;
     return !!permission && authorizedPermissions.includes(permission);
@@ -2189,22 +2381,17 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     repo: string,
     snapshot: GithubPullRequestSnapshot,
     isCurrentGeneration?: () => boolean,
+    onAuthorizationUnavailable?: () => void,
   ): Promise<GithubPullRequestSnapshot> {
-    const comments = snapshot.latestComments?.length
-      ? snapshot.latestComments
-      : [
-          {
-            author: snapshot.latestCommentAuthor,
-            authorType: snapshot.latestCommentAuthorType,
-            isBot: snapshot.latestCommentIsBot,
-            body: snapshot.latestCommentBody,
-            url: snapshot.latestCommentUrl,
-            updatedAt: snapshot.latestCommentUpdatedAt,
-          },
-        ];
-    if (!comments.some(comment => comment.author)) return snapshot;
-    if (!comments.some(comment => comment.body || comment.url || comment.updatedAt)) return snapshot;
+    const comments = snapshotComments(snapshot);
+    if (
+      snapshot.latestComments === undefined &&
+      !comments.some(comment => comment.body || comment.url || comment.updatedAt)
+    ) {
+      return snapshot;
+    }
 
+    const authorizedComments: GithubPullRequestCommentSnapshot[] = [];
     for (const comment of comments) {
       if (isCurrentGeneration && !isCurrentGeneration()) return snapshot;
       if (isNoisyBotComment({ author: comment.author, body: comment.body })) continue;
@@ -2218,23 +2405,19 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
             isBot: comment.isBot,
           },
           isCurrentGeneration,
+          onAuthorizationUnavailable,
         ))
       ) {
         continue;
       }
-      return {
-        ...snapshot,
-        latestCommentAuthor: comment.author,
-        latestCommentAuthorType: comment.authorType,
-        latestCommentIsBot: comment.isBot,
-        latestCommentBody: comment.body,
-        latestCommentUrl: comment.url,
-        latestCommentUpdatedAt: comment.updatedAt,
-      };
+      authorizedComments.push(comment);
     }
-
+    if (authorizedComments[0]) {
+      return { ...withComment(snapshot, authorizedComments[0]), latestComments: authorizedComments };
+    }
     return {
       ...snapshot,
+      latestComments: [],
       latestCommentAuthor: undefined,
       latestCommentAuthorType: undefined,
       latestCommentIsBot: undefined,
@@ -2249,6 +2432,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     repo: string,
     user: string,
     isCurrentGeneration?: () => boolean,
+    onLookupFailure?: () => void,
   ): Promise<GithubPermission | undefined> {
     const cacheKey = `${owner}/${repo}:${user.toLowerCase()}`;
     const cached = this.#permissionCache.get(cacheKey);
@@ -2279,6 +2463,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       return permission;
     } catch {
       this.#permissionCache.delete(cacheKey);
+      onLookupFailure?.();
       return undefined;
     }
   }
@@ -2290,6 +2475,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     previousGithubUpdatedAt?: string;
     previousContentHash?: string;
     latestCommentChanged?: boolean;
+    comments?: GithubPullRequestCommentSnapshot[];
     headChanged?: boolean;
     reviewStateChanged?: boolean;
     terminalState?: 'closed' | 'merged';
@@ -2351,6 +2537,8 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     const notificationInputs = [];
     for (const notification of notifications.sort(compareGithubActivityNotifications)) {
       if (!notification) continue;
+      // Comments are emitted individually below, not as a latest-comment aggregate.
+      if (notification.kind === 'pull-request-activity' && input.comments) continue;
       if (AUTHOR_GATED_NOTIFICATION_KINDS.has(notification.kind)) {
         const authorized = await this.#isAuthorizedAuthor(
           input.subscription.owner,
@@ -2378,6 +2566,51 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         : input.subscription.lastNotificationKind === notification.kind &&
           input.subscription.lastNotificationSummary === notification.summary;
       if (alreadySent) continue;
+      notificationInputs.push(notificationInput);
+      sent.push({ ...notification, dedupeKey: notificationInput.dedupeKey });
+    }
+    const comments = [...new Map((input.comments ?? []).map(comment => [commentKey(comment), comment])).values()].sort(
+      (a, b) => Date.parse(a.updatedAt ?? '') - Date.parse(b.updatedAt ?? ''),
+    );
+    const pr = `${input.subscription.owner}/${input.subscription.repo}#${input.subscription.number}`;
+    for (const comment of comments.slice(0, MAX_COMMENT_NOTIFICATIONS)) {
+      const location = comment.path ? ` at ${comment.path}${comment.line ? `:${comment.line}` : ''}` : '';
+      const notification: GithubActivityNotificationPlan = {
+        kind: 'pull-request-activity',
+        priority: 'high',
+        summary: `${comment.author} commented on ${pr}${location}: ${getCommentExcerpt(comment.body ?? '')}`,
+      };
+      const notificationInput = this.#createGithubNotificationInput({
+        subscription: input.subscription,
+        snapshot: withComment(input.snapshot, comment),
+        notification,
+        dedupeSuffix: `comment:${commentKey(comment)}:${comment.updatedAt ?? ''}`,
+        previousGithubUpdatedAt: input.previousGithubUpdatedAt,
+      });
+      // A PR-wide coalesce key replaces sibling findings in the inbox. Give each comment its own key.
+      notificationInput.coalesceKey = `github:${pr}:comment:${commentKey(comment)}`;
+      Object.assign(notificationInput.attributes, {
+        ...(comment.path ? { path: comment.path } : {}),
+        ...(comment.line ? { line: comment.line } : {}),
+        ...(comment.threadId ? { reviewThreadId: comment.threadId } : {}),
+      });
+      notificationInputs.push(notificationInput);
+      sent.push({ ...notification, dedupeKey: notificationInput.dedupeKey });
+    }
+    if (comments.length > MAX_COMMENT_NOTIFICATIONS) {
+      const remaining = comments.length - MAX_COMMENT_NOTIFICATIONS;
+      const notification: GithubActivityNotificationPlan = {
+        kind: 'pull-request-comments-collapsed',
+        priority: 'high',
+        summary: `${pr} has ${remaining} more authorized review comments (${comments.length} total this poll). Read the remaining findings: ${input.snapshot.htmlUrl ?? comments[MAX_COMMENT_NOTIFICATIONS]?.url ?? pr}`,
+      };
+      const notificationInput = this.#createGithubNotificationInput({
+        subscription: input.subscription,
+        snapshot: input.snapshot,
+        notification,
+        dedupeSuffix: `comments:${snapshotHash(comments.map(commentKey))}`,
+      });
+      Object.assign(notificationInput.attributes, { commentCount: comments.length, collapsedCommentCount: remaining });
       notificationInputs.push(notificationInput);
       sent.push({ ...notification, dedupeKey: notificationInput.dedupeKey });
     }
@@ -2440,6 +2673,8 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         ? { lastObservedReviewStateHash: existing.lastObservedReviewStateHash }
         : {}),
       ...(existing?.lastObservedCommentUrl ? { lastObservedCommentUrl: existing.lastObservedCommentUrl } : {}),
+      ...(existing?.lastObservedCommentsAt ? { lastObservedCommentsAt: existing.lastObservedCommentsAt } : {}),
+      ...(existing?.lastObservedCommentKeys ? { lastObservedCommentKeys: existing.lastObservedCommentKeys } : {}),
       ...(existing?.lastObservedCommentAuthor ? { lastObservedCommentAuthor: existing.lastObservedCommentAuthor } : {}),
       ...(typeof existing?.lastObservedCommentIsBot === 'boolean'
         ? { lastObservedCommentIsBot: existing.lastObservedCommentIsBot }

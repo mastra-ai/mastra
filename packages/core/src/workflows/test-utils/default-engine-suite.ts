@@ -52,6 +52,7 @@ export function createDefaultEngineTestSuite({
         createStep,
         createTool,
         Agent,
+        Mastra,
       };
     },
 

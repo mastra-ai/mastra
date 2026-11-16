@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CircleCheckIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { expect, userEvent, within, waitFor } from 'storybook/test';
@@ -7,6 +6,7 @@ import { toast, Toaster } from './toast';
 import { Button } from '@/ds/components/Button/Button';
 import { Notice } from '@/ds/components/Notice/Notice';
 import { Txt } from '@/ds/components/Txt/Txt';
+import { IconCircleCheck } from '@/ds/icons/central/IconCircleCheck';
 
 const meta: Meta = {
   title: 'Feedback/Toast',
@@ -425,7 +425,7 @@ export const PromiseCompletion: Story = {
 
 export const CallerSuccessIcon: Story = {
   ...PromiseCompletion,
-  parameters: { layout: 'padded', toaster: { icons: { success: <CircleCheckIcon aria-hidden /> } } },
+  parameters: { layout: 'padded', toaster: { icons: { success: <IconCircleCheck aria-hidden /> } } },
 };
 
 function saveAndFail() {

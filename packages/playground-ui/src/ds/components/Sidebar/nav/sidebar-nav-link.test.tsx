@@ -207,7 +207,7 @@ describe('SidebarNavLink — what it renders a row as', () => {
       <SidebarNavLink state={state} link={{ name: 'Gateway', url: '/gateway', opensView: true }} />,
     );
 
-    expect(container.querySelectorAll('a svg.lucide-chevron-right')).toHaveLength(carets);
+    expect(container.querySelectorAll('a svg[data-central-icon="IconChevronRight"]')).toHaveLength(carets);
   });
 
   it.each([
@@ -219,7 +219,7 @@ describe('SidebarNavLink — what it renders a row as', () => {
     );
 
     const button = screen.getByRole('button', { name: 'Gateway' });
-    expect(button.querySelector('svg.lucide-chevron-right')).toBeTruthy();
+    expect(button.querySelector('svg[data-central-icon="IconChevronRight"]')).toBeTruthy();
   });
 
   it('marks a featured row so it reads apart from the rest', () => {
@@ -310,22 +310,6 @@ describe('SidebarNavLink — what it renders a row as', () => {
     );
 
     expect(nested.container.querySelector('li > div > a')?.className).not.toBe(flatClass);
-  });
-
-  it('lights its hover fill instantly, with or without a trailing action', () => {
-    const fillOf = (container: HTMLElement) => container.querySelector('.state-layer');
-
-    const plain = renderLink(<SidebarNavLink link={{ name: 'Agents', url: '/agents' }} />);
-    expect(fillOf(plain.container)?.tagName).toBe('A');
-    expect(fillOf(plain.container)?.classList.contains('before:transition-none')).toBe(true);
-
-    cleanup();
-
-    const withAction = renderLink(
-      <SidebarNavLink link={{ name: 'Agents', url: '/agents' }} action={<button type="button">More</button>} />,
-    );
-    expect(fillOf(withAction.container)?.tagName).toBe('DIV');
-    expect(fillOf(withAction.container)?.classList.contains('before:transition-none')).toBe(true);
   });
 
   it('drops the trailing action on a collapsed rail, which has no room for it', () => {

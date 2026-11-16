@@ -12,6 +12,7 @@ import type {
 } from '@mastra/core/agent-controller';
 import { toPersistedErrorIdentity } from '@mastra/core/error';
 import type { RequestContext } from '@mastra/core/request-context';
+import { validateStorageMetadataFilter } from '@mastra/core/storage';
 // Type-only import: erased at runtime, so this cannot crash against an older
 // @mastra/core that lacks the `./agent-controller` subpath export. Controller
 // resolution at runtime goes through mastra.getAgentController?.(), never a
@@ -64,10 +65,19 @@ const RESERVED_THREAD_METADATA_KEYS = {
   createdBy: true,
   thinkingLevel: true,
   notifications: true,
+  permissionRules: true,
 } satisfies Record<ReservedThreadMetadataKey, true>;
 
 function isReservedThreadMetadataKey(key: string): boolean {
   return Object.hasOwn(RESERVED_THREAD_METADATA_KEYS, key) || key.startsWith('modeModelId_');
+}
+
+function storageTagFilter(tags: Record<string, string>) {
+  try {
+    return validateStorageMetadataFilter(tags);
+  } catch {
+    return undefined;
+  }
 }
 
 function getRequestMessageAuthor(requestContext?: RequestContext): { id: string } | undefined {
@@ -737,6 +747,10 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
           });
 
           const abortCleanup = () => cleanup(controller);
+          if (abortSignal?.aborted) {
+            abortCleanup();
+            return;
+          }
           abortSignal?.addEventListener('abort', abortCleanup, { once: true });
           scheduleHeartbeat();
         },
@@ -894,6 +908,11 @@ export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
       // can trip the request timeout and leave CORS mutating an already-sent response.
       // Claim the parked suspension before acking so a concurrent duplicate answer
       // (e.g. while an approved submit_plan awaits its mode switch) is rejected.
+      // A run parked by a process that has since gone away is only in storage.
+      // Older @mastra/core peers lack it; they only claim in-memory suspensions.
+      if (typeof session.restoreStoredToolSuspension === 'function') {
+        await session.restoreStoredToolSuspension(toolCallId, runId);
+      }
       const claim = session.claimToolSuspension(toolCallId, runId);
       if (!claim.accepted) return { ok: false, reason: claim.reason };
       ackBackgroundSessionWork({
@@ -1208,12 +1227,30 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const resourceId = await resolveSessionResourceId(controller, sessionId);
+      const tagEntries = tags ? Object.entries(tags).filter(([key]) => !isReservedThreadMetadataKey(key)) : [];
       // Read-only route: query storage directly instead of constructing a
       // Session. `createSession` triggers workspace/sandbox initialization
       // (5–17s stall, cost per provisioned sandbox) as a side effect — reads
       // shouldn't pay that. Session creation happens on the write path.
       // `queryThreads` lazily initializes storage (not workspace) on its own.
-      const threads = await controller.queryThreads({ resourceId });
+      const storageTags = storageTagFilter(Object.fromEntries(tagEntries));
+      const max = Number(limit);
+      const capped = Number.isFinite(max) && max > 0;
+      const normalizedLimit = capped ? Math.floor(max) : undefined;
+      // Only page in storage when it applies every tag; otherwise the tag filter
+      // below runs in memory and needs the whole resource.
+      const threads = await controller.queryThreads({
+        resourceId,
+        metadata: storageTags,
+        limit: normalizedLimit !== undefined && (tagEntries.length === 0 || storageTags) ? normalizedLimit : undefined,
+        matchesScope:
+          tagEntries.length === 0
+            ? undefined
+            : thread => {
+                const values = (thread.metadata as Record<string, unknown> | undefined) ?? {};
+                return tagEntries.every(([key, value]) => values[key] === value);
+              },
+      });
       // A thread's metadata mixes the session scoping tags (stamped at creation,
       // e.g. `projectPath`) with internal session bookkeeping that
       // `Session.loadMetadata()` reads back (selected model/mode, observer/
@@ -1234,7 +1271,6 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
       // never shows worktree B's threads. Mirrors the controller's tag-aware
       // selection and the TUI's worktree-strict listing. Reserved internal keys
       // are ignored as filter tags so callers can't match on session bookkeeping.
-      const tagEntries = tags ? Object.entries(tags).filter(([key]) => !isReservedThreadMetadataKey(key)) : [];
       const scoped =
         tagEntries.length > 0
           ? threads.filter(t => {
@@ -1244,8 +1280,7 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
           : threads;
       const toTime = (t: { updatedAt?: Date; createdAt?: Date }) => (t.updatedAt ?? t.createdAt)?.getTime() ?? 0;
       const sorted = [...scoped].sort((a, b) => toTime(b) - toTime(a));
-      const max = Number(limit);
-      const limited = Number.isFinite(max) && max > 0 ? sorted.slice(0, max) : sorted;
+      const limited = normalizedLimit !== undefined ? sorted.slice(0, normalizedLimit) : sorted;
       // Thread run state comes from the controller-wide active-run registry,
       // which unions per-agent active thread runs across all backing agents.
       // Keyed by resourceId + threadId so it covers runs started by any session

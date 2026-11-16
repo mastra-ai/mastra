@@ -13,42 +13,6 @@ import { resolveEntryActor } from './actor';
 import type { EntryExecuteContext } from './types';
 
 /**
- * Returns the runtime registered for `agent` on `mastra`. Registering a
- * `durable: true` agent stores a durable wrapper instead of the original, so a
- * step holding the original must run through that wrapper. Only agents built
- * with `durable` are swapped: an explicit `createDurableAgent({ agent })` leaves
- * the plain handle plain. Matching is by identity of the wrapped agent, so
- * unrelated agents sharing an id are ignored.
- */
-export function resolveRegisteredAgent<T>(agent: T, mastra?: Mastra): T {
-  const candidate = agent as { durable?: unknown; id?: string; getMastraInstance?: () => Mastra | undefined };
-  if (!candidate?.durable) return agent;
-  // Already a durable wrapper (e.g. a Proxy that forwards `durable` to its inner agent).
-  if (isDurableAgentLike(agent)) {
-    const inner: unknown = agent.agent;
-    if (inner !== agent) return agent;
-  }
-
-  for (const registered of Object.values(mastra?.listAgents?.() ?? {})) {
-    if (registered !== agent && isDurableAgentLike(registered) && registered.agent === agent) {
-      return registered as T;
-    }
-  }
-
-  // Attached to a Mastra the original skips its standalone durable path, so
-  // without a wrapper on this Mastra it runs non-durably.
-  const owner = candidate.getMastraInstance?.();
-  if (owner) {
-    (mastra ?? owner)
-      .getLogger()
-      ?.warn(
-        `Agent "${candidate.id}" has durable enabled but no durable wrapper for it is registered on this workflow's Mastra instance, so the step runs it non-durably. Register the agent in the \`agents\` of the Mastra instance that runs this workflow.`,
-      );
-  }
-  return agent;
-}
-
-/**
  * Returns the agent to run through `streamLegacy()`. v1 models have no durable
  * execution path, and a durable wrapper's inherited `streamLegacy()` would skip
  * the wrapped agent's own config (processors, memory, tools), so a wrapper is
@@ -79,7 +43,7 @@ export async function runAgentEntry(
   mastra?: Mastra,
 ): Promise<unknown> {
   const registry = mastra ?? (ctx?.mastra as Mastra | undefined);
-  const agent = entry.agent ? resolveRegisteredAgent(entry.agent, registry) : registry?.getAgentById(entry.agentId);
+  const agent = entry.agent ?? registry?.getAgentById(entry.agentId);
   if (!agent) {
     throw new Error(
       `Agent '${entry.agentId}' not found for workflow step '${entry.id}'. Register the agent on the Mastra instance or pass the agent instance directly.`,

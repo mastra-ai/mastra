@@ -24,7 +24,10 @@ export const useInView = ({ root }: UseInViewOptions = {}) => {
   const [node, setRef] = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!node) return;
+    if (!node) {
+      setInView(false);
+      return;
+    }
 
     const observer = new IntersectionObserver(
       ([entry]) => {

@@ -66,9 +66,7 @@ test.describe('Factory session navigation', () => {
             {
               id: 'fp-1',
               name: 'Session links',
-              repositories: [
-                listedRepository('repo-1', 'mastra-ai/mastra', { branch: 'main', sandboxWorkdir: '/repo' }),
-              ],
+              repositories: [listedRepository('repo-1', 'mastra-ai/mastra', { branch: 'main' })],
             },
             { id: 'fp-2', name: 'Another Factory', repositories: [] },
           ],
@@ -110,7 +108,6 @@ test.describe('Factory session navigation', () => {
           ],
         }),
       ),
-      http.get('*/web/github/projects/repo-1/issues', () => HttpResponse.json({ issues: [], nextPage: null })),
       http.get('*/web/intake/config', () => HttpResponse.json({ config: {} })),
       http.get('*/web/intake/bindings', () => HttpResponse.json({ bindings: [] })),
       http.get('*/web/linear/status', () => HttpResponse.json({ enabled: false, connected: false })),
@@ -120,10 +117,6 @@ test.describe('Factory session navigation', () => {
       url => url.origin === baseURL && /^\/(web|auth|api)\//.test(url.pathname),
       async route => {
         const request = route.request();
-        if (request.url().endsWith('/feed-events')) {
-          await route.fulfill({ contentType: 'text/event-stream', body: '' });
-          return;
-        }
         const response = await fetch(request.url(), { method: request.method() });
         await route.fulfill({
           status: response.status,

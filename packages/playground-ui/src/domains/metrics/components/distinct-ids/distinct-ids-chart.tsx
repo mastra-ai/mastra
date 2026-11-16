@@ -71,7 +71,13 @@ export function DistinctIdsChart({ scope, onTimeRangeClick }: DistinctIdsChartPr
   const layout = {
     title: DISTINCT_IDS_TITLE,
     // Each id's range total, marked like its line: they count different things, so no one sum.
-    total: shown.map(id => ({ label: id.label, value: formatCount(count(total, id)), color: id.color })),
+    // With no ids set, one plain 0, like any other empty card. None while a request failed, so no
+    // total sits beside the error.
+    total: error
+      ? undefined
+      : shown.length
+        ? shown.map(id => ({ label: id.label, value: formatCount(count(total, id)), color: id.color }))
+        : formatCount(0),
     isLoading: totals.isLoading,
     toolbar: lines.length > 0 && (
       <MetricsCard.Toolbar>
@@ -96,10 +102,7 @@ export function DistinctIdsChart({ scope, onTimeRangeClick }: DistinctIdsChartPr
 
   return (
     <ChartCard {...layout} isUpdating={series.isPlaceholderData || totals.isPlaceholderData}>
-      <ChartArea
-        isEmpty={!isLoading && shown.length === 0}
-        emptyMessage="No traces in this range set a resource, thread, user or session id."
-      >
+      <ChartArea isEmpty={!isLoading && shown.length === 0}>
         <MetricsLineChart
           lineStyle="thin"
           data={chart}

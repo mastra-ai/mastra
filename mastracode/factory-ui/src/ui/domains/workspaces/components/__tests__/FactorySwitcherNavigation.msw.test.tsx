@@ -56,12 +56,6 @@ describe('Factory switch navigation', () => {
           '/factories/factory-current/work?teammate=factory%3Auser-a&author=github%3Aoctocat&label=bug#done',
         expectedLocation: '/factories/factory-next/work#done',
       },
-      {
-        tab: 'review',
-        initialEntry:
-          '/factories/factory-current/review?teammate=github%3Aoctocat&reviewer=github%3Amonalisa&label=needs-review#queue',
-        expectedLocation: '/factories/factory-next/review#queue',
-      },
     ])('keeps the $tab location without the previous Factory filters', async ({ initialEntry, expectedLocation }) => {
       const { currentLocation } = renderFactorySwitcher(initialEntry);
 

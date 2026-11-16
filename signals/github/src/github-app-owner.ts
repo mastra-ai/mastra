@@ -40,7 +40,16 @@ export class GithubAppOwnerResolver {
     this.#runGhApi = runGhApi;
   }
 
-  async getOwner(botLogin: string, isCurrentGeneration?: () => boolean): Promise<GithubAppOwner | undefined> {
+  /**
+   * `onLookupFailure` is called when GitHub could not be asked (network, auth, rate limit), so the
+   * caller can retry later instead of treating the bot as unauthorized. An app GitHub reports as
+   * not found is a real answer and does not call it.
+   */
+  async getOwner(
+    botLogin: string,
+    isCurrentGeneration?: () => boolean,
+    onLookupFailure?: () => void,
+  ): Promise<GithubAppOwner | undefined> {
     const appSlug = botLogin.replace(/\[bot\]$/i, '');
     if (!appSlug || (isCurrentGeneration && !isCurrentGeneration())) return undefined;
 
@@ -64,7 +73,8 @@ export class GithubAppOwnerResolver {
         return undefined;
       }
       return owner;
-    } catch {
+    } catch (error) {
+      if (!isNotFoundError(error)) onLookupFailure?.();
       return undefined;
     }
   }
@@ -78,4 +88,12 @@ export class GithubAppOwnerResolver {
 
     return { login: owner.login, type: owner.type };
   }
+}
+
+function isNotFoundError(error: unknown): boolean {
+  const details = error && typeof error === 'object' ? error : {};
+  const text = ['message', 'stderr', 'stdout']
+    .map(key => (key in details ? String((details as Record<string, unknown>)[key] ?? '') : ''))
+    .join('\n');
+  return /\bHTTP 404\b|\bNot Found\b/i.test(text);
 }

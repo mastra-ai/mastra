@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
-import { builtinBoardCatalog, releaseBoard } from '../../../../../e2e/ui/board-catalog';
+import { builtinBoardCatalog, releaseBoard, shipBoard } from '../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import type { BoardCatalogResponse } from '../../../../api/types';
@@ -30,7 +30,7 @@ const item: WorkItem = {
   metadata: {},
   triageType: null,
   acceptedAt: null,
-  commentCount: 0,
+  description: null,
   revision: 4,
   createdAt: '2026-09-08T12:00:00Z',
   updatedAt: '2026-09-08T12:00:00Z',
@@ -78,6 +78,13 @@ describe('custom-board card menu', () => {
     expect(onMove).toHaveBeenCalledWith('preparing');
   });
 
+  it("names the move into a board's completed phase a completion, on a board without a pull request loop", async () => {
+    // The server names the completed phase for every board, loop or not.
+    renderMenu('shipping', [{ ...releaseBoard, flow: { completed: 'shipped' } }]);
+    expect(await screen.findByRole('menuitem', { name: 'Mark shipped' })).toBeVisible();
+    expect(screen.queryByRole('menuitem', { name: 'Move to Shipped' })).toBeNull();
+  });
+
   it.each(['shipped', 'unknown'])('offers no fabricated destinations for %s', async stage => {
     const { client } = renderMenu(stage);
     await waitForMutationsIdle(client);
@@ -103,6 +110,26 @@ describe('custom-board card menu', () => {
     const { client } = renderMenu('queued', []);
     await waitForMutationsIdle(client);
     expect(screen.queryByRole('menuitem', { name: /Move to|Mark done/ })).toBeNull();
+  });
+});
+
+describe('a board running the pull request loop under its own phase names', () => {
+  it("asks for the triage decision on a card triage left resting, naming the board's own phases", async () => {
+    const held: WorkItem = {
+      ...item,
+      board: 'ship',
+      source: 'github-issue',
+      stages: ['inbox'],
+      sessions: { triage: { sessionId: 's-triage', branch: 'b', threadId: 't', startedBy: 'user-1' } },
+    };
+    const { onMove } = renderMenu('inbox', [shipBoard], { item: held });
+    const accept = await screen.findByRole('menuitem', { name: 'Accept and build' });
+    expect(screen.getByRole('menuitem', { name: 'Close' })).toBeTruthy();
+    // A card with no pull request never enters review, and Work's phases are nowhere.
+    expect(screen.queryByRole('menuitem', { name: 'Move to Pr' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Planning|Intake/ })).toBeNull();
+    fireEvent.click(accept);
+    expect(onMove).toHaveBeenCalledWith('make');
   });
 });
 

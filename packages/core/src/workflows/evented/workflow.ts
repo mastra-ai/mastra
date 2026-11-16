@@ -18,6 +18,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraScorers } from '../../evals';
 import type { Event } from '../../events';
 import { RegisteredLogger } from '../../logger';
+import { latestProcessedModelOutput } from '../../loop/shared/steps/tool-result-commit-core';
 import type { Mastra } from '../../mastra';
 import {
   EntityType,
@@ -60,6 +61,7 @@ import {
   summarizeToolChoiceForSpan,
 } from '../../processors/span-payload';
 import type { ProcessorStepOutput } from '../../processors/step-schema';
+import { withoutLiveRequestKeys } from '../../request-context';
 import { toStandardSchema } from '../../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../../schema';
 import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
@@ -94,7 +96,7 @@ import type {
   InferWorkflowRequestContext,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
-import { resolveLegacyAgent, resolveRegisteredAgent } from '../entry-executors';
+import { resolveLegacyAgent } from '../entry-executors';
 import type { ClassifierStepOutput } from '../entry-executors';
 import { workflowTermination, completeWorkflowSpan } from '../execution-outcome';
 import { createStepFromClassifier, createStepFromTool } from '../step-factories';
@@ -272,7 +274,7 @@ export function createStep<
 export function createStep<TStepId extends string, TStepOutput>(
   agent: SubAgent<TStepId, any> | Agent<TStepId, any>,
   agentOptions: AgentStepOptions<TStepOutput> & {
-    structuredOutput: { schema: TStepOutput };
+    structuredOutput: { schema: PublicSchema<TStepOutput> };
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
     metadata?: StepMetadata;
@@ -602,7 +604,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     }) => {
       const observabilityContext = resolveObservabilityContext(obsFields);
       const logger = mastra?.getLogger();
-      const agent = resolveRegisteredAgent(params, mastra);
+      const agent = params;
       const toolData = {
         name: params.name ?? params.id,
         args: inputData,
@@ -848,6 +850,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         toolCallId,
         args: toolCallArgs,
         toolResultValue,
+        modelOutput,
         providerExecuted,
         // Shared processor states map for accessing persisted state
         processorStates,
@@ -1171,6 +1174,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         toolCallId,
         args: toolCallArgs,
         toolResultValue,
+        modelOutput,
         providerExecuted,
       };
 
@@ -1643,6 +1647,8 @@ function createStepFromProcessor<TProcessorId extends string>(
                 toolCallId: toolCallId ?? '',
                 args: toolCallArgs,
                 result: toolResultValue,
+                // The mapping an earlier processor committed, not the original.
+                modelOutput: latestProcessedModelOutput(passThrough.messageList, toolCallId ?? '', modelOutput),
                 providerExecuted,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 steps: steps ?? [],
@@ -2025,7 +2031,7 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
-    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
+    const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
     // Pre-flight gate: runs ahead of the initial run-record write below, and rejects the caller
@@ -2176,7 +2182,7 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
-    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
+    const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
     // Pre-flight gate: runs ahead of the initial run-record write below, and rejects the caller
@@ -2583,6 +2589,25 @@ export class EventedRun<
       }
     }
 
+    // A label raised inside a nested workflow is recorded against the step that
+    // wraps it, so follow it down through the nested snapshots to the step that
+    // owns it. Otherwise the nested run would resume whichever step it finds first.
+    if (params.label && snapshotResumeLabel) {
+      let levelSnapshot: WorkflowRunState | null = snapshot;
+      while (levelSnapshot) {
+        const stepResult = (levelSnapshot.context as any)?.[steps[steps.length - 1]!];
+        const nestedRunId = stepResult?.metadata?.nestedRunId ?? stepResult?.suspendPayload?.__workflow_meta?.runId;
+        if (!nestedRunId) break;
+        levelSnapshot = await workflowsStore.loadWorkflowSnapshot({
+          workflowName: steps[steps.length - 1]!,
+          runId: nestedRunId,
+        });
+        const nestedStepId = levelSnapshot?.resumeLabels?.[params.label]?.stepId;
+        if (!nestedStepId) break;
+        steps = [...steps, nestedStepId];
+      }
+    }
+
     // Validate that the step is actually suspended
     const suspendedStepIds = Object.keys(snapshot?.suspendedPaths ?? {});
     const isStepSuspended = suspendedStepIds.includes(steps?.[0] ?? '');
@@ -2595,8 +2620,9 @@ export class EventedRun<
 
     const resumePath = snapshot.suspendedPaths?.[steps[0]!] as any;
     // Start with the snapshot's request context (old values). Rows written before the
-    // auth token was stripped may still hold one; never restore a stale bearer token.
-    const requestContextObj = withoutAuthToken(snapshot.requestContext ?? {});
+    // auth token was stripped may still hold one; never restore a stale bearer token
+    // or the user who started the run.
+    const requestContextObj = withoutLiveRequestKeys(snapshot.requestContext);
     const requestContext = new RequestContext();
 
     // First, set values from the snapshot

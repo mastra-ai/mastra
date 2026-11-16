@@ -47,17 +47,8 @@ export function routingErrorMessage(error: unknown, factories: Factory[]): strin
   return error instanceof Error ? error.message : 'Failed to save Jira routing';
 }
 
-/** What a factory's routing still lacks before it picks up the issues it shows. */
-export function routingGap({
-  board,
-  labelled,
-  labels,
-}: {
-  board: string | null;
-  labelled: boolean;
-  labels: string[];
-}): string | undefined {
-  if (board === null) return "Choose a board. This factory won't pick up issues until one is set.";
+/** What a factory's routing still lacks before it takes only the issues it shows. */
+export function routingGap({ labelled, labels }: { labelled: boolean; labels: string[] }): string | undefined {
   if (labelled && labels.length === 0) return 'Still takes all issues until you add a label.';
   return undefined;
 }
