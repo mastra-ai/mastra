@@ -108,6 +108,7 @@ import {
 } from './processors/index';
 import { gatewayAgent } from './agents/gateway';
 import { askUserAgent } from './agents/ask-user-agent';
+import { genUIAgent } from './agents/gen-ui-agent';
 import { codeModeAgent } from './agents/code-mode-agent';
 import { clinicDirectAgent, clinicSpecialistAgent, clinicSupervisorAgent } from './agents/clinic-context-agents';
 import { approvalDemoAgent } from './agents/approval-demo-agent';
@@ -144,6 +145,7 @@ export const mastra = new Mastra({
   agents: {
     gatewayAgent,
     askUserAgent,
+    genUIAgent,
     approvalDemoAgent,
     chefAgent,
     chefAgentResponses,

@@ -1,7 +1,7 @@
 import type { BoardEventFacts, PullRequestEvent } from '../boards/board-events.js';
 import { closeReason, eventMovesCard, isPullRequestEvent } from '../boards/board-events.js';
-import { isPullRequestCard } from '../boards/semantics.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { isPullRequestCard } from '../work-items/change-requests.js';
 import type { FactoryRouteEventDecision, FactoryRuleHandler, FactoryTransitionDecision } from './types.js';
 
 type EventRuleTable<E extends string, TContext> = Readonly<Record<E, FactoryRuleHandler<TContext> | null>>;

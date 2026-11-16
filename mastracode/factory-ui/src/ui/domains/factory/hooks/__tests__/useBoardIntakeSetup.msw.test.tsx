@@ -109,6 +109,26 @@ describe('useBoardIntakeSetup with sources the server files from', () => {
     releaseBindings();
     await waitFor(() => expect(result.current.isPending).toBe(false));
   });
+
+  it('reports bindings that failed to load, and clears the failure once a retry loads them', async () => {
+    stubFiledSources();
+    let failing = true;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
+        failing
+          ? HttpResponse.json({ error: 'bindings unavailable' }, { status: 500 })
+          : HttpResponse.json({ bindings }),
+      ),
+    );
+
+    const { result } = renderSetup('factory-1');
+
+    await waitFor(() => expect(result.current.failure).toBeDefined(), { timeout: 5000 });
+    failing = false;
+    result.current.failure!.retry();
+    await waitFor(() => expect(result.current.failure).toBeUndefined());
+    expect(result.current.fed).toBe(true);
+  });
 });
 
 describe('useBoardIntakeSetup query loading', () => {

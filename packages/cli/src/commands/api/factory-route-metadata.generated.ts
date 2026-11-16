@@ -415,6 +415,48 @@ export const FACTORY_API_ROUTE_METADATA = {
       "listProperty": "envs"
     }
   },
+  "GET /web/factory/projects/:id/session-activity": {
+    "contractKey": "sessionActivity",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/session-activity",
+    "description": "List which of a project's sessions are running, waiting on a person or coming up",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /web/factory/projects/:id/session-rows": {
+    "contractKey": "sessionRows",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/session-rows",
+    "description": "List the sidebar's session rows of a view, grouped and in order, with how many match",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [
+      "children",
+      "groupBy",
+      "open",
+      "owner",
+      "pin",
+      "sort",
+      "status",
+      "updated",
+      "window"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /web/factory/projects/:id/work-items": {
     "contractKey": "workItemList",
     "method": "GET",
@@ -1301,9 +1343,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                             "string",
                             "null"
                           ]
-                        },
-                        "sandboxWorkdir": {
-                          "type": "string"
                         }
                       },
                       "required": [
@@ -1314,8 +1353,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "externalId",
                         "slug",
                         "defaultBranch",
-                        "branch",
-                        "sandboxWorkdir"
+                        "branch"
                       ]
                     }
                   }
@@ -2832,12 +2870,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       "string",
                       "null"
                     ]
-                  },
-                  "lastBuiltAt": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
                   }
                 },
                 "required": [
@@ -2851,8 +2883,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "setupCommand",
                   "teardownCommand",
                   "lastBuildStatus",
-                  "lastBuildError",
-                  "lastBuiltAt"
+                  "lastBuildError"
                 ]
               }
             },
@@ -3874,12 +3905,32 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "type": "integer",
                   "minimum": -9007199254740991,
                   "maximum": 9007199254740991
+                },
+                "interactive": {
+                  "type": "object",
+                  "properties": {
+                    "inUse": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "cap": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "inUse",
+                    "cap"
+                  ]
                 }
               },
               "required": [
                 "scope",
                 "inUse",
-                "cap"
+                "cap",
+                "interactive"
               ]
             },
             {
@@ -3906,23 +3957,27 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "type": {
                 "$ref": "#/$defs/__schema2"
               },
-              "role": {
+              "lane": {
                 "$ref": "#/$defs/__schema3"
               },
-              "skillName": {
+              "role": {
                 "$ref": "#/$defs/__schema4"
               },
-              "queuedSince": {
+              "skillName": {
                 "$ref": "#/$defs/__schema5"
               },
-              "workItem": {
+              "queuedSince": {
                 "$ref": "#/$defs/__schema6"
+              },
+              "workItem": {
+                "$ref": "#/$defs/__schema7"
               }
             },
             "required": [
               "decisionId",
               "state",
               "type",
+              "lane",
               "role",
               "skillName",
               "queuedSince",
@@ -3934,6 +3989,25 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "type": "integer",
           "minimum": -9007199254740991,
           "maximum": 9007199254740991
+        },
+        "queuedByLane": {
+          "type": "object",
+          "properties": {
+            "automated": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "interactive": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "automated",
+            "interactive"
+          ]
         },
         "queued": {
           "type": "array",
@@ -3949,17 +4023,20 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "type": {
                 "$ref": "#/$defs/__schema2"
               },
-              "role": {
+              "lane": {
                 "$ref": "#/$defs/__schema3"
               },
-              "skillName": {
+              "role": {
                 "$ref": "#/$defs/__schema4"
               },
-              "queuedSince": {
+              "skillName": {
                 "$ref": "#/$defs/__schema5"
               },
-              "workItem": {
+              "queuedSince": {
                 "$ref": "#/$defs/__schema6"
+              },
+              "workItem": {
+                "$ref": "#/$defs/__schema7"
               },
               "position": {
                 "type": "integer",
@@ -3971,6 +4048,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "decisionId",
               "state",
               "type",
+              "lane",
               "role",
               "skillName",
               "queuedSince",
@@ -3985,6 +4063,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "running",
         "claimed",
         "queuedCount",
+        "queuedByLane",
         "queued"
       ],
       "$defs": {
@@ -4007,9 +4086,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         },
         "__schema3": {
-          "type": [
-            "string",
-            "null"
+          "type": "string",
+          "enum": [
+            "automated",
+            "interactive"
           ]
         },
         "__schema4": {
@@ -4019,9 +4099,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         },
         "__schema5": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "__schema6": {
+          "type": "string"
+        },
+        "__schema7": {
           "anyOf": [
             {
               "type": "object",
@@ -4124,6 +4210,597 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "envs",
         "writable"
       ]
+    }
+  },
+  "GET /web/factory/projects/:id/session-activity": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "runningSessionIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "parkedSessionIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "initializingSessionIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cards": {
+          "type": "object",
+          "properties": {
+            "working": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "waiting": {
+              "$ref": "#/$defs/__schema0"
+            }
+          },
+          "required": [
+            "working",
+            "waiting"
+          ]
+        },
+        "settling": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "runningSessionIds",
+        "parkedSessionIds",
+        "initializingSessionIds",
+        "cards",
+        "settling"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    }
+  },
+  "GET /web/factory/projects/:id/session-rows": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "query": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "sort": {
+          "default": "activity",
+          "type": "string",
+          "enum": [
+            "activity",
+            "updated",
+            "created"
+          ]
+        },
+        "groupBy": {
+          "default": "none",
+          "type": "string",
+          "enum": [
+            "board",
+            "status",
+            "owner",
+            "none"
+          ]
+        },
+        "owner": {
+          "default": "all",
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "all",
+                "mine"
+              ]
+            },
+            {
+              "type": "string",
+              "maxLength": 512,
+              "pattern": "^owner:.+$"
+            }
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "waiting",
+            "working",
+            "initializing",
+            "idle",
+            "done"
+          ]
+        },
+        "updated": {
+          "type": "string",
+          "enum": [
+            "24h",
+            "7d",
+            "30d"
+          ]
+        },
+        "children": {
+          "type": "string",
+          "enum": [
+            "true"
+          ]
+        },
+        "pin": {
+          "default": [],
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema0"
+          }
+        },
+        "open": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "window": {
+          "$ref": "#/$defs/__schema1"
+        }
+      },
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "__schema1": {
+          "maxItems": 64,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema2"
+          }
+        },
+        "__schema2": {
+          "type": "string"
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "total": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "matching": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "total": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "openIndex": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "rows": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "session": {
+                      "$ref": "#/$defs/__schema1"
+                    },
+                    "origin": {
+                      "$ref": "#/$defs/__schema2"
+                    },
+                    "board": {
+                      "$ref": "#/$defs/__schema3"
+                    },
+                    "status": {
+                      "$ref": "#/$defs/__schema4"
+                    },
+                    "cardStatus": {
+                      "$ref": "#/$defs/__schema5"
+                    },
+                    "pinned": {
+                      "$ref": "#/$defs/__schema6"
+                    },
+                    "updatedAt": {
+                      "$ref": "#/$defs/__schema7"
+                    },
+                    "card": {
+                      "$ref": "#/$defs/__schema8"
+                    },
+                    "itemId": {
+                      "$ref": "#/$defs/__schema9"
+                    },
+                    "threadId": {
+                      "$ref": "#/$defs/__schema10"
+                    },
+                    "pullRequest": {
+                      "$ref": "#/$defs/__schema11"
+                    },
+                    "cardSessionIds": {
+                      "$ref": "#/$defs/__schema12"
+                    },
+                    "phaseLabel": {
+                      "$ref": "#/$defs/__schema13"
+                    },
+                    "runByFactory": {
+                      "$ref": "#/$defs/__schema14"
+                    },
+                    "waitingSessionId": {
+                      "$ref": "#/$defs/__schema15"
+                    },
+                    "childRows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "session": {
+                            "$ref": "#/$defs/__schema1"
+                          },
+                          "origin": {
+                            "$ref": "#/$defs/__schema2"
+                          },
+                          "board": {
+                            "$ref": "#/$defs/__schema3"
+                          },
+                          "status": {
+                            "$ref": "#/$defs/__schema4"
+                          },
+                          "cardStatus": {
+                            "$ref": "#/$defs/__schema5"
+                          },
+                          "pinned": {
+                            "$ref": "#/$defs/__schema6"
+                          },
+                          "updatedAt": {
+                            "$ref": "#/$defs/__schema7"
+                          },
+                          "card": {
+                            "$ref": "#/$defs/__schema8"
+                          },
+                          "itemId": {
+                            "$ref": "#/$defs/__schema9"
+                          },
+                          "threadId": {
+                            "$ref": "#/$defs/__schema10"
+                          },
+                          "pullRequest": {
+                            "$ref": "#/$defs/__schema11"
+                          },
+                          "cardSessionIds": {
+                            "$ref": "#/$defs/__schema12"
+                          },
+                          "phaseLabel": {
+                            "$ref": "#/$defs/__schema13"
+                          },
+                          "runByFactory": {
+                            "$ref": "#/$defs/__schema14"
+                          },
+                          "waitingSessionId": {
+                            "$ref": "#/$defs/__schema15"
+                          }
+                        },
+                        "required": [
+                          "session",
+                          "origin",
+                          "status",
+                          "pinned",
+                          "updatedAt"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "session",
+                    "origin",
+                    "status",
+                    "pinned",
+                    "updatedAt"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "key",
+              "total",
+              "rows"
+            ]
+          }
+        },
+        "boards": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "owners": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "userId": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "avatarUrl": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "userId"
+            ]
+          }
+        },
+        "settling": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "total",
+        "matching",
+        "groups",
+        "boards",
+        "owners",
+        "settling"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "__schema1": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "projectRepositoryId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "userId": {
+              "type": "string"
+            },
+            "branch": {
+              "type": "string"
+            },
+            "title": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "visibility": {
+              "type": "string",
+              "enum": [
+                "org",
+                "private"
+              ]
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "owner": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "avatarUrl": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "sessionId",
+            "projectRepositoryId",
+            "userId",
+            "branch",
+            "title",
+            "visibility",
+            "createdAt"
+          ]
+        },
+        "__schema2": {
+          "type": "string",
+          "enum": [
+            "factory",
+            "user"
+          ]
+        },
+        "__schema3": {
+          "type": "string"
+        },
+        "__schema4": {
+          "type": "string",
+          "enum": [
+            "waiting",
+            "working",
+            "initializing",
+            "idle",
+            "done"
+          ]
+        },
+        "__schema5": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "__schema6": {
+          "type": "boolean"
+        },
+        "__schema7": {
+          "type": "string"
+        },
+        "__schema8": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "workItemUrl": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "externalSource": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "integrationId": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "integrationId",
+                    "type",
+                    "externalId"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "workItemUrl",
+            "externalSource"
+          ]
+        },
+        "__schema9": {
+          "type": "string"
+        },
+        "__schema10": {
+          "type": "string"
+        },
+        "__schema11": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string"
+            },
+            "provider": {
+              "type": "string",
+              "enum": [
+                "github",
+                "gitlab"
+              ]
+            },
+            "number": {
+              "type": "number"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "open",
+                "closed",
+                "merged"
+              ]
+            },
+            "draft": {
+              "type": "boolean"
+            },
+            "syncedAt": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "provider",
+            "draft"
+          ]
+        },
+        "__schema12": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "__schema13": {
+          "type": "string"
+        },
+        "__schema14": {
+          "type": "boolean",
+          "const": true
+        },
+        "__schema15": {
+          "type": "string"
+        }
+      }
     }
   },
   "GET /web/factory/projects/:id/work-items": {
@@ -5784,12 +6461,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       "string",
                       "null"
                     ]
-                  },
-                  "lastBuiltAt": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
                   }
                 },
                 "required": [
@@ -5803,8 +6474,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "setupCommand",
                   "teardownCommand",
                   "lastBuildStatus",
-                  "lastBuildError",
-                  "lastBuiltAt"
+                  "lastBuildError"
                 ]
               }
             },
@@ -10134,6 +10804,8 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "metricsGet": "GET /web/factory/projects/:id/metrics",
   "runQueue": "GET /web/factory/projects/:id/run-queue",
   "projectSandboxEnvsList": "GET /web/factory/projects/:id/sandbox-envs",
+  "sessionActivity": "GET /web/factory/projects/:id/session-activity",
+  "sessionRows": "GET /web/factory/projects/:id/session-rows",
   "workItemList": "GET /web/factory/projects/:id/work-items",
   "workItemActivity": "GET /web/factory/projects/:id/work-items/activity",
   "workItemFilterOptions": "GET /web/factory/projects/:id/work-items/filter-options",

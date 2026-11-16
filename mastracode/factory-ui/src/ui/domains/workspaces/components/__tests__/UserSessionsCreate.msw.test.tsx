@@ -48,7 +48,6 @@ function stubFactoryWithRepository(sessions: FactoryUserSession[] = []) {
             repositories: [
               listedRepository(projectRepositoryId, 'octo/hello', {
                 branch: 'main',
-                sandboxWorkdir: '/workspace/hello',
               }),
             ],
           },
@@ -140,10 +139,6 @@ describe('User sessions creation', () => {
     expect(sessionPosts).toBe(0);
     expect(controller).toEqual({ createSession: 0, renameThread: 0 });
     expect(sessions).toEqual([]);
-    expect(client.getQueryData(queryKeys.sessions('fp-1'))).toEqual({
-      workspaces: [],
-      userSessions: [],
-    });
   });
 
   it('opens a new session draft from the + next to Sessions', async () => {

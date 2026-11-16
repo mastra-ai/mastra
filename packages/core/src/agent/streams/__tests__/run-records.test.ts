@@ -19,10 +19,9 @@ import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../../durable/create-durable-agent';
 import { createEventedAgent } from '../../durable/create-evented-agent';
-import { durableReplayOwnerKey } from '../../durable/replay-owners';
 import type { AgentConfig } from '../../types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
-import { AGENT_RUN_RECORD_TTL_MS, agentRunRecordKey } from '../run-records';
+import { AGENT_RUN_RECORD_TTL_MS, agentRunRecordKey, durableReplayOwnerKey } from '../run-records';
 import type { AgentRunRecord } from '../run-records';
 
 class RecordingCache extends InMemoryServerCache {

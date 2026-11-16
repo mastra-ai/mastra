@@ -51,6 +51,23 @@ export interface BoardPhasesRequest {
   item?: string;
 }
 
+type SessionRowsQuery = z.output<typeof FACTORY_ROUTE_CONTRACTS.sessionRows.querySchema>;
+export type SessionRowsResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.sessionRows.responseSchema>;
+export type SessionRowWire = SessionRowsResponse['groups'][number]['rows'][number];
+export type SessionActivity = z.infer<typeof FACTORY_ROUTE_CONTRACTS.sessionActivity.responseSchema>;
+
+export interface SessionRowsRequest {
+  sort: SessionRowsQuery['sort'];
+  groupBy: SessionRowsQuery['groupBy'];
+  owner: string;
+  status?: SessionRowsQuery['status'];
+  updated?: SessionRowsQuery['updated'];
+  children: boolean;
+  pin: readonly string[];
+  open?: string;
+  windows: Readonly<Record<string, number>>;
+}
+
 import type {
   CustomProviderInfo,
   OMConfigInfo,
@@ -69,6 +86,7 @@ import type {
   WorkspaceChangesScope,
   WorkspaceChangeStatus,
   WorkspaceFile,
+  WorkspaceFileIndex,
   WorkspaceTreeEntry,
   WorkspaceTreeListing,
   WorkspaceRenderedEntry,
@@ -91,6 +109,7 @@ export type {
   WorkspaceChangesScope,
   WorkspaceChangeStatus,
   WorkspaceFile,
+  WorkspaceFileIndex,
   WorkspaceTreeEntry,
   WorkspaceTreeListing,
   WorkspaceRenderedEntry,

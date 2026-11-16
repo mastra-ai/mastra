@@ -11,11 +11,7 @@ import { useRecentAuditEvents } from '../../../hooks/useAuditEvents';
 import { useFactoryAuth } from '../../../hooks/useFactoryAuth';
 import { useGithubStatusQuery } from '../../../hooks/useGithubStatus';
 import { useRunQueue } from '../../../hooks/useFactoryDecisions';
-import {
-  useBoardPhasesQuery,
-  useSidebarWorkItemsQuery,
-  useWorkItemFilterOptionsQuery,
-} from '../../../hooks/useWorkItems';
+import { useBoardPhasesQuery, useWorkItemFilterOptionsQuery } from '../../../hooks/useWorkItems';
 import { shownBoardPhases } from '../../domains/factory/boardPhases';
 import type { ShownPhase } from '../../domains/factory/boardPhases';
 import { boardPhasesRequest, deeperPhaseWindow, isCardId } from '../../domains/factory/boardPhasesRequest';
@@ -23,7 +19,6 @@ import { boardLoadingStages } from '../../domains/factory/boardStages';
 import type { BoardKind } from '../../domains/factory/boardStages';
 import { ConfigureBoardButton } from '../../domains/boardConfig/components/ConfigureBoardButton';
 import { RunQueueIndicator } from '../../domains/factory/components/RunQueueIndicator';
-import { RepositoryPickerDialog } from '../../domains/factory/components/RepositoryPickerDialog';
 import { BoardItemsSkeleton } from '../../domains/factory/components/BoardItemsSkeleton';
 import { BoardStageCards } from '../../domains/factory/components/BoardStageCards';
 import { BoardEmptyStateActions } from '../../domains/factory/components/BoardEmptyStateActions';
@@ -39,7 +34,6 @@ import { useItemSessionStatuses } from '../../domains/factory/hooks/useItemSessi
 import { useBoardItems } from '../../domains/factory/hooks/useBoardItems';
 import { useBoardRuns } from '../../domains/factory/hooks/useBoardRuns';
 import { useOpenCardState } from '../../domains/factory/hooks/useOpenCardState';
-import { useRepositoryChoice } from '../../domains/factory/hooks/useRepositoryChoice';
 import { boardParticipants, boardPersonIdentity, withPeopleUnfolded } from '../../domains/factory/boardPeople';
 import { boardFiltersActive } from '../../domains/factory/boardFilters';
 import { useBoardView } from '../../domains/factory/hooks/useBoardView';
@@ -118,37 +112,29 @@ export function BoardContent({
   const phasesRead = useBoardPhasesQuery(factoryProjectId, { ...view, windows }, keyedCardId(openCard.openKey));
   const snapshot = phasesRead.data;
   const cards = snapshot?.workItems ?? NO_CARDS;
-  const sessionCards = useSidebarWorkItemsQuery(factoryProjectId).data?.workItems ?? NO_CARDS;
 
-  const items = useBoardItems({ factoryProjectId, kind, currentUserId, items: [...cards, ...sessionCards] });
-  const repositoryChoice = useRepositoryChoice(factory, definition);
-  const dropWithRepository = (
-    payload: DragPayload,
-    stage: Parameters<typeof items.handleDrop>[1],
-    cause = 'board_drag',
-  ) => {
+  const items = useBoardItems({
+    factoryProjectId,
+    kind,
+    currentUserId,
+    // A refused move snaps the card back; the toast says why where the person is looking.
+    onFailure: message => toast.error(message),
+    items: cards,
+  });
+  const drop = (payload: DragPayload, stage: Parameters<typeof items.handleDrop>[1], cause = 'board_drag') => {
     if (payload.fromStage === stage) return;
     const toPhaseKind = definition.phases.find(phase => phase.id === stage)?.kind;
     if (!canMoveTo(payload.ownerKind, toPhaseKind)) {
       toast.error(BUSY_CARD_MOVE_REFUSAL);
       return;
     }
-    const card = cards.find(item => item.id === payload.id);
-    if (!card) return;
-    void repositoryChoice.choose(
-      card.source,
-      { ...card.metadata, ...card.workItem?.metadata },
-      stage,
-      slug => items.move(payload.id, stage, { cause, repositorySlug: slug }),
-      () => items.handleDrop(payload, stage, cause),
-    );
+    items.handleDrop(payload, stage, cause);
   };
   const intake = useBoardIntakeSetup({ factoryProjectId, repositories: factory.repositories, definition });
   const runs = useBoardRuns({ factoryProjectId });
   const relatedItemsFor = useMemo(() => relatedWorkItemIndex(cards), [cards]);
   const sessionStatuses = useItemSessionStatuses({
     factoryProjectId,
-    projectRepositoryId: repository.projectRepositoryId,
     items: cards,
     parkedSessionIds: snapshot?.parkedSessionIds ?? NO_SESSIONS,
   });
@@ -188,6 +174,8 @@ export function BoardContent({
     : [];
   const targetListed = targetStages.length > 0;
   const viewAnswered = phasesRead.data !== undefined && !phasesRead.isPlaceholderData;
+  // Only with every read that says who holds a card answered does the board refuse a move itself.
+  const ownerCurrent = viewAnswered && decisions.isCurrent && runQueue.isSuccess;
   const targetReady = !phasesRead.isPending && (!targetItemId || targetListed);
   const loadingStages = boardLoadingStages({
     board: definition,
@@ -269,7 +257,7 @@ export function BoardContent({
           loading={loading}
           taskCount={taskCount}
           intakeSetup={intakeSetup}
-          intakeFailure={isInitialPhase ? intake.routesFailure : undefined}
+          intakeFailure={isInitialPhase ? intake.failure : undefined}
           filtersExcludeAll={filtersExcludeAll}
           emptyStateActions={
             showEmptyStateActions && (
@@ -306,6 +294,7 @@ export function BoardContent({
                 columnStage={stage.id}
                 relatedItems={relatedItemsFor(item)}
                 sessionStatus={sessionStatuses.get(item.id)}
+                ownerCurrent={ownerCurrent}
                 projectRepositoryId={cardProjectRepositoryId(
                   factory.repositories,
                   item,
@@ -324,15 +313,7 @@ export function BoardContent({
                 onDismissProposal={decisions.dismiss}
                 onRetryDecision={decisions.retry}
                 onCreateSession={() => void runs.openOrCreateSession(item)}
-                onMove={toStage =>
-                  void repositoryChoice.choose(
-                    item.source,
-                    { ...item.metadata, ...item.workItem?.metadata },
-                    toStage,
-                    slug => items.move(item.id, toStage, { repositorySlug: slug }),
-                    () => items.move(item.id, toStage),
-                  )
-                }
+                onMove={toStage => items.move(item.id, toStage)}
                 onRemove={() => items.remove(item.id)}
               />
             )}
@@ -365,20 +346,6 @@ export function BoardContent({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {runs.repositorySelection && (
-        <RepositoryPickerDialog
-          repositories={runs.repositoryChoices}
-          onClose={runs.closeRepositorySelection}
-          onSelect={runs.selectRepository}
-        />
-      )}
-      {repositoryChoice.pending && (
-        <RepositoryPickerDialog
-          repositories={factory.repositories}
-          onClose={repositoryChoice.cancel}
-          onSelect={selectedRepository => repositoryChoice.select(selectedRepository.slug)}
-        />
-      )}
       {mutationError !== undefined && (
         <div className="shrink-0 p-4 pb-0">
           <Notice variant="destructive">
@@ -391,7 +358,7 @@ export function BoardContent({
         stages={stageViews}
         totalTaskCount={totalTaskCount}
         openCard={openCard}
-        onDrop={dropWithRepository}
+        onDrop={drop}
         toolbar={
           <BoardViewControls
             reviewsPullRequests={reviewsPullRequests}

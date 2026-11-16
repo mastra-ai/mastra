@@ -5,86 +5,95 @@ import { createRunScope, createRunScopeKey } from '../../mastra/run-scope';
 import { RequestContext } from '../../request-context';
 import type { Agent } from '../agent';
 import { AGENT_STREAM_TOPIC } from '../streams/constants';
-import { createAgentStreamPublisher } from '../streams/publisher';
-import type { AgentStreamPublisher } from '../streams/publisher';
+import type { AgentStreamProducer, AgentStreamPublisher } from '../streams/publisher';
+import { durableReplayOwnerKey, readAgentRunRecord } from '../streams/run-records';
 import {
   assertExecutionGenerationCurrent,
   assertExecutionNotSuperseded,
   DurableExecutionFenceError,
   EXECUTION_SUPERSEDED_ERROR_ID,
+  EXECUTION_UNVERIFIED_ERROR_ID,
   isExecutionFenceError,
   setExecutionClaim,
 } from './execution-fence';
 import type { DurableExecutionClaim } from './execution-fence';
-import { durableReplayOwnerKey } from './replay-owners';
 import { getRunRegistryEntry, setRunRegistryEntry } from './run-registry';
+import { getRunStreamPublisher } from './run-stream-publisher';
 import type { RunRegistryEntry } from './types';
 
-const publishersKey = createRunScopeKey<Map<string, AgentStreamPublisher>>('execution-stream-publishers');
 const streamOwnerKey =
   createRunScopeKey<Pick<Agent, '__getStreamBus' | '__getRunOwner' | '__usesSharedRunLog'>>('execution-stream-owner');
 // Proxies must forward this transport while retaining their fences, without re-entering a publisher's queue.
 export const executionTransport = Symbol('execution-stream-publisher-transport');
 
-/** Attach the shared publisher to an execution with explicit producer or lifecycle authority. */
-export function getExecutionStreamPublisher({
-  runId,
-  agentId,
-  mastra,
-  agent,
-  claim,
-  role,
-  entry = getRunRegistryEntry(runId, mastra),
-}: {
+interface ExecutionPublisherOptions {
   runId: string;
   agentId: string;
   mastra?: Mastra;
   agent?: Pick<Agent, '__getStreamBus' | '__getRunOwner' | '__usesSharedRunLog'>;
   claim?: DurableExecutionClaim;
-  role: 'producer' | 'lifecycle';
   entry?: RunRegistryEntry;
-}): AgentStreamPublisher | undefined {
+}
+
+function resolveExecutionPublisher({
+  runId,
+  mastra,
+  agentId,
+  agent,
+  claim,
+  entry = getRunRegistryEntry(runId, mastra),
+}: ExecutionPublisherOptions) {
+  // Workers can attach with a claim before a local reader registers the run.
   if (!entry && !claim) return;
   if (!entry) {
     entry = { isPlaceholder: true } as RunRegistryEntry;
     if (!setRunRegistryEntry(runId, entry, mastra)) return;
   }
+
+  // Keep the captured wrapper ahead of registry lookups: the same agent ID can use another bus.
   const scope = (entry.runScope ??= createRunScope());
   if (agent) scope.set(streamOwnerKey, agent);
   const owner = agent ?? scope.get(streamOwnerKey) ?? mastra?.getAgentById(agentId) ?? entry.agent;
   const bus = owner?.__getStreamBus();
   if (!owner || !bus) return;
+
   const usesSharedRunLog = owner.__usesSharedRunLog();
   const runBus = bus.forRun(usesSharedRunLog);
-  claim ??= entry.executionFence?.claim;
-  const executionClaim = claim;
+  const executionClaim = claim ?? entry.executionFence?.claim;
   if (!executionClaim) return;
+
   const requestContext = new RequestContext();
   setExecutionClaim(requestContext, runId, executionClaim);
   const publisherId = executionClaim.executionId;
   const memoryInfo = owner.__getRunOwner(runId);
-  let publishers = scope.get(publishersKey);
-  if (!publishers) {
-    publishers = new Map();
-    scope.set(publishersKey, publishers);
-    const attachments = publishers;
-    const previousCleanup = entry.cleanup;
-    entry.cleanup = () => {
-      try {
-        previousCleanup?.();
-      } finally {
-        for (const publisher of attachments.values()) void publisher.detach();
-      }
-    };
-  }
-  const key = `${publisherId}:${role}`;
-  const existing = publishers.get(key);
-  if (existing) return existing;
-  const fence = entry.executionFence;
-  const publisher = createAgentStreamPublisher({
+
+  const publisher = getRunStreamPublisher(runId, entry, mastra);
+  return { publisher, publisherId, runBus, bus, usesSharedRunLog, executionClaim, requestContext, memoryInfo, entry };
+}
+
+/** Worker output keeps its captured execution authority and cannot settle or clean up the run. */
+export function getExecutionStreamProducer(options: ExecutionPublisherOptions): AgentStreamProducer | undefined {
+  const context = resolveExecutionPublisher(options);
+  if (!context) return;
+  const { publisher, publisherId, runBus, requestContext } = context;
+  const { runId, agentId, mastra } = options;
+  return publisher.attachEventProducer({
+    publisherId,
     pubsub: runBus.pubsub,
-    runId,
-    role,
+    assertOwnership: () => assertExecutionNotSuperseded({ runId, agentId, mastra, requestContext }),
+  });
+}
+
+/** Owning readers settle and clean up using the authority of their captured execution. */
+export function getExecutionStreamOwner(options: ExecutionPublisherOptions): AgentStreamPublisher | undefined {
+  const context = resolveExecutionPublisher(options);
+  if (!context) return;
+  const { publisher, publisherId, runBus, bus, usesSharedRunLog, executionClaim, requestContext, memoryInfo, entry } =
+    context;
+  const { runId, agentId, mastra } = options;
+  const fence = entry.executionFence;
+  return publisher.attachOwner({
+    pubsub: runBus.pubsub,
     publisherId,
     cleanupTimeoutMs: bus.cleanupTimeoutMs,
     logger: mastra?.getLogger(),
@@ -92,22 +101,44 @@ export function getExecutionStreamPublisher({
     // ensureRemoteAbortListener owns the single execution-scoped listener on this worker.
     listenForAbort: false,
     assertOwnership: async () => {
-      if (role === 'lifecycle') {
-        if (fence?.executionId === publisherId) {
-          fence.throwIfLost();
-          if (fence.settlement !== undefined && fence.settlement !== 'owned') {
-            throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, {
-              runId,
-              agentId,
-              executionId: publisherId,
-            });
-          }
+      if (fence?.executionId === publisherId) {
+        fence.throwIfLost();
+        if (fence.settlement !== undefined && fence.settlement !== 'owned') {
+          throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, {
+            runId,
+            agentId,
+            executionId: publisherId,
+          });
         }
-        // Like the remote execution guard, check generation without poisoning a fence releasing its own lease.
-        await assertExecutionGenerationCurrent({ runId, agentId, mastra, claim: executionClaim });
-        return;
       }
-      await assertExecutionNotSuperseded({ runId, agentId, mastra, requestContext });
+      // Check generation without poisoning a fence releasing its own lease.
+      await assertExecutionGenerationCurrent({ runId, agentId, mastra, claim: executionClaim });
+    },
+    assertRecordOwnership: async () => {
+      if (fence?.executionId !== publisherId || fence.settlement !== 'owned') return;
+      let current;
+      try {
+        current = await readAgentRunRecord(
+          bus.getRunRecordCache(usesSharedRunLog),
+          agentId,
+          runId,
+          durableReplayOwnerKey(agentId, runId),
+        );
+      } catch {
+        throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, {
+          runId,
+          agentId,
+          executionId: publisherId,
+        });
+      }
+      // Releasing a successor's lease does not give an older reader its record back.
+      if (current?.publisherId && current.publisherId !== publisherId) {
+        throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, {
+          runId,
+          agentId,
+          executionId: publisherId,
+        });
+      }
     },
     assertCleanupOwnership: async () => {
       // Owned deadline settlement revokes execution writes but keeps the run's topics.
@@ -122,12 +153,10 @@ export function getExecutionStreamPublisher({
       threadId: executionClaim.threadId ?? memoryInfo?.threadId,
     },
   });
-  publishers.set(key, publisher);
-  return publisher;
 }
 
-/** Preserve durable event shaping and the workflow's existing publish-after-persist boundary. */
-export function withExecutionStreamPublisher(
+/** Route this run's stream events through its execution-bound producer; other topics pass through unchanged. */
+export function withExecutionStreamProducer(
   pubsub: PubSub,
   options: { runId: string; agentId: string; mastra?: Mastra; claim?: DurableExecutionClaim },
 ): PubSub {
@@ -142,11 +171,11 @@ export function withExecutionStreamPublisher(
           publishOptions?: { localOnly?: boolean },
         ) => {
           if (topic === AGENT_STREAM_TOPIC(options.runId)) {
-            const publisher = getExecutionStreamPublisher({ ...options, role: 'producer' });
-            if (publisher) {
+            const producer = getExecutionStreamProducer(options);
+            if (producer) {
               try {
                 // Keep each step's fence and cache policy without chaining publishers or splitting their queue.
-                return await publisher.publishEvent(event, transport);
+                return await producer.publishEvent(event, transport, publishOptions);
               } catch (error) {
                 // Like fencePubSub, a worker that lost ownership stops publishing without failing the run.
                 if (isExecutionFenceError(error)) return;

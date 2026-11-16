@@ -1,9 +1,9 @@
+import { SLACK_SESSION_BRANCH_PREFIX } from '@mastra/factory/work-item-branch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useSessionVisibility } from '../hooks/useSessionVisibility';
 import type { FactoryUserSession } from '../services/user-sessions';
-import { SLACK_SESSION_BRANCH_PREFIX } from '../services/user-sessions';
 import { SessionSharingPopover } from './SessionSharingPopover';
 
 export function UserSessionSharing({ factoryId, session }: { factoryId: string; session: FactoryUserSession }) {

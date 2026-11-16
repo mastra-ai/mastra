@@ -1,11 +1,11 @@
-import { SearchIcon } from 'lucide-react';
 import { effectiveTextSearch } from './text-search';
 import type { FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 
 export const TEXT_SEARCH_FIELD: FilterBarField = {
   id: 'textSearch',
   label: 'Contains text',
-  icon: SearchIcon,
+  icon: IconMagnifyingGlass,
   operators: ['is'],
   rootOnly: true,
   singleton: true,

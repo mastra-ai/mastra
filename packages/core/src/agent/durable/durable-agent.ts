@@ -68,7 +68,7 @@ import type { PendingSignalListener, AgentSignalInput } from '../signals';
 import type { AgentStreamBus } from '../streams/bus';
 import { replayResponseMessages, withRebuiltResponseMessages } from '../streams/response-messages';
 import type { ResponseMessagesReplay } from '../streams/response-messages';
-import { readAgentRunRecord } from '../streams/run-records';
+import { durableReplayOwnerKey, readAgentRunRecord, readDurableReplayOwner } from '../streams/run-records';
 import type { AgentRunRecord } from '../streams/run-records';
 import type { AgentStreamsConfig } from '../streams/types';
 import type { AgentStreamStepFinishPayload } from '../streams/wire';
@@ -109,12 +109,11 @@ import {
   supportsRunFencing,
 } from './execution-fence';
 import type { UntrackedRunLiveness } from './execution-fence';
-import { getExecutionStreamPublisher } from './execution-stream-publisher';
+import { getExecutionStreamOwner } from './execution-stream-publisher';
 import { detachFullStreamOnEnd } from './observe-full-stream';
 import { persistDurableRunInput } from './persist-run-input';
 import { prepareForDurableExecution } from './preparation';
 import type { PreparationOptions, PreparationResult } from './preparation';
-import { durableReplayOwnerKey, readDurableReplayOwner } from './replay-owners';
 import { createRunAbortController } from './run-abort';
 import { createRunCleanup } from './run-cleanup';
 import { recordRunSavedMessages } from './run-message-refs';
@@ -623,6 +622,21 @@ export interface DurableAgentConfig<
    * this option with a warning.
    */
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
+
+  /**
+   * How this agent's new runs are stored. `1` rewrites one snapshot per run
+   * on every write. `2` stores a run header plus per-step entries, and each
+   * write sends only what changed.
+   *
+   * Where the storage adapter doesn't support version 2, new runs are stored
+   * as version 1 and a warning is logged. Runs keep the version they were
+   * created with: a run resumed after this option changes continues in its
+   * stored version.
+   *
+   * @default 1
+   * @experimental
+   */
+  storageVersion?: 1 | 2;
 }
 
 /**
@@ -909,6 +923,9 @@ export class DurableAgent<
    */
   protected readonly userShouldPersistSnapshot: ShouldPersistSnapshotFn | undefined;
 
+  /** Storage version for new runs (see DurableAgentConfig.storageVersion) */
+  #storageVersion: 1 | 2;
+
   /**
    * Create a new DurableAgent that wraps an existing Agent
    */
@@ -923,6 +940,7 @@ export class DurableAgent<
       cleanupTimeoutMs,
       shouldCache,
       shouldPersistSnapshot,
+      storageVersion,
     } = config;
 
     // Use provided id/name or fall back to agent.id/agent.name
@@ -945,6 +963,7 @@ export class DurableAgent<
     this.#maxSteps = maxSteps;
     this.#streamConfig = { pubsub, cache, cleanupTimeoutMs, shouldCache };
     this.userShouldPersistSnapshot = shouldPersistSnapshot;
+    this.#storageVersion = storageVersion ?? 1;
 
     // Keep processor access on the wrapped agent, but dispatch through this wrapper.
     this.#wrappedAgent.getChannels()?.__setDispatchAgent(this);
@@ -1020,6 +1039,11 @@ export class DurableAgent<
     return !!this.#mastra && this.executionEngine.resolveWorkflowEngine(this.workflowEngine, this.logger) === 'evented';
   }
 
+  /** Durable execution uses its lifecycle publisher, not the plain Agent entry point. @internal */
+  protected override __ownsPlainStreamPublisher(): boolean {
+    return false;
+  }
+
   /** Kept `false`, the value this getter has always reported for durable agents. */
   override get durable(): AgentDurableOption | undefined {
     return false;
@@ -1078,13 +1102,12 @@ export class DurableAgent<
    */
   async #attachStreamPublisher(runId: string, owner: { resourceId?: string; threadId?: string }): Promise<void> {
     const claim = getRunRegistryEntry(runId, this.#mastra)?.executionFence?.claim;
-    const publisher = getExecutionStreamPublisher({
+    const publisher = getExecutionStreamOwner({
       runId,
       agentId: this.id,
       mastra: this.#mastra,
       agent: this,
       claim: claim && { ...claim, ...owner },
-      role: 'lifecycle',
     });
     await publisher?.ready.catch(error => {
       this.logger.warn(`[DurableAgent:${this.id}] run ${runId}: failed to attach its stream publisher`, { error });
@@ -1101,16 +1124,18 @@ export class DurableAgent<
   }
 
   #owningReaderTerminal(runId: string, executionFence: ExecutionFence) {
-    const publisher = getExecutionStreamPublisher({
+    const publisher = getExecutionStreamOwner({
       runId,
       agentId: this.id,
       mastra: this.#mastra,
       agent: this,
       claim: executionFence.claim,
-      role: 'lifecycle',
     });
     return async (status: 'suspended' | 'finished', generation: number | undefined) => {
       if (generation !== executionFence.generation || !executionFence.ownsRunTopics()) return;
+      const currentFence = getRunRegistryEntry(runId, this.#mastra)?.executionFence;
+      // A continuation can finish an earlier reader after resume replaced its execution.
+      if (currentFence && currentFence !== executionFence) return;
       try {
         await publisher?.settle(status);
       } catch (error) {
@@ -1209,7 +1234,7 @@ export class DurableAgent<
     // see the full rows (e.g. ToolSearch results). #loadRecalledMessages has
     // already loaded them, so this normally needs no storage read.
     return hydrateMessageListState(
-      { state: undefined, getInitData: () => fallbackSnapshot.context?.input, mastra: this.#mastra },
+      { getInitData: () => fallbackSnapshot.context?.input, mastra: this.#mastra },
       latest as Parameters<typeof hydrateMessageListState>[1],
     );
   }
@@ -1654,7 +1679,7 @@ export class DurableAgent<
       // The persisted input keeps messages memory already stores as refs.
       messageList.deserialize(
         await hydrateMessageListState(
-          { state: undefined, getInitData: () => workflowInput, mastra: this.#mastra },
+          { getInitData: () => workflowInput, mastra: this.#mastra },
           workflowInput.messageListState,
         ),
       );
@@ -2386,6 +2411,7 @@ export class DurableAgent<
       name: this.name,
       maxSteps: this.#maxSteps,
       shouldPersistSnapshot: this.userShouldPersistSnapshot,
+      storageVersion: this.#storageVersion,
     });
 
     // A transient version fork must not take over the singleton's channel ingress.
@@ -2438,17 +2464,27 @@ export class DurableAgent<
     return 'default';
   }
 
-  /**
-   * Whether new runs of this agent's loop are stored as workflow storage
-   * version 2 where the engine and store support it (see the workflow's
-   * `autoStorageVersion` option). A resumed run stays in its stored version.
-   * Off until crash recovery and resume claims are tested on version 2: the
-   * restart harness and resume-claim-loser.test.ts still store runs in v1.
-   * EventedAgent overrides this to `false`.
-   * @internal
-   */
+  /** Whether new runs opt into journal storage. @internal */
   protected get storesRunsInJournal(): boolean {
-    return false;
+    return this.#storageVersion === 2;
+  }
+
+  /**
+   * Warns once when `storageVersion: 2` is set but the registered store can't
+   * store version 2 runs. The loop workflow's `autoStorageVersion` then stores
+   * new runs as version 1. An agent with no registered store isn't warned.
+   */
+  #warnIfStorageVersionUnsupported(): void {
+    if (this.#storageVersion !== 2) return;
+    // Read `stores` directly, as resolveWorkflowEngine() does: getWorkflow() is synchronous.
+    const storage = this.#mastra?.getStorage();
+    const workflowsStore = storage?.stores?.workflows;
+    if (workflowsStore && !workflowsStore.supportsRunJournal()) {
+      this.guardrailLogger?.warn(
+        `DurableAgent '${this.id}' sets storageVersion: 2, which ${storage?.name ?? 'the configured'} storage ` +
+          `doesn't support yet; storing new runs as version 1.`,
+      );
+    }
   }
 
   /**
@@ -5741,13 +5777,27 @@ export class DurableAgent<
     let cleanupRequested = false;
     let streamCleanup: (() => void) | undefined;
 
+    const localEntry = this.#runRegistry.get(runId);
+    const observedEntry = localEntry ?? getRunRegistryEntry(runId, this.#mastra);
+    const observedFence = observedEntry?.executionFence;
     const runCleanup = createRunCleanup({
-      scheduleTimer: cleanup => this.__getStreamBus().scheduleCleanup(cleanup),
+      scheduleTimer: cleanup =>
+        observedFence
+          ? this.#scheduleReaderCleanup(observedFence, cleanup)
+          : this.__getStreamBus().scheduleCleanup(cleanup),
       release: () => {
         streamCleanup?.();
+        if (
+          observedFence &&
+          (this.#unverifiedReaderFences.has(observedFence) ||
+            !observedFence.ownsRunTopics() ||
+            getRunRegistryEntry(runId, this.#mastra) !== observedEntry)
+        ) {
+          return;
+        }
         this.#runRegistry.cleanup(runId);
         deleteRunRegistryEntry(runId, this.#mastra);
-        this.#clearPubsubTopic(runId);
+        this.#clearPubsubTopic(runId, observedEntry);
       },
     });
     const performCleanup = runCleanup.run;
@@ -5763,8 +5813,6 @@ export class DurableAgent<
       }
     };
 
-    const localEntry = this.#runRegistry.get(runId);
-    const observedEntry = localEntry ?? getRunRegistryEntry(runId, this.#mastra);
     const observedAgentSpan = observedEntry?.resumeAgentSpan ?? observedEntry?.agentSpan;
     let structuredOutput = observedEntry?.structuredOutput;
     let outputProcessors = observedEntry?.outputProcessors;
@@ -5868,7 +5916,7 @@ export class DurableAgent<
         const storedState = workflowInput.messageListState ?? (snapshot ? latestMessageListState(snapshot) : undefined);
         if (storedState) {
           const initialState = await hydrateMessageListState(
-            { state: undefined, getInitData: () => workflowInput!, mastra: this.#mastra },
+            { getInitData: () => workflowInput!, mastra: this.#mastra },
             storedState,
           );
           messageList.deserialize(initialState);
@@ -6125,13 +6173,12 @@ export class DurableAgent<
    * which reschedules deletion on that run's terminal end.
    */
   #clearPubsubTopic(runId: string, entry = getRunRegistryEntry(runId, this.#mastra)): void {
-    const publisher = getExecutionStreamPublisher({
+    const publisher = getExecutionStreamOwner({
       runId,
       agentId: this.id,
       mastra: this.#mastra,
       agent: this,
       entry,
-      role: 'lifecycle',
     });
     if (publisher) void publisher.cleanup();
     else void this.pubsub.clearTopic(AGENT_STREAM_TOPIC(runId));
@@ -6163,6 +6210,7 @@ export class DurableAgent<
    * getAgentById in execution steps).
    */
   getWorkflow(): ReturnType<typeof createDurableAgenticWorkflow> {
+    if (!this.executionEngine.workflow) this.#warnIfStorageVersionUnsupported();
     return (
       this.executionEngine.workflow ??
       this.executionEngine.getWorkflow({

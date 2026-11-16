@@ -72,7 +72,7 @@ To make a custom phase terminal or seat an agent in it, change its `kind`/`role`
 
 Use the custom-board execution example in the Factory README as the configuration pattern. Board and phase identifiers are case-sensitive, 1–128 letters, digits, underscores, or hyphens, beginning with a letter or digit, without surrounding whitespace. Lifecycle, tool-result, and integration decisions may target installed custom phases. Validate membership on the target board, never against a union of installed phase names.
 
-A `transition` decision stays on the item's assigned board. An `upsertLinkedWorkItem` decision may target another installed board; materialization enters that board's declared initial phase before the requested destination. Neither decision can reassign an existing card. Targets are checked before acceptance and before uncommitted deferred effects execute. Preserve committed replay and its original `configVersion` even if the installed configuration changes.
+A `transition` decision stays on the item's assigned board. An `upsertLinkedWorkItem` decision may target another installed board; materialization enters that board's declared initial phase before the requested destination. Neither decision can reassign an existing card. Targets are checked before acceptance and before uncommitted deferred effects execute. Committed replay returns its recorded result even if the installed configuration changes.
 
 Working roles identify bindings on the shared Code Agent, not separately configured agents. There is no per-role agent registration option. Declare `invokeSkill` decisions with the working role and a board-owned prompt (or an available skill); do not invent an `agents` configuration. For automatic session preparation, verify the deployment's GitHub integration, project connection and linked repository, sandbox, organization model credentials, and that the phase starts on its own (`autoStart`, optionally `autoStartWhen`); there is no project setting. Enter a working phase through the public transition route as an authorized human when approval is required.
 
@@ -96,7 +96,7 @@ Before changing a built-in handler:
 
 ## Version changes
 
-Set an explicit, deployment-owned `configVersion` on `MastraFactory`. Change it whenever rule behavior changes. It labels persisted evaluations and audit records (stored in the `rule_set_version` column); it must not be used as event identity or added to ingress deduplication keys.
+Set an explicit, deployment-owned `configVersion` on `MastraFactory`. Change it whenever rule behavior changes. It is recorded in transition audit event metadata and the session kickoff header; it must not be used as event identity or added to ingress deduplication keys.
 
 ## Safety rules
 

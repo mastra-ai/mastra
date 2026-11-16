@@ -51,7 +51,10 @@ function stubSessionDetails(updatedAt: string, { includeSessionTitles = true, sl
   );
 }
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
 function mockMobileViewport() {
   vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
@@ -121,7 +124,9 @@ describe('Workspace session hover details', () => {
       expect(workRow).not.toHaveAttribute('title');
     });
 
-    it('tells the session story from the stage history and the audit trail', async () => {
+    it('tells the session story from the stage history and the audit trail, timing each stage as long as it lasted', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-09-10T12:00:00.000Z'));
       const { user, workRow } = await setupSessionRows();
 
       await user.hover(workRow);
@@ -130,7 +135,7 @@ describe('Workspace session hover details', () => {
       expect(await within(card).findByText('Taken over from user-grace')).toBeInTheDocument();
       expect(
         within(card).getByRole('img', {
-          name: 'Session timeline. Triage 1h, Building 3h. 1 agent run. user-grace moved it to Building. Ada Lovelace took over',
+          name: 'Session timeline. Triage 3h, Building 3h. 1 agent run. user-grace moved it to Building. Ada Lovelace took over',
         }),
       ).toBeInTheDocument();
     });

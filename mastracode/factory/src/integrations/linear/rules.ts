@@ -12,6 +12,7 @@ import {
 import type { BoardRegistry } from '../../boards/index.js';
 import { toBoardSource } from '../../boards/project-boards.js';
 import type { ProjectBoardSource } from '../../boards/project-boards.js';
+import { recordIntakeEvent } from '../../metrics/intake.js';
 import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type { FactoryLinearRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
@@ -97,6 +98,17 @@ export class LinearRules {
   }
 
   async ingest(input: LinearRulesIngress): Promise<{ status: IngressStatus; ingested: number }> {
+    try {
+      const result = await this.#ingest(input);
+      recordIntakeEvent('linear', result.status);
+      return result;
+    } catch (error) {
+      recordIntakeEvent('linear', 'error');
+      throw error;
+    }
+  }
+
+  async #ingest(input: LinearRulesIngress): Promise<{ status: IngressStatus; ingested: number }> {
     const project = await this.options.projects.get({ orgId: input.orgId, id: input.factoryProjectId });
     if (!project) return { status: 'missing', ingested: 0 };
     await toBoardSource(this.options.boards).load(input);
@@ -230,8 +242,7 @@ export class LinearRules {
       orgId: input.orgId,
       factoryProjectId: input.factoryProjectId,
       workItemId: relatedItem?.id ?? null,
-      ingress: { identity: ingressId, triggerType: 'linear.issueObserved' },
-      configVersion: this.options.configVersion,
+      ingress: { identity: ingressId },
       expectedRevision: relatedItem?.revision ?? null,
       actor,
       outcome,

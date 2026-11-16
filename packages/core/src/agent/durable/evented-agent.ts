@@ -111,15 +111,6 @@ export class EventedAgent<
     return new EventedExecutionEngine(this.id, mastra);
   }
 
-  /**
-   * The evented engine stores runs only as version 1, and a hostless
-   * EventedAgent that falls back to the default engine stays on version 1 too.
-   * @internal
-   */
-  protected override get storesRunsInJournal(): boolean {
-    return false;
-  }
-
   // The evented engine may resolve before the suspended snapshot lands, so
   // closeOnSuspend keeps closing on the SUSPENDED event.
   protected override get suspendPersistedOnReturn(): boolean {

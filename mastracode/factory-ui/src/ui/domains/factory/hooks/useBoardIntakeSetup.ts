@@ -102,11 +102,16 @@ export function useBoardIntakeSetup({
     bindingsPending ||
     intakeRoutesPending;
 
-  // Routes that failed to load leave the board unable to tell whether anything files here.
-  const routesFailure =
-    readsIntakeRoutes && intakeRoutesQuery.isError
-      ? { message: intakeRoutesQuery.error.message, retry: () => void intakeRoutesQuery.refetch() }
-      : undefined;
+  // Failed bindings or routes leave the board unable to tell whether anything files here.
+  const failedRead =
+    providerEligible && bindingsQuery.isError
+      ? bindingsQuery
+      : readsIntakeRoutes && intakeRoutesQuery.isError
+        ? intakeRoutesQuery
+        : undefined;
+  const failure = failedRead?.error
+    ? { message: failedRead.error.message, retry: () => void failedRead.refetch() }
+    : undefined;
 
-  return { fed, unrouted, routesFailure, isPending: configQuery.isPending || discoveringSources };
+  return { fed, unrouted, failure, isPending: configQuery.isPending || discoveringSources };
 }

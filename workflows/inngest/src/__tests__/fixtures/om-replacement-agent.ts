@@ -4,6 +4,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
 import { DefaultStorage } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
+import { PostgresStore } from '@mastra/pg';
 import { Inngest } from 'inngest';
 import { z } from 'zod';
 
@@ -24,7 +25,11 @@ export function buildOmReplacementAgent({
   observationalMemory: boolean;
 }) {
   const inngest = new Inngest({ id: `om-replacement-${agentId}`, baseUrl: `http://localhost:${inngestPort}` });
-  const storage = new DefaultStorage({ id: `om-replacement-${agentId}`, url: dbUrl });
+  // Pick the backend from the connection URL so the same fixture can run the replacement-worker
+  // scenario against libsql (`file:`) or native PostgreSQL (`postgres://`). See #28059.
+  const storage = dbUrl.startsWith('postgres')
+    ? new PostgresStore({ id: `om-replacement-${agentId}`, connectionString: dbUrl })
+    : new DefaultStorage({ id: `om-replacement-${agentId}`, url: dbUrl });
   const provider = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${mockUrl}/v1` });
   const memory = new Memory({
     storage,
@@ -69,5 +74,5 @@ export function buildOmReplacementAgent({
     agents: { [agentId]: durableAgent, [specialist.id]: specialist },
     workflows: { [workflow.id]: workflow },
   });
-  return { inngest, mastra, durableAgent, memory };
+  return { inngest, mastra, durableAgent, memory, storage };
 }

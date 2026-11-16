@@ -92,7 +92,7 @@ async function setup(
     await workItems.commitRuleEvaluation({
       ...scope,
       workItemId,
-      ingress: { identity: `delivery-${deliveries}`, triggerType: 'issues.opened' },
+      ingress: { identity: `delivery-${deliveries}` },
       configVersion,
       expectedRevision: workItemId
         ? ((await workItems.get({ orgId: 'org-1', id: workItemId }))?.revision ?? null)
@@ -141,7 +141,7 @@ async function setup(
     const committed = await workItems.commitRuleEvaluation({
       ...scope,
       workItemId: cardId,
-      ingress: { identity, triggerType: 'github.issueClosed' },
+      ingress: { identity },
       configVersion,
       expectedRevision: card!.revision,
       actor: { type: 'system', id: 'rules' },
@@ -163,8 +163,7 @@ async function setup(
       expectedRevision: card!.revision,
       destinationStage: stage,
       actorId: 'user-1',
-      ingress: { identity: `put-${cardId}-${stage}`, triggerType: 'human', transitionId: `put-${cardId}-${stage}` },
-      configVersion,
+      ingress: { identity: `put-${cardId}-${stage}`, transitionId: `put-${cardId}-${stage}` },
       causalChain: [],
       evaluation: { outcome: 'accepted', decisions: [] },
     });

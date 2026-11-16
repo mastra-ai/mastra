@@ -1,4 +1,3 @@
-import { createServer } from 'node:net';
 import { createOpenAI } from '@ai-sdk/openai';
 import { LLMock } from '@copilotkit/aimock';
 import { node } from '@elysiajs/node';
@@ -6,6 +5,7 @@ import { createDurableDisconnectTestSuite } from '@mastra/server-adapters-test-s
 import { Elysia } from 'elysia';
 import { afterAll, beforeAll } from 'vitest';
 import { MastraServer } from '../index';
+import { listenWithNodeAdapter } from './helpers';
 
 let llm: LLMock;
 beforeAll(async () => {
@@ -16,18 +16,7 @@ afterAll(async () => {
   await llm.stop();
 });
 
-// @elysiajs/node reports port 0 back instead of the bound port, so pick a free port up front.
-async function getFreePort(): Promise<number> {
-  const probe = createServer();
-  await new Promise<void>(resolve => probe.listen(0, '127.0.0.1', () => resolve()));
-  const address = probe.address();
-  await new Promise(resolve => probe.close(resolve));
-  return typeof address === 'object' && address ? address.port : 0;
-}
-
 type NodeResponse = { writableFinished: boolean; on(event: 'close', listener: () => void): unknown };
-// `raw` is the srvx server behind @elysiajs/node; its `close(true)` also drops open connections.
-type ElysiaNodeServer = { raw: { close(closeActiveConnections?: boolean): Promise<void> } };
 
 createDurableDisconnectTestSuite({
   setupModel: async () => ({
@@ -54,14 +43,6 @@ createDurableDisconnectTestSuite({
       });
     });
     await new MastraServer({ app, mastra, prefix: '/api' }).init();
-    const port = await getFreePort();
-    const server = await new Promise<ElysiaNodeServer>(resolve =>
-      app.listen({ port, hostname: '127.0.0.1' }, started => resolve(started as unknown as ElysiaNodeServer)),
-    );
-
-    return {
-      baseUrl: `http://127.0.0.1:${port}`,
-      close: () => server.raw.close(true),
-    };
+    return listenWithNodeAdapter(app);
   },
 });
