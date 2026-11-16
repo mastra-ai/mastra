@@ -741,6 +741,52 @@ function adaptFirefliesGetTranscript(action: ExtractedAction): ExtractedAction {
 }
 
 /**
+ * PostHog's query API returns `types` as `[columnName, clickhouseType]` pairs
+ * (ClickHouse `with_column_types`, and `list[tuple[str, str]]` on its direct
+ * SQL adapters), while the template declares `string[]`, so every
+ * `posthog_run_query` call failed validation (#30528). Accept the pairs in the
+ * provider response and the tool output. Drop this once the upstream template
+ * does.
+ */
+function adaptPosthogRunQuery(action: ExtractedAction): ExtractedAction {
+  const stringTypes = /types: z\.array\(z\.string\(\)\)/;
+  const pairTypes = 'types: z.array(z.tuple([z.string(), z.string()]))';
+  // Keyed by the declaration each rewrite targets; each must match exactly one
+  // statement so a renamed declaration fails generation instead of shipping
+  // the string schema.
+  const statementRewrites: Readonly<Record<string, (statement: string) => string>> = {
+    [action.outputSchemaName]: statement =>
+      replaceOnce(
+        replaceOnce(statement, stringTypes, pairTypes, action, 'output types schema'),
+        /Column types for the result rows\./,
+        'Column types as [columnName, clickhouseType] pairs, one per column.',
+        action,
+        'output types description',
+      ),
+    ProviderResponseSchema: statement =>
+      replaceOnce(statement, stringTypes, pairTypes, action, 'provider types schema'),
+  };
+
+  const rewritten = new Set<string>();
+  const moduleStatements = action.moduleStatements.map(statement => {
+    const name = /^(?:export )?const (\w+)\b/.exec(statement)?.[1];
+    const rewrite = name !== undefined && Object.hasOwn(statementRewrites, name) ? statementRewrites[name] : undefined;
+    if (name === undefined || !rewrite) return statement;
+    rewritten.add(name);
+    return rewrite(statement);
+  });
+  for (const name of Object.keys(statementRewrites)) {
+    if (!rewritten.has(name)) {
+      throw new Error(
+        `Unable to adapt ${action.candidate.providerId}/${action.candidate.actionSlug} (${name} declaration); the upstream template shape changed.`,
+      );
+    }
+  }
+
+  return { ...action, moduleStatements };
+}
+
+/**
  * OpenAI retired gpt-image-1 on 2026-10-23, so a call that omits `model` fails
  * against the upstream template's default. Default to OpenAI's recommended
  * replacement instead. Drop this once the upstream template does.
@@ -775,6 +821,9 @@ function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction 
   }
   if (action.candidate.providerId === 'fireflies' && action.candidate.actionSlug === 'get-transcript') {
     return adaptFirefliesGetTranscript(action);
+  }
+  if (action.candidate.providerId === 'posthog' && action.candidate.actionSlug === 'run-query') {
+    return adaptPosthogRunQuery(action);
   }
   if (DELEGATED_OFFICE_PROVIDER_IDS.has(action.candidate.localId) && action.candidate.actionSlug === 'get-user-drive') {
     return adaptDelegatedGetUserDrive(action);

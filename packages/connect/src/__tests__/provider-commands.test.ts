@@ -167,6 +167,55 @@ const action = createAction({
 export default action;
 `;
 
+// The parts of the posthog run-query template (pinned in templates-config.ts)
+// that the #30528 generator override rewrites.
+const posthogRunQueryTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+import type { ProxyConfiguration } from 'nango';
+
+const InputSchema = z.object({
+    project_id: z.number().describe('PostHog project ID. Example: 309484'),
+    query: z.string().describe('HogQL query to execute.')
+});
+
+const OutputSchema = z.object({
+    results: z.array(z.array(z.unknown())).describe('Result rows. Each row is an array of column values.'),
+    columns: z.array(z.string()).nullish().describe('Column names for the result rows.'),
+    types: z.array(z.string()).nullish().describe('Column types for the result rows.')
+});
+
+const ProviderResponseSchema = z
+    .object({
+        results: z.array(z.array(z.unknown())),
+        columns: z.array(z.string()).nullish(),
+        types: z.array(z.string()).nullish()
+    })
+    .passthrough();
+
+const action = createAction({
+    description: 'Execute a HogQL (SQL) query against PostHog and return the result rows.',
+    version: '1.0.0',
+    input: InputSchema,
+    output: OutputSchema,
+    scopes: [],
+    exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+        const config: ProxyConfiguration = {
+            endpoint: \`/api/projects/\${encodeURIComponent(input.project_id)}/query/\`,
+            data: { query: { kind: 'HogQLQuery', query: input.query } }
+        };
+        const response = await nango.post(config);
+        const providerResponse = ProviderResponseSchema.parse(response.data);
+        return {
+            results: providerResponse.results,
+            columns: providerResponse.columns,
+            types: providerResponse.types
+        };
+    }
+});
+
+export default action;
+`;
+
 const proxyConfigurationTemplate = `import { z } from 'zod';
 import { createAction } from 'nango';
 import type { ProxyConfiguration } from 'nango';
@@ -565,6 +614,10 @@ describe('maintainer provider commands', () => {
     mkdirSync(firefliesActionDir, { recursive: true });
     writeFileSync(resolve(firefliesActionDir, 'get-transcript.ts'), firefliesGetTranscriptTemplate);
 
+    const posthogActionDir = resolve(integrationsDir, 'posthog', 'actions');
+    mkdirSync(posthogActionDir, { recursive: true });
+    writeFileSync(resolve(posthogActionDir, 'run-query.ts'), posthogRunQueryTemplate);
+
     execFileSync('git', ['init', '-q'], { cwd: resolve(packageRoot, '.templates') });
     execFileSync('git', ['add', '.'], { cwd: resolve(packageRoot, '.templates') });
     execFileSync(
@@ -918,6 +971,77 @@ export default action;
       }
     },
   );
+
+  // #30528: PostHog sends `types` as [columnName, clickhouseType] pairs; the
+  // template declares string[], so the generator widens it to pairs.
+  it('regenerates posthog run-query so column types are accepted as name and type pairs', async () => {
+    await addProvider({ providerId: 'posthog', localId: 'posthog', yes: true, expectedTemplateSha: templateSha });
+
+    const generatedTool = readFileSync(resolve(packageRoot, 'src/providers/posthog/tools/run-query.ts'), 'utf8');
+    expect(generatedTool).not.toContain('types: z.array(z.string())');
+    expect(generatedTool).toMatch(
+      /export const runQueryOutputSchema = z\.object\(\{[^;]*types: z\s*\.array\(z\.tuple\(\[z\.string\(\), z\.string\(\)\]\)\)\s*\.nullish\(\)\s*\.describe\(\s*["']Column types as \[columnName, clickhouseType\] pairs, one per column\.["']/,
+    );
+    expect(generatedTool).toMatch(
+      /const ProviderResponseSchema = z\s*\.object\(\{[^;]*types: z\s*\.array\(z\.tuple\(\[z\.string\(\), z\.string\(\)\]\)\)\s*\.nullish\(\)/,
+    );
+  });
+
+  // Each case changes one piece of the template the override rewrites; any of
+  // them must stop generation rather than ship a tool that still rejects every
+  // query result.
+  it.each([
+    {
+      what: 'ProviderResponseSchema declaration',
+      drift: (template: string) => template.replaceAll('ProviderResponseSchema', 'QueryResponseSchema'),
+    },
+    {
+      what: 'provider types schema',
+      drift: (template: string) =>
+        template.replace(
+          'types: z.array(z.string()).nullish()\n    })',
+          'types: z.array(z.array(z.string())).nullish()\n    })',
+        ),
+    },
+    {
+      what: 'output types schema',
+      drift: (template: string) =>
+        template.replace(
+          "types: z.array(z.string()).nullish().describe('Column types for the result rows.')",
+          "types: z.array(z.unknown()).nullish().describe('Column types for the result rows.')",
+        ),
+    },
+    {
+      what: 'output types description',
+      drift: (template: string) =>
+        template.replace('Column types for the result rows.', 'ClickHouse types for each column.'),
+    },
+  ])('refuses to regenerate posthog run-query when the template drifts at the $what', async ({ what, drift }) => {
+    const templatesDir = resolve(packageRoot, '.templates');
+    const templatePath = resolve(templatesDir, 'integrations', 'posthog', 'actions', 'run-query.ts');
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.name=Mastra Tests', '-c', 'user.email=tests@mastra.ai', ...args], {
+        cwd: templatesDir,
+        encoding: 'utf8',
+      }).trim();
+    const drifted = drift(posthogRunQueryTemplate);
+    expect(drifted).not.toBe(posthogRunQueryTemplate);
+    writeFileSync(templatePath, drifted);
+    git('commit', '-qam', `drift posthog template: ${what}`);
+    try {
+      await expect(
+        addProvider({
+          providerId: 'posthog',
+          localId: 'posthog',
+          yes: true,
+          expectedTemplateSha: git('rev-parse', 'HEAD'),
+        }),
+      ).rejects.toThrow(`Unable to adapt posthog/run-query (${what})`);
+      expect(existsSync(resolve(packageRoot, 'src/providers/posthog'))).toBe(false);
+    } finally {
+      git('reset', '-q', '--hard', templateSha);
+    }
+  });
 
   it('lists available providers and searches by installed alias', async () => {
     await addProvider({ providerId: 'first-provider', localId: 'custom', yes: true, expectedTemplateSha: templateSha });

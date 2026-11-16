@@ -63,7 +63,7 @@
     "tools/list-property-definitions.ts": "74ba0dea97b5d590234181cb5a835ef3701ccd99a7d31a4e8520219d052c04d0",
     "tools/list-session-recordings.ts": "c41ae6f137962ecc27b9171c528a06b4a363b8b4f618e4903626dfe058be6361",
     "tools/list-surveys.ts": "d6194656334d12a6abf0337368ee0657773745a2f06bc78709914256b234400c",
-    "tools/run-query.ts": "c1957437e66352b83150e3640bcdbb11bcefd3723270199125091e57f1984769",
+    "tools/run-query.ts": "9770d7a68715fb6ba99a020a72b3b0395b78b8644656a4784622fd13b760b12b",
     "tools/update-action.ts": "1a792afa1ffb788d114173f81ade31b73b4174585444dff05ba62c1b4ed1b797",
     "tools/update-alert.ts": "fdb94a3077795479a716b00a31e3bd76c50617fe07be0feab6947cc9bcfefd21",
     "tools/update-annotation.ts": "7d8bb968b8c725eed90806c42a96a7a06c3f77d365c629ea3ba7d78f007a10ab",
