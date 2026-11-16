@@ -526,6 +526,10 @@ describe('ToolSearchProcessor', () => {
       expect(loadResult.success).toBe(true);
       expect(loadResult.toolName).toBe('weather');
       expect(loadResult.message).toContain('loaded successfully');
+      // Loaded tools are callable at the next step of the same run, so the message
+      // must not tell the model to wait for a "next turn" (see issue #30217).
+      expect(loadResult.message).toContain('You can call it now');
+      expect(loadResult.message).not.toContain('next turn');
     });
 
     it('should return error for non-existent tool', async () => {
@@ -754,6 +758,9 @@ describe('ToolSearchProcessor', () => {
       expect(loadResult.loaded).toEqual(['calendar']);
       expect(loadResult.alreadyLoaded).toEqual(['weather']);
       expect(loadResult.loadedCount).toBe(1);
+      // Freshly loaded tools are callable immediately — the message must not say "next turn".
+      expect(loadResult.message).toContain('call them now');
+      expect(loadResult.message).not.toContain('next turn');
     });
 
     it('should return success=true when all requested tools are already loaded', async () => {
@@ -1217,7 +1224,7 @@ describe('ToolSearchProcessor', () => {
       const loadResult = await result1.tools?.load_tool!.execute?.({ toolName: 'weather_forecast' }, undefined);
       expect(loadResult.success).toBe(true);
 
-      // Step 3: Tool is available on next turn
+      // Step 3: The loaded tool is available in the same run, at the next step.
       const args2 = createMockArgs(threadId);
       const result2 = await processor.processInputStep(args2);
       expect(result2.tools?.weather_forecast).toBeDefined();
@@ -1632,6 +1639,9 @@ describe('ToolSearchProcessor', () => {
 
       expect(searchResult.results.length).toBeGreaterThan(0);
       expect(searchResult.message).toContain('loaded');
+      // The result must advertise immediate availability, not a future "next turn" (issue #30217).
+      expect(searchResult.message).toContain('Call them now');
+      expect(searchResult.message).not.toContain('next turn');
 
       // After searching, the matched tools should be active on the next step.
       const next = await processor.processInputStep(createMockArgs('thread-1'));
@@ -1724,6 +1734,44 @@ describe('ToolSearchProcessor', () => {
         const next = await processor.processInputStep(createMockArgs('thread-auto'));
         expect(next.tools?.weather_forecast).toBeDefined();
       }
+    });
+  });
+
+  describe('system instruction wording', () => {
+    async function collectSystemInstruction(processor: ToolSearchProcessor): Promise<string> {
+      const messageList = new MessageList({});
+      messageList.startRecording();
+      const args = createMockArgs('thread-instructions');
+      args.messageList = messageList;
+      await processor.processInputStep(args);
+      return messageList
+        .stopRecording()
+        .filter(e => e.type === 'addSystem')
+        .map(e => (typeof e.message?.content === 'string' ? e.message.content : ''))
+        .join('\n');
+    }
+
+    it('tells the model in autoLoad mode to call the matched tools directly, with no "next turn" delay', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: { weather: createMockTool('weather', 'Get weather') },
+        search: { autoLoad: true },
+      });
+
+      const instruction = await collectSystemInstruction(processor);
+
+      expect(instruction).toContain('call the tool directly');
+      expect(instruction).not.toContain('next turn');
+    });
+
+    it('never promises a "next turn" delay in default mode either', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: { weather: createMockTool('weather', 'Get weather') },
+      });
+
+      const instruction = await collectSystemInstruction(processor);
+
+      expect(instruction).toContain('search_tools');
+      expect(instruction).not.toContain('next turn');
     });
   });
 
