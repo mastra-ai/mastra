@@ -725,6 +725,30 @@ export const SESSION_ROW_STATUSES = ['waiting', 'working', 'initializing', 'idle
 export const SESSION_ROW_SORTS = ['activity', 'updated', 'created'] as const;
 export const SESSION_ROW_GROUP_BYS = ['board', 'status', 'owner', 'none'] as const;
 export const SESSION_ROW_UPDATED_WITHIN = ['24h', '7d', '30d'] as const;
+export const SESSION_ROW_ALL_OWNERS = 'all';
+export const SESSION_ROW_MY_SESSIONS = 'mine';
+const SESSION_ROW_OWNER_PREFIX = 'owner:';
+
+export function sessionRowOwnerKey(userId: string): string {
+  return `${SESSION_ROW_OWNER_PREFIX}${userId}`;
+}
+
+export const sessionRowGroupKeys = {
+  board: (boardId: string) => `board:${boardId}`,
+  user: 'user',
+  slack: 'slack',
+  status: (status: (typeof SESSION_ROW_STATUSES)[number]) => `status:${status}`,
+  owner: sessionRowOwnerKey,
+  all: 'all',
+} as const;
+
+export const sessionRowOwnerSchema = z.union([
+  z.enum([SESSION_ROW_ALL_OWNERS, SESSION_ROW_MY_SESSIONS]),
+  z
+    .string()
+    .regex(new RegExp(`^${SESSION_ROW_OWNER_PREFIX}.+$`))
+    .max(512),
+]);
 
 /** `<group key>:<count>`: how many rows of one group to list. Group keys hold colons, so the count follows the last. */
 const sessionRowWindowSchema = z
@@ -750,15 +774,7 @@ export const sessionRowsQuerySchema = z.object({
   sort: z.enum(SESSION_ROW_SORTS).default('activity'),
   groupBy: z.enum(SESSION_ROW_GROUP_BYS).default('none'),
   /** `all`, `mine`, or `owner:<user id>`. */
-  owner: z
-    .union([
-      z.enum(['all', 'mine']),
-      z
-        .string()
-        .regex(/^owner:.+$/)
-        .max(512),
-    ])
-    .default('all'),
+  owner: sessionRowOwnerSchema.default(SESSION_ROW_ALL_OWNERS),
   status: z.enum(SESSION_ROW_STATUSES).optional(),
   updated: z.enum(SESSION_ROW_UPDATED_WITHIN).optional(),
   /** `true` lists a card's other sessions under its row. */
