@@ -15,6 +15,7 @@ import type { ReactElement } from 'react';
 import { useParams } from 'react-router';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { boardCardState } from '../boardCardState';
+import type { BoardCardOwner } from '../boardCardState';
 import { setDragPayload } from '../boardDrag';
 import type { DragPayload } from '../boardDrag';
 import { reworkReason } from '../reworkReason';
@@ -68,6 +69,7 @@ export function WorkItemCard({
   onDismissProposal,
   onRetryDecision,
   sessionStatus,
+  ownerCurrent = true,
   onCreateSession,
   onMove,
   onRemove,
@@ -100,6 +102,11 @@ export function WorkItemCard({
   onRetryDecision: (decisionId: string) => void;
   /** Live status of the card's bound sessions, resolved once for the whole board. */
   sessionStatus?: SessionRowStatus;
+  /**
+   * Whether the board read everything that says who holds the card. When it has not, the card
+   * refuses no move up front and the server, which holds the rule too, decides.
+   */
+  ownerCurrent?: boolean;
   /** Fallback when the card offers no lane: open a session on it (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
   onMove: (toStage: string) => void;
@@ -145,9 +152,11 @@ export function WorkItemCard({
   const { status, owner, wick } = state;
   const lockedByYou = owner.kind === 'you';
   const busy = lockedByYou || owner.kind === 'automation';
+  // Your own move in flight is known here for certain; anyone else's hold only once the board read it.
+  const movesOwner: BoardCardOwner = ownerCurrent || lockedByYou ? owner : { kind: 'free' };
   const dragPayload: DragPayload | undefined = lockedByYou
     ? undefined
-    : { kind: 'work-item', id: item.id, fromStage: columnStage, ownerKind: owner.kind };
+    : { kind: 'work-item', id: item.id, fromStage: columnStage, ownerKind: movesOwner.kind };
   const retryDecisionId = status.kind === 'error' ? status.retryDecisionId : undefined;
   const primaryAction = cardPrimaryAction({
     item,
@@ -170,7 +179,7 @@ export function WorkItemCard({
     proposal,
     proposedRunLabel,
     approvingDecisionId,
-    owner,
+    owner: movesOwner,
     onApproveProposal,
     onDismissProposal,
     onMove,
@@ -326,7 +335,7 @@ export function WorkItemCard({
                       aria-label={`Actions for ${item.title}`}
                       className={REVEAL_ON_CARD_HOVER}
                     >
-                      <IconDotGrid1x3Vertical size={13} aria-hidden />
+                      <IconDotGrid1x3Vertical aria-hidden />
                     </Button>
                   }
                 />

@@ -109,7 +109,7 @@ const SidebarLink = ({
       >
         {done ? (
           <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-success-subtle text-success-subtle-foreground">
-            <IconCheckmark2Medium className="size-3.5" />
+            <IconCheckmark2Medium className="size-icon-sm" />
           </div>
         ) : (
           <Txt

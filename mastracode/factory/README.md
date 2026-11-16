@@ -471,7 +471,7 @@ Unknown integrations, unknown event names, and handler values other than a funct
 
 ### Config version
 
-`configVersion` is an operator-maintained deployment label stamped onto transition audit rows, deferred decisions, reconciler audit, and the session kickoff header (`Config: …`). Nothing branches on it; it exists so an audit row can be traced back to the deployment that produced it. It defaults to `factory-config-v1` and must be a non-empty bounded string. The storage column keeps its shipped name, `rule_set_version`.
+`configVersion` is an operator-maintained deployment label. It is recorded in the metadata of transition audit events and in the session kickoff header (`Config: …`), and rule handlers receive it in their context. Nothing branches on it; it exists so an audit event can be traced back to the deployment that produced it. It defaults to `factory-config-v1` and must be a non-empty bounded string.
 
 ```typescript
 new MastraFactory({ storage, configVersion: 'deployment-v2' });
@@ -727,11 +727,21 @@ const factory = new MastraFactory({ storage, dispatcher: { maxInFlight: 25 } });
 
 The cap counts per process, not per deployment: three replicas with the default run up to 30 at once.
 
+A reply a person writes on a card's GitHub pull request or issue doesn't wait behind automated runs. Each process keeps 2 more slots for these replies, claims them ahead of automated runs, and lets them borrow a free automated slot once the reserve is full. Change the reserve with `dispatcher.maxInteractiveInFlight`, or `MASTRACODE_DISPATCH_MAX_INTERACTIVE_IN_FLIGHT`; `0` keeps no reserve, though replies are still claimed first:
+
+```ts
+const factory = new MastraFactory({ storage, dispatcher: { maxInFlight: 10, maxInteractiveInFlight: 2 } });
+```
+
+A run counts as a reply only when GitHub reports its sender as a user (not a bot), the sender is a trusted collaborator, Factory didn't write it, it would wake the session, and no rule passed it along from another event. Everything else, including GitLab, Linear, Jira and incident.io activity, waits as an automated run.
+
+The caps bound how many slots the dispatcher holds, not how many agents run. With the defaults a process holds up to 12 slots. Pull request activity (`signalActivity`) frees its slot once the session accepts it, so the run it wakes continues outside the cap. Messages you send from the Factory UI or Slack, and approval notices to a following session, go to the session directly and never wait for a slot.
+
 The board shows how many automated runs are waiting, and opens a list of them, oldest first. A waiting card reads `Queued (#3)`. Manual starts take the same slots and are claimed ahead of these runs, but are not listed. `GET /web/factory/projects/:id/run-queue` returns the same data:
 
-- `slots` — this server's `inUse` and `cap`, or `null` when it runs no dispatcher. Other replicas keep their own.
+- `slots` — this server's automated `inUse` and `cap`, with the reply reserve's `interactive.inUse` and `interactive.cap`, or `null` when it runs no dispatcher. A reply that borrowed an automated slot counts in `inUse`. Other replicas keep their own.
 - `running` and `claimed` — the project's automated runs a server holds a slot for, on any replica. A manual start holding a slot counts in `slots.inUse` but not here, so `running` can be lower than `inUse`.
-- `queuedCount` and `queued` — every automated run waiting for a slot, and the oldest 50 with their `position`, card, phase and the skill they will run. A retry still backing off is not waiting yet.
+- `queuedCount` and `queued` — every run waiting for a slot, and up to 50 of them, waiting replies first, then automated runs, each oldest first, with their `lane` (`interactive` for a person's reply, else `automated`), `position` within that lane, card, phase and the skill they will run. `queuedByLane` splits `queuedCount` by lane. A retry still backing off is not waiting yet.
 
 ### The `factory-work-item` signal
 
@@ -890,7 +900,7 @@ Use the host's normal `prepare()`, `new Mastra(...)`, and `finalize()` sequence.
 
 Create a card with `POST /web/factory/projects/:id/work-items`, passing `board: 'release'`, a title, and the GitHub issue's `externalSource`. The card starts in `backlog`. Then use `POST /web/factory/projects/:id/work-items/:workItemId/transition` with `board: 'release'`, `stage: 'preparing'`, the returned `expectedRevision`, a unique `requestId`, and a `cause`. Send these requests as an authorized user using the host's authentication. The move starts the preparer. Its bound tool advances to `build`; the publisher's completed check produces a deferred transition to `done`. Terminal entry revokes the binding and releases the sandbox. The Factory UI performs the same operations against installed boards (see below); verify the persisted card's board, phase, and deferred decision status either way.
 
-Tool-result and integration handlers may return `upsertLinkedWorkItem` targeting a different installed board. Linked cards enter that board's declared initial phase before moving to the requested phase. Existing cards cannot be reassigned to another board through either decision type. Targets are validated against their own installed board before acceptance and again before uncommitted deferred effects execute; a phase declared only on another board is not valid. Committed replay retains its recorded result and original `configVersion`.
+Tool-result and integration handlers may return `upsertLinkedWorkItem` targeting a different installed board. Linked cards enter that board's declared initial phase before moving to the requested phase. Existing cards cannot be reassigned to another board through either decision type. Targets are validated against their own installed board before acceptance and again before uncommitted deferred effects execute; a phase declared only on another board is not valid. Committed replay returns its recorded result, even if the installed configuration has changed since.
 
 Custom phase signals and persisted tool-result ingestion use the item's installed board. Bound tools re-resolve the live binding, retain revision and topology checks, and reject session reassignment. A custom role named `triage` does not inherit Work's classification requirements. Existing authorization, external-author safeguards, and board-owned policies still apply.
 
@@ -1156,7 +1166,7 @@ const overrides = { github: { issueCommentCreated: { onEvent: null } } };
 const github = new PlatformGithubIntegration({ rules: { issueCommentCreated: null } });
 ```
 
-Board definitions own lifecycle, topology, phase-semantics, and tool-result rules; nothing is configured globally. `MastraFactory({ configVersion })` supplies the deployment-owned label stamped on audit records and GitHub evaluations; it is not a hash of custom handler code, not ingress identity, and does not change delivery replay semantics. Update `configVersion` when changing handler behavior.
+Board definitions own lifecycle, topology, phase-semantics, and tool-result rules; nothing is configured globally. `MastraFactory({ configVersion })` supplies the deployment-owned label recorded on transition audit events and passed to GitHub rule handlers; it is not a hash of custom handler code, not ingress identity, and does not change delivery replay semantics. Update `configVersion` when changing handler behavior.
 
 Handlers receive the existing typed GitHub context and return one decision or `undefined`. External titles, bodies, and comments remain untrusted data after webhook authentication. Custom handlers must preserve any required actor-permission checks explicitly.
 
@@ -1301,7 +1311,7 @@ const linear = new PlatformLinearIntegration({ rules: { issueClosed: null } });
 
 Linear event handlers are configured exclusively on the integration. Fetched issues, platform polling, and issue reconciliation use that instance's handlers. Defaults create intake items for observed open issues and close linked non-terminal Work items as Done or Canceled; closed unlinked issues do not create new items. Custom handlers receive the existing typed Linear context and return one decision or `undefined`. Treat issue titles, descriptions, and other external content as untrusted data.
 
-`MastraFactory({ configVersion })` is the deployment-owned label stamped on Linear evaluations and audit records. Update it when handler behavior changes; it is neither ingress identity nor replay state.
+`MastraFactory({ configVersion })` is the deployment-owned label recorded on transition audit events and passed to Linear rule handlers. Update it when handler behavior changes; it is neither ingress identity nor replay state.
 
 ### GitHub review commands
 
@@ -1341,7 +1351,7 @@ Read tools and `factory_message_origin` are available on every turn. The other t
 
 `factory_switch_session_model` changes the model of a side, work item or review session you own in the same Factory, without recreating it. It refuses a model this server can't run. A running session switches right away; a stopped one uses the model on its next run.
 
-`factory_create_work_item` files the card as the caller where the project's [intake routes](#intake-routes) send it, or in the Work board's first phase when no route matches (a project without Work: its first board's), stores the description that its runs start from, and subscribes the session. Name the `repository` when the Factory links more than one: a run can't start on a card that doesn't say which. `factory_update_work_item` sets it afterwards, like choosing a repository on the card, and also edits the title, the description and the parent item. It can't pre-approve plans: a plan waits for a person unless the board's phase auto-approves it. Both refuse a repository the Factory doesn't link, and a card synced from an issue keeps the issue's repository. Stages, the board and role sessions aren't fields it edits; stages move with `factory_transition_work_item`. A session that moves a card follows it from then on, so it hears from the run the move starts. Subscriptions are stored per work item and session in the `factory_work_item_subscriptions` collection and are removed with the item, so any number of sessions can follow one item.
+`factory_create_work_item` files the card as the caller where the project's [intake routes](#intake-routes) send it, or in the Work board's first phase when no route matches (a project without Work: its first board's), stores the description that its runs start from, and subscribes the session. Name the `repository` when you know it. A run on a card that names none starts in the environment's first repository, determines from the card which repository it belongs to, and records it on the card with its first push or change request. `factory_update_work_item` sets it afterwards, like choosing a repository on the card, and also edits the title, the description and the parent item. It can't pre-approve plans: a plan waits for a person unless the board's phase auto-approves it. Both refuse a repository the Factory doesn't link, and a card synced from an issue keeps the issue's repository. Stages, the board and role sessions aren't fields it edits; stages move with `factory_transition_work_item`. A session that moves a card follows it from then on, so it hears from the run the move starts. Subscriptions are stored per work item and session in the `factory_work_item_subscriptions` collection and are removed with the item, so any number of sessions can follow one item.
 
 #### Messaging between sessions
 
@@ -1356,7 +1366,7 @@ How a message is delivered depends on its priority. `urgent` always delivers, ev
 `factory_start_session` starts another session for the caller and sends `prompt` as its first message. It has two modes:
 
 - **Side session** (no `workItem`): a standalone session with no work item, for a one-off job. It uses the same repository as the session that started it. Factory stores that session on the new session's row (`origin_session_id`, `origin_thread_id`) and copies the parent's visibility. It runs on the model of the session that started it, or on `model` when one is passed. That model has to be one the session's credentials can run; an unknown or unrunnable model is refused before anything is created. When the parent has no model set, the side session keeps the Factory's default worker model.
-- **Work-item role** (`workItem` and `role`): starts a role the item's board seats, the same way **Start** does in the Factory UI. The card does not move and no autonomy is armed. The tool refuses when the role already has a session, naming it so the agent can message it instead, and refuses an item linked to several repositories. The caller is subscribed to the item, and the run is recorded as `factory.run.started` with the caller as the person who started it.
+- **Work-item role** (`workItem` and `role`): starts a role the item's board seats, the same way **Start** does in the Factory UI. The card does not move and no autonomy is armed. The tool refuses when the role already has a session, naming it so the agent can message it instead. An item that names no repository among several starts in the environment's first repository, and the run determines from the card which one to work in. The caller is subscribed to the item, and the run is recorded as `factory.run.started` with the caller as the person who started it.
 
 A side session belongs to the caller and runs with the caller's credentials. A work-item role belongs to the caller only in a Factory on the `user` model scope. Where card work runs on the organization's keys (`factory` and `hybrid`), the role's session belongs to the Factory itself, as every phase session there does, whoever started or moved the card: the person is recorded as the one who started it, and their session follows the card so it hears when that run waits on someone and can approve or decline from there. Without an organization model key the start is refused with a message saying to add one. A work-item role keeps the Factory's default worker model. The first message runs with only the session's owner as its user, never the rest of the parent turn's context. The tool needs no approval but, like the other management tools, only appears on turns a signed-in person started.
 

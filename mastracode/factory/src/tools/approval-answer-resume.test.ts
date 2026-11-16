@@ -206,9 +206,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         orgId: ORG,
         connectionId: connection.id,
         repositoryId: repository.id,
-        createdByUserId: OWNER,
-        sandboxProvider: 'local',
-        sandboxWorkdir: '/sandbox/mastra',
       });
       // A phase nobody started is the Factory's own; one a person started is theirs.
       const owner = options?.ownedByFactory ? factoryPrincipalId(project.id) : OWNER;
@@ -433,6 +430,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         waitingOn,
         shipped,
         sourceControl,
+        workItems: seeded.workItems,
       };
     }
 
@@ -520,7 +518,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
     });
 
     it("tells a following session when a tool in the Factory's phase session waits for a person to allow it", async () => {
-      const { signals, phase, requesterSessionId } = await parkedPhaseSession({
+      const { signals, phase, project, requesterSessionId, workItems } = await parkedPhaseSession({
         ownedByFactory: true,
         movedFromOwnSession: true,
         parkedOn: 'release',
@@ -531,6 +529,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(signals[0]!.summary).toContain(
         `Answer it with factory_answer_approval (sessionId "${phase.sessionId}", toolCallId "call_release")`,
       );
+      // The notice goes straight to the following session. Nothing waits on the
+      // run queue, so it arrives even while automated runs hold every slot.
+      expect(await workItems.listDeferredDecisions(ORG, project.id)).toEqual([]);
     });
 
     it('names the Factory as the owner of its own session, without looking it up as a person', async () => {

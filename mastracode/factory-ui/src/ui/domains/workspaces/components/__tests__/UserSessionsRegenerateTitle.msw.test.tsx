@@ -41,9 +41,7 @@ const session: FactoryUserSession = {
 const project = {
   id: 'fp-1',
   name: 'Mastra',
-  repositories: [
-    listedRepository(projectRepositoryId, 'octo/hello', { branch: 'main', sandboxWorkdir: '/workspace/hello' }),
-  ],
+  repositories: [listedRepository(projectRepositoryId, 'octo/hello', { branch: 'main' })],
 };
 
 function useFactoryFixtures(sessions: () => FactoryUserSession[]) {
@@ -235,13 +233,16 @@ describe('Session title regeneration', () => {
   });
 
   it('keeps a pending session disabled after its group folds and unfolds again', async () => {
-    const newerSessions = Array.from({ length: 5 }, (_, index): FactoryUserSession => ({
-      ...session,
-      id: `row-newer-${index}`,
-      sessionId: `sess-newer-${index}`,
-      title: `Newer session ${index}`,
-      updatedAt: `2026-07-24T0${index}:00:00.000Z`,
-    }));
+    const newerSessions = Array.from(
+      { length: 5 },
+      (_, index): FactoryUserSession => ({
+        ...session,
+        id: `row-newer-${index}`,
+        sessionId: `sess-newer-${index}`,
+        title: `Newer session ${index}`,
+        updatedAt: `2026-07-24T0${index}:00:00.000Z`,
+      }),
+    );
     let releaseTitle = () => {};
     const titleAnswered = new Promise<void>(resolve => {
       releaseTitle = resolve;

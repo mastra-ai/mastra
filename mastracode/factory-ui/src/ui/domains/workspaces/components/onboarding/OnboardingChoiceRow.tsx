@@ -64,7 +64,7 @@ export function OnboardingChoiceRow({
       </span>
       {selected && (
         <span className="onboarding-enter flex h-5 shrink-0 items-center">
-          <IconCheckmark2Medium aria-hidden="true" className="size-4" />
+          <IconCheckmark2Medium aria-hidden="true" className="size-icon-md" />
         </span>
       )}
     </label>

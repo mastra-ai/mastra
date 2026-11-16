@@ -14,7 +14,7 @@ export function ArrayWrapper({ label, children, onAddItem }: ArrayWrapperProps) 
     <div className="min-w-0">
       <div className="mb-2 flex items-center justify-between gap-2">
         <Txt as="h3" variant="caption" tone="muted" className="flex items-center gap-1.5">
-          <IconBrackets1 aria-hidden className="size-3.5" />
+          <IconBrackets1 aria-hidden className="size-icon-sm" />
           {label} <span className="tabular-nums">{count}</span>
         </Txt>
         {!readOnly && (

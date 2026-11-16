@@ -1,5 +1,15 @@
 # @internal/playground
 
+## 1.39.1-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`12f7965`](https://github.com/mastra-ai/mastra/commit/12f79652cf16193febe8952b664927a70b295202), [`e8ef0c9`](https://github.com/mastra-ai/mastra/commit/e8ef0c928f631145aa6d1c6833176fb2020d05d7), [`9b92400`](https://github.com/mastra-ai/mastra/commit/9b9240047b1ab2b164c20ab71414f6d27513c95f), [`cac6299`](https://github.com/mastra-ai/mastra/commit/cac6299ae060a4b0ea87592a642eba11d40cafd9), [`1100a41`](https://github.com/mastra-ai/mastra/commit/1100a41fb723b3ebb96116481580ae95e0f1071a), [`1100a41`](https://github.com/mastra-ai/mastra/commit/1100a41fb723b3ebb96116481580ae95e0f1071a), [`e8ef0c9`](https://github.com/mastra-ai/mastra/commit/e8ef0c928f631145aa6d1c6833176fb2020d05d7), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b), [`b666fdb`](https://github.com/mastra-ai/mastra/commit/b666fdbf03a95a8fbe4cf02d150f4576dad6512f)]:
+  - @mastra/core@1.84.0-alpha.3
+  - @mastra/playground-ui@69.1.0-alpha.3
+  - @mastra/client-js@1.60.1-alpha.3
+  - @mastra/react@1.15.1-alpha.3
+
 ## 1.39.1-alpha.2
 
 ### Patch Changes

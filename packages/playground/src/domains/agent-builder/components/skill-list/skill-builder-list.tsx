@@ -78,9 +78,9 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
                           data-testid="skill-builder-origin-badge"
                         >
                           {isCopy ? (
-                            <IconSquareBehindSquare1 className="h-2.5 w-2.5" />
+                            <IconSquareBehindSquare1 className="size-icon-xs" />
                           ) : (
-                            <IconArrowInbox className="h-2.5 w-2.5" />
+                            <IconArrowInbox className="size-icon-xs" />
                           )}
                           {origin.type === 'skills-sh' ? 'skills.sh' : isCopy ? 'copied' : 'imported'}
                         </Txt>

@@ -37,7 +37,7 @@ export const AutosaveIndicator = ({ status, lastError, onRetry }: AutosaveIndica
         className="flex items-center gap-1.5"
         data-testid="agent-builder-autosave-saved"
       >
-        <IconCheckmark2Medium className="h-3.5 w-3.5" />
+        <IconCheckmark2Medium className="size-icon-sm" />
         Saved
       </Txt>
     );

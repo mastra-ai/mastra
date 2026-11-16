@@ -52,7 +52,6 @@ function stubProjectAndSessions(sessions: FactoryUserSession[]) {
             repositories: [
               listedRepository(projectRepositoryId, 'octo/hello', {
                 branch: 'main',
-                sandboxWorkdir: '/workspace/hello',
               }),
             ],
           },

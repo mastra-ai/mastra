@@ -15,7 +15,7 @@ import type { ParsedGitLabWebhook } from './webhook.js';
 /**
  * First observation of the merge requests and issues GitLab sent no event
  * for. It runs inside the leased reconcile sweep, so a card appears whether or
- * not anyone has the board open, and the list routes stay pure reads.
+ * not anyone has the board open.
  *
  * A listed delivery every Factory has settled would only replay, after paying
  * for its rule evaluation and GitLab member lookups. The sweep remembers those

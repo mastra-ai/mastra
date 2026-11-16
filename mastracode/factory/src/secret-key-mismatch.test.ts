@@ -63,9 +63,9 @@ it('explains an encryption key mismatch on every surface it breaks', async () =>
         diagnostics: () => ({}),
         routes: () => [
           {
-            path: '/web/github/projects/:id/issues',
+            path: '/web/github/repos',
             method: 'GET' as const,
-            handler: () => Response.json({ issues: [] }),
+            handler: () => Response.json({ repos: [] }),
           },
         ],
       },
@@ -103,20 +103,20 @@ it('explains an encryption key mismatch on every surface it breaks', async () =>
     ],
   });
 
-  const issues = await app.request('/web/github/projects/repo-1/issues');
-  const issuesBody = await issues.json();
-  expect(issues.status).toBe(503);
-  expect(issuesBody).toEqual({
+  const repos = await app.request('/web/github/repos');
+  const reposBody = await repos.json();
+  expect(repos.status).toBe(503);
+  expect(reposBody).toEqual({
     error: 'integration_unavailable',
     message: `github integration is unavailable. ${secretKeyMismatchHint(new FactorySecretDecryptionError(''))}`,
   });
-  expect(issuesBody.message).toContain('FACTORY_CREDENTIAL_ENCRYPTION_KEY');
+  expect(reposBody.message).toContain('FACTORY_CREDENTIAL_ENCRYPTION_KEY');
   expect(errors).toHaveBeenCalledWith(
     expect.stringContaining('github integration is unavailable'),
     expect.any(FactorySecretDecryptionError),
   );
   // Every retry throws a fresh error; the same failure is logged once, not per request.
-  expect((await app.request('/web/github/projects/repo-1/issues')).status).toBe(503);
+  expect((await app.request('/web/github/repos')).status).toBe(503);
   expect(errors.mock.calls.filter(([line]) => String(line).includes('github integration is unavailable'))).toHaveLength(
     1,
   );

@@ -9,7 +9,7 @@ import { ButtonChevron, ButtonIcon, isIconButtonSize } from '@/ds/components/But
 import type { ButtonSize, TextButtonSize } from '@/ds/components/Button/Button';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
-import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
@@ -103,7 +103,7 @@ function ComboboxFieldTrigger() {
     >
       {/* Sized like Select's chevron: outside the icon rung, so it keeps Lucide's default stroke
           (1.33px at 16px) instead of the rung's 1px. */}
-      <IconChevronBottom className="size-4" />
+      <IconChevronDownMedium className="size-icon-md" />
     </BaseCombobox.Trigger>
   );
 }
@@ -169,7 +169,7 @@ function ComboboxClear({ className, ...props }: BaseCombobox.Clear.Props) {
       )}
       {...props}
     >
-      <IconCrossMedium className="size-3.5" />
+      <IconCrossMedium className="size-icon-sm" />
     </BaseCombobox.Clear>
   );
 }
@@ -449,7 +449,7 @@ function ComboboxChip({
           className="flex h-full cursor-pointer items-center rounded-r-full pr-[5.5px] pl-[3.5px] text-muted-foreground not-data-disabled:hover:text-foreground"
         >
           {/* Inline so the button's color wins over the field's `[&_svg]` icon colors. */}
-          <IconCrossMedium className="size-3" style={{ color: 'inherit' }} />
+          <IconCrossMedium className="size-icon-xs" style={{ color: 'inherit' }} />
         </BaseCombobox.ChipRemove>
       ) : null}
     </BaseCombobox.Chip>

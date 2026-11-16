@@ -217,7 +217,18 @@ export interface FactoryRuleItemContext {
 export type FactoryRuleActor =
   | { type: 'human'; id: string }
   | { type: 'agent'; bindingId: string; role: string }
-  | { type: 'github'; login: string; trusted: boolean; factoryAuthored: boolean }
+  | {
+      type: 'github';
+      login: string;
+      trusted: boolean;
+      factoryAuthored: boolean;
+      /**
+       * Whether GitHub typed the sender as a person (`User`), not an app or bot.
+       * Absent on events Factory synthesizes itself and on actors recorded before
+       * it existed: neither says a person sent them.
+       */
+      human?: boolean;
+    }
   | { type: 'gitlab'; username: string; trusted: boolean; factoryAuthored: boolean }
   | { type: 'system'; id: string };
 
@@ -658,7 +669,9 @@ export type FactoryRuleRejectionCode =
   | 'rule_error'
   | 'causal_depth_exceeded'
   | 'repeated_transition'
-  | 'approval_required';
+  | 'approval_required'
+  /** A person moved a card into a phase that may start a run while a run is in flight on it or queued for it. */
+  | 'card_busy';
 
 export interface FactoryRuleRejectDecision {
   type: 'reject';

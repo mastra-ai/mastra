@@ -5,8 +5,8 @@ import { Link } from 'react-router';
 
 import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
 import type { WorkItemSessionRef } from '../services/workItems';
-import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 
 export function cardSessionPath(factoryId: string, session: CardContextSession<WorkItemSessionRef>): string {
   return `/factories/${factoryId}/workspaces/${session.ref.sessionId}/threads/${session.ref.threadId}`;
@@ -26,7 +26,7 @@ export function SessionContextMenu({
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger variant="ghost" size="icon-sm" aria-label="Switch session">
-        <IconChevronBottom aria-hidden />
+        <IconChevronDownMedium aria-hidden />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="min-w-48">
         {sessions.map(session => {

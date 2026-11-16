@@ -83,13 +83,13 @@ export function WorkItemDetailsPanel({
                 aria-label={`Collapse ${item.title}`}
                 onClick={morph.closeDetails}
               >
-                <IconMinimize45 size={13} aria-hidden />
+                <IconMinimize45 aria-hidden />
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger
                   render={
                     <Button type="button" variant="ghost" size="icon-sm" aria-label={`All actions for ${item.title}`}>
-                      <IconDotGrid1x3Vertical size={13} aria-hidden />
+                      <IconDotGrid1x3Vertical aria-hidden />
                     </Button>
                   }
                 />

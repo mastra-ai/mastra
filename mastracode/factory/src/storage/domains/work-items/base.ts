@@ -24,6 +24,7 @@ import {
   recordWorkItemSplitComplete,
 } from '../../../work-items/split-migration.js';
 import type { LegacyWatermark, WorkItemSplitReport } from '../../../work-items/split-migration.js';
+import { ensureLegacyCollections } from '../../legacy-collections.js';
 import { ProbedList, probeNewest } from '../../probed-list.js';
 import {
   BoardScopes,
@@ -157,23 +158,11 @@ export interface WorkItemSessionRef {
   startedBy: string;
 }
 
-export interface FactoryRuleIngressRecord {
-  id: string;
-  orgId: string;
-  factoryProjectId: string;
-  identity: string;
-  triggerType: string;
-  transitionId: string;
-  result: Record<string, unknown>;
-  createdAt: Date;
-}
-
 export interface CommitFactoryRuleEvaluationInput {
   orgId: string;
   factoryProjectId: string;
   workItemId: string | null;
-  ingress: { identity: string; triggerType: string };
-  configVersion: string;
+  ingress: { identity: string };
   expectedRevision: number | null;
   actor: Record<string, unknown> | null;
   outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string };
@@ -195,22 +184,8 @@ export interface FactoryToolResultCursorRecord {
   bindingId: string;
   orgId: string;
   factoryProjectId: string;
-  lastMessageId: string;
   lastMessageCreatedAt: Date;
   updatedAt: Date;
-}
-
-export interface FactoryRuleEvaluationRecord {
-  id: string;
-  ingressId: string;
-  workItemId: string | null;
-  configVersion: string;
-  expectedRevision: number | null;
-  outcome: 'accepted' | 'rejected';
-  code: string | null;
-  reason: string | null;
-  causalChain: Array<{ ingressId: string; decisionType: string }>;
-  createdAt: Date;
 }
 
 /** `proposed` is parked awaiting approval; `dismissed` is human, `superseded` is automatic. */
@@ -295,8 +270,6 @@ export interface FactoryDeferredDecisionRecord {
   evaluationId: string;
   workItemId: string | null;
   idempotencyKey: string;
-  effectOrdinal: number;
-  effectHash: string;
   causalChain: Array<{ ingressId: string; decisionType: string }>;
   actor: Record<string, unknown> | null;
   decision: Record<string, unknown>;
@@ -442,9 +415,6 @@ export interface FactoryPendingStartRecord {
   availableAt: Date;
   leaseOwner: string | null;
   leaseExpiresAt: Date | null;
-  lastError: string | null;
-  failureCode: StoredFactoryDispatchFailureCode | null;
-  completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -457,8 +427,14 @@ export interface FactoryLeaseClaimInput {
 }
 
 export interface FactoryDeferredDecisionClaimInput extends FactoryLeaseClaimInput {
-  /** Restrict the claim by decision payload; rejected rows are never leased. */
-  decisionFilter?: (decision: Record<string, unknown>) => boolean;
+  /** Restrict the claim by decision payload and who caused it; rejected rows are never leased. */
+  decisionFilter?: (decision: Record<string, unknown>, provenance: FactoryDecisionProvenance) => boolean;
+}
+
+/** Who caused a deferred decision: the rule actor, and the decisions it follows from. */
+export interface FactoryDecisionProvenance {
+  actor: Record<string, unknown> | null;
+  causalChain: FactoryDeferredDecisionRecord['causalChain'];
 }
 
 export interface FactoryLeaseIdentity {
@@ -484,8 +460,7 @@ export interface CommitFactoryTransitionInput {
   expectedRevision: number;
   destinationStage: string;
   actorId: string;
-  ingress: { identity: string; triggerType: string; transitionId: string };
-  configVersion: string;
+  ingress: { identity: string; transitionId: string };
   causalChain: Array<{ ingressId: string; decisionType: string }>;
   evaluation:
     | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
@@ -1006,6 +981,11 @@ function decisionRowPayload(decision: unknown): Record<string, unknown> {
   return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
 }
 
+function jsonRowValue<T>(value: unknown, is: (parsed: unknown) => parsed is T): T | undefined {
+  const parsed = typeof value === 'string' ? safeJsonParse(value) : value;
+  return is(parsed) ? parsed : undefined;
+}
+
 function safeJsonParse(value: string): unknown {
   try {
     return JSON.parse(value);
@@ -1022,8 +1002,6 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       org_id: { type: 'text' },
       factory_project_id: { type: 'text' },
       identity: { type: 'text' },
-      trigger_type: { type: 'text' },
-      transition_id: { type: 'text' },
       result: { type: 'json' },
       created_at: { type: 'timestamp' },
     },
@@ -1036,13 +1014,6 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
     columns: {
       id: { type: 'uuid-pk' },
       ingress_id: { type: 'text' },
-      work_item_id: { type: 'text', nullable: true },
-      rule_set_version: { type: 'text' },
-      expected_revision: { type: 'integer', nullable: true },
-      outcome: { type: 'text' },
-      code: { type: 'text', nullable: true },
-      reason: { type: 'text', nullable: true },
-      causal_chain: { type: 'json' },
       created_at: { type: 'timestamp' },
     },
     indexes: [{ name: 'factory_rule_evaluations_ingress_idx', columns: ['ingress_id'] }],
@@ -1057,8 +1028,6 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       work_item_id: { type: 'text', nullable: true },
       source_key: { type: 'text', nullable: true },
       idempotency_key: { type: 'text' },
-      effect_ordinal: { type: 'integer' },
-      effect_hash: { type: 'text' },
       causal_chain: { type: 'json' },
       actor: { type: 'json', nullable: true },
       decision: { type: 'json' },
@@ -1170,7 +1139,6 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       binding_id: { type: 'text', primaryKey: true },
       org_id: { type: 'text' },
       factory_project_id: { type: 'text' },
-      last_message_id: { type: 'text' },
       last_message_created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -1189,9 +1157,6 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       available_at: { type: 'timestamp' },
       lease_owner: { type: 'text', nullable: true },
       lease_expires_at: { type: 'timestamp', nullable: true },
-      last_error: { type: 'text', nullable: true },
-      failure_code: { type: 'text', nullable: true },
-      completed_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -1237,8 +1202,6 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     evaluationId: String(row.evaluation_id),
     workItemId: row.work_item_id === null || row.work_item_id === undefined ? null : String(row.work_item_id),
     idempotencyKey: String(row.idempotency_key),
-    effectOrdinal: Number(row.effect_ordinal),
-    effectHash: String(row.effect_hash),
     causalChain: (row.causal_chain as FactoryDeferredDecisionRecord['causalChain']) ?? [],
     actor: (row.actor as Record<string, unknown> | null) ?? null,
     decision: row.decision as Record<string, unknown>,
@@ -1313,9 +1276,6 @@ function toPendingStart(row: GovernanceDbRow): FactoryPendingStartRecord {
     availableAt: row.available_at as Date,
     leaseOwner: (row.lease_owner as string | null) ?? null,
     leaseExpiresAt: (row.lease_expires_at as Date | null) ?? null,
-    lastError: (row.last_error as string | null) ?? null,
-    failureCode: (row.failure_code as FactoryDispatchFailureCode | null) ?? null,
-    completedAt: (row.completed_at as Date | null) ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at as Date,
   };
@@ -1486,12 +1446,16 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async init(): Promise<void> {
     this.#legacyMode = process.env.MASTRA_FACTORY_WORK_ITEM_SPLIT === 'dry-run';
+    // Pre-split cards and the split's progress marker exist only on databases an earlier release
+    // wrote cards to; dry-run mode serves from the pre-split table, so it always needs it.
+    const legacySchemas = [WORK_ITEMS_SCHEMA, FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA];
+    let hasLegacyCards = true;
+    if (this.#legacyMode) await this.ensureCollections(legacySchemas);
+    else hasLegacyCards = await ensureLegacyCollections(this.storage, legacySchemas);
     await this.ensureCollections([
-      WORK_ITEMS_SCHEMA,
       FACTORY_WORK_ITEMS_SCHEMA,
       FACTORY_WORK_ITEM_SOURCES_SCHEMA,
       FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA,
-      FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA,
       FACTORY_BOARD_ITEMS_SCHEMA,
       FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA,
       FACTORY_BOARD_VERSIONS_SCHEMA,
@@ -1506,6 +1470,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     if (this.#legacyMode) {
       this.#split = { pending: false, since: null };
       await migrateWorkItemSplit(this.storage, { dryRun: true, ops: super.ops, log: logSplit });
+      return;
+    }
+    if (!hasLegacyCards) {
+      this.#split = { pending: false, since: null };
       return;
     }
     const [marker, newest] = await Promise.all([readWorkItemSplitMarker(super.ops), readLegacyWatermark(super.ops)]);
@@ -1978,8 +1946,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 lease_owner: input.ownerId,
                 lease_expires_at: input.leaseExpiresAt,
                 // A new attempt starts clean: the previous attempt's cause no longer describes this one.
-                last_error: null,
-                failure_code: null,
+                ...(table === 'factory_deferred_decisions' ? { last_error: null, failure_code: null } : {}),
                 updated_at: input.now,
               };
             });
@@ -2026,7 +1993,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           status: status ?? (table === 'factory_pending_starts' ? 'sent' : 'succeeded'),
           lease_owner: null,
           lease_expires_at: null,
-          completed_at: now,
+          ...(table === 'factory_deferred_decisions' ? { completed_at: now } : {}),
           updated_at: now,
         };
       },
@@ -2053,11 +2020,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           available_at: input.availableAt,
           lease_owner: null,
           lease_expires_at: null,
-          last_error: input.lastError,
-          failure_code: input.failureCode,
-          completed_at: input.terminal ? input.now : null,
-          ...(table === 'factory_deferred_decisions' && input.terminal
-            ? { failure_occurrence: Number(current.failure_occurrence ?? 0) + 1 }
+          ...(table === 'factory_deferred_decisions'
+            ? {
+                last_error: input.lastError,
+                failure_code: input.failureCode,
+                completed_at: input.terminal ? input.now : null,
+                ...(input.terminal ? { failure_occurrence: Number(current.failure_occurrence ?? 0) + 1 } : {}),
+              }
             : {}),
           updated_at: input.now,
         };
@@ -2495,21 +2464,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
           identity: input.ingress.identity,
-          trigger_type: input.ingress.triggerType,
-          transition_id: input.ingress.transitionId,
           result,
           created_at: now,
         });
         if (item) {
           const evaluation = await ops.insertOne<GovernanceDbRow>('factory_rule_evaluations', {
             ingress_id: ingress.id,
-            work_item_id: item.id,
-            rule_set_version: input.configVersion,
-            expected_revision: input.expectedRevision,
-            outcome,
-            code,
-            reason,
-            causal_chain: input.causalChain,
             created_at: now,
           });
           if (outcome === 'accepted' && input.evaluation.outcome === 'accepted') {
@@ -2523,8 +2483,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 work_item_id: item.id,
                 source_key: decisionSourceKey(decision),
                 idempotency_key: String(decision.idempotencyKey),
-                effect_ordinal: index,
-                effect_hash: factoryDecisionHash(decision),
                 causal_chain: input.causalChain,
                 actor: null,
                 decision,
@@ -2644,20 +2602,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
           identity: input.ingress.identity,
-          trigger_type: input.ingress.triggerType,
-          transition_id: input.ingress.identity,
           result,
           created_at: input.now,
         });
         const evaluation = await ops.insertOne<GovernanceDbRow>('factory_rule_evaluations', {
           ingress_id: ingress.id,
-          work_item_id: item?.id ?? null,
-          rule_set_version: input.configVersion,
-          expected_revision: input.expectedRevision,
-          outcome,
-          code,
-          reason,
-          causal_chain: input.causalChain,
           created_at: input.now,
         });
         for (const [effectOrdinal, decision] of decisions.entries()) {
@@ -2669,8 +2618,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             work_item_id: item?.id ?? null,
             source_key: decisionSourceKey(decision),
             idempotency_key: String(decision.idempotencyKey),
-            effect_ordinal: effectOrdinal,
-            effect_hash: factoryDecisionHash(decision),
             causal_chain: input.causalChain,
             actor: input.actor,
             decision,
@@ -2713,7 +2660,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           bindingId: String(row.binding_id),
           orgId: row.org_id,
           factoryProjectId: String(row.factory_project_id),
-          lastMessageId: String(row.last_message_id),
           lastMessageCreatedAt: row.last_message_created_at as Date,
           updatedAt: row.updated_at as Date,
         }
@@ -2727,7 +2673,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       binding_id: cursor.bindingId,
       org_id: cursor.orgId,
       factory_project_id: cursor.factoryProjectId,
-      last_message_id: cursor.lastMessageId,
       last_message_created_at: cursor.lastMessageCreatedAt,
       updated_at: cursor.updatedAt,
     });
@@ -3070,7 +3015,21 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async claimDeferredDecisions(input: FactoryDeferredDecisionClaimInput): Promise<FactoryDeferredDecisionRecord[]> {
     const filter = input.decisionFilter;
-    const accept = filter ? (row: GovernanceDbRow) => filter(decisionRowPayload(row.decision)) : undefined;
+    const accept = filter
+      ? (row: GovernanceDbRow) =>
+          filter(decisionRowPayload(row.decision), {
+            actor:
+              jsonRowValue(
+                row.actor,
+                (value): value is Record<string, unknown> =>
+                  typeof value === 'object' && value !== null && !Array.isArray(value),
+              ) ?? null,
+            causalChain:
+              jsonRowValue(row.causal_chain, (value): value is FactoryDecisionProvenance['causalChain'] =>
+                Array.isArray(value),
+              ) ?? [],
+          })
+      : undefined;
     return this.#claimLeases('factory_deferred_decisions', input, toDeferredDecision, accept);
   }
 
@@ -3365,8 +3324,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         expectedRevision: item.revision,
         destinationStage: LEGACY_REST_PHASE,
         actorId: HELD_CARD_SWEEP_ACTOR,
-        ingress: { identity, triggerType: 'factory.boot', transitionId: identity },
-        configVersion: HELD_CARD_SWEEP_ACTOR,
+        ingress: { identity, transitionId: identity },
         causalChain: [],
         evaluation: { outcome: 'accepted', decisions: [] },
         autonomy: 'disarm',
@@ -3876,9 +3834,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           available_at: now,
           lease_owner: null,
           lease_expires_at: null,
-          last_error: null,
-          failure_code: null,
-          completed_at: null,
           created_at: now,
           updated_at: now,
         });
@@ -3900,15 +3855,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     throw lastError;
   }
 
-  async markPendingStart(
-    bindingId: string,
-    status: 'sent' | 'failed',
-    lastError?: string,
-  ): Promise<FactoryPendingStartRecord | null> {
+  async markPendingStart(bindingId: string, status: 'sent' | 'failed'): Promise<FactoryPendingStartRecord | null> {
     const row = await this.#db.updateAtomic<GovernanceDbRow>(
       'factory_pending_starts',
       { binding_id: bindingId },
-      () => ({ status, last_error: lastError ?? null, updated_at: new Date() }),
+      () => ({ status, updated_at: new Date() }),
     );
     return row ? toPendingStart(row) : null;
   }

@@ -18,10 +18,7 @@ const repositoryInput = {
 };
 
 const projectRepositoryInput = {
-  createdByUserId: 'user-1',
   branch: null,
-  sandboxProvider: 'local',
-  sandboxWorkdir: '/workspace/mastra',
 };
 
 describe('SourceControlStorage', () => {
@@ -221,7 +218,6 @@ describe('SourceControlStorage', () => {
       repositoryId: repository.id,
       ...projectRepositoryInput,
       branch: 'develop',
-      sandboxProvider: 'railway',
     });
 
     expect(firstLink).toMatchObject({
@@ -238,7 +234,7 @@ describe('SourceControlStorage', () => {
     expect(await github.projectRepositories.get({ orgId: 'org-1', id: firstLink.id })).toMatchObject({
       teardownCommand: 'docker compose down --remove-orphans',
     });
-    expect(secondLink).toMatchObject({ repositoryId: repository.id, branch: 'develop', sandboxProvider: 'railway' });
+    expect(secondLink).toMatchObject({ repositoryId: repository.id, branch: 'develop' });
     expect(firstLink.id).not.toBe(secondLink.id);
   });
 
@@ -1351,7 +1347,6 @@ describe('SourceControlStorage', () => {
       slug: string;
       createdAt: Date;
       handle?: SourceControlStorageHandle;
-      sandboxWorkdir?: string;
     }): Promise<ProjectRepository> {
       const handle = args.handle ?? github;
       const installation = await createInstallation(handle, { externalId: `installation-${args.externalId}` });
@@ -1370,7 +1365,6 @@ describe('SourceControlStorage', () => {
         connectionId: connection.id,
         repositoryId: repository.id,
         ...projectRepositoryInput,
-        sandboxWorkdir: args.sandboxWorkdir ?? projectRepositoryInput.sandboxWorkdir,
       });
       await backend.ops.updateMany('factory_project_repositories', { id: link.id }, { created_at: args.createdAt });
       return link;
@@ -1402,7 +1396,6 @@ describe('SourceControlStorage', () => {
         externalId: 'r1',
         slug: 'mastra-ai/mastra',
         createdAt: at(1),
-        sandboxWorkdir: '/workspace/oldest',
       });
       const second = await linkUnderOwnInstallation({
         factoryProjectId: project.id,
@@ -1478,7 +1471,6 @@ describe('SourceControlStorage', () => {
         externalId: 'r1',
         slug: 'mastra-ai/mastra',
         createdAt: at(1),
-        sandboxWorkdir: '/workspace/linked',
       });
 
       await domain.init();
@@ -1615,16 +1607,14 @@ describe('SourceControlStorage', () => {
       });
       expect(updated).toMatchObject({ position: 7, inEnvironment: false, lastBuildStatus: 'unbuilt' });
 
-      const builtAt = at(10);
       expect(
         await github.projectRepositories.setBuildStatus({
           orgId: 'org-1',
           id: link.id,
           status: 'failed',
           error: 'pnpm install exited 1',
-          builtAt,
         }),
-      ).toMatchObject({ lastBuildStatus: 'failed', lastBuildError: 'pnpm install exited 1', lastBuiltAt: builtAt });
+      ).toMatchObject({ lastBuildStatus: 'failed', lastBuildError: 'pnpm install exited 1' });
       expect(
         await github.projectRepositories.setBuildStatus({ orgId: 'other-org', id: link.id, status: 'configured' }),
       ).toBeNull();
@@ -1673,9 +1663,8 @@ describe('SourceControlStorage', () => {
           orgId: 'org-1',
           id: other.id,
           status: 'configured',
-          builtAt: at(1),
         }),
-      ).toMatchObject({ lastBuildStatus: 'configured', lastBuildError: null, lastBuiltAt: at(1) });
+      ).toMatchObject({ lastBuildStatus: 'configured', lastBuildError: null });
     });
   });
 });
@@ -1702,9 +1691,6 @@ describe('SourceControlStorageInMemory sessions', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/mastra',
     });
     const session = await store.sessions.create({
       sessionId: '00000000-0000-4000-8000-00000000aaaa',
@@ -1747,9 +1733,6 @@ describe('SourceControlStorageInMemory sessions', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/mastra',
     });
     const session = await store.sessions.create({
       sessionId: '00000000-0000-4000-8000-00000000bbbb',
@@ -1789,9 +1772,6 @@ describe('SourceControlStorageInMemory sessions', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/mastra',
     });
     const session = await store.sessions.create({
       sessionId: '00000000-0000-4000-8000-00000000aaab',
@@ -1818,9 +1798,6 @@ describe('SourceControlStorageInMemory sessions', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: otherRepository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/docs',
     });
     await store.sessions.create({
       sessionId: '00000000-0000-4000-8000-00000000aaad',

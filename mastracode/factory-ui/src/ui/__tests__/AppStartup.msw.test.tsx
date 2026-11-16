@@ -104,9 +104,6 @@ function renderApp(
       HttpResponse.json({ github: { enabled: true, sourceIds: null }, linear: { enabled: false, sourceIds: [] } }),
     ),
     http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
-    http.get(`${TEST_BASE_URL}/web/github/projects/:repositoryId/issues`, () =>
-      HttpResponse.json({ issues: [], nextPage: null }),
-    ),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () => HttpResponse.json({ enabled: false, connected: false })),
   );
   const client = createQueryClient();

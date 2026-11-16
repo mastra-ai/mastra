@@ -52,8 +52,8 @@ export interface MountIncidentioRoutesOptions {
   /** Host auth seam. Intake selections are org-owned, so the feature is inert without it. */
   auth: RouteAuth;
   /**
-   * Cross-integration intake selection domain. Required for the issues route's
-   * project filter; when absent, only the disabled `status` route is served.
+   * Cross-integration intake selection domain. Required for the issue detail
+   * route's project filter; when absent, only the disabled `status` route is served.
    */
   intake?: IntakeStorage;
 }
@@ -108,17 +108,6 @@ async function resolveOrgTenant(
   return { tenant: { orgId: tenant.orgId, userId: tenant.userId } };
 }
 
-/**
- * Validate an opaque pagination cursor from the query string. Cursors are
- * server-issued base64url blobs, so anything outside a conservative
- * charset/length is rejected rather than decoded.
- */
-function parseAfterCursor(raw: string | undefined): string | undefined | null {
-  if (raw === undefined || raw === '') return undefined;
-  if (raw.length > 2_048 || !/^[\w+/=.:-]+$/.test(raw)) return null;
-  return raw;
-}
-
 /** Map an incident.io read failure to the API response for the SPA. */
 function incidentioFetchError(c: RouteContext, err: unknown) {
   if (err instanceof IncidentioApiError && (err.status === 401 || err.status === 403)) {
@@ -151,9 +140,9 @@ interface IncidentioIssuePayload {
 }
 
 /**
- * The follow-ups a listing page serves, shared by the board route and the
- * reconcile sweep that files their cards. Incidents stay out of intake even
- * when a stale binding selects the incidents source.
+ * The follow-ups a listing page yields for the reconcile sweep that files
+ * their cards. Incidents stay out of intake even when a stale binding selects
+ * the incidents source.
  */
 export function followUpIssues(items: IntakeItem[]): IncidentioIssuePayload[] {
   return items
@@ -235,64 +224,6 @@ export function buildIncidentioRoutes(options: MountIncidentioRoutesOptions): Ap
   if (!enabled || !incidentio || !intake) {
     return routes;
   }
-
-  // ── List bound follow-ups (cursor-paged) ────────────────────────────────
-  // Respects the caller's intake config: disabled incident.io intake 404s,
-  // and only sources routed to the requested Factory project are listed.
-  // Incidents never appear here — only follow-ups feed intake.
-  routes.push(
-    registerApiRoute('/web/incidentio/issues', {
-      method: 'GET',
-      requiresAuth: false,
-      handler: async c => {
-        const resolved = await resolveOrgTenant(loose(c), auth);
-        if ('response' in resolved) return resolved.response;
-
-        const after = parseAfterCursor(c.req.query('after'));
-        if (after === null) return c.json({ error: 'invalid_cursor' }, 400);
-        const factoryProjectId = c.req.query('factoryProjectId');
-        if (factoryProjectId && !UUID_RE.test(factoryProjectId)) {
-          return c.json({ error: 'invalid_factory_project_id' }, 400);
-        }
-
-        await intake.ensureReady();
-        const config = await intake.getConfig({ orgId: resolved.tenant.orgId, integrationIds: ['incidentio'] });
-        const selection = config.incidentio!;
-        if (!selection.enabled) {
-          return c.json(
-            { error: 'incidentio_intake_disabled', message: 'incident.io intake is turned off in Settings.' },
-            404,
-          );
-        }
-
-        const selectedIds = selection.sourceIds ?? [];
-        const boundSourceIds = factoryProjectId
-          ? await scopeSourceIdsToProject({
-              intake,
-              orgId: resolved.tenant.orgId,
-              factoryProjectId,
-              selectedIds,
-            })
-          : null;
-        const sourceIds = boundSourceIds ?? selectedIds;
-        if (sourceIds.length === 0) {
-          return c.json({ issues: [], nextCursor: null });
-        }
-
-        try {
-          const page = await incidentio.intake.listItems({
-            orgId: resolved.tenant.orgId,
-            userId: resolved.tenant.userId,
-            sourceIds,
-            ...(after ? { cursor: after } : {}),
-          });
-          return c.json({ issues: followUpIssues(page.items), nextCursor: page.nextCursor });
-        } catch (err) {
-          return incidentioFetchError(loose(c), err);
-        }
-      },
-    }),
-  );
 
   // ── Follow-up detail (description for the card panel) ───────────────────
   routes.push(

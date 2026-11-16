@@ -39,8 +39,8 @@ import {
   SESSION_UPDATED_MENU_OPTIONS,
   sessionOwnerMenuOptions,
 } from './sessionPropertyOptions';
-import { IconArrowTopBottom } from '@mastra/playground-ui/icons/central/IconArrowTopBottom';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { IconArrowsUpDown } from '@mastra/playground-ui/icons/central/IconArrowsUpDown';
 
 const NO_EXTRA_ROWS: Readonly<Record<string, number>> = {};
 
@@ -145,7 +145,7 @@ export function SessionsSection() {
                 onClick={() => openNewUserSession(factoryId)}
                 disabled={deletion.deleting}
               >
-                <IconPlusMedium size={15} />
+                <IconPlusMedium />
               </Button>
             )}
             <PropertiesMenu
@@ -158,7 +158,7 @@ export function SessionsSection() {
             >
               <DropdownMenu.RadioSub
                 label="Sort"
-                icon={<IconArrowTopBottom aria-hidden />}
+                icon={<IconArrowsUpDown aria-hidden />}
                 options={SESSION_SORT_MENU_OPTIONS}
                 value={view.sort}
                 onValueChange={sort => updateView({ sort })}

@@ -1,8 +1,7 @@
-import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../../boards/index.js';
-import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
+import { fakeRouteAuth } from '../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { IntegrationContext } from '../base.js';
 import { INCIDENTIO_FOLLOW_UPS_SOURCE_ID, INCIDENTIO_INCIDENTS_SOURCE_ID } from './intake.js';
@@ -144,27 +143,13 @@ describe('incident.io first-sight intake', () => {
   }
   const outstanding = { ...followUp, status: 'outstanding' as const };
 
-  it('files a follow-up on the sweep, once, only where a selected source is bound, never on a board read', async () => {
-    const { integration, context, fetchImpl, project, filed, sweep } = await setup(() =>
+  it('files a follow-up on the sweep, once, only where a selected source is bound', async () => {
+    const { project, filed, sweep, fetchImpl } = await setup(() =>
       json({ follow_ups: [outstanding], pagination_meta: {} }),
     );
     const bound = await project('org-1', sources);
     const unbound = await project('org-1', []);
     const unselected = await project('org-2', [INCIDENTIO_FOLLOW_UPS_SOURCE_ID], [INCIDENTIO_INCIDENTS_SOURCE_ID]);
-    const app = new Hono();
-    app.use('*', async (c, next) => {
-      c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
-      await next();
-    });
-    mountApiRoutes(app, integration.routes(context));
-
-    // The incidents source is the board's first page and holds nothing a board shows.
-    const read = async (after = '') =>
-      (await app.request(`/web/incidentio/issues?factoryProjectId=${bound}${after}`)).json();
-    const { nextCursor } = await read();
-    expect(await read(`&after=${nextCursor}`)).toMatchObject({ issues: [{ id: 'incidentio:follow-up:follow-up-1' }] });
-    expect(await filed('org-1', bound)).toEqual([]);
-    fetchImpl.mockClear();
 
     await expect(sweep()).resolves.toMatchObject({ observed: 1, failed: 0 });
     await expect(sweep()).resolves.toMatchObject({ observed: 1, failed: 0 });
