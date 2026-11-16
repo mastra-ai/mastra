@@ -334,7 +334,7 @@ Runs can end early for several reasons, and each one leaves different messages i
 | `abortSignal` from the caller | Still run | The user message and the assistant text the user already saw |
 | Total timeout (`modelSettings.timeout.totalMs`) | Still run | The user message, completed steps, and the text streamed for the cut-off step |
 | `abort()` inside a processor | Skipped | Nothing by default; the tripwire rolls back what the run already saved |
-| `abort(reason, { persist: 'partial' })` | Skipped | The messages the run already saved: the user message, completed steps with their tool results, and the reply text already in the thread |
+| `abort(reason, { persist: 'partial' })` | Skipped | The user message, completed steps with their tool results, and the reply text streamed before the abort |
 
 A caller cancellation and a total timeout both go through output processors like any other run, so the built-in `MessageHistory` processor saves the thread. The partial answer is stored as an ordinary assistant message with no error part, which means the next turn starts from what the user actually read.
 
@@ -353,7 +353,7 @@ const refundGuardrail = {
 }
 ```
 
-`persist: 'partial'` doesn't change why the run stopped: the result still carries the tripwire and its reason. It only decides what memory keeps, and only for the messages the run already saved. A processor that rejects a single step in `processOutputStep` rolls that step back either way. The rejected step's own reply text never reaches the thread.
+`persist: 'partial'` doesn't change why the run stopped: the result still carries the tripwire and its reason. It only decides what memory keeps. Alongside the user message and the completed steps the run already saved, it keeps reply text the model streamed before the abort, even when nothing had saved that text yet. A processor that rejects a single step in `processOutputStep` rolls that step back either way. The rejected step's own reply text never reaches the thread.
 
 ```typescript
 import { Agent } from '@mastra/core/agent'

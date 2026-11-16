@@ -1740,9 +1740,13 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     async () => {
       const memory = new MockMemory();
       const threadId = `${THREAD}-timeout-keep-no-resource-${engine}`;
+      let keeperRan = false;
       const keeper: Processor = {
         id: 'deadline-keeper',
-        processOutputResult: ({ abort }) => abort('Kept without a resource id', { persist: 'partial' }),
+        processOutputResult: ({ abort }) => {
+          keeperRan = true;
+          return abort('Kept without a resource id', { persist: 'partial' });
+        },
       };
       const hang = Promise.withResolvers<unknown>();
       try {
@@ -1782,6 +1786,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
 
         const { messages } = await memory.recall({ threadId });
         expect(messages.map(message => message.role)).not.toContain('assistant');
+        expect(keeperRan).toBe(true);
       } finally {
         hang.resolve({});
       }
