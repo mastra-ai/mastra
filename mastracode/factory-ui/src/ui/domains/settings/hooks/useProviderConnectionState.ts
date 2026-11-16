@@ -7,6 +7,6 @@ export function useProviderConnectionState() {
   const customProvidersQuery = useCustomProvidersQuery();
   const anyConnected =
     (providersQuery.data ?? []).some(provider => provider.source !== 'none') ||
-    (customProvidersQuery.data ?? []).length > 0;
+    (customProvidersQuery.data ?? []).some(provider => !provider.urlProblem);
   return { anyConnected, providersKnown: providersQuery.isSuccess && customProvidersQuery.isSuccess };
 }

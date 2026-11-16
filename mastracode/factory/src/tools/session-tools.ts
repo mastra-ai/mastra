@@ -10,6 +10,7 @@ import type { BoardRegistry } from '../boards/registry.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { factorySessionUrl, factoryWorkItemUrl } from '../links.js';
 import { buildModelCatalog, listSessionScopedCredentials } from '../routes/config.js';
+import { customEndpointUrlProblem } from '../routes/custom-endpoint-url.js';
 import { customProviderOwner } from '../routes/custom-provider-source.js';
 import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.js';
@@ -158,7 +159,9 @@ export function createFactorySessionTools(
           customProviders && customProviderOwnerForSession
             ? async () => {
                 await customProviders.ensureReady();
-                return customProviders.list(customProviderOwnerForSession);
+                return (await customProviders.list(customProviderOwnerForSession)).filter(
+                  provider => !customEndpointUrlProblem(provider.url),
+                );
               }
             : undefined,
       })

@@ -302,6 +302,9 @@ export function hasProviderEnvironmentKey(providerId: string): boolean {
   return (Array.isArray(envVars) ? envVars : [envVars]).some(envVar => Boolean(process.env[envVar]?.trim()));
 }
 
+/** Servers call custom endpoints too: a redirect could aim that call at an address the saved URL never named. */
+const fetchWithoutRedirects: typeof fetch = (input, init) => fetch(input, { ...init, redirect: 'error' });
+
 export class MastraCodeGateway extends MastraModelGateway {
   readonly id = MASTRACODE_GATEWAY_ID;
   readonly name = 'MastraCode Gateway';
@@ -513,6 +516,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         baseURL: customProvider.url,
         apiKey: args.apiKey,
         headers: args.headers,
+        fetch: fetchWithoutRedirects,
       });
       const reasoningEffort = this.#thinkingLevel ? THINKING_LEVEL_TO_REASONING_EFFORT[this.#thinkingLevel] : undefined;
       const middleware = createReasoningEffortMiddleware(args.providerId, reasoningEffort);

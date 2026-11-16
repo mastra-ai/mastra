@@ -15,6 +15,13 @@ const REMOVING_STATUS: StatusPresentation = {
 };
 
 function modelsStatus(provider: CustomProviderInfo): StatusPresentation {
+  if (provider.urlProblem) {
+    return {
+      label: 'URL not allowed',
+      tone: 'error',
+      description: `${provider.urlProblem} Edit it to use its models.`,
+    };
+  }
   const count = provider.models.length;
   return {
     label: `${count} model${count === 1 ? '' : 's'}`,

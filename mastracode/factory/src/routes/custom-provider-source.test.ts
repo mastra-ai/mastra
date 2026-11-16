@@ -3,7 +3,7 @@ import type { CredentialScope } from '@mastra/code-sdk/agents/credential-resolve
 import { resolveCustomProviders } from '@mastra/code-sdk/agents/custom-provider-source';
 import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
@@ -76,6 +76,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   resetCustomProvidersSourceForTests();
   setCredentialStoreProvider(undefined);
 });
@@ -113,6 +114,20 @@ describe('registerCustomProvidersSource (tenant mode)', () => {
     expect(resolveCustomProviders(await policyContext(member, 'user'))?.map(provider => provider.name)).toEqual([
       'Mine',
     ]);
+  });
+
+  it('never hands a hosted Factory an endpoint on a local or plain-HTTP address', async () => {
+    vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deploy-1');
+    await seed.customProviders.create({
+      owner: { orgId: ORG },
+      createdBy: 'admin',
+      input: { ...endpoint('Metadata'), url: 'http://169.254.169.254/v1' },
+    });
+
+    await buildApp(member, true).request('/ok');
+    const providers = resolveCustomProviders(await policyContext(member, 'factory'));
+
+    expect(providers?.map(provider => provider.name)).toEqual(['Shared']);
   });
 
   // A session runs as its owner, whoever sends the message that wakes it.

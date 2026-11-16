@@ -25,6 +25,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { MiddlewareHandler } from 'hono';
 
 import type { CustomProviderOwner, CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
+import { customEndpointUrlProblem } from './custom-endpoint-url.js';
 import { tenantOrgId } from './provider-credentials.js';
 import type { RouteAuth } from './route.js';
 
@@ -110,6 +111,7 @@ class OrgCustomProvidersSnapshot {
     const organization: MastraCodeCustomProvider[] = [];
     const members = new Map<string, MastraCodeCustomProvider[]>();
     for (const record of await this.#storage.listForOrg(this.#orgId)) {
+      if (customEndpointUrlProblem(record.url)) continue;
       const provider: MastraCodeCustomProvider = {
         name: record.name,
         url: record.url,

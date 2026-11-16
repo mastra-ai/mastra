@@ -54,12 +54,18 @@ interface Endpoint {
 
 const endpoints: Endpoint[] = [];
 
-async function startEndpoint(): Promise<Endpoint> {
+/** An endpoint answering every request with a chat completion, or with a redirect to `redirectTo`'s origin. */
+async function startEndpoint(redirectTo?: Endpoint): Promise<Endpoint> {
   const authorizations: Array<string | undefined> = [];
   const server = createServer((req, res) => {
     authorizations.push(req.headers.authorization);
     req.resume();
     req.on('end', () => {
+      if (redirectTo) {
+        res.writeHead(307, { location: `${redirectTo.origin}${req.url}` });
+        res.end();
+        return;
+      }
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify(CHAT_COMPLETION));
     });
@@ -229,6 +235,23 @@ describe('custom provider credentials', () => {
 
       expect(await gateway.getApiKey('mastracode/acme/model-x')).toBe('acme-secret');
       expect(await gateway.getApiKey('mastracode/openai/gpt-test')).toBe('sk-saved-openai');
+    });
+  });
+
+  describe('an endpoint that redirects', () => {
+    // The server makes this call: a redirect could send it somewhere the saved
+    // URL was never allowed to point, such as a cloud metadata address.
+    it('is not followed', async () => {
+      const target = await startEndpoint();
+      const endpoint = await startEndpoint(target);
+      writeSettings({
+        customProviders: [{ name: 'Acme', url: endpoint.url, apiKey: 'acme-secret', models: ['model-x'] }],
+      });
+
+      await expect(sendPrompt('acme/model-x')).rejects.toThrow();
+
+      expect(endpoint.authorizations).toEqual(['Bearer acme-secret']);
+      expect(target.authorizations).toEqual([]);
     });
   });
 

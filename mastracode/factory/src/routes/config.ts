@@ -42,6 +42,7 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { THINKING_LEVELS } from './contracts.js';
+import { customEndpointUrlProblem } from './custom-endpoint-url.js';
 import { customProviderOwner } from './custom-provider-source.js';
 import { createGatewayKey, getGatewayCredits, MASTRA_SIGN_IN_REQUIRED, MastraGatewayError } from './mastra-gateway.js';
 import {
@@ -351,6 +352,8 @@ export interface CustomProviderInfo {
   models: string[];
   /** Saved for the caller (`user`) or for their organization (`org`), like a provider key. */
   scope: StoredCredentialScope;
+  /** Why this server refuses to call the endpoint. Its models are not offered until the URL is fixed. */
+  urlProblem?: string;
 }
 
 /** A stored custom provider and the settings scope it is saved at. */
@@ -368,7 +371,12 @@ function toCustomProviderInfo({ record, scope }: ScopedCustomProvider): CustomPr
     hasApiKey: Boolean(record.apiKey),
     models: record.models,
     scope,
+    urlProblem: customEndpointUrlProblem(record.url),
   };
+}
+
+function isCallable(record: CustomProviderRecord): boolean {
+  return !customEndpointUrlProblem(record.url);
 }
 
 /** The custom provider lists a request can reach. */
@@ -454,9 +462,9 @@ async function listCustomProvidersInEffect({
 }): Promise<CustomProviderRecord[]> {
   const ctx = await resolveCustomProvidersContext({ c, auth, customProviders });
   if ('response' in ctx) return [];
-  if (!tenant) return (await listScopedCustomProviders(ctx)).map(({ record }) => record);
+  if (!tenant) return (await listScopedCustomProviders(ctx)).map(({ record }) => record).filter(isCallable);
   const owner = customProviderOwner(tenant, auth.enabled());
-  return owner ? ctx.storage.list(owner) : [];
+  return owner ? (await ctx.storage.list(owner)).filter(isCallable) : [];
 }
 
 /** A validated custom-provider save request. */
@@ -1193,7 +1201,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const listCustomProviders = customProviders
               ? async () => {
                   const ctx = await resolveCustomProvidersContext({ c: loose(c), auth, customProviders });
-                  return 'response' in ctx ? [] : listScopedCustomProviders(ctx);
+                  if ('response' in ctx) return [];
+                  return (await listScopedCustomProviders(ctx)).filter(({ record }) => isCallable(record));
                 }
               : undefined;
             return c.json({
@@ -1390,6 +1399,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           }
           const parsed = parseCustomProviderBody(body);
           if ('error' in parsed) return c.json({ error: parsed.error }, 400);
+          const urlProblem = customEndpointUrlProblem(parsed.url);
+          if (urlProblem) return c.json({ error: 'custom_endpoint_url_refused', message: urlProblem }, 400);
           const target = await resolveCustomProviderWrite(loose(c), ctx, parsed.scope);
           if ('response' in target) return target.response;
           const input = {

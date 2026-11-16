@@ -435,6 +435,30 @@ describe('prepareFactoryRuleBinding', () => {
         expect(prepare).not.toHaveBeenCalled();
       });
 
+      it('does not count an endpoint a hosted Factory refuses to call', async () => {
+        vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deploy-1');
+        try {
+          const seed = await seedFactoryWithRepository({ modelScope });
+          await seed.seeded.customProviders.create({
+            owner: { orgId: 'org-1' },
+            createdBy: 'factory-creator',
+            input: {
+              providerId: 'acme',
+              name: 'Acme',
+              url: 'http://10.0.0.5/v1',
+              apiKey: 'sk-acme',
+              models: ['fast-1'],
+            },
+          });
+          const { prepare, started } = start(seed, 'approver-1');
+
+          await expect(started).rejects.toMatchObject({ code: 'factory_org_key_missing' });
+          expect(prepare).not.toHaveBeenCalled();
+        } finally {
+          vi.unstubAllEnvs();
+        }
+      });
+
       it.each([
         ['a person moved the card', 'approver-1'],
         ['nobody is behind the move', undefined],

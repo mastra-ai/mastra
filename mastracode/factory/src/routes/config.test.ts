@@ -2560,6 +2560,65 @@ describe('custom provider routes', () => {
     expect(forOtherMember.providers).not.toContainEqual(expect.objectContaining({ provider: 'my-llm' }));
   });
 
+  describe('on a hosted Factory', () => {
+    const modelIds = async (user: Parameters<typeof buildApp>[0]) =>
+      (
+        (await (await buildApp(user).request('/web/config/models')).json()) as { models: Array<{ id: string }> }
+      ).models.map(model => model.id);
+
+    beforeEach(() => {
+      vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deploy-1');
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it.each(['http://llm.example.com/v1', 'https://169.254.169.254/v1', 'https://localhost:11434/v1'])(
+      'refuses to save %s',
+      async url => {
+        const res = await postProvider(buildApp(userA), { ...providerBody, url });
+
+        expect(res.status).toBe(400);
+        expect(await res.json()).toMatchObject({ error: 'custom_endpoint_url_refused', message: expect.any(String) });
+        expect(await ownList(userA)).toEqual([]);
+      },
+    );
+
+    it('refuses an edit that moves an endpoint onto a local address', async () => {
+      const { provider } = await (await postProvider(buildApp(userA), providerBody)).json();
+
+      const res = await postProvider(buildApp(userA), {
+        ...providerBody,
+        url: 'https://10.0.0.5/v1',
+        previousId: provider.id,
+      });
+
+      expect(res.status).toBe(400);
+      expect(await ownList(userA)).toMatchObject([{ url: 'https://llm.example.com/v1' }]);
+    });
+
+    it('flags an endpoint saved before the rule and keeps it out of the catalogs', async () => {
+      await seed.customProviders.create({
+        owner: { orgId: 'org1', userId: 'user-a' },
+        createdBy: 'user-a',
+        input: { providerId: 'old-llm', name: 'Old LLM', url: 'http://10.0.0.5/v1', apiKey: 'sk-old', models: ['old'] },
+      });
+      await postProvider(buildApp(userA), providerBody);
+
+      const listed = await listCustomProviders(userA);
+      expect(listed.map(provider => provider.name)).toEqual(['My LLM', 'Old LLM']);
+      expect(listed[0]).not.toHaveProperty('urlProblem');
+      expect(listed[1]).toHaveProperty('urlProblem', expect.any(String));
+      const { providers } = await (await buildApp(userA).request('/web/config/providers')).json();
+      expect(providers).toContainEqual(expect.objectContaining({ provider: 'my-llm' }));
+      expect(providers).not.toContainEqual(expect.objectContaining({ provider: 'old-llm' }));
+      const models = await modelIds(userA);
+      expect(models).toContain('my-llm/m1');
+      expect(models).not.toContain('old-llm/old');
+    });
+  });
+
   it('lists a custom provider once when the gateway catalog also namespaces it', async () => {
     const app = new Hono();
     mountApiRoutes(

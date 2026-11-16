@@ -390,6 +390,26 @@ describe('ProviderList custom endpoints', () => {
     expect(screen.queryByRole('menuitem', { name: 'Update key' })).not.toBeInTheDocument();
   });
 
+  it('marks an endpoint this server refuses to call and keeps it editable', async () => {
+    stubProviders([]);
+    stubCustomProviders([
+      {
+        ...myLlm,
+        url: 'http://10.0.0.5/v1',
+        urlProblem: 'Use an HTTPS address: a hosted Factory only calls custom endpoints over HTTPS.',
+      },
+    ]);
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    const row = await findCustomRow('my-llm');
+    expect(within(row).getByText('URL not allowed')).toBeInTheDocument();
+    expect(within(row).queryByText('2 models')).not.toBeInTheDocument();
+
+    await user.click(within(row).getByRole('button', { name: 'my-llm actions' }));
+    expect(await screen.findByRole('menuitem', { name: 'Edit' })).toBeInTheDocument();
+  });
+
   it('adds an endpoint from the Add provider dialog, even when no provider matches the search', async () => {
     const saved: CustomProviderInfo[] = [];
     let postBody: unknown;
