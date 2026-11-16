@@ -1,0 +1,55 @@
+import type { Document } from 'mongodb';
+
+const isObj = (v: unknown): v is Document => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** Recursively sort object keys; arrays keep their order. */
+function canon(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(canon);
+  if (!isObj(v)) return v;
+  return Object.fromEntries(
+    Object.keys(v)
+      .sort()
+      .map(k => [k, canon(v[k])]),
+  );
+}
+
+function normalizeMapping(m: unknown): unknown {
+  if (!isObj(m)) return canon(m);
+  const out: Document = { ...m };
+  if (m.type === 'document' && m.dynamic === undefined) out.dynamic = false;
+  if (isObj(m.fields)) out.fields = normalizeFields(m.fields);
+  return canon(out);
+}
+
+// A field value is one mapping or an array of mappings: always a list sorted by canonical JSON.
+function normalizeFields(fields: Document): Document {
+  return Object.fromEntries(
+    Object.entries(fields).map(([name, value]) => [
+      name,
+      (Array.isArray(value) ? value : [value])
+        .map(normalizeMapping)
+        .sort((x, y) => cmp(JSON.stringify(x), JSON.stringify(y))),
+    ]),
+  );
+}
+
+const cmp = (x: string, y: string) => (x < y ? -1 : x > y ? 1 : 0);
+
+/** Canonical form of an Atlas Search index definition. Only the spec's listed defaults are filled in. */
+export function normalizeSearchDefinition(def: Document | undefined): unknown {
+  if (!isObj(def)) return def;
+  const out: Document = { ...def };
+  out.analyzer = def.analyzer ?? 'lucene.standard';
+  out.searchAnalyzer = def.searchAnalyzer ?? out.analyzer;
+  if (isObj(def.mappings)) {
+    const m: Document = { ...def.mappings };
+    if (m.dynamic === undefined) m.dynamic = false;
+    if (isObj(m.fields)) m.fields = normalizeFields(m.fields);
+    out.mappings = m;
+  }
+  return canon(out);
+}
+
+export function searchDefinitionsEquivalent(a: Document | undefined, b: Document | undefined): boolean {
+  return JSON.stringify(normalizeSearchDefinition(a)) === JSON.stringify(normalizeSearchDefinition(b));
+}
