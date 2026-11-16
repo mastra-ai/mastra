@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 
 import { PosthogAnalytics, setAnalytics } from 'mastra/dist/analytics/index.js';
 
@@ -27,6 +27,8 @@ type CreateArgs = {
   platform?: boolean;
   org?: string;
   region?: string;
+  latest?: boolean;
+  alpha?: boolean;
 };
 
 program
@@ -40,10 +42,13 @@ program
   .option('--no-platform', 'Skip Mastra platform provisioning and scaffold the self-hosted template')
   .option('--org <org>', 'Mastra organization id or name — skips the interactive org picker')
   .option('--region <region>', 'Platform project region (eu or us); defaults to us')
+  .addOption(new Option('--latest', 'Pin the Mastra packages to the latest stable release').conflicts('alpha'))
+  .option('--alpha', 'Pin the Mastra packages to the latest alpha (prerelease) release')
   .version(pkg.version, '-v, --version')
   .action(async (projectNameArg: string | undefined, args: CreateArgs) => {
     const region = args.region ? String(args.region) : undefined;
     const validRegion = region === 'eu' || region === 'us' ? region : undefined;
+    const versionTag = args.alpha ? 'alpha' : args.latest ? 'latest' : undefined;
     // Values that must never reach analytics if a failure message echoes them.
     // (redactError also covers derived variants, e.g. degit's prefix-stripped repo.)
     const sensitiveValues = [
@@ -66,6 +71,7 @@ program
           no_platform: args.platform === false,
           has_org: Boolean(args.org),
           region: validRegion ?? (region ? 'invalid' : undefined),
+          version_tag: versionTag,
         },
         execution: async () => {
           try {
@@ -76,6 +82,7 @@ program
               noPlatform: args.platform === false,
               org: args.org ? String(args.org) : undefined,
               region,
+              versionTag,
               analytics,
             });
           } catch (err) {

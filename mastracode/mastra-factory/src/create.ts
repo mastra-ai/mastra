@@ -23,6 +23,8 @@ import {
 } from './platform.js';
 import { canScaffoldInto, cloneTemplate, renameProject } from './utils/clone.js';
 import { detectPackageManager, getInstallArgs } from './utils/pm.js';
+import type { VersionTag } from './utils/versions.js';
+import { pinMastraPackages } from './utils/versions.js';
 
 export const PLATFORM_TEMPLATE_REPO = 'https://github.com/mastra-ai/template-factory';
 export const SELF_HOSTED_TEMPLATE_REPO = 'https://github.com/mastra-ai/template-factory-self-hosted';
@@ -48,6 +50,12 @@ export interface CreateArgs {
    * equals the value. If no match, provisioning fails with a clear message.
    */
   org?: string;
+  /**
+   * Pin the template's `mastra` / `@mastra/*` packages to the exact versions
+   * this npm dist-tag points at (e.g. `alpha` for prereleases). Omitted → the
+   * template's own version specs are installed as-is.
+   */
+  versionTag?: VersionTag;
   analytics: PosthogAnalytics;
 }
 
@@ -109,6 +117,7 @@ export async function create(args: CreateArgs): Promise<void> {
   args.analytics.trackEvent('sf_create_started', {
     package_manager: packageManager,
     no_platform: Boolean(args.noPlatform),
+    version_tag: args.versionTag,
   });
 
   // ── Clone template ───────────────────────────────────────────────────────
@@ -136,6 +145,34 @@ export async function create(args: CreateArgs): Promise<void> {
   } catch (err) {
     spinner.stop('Template download failed.');
     throw err;
+  }
+
+  // ── Pin Mastra packages to a release channel ─────────────────────────────
+  if (args.versionTag) {
+    const tag = args.versionTag;
+    const pinSpinner = p.spinner();
+    pinSpinner.start(`Resolving the "${tag}" Mastra packages...`);
+    const { pinned, unresolved } = await pinMastraPackages(projectPath, tag);
+    if (Object.keys(pinned).length === 0 && unresolved.length > 0) {
+      pinSpinner.stop(`Could not resolve "${tag}" Mastra packages.`);
+      throw new Error(
+        `Could not resolve any Mastra package versions for the "${tag}" tag. Check your network connection and npm registry access.`,
+      );
+    }
+    // Mastra peer ranges like `>=1.83.0-0` don't match a newer prerelease
+    // (`1.84.0-alpha.3`) under semver's prerelease rules, so npm refuses to
+    // install alpha releases together. Persist the override so later
+    // `npm install`s in the project keep working too.
+    if (tag === 'alpha' && packageManager === 'npm') {
+      const npmrcPath = path.join(projectPath, '.npmrc');
+      const existing = fs.existsSync(npmrcPath) ? fs.readFileSync(npmrcPath, 'utf8') : '';
+      const prefix = existing && !existing.endsWith('\n') ? '\n' : '';
+      fs.writeFileSync(npmrcPath, `${existing}${prefix}legacy-peer-deps=true\n`);
+    }
+    pinSpinner.stop(`Using "${tag}" Mastra packages.`);
+    if (unresolved.length > 0) {
+      p.log.warn(`No "${tag}" release found for ${unresolved.join(', ')}; keeping the template's version.`);
+    }
   }
 
   // ── Install dependencies ─────────────────────────────────────────────────
