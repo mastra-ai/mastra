@@ -1,7 +1,7 @@
-import { SESSION_ROW_WINDOW } from '@mastra/factory/session/session-row-limits';
+import { SESSION_ROW_WINDOW, SESSION_ROW_WINDOW_MAX } from '@mastra/factory/session/session-row-limits';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import type { ReactNode } from 'react';
-import { Fragment, useEffect, useRef } from 'react';
+import { Fragment, useState } from 'react';
 
 import { SESSION_GROUP_INCREMENT } from '../services/sessionGroups';
 import type { SessionGroup, SessionGroupIcon } from '../services/sessionGroups';
@@ -37,32 +37,30 @@ export function SessionGroupList({
   onShowMore: () => void;
   onShowLess: () => void;
 }) {
-  const sectionRef = useRef<HTMLElement>(null);
-  const focusOnAnswer = useRef<ToggleName | undefined>(undefined);
+  const [handOff, setHandOff] = useState<{ to: ToggleName; fromRowCount: number }>();
   const openBelowFold = group.openIndex !== undefined && group.openIndex >= SESSION_ROW_WINDOW;
-  const remainingCount = group.total - group.rows.length;
+  const remainingCount = Math.min(group.total, SESSION_ROW_WINDOW_MAX) - group.rows.length;
   const collapsibleCount = group.rows.length - Math.min(group.total, SESSION_ROW_WINDOW + Number(openBelowFold));
 
   // The pressed toggle unmounts once the answer leaves it nothing to count, so hand focus to the one that remains.
-  useEffect(() => {
-    const name = focusOnAnswer.current;
-    if (!name) return;
-    focusOnAnswer.current = undefined;
-    sectionRef.current?.querySelector<HTMLButtonElement>(`[data-session-group-toggle="${name}"]`)?.focus();
-  }, [group.rows.length]);
+  const focusOnAnswer = (name: ToggleName) => (toggle: HTMLButtonElement | null) => {
+    if (!toggle || handOff?.to !== name || handOff.fromRowCount === group.rows.length) return;
+    toggle.focus();
+    setHandOff(undefined);
+  };
 
   const showMore = () => {
-    if (remainingCount <= SESSION_GROUP_INCREMENT) focusOnAnswer.current = 'less';
+    if (remainingCount <= SESSION_GROUP_INCREMENT) setHandOff({ to: 'less', fromRowCount: group.rows.length });
     onShowMore();
   };
 
   const showLess = () => {
-    focusOnAnswer.current = 'more';
+    setHandOff({ to: 'more', fromRowCount: group.rows.length });
     onShowLess();
   };
 
   return (
-    <section ref={sectionRef} className="flex flex-col gap-1" aria-label={`${group.label} sessions`}>
+    <section className="flex flex-col gap-1" aria-label={`${group.label} sessions`}>
       {showHeader && (
         <Sidebar.NavHeader className="mt-0" icon={GROUP_ICONS[group.icon]}>
           {group.label}
@@ -75,18 +73,18 @@ export function SessionGroupList({
       </Sidebar.NavList>
       <div className="flex items-center gap-3">
         <Sidebar.NavShowMore
+          ref={focusOnAnswer('more')}
           foldedCount={Math.min(remainingCount, SESSION_GROUP_INCREMENT)}
           expanded={false}
           onExpandedChange={showMore}
           aria-expanded={undefined}
-          data-session-group-toggle="more"
         />
         <Sidebar.NavShowMore
+          ref={focusOnAnswer('less')}
           foldedCount={collapsibleCount}
           expanded
           onExpandedChange={showLess}
           aria-expanded={undefined}
-          data-session-group-toggle="less"
         />
       </div>
     </section>

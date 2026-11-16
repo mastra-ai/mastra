@@ -74,13 +74,13 @@ describe('removeCachedSession', () => {
     );
     const client = createQueryClient();
     const { result } = renderHookWithProviders(() => useSessionRowsQuery(FACTORY_ID, REQUEST), { client });
-    await waitFor(() => expect(result.current.data?.groups[0]?.rows).toHaveLength(2));
+    await waitFor(() => expect(result.current.shown?.groups[0]?.rows).toHaveLength(2));
 
     void client.refetchQueries({ queryKey: queryKeys.sessionRowsRoot(FACTORY_ID) });
     await waitFor(() => expect(requests).toBe(2));
     removeCachedSession(client, FACTORY_ID, 'session-1');
 
-    const shown = () => result.current.data;
+    const shown = () => result.current.shown;
     await waitFor(() =>
       expect(shown()?.groups[0]?.rows.map(listed => listed.session.sessionId)).toEqual(['session-2']),
     );

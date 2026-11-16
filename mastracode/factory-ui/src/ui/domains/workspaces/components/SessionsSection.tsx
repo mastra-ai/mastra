@@ -70,7 +70,7 @@ export function SessionsSection() {
     const { [groupKey]: _previous, ...others } = extraRows;
     setDeepened({ viewKey, extraRows: extra === undefined ? others : { ...others, [groupKey]: extra } });
   };
-  const rowsRead = useSessionRowsQuery(
+  const { read: rowsRead, shown: response } = useSessionRowsQuery(
     factoryId,
     sessionRowsRequest({
       sort: view.sort,
@@ -90,7 +90,6 @@ export function SessionsSection() {
   const deletion = useSessionDeletion(factoryId);
   const { baseUrl, sessionId: chatSessionId, sessionEnabled } = useChatSessionContext();
 
-  const response = rowsRead.data;
   const owners = sessionOwners(response?.owners ?? [], viewer);
   const defaultHeadings = sessionGroupHeadings(view.groupBy, {
     catalog: catalog.data,
@@ -127,10 +126,9 @@ export function SessionsSection() {
   const nothingToList = loaded && !hasRepositories && response?.total === 0 && !loadFailed;
   if (!factoryId || nothingToList) return null;
 
-  const emptyMessage =
-    response && !rowsRead.isPlaceholderData
-      ? emptyListMessage({ total: response.total, matching: response.matching, groupCount: groups.length })
-      : undefined;
+  const emptyMessage = rowsRead.data
+    ? emptyListMessage({ total: rowsRead.data.total, matching: rowsRead.data.matching, groupCount: groups.length })
+    : undefined;
 
   return (
     <section className="flex flex-col gap-2" aria-label="Sessions">

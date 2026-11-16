@@ -1,4 +1,5 @@
 import { queryOptions, skipToken, useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -33,15 +34,12 @@ export function sessionActivityQueryOptions(baseUrl: string, factoryProjectId: s
 
 export function useSessionRowsQuery(factoryProjectId: string | undefined, request: SessionRowsRequest) {
   const { baseUrl } = useApiConfig();
-  return useQuery({
-    ...sessionRowsQueryOptions(baseUrl, factoryProjectId, request),
-    placeholderData: (previous, previousQuery) => {
-      const [, , previousFactoryId, previousRequest] = previousQuery?.queryKey ?? [];
-      return previousFactoryId === (factoryProjectId ?? null) && previousRequest?.groupBy === request.groupBy
-        ? previous
-        : undefined;
-    },
-  });
+  const read = useQuery(sessionRowsQueryOptions(baseUrl, factoryProjectId, request));
+  const layout = { factoryProjectId, groupBy: request.groupBy };
+  const [lastRead, setLastRead] = useState({ ...layout, rows: read.data });
+  if (read.data && read.data !== lastRead.rows) setLastRead({ ...layout, rows: read.data });
+  const sameLayout = lastRead.factoryProjectId === factoryProjectId && lastRead.groupBy === request.groupBy;
+  return { read, shown: read.data ?? (sameLayout ? lastRead.rows : undefined) };
 }
 
 export function useSessionActivityQuery(factoryProjectId: string | undefined) {
