@@ -189,6 +189,27 @@ describe('posthog_run_query with live PostHog response shapes (#30528)', () => {
     expect(result.results).toEqual([[1]]);
   });
 
+  it('accepts a response that omits types', async () => {
+    const { types: _types, ...withoutTypes } = selectOneResponse;
+    queryResponse = withoutTypes;
+
+    const result = await runQuery('select 1');
+
+    expect(result.types).toBeUndefined();
+    expect(result.columns).toEqual(['1']);
+    expect(result.results).toEqual([[1]]);
+  });
+
+  it('accepts an empty types list', async () => {
+    queryResponse = { ...selectOneResponse, types: [] };
+
+    const result = await runQuery('select 1');
+
+    expect(result.types).toEqual([]);
+    expect(result.columns).toEqual(['1']);
+    expect(result.results).toEqual([[1]]);
+  });
+
   it('still rejects types that are not column name and type pairs', async () => {
     queryResponse = { ...selectOneResponse, types: [['1']] };
 
