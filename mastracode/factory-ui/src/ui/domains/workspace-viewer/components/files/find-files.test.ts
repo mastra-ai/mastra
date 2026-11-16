@@ -36,4 +36,8 @@ describe('findFiles', () => {
   it('lifts the files the session changed over otherwise equal matches', () => {
     expect(paths('index', ['a/index.ts', 'b/index.ts'], ['b/index.ts'])).toEqual(['b/index.ts', 'a/index.ts']);
   });
+
+  it('finds a path that grows longer once lowercased', () => {
+    expect(findFiles(['src/İ.ts'], 's', { limit: 5 }).matches).toEqual([{ path: 'src/İ.ts', matched: [7] }]);
+  });
 });

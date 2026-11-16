@@ -44,6 +44,16 @@ function score(path: string, matched: number[], nameStart: number, boosted: bool
   return total - path.length / 10;
 }
 
+// Lowercasing can lengthen a string ("İ"), which would move every matched position off the path.
+function lowerCased(path: string): string {
+  const lower = path.toLowerCase();
+  if (lower.length === path.length) return lower;
+  return Array.from(path, character => {
+    const lowered = character.toLowerCase();
+    return lowered.length === character.length ? lowered : character;
+  }).join('');
+}
+
 export function findFiles(
   paths: readonly string[],
   query: string,
@@ -53,7 +63,7 @@ export function findFiles(
   if (!needle) return { matches: [], total: 0 };
   const ranked: { match: FileMatch; score: number }[] = [];
   for (const path of paths) {
-    const lower = path.toLowerCase();
+    const lower = lowerCased(path);
     const nameStart = lower.lastIndexOf('/') + 1;
     const matched = positions(lower, needle, nameStart) ?? positions(lower, needle, 0);
     if (!matched) continue;
