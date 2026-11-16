@@ -1778,6 +1778,16 @@ export function getSuspensionAddressKey({ resourceId, threadId, runId, toolCallI
 }
 
 /**
+ * Whether an error is the durable layer's verdict that another continuation has
+ * already claimed the run being resumed. Two continuations racing for one
+ * suspended run are expected to produce it on the losing side, which must not be
+ * reported as a failure: the winner drives the run and reports its outcome.
+ */
+function isLostResumeClaim(error: unknown): boolean {
+  return error instanceof MastraError && error.id === 'AGENT_RESUME_ALREADY_CLAIMED';
+}
+
+/**
  * Owns the session's parked tool suspensions: tool calls paused via the native
  * tool-suspension primitive (e.g. `ask_user` / `request_access` / `submit_plan`)
  * that are awaiting a resume, keyed by `(threadId, runId, toolCallId)`. Each entry
@@ -6019,6 +6029,12 @@ export class Session<TState = unknown> {
 
   /** Tool call ids whose response has been claimed and is still being applied. */
   #claimedToolResponses = new Set<string>();
+  /**
+   * Parked calls this session is already resuming, keyed by their suspension
+   * address. Taken synchronously, so a second continuation for the same call
+   * returns quietly instead of racing the first into `sendStreamResume`.
+   */
+  #resumingSuspensions = new Set<string>();
   #suspensionAgents = new WeakMap<PendingSuspension, Agent>();
   #threadOwnerIdsByRunId = new Map<string, string>();
 
@@ -6215,6 +6231,12 @@ export class Session<TState = unknown> {
    * required when more than one is suspended concurrently; when omitted it
    * resolves to the sole pending suspension. `submit_plan` resumes are routed
    * through the plan-approval path (approval switches to the default mode).
+   *
+   * One continuation drives a parked call. Claiming it before the first await
+   * keeps a second answer arriving together with the first — two clicks, or a
+   * person answering while the Factory answers its own plan — out of the resume
+   * path: resuming is what the first caller is already doing, not a second
+   * outcome.
    */
   async respondToToolSuspension({
     resumeData,
@@ -6231,6 +6253,16 @@ export class Session<TState = unknown> {
   }): Promise<void> {
     const address = inputAddress ?? this.suspensions.resolveAddress({ toolCallId, runId });
     if (!address) return;
+    const resumingKey = getSuspensionAddressKey(address);
+    if (this.#resumingSuspensions.has(resumingKey)) {
+      console.warn('Ignoring a second resume of a parked tool call: one is already in flight.', {
+        threadId: address.threadId,
+        runId: address.runId,
+        toolCallId: address.toolCallId,
+      });
+      return;
+    }
+    this.#resumingSuspensions.add(resumingKey);
 
     try {
       if (!this.suspensions.has(address) && inputAddress) await this.resolveSuspensionAgent(address);
@@ -6247,6 +6279,10 @@ export class Session<TState = unknown> {
 
       await this.resumeToolCall({ resumeData, address, requestContext });
     } catch (error) {
+      // Losing the run to another continuation is expected rather than a failure:
+      // the winner reports the run's outcome, so this one neither alarms nor ends
+      // the run. A resume with no run to resume still reports as before.
+      if (isLostResumeClaim(error)) return;
       const err = getErrorFromUnknown(error);
       const sourceIsActive =
         address.threadId === this.thread.getId() && address.resourceId === this.identity.getResourceId();
@@ -6254,6 +6290,8 @@ export class Session<TState = unknown> {
       this.emit({ type: 'error', error: err });
       if (!this.suspensions.has(address) && this.getCurrentRunId() === address.runId)
         await this.finishAgentRun('error');
+    } finally {
+      this.#resumingSuspensions.delete(resumingKey);
     }
   }
 
@@ -6915,6 +6953,22 @@ export class Session<TState = unknown> {
     } catch (error) {
       // The resume never dispatched, so keep dropping the aborted run's trailing chunks.
       restoreAbortedRun?.();
+      if (isLostResumeClaim(error)) {
+        // Another continuation claimed the run and is driving it. Keep the call
+        // out of the parked list — the winner answered it, so re-registering it
+        // would park a call that is running — and let the start fail so the run
+        // this answer armed is reset. The run, and its ending, belong to the
+        // continuation that claimed it.
+        console.warn('A resume lost the run to another continuation; leaving the run to it.', {
+          threadId,
+          resourceId,
+          runId: address.runId,
+          toolCallId,
+          parked: agentThreadStreamRuntime.isRunParked(address.runId, agent.getPubSub()),
+          continuing: agentThreadStreamRuntime.hasRunContinuation(address.runId, agent.getPubSub()),
+        });
+        throw error;
+      }
       if (!observer?.dispatched()) {
         this.suspensions.register({ ...address, toolName: suspension.toolName });
         this.#suspensionAgents.set(this.suspensions.get(address)!, agent);

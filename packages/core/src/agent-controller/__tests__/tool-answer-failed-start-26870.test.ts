@@ -256,25 +256,31 @@ describe('tool answer that fails before its run starts', () => {
     expect(env.session.displayState.get().pendingSuspensions.size).toBe(0);
   }, 30_000);
 
-  it('leaves the session idle when two answers in flight together both fail', async () => {
+  it('dispatches one of two answers arriving together, and leaves the session idle when that one fails', async () => {
     const env = await suspended();
-    const resume = vi.spyOn(env.session.machinery.getAgent(), 'sendStreamResume');
-    let failBoth!: () => void;
-    const bothArmed = new Promise<void>(resolve => (failBoth = resolve));
-    let calls = 0;
-    resume.mockImplementation(async () => {
-      // Hold the first answer until the second has armed the run too.
-      if (++calls === 2) failBoth();
-      await bothArmed;
-      throw new Error('resume failed');
+    const agent = env.session.machinery.getAgent();
+    // Hold the first answer before it drops the parked call, so the second
+    // answer reaches the resume path while the first is still in it (#30462).
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const buildToolsets = env.session.machinery.buildToolsets;
+    vi.spyOn(env.session.machinery, 'buildToolsets').mockImplementationOnce(async context => {
+      const tools = await buildToolsets(context);
+      entered.resolve();
+      await release.promise;
+      return tools;
     });
+    const resume = vi.spyOn(agent, 'sendStreamResume').mockRejectedValue(new Error('resume failed'));
 
-    await Promise.all([
-      env.session.respondToToolSuspension({ resumeData: { ok: true } }),
-      env.session.respondToToolSuspension({ resumeData: { ok: true } }),
-    ]);
+    const first = env.session.respondToToolSuspension({ resumeData: { ok: true } });
+    await entered.promise;
+    // The second answer joins the first instead of resuming the call again.
+    await expect(env.session.respondToToolSuspension({ resumeData: { ok: true } })).resolves.toBeUndefined();
 
-    expect(resume).toHaveBeenCalledTimes(2);
+    release.resolve();
+    await first;
+
+    expect(resume).toHaveBeenCalledTimes(1);
     expect(env.session.run.isRunning()).toBe(false);
     expect(env.session.run.getRunId()).toBeNull();
     expect(env.session.displayState.get().pendingSuspensions.size).toBe(1);
