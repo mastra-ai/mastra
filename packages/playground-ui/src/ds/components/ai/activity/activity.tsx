@@ -325,7 +325,11 @@ export const ActivityHeadline = ({
       <ActivitySpacer className={cn(hasBadges && 'flex-none')} />
       {status === 'error' && (
         <ActivityTrailing>
-          <IconCrossMedium size={13} role="img" aria-label="Failed" className="shrink-0 text-destructive-foreground" />
+          <IconCrossMedium
+            role="img"
+            aria-label="Failed"
+            className="size-icon-sm shrink-0 text-destructive-foreground"
+          />
         </ActivityTrailing>
       )}
       <ActivityDisclosure />

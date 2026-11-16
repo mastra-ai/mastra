@@ -20,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { createBoardRegistry } from '../boards/index.js';
+import { createProjectSessionsReader } from '../routes/project-sessions.js';
 import { buildSourceControlSessionRoutes } from '../routes/source-control-sessions.js';
 import {
   registerTenantCredentialResolver,
@@ -375,6 +376,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         ).execute({ sessionId: phase.sessionId, toolCallId: parked.toolCallId, decision }, {});
       /** The web app, signed in as `viewer`. */
       const web = (viewer: string) => {
+        const users = {
+          getUser: async (userId: string) => {
+            profileLookups.push(userId);
+            return { id: userId, name: `Person ${userId}` };
+          },
+        } as never;
         const app = new Hono();
         app.use('*', async (context, next) => {
           context.set('factoryAuthUser' as never, { workosId: viewer, organizationId: ORG } as never);
@@ -387,12 +394,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             sourceControls: [sourceControl],
             projects: seeded.projects,
             memorySettings: seeded.memorySettings,
-            users: {
-              getUser: async (userId: string) => {
-                profileLookups.push(userId);
-                return { id: userId, name: `Person ${userId}` };
-              },
-            } as never,
+            users,
+            projectSessions: createProjectSessionsReader({
+              sourceControls: [sourceControl],
+              users,
+              workItems: seeded.workItems,
+            }),
             controller: code.controller as never,
             audit: { record: (event: { actorId: string }) => audit.push(event) } as never,
             workItems: seeded.workItems,

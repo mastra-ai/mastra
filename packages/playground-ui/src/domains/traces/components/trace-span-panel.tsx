@@ -8,7 +8,7 @@ import { TraceMessagesPanel } from '@/domains/traces/components/trace-messages-p
 import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
 import { TraceThreadPanel } from '@/domains/traces/components/trace-thread-panel';
 import { Button } from '@/ds/components/Button';
-import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
+import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
 import { useLinkComponent } from '@/lib/framework';
 import type { LinkComponentPaths } from '@/lib/framework';
 
@@ -197,7 +197,7 @@ export function TraceSpanPanel({
             ? ({ compact }) => (
                 <Button
                   tooltip={compact ? 'Open full thread' : undefined}
-                  icon={<IconBubbleText />}
+                  icon={<IconChatBubbles />}
                   variant="ghost"
                   size="sm"
                   // At a side column of 500px or less, collapse to a round icon button; the label stays for screen readers.

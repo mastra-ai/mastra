@@ -180,11 +180,11 @@ function StageArt({ stage, kind, className }: { stage: string; kind?: BoardPhase
       return <MaskedArt source="/factory-stage-icons/review.svg" className={className} />;
     case 'done':
     case 'terminal':
-      return <IconCircleCheck width={16} height={16} aria-hidden className={lucideClassName} />;
+      return <IconCircleCheck aria-hidden className={cn('size-icon-md', lucideClassName)} />;
     case 'canceled':
-      return <IconCircleX width={16} height={16} aria-hidden className={lucideClassName} />;
+      return <IconCircleX aria-hidden className={cn('size-icon-md', lucideClassName)} />;
     case 'resting':
-      return <IconCircleDashed width={16} height={16} aria-hidden className={lucideClassName} />;
+      return <IconCircleDashed aria-hidden className={cn('size-icon-md', lucideClassName)} />;
   }
 }
 

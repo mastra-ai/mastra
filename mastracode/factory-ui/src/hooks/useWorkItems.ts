@@ -69,7 +69,7 @@ export function stripCachedSessionRefs(queryClient: QueryClient, factoryProjectI
 const selectCards = (board: BoardSnapshot) => board.workItems;
 
 /** The cards holding a session, with the cards related to them, and the sessions parked on them. */
-export function sessionCardsQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
+function sessionCardsQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
   return queryOptions({
     queryKey: queryKeys.workItemsWithSessions(factoryProjectId),
     queryFn: factoryProjectId
@@ -292,8 +292,7 @@ export function useSessionWorkItemsQuery(factoryProjectId: string | undefined, s
   });
 }
 
-/** The cards the sidebar marks its sessions with: the ones holding a session, with the cards related to them. */
-export function useSidebarWorkItemsQuery(factoryProjectId: string | undefined) {
+export function useSessionCardsQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery(sessionCardsQueryOptions(baseUrl, factoryProjectId));
 }
@@ -366,12 +365,6 @@ function withoutCard(cached: BoardSnapshot | BoardPhasesSnapshot, id: string): B
   };
 }
 
-/** Whether a session is parked; `undefined` until the cards holding sessions have been read. */
-export function useSessionParked(factoryProjectId: string | undefined, sessionId: string): boolean | undefined {
-  const { data } = useSidebarWorkItemsQuery(factoryProjectId);
-  return data?.parkedSessionIds.includes(sessionId);
-}
-
 /**
  * Materialize a work item (the server upserts on `sourceKey`, so acting twice
  * on the same issue reuses the card). The cached cards are patched in place.
@@ -426,6 +419,7 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
     },
     onSuccess: item => {
       patchCards(queryClient, listKey, cards => cards.map(i => (i.id === item.id ? item : i)));
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessionRowsRoot(factoryProjectId) });
     },
   });
 }
@@ -536,6 +530,7 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
     // The lane's rule queues its run inside this commit. Awaiting both refetches keeps the
     // move pending until the card shows that run, so its button never reappears in between.
     onSettled: async () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessionRowsRoot(factoryProjectId) });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: listKey }),
         queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(factoryProjectId) }),
@@ -590,6 +585,7 @@ export function useDeleteWorkItemMutation(factoryProjectId: string | undefined) 
     onSuccess: () => {
       // patchCards keeps the snapshot's session markers, so refetch to drop the deleted card's with it.
       void queryClient.invalidateQueries({ queryKey: listKey });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessionRowsRoot(factoryProjectId) });
     },
   });
 }

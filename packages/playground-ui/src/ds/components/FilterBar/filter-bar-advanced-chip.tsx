@@ -125,7 +125,7 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
         finalFocus={triggerRef}
       >
         <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-          <IconCodeBrackets className="size-3.5 text-muted-foreground" />
+          <IconCodeBrackets className="size-icon-sm text-muted-foreground" />
           <Txt as="span" variant="label" tone="ink">
             Advanced filter
           </Txt>

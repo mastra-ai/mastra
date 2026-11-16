@@ -41,7 +41,7 @@ import { IconMaintenance } from '@/ds/icons/central/IconMaintenance';
 import { IconRescueRing } from '@/ds/icons/central/IconRescueRing';
 import { IconRobot } from '@/ds/icons/central/IconRobot';
 import { IconServer1 } from '@/ds/icons/central/IconServer1';
-import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
 import { IconSignalTower } from '@/ds/icons/central/IconSignalTower';
 import { IconSparklesTwo } from '@/ds/icons/central/IconSparklesTwo';
 import { IconUserDuo } from '@/ds/icons/central/IconUserDuo';
@@ -406,7 +406,7 @@ export const WithNestedItems: Story = {
                 key: 'settings',
                 title: 'Admin',
                 separator: true,
-                links: [{ name: 'Settings', url: '/settings', icon: <IconSettingsGear1 /> }],
+                links: [{ name: 'Settings', url: '/settings', icon: <IconSettingsGear5 /> }],
               },
             ]}
             isActive={(link, siblings) => getIsLinkActive(link, '/agents/templates', siblings)}
@@ -438,7 +438,7 @@ export const WithFooter: Story = {
           <Sidebar.NavList>
             <Sidebar.NavLink link={{ name: 'Team', url: '/team', icon: <IconUserDuo /> }} />
             <Sidebar.NavLink link={{ name: 'Notifications', url: '/notifications', icon: <IconBell2 /> }} />
-            <Sidebar.NavLink link={{ name: 'Settings', url: '/settings', icon: <IconSettingsGear1 /> }} />
+            <Sidebar.NavLink link={{ name: 'Settings', url: '/settings', icon: <IconSettingsGear5 /> }} />
           </Sidebar.NavList>
           <Sidebar.Trigger />
         </Sidebar.Footer>
@@ -591,7 +591,7 @@ const ParityBody = () => (
     </Sidebar.Nav>
     <Sidebar.Footer>
       <Sidebar.NavList>
-        <Sidebar.NavLink link={{ name: 'Settings', url: '/settings', icon: <IconSettingsGear1 /> }} />
+        <Sidebar.NavLink link={{ name: 'Settings', url: '/settings', icon: <IconSettingsGear5 /> }} />
       </Sidebar.NavList>
       <Sidebar.Trigger />
     </Sidebar.Footer>

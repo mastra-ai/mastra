@@ -36,13 +36,13 @@ const libraryLink: SidebarLink = {
 const skillsLink: SidebarLink = {
   name: 'Skills',
   url: '/agent-builder/skills',
-  icon: <IconBlocks className="h-4 w-4" />,
+  icon: <IconBlocks className="size-icon-md" />,
 };
 
 const infrastructureLink: SidebarLink = {
   name: 'Infrastructure',
   url: '/agent-builder/infrastructure',
-  icon: <IconServer className="h-4 w-4" />,
+  icon: <IconServer className="size-icon-md" />,
 };
 
 type AgentBuilderSidebarProps = {

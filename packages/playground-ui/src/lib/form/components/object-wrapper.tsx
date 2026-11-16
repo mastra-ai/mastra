@@ -26,7 +26,7 @@ function ObjectGroup({ label, children }: Pick<ObjectWrapperProps, 'label' | 'ch
       <CollapsibleTrigger className="flex min-h-11 w-full items-center gap-2 text-left text-caption text-muted-foreground">
         <DisclosureChevron direction="right" className="size-3.5" />
         <span className="flex min-w-0 items-center gap-1.5">
-          <IconCodeBrackets aria-hidden className="size-3.5" />
+          <IconCodeBrackets aria-hidden className="size-icon-sm" />
           {label}
         </span>
         {invalid && (

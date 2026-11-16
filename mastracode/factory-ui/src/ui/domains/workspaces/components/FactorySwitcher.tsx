@@ -6,9 +6,9 @@ import { Factory as FactoryIcon } from 'lucide-react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { useFactoriesQuery, useFactoryQuery } from '../../../../hooks/useFactories';
 import { createFactoryPath, factorySwitchPath } from '../services/factoryPaths';
-import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 
 export function FactorySwitcher() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -49,7 +49,7 @@ export function FactorySwitcher() {
             {activeFactory?.name ?? 'Select a factory…'}
           </Txt>
         )}
-        <IconChevronBottom size={14} className="text-muted-foreground shrink-0" />
+        <IconChevronDownMedium className="text-muted-foreground size-icon-sm shrink-0" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">
         {factories.map(factory => (

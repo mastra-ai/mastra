@@ -1,14 +1,20 @@
+import type { CardContextSession } from '@mastra/factory/work-items/card-context-sessions';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { Link } from 'react-router';
 
-import { useActiveRunResourceIds } from '../../../../hooks/useActiveRunResources';
-import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import type { CardContextSession } from '../boardItems';
+import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
+import type { WorkItemSessionRef } from '../services/workItems';
 
 /** Every session the card holds, named by the context it runs in, the current one first. */
-export function CardSessions({ factoryId, sessions }: { factoryId: string; sessions: readonly CardContextSession[] }) {
-  const running = useActiveRunResourceIds(AGENT_CONTROLLER_ID);
+export function CardSessions({
+  factoryId,
+  sessions,
+}: {
+  factoryId: string;
+  sessions: readonly CardContextSession<WorkItemSessionRef>[];
+}) {
+  const running = new Set(useSessionActivityQuery(factoryId).data?.runningSessionIds);
   if (sessions.length === 0) return null;
 
   return (

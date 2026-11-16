@@ -106,7 +106,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                                 className="cursor-grab text-muted-foreground active:cursor-grabbing"
                               >
                                 <Icon>
-                                  <IconDotGrid2x3 className="h-3.5 w-3.5" />
+                                  <IconDotGrid2x3 />
                                 </Icon>
                               </span>
                               <Txt as="span" variant="subheading">

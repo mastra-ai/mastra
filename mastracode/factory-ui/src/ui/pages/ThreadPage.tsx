@@ -32,7 +32,7 @@ import { useRefreshWorkspaceFilesOnToolCalls } from '../domains/workspace-viewer
 import { newUserSessionPath } from '../domains/workspaces/services/factoryPaths';
 
 import '../domains/chat/components/chat-enter.css';
-import { IconBubbleCrossed } from '@mastra/playground-ui/icons/central/IconBubbleCrossed';
+import { IconChatBubble7Off } from '@mastra/playground-ui/icons/central/IconChatBubble7Off';
 
 const threadShellClass = cn(chatColumnClass, '[--chat-gutter:0.25rem]');
 
@@ -74,7 +74,7 @@ function SessionNotFoundMain({ factoryId }: { factoryId: string | undefined }) {
       <div className="grid min-h-0 place-items-center">
         <EmptyState
           as="h1"
-          iconSlot={<IconBubbleCrossed />}
+          iconSlot={<IconChatBubble7Off />}
           titleSlot="Session not found"
           descriptionSlot="This session does not exist, or it is private to another user."
           actionSlot={

@@ -47,7 +47,8 @@ jobs:
         )
       )
     runs-on: starsling-ubuntu-26.04
-    # The daily update fetches jobs for every unsuccessful PR run in 14 days, one call at a time (~700).
+    # The daily update fetches jobs for unsuccessful PR runs in 14 days it hasn't settled yet, one call at a
+    # time, and stops after 45 minutes (update.mjs DAILY_BUDGET_MINUTES), saving what it has.
     timeout-minutes: 60
     permissions:
       contents: write

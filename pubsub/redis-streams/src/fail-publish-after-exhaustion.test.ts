@@ -101,4 +101,76 @@ describe('workflow.fail publish fails after retry exhaustion', () => {
     },
     60_000,
   );
+
+  // Redis delivers each event in the context the subscriber was created in, so
+  // the failure published after the last delivery can't pick up the run's
+  // storage version from the publisher the way an in-process transport does.
+  describe.each([1, 2] as const)('storage v%s', storageVersion => {
+    it.each(['top-level', 'nested'] as const)(
+      'stores a %s run as failed',
+      async shape => {
+        const workflowId = `fail-exhausted-${randomUUID()}`;
+        const step = (id: string) =>
+          createStep({
+            id,
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            execute: async () => ({}),
+          });
+        const inner = createWorkflow({
+          id: `${workflowId}-inner`,
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          options: { storageVersion },
+        })
+          .then(step('work'))
+          .commit();
+        const workflow =
+          shape === 'nested'
+            ? createWorkflow({
+                id: workflowId,
+                inputSchema: z.object({}),
+                outputSchema: z.object({}),
+                options: { storageVersion },
+              })
+                .then(inner)
+                .then(step('after'))
+                .commit()
+            : inner;
+
+        pubsub = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix: workflowId, blockMs: 50 });
+        const publish = pubsub.publish.bind(pubsub);
+        // The inner workflow's step-end publish always throws, so its step.run
+        // event exhausts its delivery budget and the run must fail.
+        vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+          if (topic === 'workflows' && event.type === 'workflow.step.end' && event.data?.workflowId === inner.id) {
+            throw new Error('injected publish failure for workflow.step.end');
+          }
+          return publish(topic, event, options);
+        });
+
+        mastra = new Mastra({ workflows: { workflow }, storage: new InMemoryStore(), pubsub, logger: false });
+        await mastra.startWorkers();
+
+        const run = await mastra.getWorkflow('workflow').createRun();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const result = await Promise.race([
+          run.start({ inputData: {} }),
+          new Promise<'HANG'>(resolve => {
+            timer = setTimeout(() => resolve('HANG'), 20_000);
+          }),
+        ]);
+        clearTimeout(timer);
+        const store = (await mastra.getStorage()!.getStore('workflows'))!;
+        const { runs } = await store.listWorkflowRuns({});
+
+        expect(result).not.toBe('HANG');
+        expect((result as { status: string }).status).toBe('failed');
+        expect(runs.map(r => [r.workflowName, (r.snapshot as { status: string }).status]).sort()).toEqual(
+          (shape === 'nested' ? [workflow.id, inner.id] : [inner.id]).map(name => [name, 'failed']).sort(),
+        );
+      },
+      60_000,
+    );
+  });
 });

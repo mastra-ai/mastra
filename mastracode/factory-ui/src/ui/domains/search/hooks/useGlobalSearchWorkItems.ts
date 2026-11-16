@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
-import { useSidebarWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useSessionCardsQuery } from '../../../../hooks/useWorkItems';
 import { listWorkItems } from '../../factory/services/workItems';
 import type { BoardSnapshot, WorkItem } from '../../factory/services/workItems';
 
@@ -39,7 +39,7 @@ function useUnstartedSearch(factoryId: string | undefined, search: string) {
  * so no provider is asked for its list.
  */
 export function useGlobalSearchWorkItems(factoryId: string | undefined, typed: string) {
-  const sessionCards = useSidebarWorkItemsQuery(factoryId);
+  const sessionCards = useSessionCardsQuery(factoryId);
   const withSessions = sessionCards.data?.workItems ?? NO_CARDS;
   const settled = useDebouncedValue(typed.trim(), 150);
   // Clearing the box goes back to the cached empty search at once.

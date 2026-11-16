@@ -1,6 +1,7 @@
 import type { AgentController, AgentControllerThread } from '@mastra/core/agent-controller';
 
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { SLACK_SESSION_BRANCH_PREFIX } from '../work-item-branch.js';
 
 /** The Factory session row fields that say which memory resource it uses. */
 export interface FactorySessionOwnership {
@@ -80,7 +81,7 @@ export function memoryResourceOf(
   runBound: boolean,
 ) {
   const factoryProjectId = session.factoryProjectId ?? undefined;
-  const slack = session.branch?.startsWith('slack/') ?? false;
+  const slack = session.branch?.startsWith(SLACK_SESSION_BRANCH_PREFIX) ?? false;
   // A private Slack DM or side session stays with its owner.
   const shared =
     slack || session.originSessionId

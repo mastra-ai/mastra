@@ -103,7 +103,7 @@ function NotificationLink({
       className="flex w-fit items-center gap-1 text-meta text-muted-foreground hover:text-foreground"
     >
       {link.label}
-      <IconSquareArrowTopRight size={12} aria-hidden />
+      <IconSquareArrowTopRight className="size-icon-xs" aria-hidden />
     </a>
   );
 }

@@ -35,7 +35,7 @@ export function DatasetTagsEditor({ datasetId }: DatasetTagsEditorProps) {
       label: tag,
       value: tag,
       end: currentTags.includes(tag) ? (
-        <IconCheckmark2Medium data-testid="tag-applied" className="size-3.5" />
+        <IconCheckmark2Medium data-testid="tag-applied" className="size-icon-sm" />
       ) : undefined,
     }));
     const trimmed = search.trim();
@@ -69,7 +69,7 @@ export function DatasetTagsEditor({ datasetId }: DatasetTagsEditorProps) {
             onClick={() => handleRemove(tag)}
             className="cursor-pointer rounded-sm hover:opacity-70 disabled:opacity-50"
           >
-            <IconCrossMedium className="size-3" />
+            <IconCrossMedium className="size-icon-xs" />
           </button>
         </ComputedTag>
       ))}

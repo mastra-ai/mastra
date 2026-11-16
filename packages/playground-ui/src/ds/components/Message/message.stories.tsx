@@ -9,7 +9,7 @@ import { MessageCopyButton } from './message-copy-button';
 import { MessageTimestamp } from './message-timestamp';
 import { IconFocusSquare } from '@/ds/icons/central/IconFocusSquare';
 import { IconStopCircle } from '@/ds/icons/central/IconStopCircle';
-import { IconVoiceHigh } from '@/ds/icons/central/IconVoiceHigh';
+import { IconVoiceSimple } from '@/ds/icons/central/IconVoiceSimple';
 
 const question = 'Can you review the keyboard behavior before we ship this change?';
 const answer =
@@ -101,7 +101,7 @@ function StudioConversation() {
               tooltip={speaking ? 'Stop' : 'Read aloud'}
               onClick={() => setSpeaking(!speaking)}
             >
-              {speaking ? <IconStopCircle /> : <IconVoiceHigh />}
+              {speaking ? <IconStopCircle /> : <IconVoiceSimple />}
             </Button>
             <MessageCopyButton text={answer} />
             <MessageActions>

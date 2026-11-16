@@ -144,7 +144,7 @@ function Dropzone({ onFileSelect, disabled }: { onFileSelect: (file: File) => vo
         className="absolute inset-0 cursor-pointer opacity-0"
       />
       <div className="flex size-9 items-center justify-center rounded-md border border-border bg-background text-muted-foreground">
-        <IconArrowOutOfBox className="size-4" />
+        <IconArrowOutOfBox className="size-icon-md" />
       </div>
       <div className="flex flex-col gap-1">
         <Txt tone="ink">Drop a JSON file here</Txt>
@@ -186,7 +186,7 @@ function FileCard({
   return (
     <div data-testid="json-file-card" className="rounded-lg border border-border">
       <div className="flex items-center gap-2 px-3 py-2">
-        <IconFileText className="size-4 shrink-0 text-muted-foreground" />
+        <IconFileText className="size-icon-md shrink-0 text-muted-foreground" />
         <Txt as="span" variant="caption" tone="ink" font="mono" className="min-w-0 flex-1 truncate">
           {file.name}
         </Txt>

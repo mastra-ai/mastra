@@ -1,3 +1,5 @@
+import { cardContextSessions, phaseContext } from '@mastra/factory/work-items/card-context-sessions';
+import type { CardContextSession } from '@mastra/factory/work-items/card-context-sessions';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 import type { ReactNode } from 'react';
@@ -9,12 +11,10 @@ import { ChatPageLayout } from '../../chat/components/ChatPageLayout';
 import { UserSessionSharing } from '../../workspaces/components/UserSessionSharing';
 import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
 import { WorkspacePanelDock } from '../../workspace-viewer/components/WorkspacePanelDock';
-import { cardContextSessions, phaseContext } from '../boardItems';
-import type { CardContextSession } from '../boardItems';
 import { currentItemStage } from '../boardStages';
 import { useSessionCard } from '../hooks/useSessionCard';
 import { useOpenSession } from '../hooks/useOpenSession';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 import { CardStageBar } from './CardStageBar';
 import { CardStageSummary } from './CardStageSummary';
 import { SessionContextMenu, cardSessionPath } from './SessionContextMenu';
@@ -24,8 +24,8 @@ interface OpenSessionContext {
   context: string;
   label: string;
   /** Every session the card holds, one per context. */
-  sessions: CardContextSession[];
-  workingSession?: CardContextSession;
+  sessions: CardContextSession<WorkItemSessionRef>[];
+  workingSession?: CardContextSession<WorkItemSessionRef>;
 }
 
 function openSessionContext(
