@@ -124,8 +124,8 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `span-query-token-search`: token matching in `querySpans`
  * - `trace-query-token-search`: token matching across any span in `queryTraces`
  * - `span-query-model-fields`: `model` and `provider` predicates in `querySpans` and `aggregateSpans`
- * - `trace-aggregate-token-search`: text search in `aggregateTraces`
- * - `span-aggregate-token-search`: text search in `aggregateSpans`
+ * - `trace-aggregate-token-search`: token matching across any span in `aggregateTraces`
+ * - `span-aggregate-token-search`: token matching in `aggregateSpans`
  * - `span-aggregate`: `aggregateSpans`, including every `querySpans` predicate field
  * - `span-aggregate-model-dimensions`: `model` and `provider` in `aggregateSpans` `groupBy` and `countDistinct`
  * - `trace-query`: `queryTraces`
