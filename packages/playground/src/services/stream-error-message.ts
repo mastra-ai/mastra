@@ -14,10 +14,23 @@ type FinishChunkLike = {
     stepResult?: {
       reason?: unknown;
     };
+    output?: {
+      steps?: unknown;
+    };
   };
 };
 
 const MAX_STEPS_FINISH_REASON = 'tool-calls';
+
+const isRetryStep = (step: unknown) =>
+  typeof step === 'object' && step !== null && 'finishReason' in step && step.finishReason === 'retry';
+
+/**
+ * The steps a run spent from its maxSteps budget. A processor retry re-runs its
+ * step, so core's step limit does not count it, and neither does this.
+ */
+const countBudgetedSteps = (steps: unknown) =>
+  Array.isArray(steps) ? steps.filter(step => !isRetryStep(step)).length : undefined;
 
 const getMaxStepsErrorText = (maxSteps?: number) => {
   const limit = typeof maxSteps === 'number' ? ` (${maxSteps})` : '';
@@ -31,7 +44,25 @@ const getFinishReason = (chunk: FinishChunkLike) => {
   return typeof reason === 'string' ? reason : undefined;
 };
 
-export const isMaxStepsFinishChunk = (chunk: FinishChunkLike) => getFinishReason(chunk) === MAX_STEPS_FINISH_REASON;
+/**
+ * True when a run stopped because it used its whole step budget while the model
+ * still wanted to call tools. A `'tool-calls'` finish reason alone only says the
+ * last step called a tool: a `stopWhen` match or a client tool ends a run the
+ * same way (#29612). So the run must also have used every step in `maxSteps`.
+ * Without a known limit there is nothing to compare against, so no warning.
+ */
+export const isMaxStepsFinishChunk = ({
+  chunk,
+  maxSteps,
+}: {
+  chunk: FinishChunkLike;
+  maxSteps: number | undefined;
+}) => {
+  if (getFinishReason(chunk) !== MAX_STEPS_FINISH_REASON) return false;
+  if (typeof maxSteps !== 'number' || maxSteps < 1) return false;
+  const usedSteps = countBudgetedSteps(chunk.payload?.output?.steps);
+  return usedSteps !== undefined && usedSteps >= maxSteps;
+};
 
 /**
  * Build a `MastraDBMessage` representing a stream `error` chunk so it can be

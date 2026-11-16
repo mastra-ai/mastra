@@ -2,39 +2,53 @@ import { describe, expect, it } from 'vitest';
 import { buildStreamErrorMessage, isMaxStepsFinishChunk } from '../stream-error-message';
 
 describe('stream error messages', () => {
-  it('only treats terminal tool-call finish chunks as maxSteps exhaustion', () => {
-    expect(
-      isMaxStepsFinishChunk({
-        type: 'finish',
-        payload: {
-          stepResult: {
-            reason: 'tool-calls',
-          },
-        },
-      }),
-    ).toBe(true);
+  describe('when a run ends on a tool call (#29612)', () => {
+    const finish = ({
+      type = 'finish',
+      reason = 'tool-calls',
+      steps,
+    }: {
+      type?: string;
+      reason?: string;
+      steps: unknown[];
+    }) => ({
+      type,
+      payload: { stepResult: { reason }, output: { steps } },
+    });
+    const step = (finishReason: string) => ({ finishReason });
 
-    expect(
-      isMaxStepsFinishChunk({
-        type: 'step-finish',
-        payload: {
-          stepResult: {
-            reason: 'tool-calls',
-          },
-        },
-      }),
-    ).toBe(false);
+    it('warns only once every step in the budget is used', () => {
+      const threeToolSteps = [step('tool-calls'), step('tool-calls'), step('tool-calls')];
+      expect(isMaxStepsFinishChunk({ chunk: finish({ steps: threeToolSteps }), maxSteps: 3 })).toBe(true);
+      expect(isMaxStepsFinishChunk({ chunk: finish({ steps: threeToolSteps }), maxSteps: 10 })).toBe(false);
+    });
 
-    expect(
-      isMaxStepsFinishChunk({
-        type: 'finish',
-        payload: {
-          stepResult: {
-            reason: 'stop',
-          },
-        },
-      }),
-    ).toBe(false);
+    it('does not count processor retry steps against the budget', () => {
+      const steps = [step('retry'), step('tool-calls'), step('tool-calls')];
+      expect(isMaxStepsFinishChunk({ chunk: finish({ steps }), maxSteps: 3 })).toBe(false);
+      expect(isMaxStepsFinishChunk({ chunk: finish({ steps }), maxSteps: 2 })).toBe(true);
+    });
+
+    it('does not warn without a known limit or step list', () => {
+      expect(isMaxStepsFinishChunk({ chunk: finish({ steps: [step('tool-calls')] }), maxSteps: undefined })).toBe(
+        false,
+      );
+      expect(
+        isMaxStepsFinishChunk({
+          chunk: { type: 'finish', payload: { stepResult: { reason: 'tool-calls' } } },
+          maxSteps: 1,
+        }),
+      ).toBe(false);
+    });
+
+    it('ignores step-finish chunks and runs the model ended', () => {
+      expect(
+        isMaxStepsFinishChunk({ chunk: finish({ type: 'step-finish', steps: [step('tool-calls')] }), maxSteps: 1 }),
+      ).toBe(false);
+      expect(isMaxStepsFinishChunk({ chunk: finish({ reason: 'stop', steps: [step('stop')] }), maxSteps: 1 })).toBe(
+        false,
+      );
+    });
   });
 
   it('preserves human-readable error payloads', () => {

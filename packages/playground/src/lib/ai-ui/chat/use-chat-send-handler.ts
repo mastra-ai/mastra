@@ -343,7 +343,7 @@ export const useChatSendHandler = ({
             onChunk: async (chunk: any) => {
               delivered = true;
               if (chunk.type === 'finish') {
-                if (isMaxStepsFinishChunk(chunk)) {
+                if (isMaxStepsFinishChunk({ chunk, maxSteps: deps.maxSteps })) {
                   setStreamErrors(prev => [...prev, buildMaxStepsStreamErrorMessage(chunk, deps.maxSteps)]);
                 }
                 await refreshThreadList?.();

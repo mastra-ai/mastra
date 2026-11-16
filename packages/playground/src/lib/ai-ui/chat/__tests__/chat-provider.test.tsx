@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import type { ChunkType } from '@mastra/core/stream';
 import {
   useChatMessages,
   useChatModelContext,
@@ -25,6 +26,7 @@ import {
   emptyApprovalHistory,
   generatedApprovalResponse,
 } from './fixtures/nested-approval';
+import { stopAfterQuestion, streamQuestionAgent } from './fixtures/question-agent';
 import {
   acceptedToolRun,
   emptyMcpServers,
@@ -375,6 +377,87 @@ describe('ChatProvider', () => {
         );
       },
     );
+  });
+
+  // A finish reason of 'tool-calls' only says the last step called a tool. A stopWhen
+  // match ends a run the same way, so Studio must not read it as running out of steps. (#29612)
+  describe('when a run ends on a tool call', () => {
+    const MAX_STEPS_WARNING = /reached maxSteps/;
+
+    const renderRun = async ({ maxSteps, chunks }: { maxSteps: number; chunks: ChunkType[] }) => {
+      let requested = false;
+      server.use(
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, () => {
+          requested = true;
+          return new HttpResponse(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                for (const chunk of chunks)
+                  controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+                controller.close();
+              },
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          );
+        }),
+        http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(emptyMcpServers)),
+        ...baseHandlers([]),
+      );
+      const Transcript = () => {
+        const messages = useChatMessages();
+        const send = useChatSend();
+        const { isRunning } = useChatRunning();
+        return (
+          <>
+            <button onClick={() => send({ message: 'Make me a poster' })}>Send</button>
+            <output data-testid="run-state">{isRunning ? 'Running' : 'Stopped'}</output>
+            {messages.map(message => (
+              <MessageRow key={message.id} message={message} />
+            ))}
+          </>
+        );
+      };
+      render(
+        <Wrapper>
+          <ChatProvider
+            agentId="agent-1"
+            threadId="thread-1"
+            initialMessages={[]}
+            settings={{ modelSettings: { maxSteps } }}
+          >
+            <Transcript />
+          </ChatProvider>
+        </Wrapper>,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+      await waitFor(() => expect(requested).toBe(true));
+      await waitFor(() => expect(screen.getByTestId('run-state').textContent).toBe('Stopped'));
+    };
+
+    // Both runs end the same way on the wire; only the step count tells them apart.
+    const expectToolCallFinish = (chunks: ChunkType[], steps: number) =>
+      expect(chunks.at(-1)).toMatchObject({
+        type: 'finish',
+        payload: { stepResult: { reason: 'tool-calls' }, output: { steps: Array(steps).fill(expect.anything()) } },
+      });
+
+    it('shows no maxSteps warning when stopWhen ended the turn after the question', async () => {
+      const chunks = await streamQuestionAgent({ maxSteps: 10, stopWhen: stopAfterQuestion });
+      expectToolCallFinish(chunks, 1);
+
+      await renderRun({ maxSteps: 10, chunks });
+
+      expect(screen.queryByText(MAX_STEPS_WARNING)).toBeNull();
+    });
+
+    it('warns when the run used every step it had', async () => {
+      const chunks = await streamQuestionAgent({ maxSteps: 3 });
+      expectToolCallFinish(chunks, 3);
+
+      await renderRun({ maxSteps: 3, chunks });
+
+      expect(await screen.findByText(/reached maxSteps \(3\)/)).toBeTruthy();
+    });
   });
 
   describe('when a later run starts after an interrupted run', () => {
