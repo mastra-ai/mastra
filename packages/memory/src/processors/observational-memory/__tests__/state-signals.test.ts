@@ -136,12 +136,37 @@ describe('observationalMemory.stateSignals', () => {
     expect(conversation(prompt).join('\n')).toContain('Fix the flaky test');
   });
 
-  it('keeps the extracted sections out of the system prompt on read-only calls', async () => {
-    const { run } = await setup({ stateSignals: true });
+  // State signals are saved to the thread, which a read-only call must not write.
+  it('keeps the sections in the system prompt on read-only calls and writes nothing to the thread', async () => {
+    const { run, memory } = await setup({ stateSignals: true });
+    const before = await memory.getThreadById({ threadId });
     const prompt = await run('hello', { readOnly: true });
+    const after = await memory.getThreadById({ threadId });
 
-    expect(system(prompt).join('\n')).toContain('stale');
+    expect(system(prompt).join('\n')).toContain('<current-task>\nShip the report\n</current-task>');
+    expect(conversation(prompt).join('\n')).not.toContain('<observational-memory>');
+    expect(after!.metadata).toEqual(before!.metadata);
+    expect(after!.updatedAt).toEqual(before!.updatedAt);
+  });
+
+  it('sends an empty state once the values are cleared, so the old ones stop applying', async () => {
+    const { run, setHints } = await setup({ stateSignals: true });
+    await run('first');
+
+    await setHints({ currentTask: '', suggestedResponse: '' });
+    const prompt = await run('second');
+
+    const signals = conversation(prompt).filter(m => m.startsWith('<observational-memory'));
+    expect(signals.at(-1)).toBe('<observational-memory />');
     expect(system(prompt).join('\n')).not.toContain('Ship the report');
+  });
+
+  it('sends no state when the thread never had values', async () => {
+    const { run, setHints } = await setup({ stateSignals: true });
+    await setHints({ currentTask: '', suggestedResponse: '' });
+    const prompt = await run();
+
+    expect(conversation(prompt).join('\n')).not.toContain('<observational-memory>');
   });
 
   it('still returns the sections from Memory.getContext()', async () => {

@@ -323,7 +323,6 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           resourceId,
           record: ctx.omRecord,
           unobservedContextBlocks: ctx.otherThreadsContext,
-          omitExtractedValues: this.engine.stateSignals,
         });
 
         injectObservationContextMessages({

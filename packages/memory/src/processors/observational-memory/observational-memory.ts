@@ -21,6 +21,7 @@ import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../..';
 import { WORKING_MEMORY_STATE_ID } from '../working-memory-state/processor';
+import { OBSERVATIONAL_MEMORY_STATE_ID } from './state-processor';
 import { getMarkerActivationTTL, resolveActivationTTL } from './activation-ttl';
 import { resolveAutoModelId } from './auto-model';
 import { BufferingCoordinator } from './buffering-coordinator';
@@ -49,15 +50,17 @@ export function getLatestStepParts(parts: MastraDBMessage['content']['parts']): 
   return parts;
 }
 
+const OM_OWNED_STATE_IDS = new Set<unknown>([WORKING_MEMORY_STATE_ID, OBSERVATIONAL_MEMORY_STATE_ID]);
+
 /**
- * Returns true for persisted Working Memory state signals (`role: 'signal'`,
- * `signal.type: 'state'`, `state.id: 'working-memory'`). OM must not observe these:
- * they mirror memory OM itself manages, and re-observing them creates a self-feedback
- * loop that can overwrite stored working memory (#21961). Only the working-memory lane
- * is filtered — other state lanes are outside OM's write path, so re-observing them
- * cannot corrupt OM-managed state; excluding them broadly is a separate decision.
+ * Returns true for persisted state signals (`role: 'signal'`, `signal.type: 'state'`) on a lane that mirrors
+ * state OM itself manages: working memory and OM's own extracted values. OM must not observe these, since
+ * re-observing them is a self-feedback loop that can overwrite stored working memory (#21961) or feed the
+ * Observer its own output. Other state lanes are outside OM's write path, so they stay observable;
+ * excluding them broadly is a separate decision.
+ * @internal
  */
-function isWorkingMemoryStateSignal(message: MastraDBMessage): boolean {
+export function isOMOwnedStateSignal(message: MastraDBMessage): boolean {
   if (message.role !== 'signal') return false;
 
   const signal = message.content.metadata?.signal;
@@ -76,7 +79,7 @@ function isWorkingMemoryStateSignal(message: MastraDBMessage): boolean {
     !!state &&
     typeof state === 'object' &&
     !Array.isArray(state) &&
-    (state as Record<string, unknown>).id === WORKING_MEMORY_STATE_ID
+    OM_OWNED_STATE_IDS.has((state as Record<string, unknown>).id)
   );
 }
 
@@ -1846,7 +1849,7 @@ export class ObservationalMemory {
     const result: MastraDBMessage[] = [];
 
     for (const msg of allMessages) {
-      if (msg.role === 'system' || isWorkingMemoryStateSignal(msg)) {
+      if (msg.role === 'system' || isOMOwnedStateSignal(msg)) {
         continue;
       }
 
@@ -2303,10 +2306,10 @@ export class ObservationalMemory {
       });
     }
 
-    // Exclude working-memory state signals so storage-loaded paths (e.g. observe()
+    // Exclude OM-owned state signals so storage-loaded paths (e.g. observe()
     // without explicit messages, buffering token counts) never re-observe stored
     // working memory (#21961).
-    return result.messages.filter(msg => msg.role !== 'system' && !isWorkingMemoryStateSignal(msg));
+    return result.messages.filter(msg => msg.role !== 'system' && !isOMOwnedStateSignal(msg));
   }
 
   /**
@@ -3203,7 +3206,7 @@ ${formattedMessages}
       });
 
       const filtered = result.messages.filter(
-        message => !this.observedMessageIds.has(message.id) && !isWorkingMemoryStateSignal(message),
+        message => !this.observedMessageIds.has(message.id) && !isOMOwnedStateSignal(message),
       );
 
       if (filtered.length > 0) {
