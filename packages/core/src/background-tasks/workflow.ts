@@ -5,7 +5,7 @@ import { slimProgressChunk } from '../stream/strip-model-snapshots';
 import { createStep, createWorkflow } from '../workflows';
 import type { SuspendOptions } from '../workflows';
 import type { BackgroundTaskManager } from './manager';
-import { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
+import { BACKGROUND_TASK_WORKFLOW_ID, toolSuspendPayload } from './workflow-id';
 
 export { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
 
@@ -189,11 +189,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         // The payload this task suspended with, so the resumed tool knows which
         // request it is answering. The step's suspend data may carry the internal
         // `suspendedToolRunId` bridge (see below); strip it back off.
-        let suspendPayload: unknown = suspendData;
-        if (suspendPayload && typeof suspendPayload === 'object' && 'suspendedToolRunId' in suspendPayload) {
-          const { suspendedToolRunId: _bridge, ...rest } = suspendPayload as Record<string, unknown>;
-          suspendPayload = Object.keys(rest).length > 0 ? rest : undefined;
-        }
+        const suspendPayload = toolSuspendPayload(suspendData);
 
         const result = await executor.execute(args, {
           abortSignal: abortController.signal,

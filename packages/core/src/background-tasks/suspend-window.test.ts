@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MessageList } from '../agent/message-list';
+import { applyBackgroundToolExecution } from '../loop/shared/steps/background-task-result-core';
 import { Mastra } from '../mastra';
 import { InMemoryStore } from '../storage';
 import type { BackgroundTaskManager } from './manager';
@@ -86,6 +88,17 @@ async function settled(manager: BackgroundTaskManager, taskId: string): Promise<
     { timeout: 5000, interval: 20 },
   );
   return task!;
+}
+
+/** Stops an instance as a crash would: no shutdown, no more lease renewals. */
+function crashOut(mastra: Mastra): void {
+  mastras.splice(mastras.indexOf(mastra), 1);
+  clearInterval((mastra.backgroundTaskManager as unknown as { heartbeatInterval?: NodeJS.Timeout }).heartbeatInterval);
+}
+
+/** Lets the task's lease lapse, as it does a while after its owner died. */
+async function lapseLease(storage: InMemoryStore, taskId: string): Promise<void> {
+  await (await storage.getStore('backgroundTasks'))!.updateTask(taskId, { leaseExpiresAt: new Date(Date.now() - 1) });
 }
 
 afterEach(async () => {
@@ -570,6 +583,66 @@ describe('a background task that has just suspended (#30226)', () => {
     expect(tool.calls).toEqual([undefined, { approved: true }]);
   });
 
+  // Technical: an agent's suspend hook transforms the payload before it writes
+  // the tool call's `suspendedTools` entry. An answer in that await ran the
+  // resume hook, which drops the entry, first; the late write then put the
+  // answered question back on the message.
+  it('does not leave an answered question on the tool call when the answer arrives while it is being recorded', async () => {
+    const storage = new InMemoryStore();
+    const tool = approvalTool();
+    const manager = start(storage, tool).backgroundTaskManager!;
+    const toolCallId = 'answered-while-recording';
+    const messageList = new MessageList({ threadId: 'thread', resourceId: 'user' });
+    messageList.add(
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId, toolName: 'approval', args: {} } },
+          ],
+        },
+      },
+      'response',
+    );
+    const openRequest = () =>
+      (messageList.get.all.db()[0]?.content.metadata as { suspendedTools?: Record<string, unknown> } | undefined)
+        ?.suspendedTools?.[toolCallId];
+    let recording!: () => void;
+    const recordingReached = new Promise<void>(resolve => (recording = resolve));
+    let finishRecording!: () => void;
+    const recorded = new Promise<void>(resolve => (finishRecording = resolve));
+    let questionWritten!: () => void;
+    const written = new Promise<void>(resolve => (questionWritten = resolve));
+    const { task } = await manager.enqueue(payload(toolCallId), {
+      executor: tool,
+      onExecution: async params => {
+        await applyBackgroundToolExecution({
+          params,
+          args: {},
+          messageList,
+          transformChunk: async chunk => {
+            recording();
+            await recorded;
+            return chunk;
+          },
+        });
+        if (params.suspendedAt) questionWritten();
+      },
+    });
+    await recordingReached;
+
+    await manager.resume(task.id, { approved: true });
+    expect((await settled(manager, task.id)).status).toBe('completed');
+    finishRecording();
+    await written;
+
+    await vi.waitFor(() => expect(openRequest()).toBeUndefined(), { timeout: 1000, interval: 20 });
+    expect(tool.calls).toEqual([undefined, { approved: true }]);
+  });
+
   it('keeps the lease and slot of a task answered while its suspend hooks run, even if they outlast the lease', async () => {
     // The run that suspended finishes its hooks after the resumed run has
     // claimed the task; its cleanup must not drop the resumed run's lease or slot.
@@ -819,6 +892,85 @@ describe('a background task that has just suspended (#30226)', () => {
 
     expect((await settled(restarted, task.id)).status).toBe('completed');
     expect(tool.calls).toEqual([undefined, { approved: true }]);
+  });
+
+  // Technical: the dead worker's run saved its suspended snapshot, but its task
+  // row stayed `running`. Once the lease lapsed, stale recovery failed a task
+  // with no retries ("Worker process terminated…") although the run could be
+  // resumed. Recovery now stores the suspension the run saved.
+  it('is answered after a crash between saving the suspended run and storing the task as suspended, with no retries', async () => {
+    const storage = new InMemoryStore();
+    const tasks = (await storage.getStore('backgroundTasks'))!;
+    let writeReached!: () => void;
+    const writeHeld = new Promise<void>(resolve => (writeReached = resolve));
+    let heldOne = false;
+    const updateTask = tasks.updateTask.bind(tasks);
+    tasks.updateTask = async (taskId, update, options) => {
+      if (update.status === 'suspended' && !heldOne) {
+        heldOne = true;
+        writeReached();
+        return new Promise<boolean>(() => {});
+      }
+      return updateTask(taskId, update, options);
+    };
+    const crashedTool = approvalTool();
+    const crashed = start(storage, crashedTool);
+    const { task } = await crashed.backgroundTaskManager!.enqueue(payload('crash-before-row-no-retries'));
+    await writeHeld;
+    crashOut(crashed);
+    await lapseLease(storage, task.id);
+
+    const tool = approvalTool();
+    const restarted = start(storage, tool).backgroundTaskManager!;
+    await vi.waitFor(
+      async () =>
+        expect(await restarted.getTask(task.id)).toMatchObject({
+          status: 'suspended',
+          suspendPayload: { question: 'Approve?' },
+        }),
+      { timeout: 5000, interval: 20 },
+    );
+    await restarted.resume(task.id, { approved: true });
+    const done = await settled(restarted, task.id);
+
+    expect(done.status).toBe('completed');
+    expect(done.result).toBe('ran with {"approved":true}');
+    expect(crashedTool.calls).toEqual([undefined]);
+    expect(tool.calls).toEqual([{ approved: true }]);
+  });
+
+  it('does not ask an answered question again when the worker running the answer crashes', async () => {
+    // The answered run saves nothing until it suspends again or ends, so the
+    // stored run still holds the old suspension. Recovery must not restore it.
+    const storage = new InMemoryStore();
+    const answering: Approval = {
+      calls: [],
+      execute: async (_args, options) => {
+        answering.calls.push(options.resumeData);
+        if (options.resumeData !== undefined) return new Promise(() => {}); // dies while running the answer
+        await options.suspend?.({ question: 'Approve?' });
+      },
+    };
+    const crashed = start(storage, answering);
+    const manager = crashed.backgroundTaskManager!;
+    const { task } = await manager.enqueue(payload('crash-while-answering'));
+    await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('suspended'), {
+      timeout: 5000,
+      interval: 20,
+    });
+    await manager.resume(task.id, { approved: true });
+    await vi.waitFor(() => expect(answering.calls).toEqual([undefined, { approved: true }]), {
+      timeout: 5000,
+      interval: 20,
+    });
+    crashOut(crashed);
+    await lapseLease(storage, task.id);
+
+    const restarted = start(storage, approvalTool()).backgroundTaskManager!;
+    const recovered = await settled(restarted, task.id);
+
+    expect(recovered.status).toBe('failed');
+    expect(recovered.error?.message).toBe('Worker process terminated before task completed');
   });
 
   it('keeps the suspended run of a worker that took over a task shutdown left running', async () => {

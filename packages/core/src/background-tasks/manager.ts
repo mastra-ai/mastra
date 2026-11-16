@@ -15,7 +15,7 @@ import type {
   ToolExecutor,
   BackgroundTaskEvent,
 } from './types';
-import { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
+import { BACKGROUND_TASK_WORKFLOW_ID, RUN_ATTEMPT_STEP_PATH, toolSuspendPayload } from './workflow-id';
 
 const TOPIC_DISPATCH = 'background-tasks';
 const TOPIC_RESULT = 'background-tasks-result';
@@ -136,6 +136,8 @@ export class BackgroundTaskManager {
   #settlingRuns = new Set<Promise<unknown>>();
   // What each task's tool suspended with, until `#storeSuspension` stores it.
   #suspendPayloads = new Map<string, unknown>();
+  // The last `onExecution` hook queued for each task; see `#queueExecutionHook`.
+  #executionHooks = new Map<string, Promise<void>>();
 
   // Pubsub callbacks (kept for unsubscribe)
   private workerCallback?: EventCallback;
@@ -622,7 +624,7 @@ export class BackgroundTaskManager {
         }
         // Cancelling answers nothing, but the open request on the tool call
         // must go so a client doesn't offer to answer a dead task.
-        if (previousStatus === 'suspended') await this.runLocalExecutionHook(cancelledTask);
+        if (previousStatus === 'suspended') await this.#clearOpenRequest(cancelledTask);
       }
       this.deregisterTaskContext(taskId);
 
@@ -1523,7 +1525,7 @@ export class BackgroundTaskManager {
     }
 
     try {
-      if (runningTask) void this.runLocalExecutionHook(runningTask);
+      if (runningTask) void this.#queueExecutionHook(taskId, () => this.runLocalExecutionHook(runningTask)).ran;
       const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
       const prevWorkflowRun = isRestart ? await workflow.getWorkflowRunById(taskId) : undefined;
       if (this.shuttingDown) return false;
@@ -1624,7 +1626,7 @@ export class BackgroundTaskManager {
       await this.publishLifecycleEvent('task.resumed', resumedTask);
       // The suspension is answered: let the caller drop its open request from
       // the tool call before the run can suspend again.
-      await this.runLocalExecutionHook(resumedTask);
+      await this.#clearOpenRequest(resumedTask);
     }
 
     if (!this.#mastra) {
@@ -1762,7 +1764,7 @@ export class BackgroundTaskManager {
     try {
       // Suspend is non-terminal — DO NOT use `runLocalCompletionHooks` here.
       // It deregisters the task context, which the resumed run needs.
-      await this.runLocalSuspendHooks(suspendedTask);
+      await this.#queueExecutionHook(taskId, () => this.runLocalSuspendHooks(suspendedTask)).ran;
     } catch (error) {
       this.#mastra?.getLogger?.()?.warn(`background-task suspend hook failed for ${taskId}:`, error as any);
     }
@@ -1781,7 +1783,11 @@ export class BackgroundTaskManager {
     result: Parameters<typeof workflowRunError>[0],
   ): Promise<void> {
     if (result.status !== 'success') await this.failUnsettledTask(taskId, action, workflowRunError(result));
-    this.#deleteEndedRun(workflow, taskId);
+    // Finished before the run's slot is released, so the next queued task's
+    // claim can't overlap this delete. On LibSQL that claim waits for the
+    // delete's transaction while blocking the event loop the delete needs to
+    // commit, and fails with SQLITE_BUSY.
+    await this.#deleteEndedRun(workflow, taskId);
   }
 
   /**
@@ -1790,13 +1796,17 @@ export class BackgroundTaskManager {
    * one left running for recovery can be restarted by another worker, whose
    * suspended snapshot a late delete from here would remove.
    */
-  #deleteEndedRun(workflow: { deleteWorkflowRunById(runId: string): Promise<void> }, taskId: string): void {
-    this.#trackSettlingRun(
-      (async () => {
-        const task = await (await this.getStorage()).getTask(taskId);
-        if (!task || isTerminalStatus(task.status)) this.#deleteSettledRun(workflow, taskId);
-      })(),
-    );
+  async #deleteEndedRun(
+    workflow: { deleteWorkflowRunById(runId: string): Promise<void> },
+    taskId: string,
+  ): Promise<void> {
+    try {
+      const task = await (await this.getStorage()).getTask(taskId);
+      if (task && !isTerminalStatus(task.status)) return;
+      await workflow.deleteWorkflowRunById(taskId);
+    } catch (error) {
+      this.#mastra?.getLogger?.()?.warn(`Failed to delete workflow run for background task ${taskId}:`, error as any);
+    }
   }
 
   #deleteSettledRun(workflow: { deleteWorkflowRunById(runId: string): Promise<void> }, taskId: string): void {
@@ -1977,8 +1987,7 @@ export class BackgroundTaskManager {
   }
 
   /** @internal — also called by the workflow-engine step bodies in workflow.ts */
-  async runLocalExecutionHook(task: BackgroundTask): Promise<void> {
-    const ctx = this.taskContexts.get(task.id);
+  async runLocalExecutionHook(task: BackgroundTask, ctx = this.taskContexts.get(task.id)): Promise<void> {
     if (!ctx) return;
 
     try {
@@ -1998,6 +2007,37 @@ export class BackgroundTaskManager {
   }
 
   /**
+   * Runs a task's `onExecution` hook after the ones already queued for it. A
+   * suspend hook records the open request after an await (an agent transforms
+   * the payload first), so an answer or cancel arriving meanwhile clears it
+   * only once it is written, instead of having it written back afterwards.
+   * `queued` says whether the hook had to wait for an earlier one.
+   */
+  #queueExecutionHook(taskId: string, hook: () => Promise<void>): { ran: Promise<void>; queued: boolean } {
+    const previous = this.#executionHooks.get(taskId);
+    const ran = previous ? previous.then(hook) : hook();
+    const tail = ran.catch(() => {});
+    this.#executionHooks.set(taskId, tail);
+    void tail.then(() => {
+      if (this.#executionHooks.get(taskId) === tail) this.#executionHooks.delete(taskId);
+    });
+    return { ran, queued: previous !== undefined };
+  }
+
+  /**
+   * Runs the execution hook that drops a task's open request, after any suspend
+   * hook still recording it. It waits for that hook only through the queue:
+   * an answer must not be held up by a suspend hook that never returns.
+   */
+  async #clearOpenRequest(task: BackgroundTask): Promise<void> {
+    // Captured now: a cancel releases the context right after this call.
+    const ctx = this.taskContexts.get(task.id);
+    if (!ctx) return;
+    const { ran, queued } = this.#queueExecutionHook(task.id, () => this.runLocalExecutionHook(task, ctx));
+    if (!queued) await ran;
+  }
+
+  /**
    * Another process cancelled a task this one dispatched. Run its execution
    * hook, so the dispatcher drops an open request it recorded for the task,
    * and release the task's context. A cancel made here has already done both.
@@ -2006,7 +2046,7 @@ export class BackgroundTaskManager {
     if (!this.taskContexts.has(taskId)) return;
     const task = await (await this.getStorage()).getTask(taskId);
     if (task?.status !== 'cancelled') return;
-    await this.runLocalExecutionHook(task);
+    await this.#clearOpenRequest(task);
     this.deregisterTaskContext(taskId);
   }
 
@@ -2405,6 +2445,7 @@ export class BackgroundTaskManager {
           expectedOwnerId: task.ownerId ?? null,
           expectedLeaseExpiresAt: task.leaseExpiresAt ?? null,
         };
+        if (await this.#recoverSavedSuspension(storage, task, fence)) continue;
         if (task.maxRetries > 0) {
           await storage.updateTask(
             task.id,
@@ -2457,6 +2498,46 @@ export class BackgroundTaskManager {
         logger.error('Failed to recover stale background tasks', error);
       }
     }
+  }
+
+  /**
+   * A worker can die after its run saved the suspended snapshot but before it
+   * stored the task as `suspended` (see `#storeSuspension`). That run can still
+   * be resumed, so the suspension it saved is stored instead of failing the
+   * task or running its tool from the start again. A snapshot saved before the
+   * task last started belongs to a suspension already answered and is ignored:
+   * a resumed run saves nothing until it suspends or ends. Returns whether the
+   * task was handled here (including by another worker winning the fence).
+   */
+  async #recoverSavedSuspension(
+    storage: Awaited<ReturnType<BackgroundTaskManager['getStorage']>>,
+    task: BackgroundTask,
+    fence: { expectedStatus: 'running'; expectedOwnerId: string | null; expectedLeaseExpiresAt: Date | null },
+  ): Promise<boolean> {
+    if (!this.#mastra?.__hasInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID)) return false;
+    const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
+    const run = await workflow.getWorkflowRunById(task.id, { fields: ['steps'] });
+    if (!run || run.isFromInMemory || run.status !== 'suspended') return false;
+    const step = run.steps?.[RUN_ATTEMPT_STEP_PATH];
+    if (!step || Array.isArray(step) || step.status !== 'suspended' || step.suspendedAt === undefined) return false;
+    if (task.startedAt && step.suspendedAt < task.startedAt.getTime()) return false;
+
+    const stored = await storage.updateTask(
+      task.id,
+      {
+        status: 'suspended',
+        suspendPayload: toolSuspendPayload(step.suspendPayload),
+        suspendedAt: new Date(step.suspendedAt),
+        ownerId: undefined,
+        leaseExpiresAt: undefined,
+      },
+      fence,
+    );
+    if (stored) {
+      const suspended = await storage.getTask(task.id);
+      if (suspended?.status === 'suspended') await this.publishLifecycleEvent('task.suspended', suspended);
+    }
+    return true;
   }
 
   /**
