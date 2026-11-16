@@ -10,4 +10,14 @@ Removed the unused `sandboxProvider` field from linked project repositories. Fac
 
 **Upgrading**
 
+Stop passing `sandboxProvider` when linking a project repository:
+
+```ts
+// Before
+await github.projectRepositories.link({ orgId, connectionId, repositoryId, sandboxProvider: 'local' });
+
+// After
+await github.projectRepositories.link({ orgId, connectionId, repositoryId });
+```
+
 Update `mastra` together with `@mastra/factory`. The Factory UI ships with `mastra`, and repository linking fails when one of the two is older than the other.
