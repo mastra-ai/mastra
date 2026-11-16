@@ -1194,7 +1194,8 @@ export interface ObservationalMemoryConfig {
    * unchanged, so a prompt cache keeps covering the instructions and the observation log. Turn this on
    * when you use prompt caching. It becomes the only behavior in the next major version.
    *
-   * Needs a memory thread. `Memory.getContext()` keeps returning the values as sections.
+   * Needs a memory thread. A state signal is saved to the thread, so read-only calls keep the values as
+   * system-prompt sections and write nothing. `Memory.getContext()` also keeps returning them as sections.
    *
    * @default false
    */
