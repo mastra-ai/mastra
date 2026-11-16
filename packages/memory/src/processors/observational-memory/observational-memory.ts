@@ -2116,9 +2116,10 @@ export class ObservationalMemory {
       );
     }
 
-    const observationChunks = this.splitObservationContextChunks(optimized);
-    if (observationChunks.length > 0) {
-      messages.push('<observations>', ...observationChunks, '</observations>');
+    // Each chunk is a closed block of its own, so the log ends on its newest chunk rather than a shared closing
+    // tag. An append then only adds messages after it, and a prompt-cache prefix ending there is still valid.
+    for (const chunk of this.splitObservationContextChunks(optimized)) {
+      messages.push(`<observations>\n${chunk}\n</observations>`);
     }
 
     // Dynamically inject current-task from thread metadata (not stored in observations)
