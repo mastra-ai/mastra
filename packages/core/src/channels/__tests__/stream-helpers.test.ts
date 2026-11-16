@@ -1,13 +1,29 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
 
 import { ChunkFrom } from '../../stream/types';
+import { getChatModule } from '../chat-lazy';
 import {
   ToolTracker,
   editOrPostMessage,
   extractErrorMessage,
   postFileAttachment,
   postStreamError,
+  renderBuiltInToolEvent,
 } from '../stream-helpers';
+import type { PostableMessage } from '../types';
+
+/** Collect the button ids out of a rendered card message (plain strings have none). */
+function buttonIds(message: PostableMessage): string[] {
+  if (typeof message === 'string' || !message || !('children' in message)) return [];
+  const ids: string[] = [];
+  for (const child of (message as { children: any[] }).children) {
+    if (child?.type !== 'actions' || !Array.isArray(child.children)) continue;
+    for (const element of child.children) {
+      if (element && typeof element.id === 'string') ids.push(element.id);
+    }
+  }
+  return ids;
+}
 
 describe('ToolTracker', () => {
   it('tracks a tool start and returns enrichment', () => {
@@ -113,6 +129,23 @@ describe('ToolTracker', () => {
     expect(e.argsSummary).toBe('docs/old.md');
   });
 
+  it('enrichApproval carries the delegated ids it was given', () => {
+    const tracker = new ToolTracker();
+    tracker.trackStart({ toolCallId: 'call_delegate_1', toolName: 'agent-worker', args: { prompt: 'Clean up' } });
+    const e = tracker.enrichApproval({
+      toolCallId: 'call_delegate_1',
+      toolName: 'delete',
+      args: { path: 'b.txt' },
+      delegatedToolCallId: 'call_delete_b',
+      delegatedToolName: 'delete',
+    });
+
+    expect(e.toolCallId).toBe('call_delegate_1');
+    expect(e.delegatedToolCallId).toBe('call_delete_b');
+    expect(e.delegatedToolName).toBe('delete');
+    expect(tracker.has('call_delegate_1')).toBe(true);
+  });
+
   it('parallel same-tool calls do not clobber each other', () => {
     const tracker = new ToolTracker();
     tracker.trackStart({ toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } });
@@ -141,6 +174,46 @@ describe('ToolTracker', () => {
     tracker.trackStart({ toolCallId: 't2', toolName: 'weather', args: {} });
     tracker.reset();
     expect(tracker.inFlightCount).toBe(0);
+  });
+});
+
+describe('renderBuiltInToolEvent', () => {
+  beforeAll(async () => {
+    await getChatModule();
+  });
+
+  it('gives a delegated approval the sub-agent call id on its buttons', () => {
+    const message = renderBuiltInToolEvent(
+      {
+        kind: 'approval',
+        toolCallId: 'call_delegate_1',
+        delegatedToolCallId: 'call_delete_b',
+        delegatedToolName: 'delete',
+        toolName: 'delete',
+        displayName: 'delete',
+        argsSummary: 'b.txt',
+        args: { path: 'b.txt' },
+      },
+      'cards',
+    );
+
+    expect(buttonIds(message)).toEqual(['tool_approve:call_delete_b', 'tool_deny:call_delete_b']);
+  });
+
+  it('keeps the tool call id on the buttons for an ordinary approval', () => {
+    const message = renderBuiltInToolEvent(
+      {
+        kind: 'approval',
+        toolCallId: 'tool-call-1',
+        toolName: 'delete',
+        displayName: 'delete',
+        argsSummary: 'a.txt',
+        args: { path: 'a.txt' },
+      },
+      'cards',
+    );
+
+    expect(buttonIds(message)).toEqual(['tool_approve:tool-call-1', 'tool_deny:tool-call-1']);
   });
 });
 

@@ -8,11 +8,13 @@
  * `formatToolApproved`, and `formatToolDenied` functions branch on a `useCards`
  * flag.  When `useCards` is false they return plain strings; when true they call
  * into the lazily-loaded Chat SDK via `chatModule()`.  The plain-text paths are
- * fully covered here.  The card paths require the Chat SDK to be initialised and
- * are integration-level concerns left to the channel integration tests.
+ * fully covered here; the remaining card paths are integration-level concerns
+ * left to the channel integration tests (the few card-path cases below load the
+ * Chat SDK in a `beforeAll`).
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeAll } from 'vitest';
 
+import { getChatModule } from './chat-lazy';
 import {
   formatArgsSummary,
   formatResult,
@@ -320,6 +322,26 @@ describe('formatToolApproval (plain text)', () => {
     const result = formatToolApproval('run_code', '', 'call-123', false);
     expect(result).toContain('*run_code*');
     expect(result).toContain('Requires approval');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatToolApproval (card path) — the button ids carry the given card id
+// ---------------------------------------------------------------------------
+
+describe('formatToolApproval (cards)', () => {
+  beforeAll(async () => {
+    await getChatModule();
+  });
+
+  it('stamps the given card id into both button ids', () => {
+    const message = formatToolApproval('delete', 'b.txt', 'call_delete_b', true);
+    const ids: string[] = [];
+    for (const child of (message as { children: any[] }).children) {
+      if (child?.type !== 'actions') continue;
+      for (const element of child.children) ids.push(element.id);
+    }
+    expect(ids).toEqual(['tool_approve:call_delete_b', 'tool_deny:call_delete_b']);
   });
 });
 

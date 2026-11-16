@@ -212,6 +212,14 @@ export type ToolDisplayFn = (event: ToolDisplayEvent, ctx: ToolDisplayContext) =
  * message, or as the `id` on a streamed `task_update` so the SDK updates
  * the row in place rather than appending a new one). It is unique even
  * when the same tool is called in parallel.
+ *
+ * When a supervisor delegates to a sub-agent and the sub-agent pauses for
+ * approval, the approval is raised under the supervisor's delegation call:
+ * `toolCallId` stays that delegation call (it is what resumes the run), and
+ * `delegatedToolCallId` identifies the sub-agent's own paused tool call.
+ * Several sub-agent approvals can therefore share one `toolCallId`, so give
+ * each channel-facing identifier — a button `id`, a message key — the value
+ * `delegatedToolCallId ?? toolCallId` to keep the cards apart.
  */
 export type ToolDisplayEvent =
   | {
@@ -248,6 +256,14 @@ export type ToolDisplayEvent =
   | {
       kind: 'approval';
       toolCallId: string;
+      /**
+       * The paused sub-agent's own tool call when a supervisor re-raised this
+       * approval. Identifies this card; `toolCallId` stays the delegation call
+       * that resumes the run. Give the card's action ids this value when set.
+       */
+      delegatedToolCallId?: string;
+      /** The paused sub-agent's tool name, when this approval came from a delegate. */
+      delegatedToolName?: string;
       toolName: string;
       displayName: string;
       argsSummary: string;
@@ -262,6 +278,10 @@ export type ToolDisplayEvent =
   | {
       kind: 'approved';
       toolCallId: string;
+      /** The sub-agent tool call this card answered, when the card came from a delegate. */
+      delegatedToolCallId?: string;
+      /** The paused sub-agent's tool name, when this approval came from a delegate. */
+      delegatedToolName?: string;
       toolName: string;
       displayName: string;
       argsSummary: string;
@@ -277,6 +297,10 @@ export type ToolDisplayEvent =
   | {
       kind: 'denied';
       toolCallId: string;
+      /** The sub-agent tool call this card answered, when the card came from a delegate. */
+      delegatedToolCallId?: string;
+      /** The paused sub-agent's tool name, when this approval came from a delegate. */
+      delegatedToolName?: string;
       toolName: string;
       displayName: string;
       argsSummary: string;

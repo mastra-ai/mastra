@@ -141,11 +141,20 @@ export function formatToolResult(
   return `${header} · ${status}\n${resultBody}`;
 }
 
-/** Format a tool approval request message */
+/**
+ * Format a tool approval request message.
+ *
+ * `cardId` becomes the id the Approve/Deny buttons carry
+ * (`tool_approve:<cardId>` / `tool_deny:<cardId>`). It must identify this
+ * specific card: pass the sub-agent's own call id (`delegatedToolCallId`)
+ * when the approval came from a delegate, otherwise the tool call id. Two
+ * approvals raised under one delegation call would otherwise share button
+ * ids, and a replayed click could answer the wrong one.
+ */
 export function formatToolApproval(
   toolName: string,
   argsSummary: string,
-  toolCallId: string,
+  cardId: string,
   useCards: boolean,
 ): PostableMessage {
   const header = formatToolHeader(toolName, argsSummary);
@@ -156,8 +165,8 @@ export function formatToolApproval(
         ui().CardText(header),
         ui().CardText('Requires approval to run.'),
         ui().Actions([
-          ui().Button({ id: `tool_approve:${toolCallId}`, label: 'Approve', style: 'primary' }),
-          ui().Button({ id: `tool_deny:${toolCallId}`, label: 'Deny', style: 'danger' }),
+          ui().Button({ id: `tool_approve:${cardId}`, label: 'Approve', style: 'primary' }),
+          ui().Button({ id: `tool_deny:${cardId}`, label: 'Deny', style: 'danger' }),
         ]),
       ],
     });

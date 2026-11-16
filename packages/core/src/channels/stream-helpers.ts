@@ -28,6 +28,17 @@ export interface PendingApprovalRecord {
   args?: Record<string, unknown>;
   /** Platform user id of the person whose message triggered the tool call. */
   requesterId?: string;
+  /**
+   * The tool call that resumes the run — the supervisor's delegation call for
+   * a delegated approval, otherwise the card id. The stash is keyed by the
+   * card id; `onAction` resumes with this value.
+   */
+  toolCallId?: string;
+  /**
+   * The sub-agent's own paused tool call, when this card came from a delegate.
+   * Identifies the card (button id and stash key); `toolCallId` resumes it.
+   */
+  delegatedToolCallId?: string;
 }
 
 /**
@@ -50,6 +61,10 @@ export interface ToolEnrichment {
   errorText?: string;
   /** Set on enrichResult / enrichError. */
   isError?: boolean;
+  /** Set on enrichApproval when a supervisor re-raised a sub-agent's approval. */
+  delegatedToolCallId?: string;
+  /** Set on enrichApproval when a supervisor re-raised a sub-agent's approval. */
+  delegatedToolName?: string;
 }
 
 interface TrackedTool {
@@ -160,7 +175,13 @@ export class ToolTracker {
     };
   }
 
-  enrichApproval(call: { toolCallId: string; toolName: string; args: unknown }): ToolEnrichment {
+  enrichApproval(call: {
+    toolCallId: string;
+    toolName: string;
+    args: unknown;
+    delegatedToolCallId?: string;
+    delegatedToolName?: string;
+  }): ToolEnrichment {
     const tracked = this.tools.get(call.toolCallId);
     // A supervisor re-emits a sub-agent's approval under its own delegation
     // call's toolCallId; only reuse tracked details when they describe the same tool.
@@ -176,6 +197,8 @@ export class ToolTracker {
       argsSummary,
       args,
       startedAt,
+      delegatedToolCallId: call.delegatedToolCallId,
+      delegatedToolName: call.delegatedToolName,
     };
   }
 
@@ -374,7 +397,11 @@ export function renderBuiltInToolEvent(event: ToolDisplayEvent, mode: 'cards' | 
   }
   // Approval: always cards (need Approve/Deny buttons). `useCards: false`
   // falls back to a plain "reply approve/deny" hint.
-  return formatToolApproval(event.displayName, event.argsSummary, event.toolCallId, true);
+  //
+  // A delegated approval rides on the supervisor's delegation call id, and a
+  // supervisor can raise several such approvals in one delegation — give the
+  // card the sub-agent's own call id so each card's buttons are distinct.
+  return formatToolApproval(event.displayName, event.argsSummary, event.delegatedToolCallId ?? event.toolCallId, true);
 }
 
 /**
