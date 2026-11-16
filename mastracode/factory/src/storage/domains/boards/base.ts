@@ -1350,7 +1350,7 @@ async function writeBoard(
   await insertPhases(ops, scope, { ...input, key: row.board_key });
 }
 
-/** Rows written before the rename name `work_item.created`; they read as `work_item.opened`. */
+/** Rows written before the rename name `work_item.created`; they always read as `work_item.opened` (rows are never rewritten). */
 function routeEvents(row: IntakeRouteRow): StatusEvent[] {
   return row.on_events ? row.on_events.map(event => canonicalStatusEvent(event)) : [...DEFAULT_ROUTE_EVENTS];
 }

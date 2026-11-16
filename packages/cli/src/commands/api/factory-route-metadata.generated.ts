@@ -1913,7 +1913,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.integration",
             "source.provider",
             "source.repository",
-            "item.pullRequest"
+            "item.pullRequest",
+            "item.hasPullRequest",
+            "item.hasIssue"
           ]
         },
         "__schema4": {
@@ -2340,7 +2342,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.integration",
             "source.provider",
             "source.repository",
-            "item.pullRequest"
+            "item.pullRequest",
+            "item.hasPullRequest",
+            "item.hasIssue"
           ]
         },
         "__schema4": {
@@ -3445,10 +3449,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 "items": {
                   "type": "string",
                   "enum": [
-                    "work_item.created",
-                    "work_item.closed",
+                    "work_item.opened",
                     "work_item.reopened",
+                    "work_item.updated",
+                    "work_item.closed",
                     "pull_request.opened",
+                    "pull_request.reopened",
+                    "pull_request.updated",
                     "pull_request.synchronized",
                     "pull_request.review_requested",
                     "pull_request.merged",
@@ -3572,8 +3579,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.provider",
             "source.repository",
             "item.pullRequest",
+            "item.hasPullRequest",
+            "item.hasIssue",
+            "card.phase",
             "event.type",
             "event.reason",
+            "event.labels.added",
+            "event.labels.removed",
+            "event.assignees.added",
+            "event.assignees.removed",
             "pullRequest.closesIssue",
             "closedIssue.phase",
             "closedIssue.hasPullRequest"
@@ -3762,10 +3776,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "items": {
                 "type": "string",
                 "enum": [
-                  "work_item.created",
-                  "work_item.closed",
+                  "work_item.opened",
                   "work_item.reopened",
+                  "work_item.updated",
+                  "work_item.closed",
                   "pull_request.opened",
+                  "pull_request.reopened",
+                  "pull_request.updated",
                   "pull_request.synchronized",
                   "pull_request.review_requested",
                   "pull_request.merged",
@@ -3884,8 +3901,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.provider",
             "source.repository",
             "item.pullRequest",
+            "item.hasPullRequest",
+            "item.hasIssue",
+            "card.phase",
             "event.type",
             "event.reason",
+            "event.labels.added",
+            "event.labels.removed",
+            "event.assignees.added",
+            "event.assignees.removed",
             "pullRequest.closesIssue",
             "closedIssue.phase",
             "closedIssue.hasPullRequest"
@@ -5975,7 +5999,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.integration",
             "source.provider",
             "source.repository",
-            "item.pullRequest"
+            "item.pullRequest",
+            "item.hasPullRequest",
+            "item.hasIssue"
           ]
         },
         "__schema5": {
@@ -6381,7 +6407,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.integration",
             "source.provider",
             "source.repository",
-            "item.pullRequest"
+            "item.pullRequest",
+            "item.hasPullRequest",
+            "item.hasIssue"
           ]
         },
         "__schema4": {
@@ -7056,8 +7084,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.provider",
             "source.repository",
             "item.pullRequest",
+            "item.hasPullRequest",
+            "item.hasIssue",
+            "card.phase",
             "event.type",
             "event.reason",
+            "event.labels.added",
+            "event.labels.removed",
+            "event.assignees.added",
+            "event.assignees.removed",
             "pullRequest.closesIssue",
             "closedIssue.phase",
             "closedIssue.hasPullRequest"
@@ -7179,10 +7214,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "__schema13": {
           "type": "string",
           "enum": [
-            "work_item.created",
-            "work_item.closed",
+            "work_item.opened",
             "work_item.reopened",
+            "work_item.updated",
+            "work_item.closed",
             "pull_request.opened",
+            "pull_request.reopened",
+            "pull_request.updated",
             "pull_request.synchronized",
             "pull_request.review_requested",
             "pull_request.merged",
@@ -7276,10 +7314,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "items": {
                 "type": "string",
                 "enum": [
-                  "work_item.created",
-                  "work_item.closed",
+                  "work_item.opened",
                   "work_item.reopened",
+                  "work_item.updated",
+                  "work_item.closed",
                   "pull_request.opened",
+                  "pull_request.reopened",
+                  "pull_request.updated",
                   "pull_request.synchronized",
                   "pull_request.review_requested",
                   "pull_request.merged",
@@ -7398,8 +7439,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.provider",
             "source.repository",
             "item.pullRequest",
+            "item.hasPullRequest",
+            "item.hasIssue",
+            "card.phase",
             "event.type",
             "event.reason",
+            "event.labels.added",
+            "event.labels.removed",
+            "event.assignees.added",
+            "event.assignees.removed",
             "pullRequest.closesIssue",
             "closedIssue.phase",
             "closedIssue.hasPullRequest"
@@ -8372,7 +8420,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.integration",
             "source.provider",
             "source.repository",
-            "item.pullRequest"
+            "item.pullRequest",
+            "item.hasPullRequest",
+            "item.hasIssue"
           ]
         },
         "__schema9": {
@@ -8778,7 +8828,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.integration",
             "source.provider",
             "source.repository",
-            "item.pullRequest"
+            "item.pullRequest",
+            "item.hasPullRequest",
+            "item.hasIssue"
           ]
         },
         "__schema4": {
@@ -9219,7 +9271,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.integration",
             "source.provider",
             "source.repository",
-            "item.pullRequest"
+            "item.pullRequest",
+            "item.hasPullRequest",
+            "item.hasIssue"
           ]
         },
         "__schema4": {
@@ -9628,8 +9682,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.provider",
             "source.repository",
             "item.pullRequest",
+            "item.hasPullRequest",
+            "item.hasIssue",
+            "card.phase",
             "event.type",
             "event.reason",
+            "event.labels.added",
+            "event.labels.removed",
+            "event.assignees.added",
+            "event.assignees.removed",
             "pullRequest.closesIssue",
             "closedIssue.phase",
             "closedIssue.hasPullRequest"
@@ -9720,10 +9781,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "__schema8": {
           "type": "string",
           "enum": [
-            "work_item.created",
-            "work_item.closed",
+            "work_item.opened",
             "work_item.reopened",
+            "work_item.updated",
+            "work_item.closed",
             "pull_request.opened",
+            "pull_request.reopened",
+            "pull_request.updated",
             "pull_request.synchronized",
             "pull_request.review_requested",
             "pull_request.merged",
@@ -9812,10 +9876,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "items": {
                 "type": "string",
                 "enum": [
-                  "work_item.created",
-                  "work_item.closed",
+                  "work_item.opened",
                   "work_item.reopened",
+                  "work_item.updated",
+                  "work_item.closed",
                   "pull_request.opened",
+                  "pull_request.reopened",
+                  "pull_request.updated",
                   "pull_request.synchronized",
                   "pull_request.review_requested",
                   "pull_request.merged",
@@ -9934,8 +10001,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.provider",
             "source.repository",
             "item.pullRequest",
+            "item.hasPullRequest",
+            "item.hasIssue",
+            "card.phase",
             "event.type",
             "event.reason",
+            "event.labels.added",
+            "event.labels.removed",
+            "event.assignees.added",
+            "event.assignees.removed",
             "pullRequest.closesIssue",
             "closedIssue.phase",
             "closedIssue.hasPullRequest"
@@ -10152,10 +10226,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 "items": {
                   "type": "string",
                   "enum": [
-                    "work_item.created",
-                    "work_item.closed",
+                    "work_item.opened",
                     "work_item.reopened",
+                    "work_item.updated",
+                    "work_item.closed",
                     "pull_request.opened",
+                    "pull_request.reopened",
+                    "pull_request.updated",
                     "pull_request.synchronized",
                     "pull_request.review_requested",
                     "pull_request.merged",
@@ -10279,8 +10356,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.provider",
             "source.repository",
             "item.pullRequest",
+            "item.hasPullRequest",
+            "item.hasIssue",
+            "card.phase",
             "event.type",
             "event.reason",
+            "event.labels.added",
+            "event.labels.removed",
+            "event.assignees.added",
+            "event.assignees.removed",
             "pullRequest.closesIssue",
             "closedIssue.phase",
             "closedIssue.hasPullRequest"

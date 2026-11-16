@@ -134,6 +134,21 @@ describe('combineChanges', () => {
     expect(combineChanges([{ added: [], removed: ['wip'] }])).toEqual({ added: [], removed: ['wip'] });
   });
 
+  it('matches names case-insensitively, keeping the newest spelling', () => {
+    expect(
+      combineChanges([
+        { added: ['ship'], removed: [] },
+        { added: [], removed: ['Ship'] },
+      ]),
+    ).toEqual({ added: [], removed: [] });
+    expect(
+      combineChanges([
+        { added: ['ship'], removed: [] },
+        { added: ['Ship'], removed: [] },
+      ]),
+    ).toEqual({ added: ['Ship'], removed: [] });
+  });
+
   it('leaves out the labels Factory manages itself: they are bookkeeping, not a change', () => {
     expect(
       updateEventFacts('work_item.updated', {

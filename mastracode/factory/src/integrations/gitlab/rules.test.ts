@@ -122,6 +122,8 @@ async function setup(
     storage?: FactoryStorage;
     rules?: GitLabRuleOverrides;
     notRouted?: NotRoutedLookup;
+    /** The user Factory's GitLab connection acts as. */
+    factoryUsername?: string;
   } = {},
 ) {
   const seeded = options.storage
@@ -186,6 +188,7 @@ async function setup(
     rules: resolveGitLabRules(options.rules),
     getProjectMemberAccessLevel: vi.fn().mockResolvedValue(options.accessLevel ?? 40),
     getWorkItemAuthorUsername: vi.fn().mockResolvedValue('maintainer'),
+    getCurrentUsername: vi.fn().mockResolvedValue(options.factoryUsername ?? 'factory-bot'),
     resolveActiveConnectionForHost: vi
       .fn()
       .mockImplementation(async (connectionId: string, host: string) =>
@@ -1638,6 +1641,54 @@ describe('GitLab activity signals', () => {
   });
 });
 
+describe("GitLab changes Factory's own connection makes", () => {
+  it("holds a label change made as Factory's GitLab user for the card's run, and no one else's", async () => {
+    const { seeded, project, service } = await setup({ factoryUsername: 'Factory-Bot' });
+    await seeded.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'gitlab',
+          type: 'issue',
+          externalId: encodeIssueReference({ host: 'gitlab.example.com', projectId: PROJECT_ID, issueIid: 42 }),
+          url: 'https://gitlab.example.com/acme/app/-/issues/42',
+        },
+        title: 'Issue 42',
+        board: 'work',
+        stages: ['execute'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const labelled = (deliveryId: string, user: string, label: string) => {
+      const delivery = issueOpened(deliveryId);
+      return {
+        ...delivery,
+        payload: {
+          ...delivery.payload,
+          user_username: user,
+          user: { username: user },
+          object_attributes: { ...delivery.payload.object_attributes, action: 'update' },
+          changes: { labels: { previous: [], current: [{ title: label }] } },
+        },
+      };
+    };
+
+    await service.ingest(labelled('by-factory', 'factory-bot', 'bug'));
+    await service.ingest(labelled('by-person', 'maintainer', 'ship'));
+
+    const updates = (await seeded.workItems.listDeferredDecisions('org-1', project.id))
+      .map(record => record.decision)
+      .filter(decision => decision.type === 'routeEvent');
+    expect(updates).toEqual([
+      expect.objectContaining({ idempotencyKey: 'gitlab:101:by-factory:event-route', fromCardSession: true }),
+      expect.not.objectContaining({ fromCardSession: true }),
+    ]);
+  });
+});
+
 describe('GitLab updates to an issue intake turned away', () => {
   function labelled(deliveryId: string, changes: Record<string, unknown>) {
     const delivery = issueOpened(deliveryId);
@@ -1667,6 +1718,15 @@ describe('GitLab updates to an issue intake turned away', () => {
       { orgId: 'org-1', factoryProjectId: project.id },
       intake?.sourceKey,
     );
+  });
+
+  it('files no card when an issue intake turned away is relabelled after it closed', async () => {
+    const notRouted = { isNotRouted: vi.fn(async () => true) };
+    const { seeded, project, service } = await setup({ notRouted });
+    const closed = labelled('label-closed', ADD_SHIP);
+    closed.payload.object_attributes = { ...closed.payload.object_attributes, state: 'closed' };
+    await service.ingest(closed);
+    expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 
   it('leaves it alone when intake never turned it away, or only its title changed', async () => {

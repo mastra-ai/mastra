@@ -22,7 +22,10 @@ export const STATUS_EVENTS = [
 ] as const;
 export type StatusEvent = (typeof STATUS_EVENTS)[number];
 
-/** Old names stored routes and API callers may still use, read as the new ones. Accepted for one release. */
+/**
+ * Old names, read as the new ones. Stored routes are never rewritten, so reading them stays
+ * permanent; the API accepts the old name as input for one release only.
+ */
 const LEGACY_STATUS_EVENTS: Readonly<Record<string, StatusEvent>> = { 'work_item.created': 'work_item.opened' };
 
 /** The event's current name: `work_item.created` reads as `work_item.opened`; anything else is unchanged. */
@@ -48,18 +51,20 @@ export interface ItemChange {
  * then added back) cancels out, so the result never carries just the newest delta.
  */
 export function combineChanges(changes: readonly ItemChange[]): ItemChange {
-  const net = new Map<string, 'added' | 'removed'>();
+  // Keyed case-insensitively like `listChange`, keeping the newest spelling.
+  const net = new Map<string, { name: string; side: 'added' | 'removed' }>();
+  const fold = (name: string, side: 'added' | 'removed') => {
+    const key = name.toLowerCase();
+    const seen = net.get(key);
+    if (seen && seen.side !== side) net.delete(key);
+    else net.set(key, { name, side });
+  };
   for (const change of changes) {
-    for (const name of change.removed) {
-      if (net.get(name) === 'added') net.delete(name);
-      else net.set(name, 'removed');
-    }
-    for (const name of change.added) {
-      if (net.get(name) === 'removed') net.delete(name);
-      else net.set(name, 'added');
-    }
+    for (const name of change.removed) fold(name, 'removed');
+    for (const name of change.added) fold(name, 'added');
   }
-  const pick = (side: 'added' | 'removed') => [...net].filter(([, value]) => value === side).map(([name]) => name);
+  const pick = (side: 'added' | 'removed') =>
+    [...net.values()].filter(entry => entry.side === side).map(entry => entry.name);
   return { added: pick('added'), removed: pick('removed') };
 }
 

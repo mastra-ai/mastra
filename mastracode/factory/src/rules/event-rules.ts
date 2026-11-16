@@ -150,6 +150,13 @@ export function cardUpdateDecision(
  * the dispatcher holds until the card's run ends. The change has already been written to the card,
  * so a stale revision only means another write landed; re-read and commit against it.
  */
+/**
+ * How handing an update to the card's routes went: queued (or already queued), nothing to hand
+ * over, or not queued (the card is gone or kept changing), in which case the caller must not
+ * record the change as seen, so a redelivery or the next sighting hands it over again.
+ */
+export type CardUpdateStatus = 'committed' | 'replayed' | 'unchanged' | 'ignored';
+
 export async function commitCardUpdate(
   storage: Pick<WorkItemsStorage, 'commitRuleEvaluation' | 'get'>,
   input: {
@@ -163,8 +170,8 @@ export async function commitCardUpdate(
     fromCardSession: boolean;
     now?: Date;
   },
-): Promise<'committed' | 'replayed' | 'ignored'> {
-  if (!input.event) return 'ignored';
+): Promise<CardUpdateStatus> {
+  if (!input.event) return 'unchanged';
   const decision = cardUpdateDecision(input.ingress.identity, input.event, input.fromCardSession);
   let revision = input.item.revision;
   for (let attempt = 1; attempt <= 3; attempt++) {
@@ -216,7 +223,7 @@ export async function commitObservedChange(
   input: {
     orgId: string;
     factoryProjectId: string;
-    item: Pick<Card, 'id' | 'metadata' | 'workItem'>;
+    item: Pick<Card, 'id' | 'revision' | 'metadata' | 'workItem'>;
     ingressId: string;
     triggerType: string;
     configVersion: string;
@@ -226,19 +233,33 @@ export async function commitObservedChange(
     /** Provider-specific metadata to record next to the labels and assignees. */
     metadata?: Record<string, unknown>;
   },
-): Promise<'committed' | 'replayed' | 'ignored'> {
+): Promise<CardUpdateStatus> {
   const assignees = input.assignee ? [input.assignee] : [];
   const seen = observedItem(input.item);
-  const event = seen
-    ? updateEventFacts('work_item.updated', {
-        labels: listChange(seen.labels, input.labels),
-        assignees: listChange(seen.assignees, assignees),
+  const change = seen && {
+    labels: listChange(seen.labels, input.labels),
+    assignees: listChange(seen.assignees, assignees),
+  };
+  if (change && [change.labels, change.assignees].every(side => !side.added.length && !side.removed.length)) {
+    return 'unchanged';
+  }
+  // Queued before the new labels and assignees are recorded as seen: if queueing fails, the next
+  // sighting still diffs against the old ones and hands the change over.
+  const status = change
+    ? await commitCardUpdate(storage, {
+        orgId: input.orgId,
+        factoryProjectId: input.factoryProjectId,
+        item: input.item,
+        ingress: { identity: `${input.ingressId}:update`, triggerType: input.triggerType },
+        configVersion: input.configVersion,
+        actor: input.actor,
+        event: updateEventFacts('work_item.updated', change),
+        fromCardSession: false,
       })
-    : undefined;
-  if (seen && !event) return 'ignored';
-  let synced;
+    : 'unchanged';
+  if (status === 'ignored') return status;
   try {
-    synced = await storage.syncCard({
+    await storage.syncCard({
       orgId: input.orgId,
       id: input.item.id,
       userId: 'factory-rule-dispatcher',
@@ -253,21 +274,10 @@ export async function commitObservedChange(
       },
     });
   } catch (error) {
-    // A concurrent write won; the next sighting diffs against what it left.
+    // A concurrent write won; the change is queued, and the next sighting diffs against what it left.
     if (!(error instanceof WorkItemUpdateConflictError)) throw error;
-    return 'ignored';
   }
-  if (!synced || !event) return 'ignored';
-  return commitCardUpdate(storage, {
-    orgId: input.orgId,
-    factoryProjectId: input.factoryProjectId,
-    item: synced.item,
-    ingress: { identity: `${input.ingressId}:update`, triggerType: input.triggerType },
-    configVersion: input.configVersion,
-    actor: input.actor,
-    event,
-    fromCardSession: false,
-  });
+  return status;
 }
 
 /**

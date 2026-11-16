@@ -31,7 +31,7 @@ import {
   selectEventRule,
   withoutRouteEvent,
 } from '../../rules/event-rules.js';
-import type { NotRoutedLookup } from '../../rules/event-rules.js';
+import type { CardUpdateStatus, NotRoutedLookup } from '../../rules/event-rules.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
@@ -557,9 +557,17 @@ export class GithubRules {
     const labels = labelNames(issue?.labels);
     const before = cardLabels(found);
     if (sameLabels(before, labels)) return { status: 'ignored' };
-    let updated;
+    // Queued before the labels are recorded: if queueing fails, a redelivery still sees the change.
+    const queued = await this.#commitUpdate(
+      parsed,
+      repositoryName,
+      project,
+      found,
+      updateEventFacts('work_item.updated', { labels: listChange(before, labels) }),
+    );
+    if (queued === 'ignored') return { status: 'ignored' };
     try {
-      updated = await this.options.storage.syncCard({
+      await this.options.storage.syncCard({
         orgId: found.orgId,
         id: found.id,
         userId: CARD_SYNC_USER_ID,
@@ -570,39 +578,24 @@ export class GithubRules {
       // The card changed under us (a run wrote it, or a concurrent delivery won). The next
       // delivery or reconcile pass carries the same labels, so drop this one instead of 5xx-ing.
       if (!(error instanceof WorkItemUpdateConflictError)) throw error;
-      return { status: 'ignored' };
     }
-    if (!updated) return { status: 'ignored' };
-    await this.#commitIssueUpdate(parsed, repositoryName, project, updated.item, {
-      labels: listChange(before, labels),
-    });
     return { status: 'committed' };
   }
 
   /**
-   * Hands a label or assignee change on an issue card to the card's routes. A change Factory made
-   * itself is the card's own session's, held until its run ends.
+   * Hands a label or assignee change to the card's routes. A change Factory made itself is the
+   * card's own session's, held until its run ends.
    */
-  async #commitIssueUpdate(
-    parsed: ParsedGithubWebhook,
-    repositoryName: string,
-    project: ExternalRepositoryProjectTarget,
-    item: Card,
-    change: Parameters<typeof updateEventFacts>[1],
-  ): Promise<void> {
-    await this.#commitUpdate(parsed, repositoryName, project, item, updateEventFacts('work_item.updated', change));
-  }
-
   async #commitUpdate(
     parsed: ParsedGithubWebhook,
     repositoryName: string,
     project: ExternalRepositoryProjectTarget,
     item: Card,
     event: BoardEventFacts | undefined,
-  ): Promise<boolean> {
+  ): Promise<CardUpdateStatus> {
     const installationId = number(object(parsed.payload.installation)?.id);
     const login = string(object(parsed.payload.sender)?.login);
-    if (!installationId || !login || !event) return false;
+    if (!installationId || !login || !event) return 'unchanged';
     const fromCardSession = this.#isFactoryLogin(login);
     const actor = await githubActor(this.options.github, {
       installationId,
@@ -623,7 +616,7 @@ export class GithubRules {
       event,
       fromCardSession,
     });
-    return status !== 'ignored';
+    return status;
   }
 
   /**
@@ -664,8 +657,19 @@ export class GithubRules {
     // payload cannot slip in behind it.
     const advancesTime = payloadTime !== undefined && (storedTime === undefined || payloadTime > storedTime);
     if (sameStrings(item.workItem.metadata?.assignees, assignees) && !advancesTime) return { status: 'ignored' };
+    // Queued before the assignees are recorded: if queueing fails, a redelivery still sees the change.
+    const queued = await this.#commitUpdate(
+      parsed,
+      repositoryName,
+      project,
+      item,
+      updateEventFacts('work_item.updated', {
+        assignees: listChange(stringList(item.workItem.metadata?.assignees), assignees),
+      }),
+    );
+    if (queued === 'ignored') return { status: 'ignored' };
     try {
-      const updated = await this.options.storage.syncCard({
+      await this.options.storage.syncCard({
         orgId: item.orgId,
         id: item.id,
         userId: CARD_SYNC_USER_ID,
@@ -677,17 +681,12 @@ export class GithubRules {
         },
         expectedSourceRevision: primarySource(item)?.revision,
       });
-      if (!updated) return { status: 'ignored' };
-      await this.#commitIssueUpdate(parsed, repositoryName, project, updated.item, {
-        assignees: listChange(stringList(item.workItem.metadata?.assignees), assignees),
-      });
-      return { status: 'committed' };
     } catch (error) {
       // A concurrent write won; nothing reconciles issue-card assignees, so they stay as the
       // winner left them until the next assigned/unassigned delivery for this issue.
       if (!(error instanceof WorkItemUpdateConflictError)) throw error;
-      return { status: 'ignored' };
     }
+    return { status: 'committed' };
   }
 
   /** A reopened pull request reads open again on every card that holds it; clearing the sweep's settled stamp lets a later close replay. */
@@ -800,13 +799,56 @@ export class GithubRules {
     if (!item || (!ownCard && !attachedPullRequestSource(item, repositoryId, repositoryName, pullRequestNumber))) {
       return { status: 'ignored' };
     }
-    const change = action === 'labeled' || action === 'assigned' ? { added: [name], removed: [] } : { added: [], removed: [name] };
-    const event = updateEventFacts(
-      ownCard ? 'work_item.updated' : 'pull_request.updated',
-      action === 'labeled' || action === 'unlabeled' ? { labels: change } : { assignees: change },
+    const labelChange = action === 'labeled' || action === 'unlabeled';
+    const delta =
+      action === 'labeled' || action === 'assigned' ? { added: [name], removed: [] } : { added: [], removed: [name] };
+    if (!ownCard) {
+      const event = updateEventFacts('pull_request.updated', labelChange ? { labels: delta } : { assignees: delta });
+      const queued = await this.#commitUpdate(parsed, repositoryName, project, item, event);
+      return { status: queued === 'committed' || queued === 'replayed' ? 'committed' : 'ignored' };
+    }
+    // The pull request is the card's source: record its current labels and assignees on the card,
+    // so routes reading `item.labels` or `item.assignees` see them, and hand over what changed.
+    const pullRequest = object(parsed.payload.pull_request);
+    const before = { labels: cardLabels(item), assignees: stringList(item.workItem.metadata?.assignees) };
+    const applied = (list: string[]) =>
+      delta.added.length ? [...list, ...delta.added] : list.filter(entry => entry.toLowerCase() !== name.toLowerCase());
+    const after = {
+      labels: Array.isArray(pullRequest?.labels)
+        ? labelNames(pullRequest.labels)
+        : labelChange
+          ? applied(before.labels)
+          : before.labels,
+      assignees: Array.isArray(pullRequest?.assignees)
+        ? actorLogins(pullRequest.assignees)
+        : labelChange
+          ? before.assignees
+          : applied(before.assignees),
+    };
+    const queued = await this.#commitUpdate(
+      parsed,
+      repositoryName,
+      project,
+      item,
+      updateEventFacts('work_item.updated', {
+        labels: listChange(before.labels, after.labels),
+        assignees: listChange(before.assignees, after.assignees),
+      }),
     );
-    const committed = await this.#commitUpdate(parsed, repositoryName, project, item, event);
-    return { status: committed ? 'committed' : 'ignored' };
+    // Queued before the new lists are recorded: if queueing fails, a redelivery still sees the change.
+    if (queued === 'ignored') return { status: 'ignored' };
+    try {
+      await this.options.storage.syncCard({
+        orgId: item.orgId,
+        id: item.id,
+        userId: CARD_SYNC_USER_ID,
+        patch: { metadata: { labels: after.labels, assignees: after.assignees } },
+        expectedSourceRevision: primarySource(item)?.revision,
+      });
+    } catch (error) {
+      if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+    }
+    return { status: queued === 'unchanged' ? 'ignored' : 'committed' };
   }
 
 
@@ -847,6 +889,8 @@ export class GithubRules {
     if (
       !installationId ||
       !login ||
+      // A closed issue's Not routed record stays until it's filed; a label on it never files it.
+      string(object(parsed.payload.issue)?.state) !== 'open' ||
       // Intake records a card-less issue under the key its rule files it with (see `githubSourceKey`).
       !(await this.options.notRouted?.isNotRouted(scope, legacySourceKey(repositoryId, 'issue', issueNumber)))
     ) {

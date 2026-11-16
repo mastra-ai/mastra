@@ -295,6 +295,8 @@ export interface GitLabRulesIntegration {
     kind: 'issue' | 'merge_request',
     iid: number,
   ): Promise<string | undefined>;
+  /** The user the connection acts as on GitLab: Factory's own identity there. */
+  getCurrentUsername?(connectionId: string): Promise<string | undefined>;
 }
 
 interface GitLabRulesOptions {
@@ -457,6 +459,8 @@ export class GitLabRules {
       event === 'issueUpdated' &&
       !issueItem &&
       issueSourceKey &&
+      // A closed issue's Not routed record stays until it's filed; a label on it never files it.
+      string(issue?.state) === 'opened' &&
       (changes?.labels !== undefined || changes?.assignees !== undefined) &&
       (await this.options.notRouted?.isNotRouted(
         { orgId: target.target.orgId, factoryProjectId: target.target.factoryProjectId },
@@ -535,7 +539,7 @@ export class GitLabRules {
       type: 'gitlab',
       username,
       trusted: actorTrusted,
-      factoryAuthored: false,
+      factoryAuthored: await this.#isFactoryUser(connectionIds, username),
     };
     // A merge request seen for the first time is filed on the card whose branch it comes from,
     // when its board reviews merge requests. Otherwise a trusted author's merge request names the card of the issue
@@ -808,6 +812,20 @@ export class GitLabRules {
         if (!(error instanceof WorkItemUpdateConflictError)) throw error;
       }
     }
+  }
+
+  /** Whether the event's user is the one Factory's connection acts as, so Factory made the change. */
+  async #isFactoryUser(connectionIds: string[], username: string): Promise<boolean> {
+    const normalized = username.trim().toLowerCase();
+    for (const connectionId of connectionIds) {
+      try {
+        const factoryUser = await this.options.gitlab.getCurrentUsername?.(connectionId);
+        if (factoryUser !== undefined) return factoryUser.trim().toLowerCase() === normalized;
+      } catch {
+        // Try another active credential; otherwise the change counts as a person's.
+      }
+    }
+    return false;
   }
 
   async #trusted(connectionIds: string[], projectId: string, username: string): Promise<boolean> {

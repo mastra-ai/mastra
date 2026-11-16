@@ -3279,7 +3279,7 @@ describe('FactoryDecisionDispatcher', () => {
   });
 
   describe("label changes while the card's run is in flight", () => {
-    async function runningCard() {
+    async function runningCard(phaseKey = 'done') {
       const seed = await createFactoryStorageForTests();
       const storage = seed.workItems;
       const item = await createItem(storage);
@@ -3302,8 +3302,8 @@ describe('FactoryDecisionDispatcher', () => {
               { field: 'event.labels.removed', operator: 'not_exists' },
             ],
           },
-          // A terminal phase: a route move there never waits for the run on its own.
-          target: { boardKey: 'work', phaseKey: 'done' },
+          // By default a terminal phase: a route move there never waits for the run on its own.
+          target: { boardKey: 'work', phaseKey },
         },
         'admin',
       );
@@ -3402,6 +3402,24 @@ describe('FactoryDecisionDispatcher', () => {
       await dispatcher.runOnce(new Date('2030-01-01T00:00:06Z'));
 
       expect(await stages()).toEqual(['done']);
+      expect(await updates()).toEqual(['succeeded']);
+    });
+
+    it("moves a person's change into a phase that isn't terminal only once the run ends, like any route move", async () => {
+      const { dispatcher, controller, emitAgentEnd, update, stages, updates } = await runningCard('planning');
+      const before = await stages();
+
+      await update(['ship'], [], '2030-01-01T00:00:00Z', false);
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:06Z'));
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+      expect(await stages()).toEqual(before);
+      expect(await updates()).toEqual(['pending']);
+
+      controller.listActiveThreadRuns.mockReturnValue([]);
+      emitAgentEnd('complete');
+      await dispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
+
+      expect(await stages()).toEqual(['planning']);
       expect(await updates()).toEqual(['succeeded']);
     });
   });
