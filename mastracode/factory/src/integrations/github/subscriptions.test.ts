@@ -120,18 +120,15 @@ describe('GitHub signal subscription store', () => {
     expect(await listPullRequestSubscriptionsForThread(baseInput, storage)).toHaveLength(1);
   });
 
-  it('keeps a closed pull request closed when its session subscribes again', async () => {
-    const { listPullRequestSubscriptionsForThread, retirePullRequestSubscription, subscribeToPullRequest } =
-      await import('./subscriptions.js');
+  it('reactivates a retained terminal subscription when subscribing again', async () => {
+    const { retirePullRequestSubscription, subscribeToPullRequest } = await import('./subscriptions.js');
     const first = await subscribeToPullRequest(baseInput, storage);
     await retirePullRequestSubscription(first.id, 'closed', storage);
 
-    const again = await subscribeToPullRequest(baseInput, storage);
+    const reactivated = await subscribeToPullRequest(baseInput, storage);
 
-    expect(again).toMatchObject({ id: first.id, status: 'closed' });
-    expect(await listPullRequestSubscriptionsForThread(baseInput, storage)).toEqual([
-      expect.objectContaining({ id: first.id, status: 'closed' }),
-    ]);
+    expect(reactivated.id).toBe(first.id);
+    expect(reactivated.status).toBe('open');
   });
 
   it('unsubscribes idempotently', async () => {

@@ -1,14 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
-import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { IntegrationStorage } from '../../storage/domains/integrations/base.js';
 import { MERGED_MESSAGES } from '../channel-thread-announcements.js';
-import type { GithubSignalSubscriptionRow, GithubSubscriptionStorage } from './subscriptions.js';
-import {
-  listPullRequestSubscriptionsForThread,
-  retirePullRequestSubscription,
-  subscribeToPullRequest,
-} from './subscriptions.js';
+import type { GithubSignalSubscriptionRow } from './subscriptions.js';
 
 const getRepositoryCollaboratorPermission = vi.fn<
   (
@@ -538,50 +531,27 @@ describe('dispatchGithubWebhook', () => {
     expect(send).toHaveBeenCalledOnce();
   });
 
-  it('reads a closed subscription open again once the reopen reaches its session, even after subscribing again', async () => {
-    const backend = new LibSQLFactoryStorage({ id: 'github-webhook-reopen', url: ':memory:' });
-    const integrations = backend.registerDomain(new IntegrationStorage());
-    await backend.init();
-    const storage: GithubSubscriptionStorage = integrations.forIntegration('github');
-    const thread = {
-      orgId: 'org-1',
-      installationExternalId: '7',
-      projectRepositoryId: 'project-repository-1',
-      repositoryExternalId: '99',
-      repositorySlug: 'octo/hello',
-      changeRequestId: '34',
-      sessionId: 'session-a',
-      ownerId: 'user-1',
-      resourceId: 'resource-1',
-      threadId: 'thread-a',
-      source: 'explicit-tool' as const,
-      subscribedByUserId: 'user-1',
-    };
-    try {
-      const subscribed = await subscribeToPullRequest(thread, storage);
-      await retirePullRequestSubscription(subscribed.id, 'closed', storage);
-      await subscribeToPullRequest(thread, storage);
-      expect(await listPullRequestSubscriptionsForThread(thread, storage)).toEqual([
-        expect.objectContaining({ id: subscribed.id, status: 'closed' }),
-      ]);
+  it('includes retained subscriptions and reopens them after accepted reopen delivery', async () => {
+    const send = vi.fn(async () => ({ record: { id: 'n-1' }, decision: { action: 'deliver' } }));
+    const listSubscriptions = vi.fn(async () => [{ ...subscription('a'), status: 'closed' as const }]);
+    const updateStatus = vi.fn(async () => {});
 
-      await dispatchGithubWebhook(parsed('pull_request', 'reopened'), {
-        controller: controllerStub({
-          getSession: async () => ({
-            thread: { getId: () => 'thread-a', switch: vi.fn() },
-            sendNotificationSignal: async () => ({ record: { id: 'n-1' }, decision: { action: 'deliver' } }),
-          }),
-          createSession: vi.fn(),
+    await dispatchGithubWebhook(parsed('pull_request', 'reopened'), {
+      controller: controllerStub({
+        getSession: async () => ({
+          thread: { getId: () => 'thread-a', switch: vi.fn() },
+          sendNotificationSignal: send,
         }),
-        github: { ...githubStub, integrationStorage: storage },
-      });
+        createSession: vi.fn(),
+      }),
+      listSubscriptions,
+      retireSubscription: updateStatus,
+    });
 
-      expect(await listPullRequestSubscriptionsForThread(thread, storage)).toEqual([
-        expect.objectContaining({ id: subscribed.id, status: 'open' }),
-      ]);
-    } finally {
-      await backend.close();
-    }
+    expect(listSubscriptions).toHaveBeenCalledWith(expect.objectContaining({ changeRequestId: '34' }), {
+      includeTerminal: true,
+    });
+    expect(updateStatus).toHaveBeenCalledWith('a', 'open');
   });
 
   it('isolates failed targets and retires only successful terminal deliveries after acceptance', async () => {

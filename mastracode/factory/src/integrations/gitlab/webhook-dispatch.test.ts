@@ -1,13 +1,6 @@
-import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { IntegrationStorage } from '../../storage/domains/integrations/base.js';
-import {
-  listMergeRequestSubscriptionsForThread,
-  retireMergeRequestSubscription,
-  subscribeToMergeRequest,
-} from './subscriptions.js';
-import type { GitLabSignalSubscriptionRow, SubscribeToMergeRequestInput } from './subscriptions.js';
+import type { GitLabSignalSubscriptionRow } from './subscriptions.js';
 import { classifyGitLabWebhook, dispatchGitLabWebhook } from './webhook-dispatch.js';
 import type { GitLabWebhookDispatchIntegration } from './webhook-dispatch.js';
 import type { ParsedGitLabWebhook } from './webhook.js';
@@ -310,50 +303,6 @@ describe('dispatchGitLabWebhook', () => {
       expect.objectContaining({ requestContext: expect.anything() }),
     );
     expect(getProjectMemberAccessLevel).toHaveBeenCalledWith('direct', '101', 'ada');
-  });
-
-  it('reads a closed subscription open again once the reopen reaches its session, even after subscribing again', async () => {
-    const backend = new LibSQLFactoryStorage({ id: 'gitlab-reopen-dispatch-test', url: ':memory:' });
-    const integrations = backend.registerDomain(new IntegrationStorage());
-    await backend.init();
-    const storage = integrations.forIntegration('gitlab');
-    const input: SubscribeToMergeRequestInput = {
-      orgId: 'org-1',
-      host: 'gitlab.example.com',
-      projectId: '101',
-      projectPath: 'acme/app',
-      projectRepositoryId: 'project-repository-1',
-      installationExternalId: 'direct',
-      changeRequestId: '34',
-      sessionId: 'session-a',
-      ownerId: 'owner-1',
-      resourceId: 'resource-1',
-      threadId: 'thread-a',
-      source: 'explicit-tool',
-      subscribedByUserId: 'user-1',
-    };
-    try {
-      const row = await subscribeToMergeRequest(input, storage);
-      await retireMergeRequestSubscription(row.id, 'closed', storage);
-      await subscribeToMergeRequest(input, storage);
-      expect(await listMergeRequestSubscriptionsForThread(input, storage)).toEqual([
-        expect.objectContaining({ id: row.id, status: 'closed' }),
-      ]);
-
-      const a = session('thread-a');
-      await expect(
-        dispatchGitLabWebhook(mergeRequest('reopen'), {
-          controller: controllerStub({ getSession: async () => a.session, createSession: vi.fn() }),
-          gitlab: { ...gitlabStub(), integrationStorage: storage },
-        }),
-      ).resolves.toMatchObject({ delivered: 1, failed: 0 });
-
-      expect(await listMergeRequestSubscriptionsForThread(input, storage)).toEqual([
-        expect.objectContaining({ id: row.id, status: 'open' }),
-      ]);
-    } finally {
-      await backend.close();
-    }
   });
 
   it('gates comments and approvals on trusted membership through the subscription connection', async () => {

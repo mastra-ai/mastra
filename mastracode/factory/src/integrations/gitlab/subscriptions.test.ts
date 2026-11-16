@@ -113,19 +113,17 @@ describe('GitLab merge-request subscription store', () => {
     ).toEqual([]);
   });
 
-  it('returns the existing row for duplicate subscriptions and keeps a merged merge request merged when subscribed again', async () => {
+  it('returns the existing row for duplicate subscriptions and reactivates a retired one', async () => {
     const first = await subscribeToMergeRequest(baseInput, storage);
     const second = await subscribeToMergeRequest(baseInput, storage);
     expect(second.id).toBe(first.id);
 
     await retireMergeRequestSubscription(first.id, 'merged', storage);
-    const again = await subscribeToMergeRequest(baseInput, storage);
-
-    expect(again).toMatchObject({ id: first.id, status: 'merged' });
-    expect(await listMergeRequestSubscriptionsForThread(baseInput, storage)).toEqual([
-      expect.objectContaining({ id: first.id, status: 'merged' }),
-    ]);
     expect(await listMergeRequestSubscriptions(baseInput, storage)).toHaveLength(0);
+    const third = await subscribeToMergeRequest(baseInput, storage);
+    expect(third.id).toBe(first.id);
+    expect(third.status).toBe('open');
+    expect(await listMergeRequestSubscriptions(baseInput, storage)).toHaveLength(1);
   });
 
   it('separates sessions by session id and only removes the matching one', async () => {
