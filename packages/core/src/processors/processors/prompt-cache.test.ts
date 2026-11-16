@@ -238,7 +238,7 @@ describe('PromptCacheProcessor', () => {
       });
 
       // Anthropic sends the first run of system messages as the top-level system prompt, ahead of every message.
-      it('checks order as Anthropic sends it, with the first system messages moved to the front', () => {
+      it('checks order as Anthropic sends it when the first system messages move to the front', () => {
         const prompt: LanguageModelV2Prompt = [
           { role: 'user', content: [{ type: 'text', text: 'hi' }], providerOptions: oneHour },
           { role: 'system', content: 'added after the user message' },
@@ -246,6 +246,19 @@ describe('PromptCacheProcessor', () => {
 
         expect(runWith(undefined, prompt)).toBe(prompt);
         expect(runWith('1h', prompt)[1]!.providerOptions).toEqual(oneHour);
+      });
+
+      // Anthropic leaves a late first system message in place when it carries options such as clearAt, so a mark
+      // there has to fit both orders.
+      it('uses a TTL that fits whether or not a late first system message is moved to the front', () => {
+        const prompt: LanguageModelV2Prompt = [
+          { role: 'user', content: [{ type: 'text', text: 'hi' }], providerOptions: mark },
+          { role: 'system', content: 'a', providerOptions: { anthropic: { clearAt: 'next_user_message' } } },
+        ];
+
+        expect(runWith('1h', prompt)[1]!.providerOptions).toEqual({
+          anthropic: { clearAt: 'next_user_message', cacheControl: { type: 'ephemeral', ttl: '5m' } },
+        });
       });
 
       it('keeps later system messages where they are', () => {

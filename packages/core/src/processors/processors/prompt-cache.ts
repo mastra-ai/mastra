@@ -91,31 +91,33 @@ export class PromptCacheProcessor implements Processor<'prompt-cache'> {
 type Ttl = '5m' | '1h';
 
 /**
- * The TTL a new Anthropic mark at `index` can use without putting a shorter TTL before a longer one:
- * `wanted` when it fits, `'5m'` when a mark before it is shorter, `null` when a mark after it is longer.
+ * The TTL a new Anthropic mark at `index` can use without putting a shorter TTL before a longer one in the
+ * request Anthropic receives: `wanted` when it fits, `'5m'` when only that fits, `null` when neither does.
+ *
+ * Anthropic usually sends the first run of system messages as the top-level system prompt, ahead of every
+ * message, but leaves it in place when it carries options such as `clearAt`. When that run isn't at the start
+ * of the prompt, the mark has to fit both orders.
  */
 function allowedTtl(prompt: LanguageModelV2Prompt, index: number, wanted: Ttl | undefined): Ttl | undefined | null {
-  const position = anthropicSendOrder(prompt);
-  let shortestBefore = Infinity;
-  let longestAfter = 0;
-  prompt.forEach((message, i) => {
-    if (i === index) return;
-    for (const ttl of anthropicTtls(message)) {
-      if (position[i]! < position[index]!) shortestBefore = Math.min(shortestBefore, ttlSeconds(ttl));
-      else longestAfter = Math.max(longestAfter, ttlSeconds(ttl));
-    }
-  });
-  const seconds = Math.min(ttlSeconds(wanted), shortestBefore);
-  if (seconds < longestAfter) return null;
-  return seconds === ttlSeconds(wanted) ? wanted : '5m';
+  const orders = [prompt.map((_, i) => i), promotedOrder(prompt)];
+  for (const ttl of wanted === '1h' ? ['1h', '5m'] as const : [wanted]) {
+    if (orders.every(order => fitsOrder(prompt, order, index, ttl))) return ttl;
+  }
+  return null;
 }
 
-/**
- * Each message's position in the request Anthropic receives. The provider sends the first run of consecutive
- * system messages as the top-level system prompt, ahead of every message, wherever that run is in the prompt.
- * Later system messages stay in place.
- */
-function anthropicSendOrder(prompt: LanguageModelV2Prompt): number[] {
+function fitsOrder(prompt: LanguageModelV2Prompt, order: number[], index: number, ttl: Ttl | undefined): boolean {
+  const seconds = ttlSeconds(ttl);
+  return prompt.every((message, i) => {
+    if (i === index) return true;
+    return anthropicTtls(message).every(other =>
+      order[i]! < order[index]! ? ttlSeconds(other) >= seconds : ttlSeconds(other) <= seconds,
+    );
+  });
+}
+
+/** Each message's position when the first run of system messages is moved to the front. */
+function promotedOrder(prompt: LanguageModelV2Prompt): number[] {
   const start = prompt.findIndex(message => message.role === 'system');
   if (start < 0) return prompt.map((_, i) => i);
   let end = start;
