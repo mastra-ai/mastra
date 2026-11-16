@@ -934,4 +934,142 @@ describe('CompositeFilesystem', () => {
       await expect(cfs.writeFile('/unknown/file.txt', 'data')).rejects.not.toHaveProperty('code');
     });
   });
+
+  // ===========================================================================
+  // 22. defaultMount for Relative Paths
+  // ===========================================================================
+  describe('defaultMount', () => {
+    it('should normalize the configured default mount path', () => {
+      const cfs = new CompositeFilesystem({ mounts: { '/data': localA }, defaultMount: 'data/' });
+      expect(cfs.defaultMount).toBe('/data');
+      expect(cfs.mountPaths).toEqual(['/data']);
+    });
+
+    it('should leave defaultMount undefined when not configured', () => {
+      const cfs = new CompositeFilesystem({ mounts: { '/data': localA } });
+      expect(cfs.defaultMount).toBeUndefined();
+    });
+
+    it('should reject a defaultMount that does not match a configured mount', () => {
+      expect(() => new CompositeFilesystem({ mounts: { '/data': localA }, defaultMount: '/nope' })).toThrow(
+        'CompositeFilesystem defaultMount "/nope" does not match any configured mount',
+      );
+    });
+
+    it('should resolve relative reads through the default mount', async () => {
+      const cfs = new CompositeFilesystem({ mounts: { '/data': localA }, defaultMount: '/data' });
+      await cfs.init();
+      await cfs.writeFile('/data/note.txt', 'hello');
+
+      await expect(cfs.readFile('note.txt', { encoding: 'utf-8' })).resolves.toBe('hello');
+      await expect(cfs.readFile('./note.txt', { encoding: 'utf-8' })).resolves.toBe('hello');
+      await expect(cfs.readFile('sub/../note.txt', { encoding: 'utf-8' })).resolves.toBe('hello');
+      await expect(cfs.readFile('note.txt/', { encoding: 'utf-8' })).resolves.toBe('hello');
+    });
+
+    it('should route relative writes through the default mount', async () => {
+      const cfs = new CompositeFilesystem({ mounts: { '/data': localA }, defaultMount: '/data' });
+      await cfs.init();
+
+      await cfs.writeFile('created.txt', 'one');
+      await cfs.appendFile('created.txt', '-two');
+      await cfs.mkdir('nested/dir', { recursive: true });
+      await cfs.writeFile('nested/dir/file.txt', 'x');
+
+      await expect(fs.readFile(path.join(tempDirA, 'created.txt'), 'utf-8')).resolves.toBe('one-two');
+      await expect(fs.readFile(path.join(tempDirA, 'nested/dir/file.txt'), 'utf-8')).resolves.toBe('x');
+
+      await cfs.deleteFile('created.txt');
+      await expect(cfs.exists('/data/created.txt')).resolves.toBe(false);
+
+      await cfs.rmdir('nested', { recursive: true });
+      await expect(cfs.exists('/data/nested')).resolves.toBe(false);
+    });
+
+    it('should resolve relative stat, exists, isFile, isDirectory, and readdir through the default mount', async () => {
+      const cfs = new CompositeFilesystem({ mounts: { '/data': localA }, defaultMount: '/data' });
+      await cfs.init();
+      await cfs.writeFile('/data/note.txt', 'hello');
+      await cfs.mkdir('/data/sub', { recursive: true });
+
+      await expect(cfs.exists('note.txt')).resolves.toBe(true);
+      await expect(cfs.exists('missing.txt')).resolves.toBe(false);
+      await expect(cfs.isFile('note.txt')).resolves.toBe(true);
+      await expect(cfs.isDirectory('note.txt')).resolves.toBe(false);
+      await expect(cfs.isDirectory('sub')).resolves.toBe(true);
+      await expect(cfs.stat('note.txt')).resolves.toMatchObject({ type: 'file' });
+      await expect(cfs.readdir('sub')).resolves.toEqual([]);
+    });
+
+    it('should report the default mount for relative paths', async () => {
+      const cfs = new CompositeFilesystem({ mounts: { '/data': localA }, defaultMount: '/data' });
+      await cfs.init();
+      await cfs.writeFile('/data/note.txt', 'hello');
+
+      expect(cfs.getMountPathForPath('note.txt')).toBe('/data');
+      expect(cfs.getMountPathForPath('.')).toBeUndefined();
+      expect(cfs.resolveAbsolutePath('note.txt')).toBe(path.join(tempDirA, 'note.txt'));
+    });
+
+    it('should keep mount-prefixed paths ahead of the default mount', async () => {
+      const cfs = new CompositeFilesystem({ mounts: { '/data': localA, '/other': localB }, defaultMount: '/data' });
+      await cfs.init();
+      await cfs.writeFile('/data/note.txt', 'from-data');
+      await cfs.writeFile('/other/other.txt', 'from-other');
+
+      await expect(cfs.readFile('data/note.txt', { encoding: 'utf-8' })).resolves.toBe('from-data');
+      await expect(cfs.readFile('other/other.txt', { encoding: 'utf-8' })).resolves.toBe('from-other');
+      await expect(cfs.readFile('/other/other.txt', { encoding: 'utf-8' })).resolves.toBe('from-other');
+      expect(cfs.getMountPathForPath('other/other.txt')).toBe('/other');
+    });
+
+    it('should support cross-mount copy and move from a relative source', async () => {
+      const cfs = new CompositeFilesystem({ mounts: { '/data': localA, '/archive': localB }, defaultMount: '/data' });
+      await cfs.init();
+      await cfs.writeFile('/data/report.txt', 'content');
+
+      await cfs.copyFile('report.txt', '/archive/copy.txt');
+      await expect(cfs.readFile('/archive/copy.txt', { encoding: 'utf-8' })).resolves.toBe('content');
+      await expect(cfs.readFile('report.txt', { encoding: 'utf-8' })).resolves.toBe('content');
+
+      await cfs.moveFile('report.txt', '/archive/moved.txt');
+      await expect(cfs.readFile('/archive/moved.txt', { encoding: 'utf-8' })).resolves.toBe('content');
+      await expect(cfs.exists('/data/report.txt')).resolves.toBe(false);
+    });
+
+    it('should keep absolute and escaping paths unresolved', async () => {
+      const cfs = new CompositeFilesystem({ mounts: { '/data': localA }, defaultMount: '/data' });
+      await cfs.init();
+      await fs.writeFile(path.join(tempDirA, 'outside.txt'), 'outside');
+
+      await expect(cfs.readFile('/note.txt')).rejects.toThrow('No mount for path: /note.txt');
+      await expect(cfs.readFile('../outside.txt')).rejects.toThrow('No mount for path: ../outside.txt');
+      await expect(cfs.readFile('sub/../../outside.txt')).rejects.toThrow('No mount for path');
+      await expect(cfs.writeFile('../../escape.txt', 'x')).rejects.toThrow('No mount for path');
+      await expect(cfs.exists('../outside.txt')).resolves.toBe(false);
+      expect(cfs.resolveAbsolutePath('../outside.txt')).toBeUndefined();
+    });
+
+    it('should keep the virtual root and explicit mount paths unchanged', async () => {
+      const cfs = new CompositeFilesystem({ mounts: { '/data': localA }, defaultMount: '/data' });
+      await cfs.init();
+
+      const entries = await cfs.readdir('.');
+      expect(entries.map(entry => entry.name)).toEqual(['data']);
+      expect(entries[0]?.type).toBe('directory');
+      await expect(cfs.stat('.')).resolves.toMatchObject({ type: 'directory' });
+      await expect(cfs.isDirectory('/')).resolves.toBe(true);
+      expect(cfs.getMountPathForPath('/')).toBeUndefined();
+    });
+
+    it('should leave relative paths unresolved without the option', async () => {
+      const cfs = new CompositeFilesystem({ mounts: { '/data': localA } });
+      await cfs.init();
+      await cfs.writeFile('/data/note.txt', 'hello');
+
+      await expect(cfs.readFile('note.txt')).rejects.toThrow('No mount for path: note.txt');
+      await expect(cfs.readFile('.gitignore')).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(cfs.resolveAbsolutePath('note.txt')).toBeUndefined();
+    });
+  });
 });
