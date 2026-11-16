@@ -1,7 +1,3 @@
-import type { Mastra } from '../../mastra';
-import { createObservabilityContext } from '../../observability';
-import { agentThreadStreamRuntime } from '../thread-stream-runtime';
-import type { ToolsInput } from '../types';
 /**
  * EventedAgent - A durable agent that executes steps through event workers.
  *
@@ -10,6 +6,11 @@ import type { ToolsInput } from '../types';
  * while the run's completion promise is tracked for safe suspension/resume.
  * Events are streamed via pubsub as the workflow executes.
  */
+
+import type { Mastra } from '../../mastra';
+import { createObservabilityContext } from '../../observability';
+import { agentThreadStreamRuntime } from '../thread-stream-runtime';
+import type { ToolsInput } from '../types';
 
 import { DurableAgent } from './durable-agent';
 import type { DurableAgentConfig } from './durable-agent';

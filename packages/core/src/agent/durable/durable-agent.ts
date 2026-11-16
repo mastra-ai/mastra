@@ -163,9 +163,6 @@ import { deadlineMessageListState, runDurableDeadlineOutputPass } from './workfl
 import { readAccumulatedSteps } from './workflows/shared/accumulated-steps';
 import { hydrateMessageListState, loadMessageListStateForResume } from './workflows/shared/message-list-state';
 
-/** Recoveries in progress in this process, keyed by agent and run. */
-const localRecoveryClaims = new Map<string, string>();
-
 function createLocalRequestReader(runId: string, entry: RunRegistryEntry, mastra: Mastra | undefined) {
   const scope = (entry.runScope ??= createRunScope());
   scope.delete(LOCAL_MODEL_REQUEST_KEY);
@@ -183,6 +180,8 @@ const RESOLVED_DEFAULT_OPTIONS = Symbol('mastra.durable.resolvedDefaultOptions')
 const SCOPES_ALREADY_APPLIED = Symbol('mastra.durable.scopesAlreadyApplied');
 /** Carries the persisted spans a resume rebuilt from storage reattaches to into `prepare()`. */
 const RESUMED_SPAN_DATA = Symbol('mastra.durable.resumedSpanData');
+/** Recoveries in progress in this process, keyed by agent and run. */
+const localRecoveryClaims = new Map<string, string>();
 const RECOVER_SHUTDOWN_ERROR_ID = 'DURABLE_AGENT_RECOVER_SHUTDOWN';
 const OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS = 5_000;
 
@@ -1431,10 +1430,7 @@ export class DurableAgent<
       executionFence.throwIfLost();
       registryEntry.messageList = messageList;
       registryEntry.agentId = this.id;
-      this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, {
-        threadId,
-        resourceId,
-      });
+      this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
       globalRunRegistry.set(runId, registryEntry);
       await this.#attachStreamPublisher(runId, { threadId, resourceId });
 
@@ -2551,7 +2547,7 @@ export class DurableAgent<
       if (outcome.owner === 'agent') await this.settleExecution(runId, executionFence, outcome);
       return result;
     } finally {
-      this.executionEngine.releaseRun(workflow, runId, result?.status);
+      this.executionEngine.releaseRun(workflow, runId, run, result?.status);
     }
   }
 
@@ -3126,7 +3122,7 @@ export class DurableAgent<
     } catch (error) {
       this.#mastra
         ?.getLogger?.()
-        ?.warn?.('[DurableAgent] Failed to delete workflow snapshot rows after terminal state', { runId, error });
+        ?.warn?.(`[DurableAgent] Failed to delete workflow snapshot rows after terminal state`, { runId, error });
     }
   }
 
@@ -3234,10 +3230,7 @@ export class DurableAgent<
 
     // 2. Register non-serializable state (both local and global registries)
     registryEntry.agentId = this.id;
-    this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, {
-      threadId,
-      resourceId,
-    });
+    this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
     const globalRegistryEntry = { ...registryEntry, messageList };
     globalRunRegistry.set(runId, globalRegistryEntry);
     await this.#attachStreamPublisher(runId, { threadId, resourceId });
@@ -4859,10 +4852,7 @@ export class DurableAgent<
 
     // 2. Register non-serializable state (both local and global registries)
     registryEntry.agentId = this.id;
-    this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, {
-      threadId,
-      resourceId,
-    });
+    this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
     const globalRegistryEntry = { ...registryEntry, messageList };
     globalRunRegistry.set(runId, globalRegistryEntry);
     await this.#attachStreamPublisher(runId, { threadId, resourceId });

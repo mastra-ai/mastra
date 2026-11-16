@@ -366,8 +366,8 @@ export class DurableExecutionEngine {
     return workflow.createRun(options);
   }
 
-  releaseRun(workflow: DurableWorkflow, runId: string, status: string | undefined): void {
-    if (status !== 'suspended') {
+  releaseRun(workflow: DurableWorkflow, runId: string, run: DurableRun, status: string | undefined): void {
+    if (status !== 'suspended' && workflow.runs.get(runId) === run) {
       workflow.runs.delete(runId);
     }
   }

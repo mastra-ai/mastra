@@ -32,6 +32,7 @@ import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 import { DurableAgent } from '../durable-agent';
 import { EventedAgent } from '../evented-agent';
+import { DurableExecutionEngine } from '../execution-engine';
 import type { ExecutionFence } from '../execution-fence';
 import type { DurableAgenticWorkflowInput } from '../types';
 
@@ -58,6 +59,43 @@ function buildEventedAgent(id: string) {
     }),
   });
 }
+
+describe('Durable workflow run cleanup', () => {
+  it.each([
+    { replaced: true, status: 'success', retained: true },
+    { replaced: false, status: 'success', retained: false },
+    { replaced: false, status: 'suspended', retained: true },
+  ])(
+    'retains the registered run: $retained (replaced: $replaced, status: $status)',
+    async ({ replaced, status, retained }) => {
+      const agent = createDurableAgent({
+        agent: new Agent({
+          id: 'run-cleanup',
+          name: 'Run cleanup',
+          instructions: 'Answer.',
+          model: createTextStreamModel('hello'),
+        }),
+      });
+      const mastra = new Mastra({ storage: new MockStore(), agents: { agent }, logger: false });
+      try {
+        const workflow = agent.getWorkflow();
+        const engine = new DurableExecutionEngine(agent.id, mastra);
+        const runId = 'cleanup-run';
+        const original = await engine.createRun(workflow, { runId });
+        let current = original;
+        if (replaced) {
+          workflow.runs.delete(runId);
+          current = await engine.createRun(workflow, { runId });
+          expect(current).not.toBe(original);
+        }
+        engine.releaseRun(workflow, runId, original, status);
+        expect(workflow.runs.get(runId)).toBe(retained ? current : undefined);
+      } finally {
+        await mastra.shutdown();
+      }
+    },
+  );
+});
 
 describe('Durable workflow subclass dispatch', () => {
   it.each([
