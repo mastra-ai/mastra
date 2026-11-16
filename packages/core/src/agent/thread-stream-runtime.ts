@@ -2218,6 +2218,9 @@ export class AgentThreadStreamRuntime {
         subscription.admittedSignalIds.add(data.signal.id);
         this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
         this.#notifyPendingSignals(state, key, signal);
+        // Input from another process can be the answer a run parked here is waiting for.
+        const record = state.threadRunsById.get(runId);
+        if (record) void this.#startQueuedTurnAfterParkedRun(state, pubsub, key, record).catch(() => {});
       } else if (data?.type === 'user-message-presentation') {
         const { chunk } = data;
         if (chunk.type === 'data-user-message-pending' && chunk.data.metadata?.status === 'pending') {
@@ -4735,7 +4738,8 @@ export class AgentThreadStreamRuntime {
   /**
    * Queues a signal for in-loop draining by a same-agent run that is already in
    * flight here, so it becomes that run's next model input instead of waiting for
-   * the run to finish.
+   * the run to finish. If the run is parked on a suspension that auto-resume
+   * answers, the signal starts the next turn instead.
    */
   #queueForActiveRun(
     state: AgentThreadRuntimeState,
@@ -4757,6 +4761,7 @@ export class AgentThreadStreamRuntime {
       sourceId: this.#getSourceId(),
     });
     this.#watchThreadRunCompletion(state, pubsub, key, record);
+    void this.#startQueuedTurnAfterParkedRun(state, pubsub, key, record).catch(() => {});
   }
 
   #publishPendingUserMessage(
@@ -8243,7 +8248,6 @@ export class AgentThreadStreamRuntime {
         if (activeRecord.agent.id === agent.id) {
           if (scopeMismatch(runId)) return refuseScopes(runId);
           this.#queueForActiveRun(state, pubsub, key, activeRecord, signal);
-          void this.#startQueuedTurnAfterParkedRun(state, pubsub, key, activeRecord).catch(() => {});
           return {
             signal,
             accepted: Promise.resolve({ action: 'deliver' as const, runId }),
