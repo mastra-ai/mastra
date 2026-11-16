@@ -1,5 +1,18 @@
 # @mastra/redis-streams
 
+## 0.9.0-alpha.1
+
+### Minor Changes
+
+- Added `createMonitorClient()` and `streamKey()` to `RedisStreamsPubSub`, so health checks can inspect Redis on their own connection instead of queueing behind event traffic: ([#30225](https://github.com/mastra-ai/mastra/pull/30225))
+
+  ```ts
+  const client = pubsub.createMonitorClient(); // unconnected; commands fail fast while disconnected
+  await client.connect();
+  const groups = await client.xInfoGroups(pubsub.streamKey('workflows'));
+  await client.destroy();
+  ```
+
 ## 0.8.2-alpha.0
 
 ### Patch Changes

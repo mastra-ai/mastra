@@ -3,11 +3,11 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/components/review-status-badge';
+import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
-import { GaugeIcon } from 'lucide-react';
 import { getResultErrorMessage, getResultOutputPreview } from '../utils/result-output';
 import { formatCostValue, formatTokenCount, totalTokens } from './comparison/comparison-metric-format';
 import { ScoreReasonHoverCard } from './comparison/score-reason-hover-card';
@@ -325,7 +325,7 @@ function ScoresSummary({ scores }: { scores: ExperimentResultsListItem['scores']
   return (
     <div className="flex items-center gap-1">
       <Icon size="xs" className="text-muted-foreground">
-        <GaugeIcon />
+        <IconGauge />
       </Icon>
       <Txt variant="meta" tone="muted" font="mono">
         {values[0].toFixed(2)}

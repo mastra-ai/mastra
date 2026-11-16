@@ -14,6 +14,7 @@ import {
   describeForAllEngines,
   isDurableEngineVariant,
 } from '../aimock-scenario';
+import { BackgroundTaskManager } from '../../../../background-tasks/manager';
 
 /**
  * Regression classes: the end-to-end background-task lifecycle driven by real
@@ -167,6 +168,104 @@ describeForAllEngines(
       );
       expect((task as any).result).toEqual({ summary: 'Research complete on "quantum computing"' });
     }, 30_000);
+
+    // The task turns `completed` before its onResult hook has written the result into the
+    // transcript, here held up by a slow toModelOutput. Durable engines wait for that hook before
+    // the follow-up model call; the main loop never waits in-loop.
+    it.runIf(isDurableEngineVariant(engine))(
+      'shows the follow-up model call a result whose toModelOutput is still running when the task finishes',
+      async () => {
+        const toModelOutput = vi.fn(async (output: { summary?: string }) => {
+          // The placeholder passes through here too, with no summary.
+          if (output.summary === undefined) return { type: 'text', value: 'Research running.' };
+          await new Promise(resolve => setTimeout(resolve, 300));
+          return { type: 'text', value: `Model view: ${output.summary}` };
+        });
+        const research = createTool({
+          id: 'research',
+          description: 'Research a topic in the background',
+          inputSchema: z.object({ topic: z.string() }),
+          outputSchema: z.object({ summary: z.string() }),
+          background: { enabled: true },
+          execute: async ({ topic }) => ({ summary: `Research complete on "${topic}"` }),
+          toModelOutput,
+        });
+
+        await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Research slow model output',
+          tools: { research },
+          agentBackgroundTasks: { tools: { research: true } },
+          backgroundTasks: BG_CONFIG,
+          stopWhen: stepCountIs(3),
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              { toolCalls: [{ id: 'call-bg-slow', name: 'research', arguments: { topic: 'slow output' } }] },
+            );
+            llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Research reported.' });
+          },
+        });
+
+        expect(JSON.stringify(getMock().getRequests()[1]!.body!.messages)).toContain(
+          'Model view: Research complete on \\"slow output\\"',
+        );
+        // Steps that write the result into their own transcript reuse the hook's output.
+        expect(toModelOutput.mock.calls.filter(([output]) => output.summary !== undefined)).toHaveLength(1);
+      },
+      30_000,
+    );
+
+    // Waiting for a finished task's result reads the task again. A failing read only skips that
+    // wait: the follow-up model call still runs, with the placeholder if the result isn't in yet.
+    it.runIf(isDurableEngineVariant(engine))(
+      'keeps the run going when reading a task fails while waiting for its result',
+      async () => {
+        const getTask = vi
+          .spyOn(BackgroundTaskManager.prototype, 'getTask')
+          .mockRejectedValue(new Error('storage unavailable'));
+        try {
+          const research = createTool({
+            id: 'research',
+            description: 'Research a topic in the background',
+            inputSchema: z.object({ topic: z.string() }),
+            outputSchema: z.object({ summary: z.string() }),
+            background: { enabled: true },
+            execute: async ({ topic }) => ({ summary: `Research complete on "${topic}"` }),
+            // Holds the result hook up, so the check reads the finished task.
+            toModelOutput: async (output: { summary?: string }) => {
+              if (output.summary !== undefined) await new Promise(resolve => setTimeout(resolve, 300));
+              return { type: 'text', value: output.summary ?? 'Research running.' };
+            },
+          });
+
+          const { output } = await runLoopScenario({
+            engine,
+            llm: getMock(),
+            prompt: 'Research a flaky store',
+            tools: { research },
+            agentBackgroundTasks: { tools: { research: true } },
+            backgroundTasks: BG_CONFIG,
+            stopWhen: stepCountIs(3),
+            fixtures: llm => {
+              llm.on(
+                { endpoint: 'chat', sequenceIndex: 0 },
+                { toolCalls: [{ id: 'call-bg-flaky', name: 'research', arguments: { topic: 'flaky store' } }] },
+              );
+              llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Research reported.' });
+            },
+          });
+
+          expect(getTask).toHaveBeenCalled();
+          expect(await output.text).toBe('Research reported.');
+          expect(getMock().getRequests()).toHaveLength(2);
+        } finally {
+          getTask.mockRestore();
+        }
+      },
+      30_000,
+    );
 
     it('runs a foreground tool on the same thread while a background task is still running', async () => {
       let release!: () => void;

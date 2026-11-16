@@ -343,7 +343,12 @@ export class Observability extends BaseResource {
    * Check `capabilities.traceAggregate` from `getObservabilityCapabilities()` first; servers without it return 404 or 501.
    */
   aggregateTraces(params: AggregateTracesArgs, options?: { signal?: AbortSignal }): Promise<AggregateTracesResponse> {
-    return this.request('/observability/traces/aggregate', { method: 'POST', body: params, signal: options?.signal });
+    return this.request('/observability/traces/aggregate', {
+      method: 'POST',
+      body: params,
+      retries: this.readRetries(),
+      signal: options?.signal,
+    });
   }
 
   /**
@@ -352,7 +357,11 @@ export class Observability extends BaseResource {
    * `getObservabilityCapabilities()` first; servers without it return 404 or 501.
    */
   aggregateSpans(params: AggregateSpansArgs): Promise<AggregateSpansResponse> {
-    return this.request('/observability/spans/aggregate', { method: 'POST', body: params });
+    return this.request('/observability/spans/aggregate', {
+      method: 'POST',
+      body: params,
+      retries: this.readRetries(),
+    });
   }
 
   /** Returns canonical and observed fields available to the advanced trace-query grammar. */
@@ -388,7 +397,7 @@ export class Observability extends BaseResource {
    * @returns Matching thread rows. Legacy requests retain their identity-only response.
    */
   queryTraceThreads<T extends QueryTraceThreadsInput>(params: T): Promise<QueryTraceThreadsResult<T>> {
-    return this.request('/observability/threads/query', { method: 'POST', body: params });
+    return this.request('/observability/threads/query', { method: 'POST', body: params, retries: this.readRetries() });
   }
 
   /**
@@ -398,7 +407,7 @@ export class Observability extends BaseResource {
    * @returns Matching span rows with model/provider fields and input/output/error previews
    */
   querySpans(params: QuerySpansInput): Promise<QuerySpansResult> {
-    return this.request('/observability/spans/query', { method: 'POST', body: params });
+    return this.request('/observability/spans/query', { method: 'POST', body: params, retries: this.readRetries() });
   }
 
   /**

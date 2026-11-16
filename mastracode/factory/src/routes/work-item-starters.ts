@@ -56,6 +56,20 @@ export function cardsWithFailedRun(
   return failed;
 }
 
+export function cardsAwaitingPerson(
+  decisions: readonly Pick<FactoryDeferredDecisionRecord, 'workItemId' | 'status'>[],
+): Set<string> {
+  const proposed = new Set<string>();
+  const withEffect = new Set<string>();
+  for (const { workItemId, status } of decisions) {
+    if (workItemId === null) continue;
+    (status === 'proposed' ? proposed : withEffect).add(workItemId);
+  }
+  const awaiting = cardsWithFailedRun(decisions);
+  for (const workItemId of proposed) if (!withEffect.has(workItemId)) awaiting.add(workItemId);
+  return awaiting;
+}
+
 function isPullRequest(card: Card): boolean {
   return isPullRequestCard({ source: workItemBranchSource(card.externalSource) });
 }

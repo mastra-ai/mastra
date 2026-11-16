@@ -82,9 +82,7 @@ describe('GitLabIntegration', () => {
       { path: '/web/gitlab/status', requiresAuth: false },
       { path: '/web/gitlab/projects', requiresAuth: false },
       { path: '/web/gitlab/projects/registration', requiresAuth: false },
-      { path: '/web/gitlab/projects/:id/prs', requiresAuth: false },
       { path: '/web/gitlab/projects/:id/prs/:number', requiresAuth: false },
-      { path: '/web/gitlab/issues', requiresAuth: false },
       { path: '/web/gitlab/issues/:issueId', requiresAuth: false },
       { path: '/web/gitlab/subscriptions', requiresAuth: false },
       { path: '/web/gitlab/webhook', requiresAuth: false },
@@ -366,9 +364,6 @@ describe('GitLabIntegration', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/workspace',
     });
 
     await expect(
@@ -451,9 +446,7 @@ describe('PlatformGitLabIntegration', () => {
       '/web/gitlab/status',
       '/web/gitlab/projects',
       '/web/gitlab/projects/registration',
-      '/web/gitlab/projects/:id/prs',
       '/web/gitlab/projects/:id/prs/:number',
-      '/web/gitlab/issues',
       '/web/gitlab/issues/:issueId',
       '/web/gitlab/subscriptions',
       '/web/gitlab/webhook',

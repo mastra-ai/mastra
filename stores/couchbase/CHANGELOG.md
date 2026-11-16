@@ -1,5 +1,14 @@
 # @mastra/couchbase
 
+## 1.1.5-alpha.0
+
+### Patch Changes
+
+- Couchbase vector queries now log a warning the first time a metadata filter is passed. Couchbase vector search can't narrow results by metadata, so the filter is ignored, as before. The warning makes that visible instead of silent. ([#30446](https://github.com/mastra-ai/mastra/pull/30446))
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b)]:
+  - @mastra/core@1.84.0-alpha.3
+
 ## 1.1.4
 
 ### Patch Changes

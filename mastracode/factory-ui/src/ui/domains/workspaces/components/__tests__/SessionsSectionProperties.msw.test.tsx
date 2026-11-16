@@ -94,7 +94,6 @@ beforeEach(() => {
             repositories: [
               listedRepository(projectRepositoryId, 'mastra-ai/mastra', {
                 branch: 'main',
-                sandboxWorkdir: '/workspace',
               }),
             ],
           },

@@ -2,6 +2,7 @@ import { createOpenAI } from '@ai-sdk/openai-v5';
 import { it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../../../events/event-emitter';
+import type { Mastra } from '../../../../mastra';
 import { createTool } from '../../../../tools';
 import {
   createSharedAgent,
@@ -9,6 +10,50 @@ import {
   isDurableEngineVariant,
   useLoopScenarioAimock,
 } from '../aimock-scenario';
+
+const RUN_WRITE_METHODS = [
+  'persistWorkflowSnapshot',
+  'updateWorkflowResults',
+  'updateWorkflowState',
+  'writeWorkflowRunCheckpoint',
+  'appendWorkflowRunEntries',
+  'mergeWorkflowRunStepResult',
+  'updateWorkflowRunHeader',
+] as const;
+
+/** Records everything a run publishes or writes to workflow storage, on either storage version. */
+async function recordRunBoundaries(pubsub: EventEmitterPubSub, mastra: Mastra) {
+  const serialized: string[] = [];
+  const writes: Record<string, number> = {};
+  const record = (boundary: string, args: unknown[]) => {
+    writes[boundary] = (writes[boundary] ?? 0) + 1;
+    serialized.push(JSON.stringify(args));
+  };
+  const publish = pubsub.publish.bind(pubsub);
+  vi.spyOn(pubsub, 'publish').mockImplementation((...args) => {
+    record('publish', args);
+    return publish(...args);
+  });
+  const store = await mastra.getStorage()?.getStore('workflows');
+  for (const method of store ? RUN_WRITE_METHODS : []) {
+    const write = store![method].bind(store) as (...args: unknown[]) => Promise<unknown>;
+    vi.spyOn(store!, method).mockImplementation((...args: unknown[]) => {
+      record(method, args);
+      return write(...args);
+    });
+  }
+  return { serialized, writes };
+}
+
+/** Checks a durable run published and wrote through every boundary of the storage version it ran on. */
+function expectRunCrossedBoundaries(writes: Record<string, number>, engine: string) {
+  expect(writes.publish).toBeGreaterThan(0);
+  const evented = engine === 'evented';
+  const boundaries = writes.writeWorkflowRunCheckpoint
+    ? ['writeWorkflowRunCheckpoint', ...(evented ? ['appendWorkflowRunEntries', 'updateWorkflowRunHeader'] : [])]
+    : ['persistWorkflowSnapshot', ...(evented ? ['updateWorkflowResults', 'updateWorkflowState'] : [])];
+  for (const boundary of boundaries) expect(writes[boundary], boundary).toBeGreaterThan(0);
+}
 
 /**
  * Destructuring the stream result (moved from save-and-errors.e2e, which ran
@@ -199,38 +244,7 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
           }),
         },
       });
-      const serialized: string[] = [];
-      const boundaries = { publish: 0, persist: 0, results: 0, state: 0 };
-      if (isDurableEngineVariant(engine)) {
-        const publish = pubsub.publish.bind(pubsub);
-        vi.spyOn(pubsub, 'publish').mockImplementation((...args) => {
-          boundaries.publish++;
-          serialized.push(JSON.stringify(args));
-          return publish(...args);
-        });
-        const store = await mastra.getStorage()?.getStore('workflows');
-        expect(store).toBeDefined();
-        if (store) {
-          const persist = store.persistWorkflowSnapshot.bind(store);
-          vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation((...args) => {
-            boundaries.persist++;
-            serialized.push(JSON.stringify(args));
-            return persist(...args);
-          });
-          const results = store.updateWorkflowResults.bind(store);
-          vi.spyOn(store, 'updateWorkflowResults').mockImplementation((...args) => {
-            boundaries.results++;
-            serialized.push(JSON.stringify(args));
-            return results(...args);
-          });
-          const state = store.updateWorkflowState.bind(store);
-          vi.spyOn(store, 'updateWorkflowState').mockImplementation((...args) => {
-            boundaries.state++;
-            serialized.push(JSON.stringify(args));
-            return state(...args);
-          });
-        }
-      }
+      const { serialized, writes } = await recordRunBoundaries(pubsub, mastra);
       const onFinish = vi.fn();
       const result: any = await agent.stream('Report the failed request', { maxSteps: 3, onFinish });
       const output = result.output ?? result;
@@ -247,12 +261,7 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
         );
         expect(onFinish).not.toHaveBeenCalled();
         if (isDurableEngineVariant(engine)) {
-          expect(boundaries.publish).toBeGreaterThan(0);
-          expect(boundaries.persist).toBeGreaterThan(0);
-          if (engine === 'evented') {
-            expect(boundaries.results).toBeGreaterThan(0);
-            expect(boundaries.state).toBeGreaterThan(0);
-          }
+          expectRunCrossedBoundaries(writes, engine);
           expect(serialized.join('\n')).not.toMatch(/PRIVATE_(ERROR|EARLIER)_REQUEST/);
         }
       } finally {
@@ -358,38 +367,7 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
           },
         ],
       });
-      const serialized: string[] = [];
-      const boundaries = { publish: 0, persist: 0, results: 0, state: 0 };
-      if (isDurableEngineVariant(engine)) {
-        const publish = pubsub.publish.bind(pubsub);
-        vi.spyOn(pubsub, 'publish').mockImplementation((...args) => {
-          boundaries.publish++;
-          serialized.push(JSON.stringify(args));
-          return publish(...args);
-        });
-        const store = await mastra.getStorage()?.getStore('workflows');
-        expect(store).toBeDefined();
-        if (store) {
-          const persist = store.persistWorkflowSnapshot.bind(store);
-          vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation((...args) => {
-            boundaries.persist++;
-            serialized.push(JSON.stringify(args));
-            return persist(...args);
-          });
-          const updateResults = store.updateWorkflowResults.bind(store);
-          vi.spyOn(store, 'updateWorkflowResults').mockImplementation((...args) => {
-            boundaries.results++;
-            serialized.push(JSON.stringify(args));
-            return updateResults(...args);
-          });
-          const updateState = store.updateWorkflowState.bind(store);
-          vi.spyOn(store, 'updateWorkflowState').mockImplementation((...args) => {
-            boundaries.state++;
-            serialized.push(JSON.stringify(args));
-            return updateState(...args);
-          });
-        }
-      }
+      const { serialized, writes } = await recordRunBoundaries(pubsub, mastra);
       const result: any = await agent.stream('Use the cached answer');
       const output = result.output ?? result;
       try {
@@ -398,12 +376,7 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
         expect(llm.getRequests()).toHaveLength(0);
         expect(await output.request).toEqual(request);
         if (isDurableEngineVariant(engine)) {
-          expect(boundaries.publish).toBeGreaterThan(0);
-          expect(boundaries.persist).toBeGreaterThan(0);
-          if (engine === 'evented') {
-            expect(boundaries.results).toBeGreaterThan(0);
-            expect(boundaries.state).toBeGreaterThan(0);
-          }
+          expectRunCrossedBoundaries(writes, engine);
           expect(serialized.join('\n')).not.toContain('private-cached-request');
         }
       } finally {
@@ -454,38 +427,7 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
           }),
         },
       });
-      const serialized: string[] = [];
-      const boundaries = { publish: 0, persist: 0, results: 0, state: 0 };
-      if (isDurableEngineVariant(engine)) {
-        const publish = pubsub.publish.bind(pubsub);
-        vi.spyOn(pubsub, 'publish').mockImplementation((...args) => {
-          boundaries.publish++;
-          serialized.push(JSON.stringify(args));
-          return publish(...args);
-        });
-        const store = await mastra.getStorage()?.getStore('workflows');
-        expect(store).toBeDefined();
-        if (store) {
-          const persist = store.persistWorkflowSnapshot.bind(store);
-          vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation((...args) => {
-            boundaries.persist++;
-            serialized.push(JSON.stringify(args));
-            return persist(...args);
-          });
-          const updateResults = store.updateWorkflowResults.bind(store);
-          vi.spyOn(store, 'updateWorkflowResults').mockImplementation((...args) => {
-            boundaries.results++;
-            serialized.push(JSON.stringify(args));
-            return updateResults(...args);
-          });
-          const updateState = store.updateWorkflowState.bind(store);
-          vi.spyOn(store, 'updateWorkflowState').mockImplementation((...args) => {
-            boundaries.state++;
-            serialized.push(JSON.stringify(args));
-            return updateState(...args);
-          });
-        }
-      }
+      const { serialized, writes } = await recordRunBoundaries(pubsub, mastra);
       let callbackRequest: unknown;
       const result: any = await agent.stream('Look up a value.', {
         maxSteps: 3,
@@ -500,12 +442,7 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
         expect(await output.request).toEqual(requests[1]);
         await expect.poll(() => callbackRequest).toEqual(requests[1]);
         if (isDurableEngineVariant(engine)) {
-          expect(boundaries.publish).toBeGreaterThan(0);
-          expect(boundaries.persist).toBeGreaterThan(0);
-          if (engine === 'evented') {
-            expect(boundaries.results).toBeGreaterThan(0);
-            expect(boundaries.state).toBeGreaterThan(0);
-          }
+          expectRunCrossedBoundaries(writes, engine);
           const leaks: string[] = [];
           const visit = (value: unknown, path: string) => {
             if (typeof value === 'string' && value.includes('PRIVATE_REQUEST_')) leaks.push(path);

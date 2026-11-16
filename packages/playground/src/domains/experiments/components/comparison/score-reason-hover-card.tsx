@@ -1,6 +1,6 @@
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { InfoIcon } from 'lucide-react';
+import { IconCircleInfo } from '@mastra/playground-ui/icons/central/IconCircleInfo';
 
 export interface ScoreReasonHoverCardProps {
   scorerId: string;
@@ -33,7 +33,7 @@ export function ScoreReasonHoverCard({ scorerId, reason, nested = false }: Score
           )
         }
       >
-        <InfoIcon />
+        <IconCircleInfo />
       </HoverCardTrigger>
       {/* The card is portaled but still bubbles React events to the trigger's ancestors (e.g. a row button). */}
       <HoverCardContent

@@ -1,16 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import {
-  BoxIcon,
-  Columns2Icon,
-  Columns3Icon,
-  EllipsisVerticalIcon,
-  FolderIcon,
-  GlobeIcon,
-  ListFilterPlusIcon,
-  ListIcon,
-  NetworkIcon,
-  TagIcon,
-} from 'lucide-react';
+import { NetworkIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { traceFilterFieldColor } from '@/domains/traces/trace-filters';
@@ -33,6 +22,15 @@ import type { FilterBarField, FilterBarItem } from '@/ds/components/FilterBar/ty
 import { SearchInput } from '@/ds/components/SearchInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Txt } from '@/ds/components/Txt';
+import { IconBox } from '@/ds/icons/central/IconBox';
+import { IconColumns3 } from '@/ds/icons/central/IconColumns3';
+import { IconDotGrid1x3Vertical } from '@/ds/icons/central/IconDotGrid1x3Vertical';
+import { IconFilter2 } from '@/ds/icons/central/IconFilter2';
+import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
+import { IconGlobe } from '@/ds/icons/central/IconGlobe';
+import { IconLayoutColumn } from '@/ds/icons/central/IconLayoutColumn';
+import { IconListBullets } from '@/ds/icons/central/IconListBullets';
+import { IconTag } from '@/ds/icons/central/IconTag';
 
 /*
  * Every page toolbar in Studio and Platform, rebuilt from the same components and props as
@@ -51,7 +49,7 @@ const FIELDS: FilterBarField[] = [
   {
     id: 'environment',
     label: 'Environment',
-    icon: GlobeIcon,
+    icon: IconGlobe,
     operators: ['is', 'is-not'],
     suggestions: [],
     color: traceFilterFieldColor('environment'),
@@ -59,7 +57,7 @@ const FIELDS: FilterBarField[] = [
   {
     id: 'rootEntityType',
     label: 'Primitive type',
-    icon: BoxIcon,
+    icon: IconBox,
     operators: ['is'],
     suggestions: [],
     color: traceFilterFieldColor('rootEntityType'),
@@ -67,12 +65,12 @@ const FIELDS: FilterBarField[] = [
   {
     id: 'project',
     label: 'Project',
-    icon: FolderIcon,
+    icon: IconFolder1,
     operators: ['is'],
     suggestions: [],
     color: traceFilterFieldColor('project'),
   },
-  { id: 'tag', label: 'Tag', icon: TagIcon, operators: ['is'], suggestions: [], color: traceFilterFieldColor('tag') },
+  { id: 'tag', label: 'Tag', icon: IconTag, operators: ['is'], suggestions: [], color: traceFilterFieldColor('tag') },
 ];
 
 const ENVIRONMENT: FilterBarItem = { id: 'environment', fieldId: 'environment', operatorId: 'is', value: 'production' };
@@ -134,7 +132,7 @@ function ColumnsMenu() {
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger size="icon-sm" tooltip="Columns">
-        <Columns3Icon />
+        <IconColumns3 />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start">
         <DropdownMenu.Item>Start</DropdownMenu.Item>
@@ -272,7 +270,7 @@ export const AllToolbars: StoryObj = {
           <ActionRow>
             <ActionRow.Start>
               <StandalonePicker />
-              <Button size="sm" icon={<ListFilterPlusIcon />}>
+              <Button size="sm" icon={<IconFilter2 />}>
                 Add filter
               </Button>
             </ActionRow.Start>
@@ -302,10 +300,10 @@ export const AllToolbars: StoryObj = {
             <ActionRow.End>
               <ButtonsGroup size="sm">
                 <Button size="icon-sm" variant="default" aria-label="List view">
-                  <ListIcon />
+                  <IconListBullets />
                 </Button>
                 <Button size="icon-sm" variant="ghost" aria-label="Columns view">
-                  <Columns2Icon />
+                  <IconLayoutColumn />
                 </Button>
               </ButtonsGroup>
             </ActionRow.End>
@@ -380,7 +378,7 @@ export const AllToolbars: StoryObj = {
             </ActionRow.Start>
             <ActionRow.End>
               <Button size="icon-sm" aria-label="Search actions">
-                <EllipsisVerticalIcon />
+                <IconDotGrid1x3Vertical />
               </Button>
             </ActionRow.End>
           </ActionRow>

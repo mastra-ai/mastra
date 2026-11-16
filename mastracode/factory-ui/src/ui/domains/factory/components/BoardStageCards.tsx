@@ -42,7 +42,7 @@ export function BoardStageCards({
       {loading && <BoardItemsSkeleton label={`Loading ${stage.label} column`} layout={layout} />}
       {showEmptyState && (
         <BoardColumnEmptyState
-          stage={stage.id}
+          stage={stage}
           isInitialPhase={isInitialPhase}
           intakeSetup={intakeSetup}
           filtersExcludeAll={filtersExcludeAll}

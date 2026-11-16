@@ -41,6 +41,7 @@ import {
   registerGithubTokenInjector,
   registerGithubTokenInjectorResolver,
 } from './integrations/github/token-refresh.js';
+import { instrumentSandboxStart, markEagerSandboxStart, recordSandboxAcquired } from './metrics/sandbox.js';
 import { requireExec } from './sandbox/materialization.js';
 import type { ExecutableSandbox } from './sandbox/materialization.js';
 import {
@@ -1079,6 +1080,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             `sandbox(${session.id})`,
             ['start', 'stop', 'executeCommand', 'reconnect'],
           );
+          instrumentSandboxStart(sandbox, factorySandbox.provider, session.sandboxId != null);
           // Before Factory's own GH_TOKEN, so a host env key is remembered before Factory writes it.
           if (envScope && sandboxEnv) {
             attachSandboxEnvRefresh(sandbox, {
@@ -1118,6 +1120,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           // stack a wrapper per call. Factory's setup runs first: a hook the
           // callback installed itself expects a prepared workspace.
           sandbox.setOnStart(previous => async args => {
+            recordSandboxAcquired(args.sandbox, args.outcome);
             try {
               await timedPhase(`workspace.onStart(${args.outcome})`, async () => {
                 await setupHook(args);
@@ -1144,7 +1147,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       if (!startEagerly) return;
       startEagerly = false;
       Promise.resolve()
-        .then(() => sessionEntry.sandbox.start?.())
+        .then(() => {
+          markEagerSandboxStart(sessionEntry.sandbox);
+          return sessionEntry.sandbox.start?.();
+        })
         .catch(error => {
           console.warn(`[factory] Eager sandbox start for session ${session.id} failed:`, error);
         });
@@ -1846,7 +1852,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       inFlight: string | undefined,
       repeated: Set<string>,
     ) => {
-      const builtAt = new Date();
       try {
         for (const state of states) {
           if (state.setupStatus === 'skipped') continue;
@@ -1860,7 +1865,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             id: repo.projectRepositoryId,
             status: state.setupStatus === 'failed' ? 'failed' : 'configured',
             error: error === undefined ? null : redactCredentials(error).slice(-2000),
-            builtAt,
           });
         }
       } catch (error) {

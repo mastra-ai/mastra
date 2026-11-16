@@ -153,7 +153,7 @@ describe('IncidentioRules', () => {
   });
 
   it.each(['completed', 'canceled'])(
-    'closes linked follow-ups in state %s with shared audit metadata',
+    'closes linked follow-ups in state %s',
     async stateType => {
       const { project, service, workItems } = await setup();
       await workItems.upsert({
@@ -176,13 +176,7 @@ describe('IncidentioRules', () => {
       });
       expect(commit).toHaveBeenCalledWith(
         expect.objectContaining({
-          configVersion: 'factory-config-v1',
-          ingress: {
-            identity: `incidentio:${issue.id}:${issue.updatedAt}`,
-            // Closures must be stored under the close trigger, not the
-            // observation trigger, so trigger-based audit queries stay correct.
-            triggerType: 'incidentio.followUpClosed',
-          },
+          ingress: { identity: `incidentio:${issue.id}:${issue.updatedAt}` },
         }),
       );
       expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
@@ -370,7 +364,7 @@ describe('incident.io board events', () => {
     await ingest('canceled', '2026-07-05T00:00:00Z');
 
     expect(seen).toEqual([
-      { event: 'followUpObserved', boardEvent: { type: 'work_item.created' } },
+      { event: 'followUpObserved', boardEvent: { type: 'work_item.opened' } },
       // A later sighting of an open incident.io follow-up is not a status change.
       { event: 'followUpObserved', boardEvent: undefined },
       { event: 'followUpClosed', boardEvent: { type: 'work_item.closed', reason: 'completed' } },

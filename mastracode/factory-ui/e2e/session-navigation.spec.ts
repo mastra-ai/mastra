@@ -66,9 +66,7 @@ test.describe('Factory session navigation', () => {
             {
               id: 'fp-1',
               name: 'Session links',
-              repositories: [
-                listedRepository('repo-1', 'mastra-ai/mastra', { branch: 'main', sandboxWorkdir: '/repo' }),
-              ],
+              repositories: [listedRepository('repo-1', 'mastra-ai/mastra', { branch: 'main' })],
             },
             { id: 'fp-2', name: 'Another Factory', repositories: [] },
           ],
@@ -110,7 +108,6 @@ test.describe('Factory session navigation', () => {
           ],
         }),
       ),
-      http.get('*/web/github/projects/repo-1/issues', () => HttpResponse.json({ issues: [], nextPage: null })),
       http.get('*/web/intake/config', () => HttpResponse.json({ config: {} })),
       http.get('*/web/intake/bindings', () => HttpResponse.json({ bindings: [] })),
       http.get('*/web/linear/status', () => HttpResponse.json({ enabled: false, connected: false })),

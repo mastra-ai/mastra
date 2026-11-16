@@ -65,6 +65,7 @@
     "@mastra/libsql": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
+    "@mastra/pg": "workspace:*",
     "@types/express": "^5.0.6",
     "@types/koa": "^3.0.3",
     "@types/koa-bodyparser": "^4.3.13",

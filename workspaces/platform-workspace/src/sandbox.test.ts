@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { supportsNetworking } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DirectExecWebSocket, DirectExecWebSocketFactory } from './direct-exec.js';
-import { PlatformSandbox } from './sandbox.js';
+import { commandInCwd, PlatformSandbox } from './sandbox.js';
 import type { SandboxAddressRegistry } from './sandbox.js';
 import { serializeSandboxTemplate, Template } from './template.js';
 
@@ -139,9 +139,9 @@ describe('PlatformSandbox', () => {
     expect(sockets).toHaveLength(1);
     expect(sockets[0]!.endpoint).toBe('wss://ssh.railway.com:2226/ws/exec');
     expect(sockets[0]!.subprotocols).toEqual(['railway-shell', 'jwt.value.here']);
-    // init_exec frame carries command + cwd + env.
+    // init_exec frame carries the command (changing into cwd in the shell) + env.
     const init = JSON.parse(sockets[0]!.sent[0]!) as { data: Record<string, unknown> };
-    expect(init.data).toEqual({ command: 'echo ok', cwd: '/workspace', env: { A: '1' } });
+    expect(init.data).toEqual({ command: commandInCwd('echo ok', '/workspace', undefined), env: { A: '1' } });
   });
 
   it('uses the regional workspace proxy URL for sandbox requests', async () => {
@@ -457,7 +457,7 @@ describe('PlatformSandbox', () => {
         jwt: 'envd-access-token',
         wsEndpoint: 'https://49983-e2b-sbx-1.e2b.app',
       }),
-      expect.objectContaining({ command: 'echo ok', cwd: '/workspace', env: { A: '1' } }),
+      expect.objectContaining({ command: commandInCwd('echo ok', '/workspace', undefined), env: { A: '1' } }),
     );
     expect(webSocketFactory).not.toHaveBeenCalled();
   });
@@ -493,7 +493,7 @@ describe('PlatformSandbox', () => {
     expect(sandbox.workingDirectory).toBe('/srv/app');
   });
 
-  it('per-command cwd wins over the configured workingDirectory', async () => {
+  it('runs a per-command cwd by changing into it from the configured workingDirectory', async () => {
     vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi
@@ -520,7 +520,10 @@ describe('PlatformSandbox', () => {
     await sandbox._start();
     await sandbox.executeCommand('pwd', [], { cwd: '/workspace' });
 
-    expect(e2bExecRunner).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ cwd: '/workspace' }));
+    expect(e2bExecRunner).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ command: commandInCwd('pwd', '/workspace', '/srv/app'), cwd: '/srv/app' }),
+    );
   });
 
   it('omits cwd when neither cwd nor workingDirectory is set', async () => {
@@ -1792,7 +1795,7 @@ describe('PlatformSandbox', () => {
       expect(priv.calls).toHaveLength(1);
       expect(priv.calls[0]!.url).toBe('http://[fd12:752d:16f5:1:d000:41:e7de:188c]:47000/exec');
       const body = JSON.parse(priv.calls[0]!.init!.body as string);
-      expect(body).toEqual({ command: 'echo ok', cwd: '/workspace', env: { A: '1' } });
+      expect(body).toEqual({ command: commandInCwd('echo ok', '/workspace', undefined), env: { A: '1' } });
     });
 
     it('falls straight through to the lease path when the registry has no address for the sandbox', async () => {

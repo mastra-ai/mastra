@@ -1,7 +1,7 @@
-import { Loader2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button';
+import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
 import { Icon } from '@/ds/icons/Icon';
 import { cn } from '@/utils/cn';
 
@@ -44,7 +44,7 @@ export const FormSubmitRow = ({
       >
         {isSubmitLoading ? (
           <Icon>
-            <Loader2 className="animate-spin" />
+            <IconLoadingCircle className="animate-spin" />
           </Icon>
         ) : (
           submitButtonIcon

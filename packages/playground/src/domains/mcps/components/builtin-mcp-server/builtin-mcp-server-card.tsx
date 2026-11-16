@@ -8,9 +8,9 @@ import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useMastraClient } from '@mastra/react';
-import { ExternalLinkIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useBuiltinMcpServer } from '../../hooks/use-builtin-mcp-server';
@@ -196,7 +196,7 @@ function DocsLink() {
       <Button
         variant="ghost"
         render={<a href={DOCS_URL} target="_blank" rel="noopener noreferrer" />}
-        icon={<ExternalLinkIcon />}
+        icon={<IconSquareArrowTopRight />}
       >
         MCP server docs
       </Button>

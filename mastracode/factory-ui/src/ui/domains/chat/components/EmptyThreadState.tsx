@@ -37,7 +37,7 @@ export function EmptyThreadState() {
   return (
     <section className={emptyThreadClass} aria-labelledby="empty-thread-title">
       <Logo size="md" aria-label="Mastra Code" />
-      <Txt as="h1" variant="display" tone="ink" id="empty-thread-title" className="mt-7 text-balance">
+      <Txt as="h2" variant="display" tone="ink" id="empty-thread-title" className="mt-7 text-balance">
         What can I help you build?
       </Txt>
       <Txt variant="body-sm" tone="muted" className="mt-2 max-w-lg text-pretty">

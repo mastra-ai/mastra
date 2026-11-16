@@ -102,7 +102,7 @@ export function versionedCard(wire: unknown): Record<string, unknown> {
 }
 
 /** The card the server holds for a card a test lists on the wire. */
-function storedCard(wire: unknown): Card {
+export function storedCard(wire: unknown): Card {
   const card = wireCardSchema.parse(wire);
   const updatedAt = card.updatedAt ?? card.createdAt;
   const workItemId = card.workItemId ?? card.workItem?.id ?? card.id;
@@ -161,7 +161,7 @@ export interface StubbedProject {
   parkedSessionIds?: readonly string[];
 }
 
-function queryValues(url: URL, name: string): string[] | undefined {
+export function queryValues(url: URL, name: string): string[] | undefined {
   const values = url.searchParams.getAll(name);
   return values.length > 0 ? values : undefined;
 }
@@ -241,27 +241,44 @@ export function isStubbedProjectRead(request: Request): boolean {
   return request.headers.has(STUBBED_PROJECT_READ_HEADER);
 }
 
+export interface StubbedReads {
+  project(path: string): Promise<Response>;
+  origin(path: string): Promise<Response>;
+}
+
+export function stubbedReads(request: Request, factoryProjectId: string): StubbedReads {
+  const { origin } = new URL(request.url);
+  const project = `${origin}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`;
+  const init = { signal: request.signal, headers: { [STUBBED_PROJECT_READ_HEADER]: 'true' } };
+  return {
+    project: (path: string) => fetch(`${project}/${path}`, init),
+    origin: (path: string) => fetch(`${origin}/${path}`, init),
+  };
+}
+
+export async function stubbedUserId(me: Response): Promise<string> {
+  const user = me.ok ? stubbedUserSchema.safeParse(await me.json()) : undefined;
+  return user?.success ? user.data.user.userId : 'user-1';
+}
+
 /**
  * The project as the running test stubs it: the cards its `work-items` handler lists, its board
  * catalog and its signed-in user. An answer that is not one of these is the stub's own failure,
  * which the paged read then fails with.
  */
 async function stubbedProject(request: Request, factoryProjectId: string): Promise<StubbedProject | Response> {
-  const { origin } = new URL(request.url);
-  const project = `${origin}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`;
-  const read = { signal: request.signal, headers: { [STUBBED_PROJECT_READ_HEADER]: 'true' } };
+  const reads = stubbedReads(request, factoryProjectId);
   const [list, catalog, me] = await Promise.all([
-    fetch(`${project}/work-items`, read),
-    fetch(`${project}/boards`, read),
-    fetch(`${origin}/auth/me`, read),
+    reads.project('work-items'),
+    reads.project('boards'),
+    reads.origin('auth/me'),
   ]);
   if (!list.ok) return list;
   if (!catalog.ok) return catalog;
-  const user = me.ok ? stubbedUserSchema.safeParse(await me.json()) : undefined;
   return {
     ...stubbedListSchema.parse(await list.json()),
     boards: stubbedCatalogSchema.parse(await catalog.json()).boards,
-    userId: user?.success ? user.data.user.userId : 'user-1',
+    userId: await stubbedUserId(me),
   };
 }
 
