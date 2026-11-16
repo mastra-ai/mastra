@@ -230,8 +230,8 @@ function closedUnmerged(source: Pick<WorkItemSourceRow, 'state' | 'metadata'>): 
 /**
  * The card's working pull request, the one its review passes and status checks follow: the one
  * `openPullRequestNumber` names (its session's own, or the one a person picked), unless it closed
- * without merging; else the first trusted one linked that hasn't. An outsider's pull request is
- * never picked on its own. `except` leaves one pull request out.
+ * without merging; else the first trusted open one linked, else the first trusted merged one. An
+ * outsider's pull request is never picked on its own. `except` leaves one pull request out.
  */
 export function workingPullRequest(
   item: SourcedItem & { readonly metadata?: Record<string, unknown> | null },
@@ -243,8 +243,23 @@ export function workingPullRequest(
   const pointer = item.metadata?.openPullRequestNumber;
   return (
     (typeof pointer === 'number' ? sources.find(source => pullRequestSourceNumber(source) === pointer) : undefined) ??
+    sources.find(source => openSource(source) && trustedPullRequestSource(item, source)) ??
     sources.find(source => trustedPullRequestSource(item, source))
   );
+}
+
+/**
+ * The pull request `openPullRequestNumber` names, unless it is one linked to the card that closed
+ * without merging: the card then works on its {@link workingPullRequest} instead. A pointer to a
+ * pull request the card has no source for (its session opened it) stands.
+ */
+export function pointedPullRequest(
+  item: SourcedItem & { readonly metadata?: Record<string, unknown> | null },
+): number | undefined {
+  const pointer = item.metadata?.openPullRequestNumber;
+  if (typeof pointer !== 'number') return undefined;
+  const source = pullRequestSources(item).find(entry => pullRequestSourceNumber(entry) === pointer);
+  return source && closedUnmerged(source) ? undefined : pointer;
 }
 
 /** The pull request a PR review pass on this card reviews: its {@link workingPullRequest}. */

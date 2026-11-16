@@ -299,28 +299,126 @@ describe("a card's working pull request", () => {
     return source && pullRequestSourceNumber(source);
   };
 
-  it('is the one the card points at, else the first trusted one linked', () => {
-    expect(working(card([pr(17, 'open'), pr(18, 'open')], { openPullRequestNumber: 18 }))).toBe(18);
-    expect(working(card([pr(17, 'open'), pr(18, 'open')]))).toBe(17);
-    expect(working(card([pr(17, 'open'), pr(18, 'open')], outsider(17)))).toBe(18);
-  });
-
-  it("is never an outsider's on its own, but is one a person picked", () => {
-    expect(working(card([pr(17, 'open')], outsider(17)))).toBeUndefined();
-    expect(working(card([pr(17, 'open')], { ...outsider(17), openPullRequestNumber: 17 }))).toBe(17);
-  });
-
-  it('falls back to the first trusted open one when the one pointed at closes unmerged, never to an outsider', () => {
-    const sources = [pr(16, 'open'), pr(17, 'closed'), pr(18, 'open')];
-    expect(working(card(sources, { ...outsider(16), openPullRequestNumber: 17 }))).toBe(18);
+  type State = 'open' | 'closed' | 'merged';
+  it.each<[string, Array<[number, State]>, Record<string, unknown>, number | undefined, number | undefined]>([
+    [
+      'the one the card points at',
+      [
+        [17, 'open'],
+        [18, 'open'],
+      ],
+      { openPullRequestNumber: 18 },
+      undefined,
+      18,
+    ],
+    [
+      'else the first trusted one linked',
+      [
+        [17, 'open'],
+        [18, 'open'],
+      ],
+      {},
+      undefined,
+      17,
+    ],
+    [
+      "never an outsider's on its own",
+      [
+        [17, 'open'],
+        [18, 'open'],
+      ],
+      outsider(17),
+      undefined,
+      18,
+    ],
+    ["nothing when only an outsider's is linked", [[17, 'open']], outsider(17), undefined, undefined],
+    ["an outsider's a person picked", [[17, 'open']], { ...outsider(17), openPullRequestNumber: 17 }, undefined, 17],
+    [
+      'the first trusted open one once the one pointed at closes unmerged',
+      [
+        [16, 'open'],
+        [17, 'closed'],
+        [18, 'open'],
+      ],
+      { ...outsider(16), openPullRequestNumber: 17 },
+      undefined,
+      18,
+    ],
+    [
+      "nothing, rather than an outsider's, when the one pointed at closes unmerged",
+      [
+        [16, 'open'],
+        [17, 'closed'],
+      ],
+      { ...outsider(16), openPullRequestNumber: 17 },
+      undefined,
+      undefined,
+    ],
+    [
+      'a trusted open one over a merged one when the one pointed at closes unmerged',
+      [
+        [17, 'merged'],
+        [18, 'closed'],
+        [19, 'open'],
+      ],
+      { openPullRequestNumber: 18 },
+      undefined,
+      19,
+    ],
+    [
+      'a trusted open one over a merged one',
+      [
+        [17, 'merged'],
+        [18, 'open'],
+      ],
+      {},
+      undefined,
+      18,
+    ],
+    [
+      'the merged one when no trusted one is open',
+      [
+        [17, 'merged'],
+        [18, 'closed'],
+      ],
+      {},
+      undefined,
+      17,
+    ],
+    [
+      'the merged one the card points at, so merging it finishes the card',
+      [
+        [17, 'merged'],
+        [18, 'open'],
+      ],
+      { openPullRequestNumber: 17 },
+      undefined,
+      17,
+    ],
+    [
+      'the next one when one is left out',
+      [
+        [17, 'open'],
+        [18, 'open'],
+      ],
+      {},
+      17,
+      18,
+    ],
+  ])('is %s', (_case, sources, metadata, except, expected) => {
     expect(
-      working(card([pr(16, 'open'), pr(17, 'closed')], { ...outsider(16), openPullRequestNumber: 17 })),
-    ).toBeUndefined();
+      working(
+        card(
+          sources.map(([number, state]) => pr(number, state)),
+          metadata,
+        ),
+        except,
+      ),
+    ).toBe(expected);
   });
 
-  it('stays the first one once it merges, so merging it finishes the card', () => {
-    expect(working(card([pr(17, 'merged'), pr(18, 'open')]))).toBe(17);
-    expect(working(card([pr(17, 'merged'), pr(18, 'open')]), 17)).toBe(18);
+  it('is what a review pass reviews', () => {
     expect(reviewedPullRequest(card([pr(17, 'open')], outsider(17)))).toBeUndefined();
+    expect(reviewedPullRequest(card([pr(17, 'open')]))).toMatchObject({ externalId: 'github-pr:17' });
   });
 });

@@ -226,6 +226,23 @@ describe('item.pullRequest', () => {
     const picked = cardRuleFacts(issueCard([outsider], { ...untrusted, openPullRequestNumber: 14 }));
     expect(picked).toMatchObject({ 'item.pullRequest': 14, 'pullRequest.trusted': false });
   });
+
+  it('describes one pull request, the one the card falls back to, once the one it points at closes unmerged', () => {
+    const outsider = { ...pullRequest(18, 'open'), provider: 'github', externalId: 'github-pr:18' };
+    const fellBack = cardRuleFacts(
+      issueCard([pullRequest(17, 'closed'), pullRequest(18, 'open')], { openPullRequestNumber: 17 }),
+    );
+    expect(fellBack).toMatchObject({ 'item.pullRequest': 18, 'item.hasPullRequest': true });
+    const none = cardRuleFacts(
+      issueCard([pullRequest(17, 'closed'), outsider], {
+        openPullRequestNumber: 17,
+        untrustedPullRequests: ['github:github-pr:18'],
+      }),
+    );
+    expect(none).not.toHaveProperty('item.pullRequest');
+    expect(none).not.toHaveProperty('pullRequest.trusted');
+    expect(none['item.hasPullRequest']).toBe(false);
+  });
 });
 
 describe('item.hasPullRequest and item.hasIssue', () => {

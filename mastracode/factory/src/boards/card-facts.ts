@@ -4,7 +4,12 @@ import type { Card } from '../storage/domains/work-items/base.js';
 import { pullRequestSourceNumber, pullRequestSources } from '../work-items/change-requests.js';
 import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { stringList, stringValue } from '../work-items/providers/metadata-keys.js';
-import { openPullRequestSource, trustedPullRequestSource, workingPullRequest } from './semantics.js';
+import {
+  openPullRequestSource,
+  pointedPullRequest,
+  trustedPullRequestSource,
+  workingPullRequest,
+} from './semantics.js';
 
 type WorkItemFacts = Pick<Card['workItem'], 'labels' | 'author'> &
   Partial<Pick<Card['workItem'], 'sources' | 'provider' | 'key' | 'state' | 'metadata'>>;
@@ -35,9 +40,11 @@ export function cardRuleFacts(
       : [];
   // The card's working pull request: a pull request's own card is its own; an issue card's is
   // the attached one it works on, and trusted unless a person picked an outsider's.
-  const working =
-    source?.type === 'pull-request' ? undefined : workingPullRequest({ ...item, workItem: item.workItem ?? null });
-  const pointer = metadata.openPullRequestNumber;
+  const sourced = { ...item, workItem: item.workItem ?? null };
+  const working = source?.type === 'pull-request' ? undefined : workingPullRequest(sourced);
+  // Number, trust and presence all describe the working pull request: a pointer to a linked one
+  // that closed unmerged gives way to it.
+  const pointer = pointedPullRequest(sourced);
   const pullRequest =
     typeof pointer === 'number'
       ? pointer
