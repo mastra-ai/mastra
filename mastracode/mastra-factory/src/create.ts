@@ -151,12 +151,17 @@ export async function create(args: CreateArgs): Promise<void> {
     const tag = args.versionTag;
     const pinSpinner = p.spinner();
     pinSpinner.start(`Resolving the "${tag}" Mastra packages...`);
-    const { pinned, unresolved } = await pinMastraPackages(projectPath, tag);
+    let pinResult: Awaited<ReturnType<typeof pinMastraPackages>>;
+    try {
+      pinResult = await pinMastraPackages(projectPath, tag);
+    } catch (err) {
+      pinSpinner.stop(`Could not resolve "${tag}" Mastra packages.`);
+      throw err;
+    }
+    const { pinned, unresolved } = pinResult;
     if (Object.keys(pinned).length === 0 && unresolved.length > 0) {
       pinSpinner.stop(`Could not resolve "${tag}" Mastra packages.`);
-      throw new Error(
-        `Could not resolve any Mastra package versions for the "${tag}" tag. Check your network connection and npm registry access.`,
-      );
+      throw new Error(`No Mastra packages are published under the "${tag}" tag.`);
     }
     // Mastra peer ranges like `>=1.83.0-0` don't match a newer prerelease
     // (`1.84.0-alpha.3`) under semver's prerelease rules, so npm refuses to

@@ -44,9 +44,16 @@ export async function pinMastraPackages(projectPath: string, tag: string): Promi
     [...names].sort().map(async name => [name, await resolveDistTag(name, tag, projectPath)] as const),
   );
 
+  const failed = resolved.filter(([, result]) => result.failed).map(([name]) => name);
+  if (failed.length > 0) {
+    throw new Error(
+      `Could not look up the "${tag}" versions of ${failed.join(', ')}. Check your network connection and npm registry access.`,
+    );
+  }
+
   const pinned: Record<string, string> = {};
   const unresolved: string[] = [];
-  for (const [name, version] of resolved) {
+  for (const [name, { version }] of resolved) {
     if (version) pinned[name] = version;
     else unresolved.push(name);
   }
@@ -63,7 +70,11 @@ export async function pinMastraPackages(projectPath: string, tag: string): Promi
   return { pinned, unresolved };
 }
 
-async function resolveDistTag(name: string, tag: string, cwd: string): Promise<string | undefined> {
+/**
+ * `failed` means the registry lookup itself failed, which callers must not
+ * mistake for the package simply having no release under the tag.
+ */
+async function resolveDistTag(name: string, tag: string, cwd: string): Promise<{ version?: string; failed?: true }> {
   try {
     const { stdout } = await x('npm', ['view', name, 'dist-tags', '--json'], {
       throwOnError: true,
@@ -73,8 +84,8 @@ async function resolveDistTag(name: string, tag: string, cwd: string): Promise<s
     });
     const tags = JSON.parse(stdout) as Record<string, unknown>;
     const version = tags[tag];
-    return typeof version === 'string' && version ? version : undefined;
+    return typeof version === 'string' && version ? { version } : {};
   } catch {
-    return undefined;
+    return { failed: true };
   }
 }
