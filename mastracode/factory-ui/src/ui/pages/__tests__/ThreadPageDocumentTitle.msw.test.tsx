@@ -49,9 +49,7 @@ function stubBase({ workItems, threads }: { workItems: unknown[]; threads: unkno
           {
             id: FACTORY_ID,
             name: 'Acme Factory',
-            repositories: [
-              listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/local/acme/app' }),
-            ],
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main' })],
           },
         ],
       }),

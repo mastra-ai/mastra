@@ -99,7 +99,6 @@ function activeFactoryRepositories(options: StubSearchOptions): ProjectListRepos
       integrationId: repository.provider ?? 'github',
       externalId: repository.externalId ?? null,
       branch: 'main',
-      sandboxWorkdir: '/repo',
     }),
   );
 }

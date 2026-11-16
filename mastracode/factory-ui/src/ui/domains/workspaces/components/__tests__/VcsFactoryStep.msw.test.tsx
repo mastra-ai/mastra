@@ -30,7 +30,6 @@ const repo = {
   installationStorageId: 'inst-7',
   repositoryStorageId: 'repo-99',
   sandboxProvider: 'local',
-  sandboxWorkdir: '/workspace/hello',
 };
 
 const gitlabRepository: GitLabRepository = {
@@ -43,7 +42,6 @@ const gitlabRepository: GitLabRepository = {
   defaultBranch: 'main',
   private: true,
   sandboxProvider: 'local',
-  sandboxWorkdir: '/workspace/project',
 };
 
 function renderStep(props: Partial<VcsFactoryStepProps> = {}) {
@@ -449,7 +447,6 @@ describe('VCS Factory step', () => {
               installationStorageId: 'gitlab-installation',
               defaultBranch: 'main',
               sandboxProvider: 'local',
-              sandboxWorkdir: '/workspace/project',
             },
           ],
         }),

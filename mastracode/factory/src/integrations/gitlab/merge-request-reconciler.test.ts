@@ -56,9 +56,7 @@ async function seedMergeRequestCard({ initialStage, initialState, missingIdentit
       orgId: project.orgId,
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: project.createdBy,
       sandboxProvider: 'local',
-      sandboxWorkdir: '/workspace',
     });
   }
   const wrongInstallation = await sourceControl.installations.upsert({
@@ -86,9 +84,7 @@ async function seedMergeRequestCard({ initialStage, initialState, missingIdentit
     orgId: project.orgId,
     connectionId: wrongConnection.id,
     repositoryId: wrongRepository.id,
-    createdByUserId: project.createdBy,
     sandboxProvider: 'local',
-    sandboxWorkdir: '/workspace/other',
   });
   await seeded.intake.saveConfig({
     orgId: project.orgId,

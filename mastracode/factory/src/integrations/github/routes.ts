@@ -27,8 +27,6 @@ import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
 import { requireExec } from '../../sandbox/materialization.js';
 import type { ExecutableSandbox } from '../../sandbox/materialization.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
-import { sanitizeSegment } from '../../sandbox/workdir.js';
-import { waitForPendingFilesystemCapture } from '../../session/filesystem-capture.js';
 import { sessionMemoryResourceId, listFactorySessionThreads } from '../../session/session-threads.js';
 import { normalizeSessionTitle } from '../../session/session-title.js';
 import type { StateSigner } from '../../state-signing.js';
@@ -715,10 +713,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           ...repo,
           installationStorageId: inst.id,
           sandboxProvider: sandbox ? 'custom' : 'none',
-          // Display only — the runtime workdir is resolved from the
-          // live sandbox at open time. Repositories are persisted only after
-          // selection, so `~/<repo>` is the honest listing-time guess.
-          sandboxWorkdir: `~/${sanitizeSegment(repo.fullName.split('/', 2)[1] || 'repo')}`,
         }));
         return c.json({ repos });
       },
@@ -1426,14 +1420,6 @@ function buildProjectGitRoutes({
           return c.json({ error: 'Session not found' }, 404);
         }
         try {
-          // Drain the turn's queued filesystem capture while the thread and sandbox still exist.
-          // A failed drain only costs the snapshot; it must not block teardown.
-          await waitForPendingFilesystemCapture(session.sessionId).catch(error => {
-            console.warn('[GitHub Sessions] Failed to drain filesystem capture before delete', {
-              sessionId: session.sessionId,
-              error,
-            });
-          });
           await controller?.deleteSession({ sessionId: session.sessionId });
         } catch (error) {
           console.error('[GitHub Sessions] Failed to tear down live controller session', {

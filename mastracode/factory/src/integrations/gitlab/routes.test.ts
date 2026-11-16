@@ -207,7 +207,6 @@ describe('GitLab UI routes', () => {
           accountLabel: 'gitlab.com',
           defaultBranch: 'main',
           sandboxProvider: 'none',
-          sandboxWorkdir: '~/app',
         },
       ],
     });

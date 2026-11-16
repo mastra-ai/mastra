@@ -54,7 +54,7 @@ function renderBoard(
           {
             id: 'fp-1',
             name: 'Factory',
-            repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
+            repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main' })],
           },
         ],
       }),

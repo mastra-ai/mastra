@@ -595,9 +595,7 @@ describe('ProjectRoutes', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
       sandboxProvider: 'local',
-      sandboxWorkdir: '/workspace/acme/api',
       teardownCommand: 'pnpm local teardown',
     });
     await github.sessions.create({
@@ -657,9 +655,7 @@ describe('ProjectRoutes', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
       sandboxProvider: 'local',
-      sandboxWorkdir: '/workspace/acme/api',
       teardownCommand: 'pnpm local teardown',
     });
     const session = await github.sessions.create({
@@ -756,7 +752,6 @@ describe('ProjectRoutes', () => {
             repositoryId,
             branch,
             sandboxProvider: 'local',
-            sandboxWorkdir: `/workspace/${repositoryId}`,
             setupCommand: 'pnpm install',
             teardownCommand: 'pnpm local worktree teardown',
           }),
@@ -774,7 +769,6 @@ describe('ProjectRoutes', () => {
           repository: { externalId: 'repo-1', slug: 'acme/api' },
           branch: 'release',
           sandboxProvider: 'local',
-          sandboxWorkdir: '/workspace/api',
           setupCommand: 'pnpm install',
           teardownCommand: 'pnpm local worktree teardown',
         }),
@@ -879,7 +873,6 @@ describe('ProjectRoutes', () => {
             body: JSON.stringify({
               repositoryId: repository.id,
               sandboxProvider: 'local',
-              sandboxWorkdir: '/workspace/repo',
             }),
           },
         )
@@ -952,7 +945,6 @@ describe('ProjectRoutes', () => {
           repositoryId: repository.id,
           branch: 'main',
           sandboxProvider: 'local',
-          sandboxWorkdir: '/workspace/acme/api',
         }),
       },
     );
@@ -1009,7 +1001,6 @@ describe('ProjectRoutes', () => {
           repositoryId: repository.id,
           branch: 'main',
           sandboxProvider: 'local',
-          sandboxWorkdir: '/workspace/acme/api',
         }),
       },
     );
@@ -1079,10 +1070,8 @@ describe('ProjectRoutes', () => {
             orgId: 'org-1',
             connectionId: connection.id,
             repositoryId: repository.id,
-            createdByUserId: 'user-1',
             branch,
             sandboxProvider: 'local',
-            sandboxWorkdir: `/workspace/${slug}`,
           });
           links.push({ connection, repository, link });
         }
@@ -1131,9 +1120,7 @@ describe('ProjectRoutes', () => {
         orgId: 'org-2',
         connectionId: otherOrgConnection.id,
         repositoryId: otherOrgRepository.id,
-        createdByUserId: 'user-2',
         sandboxProvider: 'local',
-        sandboxWorkdir: '/workspace/secret',
       });
 
       const response = await app.request('/web/factory/projects');
@@ -1152,7 +1139,6 @@ describe('ProjectRoutes', () => {
           slug: 'acme/api-0',
           defaultBranch: 'main',
           branch: 'release',
-          sandboxWorkdir: '/workspace/acme/api-0',
         },
         {
           projectRepositoryId: gitlabLink!.link.id,
@@ -1163,7 +1149,6 @@ describe('ProjectRoutes', () => {
           slug: 'acme/web-0',
           defaultBranch: 'main',
           branch: null,
-          sandboxWorkdir: '/workspace/acme/web-0',
         },
       ]);
       expect(body.projects.find(({ id }) => id === empty.id)?.repositories).toEqual([]);
@@ -1300,10 +1285,8 @@ describe('ProjectRoutes', () => {
             orgId: 'org-1',
             connectionId: connection.id,
             repositoryId: repository.id,
-            createdByUserId: 'user-1',
             branch: 'main',
             sandboxProvider: 'local',
-            sandboxWorkdir: '/workspace',
             setupCommand: 'pnpm i',
           }),
         );
@@ -1342,7 +1325,8 @@ describe('ProjectRoutes', () => {
           expect(await seed.projects.getById({ id: project.id })).toMatchObject({ sandboxWorkingDirectory: workdir });
         }
         expect(await github.projectRepositories.get({ orgId: 'org-1', id: links[0]!.id })).toMatchObject({
-          sandboxWorkdir: '/workspace',
+          branch: 'main',
+          sandboxProvider: 'local',
         });
       },
     );
@@ -1418,7 +1402,7 @@ describe('ProjectRoutes', () => {
       ]);
       // Existing per-link fields are untouched by the environment route.
       const stored = await github.projectRepositories.get({ orgId: 'org-1', id: links[0]!.id });
-      expect(stored).toMatchObject({ branch: 'main', sandboxProvider: 'local', sandboxWorkdir: '/workspace' });
+      expect(stored).toMatchObject({ branch: 'main', sandboxProvider: 'local' });
 
       // Re-reading returns the same shape the PATCH returned.
       const reread = (await (await app.request(`/web/factory/projects/${project.id}/environment`)).json()) as unknown;
@@ -1707,9 +1691,7 @@ describe('ProjectRoutes', () => {
           orgId: 'org-1',
           connectionId: connection.id,
           repositoryId: repository.id,
-          createdByUserId: 'user-1',
           sandboxProvider: 'platform',
-          sandboxWorkdir: '/workspace',
         });
         let mastra: Mastra | undefined;
         const runner = new EnvironmentBuildRunner(
@@ -1936,9 +1918,7 @@ describe('ProjectRoutes', () => {
           orgId: 'org-1',
           connectionId: second.id,
           repositoryId: repository.id,
-          createdByUserId: 'user-1',
           sandboxProvider: 'platform',
-          sandboxWorkdir: '/workspace',
         });
         const built = await app.request(`/web/factory/projects/${project.id}/environment/build`, { method: 'POST' });
         expect(await built.json()).toMatchObject({ outcome: 'started' });

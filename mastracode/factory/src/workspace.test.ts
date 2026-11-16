@@ -4860,13 +4860,12 @@ describe('factory environment sandbox context', () => {
         (call: [unknown]) => call[0],
       );
       expect(writes).toEqual([
-        { orgId: 'org-1', id: 'project-1', status: 'configured', error: null, builtAt: expect.any(Date) },
+        { orgId: 'org-1', id: 'project-1', status: 'configured', error: null },
         {
           orgId: 'org-1',
           id: 'link-2',
           status: 'failed',
           error: 'Setup command failed (exit 1): fatal: https://***@github.com/octocat/docs',
-          builtAt: expect.any(Date),
         },
       ]);
       warn.mockRestore();
@@ -4956,9 +4955,7 @@ describe('factory environment sandbox context', () => {
       const writes = (github.sourceControlStorage.projectRepositories as any).setBuildStatus.mock.calls.map(
         (call: [unknown]) => call[0],
       );
-      expect(writes).toEqual([
-        { orgId: 'org-1', id: 'project-1', status: 'configured', error: null, builtAt: expect.any(Date) },
-      ]);
+      expect(writes).toEqual([{ orgId: 'org-1', id: 'project-1', status: 'configured', error: null }]);
     });
   });
 });

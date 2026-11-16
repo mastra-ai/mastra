@@ -1059,7 +1059,7 @@ describe('FactoryPhaseStateProcessor', () => {
       expect.objectContaining({ decision: expect.objectContaining({ board: 'release', stage: 'shipped' }) }),
     ]);
     expect(await storage.getToolResultCursor('org-1', PROJECT_ID, prepared.binding.id)).toMatchObject({
-      lastMessageId: message.id,
+      lastMessageCreatedAt: message.createdAt,
     });
     expect((await processor.computeStateSignal(stateArgs(requestContext())))?.contents).toContain(
       'Publishing release (shipping)',
@@ -1883,7 +1883,7 @@ describe('FactoryPhaseStateProcessor', () => {
     );
     expect(onResult).toHaveBeenCalledTimes(2);
     await expect(storage.getToolResultCursor('org-1', PROJECT_ID, prepared.binding.id)).resolves.toMatchObject({
-      lastMessageId: trailing.id,
+      lastMessageCreatedAt: trailing.createdAt,
     });
   });
 
@@ -1932,7 +1932,7 @@ describe('FactoryPhaseStateProcessor', () => {
       expect.objectContaining({ filter: { dateRange: { start: new Date('2026-07-18T10:01:00Z') } } }),
     );
     await expect(storage.getToolResultCursor('org-1', PROJECT_ID, prepared.binding.id)).resolves.toMatchObject({
-      lastMessageId: 'assistant-aborted',
+      lastMessageCreatedAt: new Date('2026-07-18T10:01:00Z'),
     });
   });
 

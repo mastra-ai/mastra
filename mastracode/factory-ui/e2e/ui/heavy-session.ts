@@ -449,7 +449,6 @@ const AC = '*/api/agent-controller/code';
 const repositories: ProjectListRepository[] = REPOSITORIES.map(repository =>
   listedRepository(repository.id, repository.slug, {
     branch: 'main',
-    sandboxWorkdir: `/workspace/${repository.prefix}`,
   }),
 );
 

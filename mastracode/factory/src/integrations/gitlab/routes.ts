@@ -6,7 +6,6 @@ import type { IntakeIssue } from '../../capabilities/intake.js';
 import type { PullRequest } from '../../capabilities/version-control.js';
 import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
-import { sanitizeSegment } from '../../sandbox/workdir.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import { GitLabApiError } from './api.js';
@@ -71,7 +70,6 @@ function gitlabProjectPayload(source: { id: string; name: string; metadata?: Rec
   const projectId = typeof source.metadata?.projectId === 'string' ? source.metadata.projectId : null;
   const projectPath = typeof source.metadata?.projectPath === 'string' ? source.metadata.projectPath : source.name;
   if (!connectionId || !projectId) return null;
-  const repositoryName = projectPath.split('/').filter(Boolean).at(-1) ?? 'repo';
   return {
     id: source.id,
     name: source.name,
@@ -81,7 +79,6 @@ function gitlabProjectPayload(source: { id: string; name: string; metadata?: Rec
     accountLabel: typeof source.metadata?.accountLabel === 'string' ? source.metadata.accountLabel : null,
     defaultBranch: typeof source.metadata?.defaultBranch === 'string' ? source.metadata.defaultBranch : 'main',
     sandboxProvider: 'none',
-    sandboxWorkdir: `~/${sanitizeSegment(repositoryName)}`,
   };
 }
 

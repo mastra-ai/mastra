@@ -421,16 +421,15 @@ describe('IntakeStorage', () => {
       try {
         await backend.ops.deleteMany('intake_source_subscriptions', {});
         await backend.ops.deleteMany('intake_data_migrations', {});
-        for (const [integrationId, sourceId, factoryProjectId, board] of [
-          ['jira', 'OPS', 'proj-1', 'work'],
-          ['linear', 'team-1', 'proj-2', null],
+        for (const [integrationId, sourceId, factoryProjectId] of [
+          ['jira', 'OPS', 'proj-1'],
+          ['linear', 'team-1', 'proj-2'],
         ] as const) {
           await backend.ops.insertOne('intake_source_bindings', {
             org_id: 'org1',
             integration_id: integrationId,
             source_id: sourceId,
             factory_project_id: factoryProjectId,
-            board,
             created_by_user_id: 'alice',
             created_at: legacyCreatedAt,
             updated_at: legacyCreatedAt,

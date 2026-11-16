@@ -38,7 +38,7 @@ export function workItem(
 }
 
 export function stubWorkBoard() {
-  const repository = listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' });
+  const repository = listedRepository(REPO_ID, 'acme/app', { branch: 'main' });
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),

@@ -26,7 +26,6 @@ const githubRepo: GithubRepo = {
   installationId: 7,
   installationStorageId: 'inst-7',
   sandboxProvider: 'local',
-  sandboxWorkdir: '/workspace/widgets',
 };
 
 const gitlabProject: GitLabRepository = {
@@ -40,7 +39,6 @@ const gitlabProject: GitLabRepository = {
   private: true,
   installationStorageId: 'inst-9',
   sandboxProvider: 'local',
-  sandboxWorkdir: '/workspace/platform',
 };
 
 /** Stub both intake endpoints, so a write to either is recorded rather than reaching the network. */

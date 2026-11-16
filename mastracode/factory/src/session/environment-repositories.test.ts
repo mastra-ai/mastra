@@ -32,9 +32,7 @@ async function seed() {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
       sandboxProvider: 'local',
-      sandboxWorkdir: `/sandbox/${slug.split('/')[1]}`,
     });
   };
   const website = await link('mastra-ai/mastra-website', '1');

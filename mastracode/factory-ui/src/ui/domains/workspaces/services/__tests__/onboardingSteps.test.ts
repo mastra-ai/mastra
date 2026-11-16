@@ -14,7 +14,6 @@ const repository: GithubRepo = {
   installationId: 7,
   installationStorageId: 'inst-7',
   sandboxProvider: 'local',
-  sandboxWorkdir: '/workspace/hello',
 };
 
 describe('onboarding sections', () => {

@@ -33,7 +33,7 @@ export function stubFactory(factory: Record<string, unknown> = {}) {
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({
-        projects: [{ ...project, repositories: [listedRepository('repo-1', 'acme/app', { sandboxWorkdir: '/repo' })] }],
+        projects: [{ ...project, repositories: [listedRepository('repo-1', 'acme/app', {})] }],
       }),
     ),
     http.patch(PROJECT_URL, async ({ request }) => {

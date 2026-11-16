@@ -102,7 +102,7 @@ function stubBoardEndpoints({
             id: FACTORY_ID,
             name: 'Acme Factory',
             repositories: [
-              listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' }),
+              listedRepository(REPO_ID, 'acme/app', { branch: 'main' }),
               ...(multiRepository ? [listedRepository('repo-2', 'acme/other', { branch: 'main' })] : []),
             ],
           },

@@ -30,7 +30,6 @@ export { workSeedWithTriage } from './boards/work-seeds.js';
 export type { StoredBoardInput, StoredBoardScope, StoredPhaseInput } from './storage/domains/boards/base.js';
 export type { RuleCondition, RuleGroup, RuleOperator } from './rules/rule-group.js';
 export { MastraFactory } from './factory.js';
-export { waitForPendingFilesystemCapture } from './session/filesystem-capture.js';
 export type {
   FactoryTools,
   MastraArgs,

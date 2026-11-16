@@ -72,7 +72,6 @@ export function createSessionHoverDetailsFixtures(updatedAt: string) {
     repositories: [
       listedRepository(projectRepositoryId, 'mastra-ai/mastra', {
         branch: 'main',
-        sandboxWorkdir: '/workspace/mastra',
       }),
     ],
   };

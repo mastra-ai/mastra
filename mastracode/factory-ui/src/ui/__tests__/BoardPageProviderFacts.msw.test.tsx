@@ -62,7 +62,7 @@ it.each([
               id: 'fp-1',
               name: 'Acme Factory',
               repositories: repositories.map((slug, index) =>
-                listedRepository(`repo-${index + 1}`, slug, { branch: 'main', sandboxWorkdir: `/repo/${slug}` }),
+                listedRepository(`repo-${index + 1}`, slug, { branch: 'main' }),
               ),
             },
           ],
