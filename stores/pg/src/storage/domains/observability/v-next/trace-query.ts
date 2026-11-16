@@ -294,6 +294,7 @@ function compileScalarPredicate<TField extends string>(
   parameterOffset: number,
   allowMetadata = false,
 ): SqlFragment {
+  if (predicate.type === 'tokens') throw new Error('Indexed token search is not supported by this store');
   if (predicate.type === 'boolean') {
     const values: unknown[] = [];
     const parts = predicate.args.map(arg => {

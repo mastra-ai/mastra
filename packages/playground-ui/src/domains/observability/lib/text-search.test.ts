@@ -1,15 +1,15 @@
-import { observabilityTextSearchSchema } from '@mastra/core/storage';
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { effectiveTextSearch } from './text-search';
-
-describe('effectiveTextSearch', () => {
-  describe('when the draft is normalized', () => {
-    it.each(['', '  ', 'ab', ' ABC ', 'İİ', '😀😀😀', '😀'.repeat(256), '😀'.repeat(257), 'a%b_c'])(
-      'matches API validation for %s',
-      value => {
-        const parsed = observabilityTextSearchSchema.safeParse(value);
-        expect(effectiveTextSearch(value)).toBe(parsed.success ? parsed.data : undefined);
-      },
-    );
-  });
+it.each([
+  ['', undefined],
+  ['  ', undefined],
+  ['ab', undefined],
+  [' ABC ', 'abc'],
+  ['ÄPFEL', 'Äpfel'],
+  ['😀😀😀', '😀😀😀'],
+  ['😀'.repeat(256), '😀'.repeat(256)],
+  ['😀'.repeat(257), undefined],
+  ['a%b_c', 'a%b_c'],
+])('normalizes the existing search chip draft %j', (value, expected) => {
+  expect(effectiveTextSearch(value)).toBe(expected);
 });

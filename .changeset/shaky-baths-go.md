@@ -1,12 +1,13 @@
 ---
 '@mastra/core': minor
-'@mastra/client-js': patch
-'@mastra/server': patch
-'mastra': patch
 ---
 
-Add `textSearch` to trace and span aggregate request contracts for supporting stores. Built-in OSS stores don't implement aggregate text search.
+Replace the experimental `textSearch` request field with composable `hasAllTokens` predicates for supporting stores. Trace and span lists and aggregates share the predicate contract. Built-in OSS stores do not implement indexed token search.
 
 ```ts
-await client.aggregateTraces({ timeRange, textSearch: 'timeout', measures: ['count'] });
+await client.aggregateSpans({
+  timeRange,
+  where: { op: 'hasAllTokens', left: { path: 'input' }, right: { literal: 'timeout' } },
+  measures: ['count'],
+});
 ```

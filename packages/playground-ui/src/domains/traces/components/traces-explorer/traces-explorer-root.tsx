@@ -123,7 +123,7 @@ export function TracesExplorerRoot({
     withTimeToFirstToken && (capabilities?.capabilities.traceQueryTimeToFirstTokenSort ?? false);
   const withOutcomeFields = withQueryTrace && (capabilities?.capabilities.traceQueryOutcomeFields ?? false);
 
-  const withTextSearch = withQueryTrace && (capabilities?.capabilities.traceQueryTextSearch ?? false);
+  const withTextSearch = withQueryTrace && (capabilities?.capabilities.traceQueryTokenSearch ?? false);
 
   // Entries the server can't query are ignored, never written back: the host keeps its raw value.
   const filters = useMemo(() => {

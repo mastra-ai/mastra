@@ -1,5 +1,5 @@
 export * from './base';
-export * from './text-search';
+
 export * from './discovery';
 export * from './feedback';
 export * from './inmemory';
@@ -165,3 +165,6 @@ export * from './tracing';
 export * from './types';
 export * from './span-query';
 export * from './thread-query';
+
+export { TRACE_QUERY_TOKEN_FIELDS, hasTraceQueryTokenPredicate } from './trace-query';
+export type { TraceQueryTokenField } from './trace-query';

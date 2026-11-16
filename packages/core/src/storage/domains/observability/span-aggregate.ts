@@ -8,7 +8,6 @@ import { z } from 'zod/v4';
  * attributed per span rather than per trace. Trace-level questions ("traces containing a failing
  * tool call") remain `aggregateTraces()` with `spans.some`.
  */
-import { observabilityTextSearchSchema } from './text-search';
 import {
   getTraceAggregateCountDistinctField,
   TRACE_AGGREGATE_DEFAULT_LIMIT,
@@ -138,7 +137,6 @@ const hasDistinctValues = (values: readonly string[]) => new Set(values).size ==
 const spanAggregateRequestObjectSchema = z
   .object({
     timeRange: traceAggregateTimeRangeSchema,
-    textSearch: observabilityTextSearchSchema.optional(),
     where: traceQueryScalarPredicateSchema.optional(),
     groupBy: z
       .array(traceAggregateDimensionSchema)
@@ -221,7 +219,6 @@ export type TrustedSpanAggregateOrderBy = TrustedTraceAggregateOrderBy<
  */
 export interface TrustedSpanAggregatePlan {
   result: 'spanAggregate';
-  textSearch?: string;
   timeRange: { from: string; to: string };
   where?: TrustedTraceQueryScalarPredicate;
   scope?: TraceQueryTenantScope;
@@ -244,18 +241,19 @@ export interface TrustedSpanAggregatePlan {
  */
 export function planSpanAggregate(
   input: unknown,
-  options: Pick<TraceQueryPlanOptions, 'scope'> = {},
+  options: Pick<TraceQueryPlanOptions, 'scope' | 'allowTokenSearch'> = {},
 ): TrustedSpanAggregatePlan {
   const request = parseSpanAggregateRequest(input);
   const issues: TraceQueryIssue[] = [];
-  const where = request.where ? planSpanQuerySelectionPredicate(request.where, issues) : undefined;
+  const where = request.where
+    ? planSpanQuerySelectionPredicate(request.where, issues, options.allowTokenSearch)
+    : undefined;
   const plan = planAggregateGroups(request, issues, {
     isDimension: isSpanAggregateDimension,
     parseMeasure: parseSpanAggregateMeasure,
   });
   return {
     result: 'spanAggregate',
-    textSearch: request.textSearch,
     ...plan,
     where,
     scope: normalizeTraceQueryTenantScope(options.scope),

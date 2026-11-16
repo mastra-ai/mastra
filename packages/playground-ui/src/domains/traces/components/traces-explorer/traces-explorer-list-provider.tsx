@@ -12,6 +12,7 @@ import {
   useTracesFilters,
 } from './traces-explorer-context';
 import type { TracesListContextValue } from './traces-explorer-context';
+import { traceTokenSearch } from '@/domains/observability/lib/token-search-predicate';
 
 type TracesListProviderProps = {
   sort: TracesSort;
@@ -55,8 +56,8 @@ export const TracesListProvider = memo(function TracesListProvider({
   const sort = sortable ? hostSort : DEFAULT_TRACES_SORT;
   const list = useTracesListSource({
     rolling: !dateTo,
-    query: now => ({
-      ...buildTracesQueryRequest({
+    query: now => {
+      const query = buildTracesQueryRequest({
         filters,
         dateFrom,
         dateTo,
@@ -65,10 +66,13 @@ export const TracesListProvider = memo(function TracesListProvider({
         withTimeToFirstToken,
         withOutcomeFields,
         now,
-      }),
-      ...(rootSource === 'aggregated' ? { rootSource } : {}),
-      ...(textSearch ? { textSearch } : {}),
-    }),
+      });
+      return {
+        ...query,
+        where: traceTokenSearch(query.where, textSearch),
+        ...(rootSource === 'aggregated' ? { rootSource } : {}),
+      };
+    },
     orderBy: [sort],
     // An explicit projection must never fall back to the legacy list endpoint.
     withQueryTrace: rootSource === 'aggregated' || withQueryTrace,

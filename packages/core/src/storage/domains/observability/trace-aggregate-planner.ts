@@ -174,7 +174,6 @@ export type TrustedTraceAggregateOrderBy<
  */
 export interface TrustedTraceAggregatePlan {
   result: 'aggregate';
-  textSearch?: string;
   timeRange: { from: string; to: string };
   where?: TrustedTraceQueryPredicate;
   scope?: TraceQueryTenantScope;
@@ -214,17 +213,18 @@ interface HavingState<M extends string> {
  */
 export function planTraceAggregate(
   request: NormalizedTraceAggregateRequest,
-  options: Pick<TraceQueryPlanOptions, 'scope'> = {},
+  options: Pick<TraceQueryPlanOptions, 'scope' | 'allowTokenSearch'> = {},
 ): TrustedTraceAggregatePlan {
   const issues: TraceQueryIssue[] = [];
-  const where = request.where ? planTraceQuerySelectionPredicate(request.where, issues) : undefined;
+  const where = request.where
+    ? planTraceQuerySelectionPredicate(request.where, issues, ['where'], options.allowTokenSearch)
+    : undefined;
   const plan = planAggregateGroups(request, issues, {
     isDimension: isTraceAggregateDimension,
     parseMeasure: parseTraceAggregateMeasure,
   });
   return {
     result: 'aggregate',
-    textSearch: request.textSearch,
     ...plan,
     where,
     scope: normalizeTraceQueryTenantScope(options.scope),

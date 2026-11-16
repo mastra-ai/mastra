@@ -7,7 +7,6 @@ import {
   paginationArgsSchema,
   paginationInfoSchema,
 } from '../shared';
-import { observabilityTextSearchSchema } from './text-search';
 import type { SpanRecord } from './tracing';
 
 export const TRACE_QUERY_MAX_DEPTH = 12;
@@ -65,6 +64,33 @@ const collectionMemberSchema = literalStringSchema.refine(
   'Collection predicates require a non-empty string value',
 );
 const timestampLiteralSchema = z.string().datetime({ offset: true });
+export const TRACE_QUERY_TOKEN_FIELDS = [
+  'input',
+  'output',
+  'error',
+  'inputPreview',
+  'outputPreview',
+  'errorPreview',
+  'all',
+] as const;
+export type TraceQueryTokenField = (typeof TRACE_QUERY_TOKEN_FIELDS)[number];
+const tokenPredicateSchema = z
+  .object({
+    op: z.literal('hasAllTokens'),
+    left: z.object({ path: z.enum(TRACE_QUERY_TOKEN_FIELDS) }).strict(),
+    right: z
+      .object({
+        literal: z
+          .string()
+          .trim()
+          .min(1)
+          .refine(value => Array.from(value).length <= 256, 'Token search must contain at most 256 characters')
+          .meta({ maxLength: 256 }),
+      })
+      .strict(),
+  })
+  .strict();
+
 const textLiteralSchema = z.object({ literal: literalStringSchema }).strict();
 const predicatePathSchema = z
   .string()
@@ -104,6 +130,7 @@ export const traceQueryScalarPredicateSchema: z.ZodType<TraceQueryScalarPredicat
         .object({ op: z.enum(['includes', 'notIncludes']), path: predicatePathSchema, value: collectionMemberSchema })
         .strict(),
       z.object({ op: z.enum(['matches', 'notMatches']), left: pathRefSchema, right: textLiteralSchema }).strict(),
+      tokenPredicateSchema,
       z
         .object({
           op: z.enum(['and', 'or']),
@@ -135,6 +162,7 @@ export const traceQueryPredicateSchema: z.ZodType<TraceQueryPredicate, TraceQuer
       .object({ op: z.enum(['includes', 'notIncludes']), path: predicatePathSchema, value: collectionMemberSchema })
       .strict(),
     z.object({ op: z.enum(['matches', 'notMatches']), left: pathRefSchema, right: textLiteralSchema }).strict(),
+    tokenPredicateSchema,
     z
       .object({
         op: z.enum(['and', 'or']),
@@ -346,7 +374,6 @@ export const traceQueryRootSourceSchema = z.enum(['legacy', 'aggregated']);
 const traceQueryRequestObjectSchema = z
   .object({
     rootSource: traceQueryRootSourceSchema.optional(),
-    textSearch: observabilityTextSearchSchema.optional(),
     timeRange: traceQueryTimeRangeSchema,
     where: traceQueryPredicateSchema.optional(),
     /**
@@ -379,7 +406,7 @@ const traceQueryRequestObjectSchema = z
       context.addIssue({ code: 'custom', path: ['rootSource'], message: 'Aggregated roots do not support delta mode' });
     }
     if (request.mode === 'delta') {
-      for (const field of ['page', 'pagination', 'group', 'orderBy', 'textSearch'] as const) {
+      for (const field of ['page', 'pagination', 'group', 'orderBy'] as const) {
         if (request[field] !== undefined) {
           context.addIssue({ code: 'custom', path: [field], message: `Delta trace queries do not support ${field}` });
         }
@@ -535,6 +562,7 @@ export type TraceQueryScalarPredicate =
   | { op: 'in' | 'notIn'; value: TraceQueryPathOrLiteral; set: TraceQueryLiteral[] }
   | { op: 'exists' | 'notExists'; path: string }
   | { op: 'includes' | 'notIncludes'; path: string; value: string }
+  | { op: 'hasAllTokens'; left: { path: TraceQueryTokenField }; right: { literal: string } }
   | { op: 'matches' | 'notMatches'; left: { path: string }; right: { literal: string } }
   | { op: 'and' | 'or'; args: TraceQueryScalarPredicate[] }
   | { op: 'not'; arg: TraceQueryScalarPredicate };
@@ -816,6 +844,7 @@ export type TraceAggregateDiscovery = z.infer<typeof traceAggregateDiscoverySche
 export type GetTraceQueryValuesResponse = z.infer<typeof getTraceQueryValuesResponseSchema>;
 
 export type TrustedTraceQueryScalarPredicate =
+  | { type: 'tokens'; field: TraceQueryTokenField; operator: 'hasAllTokens'; value: string }
   | {
       type: 'comparison';
       field: TraceQueryPredicateField;
@@ -870,7 +899,6 @@ export interface TraceQueryTenantScope {
 export interface TrustedTraceQueryBasePlan {
   rootSource?: 'aggregated';
   timeRange: { from: string; to: string };
-  textSearch?: string;
   where?: TrustedTraceQueryPredicate;
   scope?: TraceQueryTenantScope;
 }
@@ -1037,6 +1065,7 @@ type PredicateContext = TraceQueryPredicateScope | 'spanQuery' | 'threadQuery';
 
 /** @internal */
 export interface PlannerState {
+  allowTokenSearch?: boolean;
   nodes: number;
   relatedClauses: number;
   literalUnits: number;
@@ -1163,6 +1192,8 @@ export function parseGetTraceQueryValuesArgs(input: unknown): NormalizedGetTrace
 }
 
 export interface TraceQueryPlanOptions {
+  /** Opt in only when the host checks indexed token-search support before execution. */
+  allowTokenSearch?: boolean;
   /** The host provides an aggregated-root reader. Defaults to false. */
   allowAggregatedRoots?: boolean;
   /** Opaque host authorization state bound into keyset cursors. */
@@ -1316,8 +1347,9 @@ export function planTraceQuerySelectionPredicate(
   where: TraceQueryPredicate,
   issues: TraceQueryIssue[],
   path: Array<string | number> = ['where'],
+  allowTokenSearch = false,
 ): TrustedTraceQueryPredicate | undefined {
-  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
+  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues, allowTokenSearch };
   return planPredicate(where, 'trace', path, 1, state);
 }
 
@@ -1325,8 +1357,9 @@ export function planTraceQuerySelectionPredicate(
 export function planSpanQuerySelectionPredicate(
   where: TraceQueryScalarPredicate,
   issues: TraceQueryIssue[],
+  allowTokenSearch = false,
 ): TrustedTraceQueryScalarPredicate | undefined {
-  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
+  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues, allowTokenSearch };
   // Scalar grammar cannot produce a related-record predicate.
   return planPredicate(where, 'spanQuery', ['where'], 1, state) as TrustedTraceQueryScalarPredicate | undefined;
 }
@@ -1391,6 +1424,23 @@ export function planPredicate(
   if (predicate.op === 'not') {
     const arg = planPredicate(predicate.arg, context, [...path, 'arg'], depth + 1, state);
     return arg ? { type: 'not', arg } : undefined;
+  }
+
+  if (predicate.op === 'hasAllTokens') {
+    if (!state.allowTokenSearch) {
+      state.issues.push({
+        code: 'operator_not_allowed',
+        path: [...path, 'op'],
+        message: 'Token search requires a supporting host',
+      });
+      return undefined;
+    }
+    if (context !== 'spans' && context !== 'spanQuery') {
+      state.issues.push({ code: 'field_not_allowed', path, message: 'Token matching is supported only on spans' });
+      return undefined;
+    }
+    state.literalUnits += 1;
+    return { type: 'tokens', field: predicate.left.path, operator: 'hasAllTokens', value: predicate.right.literal };
   }
 
   const rules = rulesForContext(context);
@@ -1633,4 +1683,14 @@ function normalizeSet(values: TraceQueryLiteral[], rule: FieldRule): Array<strin
   if (rule.valueKind === 'stringOrNumber' && normalized.some(value => typeof value !== typeof normalized[0]))
     return undefined;
   return normalized as Array<string | number>;
+}
+
+/** Whether a trusted predicate requires indexed token-search support. */
+export function hasTraceQueryTokenPredicate(predicate: TrustedTraceQueryPredicate | undefined): boolean {
+  if (!predicate) return false;
+  if (predicate.type === 'tokens') return true;
+  if (predicate.type === 'boolean') return predicate.args.some(hasTraceQueryTokenPredicate);
+  if (predicate.type === 'not') return hasTraceQueryTokenPredicate(predicate.arg);
+  if (predicate.type === 'relation') return hasTraceQueryTokenPredicate(predicate.predicate);
+  return false;
 }

@@ -109,7 +109,7 @@ export const traceAggregateCapabilities: GetObservabilityCapabilitiesResponse = 
 
 export const traceTextSearchCapabilities: GetObservabilityCapabilitiesResponse = {
   ...traceAggregateCapabilities,
-  capabilities: { ...traceAggregateCapabilities.capabilities, traceQueryTextSearch: true },
+  capabilities: { ...traceAggregateCapabilities.capabilities, traceQueryTokenSearch: true },
 };
 
 const HOUR = 60 * 60 * 1000;

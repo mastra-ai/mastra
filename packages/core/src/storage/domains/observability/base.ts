@@ -121,11 +121,11 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `span-query-duration-sort`: ordering completed spans by `durationMs`
  * - `span-query-model-provider-sort`: ordering completed spans by their model/provider columns
  * - `span-query-context-fields`: identity, context and parent/root entity predicates added to `querySpans`
- * - `span-query-text-search`: literal substring search in `querySpans`
- * - `trace-query-text-search`: literal substring search across any span in `queryTraces`
+ * - `span-query-token-search`: token matching in `querySpans`
+ * - `trace-query-token-search`: token matching across any span in `queryTraces`
  * - `span-query-model-fields`: `model` and `provider` predicates in `querySpans` and `aggregateSpans`
- * - `trace-aggregate-text-search`: text search in `aggregateTraces`
- * - `span-aggregate-text-search`: text search in `aggregateSpans`
+ * - `trace-aggregate-token-search`: text search in `aggregateTraces`
+ * - `span-aggregate-token-search`: text search in `aggregateSpans`
  * - `span-aggregate`: `aggregateSpans`, including every `querySpans` predicate field
  * - `span-aggregate-model-dimensions`: `model` and `provider` in `aggregateSpans` `groupBy` and `countDistinct`
  * - `trace-query`: `queryTraces`
@@ -166,10 +166,10 @@ export type ObservabilityStorageFeature =
   | 'span-query-duration-sort'
   | 'span-query-model-provider-sort'
   | 'span-query-context-fields'
-  | 'span-query-text-search'
-  | 'trace-query-text-search'
-  | 'trace-aggregate-text-search'
-  | 'span-aggregate-text-search'
+  | 'span-query-token-search'
+  | 'trace-query-token-search'
+  | 'trace-aggregate-token-search'
+  | 'span-aggregate-token-search'
   | 'span-query-model-fields'
   | 'span-aggregate'
   | 'span-aggregate-model-dimensions'

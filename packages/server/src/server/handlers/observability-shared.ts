@@ -207,11 +207,11 @@ export function assertObservabilitySpanAggregateSupported(observabilityStore: Ob
 /** Reject unsupported search instead of silently returning unfiltered results. */
 export function assertObservabilityTextSearchSupported(
   observabilityStore: ObservabilityStorage,
-  textSearch: string | undefined,
+  predicate: unknown,
   kind: 'span' | 'trace',
   operation: 'query' | 'aggregate' = 'query',
 ) {
-  if (textSearch !== undefined && !getFeatures(observabilityStore)?.includes(`${kind}-${operation}-text-search`)) {
+  if (hasTokenPredicate(predicate) && !getFeatures(observabilityStore)?.includes(`${kind}-${operation}-token-search`)) {
     throw new HTTPException(501, {
       message: 'Text search is not supported by the configured observability store',
     });
@@ -696,7 +696,7 @@ export type ObservabilityStorageCapabilities = {
   deltaPolling: boolean;
   traceQuery: boolean;
   traceQueryAggregatedRoots: boolean;
-  traceQueryTextSearch: boolean;
+  traceQueryTokenSearch: boolean;
   traceQueryRootDuration: boolean;
   traceQueryContextIds: boolean;
   traceQueryContextFields: boolean;
@@ -709,11 +709,11 @@ export type ObservabilityStorageCapabilities = {
   traceQueryDiscovery: boolean;
   traceQueryTenantScope: boolean;
   traceAggregate: boolean;
-  traceAggregateTextSearch: boolean;
+  traceAggregateTokenSearch: boolean;
   threadQuery: boolean;
   threadQueryRows: boolean;
   spanQuery: boolean;
-  spanQueryTextSearch: boolean;
+  spanQueryTokenSearch: boolean;
   spanQueryDurationSort: boolean;
   spanQueryModelProviderSort: boolean;
   spanQueryContextFields: boolean;
@@ -721,7 +721,7 @@ export type ObservabilityStorageCapabilities = {
   spanQueryOutcomeFields: boolean;
   traceQueryOutcomeFields: boolean;
   spanAggregate: boolean;
-  spanAggregateTextSearch: boolean;
+  spanAggregateTokenSearch: boolean;
   spanAggregateModelDimensions: boolean;
   aggregateTimeToFirstMeasures: boolean;
   /** Days of traces the store keeps. Omitted when the store does not report a limit. */
@@ -744,7 +744,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   deltaPolling: false,
   traceQuery: false,
   traceQueryAggregatedRoots: false,
-  traceQueryTextSearch: false,
+  traceQueryTokenSearch: false,
   traceQueryRootDuration: false,
   traceQueryContextIds: false,
   traceQueryContextFields: false,
@@ -757,13 +757,13 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
   traceAggregate: false,
-  traceAggregateTextSearch: false,
+  traceAggregateTokenSearch: false,
   threadQuery: false,
   threadQueryRows: false,
   spanQuery: false,
-  spanQueryTextSearch: false,
+  spanQueryTokenSearch: false,
   spanAggregate: false,
-  spanAggregateTextSearch: false,
+  spanAggregateTokenSearch: false,
   spanQueryDurationSort: false,
   spanQueryModelProviderSort: false,
   spanQueryContextFields: false,
@@ -840,14 +840,14 @@ export function getObservabilityStorageCapabilities(
       coreFeatures.has(OBSERVABILITY_DELTA_POLLING_FEATURE) && declares(OBSERVABILITY_DELTA_POLLING_STORAGE_FEATURE),
     traceQuery,
     traceQueryAggregatedRoots: false,
-    traceAggregateTextSearch:
+    traceAggregateTokenSearch:
       newApiCore &&
       supportsTraceAggregateCore() &&
-      coreStorage.traceAggregateQueryObjectSchema?.shape.textSearch !== undefined &&
+      coreStorage.TRACE_QUERY_TOKEN_FIELDS !== undefined &&
       declares('trace-aggregate') &&
-      declares('trace-aggregate-text-search'),
-    traceQueryTextSearch:
-      traceQuery && coreStorage.observabilityTextSearchSchema !== undefined && declares('trace-query-text-search'),
+      declares('trace-aggregate-token-search'),
+    traceQueryTokenSearch:
+      traceQuery && coreStorage.TRACE_QUERY_TOKEN_FIELDS !== undefined && declares('trace-query-token-search'),
     traceQueryRootDuration:
       (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE),
     traceQueryContextIds:
@@ -880,14 +880,14 @@ export function getObservabilityStorageCapabilities(
     threadQueryRows:
       threadQuery && typeof coreStorage.planThreadRowsQuery === 'function' && declares('thread-query-rows'),
     spanQuery,
-    spanAggregateTextSearch:
+    spanAggregateTokenSearch:
       newApiCore &&
       supportsSpanAggregateCore() &&
-      coreStorage.spanAggregateQueryObjectSchema?.shape.textSearch !== undefined &&
+      coreStorage.TRACE_QUERY_TOKEN_FIELDS !== undefined &&
       declares('span-aggregate') &&
-      declares('span-aggregate-text-search'),
-    spanQueryTextSearch:
-      spanQuery && coreStorage.observabilityTextSearchSchema !== undefined && declares('span-query-text-search'),
+      declares('span-aggregate-token-search'),
+    spanQueryTokenSearch:
+      spanQuery && coreStorage.TRACE_QUERY_TOKEN_FIELDS !== undefined && declares('span-query-token-search'),
     spanQueryDurationSort:
       spanQuery &&
       coreStorage.SPAN_QUERY_ORDER_FIELDS?.includes('durationMs') === true &&
@@ -1373,4 +1373,14 @@ export function createObservabilityListQuerySchema<
       });
     }
   });
+}
+
+/** Inspect only the bounded, parsed predicate tree. */
+export function hasTokenPredicate(predicate: unknown): boolean {
+  if (!predicate || typeof predicate !== 'object') return false;
+  if ('type' in predicate && predicate.type === 'tokens') return true;
+  if ('op' in predicate && predicate.op === 'hasAllTokens') return true;
+  return Object.values(predicate).some(value =>
+    Array.isArray(value) ? value.some(hasTokenPredicate) : hasTokenPredicate(value),
+  );
 }

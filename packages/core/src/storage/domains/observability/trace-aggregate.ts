@@ -1,5 +1,4 @@
 import { z } from 'zod/v4';
-import { observabilityTextSearchSchema } from './text-search';
 import {
   findPredicateComplexityIssue,
   TRACE_QUERY_MAX_PATH_BYTES,
@@ -129,7 +128,6 @@ const hasDistinctValues = (values: readonly string[]) => new Set(values).size ==
 const traceAggregateRequestObjectSchema = z
   .object({
     timeRange: traceAggregateTimeRangeSchema,
-    textSearch: observabilityTextSearchSchema.optional(),
     where: traceQueryPredicateSchema.optional(),
     groupBy: z
       .array(traceAggregateDimensionSchema)

@@ -82,11 +82,15 @@ describe('text search capabilities', () => {
       const store = await new InMemoryStore().getStore('observability');
       if (!store) throw new Error('Missing observability store');
       const capabilities = getObservabilityStorageCapabilities(store);
-      expect(capabilities.spanQueryTextSearch).toBe(false);
-      expect(capabilities.traceQueryTextSearch).toBe(false);
-      expect(() => assertObservabilityTextSearchSupported(store, 'error', kind)).toThrow(
-        expect.objectContaining({ status: 501 }),
-      );
+      expect(capabilities.spanQueryTokenSearch).toBe(false);
+      expect(capabilities.traceQueryTokenSearch).toBe(false);
+      expect(() =>
+        assertObservabilityTextSearchSupported(
+          store,
+          { type: 'tokens', field: 'all', operator: 'hasAllTokens', value: 'error' },
+          kind,
+        ),
+      ).toThrow(expect.objectContaining({ status: 501 }));
       // The same store remains usable for requests that don't ask for text search.
       assertObservabilityTextSearchSupported(store, undefined, kind);
       expect(await store.getEntityTypes({})).toEqual({ entityTypes: [] });
@@ -96,16 +100,23 @@ describe('text search capabilities', () => {
 
 describe.each(['trace', 'span'] as const)('%s aggregate search capability', kind => {
   it('does not treat list search support as aggregate search support', () => {
-    const store = { getFeatures: () => [`${kind}-query-text-search`, `${kind}-aggregate`] } as Parameters<
+    const store = { getFeatures: () => [`${kind}-query-token-search`, `${kind}-aggregate`] } as Parameters<
       typeof assertObservabilityTextSearchSupported
     >[0];
-    expect(() => assertObservabilityTextSearchSupported(store, 'error', kind, 'aggregate')).toThrow(HTTPException);
-    expect(getObservabilityStorageCapabilities(store)[`${kind}AggregateTextSearch`]).toBe(false);
+    expect(() =>
+      assertObservabilityTextSearchSupported(
+        store,
+        { type: 'tokens', field: 'all', operator: 'hasAllTokens', value: 'error' },
+        kind,
+        'aggregate',
+      ),
+    ).toThrow(HTTPException);
+    expect(getObservabilityStorageCapabilities(store)[`${kind}AggregateTokenSearch`]).toBe(false);
   });
   it('requires the explicit aggregate search feature', () => {
-    const store = { getFeatures: () => [`${kind}-aggregate`, `${kind}-aggregate-text-search`] } as Parameters<
+    const store = { getFeatures: () => [`${kind}-aggregate`, `${kind}-aggregate-token-search`] } as Parameters<
       typeof assertObservabilityTextSearchSupported
     >[0];
-    expect(getObservabilityStorageCapabilities(store)[`${kind}AggregateTextSearch`]).toBe(true);
+    expect(getObservabilityStorageCapabilities(store)[`${kind}AggregateTokenSearch`]).toBe(true);
   });
 });

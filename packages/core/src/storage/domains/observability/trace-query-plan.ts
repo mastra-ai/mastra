@@ -5,6 +5,7 @@ import { z } from 'zod/v4';
 import { defaultDeltaLimit } from '../shared';
 import {
   compareTraceQueryStrings,
+  hasTraceQueryTokenPredicate,
   isTraceQuerySortValueFor,
   normalizeTraceQueryTenantScope,
   planPredicate,
@@ -60,7 +61,13 @@ export function planTraceQuery(
       message: 'Grouped trace queries use fixed threadId ordering',
     });
   }
-  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
+  const state: PlannerState = {
+    nodes: 0,
+    relatedClauses: 0,
+    literalUnits: 0,
+    issues,
+    allowTokenSearch: options.allowTokenSearch,
+  };
   const where = request.where ? planPredicate(request.where, 'trace', ['where'], 1, state) : undefined;
   if (rootSource && where && hasMetadataPredicate(where)) {
     issues.push({
@@ -68,6 +75,9 @@ export function planTraceQuery(
       path: ['where'],
       message: 'Aggregated roots do not support metadata predicates',
     });
+  }
+  if (request.mode === 'delta' && hasTraceQueryTokenPredicate(where)) {
+    issues.push({ code: 'invalid_request', path: ['where'], message: 'Token search is not supported in delta mode' });
   }
   if (issues.length > 0) throw new TraceQueryValidationError(issues);
 
@@ -79,7 +89,6 @@ export function planTraceQuery(
     const orderBy = { field: 'threadId', direction: 'asc' } as const;
     const binding = digestBinding({
       rootSource,
-      textSearch: request.textSearch,
       timeRange,
       where,
       result,
@@ -92,7 +101,6 @@ export function planTraceQuery(
     return {
       result,
       rootSource,
-      textSearch: request.textSearch,
       timeRange,
       where,
       scope,
@@ -108,7 +116,6 @@ export function planTraceQuery(
   const orderBy = request.orderBy?.[0] ?? ({ field: 'startedAt', direction: 'desc' } as const);
   const deltaBinding = digestBinding({
     rootSource,
-    textSearch: request.textSearch,
     timeRange,
     where,
     result: 'trace-delta',
@@ -119,7 +126,6 @@ export function planTraceQuery(
     return {
       result,
       rootSource,
-      textSearch: request.textSearch,
       timeRange,
       where,
       scope,
@@ -134,7 +140,6 @@ export function planTraceQuery(
     return {
       result,
       rootSource,
-      textSearch: request.textSearch,
       timeRange,
       where,
       scope,
@@ -149,7 +154,6 @@ export function planTraceQuery(
   const page = request.page ?? { limit: 100 };
   const binding = digestBinding({
     rootSource,
-    textSearch: request.textSearch,
     timeRange,
     where,
     result,
@@ -164,7 +168,6 @@ export function planTraceQuery(
   return {
     result,
     rootSource,
-    textSearch: request.textSearch,
     timeRange,
     where,
     scope,

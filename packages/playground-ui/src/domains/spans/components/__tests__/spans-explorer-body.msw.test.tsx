@@ -144,7 +144,7 @@ describe('SpansExplorerBody', () => {
     const renderSearchableBody = async (initial: string) => {
       setHandlers(spanRowsPage, {
         ...spanAggregateCapabilities,
-        capabilities: { ...spanAggregateCapabilities.capabilities, spanQueryTextSearch: true },
+        capabilities: { ...spanAggregateCapabilities.capabilities, spanQueryTokenSearch: true },
       });
       server.use(
         http.post(SPANS_AGGREGATE_URL, () => HttpResponse.json(spanCountsAggregate({ to: new Date().toISOString() }))),
@@ -157,19 +157,19 @@ describe('SpansExplorerBody', () => {
     it('marks an invalid restored search with a validation warning', async () => {
       setHandlers(spanRowsPage, {
         ...spanQueryCapabilities,
-        capabilities: { ...spanQueryCapabilities.capabilities, spanQueryTextSearch: true },
+        capabilities: { ...spanQueryCapabilities.capabilities, spanQueryTokenSearch: true },
       });
       const { queries } = renderBodyAtUrl('textSearch=ab');
       await waitFor(() => expect(queries.length).toBeGreaterThan(0));
       expect(screen.getByRole('group', { name: 'Contains text ab' }).getAttribute('aria-invalid')).toBe('true');
       expect(screen.getByTitle('Enter between 3 and 256 characters to search')).toBeTruthy();
-      expect(queries.at(-1)).not.toHaveProperty('textSearch');
+      expect(tokenTerms(queries.at(-1))).toEqual([]);
     });
 
     it('applies a corrected restored search', async () => {
       setHandlers(spanRowsPage, {
         ...spanQueryCapabilities,
-        capabilities: { ...spanQueryCapabilities.capabilities, spanQueryTextSearch: true },
+        capabilities: { ...spanQueryCapabilities.capabilities, spanQueryTokenSearch: true },
       });
       const { queries } = renderBodyAtUrl('textSearch=ab');
       await waitFor(() => expect(queries.length).toBeGreaterThan(0));
@@ -177,14 +177,14 @@ describe('SpansExplorerBody', () => {
       const editor = screen.getByPlaceholderText('Type a value…');
       fireEvent.change(editor, { target: { value: 'needle' } });
       fireEvent.keyDown(editor, { key: 'Enter' });
-      await waitFor(() => expect(queries.at(-1)).toHaveProperty('textSearch', 'needle'));
+      await waitFor(() => expect(tokenTerms(queries.at(-1))).toEqual(['needle']));
       expect(screen.getByRole('group', { name: 'Contains text needle' }).getAttribute('aria-invalid')).toBeNull();
     });
 
     it('does not offer an existing search field when editing another chip', async () => {
       setHandlers(spanRowsPage, {
         ...spanQueryCapabilities,
-        capabilities: { ...spanQueryCapabilities.capabilities, spanQueryTextSearch: true },
+        capabilities: { ...spanQueryCapabilities.capabilities, spanQueryTokenSearch: true },
       });
       const { queries } = renderBodyAtUrl('filter.status=error&textSearch=needle');
       await waitFor(() => expect(queries.length).toBeGreaterThan(0));
@@ -198,7 +198,7 @@ describe('SpansExplorerBody', () => {
     it('preserves an editable empty search after changing the field', async () => {
       setHandlers(spanRowsPage, {
         ...spanQueryCapabilities,
-        capabilities: { ...spanQueryCapabilities.capabilities, spanQueryTextSearch: true },
+        capabilities: { ...spanQueryCapabilities.capabilities, spanQueryTokenSearch: true },
       });
       const { queries } = renderBodyAtUrl('filter.status=error');
       await waitFor(() => expect(queries.length).toBeGreaterThan(0));
@@ -206,13 +206,13 @@ describe('SpansExplorerBody', () => {
       fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
       expect(await screen.findByRole('button', { name: 'Remove Contains text filter' })).toBeTruthy();
       expect(currentSearchParams().get('textSearch')).toBe('');
-      expect(queries.at(-1)).not.toHaveProperty('textSearch');
+      expect(tokenTerms(queries.at(-1))).toEqual([]);
     });
 
     it('applies text entered into an empty search chip', async () => {
       setHandlers(spanRowsPage, {
         ...spanQueryCapabilities,
-        capabilities: { ...spanQueryCapabilities.capabilities, spanQueryTextSearch: true },
+        capabilities: { ...spanQueryCapabilities.capabilities, spanQueryTokenSearch: true },
       });
       const { queries } = renderBodyAtUrl('filter.status=error');
       await waitFor(() => expect(queries.length).toBeGreaterThan(0));
@@ -220,18 +220,18 @@ describe('SpansExplorerBody', () => {
       fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
       expect(await screen.findByRole('button', { name: 'Remove Contains text filter' })).toBeTruthy();
       expect(currentSearchParams().get('textSearch')).toBe('');
-      expect(queries.at(-1)).not.toHaveProperty('textSearch');
+      expect(tokenTerms(queries.at(-1))).toEqual([]);
       fireEvent.click(screen.getByRole('combobox', { name: 'Value: …' }));
       const editor = screen.getByPlaceholderText('Type a value…');
       fireEvent.change(editor, { target: { value: 'needle' } });
       fireEvent.keyDown(editor, { key: 'Enter' });
-      await waitFor(() => expect(queries.at(-1)).toHaveProperty('textSearch', 'needle'));
+      await waitFor(() => expect(tokenTerms(queries.at(-1))).toEqual(['needle']));
     });
 
     it('removes an empty draft from the URL', async () => {
       setHandlers(spanRowsPage, {
         ...spanQueryCapabilities,
-        capabilities: { ...spanQueryCapabilities.capabilities, spanQueryTextSearch: true },
+        capabilities: { ...spanQueryCapabilities.capabilities, spanQueryTokenSearch: true },
       });
       const { queries } = renderBodyAtUrl('filter.status=error');
       await waitFor(() => expect(queries.length).toBeGreaterThan(0));
@@ -239,7 +239,7 @@ describe('SpansExplorerBody', () => {
       fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
       expect(await screen.findByRole('button', { name: 'Remove Contains text filter' })).toBeTruthy();
       expect(currentSearchParams().get('textSearch')).toBe('');
-      expect(queries.at(-1)).not.toHaveProperty('textSearch');
+      expect(tokenTerms(queries.at(-1))).toEqual([]);
       fireEvent.click(screen.getByRole('button', { name: 'Remove Contains text filter' }));
       await waitFor(() => expect(currentSearchParams().has('textSearch')).toBe(false));
     });
@@ -252,10 +252,13 @@ describe('SpansExplorerBody', () => {
       fireEvent.change(input, { target: { value: 'Contains text' } });
       fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
       fireEvent.change(input, { target: { value: 'NEEDLE' } });
-      expect(queries.at(-1)).not.toHaveProperty('textSearch');
+      expect(tokenTerms(queries.at(-1))).toEqual([]);
       fireEvent.keyDown(input, { key: 'Enter' });
-      await waitFor(() => expect(queries.at(-1)).toHaveProperty('textSearch', 'needle'));
-      expect(queries.at(-1)?.where).toEqual(originalWhere);
+      await waitFor(() => expect(tokenTerms(queries.at(-1))).toEqual(['needle']));
+      expect(queries.at(-1)?.where).toEqual({
+        op: 'and',
+        args: [originalWhere, { op: 'hasAllTokens', left: { path: 'all' }, right: { literal: 'needle' } }],
+      });
     });
 
     it('preserves the entered search in the URL', async () => {
@@ -265,9 +268,9 @@ describe('SpansExplorerBody', () => {
       fireEvent.change(input, { target: { value: 'Contains text' } });
       fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
       fireEvent.change(input, { target: { value: 'NEEDLE' } });
-      expect(queries.at(-1)).not.toHaveProperty('textSearch');
+      expect(tokenTerms(queries.at(-1))).toEqual([]);
       fireEvent.keyDown(input, { key: 'Enter' });
-      await waitFor(() => expect(queries.at(-1)).toHaveProperty('textSearch', 'needle'));
+      await waitFor(() => expect(tokenTerms(queries.at(-1))).toEqual(['needle']));
       expect(currentSearchParams().get('textSearch')).toBe('NEEDLE');
     });
 
@@ -278,9 +281,9 @@ describe('SpansExplorerBody', () => {
       fireEvent.change(input, { target: { value: 'Contains text' } });
       fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
       fireEvent.change(input, { target: { value: 'NEEDLE' } });
-      expect(queries.at(-1)).not.toHaveProperty('textSearch');
+      expect(tokenTerms(queries.at(-1))).toEqual([]);
       fireEvent.keyDown(input, { key: 'Enter' });
-      await waitFor(() => expect(queries.at(-1)).toHaveProperty('textSearch', 'needle'));
+      await waitFor(() => expect(tokenTerms(queries.at(-1))).toEqual(['needle']));
       expect(screen.queryByRole('region', { name: 'Spans over time' })).toBeNull();
     });
 
@@ -300,29 +303,30 @@ describe('SpansExplorerBody', () => {
       const editor = screen.getByPlaceholderText('Type a value…');
       fireEvent.change(editor, { target: { value: 'updated' } });
       fireEvent.keyDown(editor, { key: 'Enter' });
-      await waitFor(() => expect(queries.at(-1)).toHaveProperty('textSearch', 'updated'));
+      await waitFor(() => expect(tokenTerms(queries.at(-1))).toEqual(['updated']));
     });
 
     it('removes search without losing other filters', async () => {
       const { queries } = await renderSearchableBody('filter.status=error&textSearch=NEEDLE');
       const originalWhere = queries.at(-1)?.where;
       fireEvent.click(screen.getByRole('button', { name: 'Remove Contains text filter' }));
-      await waitFor(() => expect(queries.at(-1)).not.toHaveProperty('textSearch'));
+      await waitFor(() => expect(tokenTerms(queries.at(-1))).toEqual([]));
       expect(currentSearchParams().has('textSearch')).toBe(false);
-      expect(queries.at(-1)?.where).toEqual(originalWhere);
+      if (originalWhere?.op !== 'and') throw new Error('Expected combined search and status filter');
+      expect(queries.at(-1)?.where).toEqual(originalWhere.args[0]);
     });
 
     it('restores the histogram after removing search', async () => {
       const { queries } = await renderSearchableBody('filter.status=error&textSearch=NEEDLE');
       fireEvent.click(screen.getByRole('button', { name: 'Remove Contains text filter' }));
-      await waitFor(() => expect(queries.at(-1)).not.toHaveProperty('textSearch'));
+      await waitFor(() => expect(tokenTerms(queries.at(-1))).toEqual([]));
       await screen.findByRole('region', { name: 'Spans over time' });
     });
 
     it('restores search from the URL without requesting an unfiltered histogram', async () => {
       setHandlers(spanRowsPage, {
         ...spanAggregateCapabilities,
-        capabilities: { ...spanAggregateCapabilities.capabilities, spanQueryTextSearch: true },
+        capabilities: { ...spanAggregateCapabilities.capabilities, spanQueryTokenSearch: true },
       });
       const aggregate = vi.fn();
       server.use(
@@ -333,7 +337,7 @@ describe('SpansExplorerBody', () => {
       );
       const { queries } = renderBodyAtUrl('textSearch=needle');
       await waitFor(() => expect(queries.length).toBeGreaterThan(0));
-      expect(queries.at(-1)).toHaveProperty('textSearch', 'needle');
+      expect(tokenTerms(queries.at(-1))).toEqual(['needle']);
       expect(screen.getByRole('button', { name: 'Remove Contains text filter' })).toBeTruthy();
       expect(screen.getByText('needle')).toBeTruthy();
       expect(screen.queryByRole('region', { name: 'Spans over time' })).toBeNull();
@@ -346,7 +350,7 @@ describe('SpansExplorerBody', () => {
       setHandlers(spanRowsPage);
       const { queries } = renderBodyAtUrl('textSearch=needle');
       await waitFor(() => expect(queries.length).toBeGreaterThan(0));
-      expect(queries.at(-1)).not.toHaveProperty('textSearch');
+      expect(tokenTerms(queries.at(-1))).toEqual([]);
       expect(screen.queryByRole('button', { name: 'Remove Contains text filter' })).toBeNull();
       const input = screen.getByRole('combobox', { name: 'Add filter' });
       fireEvent.focus(input);
@@ -1185,3 +1189,17 @@ describe('SpansExplorerBody histogram', () => {
     });
   });
 });
+
+function tokenTerms(value: unknown): unknown[] {
+  if (!value || typeof value !== 'object') return [];
+  if (
+    'op' in value &&
+    value.op === 'hasAllTokens' &&
+    'right' in value &&
+    value.right &&
+    typeof value.right === 'object' &&
+    'literal' in value.right
+  )
+    return [value.right.literal];
+  return Object.values(value).flatMap(child => (Array.isArray(child) ? child.flatMap(tokenTerms) : tokenTerms(child)));
+}

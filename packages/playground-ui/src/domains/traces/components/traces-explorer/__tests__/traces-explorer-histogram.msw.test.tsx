@@ -505,7 +505,7 @@ describe('TracesExplorer.Histogram', () => {
       await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, textSearch: 'ab' } });
       expect(screen.getByRole('group', { name: 'Contains text ab' }).getAttribute('aria-invalid')).toBe('true');
       expect(screen.getByTitle('Enter between 3 and 256 characters to search')).toBeTruthy();
-      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
+      expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual([]);
       expect(chart()).not.toBeNull();
     });
 
@@ -517,7 +517,7 @@ describe('TracesExplorer.Histogram', () => {
       fireEvent.change(editor, { target: { value: 'x'.repeat(257) } });
       fireEvent.keyDown(editor, { key: 'Enter' });
       expect(await screen.findByText('Enter between 3 and 256 characters to search')).toBeTruthy();
-      expect(onTraceQuery.mock.calls.at(-1)?.[0]).toHaveProperty('textSearch', 'needle');
+      expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual(['needle']);
     });
 
     it('applies an edited search without losing other filters', async () => {
@@ -530,8 +530,15 @@ describe('TracesExplorer.Histogram', () => {
       const editor = screen.getByPlaceholderText('Type a value…');
       fireEvent.change(editor, { target: { value: 'updated' } });
       fireEvent.keyDown(editor, { key: 'Enter' });
-      await waitFor(() => expect(onTraceQuery.mock.calls.at(-1)?.[0]).toHaveProperty('textSearch', 'updated'));
-      expect(onTraceQuery.mock.calls.at(-1)?.[0].where).toEqual(originalWhere);
+      await waitFor(() => expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual(['updated']));
+      if (originalWhere?.op !== 'and') throw new Error('Expected combined search and status filter');
+      expect(onTraceQuery.mock.calls.at(-1)?.[0].where).toEqual({
+        op: 'and',
+        args: [
+          originalWhere.args[0],
+          { spans: { some: { op: 'hasAllTokens', left: { path: 'all' }, right: { literal: 'updated' } } } },
+        ],
+      });
     });
 
     it('does not offer an existing search field when editing another chip', async () => {
@@ -552,7 +559,7 @@ describe('TracesExplorer.Histogram', () => {
       fireEvent.click(screen.getByRole('combobox', { name: 'Field: Status' }));
       fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
       expect(await screen.findByRole('button', { name: 'Remove Contains text filter' })).toBeTruthy();
-      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
+      expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual([]);
     });
 
     it('applies text entered into an empty search chip', async () => {
@@ -563,14 +570,12 @@ describe('TracesExplorer.Histogram', () => {
       fireEvent.click(screen.getByRole('combobox', { name: 'Field: Status' }));
       fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
       expect(await screen.findByRole('button', { name: 'Remove Contains text filter' })).toBeTruthy();
-      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
+      expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual([]);
       fireEvent.click(screen.getByRole('combobox', { name: 'Value: …' }));
       const editor = screen.getByPlaceholderText('Type a value…');
       fireEvent.change(editor, { target: { value: 'needle' } });
       fireEvent.keyDown(editor, { key: 'Enter' });
-      await waitFor(() =>
-        expect(onTraceQuery).toHaveBeenLastCalledWith(expect.objectContaining({ textSearch: 'needle' })),
-      );
+      await waitFor(() => expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual(['needle']));
     });
 
     it('removes an empty search chip', async () => {
@@ -581,7 +586,7 @@ describe('TracesExplorer.Histogram', () => {
       fireEvent.click(screen.getByRole('combobox', { name: 'Field: Status' }));
       fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
       expect(await screen.findByRole('button', { name: 'Remove Contains text filter' })).toBeTruthy();
-      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
+      expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual([]);
       fireEvent.click(screen.getByRole('button', { name: 'Remove Contains text filter' }));
       await waitFor(() => expect(screen.queryByRole('button', { name: 'Remove Contains text filter' })).toBeNull());
     });
@@ -597,11 +602,9 @@ describe('TracesExplorer.Histogram', () => {
       fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
       onAggregate.mockClear();
       fireEvent.change(search, { target: { value: 'needle' } });
-      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
+      expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual([]);
       fireEvent.keyDown(search, { key: 'Enter' });
-      await waitFor(() =>
-        expect(onTraceQuery).toHaveBeenLastCalledWith(expect.objectContaining({ textSearch: 'needle' })),
-      );
+      await waitFor(() => expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual(['needle']));
     });
 
     it('suppresses the histogram after search is applied', async () => {
@@ -615,15 +618,15 @@ describe('TracesExplorer.Histogram', () => {
       fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
       onAggregate.mockClear();
       fireEvent.change(search, { target: { value: 'needle' } });
-      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
+      expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual([]);
       fireEvent.keyDown(search, { key: 'Enter' });
-      await waitFor(() =>
-        expect(onTraceQuery).toHaveBeenLastCalledWith(expect.objectContaining({ textSearch: 'needle' })),
-      );
+      await waitFor(() => expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual(['needle']));
       await settle(result.queryClient);
       expect(chart()).toBeNull();
       expect(onAggregate).not.toHaveBeenCalled();
-      expect(onTraceQuery.mock.calls.at(-1)?.[0].where).toBeUndefined();
+      expect(onTraceQuery.mock.calls.at(-1)?.[0].where).toEqual({
+        spans: { some: { op: 'hasAllTokens', left: { path: 'all' }, right: { literal: 'needle' } } },
+      });
     });
 
     it('restores the histogram when search is removed', async () => {
@@ -632,7 +635,7 @@ describe('TracesExplorer.Histogram', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Remove Contains text filter' }));
       await waitFor(() => expect(chart()).not.toBeNull());
       await settle(result.queryClient);
-      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
+      expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual([]);
     });
   });
 
@@ -651,7 +654,7 @@ describe('TracesExplorer.Histogram', () => {
     it('keeps the ordinary list and histogram available', async () => {
       setHandlers();
       await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, textSearch: 'needle' } });
-      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
+      expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual([]);
       expect(chart()).not.toBeNull();
     });
   });
@@ -671,7 +674,7 @@ describe('TracesExplorer.Histogram', () => {
       expect(await screen.findByText('Enter between 3 and 256 characters to search')).toBeTruthy();
       fireEvent.keyDown(search, { key: 'Escape' });
       await settle(result.queryClient);
-      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
+      expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual([]);
       expect(screen.getByRole('region', { name: 'Traces over time', hidden: true })).toBeTruthy();
     });
   });
@@ -682,8 +685,22 @@ describe('TracesExplorer.Histogram', () => {
         capabilities: traceTextSearchCapabilities,
       });
       await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, textSearch: '  NEEDLE  ' } });
-      expect(onTraceQuery).toHaveBeenLastCalledWith(expect.objectContaining({ textSearch: 'needle' }));
+      expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual(['needle']);
       expect(onAggregate).not.toHaveBeenCalled();
     });
   });
 });
+
+function tokenTerms(value: unknown): unknown[] {
+  if (!value || typeof value !== 'object') return [];
+  if (
+    'op' in value &&
+    value.op === 'hasAllTokens' &&
+    'right' in value &&
+    value.right &&
+    typeof value.right === 'object' &&
+    'literal' in value.right
+  )
+    return [value.right.literal];
+  return Object.values(value).flatMap(child => (Array.isArray(child) ? child.flatMap(tokenTerms) : tokenTerms(child)));
+}

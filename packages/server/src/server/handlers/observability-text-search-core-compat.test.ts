@@ -8,12 +8,12 @@ import { createTestServerContext } from './test-utils';
 // Model the pre-search Core contract, retaining real schema validation and planning.
 vi.mock('@mastra/core/storage', async importOriginal => {
   const actual = await importOriginal<typeof import('@mastra/core/storage')>();
-  const legacyRequestSchema = actual.spanQueryRequestSchema.out.omit({ textSearch: true });
+  const legacyRequestSchema = actual.spanQueryRequestSchema.out;
   return {
     ...actual,
-    observabilityTextSearchSchema: undefined,
-    traceAggregateQueryObjectSchema: actual.traceAggregateQueryObjectSchema.omit({ textSearch: true }),
-    spanAggregateQueryObjectSchema: actual.spanAggregateQueryObjectSchema.omit({ textSearch: true }),
+    TRACE_QUERY_TOKEN_FIELDS: undefined,
+    traceAggregateQueryObjectSchema: actual.traceAggregateQueryObjectSchema,
+    spanAggregateQueryObjectSchema: actual.spanAggregateQueryObjectSchema,
     planSpanQuery: (input: unknown, options: Parameters<typeof actual.planSpanQuery>[1]) =>
       actual.planSpanQuery(legacyRequestSchema.parse(input), options),
   };
@@ -44,21 +44,21 @@ describe('text search with pre-search Core', () => {
       getFeatures: () => [
         'span-query',
         'trace-query',
-        'span-query-text-search',
-        'trace-query-text-search',
+        'span-query-token-search',
+        'trace-query-token-search',
         'trace-aggregate',
         'span-aggregate',
-        'trace-aggregate-text-search',
-        'span-aggregate-text-search',
+        'trace-aggregate-token-search',
+        'span-aggregate-token-search',
       ],
     } as Parameters<typeof getObservabilityStorageCapabilities>[0]);
     expect(capabilities).toMatchObject({
       spanQuery: true,
       traceQuery: true,
-      spanQueryTextSearch: false,
-      traceQueryTextSearch: false,
-      traceAggregateTextSearch: false,
-      spanAggregateTextSearch: false,
+      spanQueryTokenSearch: false,
+      traceQueryTokenSearch: false,
+      traceAggregateTokenSearch: false,
+      spanAggregateTokenSearch: false,
     });
   });
 });

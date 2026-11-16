@@ -44,8 +44,8 @@ The configured observability store must support each API. Call `getObservability
 | `spanQueryContextFields` | `span-query-context-fields` | Additional identity, context, and parent/root entity predicates in span queries and aggregates |
 | `spanQueryModelFields` | `span-query-model-fields` | `model` and `provider` predicates in span queries and aggregates |
 | `traceAggregate` | `trace-aggregate` | `aggregateTraces()` |
-| `traceAggregateTextSearch` | `trace-aggregate-text-search` | `textSearch` in trace aggregates |
-| `spanAggregateTextSearch` | `span-aggregate-text-search` | `textSearch` in span aggregates |
+| `traceAggregateTokenSearch` | `trace-aggregate-token-search` | Token predicates in trace aggregates |
+| `spanAggregateTokenSearch` | `span-aggregate-token-search` | Token predicates in span aggregates |
 | `spanAggregate` | `span-aggregate` | `aggregateSpans()` |
 | `traceQueryRootDuration` | `trace-query-root-duration` | Trace-scope `durationMs` predicates |
 | `traceQueryTimeToFirstChunk` | `trace-query-time-to-first-chunk` | `timeToFirstChunkMs` predicates and results |
@@ -341,6 +341,28 @@ Tags compare exactly and case-sensitively as whole strings. `value` must be one 
 
 `tags` is available in trace predicates only. `in`, `notIn`, and the comparison operators are rejected for `tags`. Value discovery for `tags` returns each observed tag with the number of qualifying traces that carry it.
 
+#### Filter by indexed tokens
+
+Supporting stores accept `hasAllTokens` predicates on span `input`, `output`, `error`, `inputPreview`, `outputPreview`, and `errorPreview`. The `all` path matches when any one of those fields contains every query token. Token order doesn't matter. Tokenization and case handling follow the supporting store.
+
+```ts
+const where = {
+  spans: {
+    some: {
+      op: 'and',
+      args: [
+        { op: 'hasAllTokens', left: { path: 'input' }, right: { literal: 'tacos' } },
+        { op: 'hasAllTokens', left: { path: 'output' }, right: { literal: 'nachos' } },
+      ],
+    },
+  },
+}
+```
+
+Both conditions must match the same span. For direct span queries and aggregates, use the predicate inside `some` as `where`. Trace lists and aggregates use the `spans.some` wrapper. Matching spans must start within the requested `timeRange`.
+
+Check `traceQueryTokenSearch`, `spanQueryTokenSearch`, `traceAggregateTokenSearch`, or `spanAggregateTokenSearch` for the operation you use. Built-in OSS stores don't implement indexed token search. These predicates replace the experimental top-level `textSearch` request field.
+
 #### Filter by text
 
 Span names support word matching in addition to exact comparison. `matches` succeeds when the literal's words appear in the field, in order, as whole words. `notMatches` succeeds when the field exists but doesn't contain those words. This query finds traces with a span whose name contains the words "document search":
@@ -364,7 +386,7 @@ Both the literal and the stored value are lowercased and split into words. A wor
 | `matches` | The field contains the literal's words as a contiguous whole-word phrase |
 | `notMatches` | The field is present and doesn't contain that phrase |
 
-The literal must contain at least one letter or digit; otherwise the request fails with `422 TRACE_QUERY_INVALID`. A missing field satisfies neither operator. Use `{ op: 'not', arg: { op: 'matches', ... } }` when records without the field should also match. Text operators are available on span `name`. Other string fields, numbers, timestamps, tags, and metadata reject them. Substring, wildcard, regular-expression, and fuzzy matching aren't supported, and there is no search across several fields.
+The literal must contain at least one letter or digit; otherwise the request fails with `422 TRACE_QUERY_INVALID`. A missing field satisfies neither operator. Use `{ op: 'not', arg: { op: 'matches', ... } }` when records without the field should also match. Text operators are available on span `name`. Other string fields, numbers, timestamps, tags, and metadata reject them. Substring, wildcard, regular-expression, and fuzzy matching aren't supported, and these operators don't search across fields.
 
 ### Query limits
 
@@ -782,7 +804,6 @@ curl --request POST \
 | - | - | - |
 | `timeRange` | Yes | Trace start-time boundary, as in [Select traces](#select-traces). The range can span up to 365 days. |
 | `where` | No | Trace predicate, as in [Select traces](#select-traces). |
-| `textSearch` | No | Text filter applied before aggregation. Requires `traceAggregateTextSearch` for traces or `spanAggregateTextSearch` for spans. Accepts 3 to 256 characters after trimming and case normalization. Matching follows the supporting store. Built-in OSS stores don't implement aggregate text search. |
 | `measures` | Yes | One or more distinct [measure names](#measures). |
 | `groupBy` | No | Up to two distinct [dimensions](#dimensions). Defaults to `[]`, which treats all selected traces as one group. With `interval`, that group has one row per non-empty bucket. No matching traces returns no rows. |
 | `interval` | No | Bucket width: `'1m'`, `'5m'`, `'15m'`, `'1h'`, or `'1d'`. See [Time buckets](#time-buckets). |
