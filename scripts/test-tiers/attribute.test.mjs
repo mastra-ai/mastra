@@ -1,0 +1,278 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {
+  alertMessages,
+  attribute,
+  candidateRange,
+  escapedFiles,
+  escapeMrkdwn,
+  goodRunFor,
+  nextBisectStep,
+  prForCommit,
+  verdictFor,
+} from './attribute.mjs';
+
+const out = { tier: 'out', since: '2026-10-01', last_failure: null, reason: 'seed-rule-b' };
+const inn = { tier: 'in', since: '2026-10-01', last_failure: '2026-11-01', reason: 'catch' };
+
+test('only files and jobs that were out before the run escaped', () => {
+  const before = {
+    files: {
+      'packages/core/src/a.test.ts': { ...out },
+      'packages/core/src/b.test.ts': { ...inn },
+      'job:store/pg': { ...out },
+      'job:store/mongodb': { ...inn },
+    },
+  };
+  const moved = [
+    'packages/core/src/a.test.ts',
+    'packages/core/src/b.test.ts',
+    'packages/core/src/new.test.ts',
+    'job:store/pg',
+    'job:store/mongodb',
+  ];
+  assert.deepEqual(escapedFiles(before, moved), { files: ['packages/core/src/a.test.ts'], jobs: ['job:store/pg'] });
+});
+
+test('the good run is the latest green run on the branch before the failing one, inside 72 hours', () => {
+  const run = { id: 9, created_at: '2026-11-16T17:00:00Z' };
+  const runs = [
+    { id: 1, conclusion: 'success', created_at: '2026-11-13T16:00:00Z' },
+    { id: 2, conclusion: 'success', created_at: '2026-11-16T10:00:00Z' },
+    { id: 3, conclusion: 'failure', created_at: '2026-11-16T12:00:00Z' },
+    { id: 4, conclusion: 'cancelled', created_at: '2026-11-16T13:00:00Z' },
+    { id: 9, conclusion: 'failure', created_at: '2026-11-16T17:00:00Z' },
+    { id: 10, conclusion: 'success', created_at: '2026-11-16T18:00:00Z' },
+  ];
+  assert.equal(goodRunFor(runs, run).id, 2);
+  assert.equal(
+    goodRunFor(
+      runs.filter(r => r.id !== 2),
+      run,
+    ),
+    null,
+    'the only older green run is past 72 h',
+  );
+});
+
+test('the candidate range is every merge after good up to bad, capped at 60', () => {
+  const shas = Array.from({ length: 61 }, (_, i) => `c${i}`);
+  assert.deepEqual(candidateRange(shas.slice(0, 3)), { commits: ['c0', 'c1', 'c2'] });
+  assert.deepEqual(candidateRange(shas.slice(0, 60)).commits.length, 60);
+  assert.deepEqual(candidateRange(shas), { unattributed: 'more than 60 merges between the green and the red run' });
+  assert.deepEqual(candidateRange([]), { unattributed: 'no merges between the green and the red run' });
+});
+
+test('a bisect step tests the middle of a range and every file whose range holds that commit', () => {
+  const states = {
+    a: { lo: -1, hi: 7 },
+    b: { lo: -1, hi: 7 },
+    c: { lo: 4, hi: 5 },
+  };
+  assert.deepEqual(nextBisectStep(states), { index: 3, files: ['a', 'b'] });
+  assert.deepEqual(nextBisectStep({ a: { lo: 2, hi: 7 }, b: { lo: 4, hi: 7 } }), { index: 4, files: ['a'] });
+  assert.equal(nextBisectStep({ a: { lo: 2, hi: 3 } }), null);
+});
+
+test('a culprit needs two failing runs and a passing parent', () => {
+  assert.equal(verdictFor({ culprit: ['fail', 'fail'], parent: ['pass'] }), 'culprit');
+  assert.equal(verdictFor({ culprit: ['fail', 'pass'], parent: ['pass'] }), 'unconfirmed');
+  assert.equal(verdictFor({ culprit: ['fail', 'fail'], parent: ['error'] }), 'unconfirmed');
+  assert.equal(verdictFor({ culprit: ['fail'], parent: ['pass'] }), 'unconfirmed');
+});
+
+/** A fake checkout: each file starts failing at the commit given, or flips per call. */
+const fakeRepo = (breaksAt, commits, { flaky = {}, errorAt = [] } = {}) => {
+  const calls = [];
+  const runFileAt = async (sha, files) => {
+    calls.push({ sha, files: [...files] });
+    if (errorAt.includes(sha)) return Object.fromEntries(files.map(f => [f, 'error']));
+    const at = sha === 'good' ? -1 : commits.indexOf(sha);
+    return Object.fromEntries(
+      files.map(f => {
+        if (flaky[f]) return [f, flaky[f]()];
+        return [f, breaksAt[f] !== undefined && at >= breaksAt[f] ? 'fail' : 'pass'];
+      }),
+    );
+  };
+  return { runFileAt, calls };
+};
+
+test('bisect finds the merge that broke each file, sharing runs between files', async () => {
+  const commits = ['m0', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7'];
+  const { runFileAt, calls } = fakeRepo({ a: 2, b: 2, c: 6 }, commits);
+  const results = await attribute({ files: ['a', 'b', 'c'], good: 'good', commits, runFileAt });
+  assert.deepEqual(results, [
+    { file: 'a', verdict: 'culprit', culprit: 'm2', parent: 'm1' },
+    { file: 'b', verdict: 'culprit', culprit: 'm2', parent: 'm1' },
+    { file: 'c', verdict: 'culprit', culprit: 'm6', parent: 'm5' },
+  ]);
+  // bad, good, five bisect runs (m3 is shared by all three files, m1 and m2 by a and b), then one
+  // confirmation run per culprit.
+  assert.deepEqual(
+    calls.map(c => c.sha),
+    ['m7', 'good', 'm3', 'm1', 'm2', 'm5', 'm6', 'm2', 'm6'],
+  );
+  assert.deepEqual(calls[0], { sha: 'm7', files: ['a', 'b', 'c'] });
+  assert.deepEqual(calls[1], { sha: 'good', files: ['a', 'b', 'c'] });
+});
+
+test('the first merge in the range can be the culprit, with the good commit as its parent', async () => {
+  const commits = ['m0', 'm1', 'm2'];
+  const { runFileAt } = fakeRepo({ a: 0 }, commits);
+  assert.deepEqual(await attribute({ files: ['a'], good: 'good', commits, runFileAt }), [
+    { file: 'a', verdict: 'culprit', culprit: 'm0', parent: 'good' },
+  ]);
+});
+
+test('a file that passes on the red commit is a flake and is never bisected', async () => {
+  const commits = ['m0', 'm1'];
+  const { runFileAt, calls } = fakeRepo({}, commits);
+  assert.deepEqual(await attribute({ files: ['a'], good: 'good', commits, runFileAt }), [
+    { file: 'a', verdict: 'not-reproduced' },
+  ]);
+  assert.equal(calls.length, 1);
+});
+
+test('a file that already fails on the green commit is not blamed on a merge', async () => {
+  const commits = ['m0', 'm1'];
+  const { runFileAt } = fakeRepo({ a: -1 }, commits);
+  assert.deepEqual(await attribute({ files: ['a'], good: 'good', commits, runFileAt }), [
+    { file: 'a', verdict: 'already-failing' },
+  ]);
+});
+
+test('a file that stops failing on the confirmation run is unconfirmed, never tagged', async () => {
+  const commits = ['m0', 'm1', 'm2', 'm3'];
+  // red at bad, green at good, red at m1, green at m0, then green again at m1 on the confirmation run.
+  const seq = ['fail', 'pass', 'fail', 'pass', 'pass'];
+  const { runFileAt, calls } = fakeRepo({}, commits, { flaky: { a: () => seq.shift() } });
+  const [result] = await attribute({ files: ['a'], good: 'good', commits, runFileAt });
+  assert.deepEqual(result, { file: 'a', verdict: 'unconfirmed', reason: 'passed when rerun at m1' });
+  assert.deepEqual(
+    calls.map(c => c.sha),
+    ['m3', 'good', 'm1', 'm0', 'm1'],
+  );
+});
+
+test('a commit that cannot be built leaves its files unconfirmed', async () => {
+  const commits = ['m0', 'm1', 'm2', 'm3'];
+  const { runFileAt } = fakeRepo({ a: 3 }, commits, { errorAt: ['m1'] });
+  assert.deepEqual(await attribute({ files: ['a'], good: 'good', commits, runFileAt }), [
+    { file: 'a', verdict: 'unconfirmed', reason: 'could not run the file at m1' },
+  ]);
+});
+
+test('files left when the deadline passes are unconfirmed', async () => {
+  const commits = ['m0', 'm1', 'm2', 'm3'];
+  const { runFileAt, calls } = fakeRepo({ a: 2 }, commits);
+  let now = 0;
+  const timed = async (sha, files) => {
+    now += 10;
+    return runFileAt(sha, files);
+  };
+  const results = await attribute({
+    files: ['a'],
+    good: 'good',
+    commits,
+    runFileAt: timed,
+    deadline: 15,
+    now: () => now,
+  });
+  assert.deepEqual(results, [{ file: 'a', verdict: 'unconfirmed', reason: 'ran out of time' }]);
+  assert.equal(calls.length, 2);
+});
+
+test('the culprit PR comes from the commit-pulls API, else from the squash subject', () => {
+  const merged = [
+    { number: 30434, title: 'fix(client-js): x', user: { login: 'bot[bot]', type: 'Bot' }, merged_at: 'x' },
+  ];
+  assert.deepEqual(prForCommit(merged, 'ignored (#1)'), {
+    number: 30434,
+    title: 'fix(client-js): x',
+    author: 'bot[bot]',
+    bot: true,
+  });
+  assert.deepEqual(prForCommit([], 'feat(core): y (#29370)'), {
+    number: 29370,
+    title: 'feat(core): y',
+    author: null,
+    bot: false,
+  });
+  assert.equal(prForCommit([], 'no number here'), null);
+});
+
+test('Slack text escapes the characters mrkdwn treats as markup', () => {
+  assert.equal(escapeMrkdwn('a <b> & <!channel>'), 'a &lt;b&gt; &amp; &lt;!channel&gt;');
+});
+
+test('one message per culprit PR; mapped authors are tagged, bots and unmapped are not', () => {
+  const ctx = {
+    repo: 'mastra-ai/mastra',
+    runUrl: 'https://github.com/mastra-ai/mastra/actions/runs/1',
+    good: 'g000000000',
+    bad: 'b000000000',
+    slackUsers: { tony: 'U123' },
+  };
+  const results = [
+    { file: 'packages/core/a.test.ts', verdict: 'culprit', culprit: 'c1111111111', parent: 'p' },
+    { file: 'packages/core/b.test.ts', verdict: 'culprit', culprit: 'c1111111111', parent: 'p' },
+    { file: 'packages/playground/c.test.tsx', verdict: 'culprit', culprit: 'c2222222222', parent: 'p' },
+    { file: 'packages/core/flaky.test.ts', verdict: 'not-reproduced' },
+  ];
+  const prs = {
+    c1111111111: { number: 29370, title: 'feat: <storage> & v2', author: 'tony', bot: false },
+    c2222222222: { number: 30434, title: 'fix(client-js): retries', author: 'mastra-platform[bot]', bot: true },
+  };
+  const messages = alertMessages({ ...ctx, results, jobs: [], prs });
+  assert.equal(messages.length, 2);
+  assert.match(messages[0], /`packages\/core\/a\.test\.ts`, `packages\/core\/b\.test\.ts`/);
+  assert.match(
+    messages[0],
+    /<https:\/\/github\.com\/mastra-ai\/mastra\/pull\/29370\|#29370> "feat: &lt;storage&gt; &amp; v2" by <@U123>/,
+  );
+  assert.match(messages[0], /Fails on `c111111`, passes on its parent/);
+  assert.match(messages[1], /by mastra-platform\[bot\] \(bot\)/);
+  assert.doesNotMatch(messages.join('\n'), /flaky/);
+
+  const unmapped = alertMessages({ ...ctx, slackUsers: {}, results: results.slice(0, 1), jobs: [], prs });
+  assert.match(unmapped[0], /by @tony\./);
+});
+
+test('unconfirmed files and escaped jobs go in one unattributed message with the range', () => {
+  const messages = alertMessages({
+    repo: 'mastra-ai/mastra',
+    runUrl: 'https://run',
+    good: 'g000000000',
+    bad: 'b000000000',
+    slackUsers: {},
+    results: [
+      { file: 'a.test.ts', verdict: 'unconfirmed', reason: 'ran out of time' },
+      { file: 'b.test.ts', verdict: 'already-failing' },
+    ],
+    jobs: ['job:store/pg'],
+    prs: {},
+  });
+  assert.equal(messages.length, 1);
+  assert.match(messages[0], /culprit not found/);
+  assert.match(messages[0], /`a\.test\.ts` \(ran out of time\), `job:store\/pg` \(whole job, not bisected\)/);
+  assert.match(
+    messages[0],
+    /<https:\/\/github\.com\/mastra-ai\/mastra\/compare\/g000000000\.\.\.b000000000\|g000000\.\.\.b000000>/,
+  );
+});
+
+test('without a range the unattributed message still names the files and the run', () => {
+  const [message] = alertMessages({
+    repo: 'mastra-ai/mastra',
+    runUrl: 'https://run',
+    reason: 'no green versioning run in the last 72 hours',
+    slackUsers: {},
+    results: [{ file: 'a.test.ts', verdict: 'unconfirmed' }],
+    jobs: [],
+    prs: {},
+  });
+  assert.match(message, /`a\.test\.ts`/);
+  assert.match(message, /no green versioning run in the last 72 hours/);
+  assert.match(message, /<https:\/\/run\|Versioning run>/);
+});
