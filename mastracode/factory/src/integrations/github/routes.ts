@@ -42,6 +42,7 @@ import type {
   SourceControlInstallation,
   SourceControlRepository,
 } from '../../storage/domains/source-control/base.js';
+import { USER_SESSION_BRANCH_PREFIX } from '../../work-item-branch.js';
 import { listRepositoryCommits } from './commits.js';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js';
 import type { GithubIntegration } from './integration.js';
@@ -61,7 +62,6 @@ import {
 import type { GitIdentity } from './sandbox.js';
 
 const sessionOperationLocks = new Map<string, Promise<unknown>>();
-const USER_SESSION_BRANCH_PREFIX = 'user/session-';
 // lowercase only (crypto.randomUUID output), so casing cannot fork one logical ID into two sessions
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 /**

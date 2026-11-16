@@ -1,6 +1,11 @@
+import {
+  SLACK_SESSION_BRANCH_PREFIX,
+  USER_BRANCH_PREFIX,
+  USER_SESSION_BRANCH_PREFIX,
+} from '@mastra/factory/work-item-branch';
+
 import type { WorkItem, WorkItemSource } from '../../factory/services/workItems';
 import { isPullRequestSource } from '../../factory/services/workItems';
-import { SLACK_SESSION_BRANCH_PREFIX, USER_SESSION_BRANCH_PREFIX } from './user-sessions';
 import type { FactoryUserSession } from './user-sessions';
 
 const GITHUB_REVIEW_BRANCH = /^factory\/pr-([1-9]\d*)$/;
@@ -65,13 +70,13 @@ export function getReviewBranchIdentifier(branch: string): string | undefined {
 }
 
 export function isAutomaticUserSessionBranch(session: FactoryUserSession): boolean {
-  return session.branch === `${USER_SESSION_BRANCH_PREFIX}session-${session.sessionId}`;
+  return session.branch === `${USER_SESSION_BRANCH_PREFIX}${session.sessionId}`;
 }
 
 export function getUserSessionLabel(session: FactoryUserSession): string {
   const title = session.title?.trim();
   if (title) return title;
-  if (!session.branch.startsWith(USER_SESSION_BRANCH_PREFIX)) return session.branch;
+  if (!session.branch.startsWith(USER_BRANCH_PREFIX)) return session.branch;
   if (isAutomaticUserSessionBranch(session)) return 'New session';
-  return session.branch.slice(USER_SESSION_BRANCH_PREFIX.length);
+  return session.branch.slice(USER_BRANCH_PREFIX.length);
 }

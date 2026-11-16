@@ -162,11 +162,13 @@ export function mergeRequestNumberFromBranch(branch: string): number | undefined
   return number !== undefined && Number.isSafeInteger(number) ? number : undefined;
 }
 
+export const USER_BRANCH_PREFIX = 'user/';
+export const USER_SESSION_BRANCH_PREFIX = `${USER_BRANCH_PREFIX}session-`;
 // Slack thread sessions live on `slack/<thread>` branches (integrations/slack/slack.ts threadBranch).
 export const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
 
 export function isPersonSessionBranch(branch: string): boolean {
-  return branch.startsWith('user/') || branch.startsWith(SLACK_SESSION_BRANCH_PREFIX);
+  return branch.startsWith(USER_BRANCH_PREFIX) || branch.startsWith(SLACK_SESSION_BRANCH_PREFIX);
 }
 
 /** Whether a provider-reported branch name is safe to show an agent or pass to git. */

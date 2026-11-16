@@ -1,6 +1,7 @@
 import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { sessionRowStatus } from '@mastra/factory/session/session-row-status';
 import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
+import { SLACK_SESSION_BRANCH_PREFIX } from '@mastra/factory/work-item-branch';
 import { cardContextSessions, cardThreadSession } from '@mastra/factory/work-items/card-context-sessions';
 import { isSettledChangeRequest } from '@mastra/factory/work-items/change-requests';
 import type { CardChangeRequest, PullRequestStatus } from '@mastra/factory/work-items/change-requests';
@@ -16,7 +17,6 @@ import {
   isFactoryOwnedSession,
 } from './sessionPresentation';
 import type { SessionOwnerDetails, SessionSource, SessionViewerProfile } from './sessionPresentation';
-import { SLACK_SESSION_BRANCH_PREFIX } from './user-sessions';
 import type { FactoryUserSession } from './user-sessions';
 
 export type SessionActivityStatus = 'waiting' | 'working' | 'initializing' | 'idle' | 'done';
