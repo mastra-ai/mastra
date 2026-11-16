@@ -77,9 +77,9 @@ export type TraceQueryTokenField = (typeof TRACE_QUERY_TOKEN_FIELDS)[number];
 /**
  * Positive whole-token matching on indexed span content. For `all`, one underlying column
  * must contain every query token; tokens cannot be satisfied across different columns.
- * The planner preserves case. Tokenization and case folding belong to the supporting store
- * (Platform uses splitByNonAlpha with ASCII lowercasing). A literal producing no tokens
- * matches nothing, including missing content. `not` and `none` ancestors are unsupported;
+ * The planner preserves case. Tokenization and case folding belong to the supporting store.
+ * A literal producing no tokens matches nothing, including missing content.
+ * `not` and `none` ancestors are unsupported;
  * positive predicates can compose through `and`, `or`, and `spans.some`.
  */
 const tokenPredicateSchema = z
