@@ -419,6 +419,7 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
     },
     onSuccess: item => {
       patchCards(queryClient, listKey, cards => cards.map(i => (i.id === item.id ? item : i)));
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessionRowsRoot(factoryProjectId) });
     },
   });
 }
@@ -524,6 +525,7 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
     // The lane's rule queues its run inside this commit. Awaiting both refetches keeps the
     // move pending until the card shows that run, so its button never reappears in between.
     onSettled: async () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessionRowsRoot(factoryProjectId) });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: listKey }),
         queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(factoryProjectId) }),
@@ -578,6 +580,7 @@ export function useDeleteWorkItemMutation(factoryProjectId: string | undefined) 
     onSuccess: () => {
       // patchCards keeps the snapshot's session markers, so refetch to drop the deleted card's with it.
       void queryClient.invalidateQueries({ queryKey: listKey });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessionRowsRoot(factoryProjectId) });
     },
   });
 }
