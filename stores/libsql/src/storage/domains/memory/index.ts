@@ -1580,12 +1580,24 @@ export class MemoryLibSQL extends MemoryStorage {
           threadId: id,
         },
       });
+    const updateFailed = (error: unknown) =>
+      new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'UPDATE_THREAD', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to update thread ${id}`,
+          details: { threadId: id },
+        },
+        error,
+      );
 
     const now = new Date();
-    try {
-      if (metadata === undefined) {
-        // Leave the metadata column alone: rewriting it from an earlier read would
-        // drop a metadata write that landed in between.
+    if (metadata === undefined) {
+      // Leave the metadata column alone: rewriting it from an earlier read would
+      // drop a metadata write that landed in between.
+      let row: Record<string, unknown> | undefined;
+      try {
         const result = await this.#fencedWrite('updateThread', check, writer =>
           writer.execute({
             sql: `UPDATE ${TABLE_THREADS} SET title = COALESCE(?, title), updatedAt = ? WHERE id = ?
@@ -1593,30 +1605,35 @@ export class MemoryLibSQL extends MemoryStorage {
             args: [title ?? null, now.toISOString(), id],
           }),
         );
-        const row = result.rows[0];
-        if (!row) throw notFound();
-        return {
-          id: row.id as string,
-          resourceId: row.resourceId as string,
-          title: row.title as string,
-          metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata as any),
-          createdAt: new Date(row.createdAt as string),
-          updatedAt: now,
-        };
+        row = result.rows[0];
+      } catch (error) {
+        if (isRunFenceConflictError(error)) throw error;
+        throw updateFailed(error);
       }
-
-      const thread = await this.getThreadById({ threadId: id });
-      if (!thread) throw notFound();
-      const updatedThread = {
-        ...thread,
-        title: title ?? thread.title,
-        metadata: {
-          ...thread.metadata,
-          ...metadata,
-        },
+      if (!row) throw notFound();
+      return {
+        id: row.id as string,
+        resourceId: row.resourceId as string,
+        title: row.title as string,
+        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata as any),
+        createdAt: new Date(row.createdAt as string),
         updatedAt: now,
       };
+    }
 
+    const thread = await this.getThreadById({ threadId: id });
+    if (!thread) throw notFound();
+    const updatedThread = {
+      ...thread,
+      title: title ?? thread.title,
+      metadata: {
+        ...thread.metadata,
+        ...metadata,
+      },
+      updatedAt: now,
+    };
+
+    try {
       await this.#fencedWrite('updateThread', check, writer =>
         writer.execute({
           // COALESCE so an omitted title leaves the stored one alone.
@@ -1627,17 +1644,8 @@ export class MemoryLibSQL extends MemoryStorage {
 
       return updatedThread;
     } catch (error) {
-      if (error instanceof MastraError || isRunFenceConflictError(error)) throw error;
-      throw new MastraError(
-        {
-          id: createStorageErrorId('LIBSQL', 'UPDATE_THREAD', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          text: `Failed to update thread ${id}`,
-          details: { threadId: id },
-        },
-        error,
-      );
+      if (isRunFenceConflictError(error)) throw error;
+      throw updateFailed(error);
     }
   }
 

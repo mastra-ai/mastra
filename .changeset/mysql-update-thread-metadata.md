@@ -2,4 +2,4 @@
 '@mastra/mysql': patch
 ---
 
-Fixed `updateThread` dropping thread metadata written by another writer when only the title was updated.
+Fixed `updateThread` dropping metadata written by another writer when it was called without `metadata`, for example while saving a generated title.

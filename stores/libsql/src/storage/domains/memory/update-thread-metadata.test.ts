@@ -70,4 +70,28 @@ describe('MemoryLibSQL.updateThread metadata', () => {
   it('throws not found for a title-only update of a missing thread', async () => {
     await expect(store.updateThread({ id: 'missing', title: 'x' })).rejects.toThrow('Thread missing not found');
   });
+
+  it('wraps a failing metadata write as UPDATE_THREAD FAILED', async () => {
+    const { MastraError } = await import('@mastra/core/error');
+    const execute = client.execute.bind(client);
+    vi.spyOn(client, 'execute').mockImplementation((async (statement: any) => {
+      if (typeof statement === 'object' && /^UPDATE mastra_threads SET title/.test(statement.sql)) {
+        throw new MastraError({ id: 'INNER', domain: 'STORAGE', category: 'THIRD_PARTY' });
+      }
+      return execute(statement);
+    }) as any);
+
+    await expect(store.updateThread({ id: 'thread-1', metadata: { added: 1 } })).rejects.toMatchObject({
+      id: 'MASTRA_STORAGE_LIBSQL_UPDATE_THREAD_FAILED',
+    });
+  });
+
+  it('returns what getThreadById returns for a title-only update of a thread with NULL metadata', async () => {
+    await client.execute({ sql: `UPDATE mastra_threads SET metadata = NULL WHERE id = ?`, args: ['thread-1'] });
+
+    const updated = await store.updateThread({ id: 'thread-1', title: 'New title' });
+
+    expect(updated).toEqual(await store.getThreadById({ threadId: 'thread-1' }));
+    expect(updated.metadata).toBeNull();
+  });
 });
