@@ -34,11 +34,13 @@ const sideRowClassName = 'sm:flex-wrap sm:justify-between sm:gap-x-6 sm:gap-y-3'
 const headingClassName = 'flex min-w-0 flex-col gap-px';
 const sideHeadingClassName = 'sm:flex-[1_1_16rem]';
 /**
- * The control column on the right. Inputs fill it (at least 13.75rem); selects and other field triggers hug
- * their value (`--field-width: auto`, see `fieldTriggerWidthStyle`) up to that same width.
+ * The controls on the right. With a text input they take at least 13.75rem; selects and other field triggers hug
+ * their value (`--field-width: auto`, see `fieldTriggerWidthStyle`) up to that same width; switches and buttons keep
+ * their size, so a row of only those never wraps for lack of room.
+ * Controls that don't fit on one line wrap, still right-aligned.
  */
 const sideControlClassName =
-  'flex min-w-0 max-w-full items-center justify-end gap-2 [--field-max-width:13.75rem] [--field-width:auto] sm:ml-auto sm:min-w-55 sm:shrink-0';
+  'flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2 [--field-max-width:13.75rem] [--field-width:auto] sm:ml-auto sm:shrink-0 sm:has-[>input:not([aria-hidden]),>[data-slot=input-group]]:min-w-55';
 
 export function SettingsRowControl({ viewOnly = false, children }: { viewOnly?: boolean; children: ReactNode }) {
   if (!viewOnly) return children;
