@@ -22,7 +22,7 @@ import {
   resolveFactorySessionModel,
 } from '../session/factory-session.js';
 import { recordSessionRunStart } from '../session/run-audit.js';
-import { resolveWorkItemRepository } from '../session/work-item-repository.js';
+import { resolveRunRepository } from '../session/work-item-repository.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
@@ -87,13 +87,9 @@ export interface FactorySessionToolDependencies {
 
 const LISTED_MODELS = 8;
 
-function ambiguousRepository(candidates: readonly string[]): string {
-  return `This item has several repositories (${candidates.join(', ')}); v1 can't choose one.`;
-}
-
 function startErrorMessage(error: unknown): string | null {
   if (error instanceof WorkItemRepositoryError) {
-    return error.code === 'repository_ambiguous' ? ambiguousRepository(error.candidates) : error.message;
+    return error.message;
   }
   if (error instanceof FactoryStartTransitionError) return `The start was refused: ${error.result.reason}`;
   return null;
@@ -573,16 +569,14 @@ export function createFactorySessionTools(
 
   async function resolveRepository(sourceControl: SourceControlStorageHandle, item: Card): Promise<string> {
     const intakeConfig = await deps.intake?.getConfig({ orgId: scope.orgId, integrationIds: ['linear'] });
-    const repository = await resolveWorkItemRepository({
+    // A card that names no repository starts in the environment's first one; its agent determines the right one.
+    const repository = await resolveRunRepository({
       sourceControl,
       orgId: scope.orgId,
       factoryProjectId: scope.factoryProjectId,
       item,
       linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
     });
-    if (repository.status === 'ambiguous') {
-      throw new Error(ambiguousRepository(repository.candidates));
-    }
     if (repository.status === 'unlinked') throw new Error(repository.hint);
     return repository.projectRepositoryId;
   }

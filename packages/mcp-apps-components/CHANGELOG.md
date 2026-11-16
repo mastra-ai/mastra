@@ -1,5 +1,16 @@
 # @mastra/mcp-apps-components
 
+## 0.1.1-alpha.0
+
+### Patch Changes
+
+- Fixed the observability dashboard widget briefly drawing in the dark theme inside a light-themed host. The widget now applies the host's theme before its first frame. ([#30500](https://github.com/mastra-ai/mastra/pull/30500))
+
+- Interface icons in MCP app components now use Central Icons. ([#30438](https://github.com/mastra-ai/mastra/pull/30438))
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b)]:
+  - @mastra/core@1.84.0-alpha.3
+
 ## 0.1.0
 
 ### Minor Changes

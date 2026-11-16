@@ -138,7 +138,7 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
       </span>
       <IconSquareArrowTopRight
         className={cn(
-          'mt-0.5 size-3 shrink-0 text-muted-foreground group-hover/capability-row:text-foreground',
+          'mt-0.5 size-icon-xs shrink-0 text-muted-foreground group-hover/capability-row:text-foreground',
           controlStateColorTransition,
         )}
       />

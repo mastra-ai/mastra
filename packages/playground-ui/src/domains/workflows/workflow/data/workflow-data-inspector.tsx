@@ -11,7 +11,7 @@ import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowUpWall } from '@/ds/icons/central/IconArrowUpWall';
 import { IconArrowWallDown } from '@/ds/icons/central/IconArrowWallDown';
-import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { IconPause } from '@/ds/icons/central/IconPause';
 
@@ -74,7 +74,7 @@ export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSe
           <Button variant="ghost" className="w-full justify-start text-warning-foreground" onClick={closeStepDetail}>
             <IconPause />
             Return to suspended step
-            <IconChevronRight className="ml-auto" />
+            <IconChevronRightMedium className="ml-auto" />
           </Button>
         </div>
       )}

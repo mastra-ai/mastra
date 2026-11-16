@@ -1,5 +1,47 @@
 # mastra
 
+## 1.39.1-alpha.3
+
+### Patch Changes
+
+- Central Icons now cover every interface icon in Studio and Factory, and each icon family, such as speech bubbles, bells, folders and settings, uses one consistent shape. ([#30438](https://github.com/mastra-ai/mastra/pull/30438))
+
+- Improved Factory card sessions: the card's stage, links, changes and files now sit in one place beside the conversation. ([#30388](https://github.com/mastra-ai/mastra/pull/30388))
+
+  **Stage bar**
+
+  The session header shows the card's phase, with arrows to the nearest phase it can move to and a menu of every allowed move. A move that can't happen says why. The breadcrumb is gone: the sidebar names the session and the panel names the card.
+
+  **Session panel**
+
+  The panel runs from the top of the page beside the conversation, which keeps its width: when room runs out, the panel narrows, then folds into the header. Its overview lists the card's source and description, the workspace branch and pull request, the changed files, the pull requests the work opened, related cards, and a timeline of the card's moves. Pull request links now show once, here. Opening the panel doesn't re-render the conversation, and its text doesn't rewrap while the panel opens, narrows or folds.
+
+  **Go to file**
+
+  Go to file searches every file in the workspace, not only folders already opened, and ranks changed files first. The file tree marks changed files and the file viewer numbers its lines.
+
+  **Consistency fixes**
+
+  - A pull request's status icon follows one rule on the board, in the sidebar and in the panel, and GitLab merge request cards show it too.
+  - Links name what they point at, such as **PR #202** or **Issue #42**.
+  - Phase names follow the card's own board everywhere, including custom boards.
+  - A finished pull request card whose pull request is still open offers **Re-review**.
+  - A section that can't load says so instead of looking empty.
+
+  Search now sits only in the sidebar, on phones too. Cmd/Ctrl+K still opens it.
+
+  The sidebar no longer asks for each session's pull request status every 5 seconds. It reads the status again when the board's live feed reports a change.
+
+- Studio and Factory now use Central Icons for their interface icons. ([#29934](https://github.com/mastra-ai/mastra/pull/29934))
+
+- Factory no longer sends or expects a `sandboxProvider` value when linking a repository during setup. Update `mastra` together with `@mastra/factory`: repository linking fails when one of them is older than the other. ([#30508](https://github.com/mastra-ai/mastra/pull/30508))
+
+- Updated the Factory API route schemas used by `mastra api`: project repository responses no longer list `sandboxWorkdir` or `lastBuiltAt`. ([#30495](https://github.com/mastra-ai/mastra/pull/30495))
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b)]:
+  - @mastra/core@1.84.0-alpha.3
+  - @mastra/deployer@1.84.0-alpha.3
+
 ## 1.39.1-alpha.2
 
 ### Patch Changes

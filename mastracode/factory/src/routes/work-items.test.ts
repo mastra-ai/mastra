@@ -61,7 +61,7 @@ const audit: AuditEmitter = {
     }
   },
 };
-import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { createFactoryStorageForTests, finishQueuedRunsForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { boardCheck } from '../work-items/board-check.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
@@ -947,6 +947,7 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     expect(stayed.status).toBe(200);
     expect(await decisionCount()).toBe(1);
 
+    await finishQueuedRunsForTests(seed.workItems);
     const reentered = await transition(
       { id: item.id, revision: (await stayed.json()).result.revision },
       { stage: 'triage', reenter: true, requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3' },
@@ -1222,8 +1223,7 @@ describe('GET /web/factory/projects/:id/decisions', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: null,
-      ingress: { identity: 'decision-source', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'decision-source' },
       expectedRevision: null,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1275,8 +1275,7 @@ describe('GET /web/factory/projects/:id/decisions retry eligibility', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
-      ingress: { identity: 'not-failed', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'not-failed' },
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1335,8 +1334,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
-      ingress: { identity: 'stale-retry', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'stale-retry' },
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1391,8 +1389,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
-      ingress: { identity: 'attention-failure', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'attention-failure' },
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1611,8 +1608,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
-      ingress: { identity: 'approval-queue', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'approval-queue' },
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1676,8 +1672,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
-      ingress: { identity: 'approve-attribution', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'approve-attribution' },
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1717,8 +1712,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: null,
-      ingress: { identity: 'attention-refailure-order', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'attention-refailure-order' },
       expectedRevision: null,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1847,8 +1841,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: null,
-      ingress: { identity: 'legacy-attention-failure', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'legacy-attention-failure' },
       expectedRevision: null,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1907,8 +1900,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
-      ingress: { identity: 'attention-pagination', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'attention-pagination' },
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -2970,8 +2962,7 @@ describe('GET /web/factory/projects/:id/work-items/starters', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: card.id,
-      ingress: { identity: 'failing-run', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'failing-run' },
       expectedRevision: card.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },

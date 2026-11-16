@@ -260,7 +260,7 @@ describe('WorkspaceFiles', () => {
 
       toggle.focus();
       await user.tab();
-      expect(within(card).getByRole('button', { name: 'Copy branch name' })).toHaveFocus();
+      expect(within(card).getByRole('button', { name: 'Copy branch factory/issue-1' })).toHaveFocus();
 
       await user.click(toggle);
       expect(card).toHaveAttribute('inert');

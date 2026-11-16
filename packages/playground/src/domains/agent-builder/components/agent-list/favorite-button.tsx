@@ -17,11 +17,6 @@ export interface FavoriteButtonProps {
   showCount?: boolean;
 }
 
-const iconSizes = {
-  sm: 14,
-  md: 16,
-} as const;
-
 /**
  * Toggles the favorite state for a stored agent. Renders nothing if the EE
  * `agent.favorites` flag is off. Stops click propagation so it can sit inside a
@@ -70,7 +65,7 @@ export const FavoriteButton = ({
         className,
       )}
     >
-      <IconStar size={iconSizes[size]} className={cn('shrink-0', isFavorited && 'fill-current')} aria-hidden />
+      <IconStar className={cn('shrink-0', isFavorited && 'fill-current')} aria-hidden />
       {showCount && typeof favoriteCount === 'number' && (
         <Txt as="span" variant="label" className="whitespace-nowrap">
           <span className="tabular-nums">{favoriteCount}</span> {countLabel}

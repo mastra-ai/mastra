@@ -33,14 +33,20 @@ describe('Prebuild test routing', () => {
         'packages/schema-compat/src/schema.test.ts',
         'packages/schema-compat/src/provider-compats/anthropic.e2e.test.ts',
         'packages/rag/src/document.test.ts',
+        'client-sdks/ai-sdk/src/chat-route.test.ts',
+        'client-sdks/ai-sdk/src/__tests__/tool-call-approval.e2e.test.ts',
         'e2e-tests/monorepo/monorepo.test.ts',
       ],
     });
 
-    expect(result.unitTestFiles).toEqual(['packages/schema-compat/src/schema.test.ts']);
+    expect(result.unitTestFiles).toEqual([
+      'packages/schema-compat/src/schema.test.ts',
+      'client-sdks/ai-sdk/src/chat-route.test.ts',
+    ]);
     expect(result.e2eTestFiles).toEqual([
       'packages/schema-compat/src/provider-compats/anthropic.e2e.test.ts',
       'packages/rag/src/document.test.ts',
+      'client-sdks/ai-sdk/src/__tests__/tool-call-approval.e2e.test.ts',
     ]);
     // An external E2E test reaches the Studio/E2E workflow, not the package E2E job.
     expect(result.flags.e2e_changed).toBe(true);

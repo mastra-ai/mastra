@@ -116,9 +116,7 @@ function stubThreadRoute(workItems: unknown[], subscriptions: unknown[]) {
           {
             id: FACTORY_ID,
             name: 'Mastra Factory',
-            repositories: [
-              listedRepository(REPO_ID, 'mastra-ai/mastra', { branch: 'main', sandboxWorkdir: '/local/mastra' }),
-            ],
+            repositories: [listedRepository(REPO_ID, 'mastra-ai/mastra', { branch: 'main' })],
           },
         ],
       }),

@@ -88,7 +88,7 @@ export function CardDetailsHint({ onOpen }: { onOpen: () => void }) {
       onClick={onOpen}
       className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), REVEAL_ON_CARD_HOVER)}
     >
-      <IconExpand45 size={13} aria-hidden />
+      <IconExpand45 className="size-icon-sm" aria-hidden />
     </button>
   );
 }
@@ -136,7 +136,7 @@ export function CardStatus({ status, compact = false }: { status: BoardCardStatu
         status.detail !== undefined && 'underline decoration-dotted underline-offset-2',
       )}
     >
-      <IconExclamationTriangle size={11} aria-hidden className={cn('shrink-0', !compact && 'mt-0.5')} />
+      <IconExclamationTriangle aria-hidden className={cn('size-icon-xs shrink-0', !compact && 'mt-0.5')} />
       <span className={cn('min-w-0', compact ? 'truncate' : 'wrap-anywhere')}>{status.label}</span>
     </Txt>
   );

@@ -14,7 +14,7 @@ export function SessionPanelSubject({ lead }: { lead: ReactNode | undefined }) {
   return (
     <PanelSubject
       lead={lead}
-      icon={session.isUserThread ? <IconUser aria-hidden className="text-muted-foreground size-4" /> : undefined}
+      icon={session.isUserThread ? <IconUser aria-hidden className="text-muted-foreground size-icon-md" /> : undefined}
       title={session.title}
       loading={session.loading}
     />

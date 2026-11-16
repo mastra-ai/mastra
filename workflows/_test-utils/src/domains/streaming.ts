@@ -134,13 +134,15 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
   // Test: should execute workflow with state that could be streamed
   {
     mockRegistry.register('streaming-with-state-workflow:step1Action', () =>
-      vi.fn().mockImplementation(async ({ state, setState }) => {
+      vi.fn().mockImplementation(async ({ getState, setState }) => {
+        const state = await getState();
         await setState({ ...state, counter: (state?.counter || 0) + 1 });
         return { value: 'step1-done' };
       }),
     );
     mockRegistry.register('streaming-with-state-workflow:step2Action', () =>
-      vi.fn().mockImplementation(async ({ state, setState }) => {
+      vi.fn().mockImplementation(async ({ getState, setState }) => {
+        const state = await getState();
         await setState({ ...state, counter: (state?.counter || 0) + 1 });
         return { value: 'step2-done', finalCounter: state?.counter };
       }),

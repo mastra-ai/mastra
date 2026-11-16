@@ -93,7 +93,7 @@ export const AgentSelectableCard = ({
             !isSelected && 'border-border bg-transparent',
           )}
         >
-          {isSelected && <IconCheckmark2Medium className="h-3 w-3" />}
+          {isSelected && <IconCheckmark2Medium className="size-icon-xs" />}
         </span>
       </button>
       {footer}

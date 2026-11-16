@@ -175,7 +175,7 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
       data-slot="command-input-wrapper"
       className={cn('flex items-center border-b border-border px-3', transitions.colors, wrapperClassName)}
     >
-      <IconMagnifyingGlass className={cn('mr-2 size-4 shrink-0 text-muted-foreground', transitions.colors)} />
+      <IconMagnifyingGlass className={cn('mr-2 size-icon-md shrink-0 text-muted-foreground', transitions.colors)} />
       {/* cmdk renders autocomplete="off" itself; a command search is never a credential field. */}
       <CommandPrimitive.Input
         ref={ref}

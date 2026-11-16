@@ -102,7 +102,7 @@ function stubBoardEndpoints({
             id: FACTORY_ID,
             name: 'Acme Factory',
             repositories: [
-              listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' }),
+              listedRepository(REPO_ID, 'acme/app', { branch: 'main' }),
               ...(multiRepository ? [listedRepository('repo-2', 'acme/other', { branch: 'main' })] : []),
             ],
           },
@@ -246,7 +246,6 @@ describe('Board card buttons move the card', () => {
     await moveFromCardDetails(item.title, 'Investigate');
 
     await waitFor(() => expect(transitions).toHaveLength(1));
-    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
     expect(patches).toHaveLength(0);
     expect(transitions[0]).toMatchObject({ itemId: item.id, body: { stage: 'triage' } });
   });
@@ -265,106 +264,25 @@ describe('Board card buttons move the card', () => {
     expect(transitions[0]?.body).not.toHaveProperty('reenter');
   });
 
-  it('chooses a repository before investigating an unattributed Linear item in a multi-repository factory', async () => {
+  it('moves a card that names no repository in a multi-repository factory with one transition and no repository prompt', async () => {
     const { patches, transitions } = stubBoardEndpoints({
       multiRepository: true,
       workItems: [{ ...linearWorkItem, stages: ['intake'] }],
     });
-    renderWorkBoard();
+    const { client } = renderWorkBoard();
 
     await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
 
-    const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    const user = userEvent.setup();
-    const search = within(dialog).getByRole('searchbox', { name: 'Search repositories' });
-    expect(within(dialog).getByRole('button', { name: /acme\/app/ })).toBeVisible();
-    expect(within(dialog).getByRole('button', { name: /acme\/other/ })).toBeVisible();
-
-    await user.type(search, '  ACME/OTHER  ');
-    await waitFor(() => expect(within(dialog).queryByRole('button', { name: /acme\/app/ })).not.toBeInTheDocument());
-    expect(within(dialog).getByRole('button', { name: /acme\/other/ })).toBeVisible();
-    expect(patches).toHaveLength(0);
-    expect(transitions).toHaveLength(0);
-
-    await user.clear(search);
-    await user.type(search, 'missing');
-    expect(await within(dialog).findByText('No matching repositories')).toBeVisible();
-    expect(within(dialog).queryByRole('button', { name: /acme\/other/ })).not.toBeInTheDocument();
-    await user.clear(search);
-    expect(await within(dialog).findByRole('button', { name: /acme\/app/ })).toBeVisible();
-    const chosenRepository = within(dialog).getByRole('button', { name: /acme\/other/ });
-    chosenRepository.focus();
-    await user.keyboard('{Enter}');
-
     await waitFor(() => expect(transitions).toHaveLength(1));
-    expect(patches).toEqual([
-      { itemId: 'linear-item-1', body: { metadata: { ...linearWorkItem.metadata, repository: 'acme/other' } } },
-    ]);
     expect(transitions[0]).toMatchObject({
       itemId: 'linear-item-1',
-      body: { stage: 'triage', cause: 'card_action', expectedRevision: 5 },
+      body: { stage: 'triage', cause: 'card_action', expectedRevision: 1 },
     });
-  });
-
-  it('patches only the chosen repository when moving a normalized card with stale provider metadata', async () => {
-    const item = {
-      ...linearWorkItem,
-      stages: ['intake'],
-      metadata: {
-        ...linearWorkItem.metadata,
-        labels: ['stale-label'],
-        state: 'closed',
-        githubRepositoryId: 202,
-      },
-      workItem: {
-        ...providerFactsCard.workItem,
-        provider: 'linear',
-        title: linearWorkItem.title,
-        key: 'ENG-42',
-        state: 'open',
-        labels: ['bug'],
-        metadata: linearWorkItem.metadata,
-      },
-    };
-    const { patches, transitions } = stubBoardEndpoints({ multiRepository: true, workItems: [item] });
-    renderWorkBoard();
-
-    await moveFromCardDetails(item.title, 'Investigate');
-    const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    await userEvent.setup().click(within(dialog).getByRole('button', { name: /acme\/other/ }));
-
-    await waitFor(() => expect(transitions).toHaveLength(1));
-    expect(patches).toEqual([{ itemId: item.id, body: { metadata: { repository: 'acme/other' } } }]);
-    expect(transitions[0]).toMatchObject({
-      itemId: item.id,
-      body: { stage: 'triage', cause: 'card_action', expectedRevision: 5 },
-    });
-  });
-
-  it('cancels repository selection without changing a Linear item and resets search on reopening', async () => {
-    const { patches, transitions } = stubBoardEndpoints({
-      multiRepository: true,
-      workItems: [{ ...linearWorkItem, stages: ['intake'] }],
-    });
-    renderWorkBoard();
-    const user = userEvent.setup();
-    await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
-
-    const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    await user.type(within(dialog).getByRole('searchbox', { name: 'Search repositories' }), 'not-linked');
-    expect(await within(dialog).findByText('No matching repositories')).toBeVisible();
-    await user.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument());
-    expect(patches).toHaveLength(0);
-    expect(transitions).toHaveLength(0);
-
-    await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
-    const reopened = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    expect(within(reopened).getByRole('searchbox', { name: 'Search repositories' })).toHaveValue('');
-    expect(within(reopened).getByRole('button', { name: /acme\/app/ })).toBeVisible();
-    expect(within(reopened).getByRole('button', { name: /acme\/other/ })).toBeVisible();
-    expect(patches).toHaveLength(0);
-    expect(transitions).toHaveLength(0);
+    await waitForMutationsIdle(client);
+    expect(transitions).toHaveLength(1);
+    expect(patches).toEqual([]);
+    // The card's own details are the only dialog: nothing asks for a repository.
+    expect(screen.queryAllByRole('dialog', { name: name => name !== 'ENG-42: Fix intake sync' })).toEqual([]);
   });
 
   it('uses the configured Linear project repository without prompting', async () => {
@@ -384,7 +302,6 @@ describe('Board card buttons move the card', () => {
     await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
 
     await waitFor(() => expect(transitions).toHaveLength(1));
-    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
     expect(patches).toHaveLength(0);
   });
 

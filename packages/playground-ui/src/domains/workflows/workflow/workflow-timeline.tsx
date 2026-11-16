@@ -57,7 +57,7 @@ export function WorkflowTimeline() {
             aria-label={isCollapsed ? 'Expand timeline' : 'Collapse timeline'}
           >
             <span>
-              <IconGanttChart aria-hidden className="size-4 text-muted-foreground" />
+              <IconGanttChart aria-hidden className="size-icon-md text-muted-foreground" />
             </span>
             <span>Timeline</span>
             <Txt as="span" variant="meta" tone="muted">

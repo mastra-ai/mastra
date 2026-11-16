@@ -18,6 +18,7 @@ const toolRequiresApproval = vi.mocked(resolveRuntime.toolRequiresApproval);
 
 function makeParams(runId: string, overrides: Record<string, any> = {}) {
   return {
+    getState: async () => ({}),
     inputData: {
       toolCallId: 'call-1',
       toolName: 'secureTool',

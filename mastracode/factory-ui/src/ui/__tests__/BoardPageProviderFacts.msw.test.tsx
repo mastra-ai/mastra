@@ -62,7 +62,7 @@ it.each([
               id: 'fp-1',
               name: 'Acme Factory',
               repositories: repositories.map((slug, index) =>
-                listedRepository(`repo-${index + 1}`, slug, { branch: 'main', sandboxWorkdir: `/repo/${slug}` }),
+                listedRepository(`repo-${index + 1}`, slug, { branch: 'main' }),
               ),
             },
           ],
@@ -80,13 +80,7 @@ it.each([
       http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
         HttpResponse.json({ categories: {}, tools: {} }),
       ),
-      // Routine intake browsing can fail; card facts must not trigger a detail lookup to recover.
-      http.get(`${TEST_BASE_URL}/web/github/projects/:id/issues`, () =>
-        HttpResponse.json({ error: 'Provider unavailable' }, { status: 503 }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/github/projects/:id/prs`, () =>
-        HttpResponse.json({ error: 'Provider unavailable' }, { status: 503 }),
-      ),
+      // Provider reads can fail; card facts must not trigger a detail lookup to recover.
       http.get(`${TEST_BASE_URL}/web/github/projects/*`, ({ request }) => {
         providerRequests.push(request.url);
         return HttpResponse.json({ error: 'Provider unavailable' }, { status: 503 });

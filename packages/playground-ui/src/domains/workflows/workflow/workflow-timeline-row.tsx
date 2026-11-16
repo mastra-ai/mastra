@@ -98,7 +98,7 @@ export function WorkflowTimelineRow({
           </Txt>
           {row.isNestedEntry && (
             <Txt as="span" variant="meta" tone="muted" className="flex min-w-0 items-center gap-1">
-              <IconArrowCornerDownRight aria-hidden className="size-3 shrink-0" />
+              <IconArrowCornerDownRight aria-hidden className="size-icon-xs shrink-0" />
               <span className="truncate">{parentPath}</span>
             </Txt>
           )}

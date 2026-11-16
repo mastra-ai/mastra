@@ -16,7 +16,7 @@ export function ChannelOriginBadge({ origin, author }: { origin: ChannelOrigin; 
   const authorName = origin.authorName ?? author?.name;
   return (
     <div aria-label={`Sent from ${label}`} className="text-muted-foreground mt-1 flex items-center gap-1">
-      {origin.platform === 'slack' && <SlackIcon className="size-3" aria-hidden="true" />}
+      {origin.platform === 'slack' && <SlackIcon className="size-icon-xs" aria-hidden="true" />}
       <Txt as="span" variant="meta">
         <Metadata>
           <Metadata.Item>via {label}</Metadata.Item>

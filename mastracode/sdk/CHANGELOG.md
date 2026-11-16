@@ -1,5 +1,19 @@
 # @mastra/code-sdk
 
+## 1.19.1-alpha.4
+
+### Patch Changes
+
+- **Held plugin errors until someone listens.** `PluginManager.onPluginError` now receives errors reported before it subscribed, such as a plugin signal provider failing to start while Mastra Code boots. They still go to `console.warn` when reported, the first listener gets the 20 most recent, and later listeners only see new ones. ([#30428](https://github.com/mastra-ai/mastra/pull/30428))
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`6c647e6`](https://github.com/mastra-ai/mastra/commit/6c647e6faee5a6182d99e2352808df1b57558b67), [`adc0a70`](https://github.com/mastra-ai/mastra/commit/adc0a70bf835d1f81f7bf0af11b247ca115a6683), [`cd2a326`](https://github.com/mastra-ai/mastra/commit/cd2a326988ced13509902dfa50339afcffdbf95e), [`0170d70`](https://github.com/mastra-ai/mastra/commit/0170d700a411ce2b5e64a82bc1133716ae75cbd6), [`1072f7c`](https://github.com/mastra-ai/mastra/commit/1072f7c6268db5fb515460fdcdda173592bce450), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b), [`b666fdb`](https://github.com/mastra-ai/mastra/commit/b666fdbf03a95a8fbe4cf02d150f4576dad6512f)]:
+  - @mastra/core@1.84.0-alpha.3
+  - @mastra/libsql@1.31.0-alpha.1
+  - @mastra/pg@1.37.0-alpha.1
+  - @mastra/memory@1.41.2-alpha.2
+  - @mastra/mcp@2.10.0-alpha.0
+  - @mastra/client-js@1.60.1-alpha.3
+
 ## 1.19.1-alpha.3
 
 ### Patch Changes

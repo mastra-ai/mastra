@@ -137,7 +137,7 @@ function SessionOwner({ owner, previousOwner }: { owner: SessionOwnerDetails; pr
             <span className="flex opacity-50">
               <Avatar src={previousOwner.avatarUrl} name={previousOwner.name} size="inline" />
             </span>
-            <IconArrowRight className="text-placeholder size-2.5" />
+            <IconArrowRight className="text-placeholder size-icon-xs" />
           </span>
         </>
       )}

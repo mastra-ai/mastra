@@ -1852,7 +1852,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       inFlight: string | undefined,
       repeated: Set<string>,
     ) => {
-      const builtAt = new Date();
       try {
         for (const state of states) {
           if (state.setupStatus === 'skipped') continue;
@@ -1866,7 +1865,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             id: repo.projectRepositoryId,
             status: state.setupStatus === 'failed' ? 'failed' : 'configured',
             error: error === undefined ? null : redactCredentials(error).slice(-2000),
-            builtAt,
           });
         }
       } catch (error) {
