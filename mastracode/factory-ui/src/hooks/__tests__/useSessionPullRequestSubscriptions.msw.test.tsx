@@ -32,27 +32,27 @@ function inner({ children }: { children: ReactNode }) {
   return <FeedEventsProvider factoryProjectId={PROJECT_ID}>{children}</FeedEventsProvider>;
 }
 
-function countSubscriptionReads() {
+function countSubscriptionReads(subscriptions = [openSubscription]) {
   const stream = pushableFeedStream(PROJECT_ID);
   const reads = { count: 0 };
   server.use(
     stream.handler,
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => {
       reads.count += 1;
-      return HttpResponse.json({ subscriptions: [openSubscription] });
+      return HttpResponse.json({ subscriptions });
     }),
   );
   return { stream, reads };
 }
 
-async function renderQuietSidebarSession() {
-  const { stream, reads } = countSubscriptionReads();
+async function renderQuietSidebarSession(subscriptions = [openSubscription]) {
+  const { stream, reads } = countSubscriptionReads(subscriptions);
   const { result } = renderHookWithProviders(
     () => useSessionPullRequestSubscriptions({ baseUrl: TEST_BASE_URL, targets: [target], enabled: true }),
     { inner },
   );
   await waitFor(() => expect(stream.open).toBe(true));
-  await waitFor(() => expect(result.current[target.sessionId]).toHaveLength(1));
+  await waitFor(() => expect(result.current[target.sessionId]).toHaveLength(subscriptions.length));
   await act(() => vi.advanceTimersByTimeAsync(PAST_ONE_REFRESH_GAP_MS));
   return { stream, reads };
 }
@@ -74,6 +74,19 @@ describe('useSessionPullRequestSubscriptions', () => {
     await act(() => vi.advanceTimersByTimeAsync(WITHIN_A_SECOND_MS));
 
     await waitFor(() => expect(reads.count).toBe(before + 1));
+  });
+
+  it.each([
+    { situation: 'no subscription follows', subscriptions: [] },
+    { situation: 'is already merged', subscriptions: [{ ...openSubscription, status: 'merged' }] },
+  ])('reads a pull request that $situation once, whatever the feed announces', async ({ subscriptions }) => {
+    const { stream, reads } = await renderQuietSidebarSession(subscriptions);
+    const before = reads.count;
+
+    stream.push();
+    await act(() => vi.advanceTimersByTimeAsync(PAST_ONE_REFRESH_GAP_MS));
+
+    expect(reads.count).toBe(before);
   });
 
   it('asks nothing while the feed is connected and silent, even with a pull request open', async () => {
