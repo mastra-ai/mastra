@@ -1,5 +1,4 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ArrowUpRight, CircleSlash, Trash2 } from 'lucide-react';
 import type { ReactElement } from 'react';
 
 import { externalLinkLabel } from '../boardItems';
@@ -14,6 +13,9 @@ import type { FactoryDecisionSummary } from '../services/decisions';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { BoardStageIcon, actionIcon } from './BoardIcons';
+import { IconArrowUpRight } from '@mastra/playground-ui/icons/central/IconArrowUpRight';
+import { IconCircleBanSign } from '@mastra/playground-ui/icons/central/IconCircleBanSign';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 export interface WorkItemMenuProps {
   item: WorkItem;
@@ -62,7 +64,7 @@ export function WorkItemMenuItems({
   const stages = custom
     ? (board?.phases
         .filter(phase => targets.some(target => target.to === phase.id))
-        .map(phase => ({ id: phase.id, label: phase.title, kind: phase.kind })) ?? [])
+        .map(phase => ({ id: phase.id, label: phase.name ?? phase.title, kind: phase.kind })) ?? [])
     : itemStageOptions(item, board).map(stage => ({ ...stage, kind: undefined }));
   const suggestionForThisBoard = custom && proposedRunLabel === undefined ? undefined : proposal;
   const decisions = triageDecisions(board);
@@ -93,13 +95,13 @@ export function WorkItemMenuItems({
       )}
       {suggestionForThisBoard !== undefined && (
         <DropdownMenu.Item disabled={yourRequestInFlight} onClick={() => onDismissProposal(suggestionForThisBoard.id)}>
-          <CircleSlash aria-hidden />
+          <IconCircleBanSign aria-hidden />
           <span>Dismiss suggested run</span>
         </DropdownMenu.Item>
       )}
       {item.url !== null && (
         <DropdownMenu.Item render={<a href={item.url} target="_blank" rel="noreferrer" />}>
-          <ArrowUpRight aria-hidden />
+          <IconArrowUpRight aria-hidden />
           <span>{externalLinkLabel(item.source)}</span>
         </DropdownMenu.Item>
       )}
@@ -119,7 +121,7 @@ export function WorkItemMenuItems({
           </DropdownMenu.Item>
         ))}
       <DropdownMenu.Item disabled={yourRequestInFlight} onClick={onRemove}>
-        <Trash2 aria-hidden />
+        <TrashIcon aria-hidden />
         <span>Remove</span>
       </DropdownMenu.Item>
     </>

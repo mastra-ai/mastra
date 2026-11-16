@@ -861,6 +861,38 @@ describe('CachingPubSub', () => {
   });
 
   describe('key prefix', () => {
+    it('opts into co-located Redis Cluster replay keys without changing the default', async () => {
+      const keys: Array<[string, string]> = [];
+      class RecordingCache extends InMemoryServerCache {
+        override listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>, ttlMs?: number) {
+          keys.push([listKey, counterKey]);
+          return super.listPushIndexed(listKey, counterKey, value, ttlMs);
+        }
+      }
+      const cache = new RecordingCache();
+      const tagged = new CachingPubSub(new EventEmitterPubSub(), cache, { keyFormat: 'redis-cluster' });
+      const legacy = new CachingPubSub(new EventEmitterPubSub(), cache);
+      const topics = ['events', '{events}', 'agent.stream.{run-1}', 'events%7B%7D', '', '\0', '%00'];
+
+      for (const topic of topics) {
+        await tagged.publish(topic, { type: topic, runId: 'run-1', data: {} });
+        expect((await tagged.getHistory(topic)).map(event => event.type)).toEqual([topic]);
+      }
+
+      for (const [listKey, counterKey] of keys) {
+        const tag = (key: string) => key.match(/\{([^{}]+)\}/)?.[1];
+        expect(tag(listKey)).toBeDefined();
+        expect(tag(counterKey)).toBe(tag(listKey));
+        expect(counterKey).toBe(`${listKey}:counter`);
+      }
+      expect(new Set(keys.map(([listKey]) => listKey)).size).toBe(topics.length);
+      expect(keys[2]![0]).toBe('pubsub:{agent.stream.%7Brun-1%7D}');
+
+      await legacy.publish('events', { type: 'legacy', runId: 'run-1', data: {} });
+      expect(keys.at(-1)).toEqual(['pubsub:events', 'pubsub:events:counter']);
+      expect((await legacy.getHistory('events')).map(event => event.type)).toEqual(['legacy']);
+    });
+
     it('should use custom key prefix for cache', async () => {
       const prefixedPubsub = new CachingPubSub(innerPubsub, cache, { keyPrefix: 'myapp:' });
       const topic = 'events';

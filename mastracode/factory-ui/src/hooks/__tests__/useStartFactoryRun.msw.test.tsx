@@ -41,7 +41,6 @@ function stubEndpoints(
                 integrationId: repository.provider ?? 'github',
                 externalId: repository.externalId,
                 branch: 'main',
-                sandboxWorkdir: '/repo',
               }),
             ),
           },

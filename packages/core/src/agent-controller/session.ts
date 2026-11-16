@@ -469,9 +469,10 @@ export interface SessionMachinery {
    * The `activeTools` allowlist of `modeId` (the session's current mode when
    * omitted or unknown), or `undefined` when the mode does not restrict tools.
    * Resumes pass the suspended run's mode so the continuation sees the same
-   * tools as the initial stream.
+   * tools as the initial stream, and the run's request context so tools denied
+   * on the run's own thread are filtered out.
    */
-  resolveModeActiveTools(modeId?: string): string[] | undefined;
+  resolveModeActiveTools(modeId?: string, requestContext?: RequestContext): string[] | undefined;
   onSessionDeleted?(listener: () => void): () => void;
   /** Resolve the toolset (built-in controller  tools + user/subagent tools) for a run. */
   buildToolsets(requestContext: RequestContext): Promise<ToolsetsInput>;
@@ -2923,6 +2924,12 @@ class SessionOM {
   }
 }
 
+/** The permission rules held in a session state snapshot, or empty rules when none are set. */
+export function readPermissionRules(state: Readonly<Record<string, unknown>> | undefined): PermissionRules {
+  const rules = state?.permissionRules as PermissionRules | undefined;
+  return rules ?? { categories: {}, tools: {} };
+}
+
 /**
  * Owns the session's tool-permission rules: the per-category and per-tool
  * approval policies persisted in session state under `permissionRules`. The
@@ -2951,8 +2958,7 @@ class SessionPermissions {
 
   /** The current permission rules, or empty rules when none are set. */
   getRules(): PermissionRules {
-    const rules = this.#getState?.().permissionRules as PermissionRules | undefined;
-    return rules ?? { categories: {}, tools: {} };
+    return readPermissionRules(this.#getState?.());
   }
 
   /** Set the approval policy for a tool category. Resolves once persisted. */
@@ -4801,13 +4807,20 @@ export class Session<TState = unknown> {
    * grant, then the tool's category grant/policy, falling back to "ask". Pure
    * session state plus the injected category resolver.
    *
-   * Grants are checked against `threadId` (default: the current thread) plus the
-   * session-wide bucket, so a grant made from one thread's approval prompt is
-   * not inherited by every other thread in the session.
+   * `scope` names the thread whose rules and grants apply. Pass a thread id to
+   * read that thread's grants against the session's current rules, or a run's
+   * request context to use the rules of the thread that run belongs to, which
+   * may not be the thread the session currently holds. Grants are checked
+   * against that thread (default: the current thread) plus the session-wide
+   * bucket, so a grant made from one thread's approval prompt is not inherited
+   * by every other thread in the session.
    */
-  resolveToolApproval(toolName: string, threadId?: string): PermissionPolicy {
-    const state = this.state.get() as Record<string, unknown>;
-    const rules = this.permissions.getRules();
+  resolveToolApproval(toolName: string, scope?: string | RequestContext): PermissionPolicy {
+    const { threadId, state } =
+      typeof scope === 'string' || scope === undefined
+        ? { threadId: scope, state: this.state.get() as Record<string, unknown> }
+        : this.__getRunState(scope);
+    const rules = readPermissionRules(state);
 
     const toolPolicy = rules.tools[toolName];
     if (toolPolicy === 'deny') return 'deny';
@@ -4826,6 +4839,24 @@ export class Session<TState = unknown> {
     }
 
     return 'ask';
+  }
+
+  /**
+   * @internal The thread and session state a run sees. Rules are thread-scoped
+   * state, so a run on a thread the session no longer holds reads its own
+   * thread's view from its request context. A run on the current thread reads
+   * the live state, which also covers a view whose source was released while
+   * the run was parked.
+   */
+  __getRunState(requestContext: RequestContext | undefined): {
+    threadId: string | undefined;
+    state: Record<string, unknown>;
+  } {
+    const context = requestContext?.get('controller') as AgentControllerRequestContext<TState> | undefined;
+    const threadId = context?.threadId ?? this.thread.getId() ?? undefined;
+    const active = context?.isThreadActive ? context.isThreadActive() : threadId === (this.thread.getId() ?? undefined);
+    if (!context || active) return { threadId, state: this.state.get() as Record<string, unknown> };
+    return { threadId, state: (context.getState?.() ?? context.state ?? {}) as Record<string, unknown> };
   }
 
   /**
@@ -6430,18 +6461,18 @@ export class Session<TState = unknown> {
       abortSignal,
       execution: true,
     });
-    const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
     const runModeId = await this.resolveSuspendedRunModeId(agent, runId, requestContext);
     const toolsets = await this.machinery.buildToolsets(requestContext);
-    const activeTools = this.machinery.resolveModeActiveTools(runModeId);
+    const activeTools = this.machinery.resolveModeActiveTools(runModeId, requestContext);
     onDispatch?.();
+    // The approval policy rides in the shared stream options; a top-level value
+    // would override it for the rest of the run.
     await agent.sendToolApproval({
       threadId,
       resourceId,
       runId,
       toolCallId,
       approved: true,
-      requireToolApproval: !isYolo,
       memory: { thread: threadId, resource: resourceId },
       abortSignal,
       requestContext,
@@ -6521,11 +6552,12 @@ export class Session<TState = unknown> {
       abortSignal,
       execution: true,
     });
-    const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
     const runModeId = await this.resolveSuspendedRunModeId(agent, runId, requestContext);
     const toolsets = await this.machinery.buildToolsets(requestContext);
-    const activeTools = this.machinery.resolveModeActiveTools(runModeId);
+    const activeTools = this.machinery.resolveModeActiveTools(runModeId, requestContext);
     onDispatch?.();
+    // The approval policy rides in the shared stream options; a top-level value
+    // would override it for the rest of the run.
     await agent.sendToolApproval({
       threadId,
       resourceId,
@@ -6533,7 +6565,6 @@ export class Session<TState = unknown> {
       toolCallId,
       approved: false,
       declineContext,
-      requireToolApproval: !isYolo,
       memory: { thread: threadId, resource: resourceId },
       abortSignal,
       requestContext,
@@ -6622,7 +6653,11 @@ export class Session<TState = unknown> {
     const promise = (async () => {
       try {
         for await (const chunk of subscription.stream) {
-          if (subscription.__getCurrentRunRequestContext?.()?.get(markerKey) !== attempt) continue;
+          const marker = subscription.__getCurrentRunRequestContext?.()?.get(markerKey);
+          // Durable runs deliver their last chunks after the run's request context is released.
+          // Once this attempt's run has streamed, its remaining chunks still belong to it.
+          const releasedRunChunk = dispatched && marker === undefined && chunk.runId === address.runId;
+          if (marker !== attempt && !releasedRunChunk) continue;
           if (chunk.runId && chunk.runId !== address.runId) continue;
           dispatched = true;
           if (chunk.type === 'tool-call-approval') {
@@ -6635,7 +6670,7 @@ export class Session<TState = unknown> {
             const ownedCalls = runScope?.get(SOURCE_APPROVAL_CALLS_KEY) ?? new Set<string>();
             ownedCalls.add(next.toolCallId);
             runScope?.set(SOURCE_APPROVAL_CALLS_KEY, ownedCalls);
-            const policy = this.resolveToolApproval(chunk.payload.toolName, address.threadId);
+            const policy = this.resolveToolApproval(chunk.payload.toolName, requestContext);
             const decision: Promise<ApprovalGateResolution> =
               policy === 'ask'
                 ? this.approval.arm({ ...next, toolName: chunk.payload.toolName })
@@ -6783,12 +6818,10 @@ export class Session<TState = unknown> {
    * Re-supplies the shared run budget so the resumed run doesn't stop mid-task
    * on the agent's small default maxSteps.
    *
-   * Interactive builtins (`ask_user`, `request_access`) are exempted from the
-   * approval re-check on resume: their resume schema is `z.string()` /
-   * `z.array(z.string())` which cannot carry the `{ approved }` field the
-   * approval gate demands, so re-entering the approval branch would always
-   * reject the answer. The caller already handled approval (setForTool policy,
-   * yolo mode, or a prior explicit approval gate).
+   * The continuation keeps the run's approval policy. The resumed call itself
+   * is not gated again: the loop only gates calls that have not run yet or that
+   * were parked for approval, so an `ask_user` answer reaches the model as-is
+   * while later calls in the run still go through approval.
    */
   async resumeToolCall(input: {
     resumeData: any;
@@ -6855,16 +6888,8 @@ export class Session<TState = unknown> {
       this.suspensions.delete(address);
       this.displayState.deletePendingSuspension(address);
       const sharedOptions = this.machinery.buildSharedRunOptions(requestContext);
-      // Interactive builtins suspend to collect user input, not for approval.
-      // The resume data is the user's answer (a bare string), which the approval
-      // re-check would reject because it cannot carry an `{ approved }` field.
-      // Exempt these tools so the answer reaches the model as-is.
-      const isInteractive = suspension.toolName === 'ask_user' || suspension.toolName === 'request_access';
-      if (isInteractive) {
-        sharedOptions.requireToolApproval = false;
-      }
       sharedOptions.onStepFinish = this.#resumeUsageRecorder(agent, suspension.runId, requestContext);
-      const activeTools = this.machinery.resolveModeActiveTools(modeId);
+      const activeTools = this.machinery.resolveModeActiveTools(modeId, requestContext);
       await agent.sendStreamResume({
         threadId,
         resourceId,

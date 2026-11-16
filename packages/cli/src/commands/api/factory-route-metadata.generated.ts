@@ -192,6 +192,38 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /web/factory/projects/:id/boards/:boardKey/phases": {
+    "contractKey": "boardPhases",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/boards/:boardKey/phases",
+    "description": "List the cards under each phase of a board view, in order, with how many match",
+    "pathParams": [
+      "id",
+      "boardKey"
+    ],
+    "queryParams": [
+      "assignee",
+      "author",
+      "cards",
+      "item",
+      "label",
+      "limit",
+      "linearProject",
+      "q",
+      "reviewer",
+      "sort",
+      "source",
+      "teammate",
+      "window",
+      "worked"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /web/factory/projects/:id/decisions": {
     "contractKey": "decisionList",
     "method": "GET",
@@ -314,6 +346,23 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /web/factory/projects/:id/intake-routes/reroute": {
+    "contractKey": "intakeRouteReroutePreview",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/intake-routes/reroute",
+    "description": "Untouched cards the project's intake routes would now file on a different board",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "moves"
+    }
+  },
   "GET /web/factory/projects/:id/metrics": {
     "contractKey": "metricsGet",
     "method": "GET",
@@ -328,6 +377,22 @@ export const FACTORY_API_ROUTE_METADATA = {
     ],
     "bodyParams": [],
     "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /web/factory/projects/:id/run-queue": {
+    "contractKey": "runQueue",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/run-queue",
+    "description": "List the project's automated runs waiting for a run slot, oldest first, and the runs holding one. The cap is per server process; manual starts are claimed ahead of this queue.",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
     "hasBody": false,
     "responseShape": {
       "kind": "single"
@@ -388,6 +453,22 @@ export const FACTORY_API_ROUTE_METADATA = {
     ],
     "bodyParams": [],
     "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/filter-options": {
+    "contractKey": "workItemFilterOptions",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/work-items/filter-options",
+    "description": "List the labels and people the cards of a project can be filtered by",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
     "hasBody": false,
     "responseShape": {
       "kind": "single"
@@ -820,6 +901,22 @@ export const FACTORY_API_ROUTE_METADATA = {
       "listProperty": "intakeRoutes"
     }
   },
+  "POST /web/factory/projects/:id/intake-routes/reroute": {
+    "contractKey": "intakeRouteRerouteApply",
+    "method": "POST",
+    "path": "/web/factory/projects/:id/intake-routes/reroute",
+    "description": "Move untouched cards to the start of the board the project's intake routes now file them on",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /web/factory/projects/:id/runs/start": {
     "contractKey": "workItemStart",
     "method": "POST",
@@ -1204,9 +1301,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                             "string",
                             "null"
                           ]
-                        },
-                        "sandboxWorkdir": {
-                          "type": "string"
                         }
                       },
                       "required": [
@@ -1217,8 +1311,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "externalId",
                         "slug",
                         "defaultBranch",
-                        "branch",
-                        "sandboxWorkdir"
+                        "branch"
                       ]
                     }
                   }
@@ -2214,6 +2307,307 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       }
     }
   },
+  "GET /web/factory/projects/:id/boards/:boardKey/phases": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "boardKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "id",
+        "boardKey"
+      ]
+    },
+    "query": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "sort": {
+          "default": "recent",
+          "type": "string",
+          "enum": [
+            "recent",
+            "recent-mine",
+            "created-newest",
+            "created-oldest"
+          ]
+        },
+        "q": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "source": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "linearProject": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "label": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "teammate": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "author": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "assignee": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "reviewer": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "worked": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "limit": {
+          "type": "string"
+        },
+        "window": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "item": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "cards": {
+          "type": "string",
+          "enum": [
+            "true"
+          ]
+        }
+      },
+      "$defs": {
+        "__schema0": {
+          "default": [],
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema1"
+          }
+        },
+        "__schema1": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "__schema2": {
+          "maxItems": 64,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema3"
+          }
+        },
+        "__schema3": {
+          "type": "string"
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "phases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "phase": {
+                "type": "string"
+              },
+              "total": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "cards": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema1"
+                }
+              }
+            },
+            "required": [
+              "phase",
+              "total",
+              "cards"
+            ]
+          }
+        },
+        "item": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "version": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "places": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "phase": {
+                    "type": "string"
+                  },
+                  "position": {
+                    "$ref": "#/$defs/__schema0"
+                  }
+                },
+                "required": [
+                  "phase",
+                  "position"
+                ]
+              }
+            }
+          },
+          "required": [
+            "id",
+            "version",
+            "places"
+          ]
+        },
+        "related": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema1"
+          }
+        },
+        "relatedTotal": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "boardTotal": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "matchingTotal": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "workItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "workItem": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "url": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "labels": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "author": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "provider",
+                  "key",
+                  "url",
+                  "title",
+                  "state",
+                  "labels",
+                  "author"
+                ],
+                "additionalProperties": {}
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "version"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "runningSessionIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "parkedSessionIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "phases",
+        "related",
+        "relatedTotal",
+        "boardTotal",
+        "matchingTotal",
+        "runningSessionIds",
+        "parkedSessionIds"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "__schema1": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "version": {
+              "$ref": "#/$defs/__schema3"
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ]
+        },
+        "__schema2": {
+          "type": "string"
+        },
+        "__schema3": {
+          "type": "string"
+        }
+      }
+    }
+  },
   "GET /web/factory/projects/:id/decisions": {
     "path": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2434,12 +2828,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       "string",
                       "null"
                     ]
-                  },
-                  "lastBuiltAt": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
                   }
                 },
                 "required": [
@@ -2453,8 +2841,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "setupCommand",
                   "teardownCommand",
                   "lastBuildStatus",
-                  "lastBuildError",
-                  "lastBuiltAt"
+                  "lastBuildError"
                 ]
               }
             },
@@ -3343,6 +3730,60 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       }
     }
   },
+  "GET /web/factory/projects/:id/intake-routes/reroute": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "moves": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "fromBoard": {
+                "type": "string"
+              },
+              "toBoard": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "fromBoard",
+              "toBoard",
+              "count"
+            ]
+          }
+        }
+      },
+      "required": [
+        "total",
+        "moves"
+      ]
+    }
+  },
   "GET /web/factory/projects/:id/metrics": {
     "path": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -3384,6 +3825,235 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "required": [
         "metrics"
       ]
+    }
+  },
+  "GET /web/factory/projects/:id/run-queue": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "slots": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "scope": {
+                  "type": "string",
+                  "const": "server"
+                },
+                "inUse": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "cap": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "scope",
+                "inUse",
+                "cap"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "running": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "claimed": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "decisionId": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "state": {
+                "$ref": "#/$defs/__schema1"
+              },
+              "type": {
+                "$ref": "#/$defs/__schema2"
+              },
+              "role": {
+                "$ref": "#/$defs/__schema3"
+              },
+              "skillName": {
+                "$ref": "#/$defs/__schema4"
+              },
+              "queuedSince": {
+                "$ref": "#/$defs/__schema5"
+              },
+              "workItem": {
+                "$ref": "#/$defs/__schema6"
+              }
+            },
+            "required": [
+              "decisionId",
+              "state",
+              "type",
+              "role",
+              "skillName",
+              "queuedSince",
+              "workItem"
+            ]
+          }
+        },
+        "queuedCount": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "queued": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "decisionId": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "state": {
+                "$ref": "#/$defs/__schema1"
+              },
+              "type": {
+                "$ref": "#/$defs/__schema2"
+              },
+              "role": {
+                "$ref": "#/$defs/__schema3"
+              },
+              "skillName": {
+                "$ref": "#/$defs/__schema4"
+              },
+              "queuedSince": {
+                "$ref": "#/$defs/__schema5"
+              },
+              "workItem": {
+                "$ref": "#/$defs/__schema6"
+              },
+              "position": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "decisionId",
+              "state",
+              "type",
+              "role",
+              "skillName",
+              "queuedSince",
+              "workItem",
+              "position"
+            ]
+          }
+        }
+      },
+      "required": [
+        "slots",
+        "running",
+        "claimed",
+        "queuedCount",
+        "queued"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "string"
+        },
+        "__schema1": {
+          "type": "string",
+          "enum": [
+            "waiting",
+            "claimed"
+          ]
+        },
+        "__schema2": {
+          "type": "string",
+          "enum": [
+            "invokeSkill",
+            "sendMessage",
+            "signalActivity"
+          ]
+        },
+        "__schema3": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "__schema4": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "__schema5": {
+          "type": "string"
+        },
+        "__schema6": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "key": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "board": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "phase": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "key",
+                "title",
+                "board",
+                "phase"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
     }
   },
   "GET /web/factory/projects/:id/sandbox-envs": {
@@ -3702,6 +4372,73 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "total",
         "createdAt",
         "doneAt"
+      ]
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/filter-options": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "people": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "github",
+                  "gitlab",
+                  "linear",
+                  "jira",
+                  "incidentio"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "source"
+            ]
+          }
+        },
+        "actorIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "labels",
+        "people",
+        "actorIds"
       ]
     }
   },
@@ -5036,12 +5773,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       "string",
                       "null"
                     ]
-                  },
-                  "lastBuiltAt": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
                   }
                 },
                 "required": [
@@ -5055,8 +5786,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "setupCommand",
                   "teardownCommand",
                   "lastBuildStatus",
-                  "lastBuildError",
-                  "lastBuiltAt"
+                  "lastBuildError"
                 ]
               }
             },
@@ -8613,6 +9343,41 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       }
     }
   },
+  "POST /web/factory/projects/:id/intake-routes/reroute": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "moved": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "moved",
+        "skipped"
+      ]
+    }
+  },
   "POST /web/factory/projects/:id/runs/start": {
     "path": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -9339,6 +10104,7 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "attentionList": "GET /web/factory/projects/:id/attention",
   "boardCatalog": "GET /web/factory/projects/:id/boards",
   "boardGet": "GET /web/factory/projects/:id/boards/:boardKey",
+  "boardPhases": "GET /web/factory/projects/:id/boards/:boardKey/phases",
   "decisionList": "GET /web/factory/projects/:id/decisions",
   "projectEnvironmentGet": "GET /web/factory/projects/:id/environment",
   "projectEnvironmentBuilds": "GET /web/factory/projects/:id/environment/builds",
@@ -9346,10 +10112,13 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "healthThresholdsGet": "GET /web/factory/projects/:id/health/thresholds",
   "intakeRouteList": "GET /web/factory/projects/:id/intake-routes",
   "intakeRouteGet": "GET /web/factory/projects/:id/intake-routes/:routeId",
+  "intakeRouteReroutePreview": "GET /web/factory/projects/:id/intake-routes/reroute",
   "metricsGet": "GET /web/factory/projects/:id/metrics",
+  "runQueue": "GET /web/factory/projects/:id/run-queue",
   "projectSandboxEnvsList": "GET /web/factory/projects/:id/sandbox-envs",
   "workItemList": "GET /web/factory/projects/:id/work-items",
   "workItemActivity": "GET /web/factory/projects/:id/work-items/activity",
+  "workItemFilterOptions": "GET /web/factory/projects/:id/work-items/filter-options",
   "workItemStarters": "GET /web/factory/projects/:id/work-items/starters",
   "skillList": "GET /web/factory/skills",
   "projectUpdate": "PATCH /web/factory/projects/:id",
@@ -9372,6 +10141,7 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "projectEnvironmentBuild": "POST /web/factory/projects/:id/environment/build",
   "intakeRouteCreate": "POST /web/factory/projects/:id/intake-routes",
   "intakeRouteReorder": "POST /web/factory/projects/:id/intake-routes/reorder",
+  "intakeRouteRerouteApply": "POST /web/factory/projects/:id/intake-routes/reroute",
   "workItemStart": "POST /web/factory/projects/:id/runs/start",
   "workItemCreate": "POST /web/factory/projects/:id/work-items",
   "workItemAutomationRun": "POST /web/factory/projects/:id/work-items/:workItemId/automation-runs",

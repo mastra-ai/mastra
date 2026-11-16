@@ -1,12 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { useLocation } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import type { WorkItemActivity } from '../../../../api/types';
 import { useActiveRunResourceIds } from '../../../../hooks/useActiveRunResources';
 import { useSidebarWorkItemsQuery, workItemActivityQueryOptions } from '../../../../hooks/useWorkItems';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { pageLoadsBoard } from '../pageLoadsBoard';
 import { activityDepth, liveSessionCounts, periodActivity } from '../periodActivity';
 import type { ActivityPeriod, RunStarts } from '../periodActivity';
 import { useRunStarts } from './useRunStarts';
@@ -21,7 +19,6 @@ const NO_CARD_TIMES: WorkItemActivity = { total: 0, createdAt: [], doneAt: [] };
 
 export function useFactoryActivity(factoryId: string, period: ActivityPeriod) {
   const { baseUrl } = useApiConfig();
-  const { pathname } = useLocation();
   const depth = activityDepth(period);
   const week = useQuery({ ...workItemActivityQueryOptions(baseUrl, factoryId, 'week'), enabled: depth === 'week' });
   const month = useQuery({ ...workItemActivityQueryOptions(baseUrl, factoryId, 'month'), enabled: depth === 'month' });
@@ -33,7 +30,7 @@ export function useFactoryActivity(factoryId: string, period: ActivityPeriod) {
   const runs = useRunStarts(factoryId, period);
   const running = useActiveRunResourceIds(AGENT_CONTROLLER_ID);
   // Only a card holding a session can be working or waiting, and the sidebar already reads those.
-  const sessionCards = useSidebarWorkItemsQuery(factoryId, pageLoadsBoard(pathname)).data;
+  const sessionCards = useSidebarWorkItemsQuery(factoryId).data;
   const activity = periodActivity({
     period,
     now: Math.max(shown.dataUpdatedAt, runs.dataUpdatedAt),

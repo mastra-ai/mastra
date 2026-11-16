@@ -1,10 +1,12 @@
 import { useDefaultModelQuery } from '../../../../hooks/use-default-model';
-import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
+import type { AvailableModelOption, AvailableModelsTarget } from '../../../../hooks/useAvailableModels';
 import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
 
 export interface ProviderModels {
   isPending: boolean;
   catalogError?: Error;
+  /** The catalog is being fetched again, e.g. after Retry. */
+  retrying: boolean;
   models: AvailableModelOption[];
   /** What the Factory starts on unless the user picks another model. */
   suggestedModelId?: string;
@@ -24,20 +26,34 @@ export function preferredFactoryModel(providerId: string): string | undefined {
   }
 }
 
+/** Unscoped catalogs keep the bare cache key other screens share; an unconnected lane fetches nothing. */
+function catalogTarget(scope: 'org' | 'user' | undefined, enabled: boolean): AvailableModelsTarget | undefined {
+  if (scope) return { scope, enabled };
+  if (enabled) return undefined;
+  return { enabled };
+}
+
 /** The models a connected provider offers, with the one a Factory should start on. */
 export function useProviderModels(providerId: string | undefined, scope?: 'org' | 'user'): ProviderModels {
-  const personalDefault = useDefaultModelQuery({ enabled: scope === 'user' });
-  const modelsQuery = useAvailableModelsQuery(scope ? { scope } : undefined);
+  const enabled = providerId !== undefined;
+  const personalDefault = useDefaultModelQuery({ enabled: enabled && scope === 'user' });
+  const modelsQuery = useAvailableModelsQuery(catalogTarget(scope, enabled));
   const models = (modelsQuery.data ?? []).filter(model => model.provider === providerId);
   const savedDefault =
     scope === 'user' ? models.find(model => model.id === personalDefault.data?.modelId)?.id : undefined;
   const preferredModelId = savedDefault ?? (providerId ? preferredFactoryModel(providerId) : undefined);
 
+  const isPending = enabled && (modelsQuery.isPending || (scope === 'user' && personalDefault.isPending));
+
   return {
-    isPending: modelsQuery.isPending || (scope === 'user' && personalDefault.isPending),
+    isPending,
     catalogError: modelsQuery.error ?? undefined,
+    retrying: modelsQuery.isFetching,
     models,
-    suggestedModelId: models.find(model => model.id === preferredModelId)?.id ?? models[0]?.id,
+    // Unknown until the personal default answers: a fallback chosen sooner could overwrite that default on Create.
+    suggestedModelId: isPending
+      ? undefined
+      : (models.find(model => model.id === preferredModelId)?.id ?? models[0]?.id),
     retry: () => {
       void modelsQuery.refetch();
     },

@@ -83,9 +83,6 @@ async function githubSetup(
     orgId: project.orgId,
     connectionId: connection.id,
     repositoryId: storedRepository.id,
-    createdByUserId: project.createdBy,
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/workspace',
   });
   const workItem = (
     await seeded.workItems.upsert({
@@ -776,9 +773,11 @@ describe('issue reconcilers', () => {
           rules: resolveLinearRules(
             mode === 'default' ? undefined : { issueClosed: mode === 'disabled' ? null : replacement },
           ),
+          loadConnection: async () => null,
+          getFreshAccessToken: async () => 'token',
         },
         {
-          storage: { projects: seeded.projects },
+          storage: { projects: seeded.projects, intake: seeded.intake },
           runtime: { configVersion: 'factory-config-v1', workItems: seeded.workItems, boards: createTriageWorkRegistry() },
         } as never,
       );

@@ -18,6 +18,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraScorers } from '../../evals';
 import type { Event } from '../../events';
 import { RegisteredLogger } from '../../logger';
+import { latestProcessedModelOutput } from '../../loop/shared/steps/tool-result-commit-core';
 import type { Mastra } from '../../mastra';
 import {
   EntityType,
@@ -60,6 +61,7 @@ import {
   summarizeToolChoiceForSpan,
 } from '../../processors/span-payload';
 import type { ProcessorStepOutput } from '../../processors/step-schema';
+import { withoutLiveRequestKeys } from '../../request-context';
 import { toStandardSchema } from '../../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../../schema';
 
@@ -847,6 +849,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         toolCallId,
         args: toolCallArgs,
         toolResultValue,
+        modelOutput,
         providerExecuted,
         // Shared processor states map for accessing persisted state
         processorStates,
@@ -1170,6 +1173,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         toolCallId,
         args: toolCallArgs,
         toolResultValue,
+        modelOutput,
         providerExecuted,
       };
 
@@ -1642,6 +1646,8 @@ function createStepFromProcessor<TProcessorId extends string>(
                 toolCallId: toolCallId ?? '',
                 args: toolCallArgs,
                 result: toolResultValue,
+                // The mapping an earlier processor committed, not the original.
+                modelOutput: latestProcessedModelOutput(passThrough.messageList, toolCallId ?? '', modelOutput),
                 providerExecuted,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 steps: steps ?? [],
@@ -2626,8 +2632,9 @@ export class EventedRun<
 
     const resumePath = snapshot.suspendedPaths?.[steps[0]!] as any;
     // Start with the snapshot's request context (old values). Rows written before the
-    // auth token was stripped may still hold one; never restore a stale bearer token.
-    const requestContextObj = withoutAuthToken(snapshot.requestContext ?? {});
+    // auth token was stripped may still hold one; never restore a stale bearer token
+    // or the user who started the run.
+    const requestContextObj = withoutLiveRequestKeys(snapshot.requestContext);
     const requestContext = new RequestContext();
 
     // First, set values from the snapshot

@@ -1,7 +1,27 @@
 import { configure } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, vi } from 'vitest';
+import type {} from 'vitest/jsdom';
 
 import { server } from './src/test/msw-server';
+
+// The last test can leave library work queued: React Query delivers observer notifications in a
+// setTimeout(0) batch, and recharts (used by playground-ui charts) notifies on the next animation frame
+// with a 100ms setTimeout fallback. jsdom is torn down right after the last hook, so on a loaded CI
+// worker those callbacks reach react-dom without a `window` and fail the shard with an unhandled error.
+// Drain them first: the next jsdom frame runs every rAF callback queued before it, or, if a test left
+// jsdom's frame clock stalled, a 100ms timer queued after recharts' own fallback fires after it. A
+// zero-delay timer turn then runs the setTimeout(0) callbacks queued before it.
+afterAll(async () => {
+  if (typeof jsdom === 'undefined') return;
+  vi.useRealTimers();
+  let frameFallback: ReturnType<typeof setTimeout> | undefined;
+  await new Promise(resolve => {
+    jsdom.window.requestAnimationFrame(resolve);
+    frameFallback = setTimeout(resolve, 100);
+  });
+  clearTimeout(frameFallback);
+  await new Promise(resolve => setTimeout(resolve));
+});
 
 // Full-suite runs share CPU across workers; the 1s default makes waitFor flaky under load.
 configure({ asyncUtilTimeout: 3000 });

@@ -172,14 +172,14 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
       sessionId: scope.sessionId,
     });
     if (!binding) return null;
-    const item = await this.#deps.workItems.getForProject(scope.orgId, scope.factoryProjectId, binding.workItemId);
     const subscribers = await this.#deps.workItems.listWorkItemSubscribers({
       orgId: scope.orgId,
       workItemId: binding.workItemId,
     });
     const following = subscribers.filter(subscriber => subscriber.sessionId !== scope.sessionId).length;
-    // Nobody to report to: nothing worth showing (most board-started workers).
+    // Nobody to report to: nothing worth showing (most board-started workers), so skip the card read.
     if (following === 0) return null;
+    const item = await this.#deps.workItems.getForProject(scope.orgId, scope.factoryProjectId, binding.workItemId);
     const label = item ? itemLabel(item) : binding.workItemId;
     return `Working on ${label} as ${binding.role}. Reports go to ${following} following session${following === 1 ? '' : 's'}. ${PROGRESS_ASK}`;
   }

@@ -528,8 +528,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           orgId,
           factoryProjectId: projectId,
           workItemId: card.id,
-          ingress: { identity, triggerType: 'test' },
-          configVersion: 'factory-config-v1',
+          ingress: { identity },
           expectedRevision: current.revision,
           actor: { type: 'system', id: 'rules' },
           outcome: { status: 'accepted' },
@@ -588,9 +587,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           orgId,
           connectionId: connection.id,
           repositoryId: repository.id,
-          createdByUserId: 'admin-user',
-          sandboxProvider: 'local',
-          sandboxWorkdir: '/tmp/shipyard',
         });
         return projectId;
       }
@@ -1011,9 +1007,53 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
               { projects: [{ orgId, factoryProjectId: first }] },
             ),
           ).rejects.toMatchObject({ code: 'phase_in_use' });
-          await expect(
-            replica.factory.upsertBoard({ ...bugsBoard, key: 'review' }, { projects: 'all' }),
-          ).rejects.toMatchObject({ code: 'reserved_board' });
+          // `review` is a key like any other, once the retired Review board has no open card left:
+          // the board is stored, the retired board's cards stay on Work, and a card on it stays on it.
+          const retired = (number: number, stage: string) =>
+            replica.workItems.upsert({
+              orgId,
+              factoryProjectId: first,
+              userId: 'admin-user',
+              input: {
+                title: `PR ${number}`,
+                board: 'review',
+                stages: [stage],
+                externalSource: { integrationId: 'github', type: 'pull-request', externalId: `github-pr:${number}` },
+              },
+            });
+          const merged = await retired(1, 'done');
+          const waiting = await retired(2, 'review');
+          const upsertReview = () =>
+            replica.factory.upsertBoard(
+              { ...bugsBoard, key: 'review' },
+              { projects: [{ orgId, factoryProjectId: first }] },
+            );
+          await expect(upsertReview()).rejects.toMatchObject({ code: 'board_in_use' });
+          await replica.workItems.update({
+            orgId,
+            id: waiting.item.id,
+            userId: 'admin-user',
+            patch: { stages: ['canceled'] },
+          });
+          const review = await upsertReview();
+          expect(review.inserted).toEqual([{ orgId, factoryProjectId: first }]);
+          expect(await replica.workItems.get({ orgId, id: merged.item.id })).toMatchObject({
+            board: 'work',
+            stages: ['done'],
+          });
+          expect(await replica.workItems.get({ orgId, id: waiting.item.id })).toMatchObject({
+            board: 'work',
+            stages: ['canceled'],
+          });
+          const reviewCard = await replica.send('POST', `/web/factory/projects/${first}/work-items`, {
+            board: 'review',
+            title: 'Typo in the docs',
+          });
+          expect(reviewCard.status).toBe(200);
+          expect(await replica.workItems.get({ orgId, id: reviewCard.json.workItem.id })).toMatchObject({
+            board: 'review',
+            stages: ['reported'],
+          });
           // Work's key is checked against Work's code behaviour, as an edit is.
           await expect(
             replica.factory.upsertBoard({ ...bugsBoard, key: 'work' }, { projects: 'all' }),
@@ -1220,9 +1260,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             orgId,
             connectionId: connection.id,
             repositoryId: repository.id,
-            createdByUserId: 'admin-user',
-            sandboxProvider: 'local',
-            sandboxWorkdir: '/workspace',
           });
 
           // The GitHub rules and dispatcher Factory runs, over the project's stored boards.

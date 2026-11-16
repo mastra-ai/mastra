@@ -6,10 +6,13 @@ import { evaluate, exprRefs, formatSchema, unknownQueryIssues, valueExprSchema }
 import type { ValueExpr, ValueRef } from '../../lib/values';
 import type { ResolvedView } from '../../widget-kind';
 
-const kpiItemSchema = z
+export const KPI_ICONS = ['bot', 'coins', 'hash', 'threads'] as const;
+export type KpiIcon = (typeof KPI_ICONS)[number];
+
+export const kpiItemSchema = z
   .object({
     label: z.string().min(1),
-    icon: z.enum(['bot', 'coins', 'hash', 'threads']).optional(),
+    icon: z.enum(KPI_ICONS).optional(),
     format: formatSchema,
     /**
      * Aggregates combined with the value operations: metrics and scores aggregates, or ungrouped trace
@@ -25,6 +28,7 @@ const kpiItemSchema = z
 export const kpisOptionsSchema = z.object({ items: z.array(kpiItemSchema).min(1) }).strict();
 
 export type KpisOptions = z.infer<typeof kpisOptionsSchema>;
+export type KpiItem = z.infer<typeof kpiItemSchema>;
 
 export type KpiFigures = { value?: number; previous?: number; change?: number };
 

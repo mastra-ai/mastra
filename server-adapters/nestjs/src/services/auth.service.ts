@@ -5,7 +5,12 @@ import { coreAuthMiddleware, MASTRA_USER_KEY } from '@mastra/server/auth';
 import {
   MASTRA_AUTH_MODE_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
+  MASTRA_IS_STUDIO_KEY,
+  checkMCPAudience,
+  isMCPAudienceEnforced,
+  isMCPOAuthDiscoveryEnabled,
   isStudioClientTypeHeader,
+  mcpWWWAuthenticate,
 } from '@mastra/server/server-adapter';
 import type { MastraAuthMode } from '@mastra/server/server-adapter';
 import { ForbiddenException, HttpException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
@@ -23,6 +28,11 @@ export interface AuthenticateOptions {
   response?: Response;
   /** Force authentication even for publicly accessible paths. */
   requiresAuth?: boolean;
+  /**
+   * Only accept the `Authorization` bearer header, always against `server.auth`: Studio routing,
+   * cookies, and `?apiKey=` are ignored. Used by routes with `authTransport: 'bearer'` (the MCP endpoint).
+   */
+  bearerOnly?: boolean;
   /** Set when `requiresAuth` comes from a matched `server.apiRoutes` entry. */
   customRoute?: boolean;
 }
@@ -54,9 +64,13 @@ export class AuthService {
    * Studio requests (`x-mastra-client-type: studio`) use `studio.auth` exclusively when it is
    * configured, without falling back to `server.auth`; all other requests use `server.auth`.
    */
-  private getEffectiveAuthConfig(request: Request): { authConfig: MastraAuthConfig; authMode: MastraAuthMode } | null {
+  private getEffectiveAuthConfig(
+    request: Request,
+    bearerOnly = false,
+  ): { authConfig: MastraAuthConfig; authMode: MastraAuthMode } | null {
     const clientType = request.headers[MASTRA_CLIENT_TYPE_HEADER];
-    const isStudioRequest = isStudioClientTypeHeader(Array.isArray(clientType) ? clientType[0] : clientType);
+    const isStudioRequest =
+      !bearerOnly && isStudioClientTypeHeader(Array.isArray(clientType) ? clientType[0] : clientType);
     const studioAuth = this.mastra.getStudio?.()?.auth as MastraAuthConfig | undefined;
     if (isStudioRequest && studioAuth) {
       return { authConfig: studioAuth, authMode: 'studio' };
@@ -71,7 +85,8 @@ export class AuthService {
    * Throws UnauthorizedException or ForbiddenException if auth fails.
    */
   async authenticate(request: Request, options: AuthenticateOptions = {}): Promise<unknown> {
-    const effectiveAuth = this.getEffectiveAuthConfig(request);
+    const { bearerOnly = false } = options;
+    const effectiveAuth = this.getEffectiveAuthConfig(request, bearerOnly);
     if (!effectiveAuth) {
       return undefined;
     }
@@ -80,6 +95,7 @@ export class AuthService {
     const requestContext = options.requestContext ?? new RequestContext();
     // Downstream RBAC/FGA checks pick the studio or server provider from this.
     requestContext.set(MASTRA_AUTH_MODE_KEY, authMode);
+    if (bearerOnly) requestContext.set(MASTRA_IS_STUDIO_KEY, false);
     const path = request.path;
     const method = request.method;
     let customRouteAuthConfig = this.customRoutes.customRouteAuthConfig;
@@ -89,13 +105,15 @@ export class AuthService {
       customRouteAuthConfig = new Map(customRouteAuthConfig);
       customRouteAuthConfig.set(`${method.toUpperCase()}:${path}`, options.requiresAuth);
     }
-    const webRequest = toWebRequest(request);
+    const webRequest = bearerOnly ? bearerOnlyRequest(request) : toWebRequest(request);
 
     const result = await coreAuthMiddleware({
       path,
       method,
       getHeader: name => {
-        const value = request.headers[name.toLowerCase()];
+        const lower = name.toLowerCase();
+        if (bearerOnly && (lower === 'cookie' || lower === MASTRA_CLIENT_TYPE_HEADER)) return undefined;
+        const value = request.headers[lower];
         return Array.isArray(value) ? value[0] : value;
       },
       mastra: this.mastra,
@@ -103,7 +121,7 @@ export class AuthService {
       customRouteAuthConfig,
       requestContext,
       rawRequest: webRequest,
-      token: this.extractToken(request) ?? null,
+      token: this.extractToken(request, bearerOnly) ?? null,
       buildAuthorizeContext: () => ({
         get: (key: string) => {
           if (key === 'mastra') return this.mastra;
@@ -126,6 +144,10 @@ export class AuthService {
       }
     }
 
+    if (bearerOnly && (isMCPOAuthDiscoveryEnabled(this.mastra) || isMCPAudienceEnforced(this.mastra))) {
+      await this.applyBearerChallenge(request, webRequest.url, requestContext, result, options.response);
+    }
+
     if (result.action === 'error') {
       const message = typeof result.body.error === 'string' ? result.body.error : 'Access denied';
       if (result.status === 401) throw new UnauthorizedException(message);
@@ -142,10 +164,40 @@ export class AuthService {
   }
 
   /**
+   * Built-in MCP endpoint: 401s point clients at the OAuth protected-resource metadata, and when
+   * `server.mcp.oauth.resource` is set the token audience must include it.
+   */
+  private async applyBearerChallenge(
+    request: Request,
+    requestUrl: string,
+    requestContext: RequestContext,
+    result: Awaited<ReturnType<typeof coreAuthMiddleware>>,
+    response: Response | undefined,
+  ): Promise<void> {
+    const prefix = this.options.prefix ?? '/api';
+    if (result.action === 'error' && result.status === 401) {
+      if (!isMCPOAuthDiscoveryEnabled(this.mastra)) return;
+      // RFC 6750 §3: no error code when the request carried no credentials.
+      const error = request.headers.authorization?.trim() ? { error: 'invalid_token' } : undefined;
+      response?.setHeader('WWW-Authenticate', mcpWWWAuthenticate(this.mastra, prefix, requestUrl, error));
+      return;
+    }
+    const user = requestContext.get(MASTRA_USER_KEY);
+    if (user !== undefined && !(await checkMCPAudience(this.mastra, user))) {
+      const challenge = mcpWWWAuthenticate(this.mastra, prefix, requestUrl, {
+        error: 'invalid_token',
+        error_description: 'The token audience does not include this MCP server',
+      });
+      response?.setHeader('WWW-Authenticate', challenge);
+      throw new UnauthorizedException('Invalid token audience');
+    }
+  }
+
+  /**
    * Extract authentication token from request.
    * Supports Authorization header (Bearer token) and API key query param.
    */
-  private extractToken(request: Request): string | undefined {
+  private extractToken(request: Request, bearerOnly: boolean): string | undefined {
     // Check Authorization header first
     const authHeader = request.headers.authorization;
     if (authHeader?.startsWith('Bearer ')) {
@@ -153,7 +205,7 @@ export class AuthService {
     }
 
     // Optional backward-compatibility path for legacy integrations.
-    if (this.options.auth?.allowQueryApiKey) {
+    if (!bearerOnly && this.options.auth?.allowQueryApiKey) {
       const apiKey = request.query.apiKey;
       if (typeof apiKey === 'string') {
         return apiKey;
@@ -168,4 +220,12 @@ export class AuthService {
 
     return undefined;
   }
+}
+
+function bearerOnlyRequest(request: Request): globalThis.Request {
+  const authorization = request.headers.authorization;
+  return new globalThis.Request(toWebRequest(request).url, {
+    method: request.method,
+    headers: authorization ? { authorization } : {},
+  });
 }

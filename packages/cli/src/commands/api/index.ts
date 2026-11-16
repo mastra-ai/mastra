@@ -711,6 +711,10 @@ export function registerApiCommand(program: CommanderCommand): void {
       },
     ],
   });
+  addAction(factoryWorkItem, 'filter-options', FACTORY_API_ROUTE_CATALOG.workItemFilterOptions, {
+    description: 'List the labels and people a Factory board can be filtered by',
+    routePlacement: 'origin',
+  });
   addAction(factoryWorkItem, 'create', FACTORY_API_ROUTE_CATALOG.workItemCreate, {
     description: 'Create a Factory work item in Intake',
     input: 'required',
@@ -770,6 +774,17 @@ export function registerApiCommand(program: CommanderCommand): void {
   addAction(factoryBoard, 'get', FACTORY_API_ROUTE_CATALOG.boardGet, {
     description: "Get a board's definition and, except for the legacy Review board, its revision",
     routePlacement: 'origin',
+  });
+  addAction(factoryBoard, 'phases', FACTORY_API_ROUTE_CATALOG.boardPhases, {
+    description: 'List the first cards under each phase of a Factory board, with how many each phase holds',
+    input: 'optional',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'The ten latest bugs under each phase of the Work board, with the card bodies',
+        command: `mastra api factory board phases <project-id> work '{"label":["bug"],"limit":10,"cards":"true"}'`,
+      },
+    ],
   });
   addAction(factoryBoard, 'create', FACTORY_API_ROUTE_CATALOG.boardCreate, {
     description: 'Create a board on a Factory project',
@@ -880,6 +895,15 @@ export function registerApiCommand(program: CommanderCommand): void {
     input: 'required',
     routePlacement: 'origin',
   });
+  addAction(factoryIntakeRoute, 'reroute-preview', FACTORY_API_ROUTE_CATALOG.intakeRouteReroutePreview, {
+    description: "List untouched cards the project's intake routes would now file on a different board",
+    routePlacement: 'origin',
+  });
+  addAction(factoryIntakeRoute, 'reroute', FACTORY_API_ROUTE_CATALOG.intakeRouteRerouteApply, {
+    description: 'Move untouched cards to the board the intake routes now file them on',
+    routePlacement: 'origin',
+    defaultTimeoutMs: 120_000,
+  });
 
   addAction(factory, 'metrics', FACTORY_API_ROUTE_CATALOG.metricsGet, {
     description: 'Get Factory project metrics',
@@ -897,6 +921,10 @@ export function registerApiCommand(program: CommanderCommand): void {
   addAction(factoryDecision, 'list', FACTORY_API_ROUTE_CATALOG.decisionList, {
     description: 'List Factory decisions',
     input: 'optional',
+    routePlacement: 'origin',
+  });
+  addAction(factoryDecision, 'queue', FACTORY_API_ROUTE_CATALOG.runQueue, {
+    description: 'List automated runs waiting for a run slot and the runs holding one',
     routePlacement: 'origin',
   });
   addAction(factoryDecision, 'approve', FACTORY_API_ROUTE_CATALOG.decisionApprove, {

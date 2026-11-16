@@ -1198,8 +1198,8 @@ describe('PlatformGithubIntegration', () => {
         '/auth/github/connect',
         '/web/github/subscriptions',
         '/web/github/repos',
-        '/web/github/projects/:id/issues',
-        '/web/github/projects/:id/prs',
+        '/web/github/projects/:id/issues/:number',
+        '/web/github/projects/:id/prs/:number',
         '/web/github/projects/:id/pr',
       ]),
     );
@@ -1292,7 +1292,7 @@ describe('PlatformGithubIntegration', () => {
     expect(() => new PlatformGithubIntegration({ rules: { unknown: null } })).toThrow();
   });
 
-  it('imports a linked repository backlog through GitHub rules while its list routes stay reads', async () => {
+  it('imports a linked repository backlog through GitHub rules', async () => {
     const seed = await createPlatformStorageForTests();
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);
@@ -1333,9 +1333,6 @@ describe('PlatformGithubIntegration', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/tmp/app',
     });
     const context = {
       auth: fakeAuth(),
@@ -1357,18 +1354,8 @@ describe('PlatformGithubIntegration', () => {
     } as unknown as IntegrationContext;
     integration.initialize?.({ storage: context.storage.generic });
     integration.versionControl.initialize({ storage: sourceControl });
-    const app = new Hono();
-    app.use('*', async (c, next) => {
-      c.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
-      await next();
-    });
-    mountApiRoutes(app as never, integration.routes(context));
-
-    const issues = await app.request(`/web/github/projects/${projectRepository.id}/issues`);
-    const pullRequests = await app.request(`/web/github/projects/${projectRepository.id}/prs`);
-
-    expect(issues.status).toBe(200);
-    expect(pullRequests.status).toBe(200);
+    // Route assembly attaches the GitHub rules the backlog import files through.
+    integration.routes(context);
     expect(onIssue).not.toHaveBeenCalled();
     expect(onPullRequest).not.toHaveBeenCalled();
 
@@ -1573,6 +1560,62 @@ describe('PlatformGithubIntegration', () => {
       userGithubUsername: null,
       reason: 'not_connected',
     });
+  });
+
+  it.each([
+    {
+      scenario: 'says Platform withheld a personal install instead of reporting nothing installed',
+      installations: [],
+      expected: { connected: false, reason: 'personal_install_hidden' },
+    },
+    {
+      scenario: 'stays ready when another installation is usable beside the withheld personal one',
+      installations: [
+        { installationId: 7, accountLogin: 'acme', accountType: 'Organization', suspendedAt: null, usable: true },
+      ],
+      expected: { connected: true, reason: 'ready' },
+    },
+  ])('$scenario', async ({ installations, expected }) => {
+    const seed = await createPlatformStorageForTests();
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.includes('/github-app/installations')) {
+        return json({
+          installations,
+          pendingRequests: [],
+          hiddenPersonalInstallReason: 'personal_install_requires_single_member_org',
+        });
+      }
+      if (url.includes('/github-app/user-connection')) {
+        return json({ error: 'Not found' }, 404);
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    const context = {
+      auth: fakeAuth(),
+      sandbox: { enabled: true, provider: 'stub' },
+      storage: {
+        generic: seed.integrations.forIntegration('github'),
+        sourceControl: seed.sourceControl.forIntegration('github'),
+        projects: seed.projects,
+        intake: seed.intake,
+      },
+      controller: {},
+      stateSigner: {},
+      baseUrl: 'https://factory.example',
+    } as unknown as IntegrationContext;
+    integration.initialize?.({ storage: context.storage.generic, projects: context.storage.projects });
+    integration.versionControl.initialize({ storage: context.storage.sourceControl });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, integration.routes(context));
+
+    const status = await app.request('/web/github/status');
+    await expect(status.json()).resolves.toMatchObject(expected);
   });
 
   it('defaults the integrations API URL and requires a platform credential', () => {

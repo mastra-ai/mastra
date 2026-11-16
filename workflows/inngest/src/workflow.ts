@@ -4,6 +4,7 @@ import { getErrorFromUnknown } from '@mastra/core/error';
 import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
+import * as coreObservability from '@mastra/core/observability';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { RunFence, WorkflowRuns } from '@mastra/core/storage';
 import { Workflow, getEntryWorkflow, isSingleStepEntry } from '@mastra/core/workflows';
@@ -709,11 +710,16 @@ export class InngestWorkflow<
                 const workflowSpan = observability.rebuildSpan(workflowSpanData);
 
                 if (result.status === 'failed') {
+                  const failure = getErrorFromUnknown(result.error, { fallbackMessage: 'Workflow execution failed' });
+                  const origin = coreObservability.getSpanErrorOrigin?.(result.error);
+                  if (origin) coreObservability.setSpanErrorOrigin?.(failure, origin);
                   workflowSpan.error({
                     ...workflowTermination(result),
-                    error: getErrorFromUnknown(result.error, { fallbackMessage: 'Workflow execution failed' }),
+                    error: failure,
                     attributes: { status: 'failed' },
                   });
+                  const recordedOrigin = coreObservability.getSpanErrorOrigin?.(failure);
+                  if (recordedOrigin) coreObservability.setSpanErrorOrigin?.(result.error, recordedOrigin);
                 } else {
                   workflowSpan.end({
                     ...workflowTermination(result),
@@ -808,7 +814,10 @@ export class InngestWorkflow<
             // Throw after span ended for failed workflows
             if (result.status === 'failed') {
               throw new NonRetriableError(`Workflow failed`, {
-                cause: shouldCompactNestedWorkflowOutput ? { ...returnedResult, runId } : result,
+                cause: {
+                  ...(shouldCompactNestedWorkflowOutput ? { ...returnedResult, runId } : result),
+                  __mastraSpanErrorOrigin: coreObservability.getSpanErrorOrigin?.(result.error),
+                },
               });
             }
 

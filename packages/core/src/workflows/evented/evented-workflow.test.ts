@@ -38,7 +38,7 @@ const testStorage = new MockStore();
 
 describe('Workflow (Evented Engine Specific)', () => {
   beforeEach(async () => {
-    vi.resetAllMocks();
+    vi.restoreAllMocks();
     const workflowsStore = await testStorage.getStore('workflows');
     await workflowsStore?.dangerouslyClearAll();
   });

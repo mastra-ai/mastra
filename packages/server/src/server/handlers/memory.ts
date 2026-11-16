@@ -5,6 +5,7 @@ import { ErrorCategory, MastraError } from '@mastra/core/error';
 import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
 import type { MastraStorage, MemoryStorage, StorageListThreadsOutput } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
+import { MASTRA_USER_KEY } from '../constants';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
@@ -56,6 +57,7 @@ import {
 } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
+import { assertStoredAgentAccess } from './agent-access';
 
 import { handleError } from './error';
 import {
@@ -79,7 +81,7 @@ interface MemoryContext extends Context {
   agentId?: string;
   resourceId?: string;
   threadId?: string;
-  requestContext?: RequestContext;
+  requestContext: RequestContext;
 }
 
 /**
@@ -249,6 +251,7 @@ async function getMemoryFromContext({
 }): Promise<MastraMemory | null | undefined> {
   const logger = mastra.getLogger();
   let agent;
+  let fromStore = false;
   if (agentId) {
     try {
       agent = mastra.getAgentById(agentId);
@@ -262,6 +265,7 @@ async function getMemoryFromContext({
       const storedAgent = (await mastra.getEditor()?.agent.getById(agentId)) ?? null;
       if (storedAgent) {
         agent = storedAgent;
+        fromStore = true;
       }
     } catch (error) {
       logger.debug('Error getting stored agent', error);
@@ -285,18 +289,24 @@ async function getMemoryFromContext({
         }
       }
     }
+  }
 
-    if (!agent) {
-      if (allowMissingAgent) {
-        logger.debug('Agent not found in any resolution tier, returning null for storage fallback', { agentId });
-        return null;
-      }
-      throw new HTTPException(404, { message: 'Agent not found' });
+  // Sub-agents (`SubAgent`) have no raw config and are never stored agents; everything else is checked. A hidden
+  // agent takes the missing-agent path, so the response can't reveal that the id exists.
+  if (agent && 'toRawConfig' in agent && !canReadAgent(agent, agentId!, requestContext, fromStore)) {
+    agent = undefined;
+  }
+
+  if (agentId && !agent) {
+    if (allowMissingAgent) {
+      logger.debug('Agent not found in any resolution tier, returning null for storage fallback', { agentId });
+      return null;
     }
+    throw new HTTPException(404, { message: 'Agent not found' });
   }
 
   if (agent) {
-    return await agent?.getMemory({
+    return await agent.getMemory({
       requestContext,
     });
   }
@@ -353,12 +363,14 @@ async function getAgentFromContext({
   }
 
   // Then try stored agents
+  let fromStore = false;
   if (!agent) {
     logger.debug('Agent not found in registered agents, trying stored agents', { agentId });
     try {
       const storedAgent = (await mastra.getEditor()?.agent.getById(agentId)) ?? null;
       if (storedAgent) {
         agent = storedAgent;
+        fromStore = true;
       }
     } catch (error) {
       logger.debug('Error getting stored agent', error);
@@ -385,7 +397,27 @@ async function getAgentFromContext({
     }
   }
 
+  // A hidden agent is reported as missing, so the response can't reveal that the id exists.
+  if (agent && !canReadAgent(agent, agentId, requestContext, fromStore)) {
+    return null;
+  }
   return agent;
+}
+
+/** Whether the caller may read the agent; a denied stored agent is handled exactly like a missing one. */
+function canReadAgent(
+  agent: Pick<Agent, 'source' | 'toRawConfig'>,
+  agentId: string,
+  requestContext: RequestContext,
+  fromStore: boolean,
+): boolean {
+  try {
+    assertStoredAgentAccess({ agent, agentId, requestContext, access: 'read', fromStore });
+    return true;
+  } catch (error) {
+    if (error instanceof HTTPException && error.status === 404) return false;
+    throw error;
+  }
 }
 
 /**
@@ -496,6 +528,12 @@ async function getOMStatus(
 export const GET_MEMORY_STATUS_ROUTE = createRoute({
   method: 'GET',
   path: '/memory/status',
+  mcp: {
+    toolset: 'memory',
+    name: 'get_memory_status',
+    description: 'Show whether an agent has memory, its memory configuration, and its Observational Memory status.',
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   queryParamSchema: getMemoryStatusQuerySchema,
   responseSchema: memoryStatusResponseSchema,
@@ -662,6 +700,12 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
 export const GET_MEMORY_CONFIG_ROUTE = createRoute({
   method: 'GET',
   path: '/memory/config',
+  mcp: {
+    toolset: 'memory',
+    name: 'get_memory_status',
+    description: 'Show whether an agent has memory, its memory configuration, and its Observational Memory status.',
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   queryParamSchema: getMemoryConfigQuerySchema,
   responseSchema: memoryConfigResponseSchema,
@@ -730,6 +774,13 @@ export const GET_MEMORY_CONFIG_ROUTE = createRoute({
 export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
   method: 'GET',
   path: '/memory/observational-memory',
+  mcp: {
+    toolset: 'memory',
+    name: 'get_observations',
+    description:
+      "Get the current Observational Memory record (the agent's condensed observations) for a thread or resource.",
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   queryParamSchema: getObservationalMemoryQuerySchema,
   responseSchema: getObservationalMemoryResponseSchema,
@@ -950,6 +1001,12 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
 export const LIST_THREADS_ROUTE = createRoute({
   method: 'GET',
   path: '/memory/threads',
+  mcp: {
+    toolset: 'memory',
+    name: 'list_threads',
+    description: 'List conversation threads you can access, newest first.',
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   queryParamSchema: listThreadsQuerySchema,
   responseSchema: listThreadsResponseSchema,
@@ -1105,6 +1162,12 @@ export const LIST_THREADS_ROUTE = createRoute({
 export const GET_THREAD_BY_ID_ROUTE = createRoute({
   method: 'GET',
   path: '/memory/threads/:threadId',
+  mcp: {
+    toolset: 'memory',
+    name: 'get_thread',
+    description: 'Get a conversation thread by id.',
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
   queryParamSchema: getThreadByIdQuerySchema,
@@ -1196,6 +1259,12 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
 export const LIST_MESSAGES_ROUTE = createRoute({
   method: 'GET',
   path: '/memory/threads/:threadId/messages',
+  mcp: {
+    toolset: 'memory',
+    name: 'list_messages',
+    description: 'List the messages in a conversation thread.',
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
   queryParamSchema: listMessagesQuerySchema,
@@ -1345,6 +1414,12 @@ export const LIST_MESSAGES_ROUTE = createRoute({
 export const GET_WORKING_MEMORY_ROUTE = createRoute({
   method: 'GET',
   path: '/memory/threads/:threadId/working-memory',
+  mcp: {
+    toolset: 'memory',
+    name: 'get_working_memory',
+    description: "Inspect an agent's working memory for a thread or resource without modifying it.",
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
   queryParamSchema: getWorkingMemoryQuerySchema,
@@ -1398,6 +1473,74 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
       return { workingMemory, source, workingMemoryTemplate, threadExists };
     } catch (error) {
       return handleError(error, 'Error getting working memory');
+    }
+  },
+});
+
+export const GET_RESOURCE_WORKING_MEMORY_ROUTE = createRoute({
+  method: 'GET',
+  path: '/memory/working-memory',
+  mcp: {
+    toolset: 'memory',
+    name: 'get_working_memory',
+    description: "Inspect an agent's working memory for a thread or resource without modifying it.",
+    requires: capabilities => capabilities.memory,
+  },
+  responseType: 'json',
+  queryParamSchema: getWorkingMemoryQuerySchema,
+  responseSchema: getWorkingMemoryResponseSchema,
+  summary: 'Get resource working memory',
+  description: 'Returns resource-scoped working memory without requiring a thread',
+  tags: ['Memory'],
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, resourceId, requestContext, memoryConfig }) => {
+    try {
+      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      validateBody({ resourceId: effectiveResourceId });
+      const fgaProvider = getHandlerFGAProvider(mastra, requestContext);
+      if (fgaProvider) {
+        const user = requestContext?.get(MASTRA_USER_KEY) ?? requestContext?.get('user');
+        if (!user || typeof user !== 'object') {
+          throw new HTTPException(403, { message: 'FGA authorization denied: authenticated user is required' });
+        }
+        const allowed = await fgaProvider.check(user, {
+          resource: { type: 'resource', id: effectiveResourceId! },
+          permission: MastraFGAPermissions.MEMORY_READ,
+          context: { resourceId: effectiveResourceId, requestContext },
+        });
+        if (!allowed) {
+          throw new HTTPException(403, { message: 'FGA authorization denied: resource working memory access' });
+        }
+      }
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
+      if (!memory) {
+        return { workingMemory: null, source: 'resource' as const, workingMemoryTemplate: null, threadExists: false };
+      }
+      const config = memory.getMergedThreadConfig(memoryConfig || {});
+      if (config.workingMemory?.scope === 'thread') {
+        throw new HTTPException(400, { message: 'threadId is required for thread-scoped working memory' });
+      }
+      const template = await memory.getWorkingMemoryTemplate({ memoryConfig });
+      const workingMemoryTemplate =
+        template?.format === 'json'
+          ? { ...template, content: JSON.stringify(generateEmptyFromSchema(template.content)) }
+          : template;
+      const store = await memory.storage.getStore('memory');
+      let resource: Awaited<ReturnType<NonNullable<typeof store>['getResourceById']>> = null;
+      if (config.workingMemory?.enabled) {
+        if (!store) {
+          throw new HTTPException(400, { message: 'Memory storage is not initialized' });
+        }
+        resource = await store.getResourceById({ resourceId: effectiveResourceId! });
+      }
+      return {
+        workingMemory: resource?.workingMemory || null,
+        source: 'resource' as const,
+        workingMemoryTemplate,
+        threadExists: false,
+      };
+    } catch (error) {
+      return handleError(error, 'Error getting resource working memory');
     }
   },
 });
@@ -1528,6 +1671,12 @@ function withServerOwnedThreadMetadata(
 export const CREATE_THREAD_ROUTE = createRoute({
   method: 'POST',
   path: '/memory/threads',
+  mcp: {
+    toolset: 'memory',
+    name: 'create_thread',
+    description: 'Create a conversation thread.',
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   queryParamSchema: agentIdQuerySchema,
   bodySchema: createThreadBodySchema,
@@ -1600,6 +1749,12 @@ export const CREATE_THREAD_ROUTE = createRoute({
 export const UPDATE_THREAD_ROUTE = createRoute({
   method: 'PATCH',
   path: '/memory/threads/:threadId',
+  mcp: {
+    toolset: 'memory',
+    name: 'update_thread',
+    description: "Update a thread's title or metadata.",
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
   queryParamSchema: agentIdQuerySchema,
@@ -1756,6 +1911,12 @@ export const DELETE_THREAD_ROUTE = createRoute({
 export const CLONE_THREAD_ROUTE = createRoute({
   method: 'POST',
   path: '/memory/threads/:threadId/clone',
+  mcp: {
+    toolset: 'memory',
+    name: 'clone_thread',
+    description: 'Copy a thread and its messages into a new thread.',
+    requires: capabilities => capabilities.memory,
+  },
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
   queryParamSchema: agentIdQuerySchema,

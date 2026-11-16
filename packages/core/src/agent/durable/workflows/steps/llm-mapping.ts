@@ -10,6 +10,7 @@ import { TOOL_CALL_TERMINAL_FINISH_REASONS } from '../../../../loop/shared/termi
 import { getAbortReason, isMastraTimeoutError } from '../../../../loop/timeout';
 import type { Mastra } from '../../../../mastra';
 import type { SpanType, ExportedSpan, SpanTermination } from '../../../../observability';
+import { getSpanErrorOrigin, setSpanErrorOrigin } from '../../../../observability/error-count';
 import { extractUsageMetrics } from '../../../../observability/usage';
 import { persistProcessorDataChunk } from '../../../../stream/base/output';
 import { withToolPayloadTransformProviderMetadata } from '../../../../tools/payload-transform';
@@ -63,6 +64,8 @@ const durableLLMMappingOutputSchema = z.object({
   delegationBailed: z.boolean().optional(),
   tracingDelegationFailure: z.custom<SpanTermination>().optional(),
   tracingTermination: z.custom<SpanTermination>().optional(),
+  deadlineTimeout: z.object({ timeoutType: z.literal('total'), timeoutMs: z.number() }).optional(),
+  runAborted: z.boolean().optional(),
   processorRetryCount: z.number().optional(),
   processorRetryFeedback: z.string().optional(),
   releasedToolResultIds: z.array(z.string()).optional(),
@@ -231,6 +234,7 @@ export function createDurableLLMMappingStep() {
       }
 
       if (toolResults.length > 0) {
+        const runStopped = toolResults.some(result => result.deadlineTimeout || result.runAborted);
         for (const toolResult of toolResults) {
           const backgroundTask = (
             toolResult.providerMetadata as
@@ -244,9 +248,13 @@ export function createDurableLLMMappingStep() {
             continue;
           }
           if (toolResult.mappingError) {
+            // Cancellation of this call or a sibling takes precedence over a mapping failure.
+            if (runStopped) continue;
             const mappingError = new Error(toolResult.mappingError.message);
             mappingError.name = toolResult.mappingError.name;
             mappingError.stack = toolResult.mappingError.stack;
+            const origin = getSpanErrorOrigin(toolResult.mappingError);
+            if (origin) setSpanErrorOrigin(mappingError, origin);
             throw mappingError;
           }
 
@@ -434,6 +442,11 @@ export function createDurableLLMMappingStep() {
       // Keep the first failure, so a later bail with no failure can't hide it.
       const tracingDelegationFailure = toolResults.find(r => r?.tracingDelegationFailure)?.tracingDelegationFailure;
 
+      // A tool the total deadline aborted, possibly on another worker, ends the run as the deadline.
+      const deadlineTimeout = toolResults.find(r => r?.deadlineTimeout)?.deadlineTimeout;
+      // abort() stopped a tool, possibly on a worker the next step never hears from.
+      const runAborted = toolResults.some(r => r?.runAborted === true);
+
       // 4. Carry the deferred step-finish after tool-result chunks have been
       // emitted. The loop predicate adds step content and emits it after resolving
       // continuation policy, avoiding duplicate tool results in persisted snapshots.
@@ -498,6 +511,8 @@ export function createDurableLLMMappingStep() {
         delegationBailed,
         tracingDelegationFailure,
         tracingTermination: llmOutput.tracingTermination,
+        ...(deadlineTimeout ? { deadlineTimeout } : {}),
+        ...(runAborted ? { runAborted } : {}),
         deferredStepFinishChunk,
         completionStartTime: llmOutput.completionStartTime,
         timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,

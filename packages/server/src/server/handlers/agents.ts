@@ -34,6 +34,7 @@ import { z } from 'zod/v4';
 import {
   MASTRA_IS_STUDIO_KEY,
   MASTRA_RESOURCE_ID_KEY,
+  MASTRA_USER_KEY,
   MASTRA_USER_PERMISSIONS_KEY,
   WORKSPACE_TOOLS,
   resolveToolConfig,
@@ -96,7 +97,9 @@ import type { Context } from '../types';
 import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 import { toAgentStreamChunks } from '../utils/agent-stream-events';
 
-import { assertWriteAccess, getCallerAuthorId } from './authorship';
+import { assertStoredAgentAccess } from './agent-access';
+import { assertWriteAccess, getCallerAuthorId, matchesAuthorFilter, resolveAuthorFilter } from './authorship';
+import type { OwnedRecord } from './authorship';
 import { handleError } from './error';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import {
@@ -1121,16 +1124,26 @@ export function extractVersionOptions(
   return undefined;
 }
 
+/**
+ * Resolves an agent by id: code-defined agents first (with stored overrides applied), then sub-agents, then stored
+ * agents. Stored agents are owner/visibility scoped like `/stored/agents`: a caller without `access` to a private
+ * stored agent gets the same 404 as for a missing agent. Code agents are visible to every caller.
+ *
+ * `requestContext` is required: without the caller's context there is no one to check, so a missing one fails closed.
+ */
 export async function getAgentFromSystem({
   mastra,
   agentId,
   versionOptions,
   requestContext,
+  access = 'execute',
 }: {
   mastra: Context['mastra'];
   agentId: string;
   versionOptions?: { status?: 'draft' | 'published' } | { versionId: string };
-  requestContext?: RequestContext;
+  requestContext: RequestContext;
+  /** `read` for routes that only describe the agent; `execute` (default) for anything that runs or changes it. */
+  access?: 'read' | 'execute';
 }): Promise<Agent> {
   const logger = mastra.getLogger();
 
@@ -1183,10 +1196,12 @@ export async function getAgentFromSystem({
   }
 
   // If still not found, try to get stored agent
+  let fromStore = false;
   if (!agent) {
     logger.debug('Agent not found in code-defined agents, looking in stored agents', { agentId });
     try {
       agent = (await mastra.getEditor()?.agent.getById(agentId, versionOptions)) ?? null;
+      fromStore = !!agent;
     } catch (error) {
       logger.debug('Error getting stored agent', error);
     }
@@ -1196,7 +1211,24 @@ export async function getAgentFromSystem({
     throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
   }
 
+  assertStoredAgentAccess({ agent, agentId, requestContext, access, fromStore });
+
   return agent;
+}
+
+/**
+ * Swapping or resetting a stored agent's in-memory model changes it for every caller, so it needs the same edit access
+ * as `PATCH /stored/agents/:id`; public visibility only grants execute. Code agents are not owner-scoped.
+ */
+function assertStoredAgentEditAccess(agent: Agent, agentId: string, requestContext: RequestContext): void {
+  if (agent.source !== 'stored') return;
+  assertWriteAccess({
+    requestContext,
+    resource: 'stored-agents',
+    resourceId: agentId,
+    action: 'edit',
+    record: (agent.toRawConfig() ?? {}) as OwnedRecord,
+  });
 }
 
 async function getAgentForModelListMutation({
@@ -1484,11 +1516,19 @@ export const LIST_AGENTS_ROUTE = createRoute({
   summary: 'List all agents',
   description: 'Returns a list of all available agents in the system (both code-defined and stored)',
   tags: ['Agents'],
+  mcp: {
+    toolset: 'agents',
+    name: 'list_agents',
+    description: 'List the agents you can call, with their ids, names, and descriptions.',
+  },
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
   handler: async ({ mastra, requestContext, partial }) => {
     try {
-      const codeAgents = mastra.listAgents();
+      // Hydrated stored agents are registered on Mastra too; list them through the visibility-filtered stored loop below.
+      const codeAgents = Object.fromEntries(
+        Object.entries(mastra.listAgents()).filter(([, agent]) => agent.source !== 'stored'),
+      );
 
       const isPartial = partial === 'true';
 
@@ -1531,7 +1571,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
         let storedAgentsResult;
         try {
-          storedAgentsResult = await editor?.agent.list();
+          storedAgentsResult = await editor?.agent.list({ perPage: false });
         } catch (error) {
           console.error('Error listing stored agents:', error);
           storedAgentsResult = null;
@@ -1547,8 +1587,11 @@ export const LIST_AGENTS_ROUTE = createRoute({
         }
 
         if (storedAgentsResult?.agents) {
+          // Same owner/visibility view as GET /stored/agents: own, public and legacy unowned agents.
+          const authorFilter = resolveAuthorFilter({ requestContext, resource: 'stored-agents' });
           // Process each agent individually to avoid one bad agent breaking the whole list
           for (const storedAgentConfig of storedAgentsResult.agents) {
+            if (!matchesAuthorFilter(storedAgentConfig, authorFilter)) continue;
             // Skip stored configs that overlay an existing code-defined agent.
             // Those are overrides (no standalone model), not standalone stored agents,
             // and trying to hydrate them as standalone would fail model validation.
@@ -1619,12 +1662,17 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   description:
     'Returns details for a specific agent including configuration, tools, and memory settings. Use query params to control which stored config version is used for overrides: ?status=published (active version, default), ?status=draft (latest draft), or ?versionId=<id> (specific version). Use either status or versionId, not both.',
   tags: ['Agents'],
+  mcp: {
+    toolset: 'agents',
+    name: 'get_agent',
+    description: 'Get details for one agent: description, instructions, model, and tools.',
+  },
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
   handler: async ({ agentId, mastra, requestContext, status, versionId }) => {
     try {
       const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
-      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext });
+      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext, access: 'read' });
       const isStudio = getIsStudioFromContext(requestContext);
       const result = await formatAgent({
         mastra,
@@ -1669,15 +1717,28 @@ export const CLONE_AGENT_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
+        access: 'read',
       });
 
       const cloneId = toSlug(newId || `${agentId}-clone`);
+
+      // Like POST /stored/agents, the clone belongs to the authenticated caller and any body-provided authorId is
+      // ignored. Without auth there is no caller, so the body's authorId is kept. A signed-in caller without an id
+      // can't own the clone, and an unowned clone is public, so refuse rather than publish a copy of the agent.
+      const callerAuthorId = getCallerAuthorId(requestContext);
+      const authenticated = callerAuthorId !== null || requestContext.get(MASTRA_USER_KEY) != null;
+      if (authenticated && callerAuthorId === null) {
+        throw new HTTPException(403, { message: 'Cloning an agent requires a signed-in user with an id' });
+      }
+      const ownerId = callerAuthorId ?? authorId;
 
       const result = await editor.agent.clone(agent, {
         newId: cloneId,
         newName,
         metadata,
-        authorId,
+        authorId: ownerId,
+        ...(authenticated ? { visibility: 'private' as const } : {}),
         requestContext,
       });
 
@@ -1698,6 +1759,12 @@ export const GENERATE_AGENT_ROUTE = createRoute({
   summary: 'Generate agent response',
   description: 'Executes an agent with the provided messages and returns the complete response',
   tags: ['Agents'],
+  mcp: {
+    toolset: 'agents',
+    name: 'call_agent',
+    description:
+      'Send a message to an agent and get its reply. Pass threadId (and resourceId) to continue a conversation with memory.',
+  },
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
   handler: async ({ agentId, mastra, abortSignal, requestContext: serverRequestContext, ...params }) => {
@@ -3254,6 +3321,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -3395,6 +3463,8 @@ export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
+        access: 'read',
       });
 
       // Honor server-enforced thread/resource scoping from the request context
@@ -3459,6 +3529,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -3539,6 +3610,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions,
+        requestContext: serverRequestContext,
       });
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
@@ -3670,6 +3742,7 @@ export const RECOVER_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions,
+        requestContext: serverRequestContext,
       });
 
       // Durable-agent check via duck-typing to avoid a hard runtime dep on the
@@ -3751,6 +3824,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions,
+        requestContext: serverRequestContext,
       });
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
@@ -3856,6 +3930,7 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -3910,6 +3985,7 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -3965,6 +4041,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       // UI Frameworks may send "client tools" in the body,
@@ -4012,6 +4089,7 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -4052,6 +4130,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       if (!params.runId) {
@@ -4085,9 +4164,10 @@ export const UPDATE_AGENT_MODEL_ROUTE = createRoute({
   description: 'Updates the AI model used by the agent',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, modelId, provider }) => {
+  handler: async ({ mastra, requestContext, agentId, modelId, provider }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
+      assertStoredAgentEditAccess(agent, agentId, requestContext);
 
       // Use the universal Mastra router format: provider/model
       const newModel = `${provider}/${modelId}`;
@@ -4114,9 +4194,10 @@ export const RESET_AGENT_MODEL_ROUTE = createRoute({
   description: 'Resets the agent model to its original configuration',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId }) => {
+  handler: async ({ mastra, requestContext, agentId }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
+      assertStoredAgentEditAccess(agent, agentId, requestContext);
 
       agent.__resetToOriginalModel();
 
@@ -4325,9 +4406,9 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
   description: 'Uses AI to enhance or modify agent instructions based on user feedback',
   tags: ['Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, instructions, comment }) => {
+  handler: async ({ mastra, requestContext, agentId, instructions, comment }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
 
       // Find the first model with a connected provider (similar to how chat works)
       const model = await findConnectedModel(agent);
@@ -4439,10 +4520,7 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
   tags: ['Agents', 'Skills'],
   handler: async ({ mastra, agentId, skillName, path, requestContext }) => {
     try {
-      const agent = agentId ? mastra.getAgentById(agentId) : null;
-      if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found' });
-      }
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext, access: 'read' });
 
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name
       const identifier = path ?? skillName;

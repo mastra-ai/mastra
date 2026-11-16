@@ -9,9 +9,10 @@ import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { compileBoardDefinition } from '../boards/define-board.js';
-import { ProjectBoardCache } from '../boards/project-boards.js';
+import { ownReviewBoard, ProjectBoardCache } from '../boards/project-boards.js';
 import { createBoardRegistry } from '../boards/registry.js';
 import type { InstalledBoard } from '../boards/registry.js';
+import { reviewBoard } from '../boards/review.js';
 import { boardDefinitionOf } from '../boards/stored-board.js';
 import { workSeedWithTriage } from '../boards/work-seeds.js';
 import { workBoard } from '../boards/work.js';
@@ -101,14 +102,18 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     options: { auth?: RouteAuth; clock?: { now: number }; release?: InstalledBoard | null } = {},
   ) {
     const clock = options.clock ?? { now: 0 };
+    const codeRegistry = createBoardRegistry({
+      boards: options.release === null ? [] : [options.release ?? releaseBoard()],
+    });
+    // As MastraFactory wires it: cards on a board of the project's own under `review` stay on it.
+    domains.workItems.useOwnReviewBoard(ownReviewBoard(codeRegistry));
     const cache = new ProjectBoardCache({
-      codeRegistry: createBoardRegistry({
-        boards: options.release === null ? [] : [options.release ?? releaseBoard()],
-      }),
+      codeRegistry,
       storage: domains.boards,
       projects: domains.projects,
       // As MastraFactory wires it: a project still using the retired Review board keeps it.
       reviewBoardInUse: scope => domains.workItems.reviewBoardInUse(scope),
+      releaseReviewCards: (ops, scope) => domains.workItems.releaseReviewCards(ops, scope, { open: 'move' }),
       recheckMs: RECHECK_MS,
       now: () => clock.now,
       warn: () => {},
@@ -207,7 +212,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     return (response.body.boards as Array<Record<string, any>>).find(board => board.id === key);
   }
 
-  it("refuses creating over a built-in or app board, deleting the Work board, and any write under the retired Review board's key, and stores nothing else", async () => {
+  it('refuses creating over a built-in or app board and deleting the Work board, and stores nothing else', async () => {
     const { a, scope, base, replicaA } = await setup();
     const refused = (key: string, message: string) => ({ status: 409, body: { error: 'code_board', message } });
     const deleteMessage = (key: string) =>
@@ -225,25 +230,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     expect(await replicaA.send('POST', base, { ...bugsBoard, key: 'work' })).toEqual(
       refused('work', createMessage('work')),
     );
-    // The retired Review board's key stays reserved: its stored cards read as Work.
-    const reserved = {
-      status: 409,
-      body: {
-        error: 'reserved_board',
-        message: 'Board "review" is reserved for the retired Review board.',
-      },
-    };
-    expect(await replicaA.send('POST', base, { ...bugsBoard, key: 'review' })).toEqual(reserved);
-    expect(
-      await replicaA.send('PATCH', `${base}/review`, {
-        name: 'Renamed',
-        phases: bugsBoard.phases,
-        expectedRevision: 1,
-      }),
-    ).toEqual(reserved);
-    expect(await replicaA.send('POST', `${base}/review/reset`, { expectedRevision: 1 })).toEqual(reserved);
-    expect(await replicaA.send('DELETE', `${base}/review?expectedRevision=1`)).toEqual(reserved);
-
     // The project's first load stored its Work and app boards; no refusal wrote anything.
     expect((await a.boards.list(scope)).map(row => [row.key, row.revision])).toEqual([
       ['work', 1],
@@ -911,6 +897,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     expect(renamed.status).toBe(200);
   });
 
+  const cardsOf = async (send: ReturnType<typeof replica>['send'], projectId: string) =>
+    (await send('GET', `/web/factory/projects/${projectId}/work-items`)).body.workItems as Array<
+      Record<string, unknown>
+    >;
+
   describe('the retired Review board', () => {
     const pullRequestCard = (stage: string) => ({
       title: 'PR 17',
@@ -936,9 +927,101 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
         status: 200,
         body: { workItems: [{ id: item.id, board: 'review', stages: ['review'] }] },
       });
-      // The key stays reserved: nobody stores a board over it.
-      expect((await replicaA.send('POST', base, { ...bugsBoard, key: 'review' })).status).toBe(409);
       expect((await a.boards.list(scope)).map(row => row.key)).toEqual(['work', 'release']);
+    });
+
+    it('refuses a board under its key while a card on it is still open, and leaves board and card as they were', async () => {
+      const { a, scope, base, replicaA } = await setup();
+      const { item } = await a.workItems.upsert({ ...scope, userId: ADMIN, input: pullRequestCard('review') });
+
+      expect(await replicaA.send('POST', base, { ...bugsBoard, key: 'review' })).toEqual({
+        status: 409,
+        body: {
+          error: 'board_in_use',
+          message:
+            'The retired Review board still has 1 open card; move or finish it before a board takes the key "review".',
+          cards: 1,
+        },
+      });
+      expect(await catalogBoard(replicaA.send, base, 'review')).toMatchObject({ source: 'builtin', editable: false });
+      expect(await cardsOf(replicaA.send, scope.factoryProjectId)).toMatchObject([
+        { id: item.id, board: 'review', stages: ['review'] },
+      ]);
+    });
+
+    it('keeps its finished cards on Work when the project creates a board under its key, which starts empty', async () => {
+      const { a, scope, base, replicaA } = await setup();
+      // Finished while Review was still in use, so its row is stored on `review`.
+      const { item } = await a.workItems.upsert({ ...scope, userId: ADMIN, input: pullRequestCard('review') });
+      await a.workItems.update({ orgId: scope.orgId, id: item.id, userId: ADMIN, patch: { stages: ['done'] } });
+
+      const created = await replicaA.send('POST', base, { ...bugsBoard, key: 'review' });
+
+      expect(created.status).toBe(201);
+      expect(await cardsOf(replicaA.send, scope.factoryProjectId)).toMatchObject([
+        { id: item.id, board: 'work', stages: ['done'] },
+      ]);
+      // No card is the new board's: it can be deleted again.
+      expect((await replicaA.send('DELETE', `${base}/review?expectedRevision=1`)).status).toBe(204);
+    });
+
+    it('does the same when the row an earlier release seeded is edited into a board of the project', async () => {
+      const { a, scope, base, replicaA } = await setup();
+      await a.boards.insertIfMissing(scope, boardDefinitionOf(reviewBoard), 'factory');
+      const open = await a.workItems.upsert({ ...scope, userId: ADMIN, input: pullRequestCard('review') });
+      const edit = { name: 'Bugs', phases: bugsBoard.phases, expectedRevision: 1 };
+
+      expect(await replicaA.send('PATCH', `${base}/review`, edit)).toMatchObject({
+        status: 409,
+        body: { error: 'board_in_use', cards: 1 },
+      });
+      await a.workItems.update({ orgId: scope.orgId, id: open.item.id, userId: ADMIN, patch: { stages: ['done'] } });
+      expect((await replicaA.send('PATCH', `${base}/review`, edit)).status).toBe(200);
+
+      expect(await catalogBoard(replicaA.send, base, 'review')).toMatchObject({ name: 'Bugs', source: 'stored' });
+      expect(await cardsOf(replicaA.send, scope.factoryProjectId)).toMatchObject([
+        { id: open.item.id, board: 'work', stages: ['done'] },
+      ]);
+    });
+
+    it('lets the project create a board under its key over the row an earlier release seeded', async () => {
+      const { a, scope, base, replicaA } = await setup();
+      await a.boards.insertIfMissing(scope, boardDefinitionOf(reviewBoard), 'factory');
+      const open = await a.workItems.upsert({ ...scope, userId: ADMIN, input: pullRequestCard('review') });
+      const board = { ...bugsBoard, key: 'review' };
+
+      expect(await replicaA.send('POST', base, board)).toMatchObject({
+        status: 409,
+        body: { error: 'board_in_use', cards: 1 },
+      });
+      await a.workItems.update({ orgId: scope.orgId, id: open.item.id, userId: ADMIN, patch: { stages: ['done'] } });
+      const created = await replicaA.send('POST', base, board);
+
+      expect(created).toMatchObject({
+        status: 201,
+        body: { board: { key: 'review', name: 'Bugs', source: 'stored' } },
+      });
+      expect(await catalogBoard(replicaA.send, base, 'review')).toMatchObject({ name: 'Bugs', source: 'stored' });
+      expect(await a.boards.get(scope, 'review')).toMatchObject({ updatedBy: ADMIN, revision: 2 });
+      expect(await cardsOf(replicaA.send, scope.factoryProjectId)).toMatchObject([
+        { id: open.item.id, board: 'work', stages: ['done'] },
+      ]);
+      // The board is the project's now, so its key is taken.
+      expect(await replicaA.send('POST', base, board)).toMatchObject({ status: 409, body: { error: 'board_exists' } });
+    });
+
+    it('stays hidden, with no problem reported, where an earlier release left its seeded row untouched', async () => {
+      const { a, scope, base, replicaA } = await setup();
+      // The earlier release stored Work beside it, and Factory adds Work only to a project with no boards.
+      await replicaA.send('GET', base);
+      await a.boards.insertIfMissing(scope, boardDefinitionOf(reviewBoard), 'factory');
+      const { item } = await a.workItems.upsert({ ...scope, userId: ADMIN, input: pullRequestCard('done') });
+
+      const catalog = await replicaA.send('GET', base);
+      expect((catalog.body.boards as Array<{ id: string }>).map(board => board.id)).toEqual(['work', 'release']);
+      expect(catalog.body.problems ?? []).toEqual([]);
+      const cards = await replicaA.send('GET', `/web/factory/projects/${scope.factoryProjectId}/work-items`);
+      expect(cards.body.workItems).toMatchObject([{ id: item.id, board: 'work', stages: ['done'] }]);
     });
 
     it('serves it to no project whose cards there are all finished, and shows those cards on Work', async () => {
@@ -955,6 +1038,98 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
         body: { workItems: [{ id: item.id, board: 'work', stages: ['done'] }] },
       });
     });
+  });
+
+  describe('a board under the key `review`', () => {
+    it('is created, listed and holds its own cards like any other board, and its key is taken once', async () => {
+      const { a, scope, base, replicaA } = await setup();
+
+      const created = await replicaA.send('POST', base, { ...bugsBoard, key: 'review', name: 'Code review' });
+      expect(created).toMatchObject({ status: 201, body: { board: { key: 'review', revision: 1, source: 'stored' } } });
+      expect(await catalogBoard(replicaA.send, base, 'review')).toMatchObject({
+        name: 'Code review',
+        source: 'stored',
+        editable: true,
+      });
+      // Its only card is finished: the board has no open card, and the card is still its own.
+      const { item } = await a.workItems.upsert({
+        ...scope,
+        userId: ADMIN,
+        input: { title: 'Crash', board: 'review', stages: ['fixed'] },
+      });
+      expect(await cardsOf(replicaA.send, scope.factoryProjectId)).toMatchObject([
+        { id: item.id, board: 'review', stages: ['fixed'] },
+      ]);
+
+      expect(await replicaA.send('POST', base, { ...bugsBoard, key: 'review' })).toEqual({
+        status: 409,
+        body: { error: 'board_exists', message: 'Board "review" already exists in this project.' },
+      });
+      const renamed = await replicaA.send('PATCH', `${base}/review`, {
+        name: 'Reviews',
+        phases: bugsBoard.phases,
+        expectedRevision: 1,
+      });
+      expect(renamed).toMatchObject({ status: 200, body: { board: { name: 'Reviews', revision: 2 } } });
+      expect(await replicaA.send('DELETE', `${base}/review?expectedRevision=2`)).toMatchObject({
+        status: 409,
+        body: { error: 'board_in_use', cards: 1 },
+      });
+    });
+
+    const appReview = () =>
+      compileBoardDefinition({
+        id: 'review',
+        name: 'Design review',
+        initialPhase: 'queued',
+        phases: {
+          queued: { name: 'Queued', kind: 'resting', nextPhases: ['approved'] },
+          approved: { name: 'Approved', kind: 'terminal' },
+        },
+      });
+    const pullRequest = (number: number, stage: string) => ({
+      title: `PR ${number}`,
+      board: 'review',
+      stages: [stage],
+      externalSource: {
+        integrationId: 'github',
+        type: 'pull-request' as const,
+        externalId: `github-pr:${number}`,
+      },
+    });
+
+    it.each([
+      ['a project with no board under the key', false],
+      ['a project still holding the row an earlier release seeded', true],
+    ])(
+      'is served from the app that defines it in %s, holding its own cards and none the retired Review board left',
+      async (_name, seeded) => {
+        const { a, orgId, scope, base } = await setup();
+        if (seeded) await a.boards.insertIfMissing(scope, boardDefinitionOf(reviewBoard), 'factory');
+        const finished = await a.workItems.upsert({ ...scope, userId: ADMIN, input: pullRequest(1, 'done') });
+        const open = await a.workItems.upsert({ ...scope, userId: ADMIN, input: pullRequest(2, 'review') });
+        const { send } = replica(a, orgId, { release: appReview() });
+
+        expect(await catalogBoard(send, base, 'review')).toMatchObject({
+          name: 'Design review',
+          source: 'app',
+          editable: true,
+        });
+        const { item } = await a.workItems.upsert({
+          ...scope,
+          userId: ADMIN,
+          input: { title: 'Logo', board: 'review', stages: ['approved'] },
+        });
+        const cards = await cardsOf(send, scope.factoryProjectId);
+        expect(cards.map(card => [card.id, card.board, card.stages]).sort()).toEqual(
+          [
+            [finished.item.id, 'work', ['done']],
+            [open.item.id, 'work', ['pr-review']],
+            [item.id, 'review', ['approved']],
+          ].sort(),
+        );
+      },
+    );
   });
 
   it('refuses deleting a board that still has cards', async () => {

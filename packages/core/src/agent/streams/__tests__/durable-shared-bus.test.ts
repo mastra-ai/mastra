@@ -23,7 +23,15 @@ import { createDurableAgent } from '../../durable/create-durable-agent';
 describe('DurableAgent default engine on the shared Mastra bus', () => {
   const getMock = useLoopScenarioAimock();
 
-  const setup = ({ resolveBeforeRegistering = false } = {}) => {
+  const setup = ({
+    resolveBeforeRegistering = false,
+    agentPubsub,
+    streamPubsub,
+  }: {
+    resolveBeforeRegistering?: boolean;
+    agentPubsub?: PubSub;
+    streamPubsub?: PubSub;
+  } = {}) => {
     let toolStarted!: () => void;
     const started = new Promise<void>(resolve => (toolStarted = resolve));
     let release!: () => void;
@@ -42,6 +50,7 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
         instructions: 'Use the tool.',
         model: createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${getMock().url}/v1` })(SCENARIO_MODEL_ID),
         durable: true,
+        pubsub: agentPubsub,
         tools: {
           lookup: createTool({
             id: 'lookup',
@@ -60,12 +69,12 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
     const pubsub = new EventEmitterPubSub();
     const serverCache = new InMemoryServerCache();
     // Reading the bus before registration resolves it against the agent's own default bus.
-    const agentA = createDurableAgent({ agent: makeAgent() });
+    const agentA = createDurableAgent({ agent: makeAgent(), pubsub: streamPubsub });
     if (resolveBeforeRegistering) void (agentA as DurableAgent).pubsub;
     const mastraA = new Mastra({ agents: { agent: agentA }, pubsub, cache: serverCache, logger: false });
     const mastraB = new Mastra({
-      agents: { agent: createDurableAgent({ agent: makeAgent() }) },
-      pubsub,
+      agents: { agent: createDurableAgent({ agent: makeAgent(), pubsub: streamPubsub }) },
+      pubsub: agentPubsub ? new EventEmitterPubSub() : pubsub,
       cache: serverCache,
       logger: false,
     });
@@ -110,6 +119,85 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
       expect(types).toContain('text-delta');
       expect(types.at(-1)).toBe('finish');
       expect(await observed.output.text).toBe('The answer is FOUND.');
+    },
+  );
+
+  // Agent-level pubsub must also carry thread coordination, not just run frames (#29882).
+  it.each([
+    { fork: false, sharedFrames: false },
+    { fork: true, sharedFrames: false },
+    { fork: false, sharedFrames: true },
+    { fork: true, sharedFrames: true },
+  ])(
+    'shares thread runs, leases, subscriptions and Stop through the agent bus ($fork, sharedFrames=$sharedFrames)',
+    { timeout: 15_000 },
+    async ({ fork, sharedFrames }) => {
+      const custom = new EventEmitterPubSub();
+      const { a, b, started, release } = setup({
+        agentPubsub: custom,
+        streamPubsub: sharedFrames ? custom : undefined,
+      });
+      const runner = fork ? a.__fork() : a;
+      const threadId = `custom-thread-${fork}`;
+      const resourceId = 'custom-resource';
+      const subscription = await b.subscribeToThread({ threadId, resourceId });
+      const events: string[] = [];
+      const reading = (async () => {
+        for await (const chunk of subscription.stream) events.push(chunk.type);
+      })();
+      const run = await runner.stream('Look it up then answer.', {
+        maxSteps: 3,
+        memory: { thread: threadId, resource: resourceId },
+      });
+      const consumed = run.output.consumeStream();
+      try {
+        await started;
+        await custom.flush();
+        expect(await custom.getLeaseOwner(`${resourceId}\u0000${threadId}`)).toContain(run.runId);
+        expect(b.listActiveThreadRuns().map(run => run.runId)).toContain(run.runId);
+        await vi.waitFor(() => expect(events).toContain('tool-call'));
+        if (sharedFrames) expect(await b.__abortThreadStreamAcrossProcesses({ threadId, resourceId })).toBe(true);
+      } finally {
+        release();
+        await consumed;
+        subscription.unsubscribe();
+        await reading;
+      }
+      expect(await run.output.finishReason).toBe(sharedFrames ? 'aborted' : 'stop');
+      await vi.waitFor(async () =>
+        expect(await custom.getLeaseOwner(`${resourceId}\u0000${threadId}`)).toBeUndefined(),
+      );
+      expect(getMock().getRequests()).toHaveLength(sharedFrames ? 1 : 2);
+    },
+  );
+
+  it.each(['plain', 'durable'] as const)(
+    'preserves owned and injected coordination buses on %s forks without owning inherited buses',
+    kind => {
+      const makeAgent = (pubsub?: PubSub) =>
+        new Agent({
+          id: 'coordination-bus',
+          name: 'coordination-bus',
+          instructions: 'x',
+          model: 'openai/gpt-4.1-mini',
+          pubsub,
+        });
+      const owned = new EventEmitterPubSub();
+      const injected = new EventEmitterPubSub();
+      const transport = new EventEmitterPubSub();
+      for (const source of ['owned', 'injected', 'mastra'] as const) {
+        const inner = makeAgent(source === 'owned' ? owned : undefined);
+        const agent = kind === 'durable' ? createDurableAgent({ agent: inner, pubsub: transport }) : inner;
+        expect(agent.getPubSub()).toBe(source === 'owned' ? owned : undefined);
+        expect(agent.__fork().getPubSub()).toBe(source === 'owned' ? owned : undefined);
+        const mastra = new Mastra({ agents: { agent }, logger: false });
+        if (source !== 'mastra') agent.__setPubSub(injected);
+        const expected = source === 'owned' ? owned : source === 'injected' ? injected : mastra.pubsub;
+        for (const candidate of [inner, agent, agent.__fork()]) {
+          expect(candidate.getPubSub()?.__rawBus()).toBe(expected.__rawBus());
+          expect(candidate.hasOwnPubSub()).toBe(source === 'owned');
+        }
+      }
     },
   );
 

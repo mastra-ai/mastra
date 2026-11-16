@@ -18,7 +18,6 @@ import {
   TraceQueryCursorError,
   TraceQueryValidationError,
   traceQueryScalarPredicateSchema,
-  traceQuerySortValueSchema,
   traceQueryTimeRangeSchema,
 } from './trace-query';
 import type { TraceQueryIssue, TraceQueryPlanOptions, TrustedTraceQueryScalarPredicate } from './trace-query';
@@ -33,10 +32,12 @@ export const SPAN_QUERY_MAX_PREVIEW_CHARACTERS = 256;
 export const SPAN_QUERY_MAX_LIMIT = 1000;
 export const SPAN_QUERY_MAX_CURSOR_BYTES = 8192;
 /** Span-only fields do not extend the trace-query ordering contract. */
-export const SPAN_QUERY_ORDER_FIELDS = [...TRACE_QUERY_ORDER_FIELDS, 'durationMs'] as const;
+export const SPAN_QUERY_ORDER_FIELDS = [...TRACE_QUERY_ORDER_FIELDS, 'durationMs', 'model', 'provider'] as const;
 export interface SpanQueryPlanOptions extends TraceQueryPlanOptions {
   /** Opt in only when the host checks span-query-duration-sort support before execution. */
   allowSpanDurationOrdering?: boolean;
+  /** Opt in only when the host checks span-query-model-provider-sort support before execution. */
+  allowSpanModelProviderOrdering?: boolean;
 }
 const timestamp = z.string().datetime({ offset: true });
 const identifier = z.string().min(1).max(512);
@@ -209,7 +210,9 @@ export type SpanQueryIdentity = z.infer<typeof spanQueryIdentitySchema>;
 export type SpanQueryRow = z.infer<typeof spanQueryRowSchema>;
 export type SpanQueryResponse = z.infer<typeof spanQueryResponseSchema>;
 
-const cursorValuesSchema = spanQueryIdentitySchema.extend({ sortValue: traceQuerySortValueSchema }).strict();
+const cursorValuesSchema = spanQueryIdentitySchema
+  .extend({ sortValue: z.union([z.string(), z.number(), z.null()]) })
+  .strict();
 const cursorEnvelopeSchema = z
   .object({
     version: z.literal(1),
@@ -223,8 +226,9 @@ const cursorEnvelopeSchema = z
  * Ordering semantics every store compiler must implement:
  * - Sort by `orderBy.field` in the requested direction, then break ties by
  *   organizationId, resourceId, traceId, and spanId, in that order, all ascending.
- *   Empty `timeToFirstChunkMs` and `timeToFirstTokenMs` values sort last in both directions and tie
- *   with each other.
+ *   Missing sort values sort last in both directions and tie with each other.
+ *   Compare model/provider strings lexicographically by UTF-8 bytes, case sensitively.
+ *   Empty strings are values, not missing values.
  * - Compare non-null IDs lexicographically by UTF-8 bytes, without locale collation.
  *   Null organizationId/resourceId values sort last and compare equal to other nulls.
  * - Resume strictly after the cursor using that same complete ordering. Apply the
@@ -259,6 +263,16 @@ export function planSpanQuery(input: unknown, options: SpanQueryPlanOptions = {}
       code: 'field_not_allowed',
       path: ['orderBy', 0, 'field'],
       message: 'Span duration ordering requires a supporting host and store',
+    });
+  }
+  if (
+    (request.orderBy[0]?.field === 'model' || request.orderBy[0]?.field === 'provider') &&
+    !options.allowSpanModelProviderOrdering
+  ) {
+    issues.push({
+      code: 'field_not_allowed',
+      path: ['orderBy', 0, 'field'],
+      message: 'Span model/provider ordering requires a supporting host and store',
     });
   }
   const where = request.where ? planSpanQuerySelectionPredicate(request.where, issues) : undefined;
@@ -297,7 +311,10 @@ export function planSpanQuery(input: unknown, options: SpanQueryPlanOptions = {}
       throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
     cursor = {
       ...envelope.data.values,
-      sortValue: typeof sortValue === 'string' ? new Date(sortValue).toISOString() : sortValue,
+      sortValue:
+        typeof sortValue === 'string' && (orderBy.field === 'startedAt' || orderBy.field === 'endedAt')
+          ? new Date(sortValue).toISOString()
+          : sortValue,
     };
     if (
       scope &&
@@ -321,13 +338,15 @@ export function planSpanQuery(input: unknown, options: SpanQueryPlanOptions = {}
 }
 
 function isSpanQuerySortValueFor(field: TrustedSpanQueryPlan['orderBy']['field'], value: string | number | null) {
+  if (field === 'model' || field === 'provider') return value === null || typeof value === 'string';
+  if (field === 'startedAt' || field === 'endedAt') return timestamp.safeParse(value).success;
   return field === 'durationMs'
     ? typeof value === 'number' && Number.isFinite(value) && value >= 0
     : isTraceQuerySortValueFor(field, value);
 }
 
 export function encodeSpanQueryCursor(plan: TrustedSpanQueryPlan, values: z.infer<typeof cursorValuesSchema>): string {
-  if (plan.orderBy.field === 'durationMs' && !isSpanQuerySortValueFor(plan.orderBy.field, values.sortValue))
+  if (!isSpanQuerySortValueFor(plan.orderBy.field, values.sortValue))
     throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
   const envelope = cursorEnvelopeSchema.parse({ version: 1, result: 'spans', binding: plan.binding, values });
   const result = Buffer.from(JSON.stringify(envelope), 'utf8').toString('base64url');
@@ -399,7 +418,10 @@ export function resolveSpanQueryCost(metrics: SpanQueryCostMetric[]): z.infer<ty
 }
 
 /** @internal Selected page metadata; adapters normalize dates to ISO strings. */
-export type SpanQuerySelectedRow = Omit<SpanQueryRow, 'inputPreview' | 'outputPreview' | 'errorPreview'>;
+export type SpanQuerySelectedRow = Omit<SpanQueryRow, 'inputPreview' | 'outputPreview' | 'errorPreview'> & {
+  /** Keep the selected column's boundary when hydration adds a legacy display fallback. */
+  cursorSortValue?: string | number | null;
+};
 
 /**
  * @internal Previews built by `buildPreview`: the stored preview columns, or for rows written
@@ -423,7 +445,7 @@ export function buildSpanQueryResponse(
   const visible = selected.slice(0, plan.limit);
   const last = visible.at(-1);
   return spanQueryResponseSchema.parse({
-    spans: visible.map(row => {
+    spans: visible.map(({ cursorSortValue: _cursorSortValue, ...row }) => {
       const key = spanQueryIdentityKey(row);
       const payload = byIdentity.get(key);
       const input = createSpanQueryPreview(payload?.inputPreview ?? null);
@@ -444,7 +466,7 @@ export function buildSpanQueryResponse(
               resourceId: last.resourceId,
               traceId: last.traceId,
               spanId: last.spanId,
-              sortValue: last[plan.orderBy.field] ?? null,
+              sortValue: last.cursorSortValue !== undefined ? last.cursorSortValue : (last[plan.orderBy.field] ?? null),
             })
           : null,
     },

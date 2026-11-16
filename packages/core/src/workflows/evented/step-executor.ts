@@ -15,6 +15,7 @@ import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { TracingContext, TracingPolicy } from '../../observability';
 import { EntityType, SpanType, createObservabilityContext } from '../../observability';
+import { withSpanErrorAttempt } from '../../observability/context-storage';
 import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import type { StepExecutionParentWorkflow } from '../../worker/types';
@@ -187,6 +188,7 @@ export class StepExecutor extends MastraBase {
   }): Promise<StepResult<any, any, any, any>> {
     const { entry, stepResults, runId, requestContext, retryCount = 0, perStep } = params;
     const stepId = getEntryId(entry);
+    const errorAttemptId = `${runId}:${stepId}:${params.foreachIdx ?? ''}:attempt:${retryCount}`;
     const schemas = getEntrySchemas(entry, this.mastra);
     const storageVersion = params.storageVersion ?? currentStorageVersion();
     const isNestedWorkflowStep = getEntryComponent(entry) === 'WORKFLOW';
@@ -293,127 +295,128 @@ export class StepExecutor extends MastraBase {
 
       const stepOutput = await executeWithContext({
         span: stepTracingContext.currentSpan,
-        fn: () => {
-          const executionContext = createDeprecationProxy(
-            defineStateAccessors(
-              {
-                workflowId: params.workflowId,
-                runId,
-                mastra: this.mastra!,
-                requestContext,
-                actor: params.actor,
-                inputData,
-                state: params.state,
-                setState: async (newState: Record<string, any>) => {
-                  // Capture state update - don't mutate params.state in place
-                  // This matches default engine behavior where state changes
-                  // are applied AFTER the step completes, not during execution
-                  stateUpdate = { ...(stateUpdate ?? params.state), ...newState };
-                  stateDelta = { ...stateDelta, ...newState };
-                },
-                updateState: async (changes: Record<string, any>) => {
-                  // Merge into the state the step sees, validate the merged state, then record only
-                  // the keys it was given so sibling branches keep their own writes.
-                  const merged = { ...(stateUpdate ?? params.state) };
-                  applyStateDelta(merged, changes ?? {});
-                  const { stateData, validationError } = await validateStepStateData({
-                    stateData: merged,
-                    step: schemas,
-                    validateInputs: params.validateInputs ?? true,
-                  });
-                  if (validationError) {
-                    throw validationError;
-                  }
-                  const written: Record<string, any> = {};
-                  for (const [key, value] of Object.entries(changes ?? {})) {
-                    if (value === undefined) written[key] = undefined;
-                    else if (Object.prototype.hasOwnProperty.call(stateData, key)) written[key] = stateData[key];
-                  }
-                  stateUpdate = { ...(stateUpdate ?? params.state), ...written };
-                  stateDelta = { ...stateDelta, ...written };
-                },
-                retryCount,
-                resumeData: params.resumeData,
-                suspendData: suspendDataToUse,
-                getInitData: () => stepResults?.input as any,
-                ...this.#stepResultAccessors(params.workflowId, runId, stepResults, storageVersion),
-                suspend: async (suspendPayload: unknown, suspendOptions?: SuspendOptions): Promise<InnerOutput> => {
-                  const { suspendData, validationError } = await validateStepSuspendData({
-                    suspendData: suspendPayload,
-                    step: schemas,
-                    validateInputs: params.validateInputs ?? true,
-                  });
-                  if (validationError) {
-                    throw validationError;
-                  }
-                  // Build resume labels if provided
-                  const resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
-                  if (suspendOptions?.resumeLabel) {
-                    const labels = Array.isArray(suspendOptions.resumeLabel)
-                      ? suspendOptions.resumeLabel
-                      : [suspendOptions.resumeLabel];
-                    for (const label of labels) {
-                      resumeLabels[label] = {
-                        stepId,
-                        foreachIndex: params.foreachIdx,
-                      };
-                    }
-                  }
-                  suspended = {
-                    payload: {
-                      ...suspendData,
-                      __workflow_meta: {
-                        runId,
-                        path: [stepId],
-                        foreachIndex: params.foreachIdx,
-                        resumeLabels: Object.keys(resumeLabels).length > 0 ? resumeLabels : undefined,
-                      },
-                    },
-                  };
-                },
-                bail: (result: any): InnerOutput => {
-                  bailed = { payload: result };
-                },
-                writer: new ToolStream(
-                  {
-                    prefix: 'workflow-step',
-                    callId,
-                    name: stepId,
-                    runId,
+        fn: () =>
+          withSpanErrorAttempt(errorAttemptId, () => {
+            const executionContext = createDeprecationProxy(
+              defineStateAccessors(
+                {
+                  workflowId: params.workflowId,
+                  runId,
+                  mastra: this.mastra!,
+                  requestContext,
+                  actor: params.actor,
+                  inputData,
+                  state: params.state,
+                  setState: async (newState: Record<string, any>) => {
+                    // Capture state update - don't mutate params.state in place
+                    // This matches default engine behavior where state changes
+                    // are applied AFTER the step completes, not during execution
+                    stateUpdate = { ...(stateUpdate ?? params.state), ...newState };
+                    stateDelta = { ...stateDelta, ...newState };
                   },
-                  outputWriter,
-                ),
-                abort: () => {
-                  abortController?.abort();
+                  updateState: async (changes: Record<string, any>) => {
+                    // Merge into the state the step sees, validate the merged state, then record only
+                    // the keys it was given so sibling branches keep their own writes.
+                    const merged = { ...(stateUpdate ?? params.state) };
+                    applyStateDelta(merged, changes ?? {});
+                    const { stateData, validationError } = await validateStepStateData({
+                      stateData: merged,
+                      step: schemas,
+                      validateInputs: params.validateInputs ?? true,
+                    });
+                    if (validationError) {
+                      throw validationError;
+                    }
+                    const written: Record<string, any> = {};
+                    for (const [key, value] of Object.entries(changes ?? {})) {
+                      if (value === undefined) written[key] = undefined;
+                      else if (Object.prototype.hasOwnProperty.call(stateData, key)) written[key] = stateData[key];
+                    }
+                    stateUpdate = { ...(stateUpdate ?? params.state), ...written };
+                    stateDelta = { ...stateDelta, ...written };
+                  },
+                  retryCount,
+                  resumeData: params.resumeData,
+                  suspendData: suspendDataToUse,
+                  getInitData: () => stepResults?.input as any,
+                  ...this.#stepResultAccessors(params.workflowId, runId, stepResults, storageVersion),
+                  suspend: async (suspendPayload: unknown, suspendOptions?: SuspendOptions): Promise<InnerOutput> => {
+                    const { suspendData, validationError } = await validateStepSuspendData({
+                      suspendData: suspendPayload,
+                      step: schemas,
+                      validateInputs: params.validateInputs ?? true,
+                    });
+                    if (validationError) {
+                      throw validationError;
+                    }
+                    // Build resume labels if provided
+                    const resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
+                    if (suspendOptions?.resumeLabel) {
+                      const labels = Array.isArray(suspendOptions.resumeLabel)
+                        ? suspendOptions.resumeLabel
+                        : [suspendOptions.resumeLabel];
+                      for (const label of labels) {
+                        resumeLabels[label] = {
+                          stepId,
+                          foreachIndex: params.foreachIdx,
+                        };
+                      }
+                    }
+                    suspended = {
+                      payload: {
+                        ...suspendData,
+                        __workflow_meta: {
+                          runId,
+                          path: [stepId],
+                          foreachIndex: params.foreachIdx,
+                          resumeLabels: Object.keys(resumeLabels).length > 0 ? resumeLabels : undefined,
+                        },
+                      },
+                    };
+                  },
+                  bail: (result: any): InnerOutput => {
+                    bailed = { payload: result };
+                  },
+                  writer: new ToolStream(
+                    {
+                      prefix: 'workflow-step',
+                      callId,
+                      name: stepId,
+                      runId,
+                    },
+                    outputWriter,
+                  ),
+                  abort: () => {
+                    abortController?.abort();
+                  },
+                  [PUBSUB_SYMBOL]: this.#getStepPubsub(),
+                  [STREAM_FORMAT_SYMBOL]: params.format,
+                  engine: {},
+                  abortSignal: abortController?.signal,
+                  ...createObservabilityContext(stepTracingContext),
                 },
-                [PUBSUB_SYMBOL]: this.#getStepPubsub(),
-                [STREAM_FORMAT_SYMBOL]: params.format,
-                engine: {},
-                abortSignal: abortController?.signal,
-                ...createObservabilityContext(stepTracingContext),
+                () => stateUpdate ?? params.state,
+                storageVersion === 2 && !isNestedWorkflowStep,
+              ),
+              {
+                paramName: 'runCount',
+                deprecationMessage: runCountDeprecationMessage,
+                logger: this.logger,
               },
-              () => stateUpdate ?? params.state,
-              storageVersion === 2 && !isNestedWorkflowStep,
-            ),
-            {
-              paramName: 'runCount',
-              deprecationMessage: runCountDeprecationMessage,
-              logger: this.logger,
-            },
-          );
-          switch (entry.type) {
-            case 'step':
-              return entry.step.execute(executionContext);
-            case 'agent':
-              return runAgentEntry(entry, executionContext, this.mastra);
-            case 'tool':
-              return runToolEntry(entry, executionContext, this.mastra);
-            case 'classifier':
-              return runClassifierEntry(entry, executionContext);
-            case 'mapping':
-              return runMappingEntry(entry, executionContext);
-          }
-        },
+            );
+            switch (entry.type) {
+              case 'step':
+                return entry.step.execute(executionContext);
+              case 'agent':
+                return runAgentEntry(entry, executionContext, this.mastra);
+              case 'tool':
+                return runToolEntry(entry, executionContext, this.mastra);
+              case 'classifier':
+                return runClassifierEntry(entry, executionContext);
+              case 'mapping':
+                return runMappingEntry(entry, executionContext);
+            }
+          }),
       });
 
       const nestedWflowStepPaused = isNestedWorkflowStep && perStep;
@@ -485,6 +488,10 @@ export class StepExecutor extends MastraBase {
         serializeStack: false,
         fallbackMessage: 'Unknown step execution error',
       });
+
+      withSpanErrorAttempt(errorAttemptId, () =>
+        workflowStepSpan?.recordError?.(errorInstance, { occurrenceId: errorAttemptId }),
+      );
 
       completeWorkflowSpan(workflowStepSpan, {
         error: {

@@ -38,6 +38,12 @@ import { assembleAgentFromFsEntry } from '../fs-routing';
 import { verifyRunLease } from '../run-lease-fence';
 import { isRetakeLeaseOwner } from '../thread-stream-runtime';
 
+// 'sends no retry when the lease is lost while a failed request waits to be retried'
+// takes the lease during the retry backoff, so it needs the real backoff rather
+// than the instant one from @internal/test-utils/setup.
+vi.unmock('../../utils/retry-after');
+vi.mock('../../../node_modules/p-retry', importOriginal => importOriginal());
+
 const THREAD = 'lease-loss-thread';
 const RESOURCE = 'lease-loss-user';
 const LEASE_KEY = [RESOURCE, THREAD].join('\u0000');
@@ -132,7 +138,7 @@ class NoLeasePubSub extends EventEmitterPubSub {
   }
 }
 
-describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
+function threadLeaseLoss(engine: EngineVariant) {
   let llm: LLMock;
 
   beforeAll(async () => {
@@ -3168,4 +3174,8 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     expect(modelCalls()).toBe(callsAtAbort);
     expect(shared.owner(key)).toBe('successor-run');
   }, 20_000);
-});
+}
+
+// 'fs' only changes how the agent is assembled and then runs on the normal engine (see EngineVariant),
+// so here it would repeat every 'normal' lease run; the other scenario files cover fs assembly.
+describeForAllEngines('thread lease loss', threadLeaseLoss, { skip: ['fs'] });

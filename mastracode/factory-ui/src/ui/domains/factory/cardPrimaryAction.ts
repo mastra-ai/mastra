@@ -1,10 +1,12 @@
 import { needsApproval } from '@mastra/factory/rules/types';
+import { metadataLabels } from '@mastra/factory/work-items/card-labels';
 
 import type { BoardCardState, BoardCardStatus } from './boardCardState';
 import { allowsMove, boardLoop, phaseKindOf } from './boardFlow';
 import type { BoardInfo, BoardLoop } from './boardFlow';
-import { itemSessionSpec, metadataLabels, pullRequestStatusForItem, pullRequestStatusForSource } from './boardItems';
-import { attachedPullRequestSource, cardHasPullRequest, isPullRequestSource } from './services/workItems';
+import { itemSessionSpec } from './boardItems';
+import { cardChangeRequest, changeRequestStatus, isOpenChangeRequest } from './changeRequestState';
+import { cardHasPullRequest, isPullRequestSource } from './services/workItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 import type { BoardStageId } from './stages';
 
@@ -96,13 +98,8 @@ export function cardMoves(item: MovableCard, columnStage: BoardStageId, board: B
 }
 
 function openPullRequestInCompleted(item: MovableCard, columnStage: BoardStageId, loop: BoardLoop): boolean {
-  if (columnStage !== loop.completed || !cardHasPullRequest(item)) return false;
-  // An issue card's pull request state lives on the pull request's source, not the issue's.
-  const attached = attachedPullRequestSource(item);
-  const status = attached
-    ? pullRequestStatusForSource(attached)
-    : pullRequestStatusForItem({ ...item, stages: item.stages ?? [] });
-  return status === 'open' || status === 'draft';
+  const request = columnStage === loop.completed ? cardChangeRequest(item) : undefined;
+  return request !== undefined && isOpenChangeRequest(changeRequestStatus(request));
 }
 
 /**

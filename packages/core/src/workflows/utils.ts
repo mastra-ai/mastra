@@ -6,6 +6,7 @@ import { getRequestContextInputValues } from '../request-context/input-source';
 import type { StandardSchemaWithJSON } from '../schema';
 import { pickStateKeys } from '../storage/domains/workflows/journal';
 import { removeUndefinedValues } from '../utils';
+import { waitMs } from '../utils/test-waits';
 import type { ExecutionGraph } from './execution-engine';
 import { withoutNestedRunStartState } from './nested-state';
 import type { Step } from './step';
@@ -962,7 +963,7 @@ export async function waitForSuspendedSnapshot(
       return null;
     }
 
-    await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_INTERVAL_MS));
+    await new Promise(resolve => setTimeout(resolve, waitMs(RESUME_SNAPSHOT_POLL_INTERVAL_MS, 1)));
   }
 
   return snapshot;

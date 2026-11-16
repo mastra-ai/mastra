@@ -92,8 +92,6 @@ function decision(overrides: Partial<FactoryDeferredDecisionRecord> & { id: stri
     evaluationId: `evaluation-${overrides.id}`,
     workItemId: null,
     idempotencyKey: overrides.id,
-    effectOrdinal: 0,
-    effectHash: 'hash',
     causalChain: [],
     actor: null,
     decision: { type: 'invokeSkill', role: 'work' },

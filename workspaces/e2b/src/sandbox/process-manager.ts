@@ -17,11 +17,13 @@ import type { E2BSandbox } from './index';
 export interface E2BProcessManagerOptions {
   /** Default timeout in milliseconds for commands that don't specify one. */
   defaultTimeout?: number;
+  /** OS user every command runs as. Defaults to the sandbox template's own user. */
+  user?: string;
 }
 
 export class E2BProcessManager extends CommandsApiProcessManager<E2BSandbox> {
   constructor(opts: E2BProcessManagerOptions = {}) {
-    super({ defaultTimeout: opts.defaultTimeout });
+    super({ defaultTimeout: opts.defaultTimeout, user: opts.user });
   }
 
   runCommands<T>(operation: CommandsApiOperation, fn: (commands: CommandsApi) => Promise<T>): Promise<T> {

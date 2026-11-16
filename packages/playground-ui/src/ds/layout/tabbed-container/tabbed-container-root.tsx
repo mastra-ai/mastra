@@ -1,4 +1,3 @@
-import { ListFilterIcon } from 'lucide-react';
 import { Children, isValidElement, useContext } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 import './tabbed-container.css';
@@ -6,8 +5,8 @@ import { Combobox } from '@/ds/components/Combobox/combobox';
 import type { ComboboxProps } from '@/ds/components/Combobox/combobox';
 import { DataList } from '@/ds/components/DataList/data-list';
 import type { DataListFit } from '@/ds/components/DataList/data-list-root';
-import { ListSearch } from '@/ds/components/ListSearch/list-search';
-import type { ListSearchProps } from '@/ds/components/ListSearch/list-search';
+import { SearchInput } from '@/ds/components/SearchInput';
+import type { SearchInputProps } from '@/ds/components/SearchInput';
 import { TabContent } from '@/ds/components/Tabs/tabs-content';
 import { TabsContext } from '@/ds/components/Tabs/tabs-context';
 import { TabList } from '@/ds/components/Tabs/tabs-list';
@@ -17,12 +16,13 @@ import { Tab } from '@/ds/components/Tabs/tabs-tab';
 import type { TabProps } from '@/ds/components/Tabs/tabs-tab';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
 import { Txt } from '@/ds/components/Txt';
+import { IconFilter2 } from '@/ds/icons/central/IconFilter2';
 import { cn } from '@/lib/utils';
 
-export type TabbedContainerSearchProps = Pick<
-  ListSearchProps,
-  'debounceMs' | 'label' | 'onSearch' | 'placeholder' | 'value'
->;
+export type TabbedContainerSearchProps = Pick<SearchInputProps, 'debounceMs' | 'label' | 'placeholder'> & {
+  value: string;
+  onSearch: (search: string) => void;
+};
 
 export type TabbedContainerFilterProps = ComboboxProps & { 'aria-label': string };
 
@@ -71,7 +71,16 @@ export const DataListControls = ({ dataLists }: { dataLists: ReactElement<Tabbed
         <div data-slot="tabbed-container-query">
           {search ? (
             <div data-slot="tabbed-container-search">
-              <ListSearch {...search} size="md" shortcutDisabled={!active} />
+              <SearchInput
+                label={search.label}
+                placeholder={search.placeholder}
+                value={search.value}
+                onValueChange={search.onSearch}
+                debounceMs={search.debounceMs ?? 300}
+                size="md"
+                shortcut={active}
+                className="max-w-120"
+              />
             </div>
           ) : null}
           {filter ? (
@@ -79,7 +88,7 @@ export const DataListControls = ({ dataLists }: { dataLists: ReactElement<Tabbed
               <Tooltip>
                 <TooltipTrigger asChild>
                   <div data-slot="tabbed-container-filter" data-active={filterCount > 0 || undefined}>
-                    <ListFilterIcon aria-hidden="true" />
+                    <IconFilter2 aria-hidden="true" />
                     {filterCount > 0 ? (
                       <Txt as="span" variant="meta" aria-hidden="true" data-slot="tabbed-container-filter-count">
                         {filterCount}

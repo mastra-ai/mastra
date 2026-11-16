@@ -16,6 +16,7 @@ import {
 import { optionalRunIdSchema } from '../schemas/common';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
+import { listAgentsVisibleTo } from './agent-access';
 import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
@@ -58,7 +59,7 @@ function serializeSchema(schema: unknown, options?: { stripInjectedOverrides?: b
  * skipped so a single broken resolver doesn't take down the whole lookup.
  */
 async function findToolInAgents(mastra: any, toolId: string, requestContext: any): Promise<any | undefined> {
-  const agents = mastra.listAgents() || {};
+  const agents = listAgentsVisibleTo(mastra.listAgents(), requestContext);
   for (const agent of Object.values(agents) as any[]) {
     try {
       const agentTools = await agent.listTools({ requestContext });
@@ -73,6 +74,35 @@ async function findToolInAgents(mastra: any, toolId: string, requestContext: any
     }
   }
   return undefined;
+}
+
+/**
+ * Resolves a tool the way the tool routes do: `registeredTools` by `tool.id`, then `mastra.getToolById`
+ * (by `tool.id`, then registration key), then tools resolved by agents.
+ */
+export async function findTool({
+  mastra,
+  registeredTools,
+  toolId,
+  requestContext,
+}: {
+  mastra: any;
+  registeredTools?: Record<string, any>;
+  toolId: string;
+  requestContext?: any;
+}): Promise<any | undefined> {
+  if (registeredTools && Object.keys(registeredTools).length > 0) {
+    const tool = Object.values(registeredTools).find((t: any) => t.id === toolId);
+    if (tool) return tool;
+  }
+  try {
+    const tool = mastra.getToolById(toolId);
+    if (tool) return tool;
+  } catch {
+    // tool not found in global registry, continue to agent fallback
+  }
+  // Fallback: search dynamically-resolved agent tools (toolsResolver)
+  return findToolInAgents(mastra, toolId, requestContext);
 }
 
 /**
@@ -119,6 +149,11 @@ export const LIST_TOOLS_ROUTE = createRoute({
   summary: 'List all tools',
   description: 'Returns a list of all available tools in the system',
   tags: ['Tools'],
+  mcp: {
+    toolset: 'tools',
+    name: 'list_tools',
+    description: 'List the tools you can call, with their ids and descriptions.',
+  },
   requiresAuth: true,
   handler: async ({ mastra, registeredTools, requestContext }) => {
     try {
@@ -158,12 +193,14 @@ export const LIST_TOOLS_ROUTE = createRoute({
       const fgaProvider = getHandlerFGAProvider(mastra, requestContext);
       const user = requestContext?.get('user');
       if (fgaProvider && user) {
-        const toolList = Object.entries(serializedTools).map(([id, t]) => ({ id, ...t }));
+        // FGA checks a tool by its `tool.id` (as POST /tools/:toolId/execute does); the response is keyed by
+        // registration key, which can differ.
+        const toolList = Object.entries(serializedTools).map(([key, t]) => ({ ...t, id: t?.id ?? key, key }));
         const accessible = await fgaProvider.filterAccessible(user, toolList, 'tool', MastraFGAPermissions.TOOLS_READ);
-        const accessibleSet = new Set(accessible.map((t: any) => t.id));
-        for (const id of Object.keys(serializedTools)) {
-          if (!accessibleSet.has(id)) {
-            delete serializedTools[id];
+        const accessibleSet = new Set(accessible.map((t: any) => t.key));
+        for (const key of Object.keys(serializedTools)) {
+          if (!accessibleSet.has(key)) {
+            delete serializedTools[key];
           }
         }
       }
@@ -184,27 +221,15 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
   summary: 'Get tool by ID',
   description: 'Returns details for a specific tool including its schema and configuration',
   tags: ['Tools'],
+  mcp: {
+    toolset: 'tools',
+    name: 'get_tool',
+    description: 'Get details for one tool, including its input schema.',
+  },
   requiresAuth: true,
   handler: async ({ mastra, registeredTools, toolId, requestContext }) => {
     try {
-      let tool: any;
-
-      // Try explicit registeredTools first, then fallback to mastra
-      if (registeredTools && Object.keys(registeredTools).length > 0) {
-        tool = Object.values(registeredTools).find((t: any) => t.id === toolId);
-      }
-      if (!tool) {
-        try {
-          tool = mastra.getToolById(toolId);
-        } catch {
-          // tool not found in global registry, continue to agent fallback
-        }
-      }
-
-      // Fallback: search dynamically-resolved agent tools (toolsResolver)
-      if (!tool) {
-        tool = await findToolInAgents(mastra, toolId, requestContext);
-      }
+      const tool: any = await findTool({ mastra, registeredTools, toolId, requestContext });
 
       if (!tool) {
         throw new HTTPException(404, { message: 'Tool not found' });
@@ -228,6 +253,11 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
   summary: 'Execute tool',
   description: 'Executes a specific tool with the provided input data',
   tags: ['Tools'],
+  mcp: {
+    toolset: 'tools',
+    name: 'call_tool',
+    description: 'Call a tool with input data that matches its input schema (see get_tool).',
+  },
   requiresAuth: true,
   handler: async ({ mastra, runId, toolId, registeredTools, requestContext, ...bodyParams }) => {
     try {
@@ -235,24 +265,7 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Tool ID is required' });
       }
 
-      let tool: any;
-
-      // Try explicit registeredTools first, then fallback to mastra
-      if (registeredTools && Object.keys(registeredTools).length > 0) {
-        tool = Object.values(registeredTools).find((t: any) => t.id === toolId);
-      }
-      if (!tool) {
-        try {
-          tool = mastra.getToolById(toolId);
-        } catch {
-          // tool not found in global registry, continue to agent fallback
-        }
-      }
-
-      // Fallback: search dynamically-resolved agent tools (toolsResolver)
-      if (!tool) {
-        tool = await findToolInAgents(mastra, toolId, requestContext);
-      }
+      const tool: any = await findTool({ mastra, registeredTools, toolId, requestContext });
 
       if (!tool) {
         throw new HTTPException(404, { message: 'Tool not found' });
@@ -312,7 +325,7 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
       if (!agentId) {
         throw new HTTPException(400, { message: 'Agent ID is required' });
       }
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext, access: 'read' });
 
       const agentTools = await agent.listTools({ requestContext });
 
@@ -345,7 +358,7 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
       if (!agentId) {
         throw new HTTPException(400, { message: 'Agent ID is required' });
       }
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
 
       const agentTools = await agent.listTools({ requestContext });
 

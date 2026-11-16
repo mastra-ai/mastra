@@ -38,8 +38,6 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const MAX_NAME_LENGTH = 200;
 const MAX_REPOSITORY_COMMAND_LENGTH = 2_000;
 const MAX_BRANCH_LENGTH = 255;
-const MAX_SANDBOX_PROVIDER_LENGTH = 100;
-const MAX_SANDBOX_WORKDIR_LENGTH = 1_000;
 const CONTROL_CHAR_RE = /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/;
 const applyDefaultModelRuns = new Map<string, Promise<void>>();
 
@@ -76,8 +74,6 @@ function parseRepositoryLinkInput(value: unknown): {
   repositoryId?: string;
   repository?: { externalId: string; slug: string };
   branch: string | null;
-  sandboxProvider: string;
-  sandboxWorkdir: string;
   setupCommand: string | null;
   teardownCommand: string | null;
 } | null {
@@ -96,8 +92,6 @@ function parseRepositoryLinkInput(value: unknown): {
   }
   if (!repositoryId && !repository) return null;
   const branch = parseOptionalString(input.branch, { maxLength: MAX_BRANCH_LENGTH, nullable: true });
-  const sandboxProvider = parseOptionalString(input.sandboxProvider, { maxLength: MAX_SANDBOX_PROVIDER_LENGTH });
-  const sandboxWorkdir = parseOptionalString(input.sandboxWorkdir, { maxLength: MAX_SANDBOX_WORKDIR_LENGTH });
   const setupCommand = parseOptionalString(input.setupCommand, {
     maxLength: MAX_REPOSITORY_COMMAND_LENGTH,
     nullable: true,
@@ -106,20 +100,11 @@ function parseRepositoryLinkInput(value: unknown): {
     maxLength: MAX_REPOSITORY_COMMAND_LENGTH,
     nullable: true,
   });
-  if (
-    branch === false ||
-    typeof sandboxProvider !== 'string' ||
-    typeof sandboxWorkdir !== 'string' ||
-    setupCommand === false ||
-    teardownCommand === false
-  )
-    return null;
+  if (branch === false || setupCommand === false || teardownCommand === false) return null;
   return {
     ...(repositoryId ? { repositoryId } : {}),
     ...(repository ? { repository } : {}),
     branch: branch ?? null,
-    sandboxProvider,
-    sandboxWorkdir,
     setupCommand: setupCommand ?? null,
     teardownCommand: teardownCommand ?? null,
   };
@@ -130,8 +115,6 @@ function parseRepositoryUpdateInput(value: unknown): UpdateProjectRepositoryInpu
   const input = value as Record<string, unknown>;
   const patch: UpdateProjectRepositoryInput = {};
   const branch = parseOptionalString(input.branch, { maxLength: MAX_BRANCH_LENGTH, nullable: true });
-  const sandboxProvider = parseOptionalString(input.sandboxProvider, { maxLength: MAX_SANDBOX_PROVIDER_LENGTH });
-  const sandboxWorkdir = parseOptionalString(input.sandboxWorkdir, { maxLength: MAX_SANDBOX_WORKDIR_LENGTH });
   const setupCommand = parseOptionalString(input.setupCommand, {
     maxLength: MAX_REPOSITORY_COMMAND_LENGTH,
     nullable: true,
@@ -140,19 +123,8 @@ function parseRepositoryUpdateInput(value: unknown): UpdateProjectRepositoryInpu
     maxLength: MAX_REPOSITORY_COMMAND_LENGTH,
     nullable: true,
   });
-  if (
-    branch === false ||
-    sandboxProvider === false ||
-    sandboxProvider === null ||
-    sandboxWorkdir === false ||
-    sandboxWorkdir === null ||
-    setupCommand === false ||
-    teardownCommand === false
-  )
-    return null;
+  if (branch === false || setupCommand === false || teardownCommand === false) return null;
   if (branch !== undefined) patch.branch = branch;
-  if (sandboxProvider !== undefined) patch.sandboxProvider = sandboxProvider;
-  if (sandboxWorkdir !== undefined) patch.sandboxWorkdir = sandboxWorkdir;
   if (setupCommand !== undefined) patch.setupCommand = setupCommand;
   if (teardownCommand !== undefined) patch.teardownCommand = teardownCommand;
   return Object.keys(patch).length > 0 ? patch : null;
@@ -353,7 +325,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           slug: link.repository?.slug ?? null,
           defaultBranch: link.repository?.defaultBranch ?? null,
           branch: link.branch,
-          sandboxWorkdir: link.sandboxWorkdir,
         });
       }
       byProject.set(connection.factoryProjectId, repositories);
@@ -400,7 +371,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
         teardownCommand: projectRepository.teardownCommand,
         lastBuildStatus: projectRepository.lastBuildStatus,
         lastBuildError: projectRepository.lastBuildError,
-        lastBuiltAt: projectRepository.lastBuiltAt,
       });
     }
     return {
@@ -872,6 +842,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             }
           }
           await found.handle.connections.delete({ orgId: tenant.orgId, id: connectionId });
+          // Its repositories left the environment with it.
+          this.deps.environmentBuilds?.onEnvironmentSaved(projectId);
           return context.body(null, 204);
         },
       }),
@@ -907,7 +879,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const projectRepository = await found.handle.projectRepositories.link({
             orgId: tenant.orgId,
             connectionId,
-            createdByUserId: tenant.userId,
             repositoryId: repository.id,
             ...linkInput,
           });
@@ -916,6 +887,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           } catch (error) {
             console.warn('[factory] onProjectRepositoryLinked failed after a successful repository link:', error);
           }
+          this.deps.environmentBuilds?.onEnvironmentSaved(projectId);
           return context.json(
             { projectRepository: await this.#repositoryPayload(found.handle, tenant.orgId, projectRepository) },
             201,
@@ -1048,6 +1020,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             }
             if (!result) return context.json({ error: 'Project not found' }, 404);
             updated = result;
+            runner?.onEnvironmentSaved(updated.id);
           }
           if (buildTriggers?.schedule && runner?.scheduleAvailable) {
             const stored = await readSchedule(runner.schedules()!, project.id);
@@ -1062,8 +1035,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
                   : {}),
               });
           }
-          // Saving never builds: the next Build now, schedule or push run
-          // picks the changed template up.
           return context.json(await this.#environmentPayload(tenant.orgId, updated));
         },
       }),
@@ -1087,6 +1058,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             id: projectRepositoryId,
             input,
           });
+          this.deps.environmentBuilds?.onEnvironmentSaved(projectId);
           return context.json({
             projectRepository: await this.#repositoryPayload(found.handle, tenant.orgId, projectRepository!),
           });
@@ -1109,6 +1081,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             return context.json({ error: 'session_retirement_unavailable' }, 409);
           }
           await found.handle.projectRepositories.unlink({ orgId: tenant.orgId, id: projectRepositoryId });
+          this.deps.environmentBuilds?.onEnvironmentSaved(projectId);
           return context.body(null, 204);
         },
       }),

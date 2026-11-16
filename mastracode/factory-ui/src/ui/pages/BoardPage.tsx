@@ -10,6 +10,7 @@ import type { BoardKind } from '../domains/factory/boardStages';
 import type { FactoryProject } from '../domains/workspaces/services/github';
 import { BoardContent } from './board/BoardContent';
 import { BoardLoadingSkeleton } from '../domains/factory/components/BoardLoadingSkeleton';
+import { LoadErrorState } from '../ui/LoadErrorState';
 
 /**
  * Factory › Board: an org-wide grouped list of the repository's work items. The
@@ -45,7 +46,14 @@ function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) 
     return <BoardLoadingSkeleton />;
   }
   if (catalog.isError) {
-    return <EmptyState variant="fill" titleSlot={<span role="alert">Unable to load boards.</span>} />;
+    return (
+      <LoadErrorState
+        title="Couldn’t load boards"
+        error={catalog.error}
+        onRetry={() => void catalog.refetch()}
+        retrying={catalog.isFetching}
+      />
+    );
   }
   const definition = catalog.data.find(board => board.id === kind);
   if (!definition) {
