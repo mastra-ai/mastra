@@ -14,13 +14,16 @@ import {
   isTransientGhError,
   projectRootsFromConfigs,
   gitDiffFiles,
+  inspectRuns,
   jobKeysFor,
+  listRunsByDay,
   moveOut,
   nextGreenRun,
   prRuns,
   recordPrFailures,
   retryTransient,
   runsToInspect,
+  settleDay,
   syncFiles,
 } from './update.mjs';
 
@@ -430,6 +433,145 @@ test('only finished runs that may hold a failed job get their jobs fetched', () 
     runsToInspect(runs).map(r => r.id),
     [2, 4, 6],
   );
+});
+
+// Like GitHub's run listing: every run created in the range counts in total_count,
+// but only the first 1,000 of them can be read.
+const fakeRunListing = runs => {
+  const calls = [];
+  const list = range => {
+    calls.push(range);
+    const [from, to] = range.split('..');
+    const matching = runs.filter(r => r.created_at >= from && r.created_at <= to);
+    return { total: matching.length, runs: matching.slice(0, 1000) };
+  };
+  return { list, calls };
+};
+const runsEvery = (from, to, minutes) => {
+  const runs = [];
+  for (let t = Date.parse(from); t < Date.parse(to); t += minutes * 60_000) {
+    runs.push({ id: runs.length + 1, created_at: new Date(t).toISOString().replace('.000', '') });
+  }
+  return runs;
+};
+
+test('lists every run in a 14-day window, though each listing stops at 1,000', () => {
+  // About 290 runs a day, 4,032 in all: one listing for the window would see a quarter of them.
+  const runs = runsEvery('2026-11-02T00:00:00Z', '2026-11-17T00:00:00Z', 5);
+  const { list, calls } = fakeRunListing(runs);
+  const listed = listRunsByDay(list, '2026-11-02', '2026-11-16');
+  assert.equal(listed.length, runs.length);
+  assert.deepEqual(new Set(listed.map(r => r.id)).size, runs.length);
+  assert.equal(calls.length, 15);
+  assert.deepEqual(calls[0], '2026-11-02T00:00:00Z..2026-11-02T23:59:59Z');
+});
+
+test('a day with more than 1,000 runs is split until every part fits', () => {
+  // 2,880 runs on Nov 3 alone.
+  const busy = runsEvery('2026-11-03T00:00:00Z', '2026-11-04T00:00:00Z', 0.5);
+  const { list } = fakeRunListing(busy);
+  const listed = listRunsByDay(list, '2026-11-02', '2026-11-04');
+  assert.equal(listed.length, busy.length);
+  assert.equal(new Set(listed.map(r => r.id)).size, busy.length);
+});
+
+const run = (id, day) => ({ id, created_at: `2026-11-${day}T10:00:00Z`, conclusion: 'failure' });
+const settledFailure = { file: 'packages/core/src/a.test.ts', jobId: '1', date: '2026-11-10', rerunPassed: true };
+const openFailure = { file: 'packages/core/src/b.test.ts', jobId: '2', date: '2026-11-10', pkgDir: 'packages/core' };
+
+test('a run whose failures are all settled is remembered; one with an open failure is not', () => {
+  const t = tiers({});
+  const failuresOf = { 1: [settledFailure], 2: [openFailure], 3: [] };
+  const result = inspectRuns(t, [run(1, 10), run(2, 10), run(3, 11)], r => failuresOf[r.id], {
+    deadline: Infinity,
+  });
+  assert.deepEqual(
+    result.settled.map(r => r.id),
+    [3, 1],
+  );
+  assert.equal(result.left, 0);
+  assert.equal(result.failures.length, 2);
+  settleDay(t, result, '2026-11-16', 14, []);
+  assert.deepEqual(t.inspected_runs, { 1: '2026-11-10', 3: '2026-11-11' });
+});
+
+test('a remembered run is never fetched again; remembered runs leave with the window', () => {
+  const t = tiers({});
+  t.inspected_runs = { 1: '2026-11-10', 9: '2026-11-01' };
+  const fetched = [];
+  const result = inspectRuns(t, [run(1, 10), run(2, 12)], r => (fetched.push(r.id), []), { deadline: Infinity });
+  assert.deepEqual(fetched, [2]);
+  settleDay(t, result, '2026-11-16', 14, []);
+  assert.deepEqual(t.inspected_runs, { 1: '2026-11-10', 2: '2026-11-12' });
+});
+
+test('past the deadline the rest waits for tomorrow, and nothing moves out on a partial day', () => {
+  const old = { tier: 'in', since: '2026-09-01', last_failure: '2026-10-01', reason: 'pr-catch' };
+  const t = tiers({ 'packages/core/src/a.test.ts': { ...old } });
+  let clock = 0;
+  const result = inspectRuns(t, [run(1, 10), run(2, 11), run(3, 12)], () => ((clock += 10), []), {
+    deadline: 15,
+    now: () => clock,
+  });
+  assert.deepEqual(
+    result.settled.map(r => r.id),
+    [3, 2],
+  );
+  assert.equal(result.left, 1);
+  const partial = settleDay(t, result, '2026-11-16', 14, ['packages/core/src/a.test.ts']);
+  assert.deepEqual(partial.out, []);
+  assert.equal(t.files['packages/core/src/a.test.ts'].tier, 'in');
+  assert.deepEqual(Object.keys(t.inspected_runs), ['2', '3']);
+
+  const rest = inspectRuns(t, [run(1, 10), run(2, 11), run(3, 12)], () => [], { deadline: Infinity });
+  assert.deepEqual(
+    rest.settled.map(r => r.id),
+    [1],
+  );
+  const complete = settleDay(t, rest, '2026-11-16', 14, ['packages/core/src/a.test.ts']);
+  assert.deepEqual(complete.out, ['packages/core/src/a.test.ts']);
+});
+
+test('a GitHub outage that outlasts the retries ends the day early but keeps what was settled', () => {
+  const t = tiers({});
+  const down = Object.assign(new Error('Command failed'), { stderr: 'gh: Server Error (HTTP 502)' });
+  const result = inspectRuns(
+    t,
+    [run(1, 10), run(2, 11), run(3, 12)],
+    r => {
+      if (r.id === 2) throw down;
+      return [];
+    },
+    { deadline: Infinity },
+  );
+  assert.deepEqual(
+    result.settled.map(r => r.id),
+    [3],
+  );
+  assert.equal(result.left, 2);
+  const gone = Object.assign(new Error('Command failed'), { stderr: 'gh: Not Found (HTTP 404)' });
+  assert.throws(
+    () =>
+      inspectRuns(
+        t,
+        [run(1, 10)],
+        () => {
+          throw gone;
+        },
+        { deadline: Infinity },
+      ),
+    gone,
+  );
+});
+
+test('the newest runs are inspected first, so a short day still covers the latest failures', () => {
+  const fetched = [];
+  const result = inspectRuns(tiers({}), [run(1, 10), run(2, 11), run(3, 12)], r => (fetched.push(r.id), []), {
+    deadline: 1,
+    now: () => fetched.length,
+  });
+  assert.deepEqual(fetched, [3]);
+  assert.equal(result.left, 2);
 });
 
 test('the next green run must come from the same repository as the failing run', () => {

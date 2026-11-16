@@ -3,9 +3,11 @@
 //
 //   node scripts/test-tiers/update.mjs versioning --tiers=<file> --run-id=<id> [--date=YYYY-MM-DD]
 //     Every unit test file that failed in a versioning-PR Prebuild run moves `in`.
-//   node scripts/test-tiers/update.mjs daily --tiers=<file> [--days=14] [--date=YYYY-MM-DD]
+//   node scripts/test-tiers/update.mjs daily --tiers=<file> [--days=14] [--date=YYYY-MM-DD] [--budget-minutes=45]
 //     Failures on PRs in the last 14 days that the PR then fixed in source (a catch)
 //     restart the file's 30-day clock, each failure counted once; deleted files leave; files clean for 30 days move `out`.
+//     Runs whose failures are all settled are remembered and never fetched again; past the time
+//     budget the rest wait for the next day, and nothing moves out that day.
 //
 // The pure functions below hold the rules; the CLI only gathers GitHub data for them.
 import { execFileSync } from 'node:child_process';
@@ -16,6 +18,9 @@ import { WINDOW_DAYS, isExternalE2eTest, isJobKey } from './select.mjs';
 
 // PR failures are looked at for this long, so a fix that lands days later still counts.
 export const LOOKBACK_DAYS = 14;
+// The daily update stops inspecting runs after this long (listing included) and saves what it has,
+// inside the workflow's 60-minute job timeout. The next day picks up the runs it didn't reach.
+export const DAILY_BUDGET_MINUTES = 45;
 
 // Same file classes E4 used to call the fix a test-only change or a source change.
 const TEST_PATH =
@@ -251,12 +256,89 @@ export function prRuns(runs, repo) {
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
 
+// GitHub's run listing reads at most this many runs per query, whatever total_count says.
+export const RUN_LIST_CAP = 1000;
+const isoSecond = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
+
+/**
+ * Every run created from `since` through `until` (UTC days, inclusive), listed a day at a
+ * time so each query stays under the cap. A day over the cap is halved until each part fits.
+ * listRange takes a `created` range (from..to, inclusive) and returns { total, runs }.
+ */
+export function listRunsByDay(listRange, since, until, cap = RUN_LIST_CAP) {
+  const runs = new Map();
+  const list = (from, to) => {
+    const { total, runs: listed } = listRange(`${isoSecond(from)}..${isoSecond(to)}`);
+    if (total > cap && to - from >= 2000) {
+      const mid = from + Math.floor((to - from) / 2000) * 1000;
+      list(from, mid);
+      list(mid + 1000, to);
+      return;
+    }
+    if (total > cap) console.error(`warning: ${total} runs created in one second, only ${cap} listed`);
+    for (const run of listed) runs.set(run.id, run);
+  };
+  const end = Date.parse(`${until}T00:00:00Z`);
+  for (let day = Date.parse(`${since}T00:00:00Z`); day <= end; day += 86_400_000) {
+    list(day, day + 86_399_000);
+  }
+  return [...runs.values()];
+}
+
 /**
  * Finished runs that did not pass. A skipped run never started a job, so fetching its jobs
  * (one serial API call each, hundreds a day) cannot find a failure.
  */
 export function runsToInspect(runs) {
   return runs.filter(r => r.conclusion && r.conclusion !== 'success' && r.conclusion !== 'skipped');
+}
+
+/**
+ * Fetches each run's failures, newest first, until the deadline (a backlog then drains from its
+ * newest end while each new day is covered at once). Runs in `tiers.inspected_runs`
+ * are skipped: every failure they held was already settled. A run counts as settled when none of
+ * its failures is still `unresolved` (no later green head yet, or a job failure too young to call).
+ * A transient GitHub error that outlasts the retries ends the day early the same way.
+ * Returns the failures, the runs that settled, and how many runs were left for the next day.
+ */
+export function inspectRuns(tiers, runs, inspectRun, { deadline, now = Date.now }) {
+  const pending = runs
+    .filter(r => !tiers.inspected_runs?.[r.id])
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const failures = [];
+  const settled = [];
+  for (const [i, run] of pending.entries()) {
+    if (now() >= deadline) return { failures, settled, left: pending.length - i };
+    if (i % 50 === 0) console.error(`  run ${i + 1}/${pending.length}`);
+    let found;
+    try {
+      found = inspectRun(run);
+    } catch (error) {
+      // Retries already ran out; keep what is settled rather than lose the whole day.
+      if (!isTransientGhError(error)) throw error;
+      console.error(`GitHub kept failing (${String(error.stderr ?? error.message).trim()}); stopping early`);
+      return { failures, settled, left: pending.length - i };
+    }
+    failures.push(...found);
+    if (found.every(f => (f.verdict ?? classifyPrFailure(f)) !== 'unresolved')) settled.push(run);
+  }
+  return { failures, settled, left: 0 };
+}
+
+/**
+ * Records the day's failures and settled runs, then syncs the file list. Files move out only
+ * when every run was inspected: a run left for tomorrow may hold the catch that keeps a file in.
+ */
+export function settleDay(tiers, { failures, settled, left }, date, days, testFiles) {
+  const windowStart = daysBefore(date, days);
+  const { tally, caught } = recordPrFailures(tiers, failures, date, days);
+  const remembered = { ...tiers.inspected_runs };
+  for (const run of settled) remembered[run.id] = run.created_at.slice(0, 10);
+  for (const [id, day] of Object.entries(remembered)) if (day < windowStart) delete remembered[id];
+  tiers.inspected_runs = remembered;
+  const { removed, added } = syncFiles(tiers, testFiles, date);
+  const out = left ? [] : moveOut(tiers, date);
+  return { tally, caught, removed, added, out };
 }
 
 /** The first later green run of the same workflow on the same branch of the same repository, at a new head. */
@@ -511,16 +593,23 @@ function versioningCommand(tiers, { runId, date }) {
   for (const k of added) console.error(`  new ${k}`);
 }
 
-function dailyCommand(tiers, { days, date }) {
+function dailyCommand(tiers, { days, date, budgetMinutes }) {
+  const startedAt = Date.now();
   const since = daysBefore(date, Number(days));
+  // One page line per page carries total_count, so a range over the cap can be split.
+  const listRange = workflow => range => {
+    const lines = ghJson(
+      `repos/${repo}/actions/workflows/${workflow}/runs?created=${range}&per_page=100`,
+      '-q',
+      '{total:.total_count}, (.workflow_runs[]|select(.event=="pull_request" or .event=="workflow_run")|{id,head_branch,head_repo:.head_repository.full_name,head_sha,created_at,conclusion,run_attempt,workflow_id})|@json',
+    );
+    return {
+      total: Math.max(0, ...lines.filter(l => 'total' in l).map(l => l.total)),
+      runs: lines.filter(l => !('total' in l)),
+    };
+  };
   const runs = prRuns(
-    JOB_WORKFLOWS.flatMap(workflow =>
-      ghJson(
-        `repos/${repo}/actions/workflows/${workflow}/runs?created=>=${since}&per_page=100`,
-        '-q',
-        '.workflow_runs[]|select(.event=="pull_request" or .event=="workflow_run")|{id,head_branch,head_repo:.head_repository.full_name,head_sha,created_at,conclusion,run_attempt,workflow_id}|@json',
-      ),
-    ),
+    JOB_WORKFLOWS.flatMap(workflow => listRunsByDay(listRange(workflow), since, date)),
     repo,
   );
   const laterGreenRun = run =>
@@ -533,12 +622,14 @@ function dailyCommand(tiers, { days, date }) {
         r.conclusion === 'success',
     );
 
-  const failures = [];
   const compareCache = new Map();
   const toInspect = runsToInspect(runs);
-  console.error(`inspecting ${toInspect.length} of ${runs.length} PR runs since ${since}`);
-  for (const [i, run] of toInspect.entries()) {
-    if (i % 50 === 0) console.error(`  run ${i + 1}/${toInspect.length}`);
+  const known = toInspect.filter(r => tiers.inspected_runs?.[r.id]).length;
+  console.error(
+    `inspecting ${toInspect.length - known} of ${runs.length} PR runs since ${since} (${known} already settled)`,
+  );
+  const inspectRun = run => {
+    const failures = [];
     const jobs = runJobs(run.id);
     const passedLater = job =>
       jobs.some(j => j.name === job.name && j.run_attempt > job.run_attempt && j.conclusion === 'success') ||
@@ -575,10 +666,15 @@ function dailyCommand(tiers, { days, date }) {
         });
       }
     }
+    return failures;
+  };
+  const inspected = inspectRuns(tiers, toInspect, inspectRun, { deadline: startedAt + Number(budgetMinutes) * 60_000 });
+  if (inspected.left) {
+    console.error(
+      `stopped early (time budget ${budgetMinutes} min or GitHub errors): ${inspected.left} runs left for the next run; no files move out today`,
+    );
   }
-  const { tally, caught } = recordPrFailures(tiers, failures, date, Number(days));
-  const { removed, added } = syncFiles(tiers, repoTestFiles(), date);
-  const out = moveOut(tiers, date);
+  const { tally, caught, removed, added, out } = settleDay(tiers, inspected, date, Number(days), repoTestFiles());
   console.error(`PR failures since ${since}: ${JSON.stringify(tally)}`);
   console.error(
     `catches and job failures: ${caught.length} in; deleted: ${removed.length}; new: ${added.length}; moved out: ${out.length}`,
@@ -589,7 +685,13 @@ function dailyCommand(tiers, { days, date }) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [command, ...rest] = process.argv.slice(2);
-  const args = { tiers: null, runId: null, days: String(LOOKBACK_DAYS), date: new Date().toISOString().slice(0, 10) };
+  const args = {
+    tiers: null,
+    runId: null,
+    days: String(LOOKBACK_DAYS),
+    date: new Date().toISOString().slice(0, 10),
+    budgetMinutes: String(DAILY_BUDGET_MINUTES),
+  };
   for (const arg of rest) {
     const m = /^--([a-z-]+)=(.*)$/.exec(arg);
     const key = m?.[1].replace(/-([a-z])/g, (_, c) => c.toUpperCase());
