@@ -1186,6 +1186,21 @@ export interface ObservationalMemoryConfig {
   temporalMarkers?: boolean;
 
   /**
+   * Deliver the current task, suggested response and custom extractor values to the agent as a
+   * state signal in the conversation, instead of as sections at the end of the system prompt.
+   *
+   * The Observer saves these values every time it buffers, so as system-prompt sections they change the
+   * system prompt several times between observations. As a state signal they leave the system prompt
+   * unchanged, so a prompt cache keeps covering the instructions and the observation log. Turn this on
+   * when you use prompt caching. It becomes the only behavior in the next major version.
+   *
+   * Needs a memory thread. `Memory.getContext()` keeps returning the values as sections.
+   *
+   * @default false
+   */
+  stateSignals?: boolean;
+
+  /**
    * Time before buffered observations are force-activated after inactivity.
    * Accepts milliseconds as a number, a duration string like `"5m"` or `"1hr"`, `"auto"`,
    * or an object of per-provider TTLs like `{ default: 'auto', anthropic: '1h' }`.

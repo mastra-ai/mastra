@@ -427,6 +427,7 @@ export class ObservationStep {
       resourceId,
       record: this.turn.record,
       unobservedContextBlocks: otherThreadsContext,
+      omitExtractedValues: om.stateSignals,
     });
 
     // ── Filter observed messages ──────────────────────────────
