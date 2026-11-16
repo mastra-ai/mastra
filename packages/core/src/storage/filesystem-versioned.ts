@@ -282,7 +282,13 @@ export class FilesystemVersionedHelpers<
         commit.hash,
         this.entitiesFile,
       );
-      if (!fileContent) continue;
+      if (!fileContent) {
+        // The file did not exist at this commit (e.g. it was deleted). Reset the
+        // dedupe baselines so a later restore with identical content is still
+        // recorded as a distinct version rather than skipped.
+        previousSnapshots.clear();
+        continue;
+      }
 
       // Create a version record for each entity that actually changed in this commit
       for (const [entityId, snapshotConfig] of Object.entries(fileContent)) {
@@ -311,6 +317,13 @@ export class FilesystemVersionedHelpers<
         } as TVersion;
 
         this.versions.set(versionId, version);
+      }
+
+      // Entities missing from this commit's file were removed (or the file was
+      // rewritten without them). Drop their baselines so a later restore with
+      // identical content is recorded as a distinct version rather than skipped.
+      for (const entityId of [...previousSnapshots.keys()]) {
+        if (!Object.hasOwn(fileContent, entityId)) previousSnapshots.delete(entityId);
       }
     }
 
