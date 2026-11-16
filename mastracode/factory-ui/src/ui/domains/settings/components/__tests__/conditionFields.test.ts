@@ -83,4 +83,15 @@ describe('condition rows', () => {
     expect(ids(['work_item.reopened'])).not.toContain('event.reason');
     expect(ids(['work_item.closed'])).toContain('event.reason');
   });
+
+  it('offer what changed only to rules that handle a label or assignee change', () => {
+    const fields = (on: string[]) => conditionFields(intakeRouteFacts(on));
+    const changes = ['event.labels.added', 'event.labels.removed', 'event.assignees.added', 'event.assignees.removed'];
+
+    expect(fields(['work_item.closed']).map(field => field.id)).not.toContain('event.labels.added');
+    expect(fields(['pull_request.updated']).map(field => field.id)).toEqual(expect.arrayContaining(changes));
+    expect(fields(['work_item.updated']).find(field => field.id === 'event.labels.added')).toMatchObject({
+      label: 'Label added',
+    });
+  });
 });

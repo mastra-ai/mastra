@@ -9,13 +9,14 @@ import { useBoardQuery } from '../../hooks/useBoardEditor';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
 import { boardConfigPath } from '../domains/boardConfig/boardConfigPaths';
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
-import { CardMovesSection } from '../domains/settings/components/IntakeRoutesSection';
+import { BoardRules } from '../domains/boardRules/components/BoardRules';
+import { IntakeTesterDialog } from '../domains/intake/IntakeTesterDialog';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 
-const COLUMN = 'mx-auto w-full max-w-2xl';
+const COLUMN = 'w-full';
 
-/** How cards already on a board move when their issue or pull request changes, opened from board settings. */
-export function CardMovesPage() {
+/** Every rule of a board, one lane per trigger: what it takes when an item arrives and where its cards move. */
+export function BoardRulesPage() {
   const factory = useActiveFactory();
   const boardId = useBoardConfigRoute()?.boardId ?? '';
   const { isMobile, desktopState } = useSidebar();
@@ -30,7 +31,7 @@ export function CardMovesPage() {
             {board.name}
           </Crumb>
           <Crumb as="span" isCurrent>
-            Card moves
+            Rules
           </Crumb>
         </Breadcrumb>
       ) : undefined,
@@ -42,17 +43,20 @@ export function CardMovesPage() {
       header={
         <div className={cn(COLUMN, 'pb-8')}>
           <PageHeader>
-            <PageHeader.Title>Card moves</PageHeader.Title>
+            <PageHeader.Title>Rules</PageHeader.Title>
             <PageHeader.Description>
-              Where cards on this board go when their issue or pull request changes. The first matching move wins.
+              What happens to issues and pull requests on this board. In each lane the first matching rule wins.
             </PageHeader.Description>
           </PageHeader>
+          <div className="mt-3">
+            <IntakeTesterDialog factoryProjectId={factory.id} label="Test an item" />
+          </div>
         </div>
       }
       {...slots}
     >
       <div className={COLUMN}>
-        <CardMovesSection factoryId={factory.id} boardId={boardId} />
+        <BoardRules factoryId={factory.id} boardId={boardId} />
       </div>
     </PageLayout>
   );

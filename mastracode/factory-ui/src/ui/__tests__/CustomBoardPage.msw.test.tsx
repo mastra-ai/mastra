@@ -143,18 +143,18 @@ describe('custom-only board routing', () => {
         }),
       ],
     ],
-  ])('asks for an intake route, not a source, while a source is connected but %s', async (_case, intakeRoutes) => {
+  ])('asks for an intake rule, not a source, while a source is connected but %s', async (_case, intakeRoutes) => {
     const { client } = renderBoard(undefined, undefined, undefined, undefined, null, intakeRoutes);
     await waitForMutationsIdle(client);
 
     const queued = await screen.findByTestId('board-column-queued');
-    expect(await within(queued).findByText('No intake route sends cards here')).toBeVisible();
+    expect(await within(queued).findByText('No rule here takes new items')).toBeVisible();
     expect(within(queued).queryByText('Intake is clear')).not.toBeInTheDocument();
     expect(within(queued).queryByText(/No intake sources/)).not.toBeInTheDocument();
     expect(within(queued).queryByRole('link', { name: 'Connect issue source' })).not.toBeInTheDocument();
-    expect(within(queued).getByRole('link', { name: 'Add intake route' })).toHaveAttribute(
+    expect(within(queued).getByRole('link', { name: 'Add intake rule' })).toHaveAttribute(
       'href',
-      '/factories/fp-1/settings/intake#new-cards',
+      '/factories/fp-1/boards/release/rules',
     );
   });
 

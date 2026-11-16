@@ -223,7 +223,7 @@ describe('IntakeTesterPanel', () => {
     renderWithProviders(<IntakeTesterPanel factoryProjectId="fp-1" itemId={ITEM_ID} />);
 
     const moves = await screen.findByRole('list', { name: 'Card moves' });
-    expect(screen.getByText("Replayed against the card's current phase and facts.")).toBeTruthy();
+    expect(screen.getByText("Replays run against the card's current phase and facts.")).toBeTruthy();
     const events = within(moves)
       .getAllByRole('listitem')
       .filter(item => item.parentElement === moves);
