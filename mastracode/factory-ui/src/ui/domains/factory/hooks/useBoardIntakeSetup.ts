@@ -78,7 +78,7 @@ export function useBoardIntakeSetup({
     (incidentioEligible && boundToProject('incidentio', config?.incidentio?.sourceIds));
   // A connected source files onto the default board, and onto another board only through an
   // intake route that places its new cards there: enabled, run on an arrival event, and not
-  // one that only joins a pull request to an existing card (the server's `resolveIntakeRoute`).
+  // a retired route that joined pull requests to an existing card (the server skips those).
   const readsIntakeRoutes = !defaultBoard && sourceConnected;
   const intakeRoutesQuery = useIntakeRoutesQuery(readsIntakeRoutes ? factoryProjectId : undefined);
   const intakeRoutesPending = readsIntakeRoutes && intakeRoutesQuery.isPending;

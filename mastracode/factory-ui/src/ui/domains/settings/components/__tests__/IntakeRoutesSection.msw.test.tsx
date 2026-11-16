@@ -26,6 +26,8 @@ const RETIRED_JOIN_ROUTE = {
   key: 'closes-issue',
   route: {
     name: 'Pull requests that close a waiting issue join its card',
+    enabled: true,
+    on: ['work_item.created'] as const,
     when: {
       operator: 'AND' as const,
       conditions: [
