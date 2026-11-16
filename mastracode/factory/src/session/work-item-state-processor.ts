@@ -161,17 +161,28 @@ export class FactoryWorkItemStateProcessor implements Processor<'factory-work-it
   }
 }
 
+const VERDICT_TOOL = 'factory_record_review_verdict';
+
+function names(parts: unknown, type?: string): boolean {
+  return (
+    Array.isArray(parts) &&
+    parts.some(part => {
+      const { toolName, type: partType } = (part ?? {}) as { toolName?: unknown; type?: unknown };
+      return toolName === VERDICT_TOOL && (type === undefined || partType === type);
+    })
+  );
+}
+
 /**
  * Whether the run in progress has already recorded a review verdict. Only the steps of this run
  * count: a later turn (a re-requested review, or a person disputing a finding) starts with none.
+ * A step can reach here without its tool results, so the call counts too, unless it failed.
  */
 function recordedVerdict(steps: unknown[]): boolean {
-  return steps.some(step => {
-    const results = (step as { toolResults?: unknown } | null)?.toolResults;
-    return (
-      Array.isArray(results) &&
-      results.some(result => (result as { toolName?: unknown } | null)?.toolName === 'factory_record_review_verdict')
-    );
+  return steps.some(raw => {
+    const step = (raw ?? {}) as { toolCalls?: unknown; toolResults?: unknown; content?: unknown };
+    if (names(step.content, 'tool-error')) return false;
+    return names(step.toolResults) || names(step.toolCalls);
   });
 }
 
