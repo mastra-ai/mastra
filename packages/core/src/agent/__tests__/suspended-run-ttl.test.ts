@@ -19,9 +19,14 @@
  * boundary exactly. Virtual time is advanced around the sweeping registration the same
  * way `runscope-leak.test.ts` advances past the internal-workflow TTL.
  */
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../events/event-emitter';
+import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
+import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import type { MastraModelOutput } from '../../stream/base/output';
 import { Agent } from '../agent';
 import { AgentThreadStreamRuntime, agentThreadStreamRuntime } from '../thread-stream-runtime';
@@ -108,7 +113,7 @@ function createFakeRun(runId: string) {
 type FakeRun = ReturnType<typeof createFakeRun>;
 
 /** Records everything the runtime publishes for one thread, for event assertions. */
-async function watchThread(pubsub: EventEmitterPubSub, threadId: string) {
+async function watchThread(pubsub: PubSub, threadId: string) {
   const events: Event[] = [];
   await pubsub.subscribe(threadTopic(RESOURCE_ID, threadId), event => {
     events.push(event);
@@ -146,9 +151,14 @@ describe('suspended run in-memory TTL', () => {
   });
 
   /** Start a run on `threadId` and drive it to a suspended, thread-blocking record. */
-  async function registerSuspendedRun(runId: string, threadId: string, watcher: ThreadWatcher) {
+  async function registerSuspendedRun(
+    runId: string,
+    threadId: string,
+    watcher: ThreadWatcher,
+    target: PubSub = pubsub,
+  ) {
     const run = createFakeRun(runId);
-    await runtime.registerRun(fakeAgent, run.output, { memory: { thread: threadId, resource: RESOURCE_ID } }, pubsub, {
+    await runtime.registerRun(fakeAgent, run.output, { memory: { thread: threadId, resource: RESOURCE_ID } }, target, {
       continuation: 'across-suspension',
     });
 
@@ -160,7 +170,7 @@ describe('suspended run in-memory TTL', () => {
     run.settle('suspended');
     await watcher.waitFor('run-suspended', runId);
 
-    expect(runtime.getResumableThreadRun({ threadId, resourceId: RESOURCE_ID, runId }, pubsub)).toEqual({
+    expect(runtime.getResumableThreadRun({ threadId, resourceId: RESOURCE_ID, runId }, target)).toEqual({
       runId,
       toolCallId: `${runId}-call`,
     });
@@ -173,12 +183,16 @@ describe('suspended run in-memory TTL', () => {
    * timers are restored before the assertions so the runtime's own async plumbing
    * (and `vi.waitFor`) runs unfaked.
    */
-  async function sweepAfter(elapsedMs: number, threadId = 'sweep-trigger-thread'): Promise<FakeRun> {
+  async function sweepAfter(
+    elapsedMs: number,
+    threadId = 'sweep-trigger-thread',
+    target: PubSub = pubsub,
+  ): Promise<FakeRun> {
     vi.useFakeTimers({ shouldAdvanceTime: true, now: Date.now() });
     vi.setSystemTime(Date.now() + elapsedMs);
     try {
       const run = createFakeRun(`sweeper-${threadId}`);
-      await runtime.registerRun(fakeAgent, run.output, { memory: { thread: threadId, resource: RESOURCE_ID } }, pubsub);
+      await runtime.registerRun(fakeAgent, run.output, { memory: { thread: threadId, resource: RESOURCE_ID } }, target);
       return run;
     } finally {
       vi.useRealTimers();
@@ -315,60 +329,85 @@ describe('suspended run in-memory TTL', () => {
       }
     });
 
-    it('reports blocked to a sender on another instance when the claimed owner loses the lease', async () => {
-      const watcher = await watchThread(pubsub, 'thread-1');
-      await registerSuspendedRun('run-1', 'thread-1', watcher);
-      await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
-      const owner = createWakeableAgent('run-2');
-      const claim = await runtime.claimThreadOwnership(
-        owner.agent,
-        { resourceId: RESOURCE_ID, threadId: 'thread-1' },
-        pubsub,
-      );
-      expect(claim.claimed).toBe(true);
+    // The sender is a separate runtime on its own `UnixSocketPubSub` client, so the
+    // claimed owner's verdict reaches it only as an `idle-signal-rejected` reply
+    // encoded over the socket, and both instances read the thread lease from the
+    // socket's shared lease files.
+    describe.runIf(process.platform !== 'win32')('from a sender on another instance over UnixSocketPubSub', () => {
+      let tempDir: string;
+      let ownerPubSub: UnixSocketPubSub;
+      let senderPubSub: UnixSocketPubSub;
+      let senderRuntime: AgentThreadStreamRuntime;
 
-      // The sender is a separate runtime instance, so the claimed owner's verdict
-      // reaches it only through the PubSub acceptance reply.
-      const senderRuntime = new AgentThreadStreamRuntime();
-      try {
-        await expect(
-          senderRuntime.sendSignal(
-            createWakeableAgent('run-3').agent,
-            { type: 'user-message', contents: 'hello from another instance' },
-            { resourceId: RESOURCE_ID, threadId: 'thread-1', ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
-            pubsub,
-          ).accepted,
-        ).resolves.toEqual({ action: 'blocked', reason: 'thread-blocked', runId: 'run-1' });
-        await flushPublishes();
-        expect(watcher.has('signal-enqueued', 'run-1')).toBe(false);
-        expect(owner.stream).not.toHaveBeenCalled();
-      } finally {
-        claim.unsubscribe();
-      }
-    });
+      beforeEach(async () => {
+        tempDir = await mkdtemp(join(tmpdir(), 'mastra-swept-run-send-'));
+        const socketPath = join(tempDir, 'signals.sock');
+        ownerPubSub = new UnixSocketPubSub(socketPath);
+        senderPubSub = new UnixSocketPubSub(socketPath);
+        senderRuntime = new AgentThreadStreamRuntime();
+      });
 
-    it('still delivers through a claimed owner on another instance when no swept run holds the lease', async () => {
-      const owner = createWakeableAgent('run-2');
-      const claim = await runtime.claimThreadOwnership(
-        owner.agent,
-        { resourceId: RESOURCE_ID, threadId: 'thread-1' },
-        pubsub,
-      );
-      expect(claim.claimed).toBe(true);
-      const senderRuntime = new AgentThreadStreamRuntime();
-      try {
-        await expect(
-          senderRuntime.sendSignal(
-            createWakeableAgent('run-3').agent,
-            { type: 'user-message', contents: 'hello from another instance' },
-            { resourceId: RESOURCE_ID, threadId: 'thread-1', ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
-            pubsub,
-          ).accepted,
-        ).resolves.toMatchObject({ action: 'deliver' });
-        expect(owner.stream).toHaveBeenCalledTimes(1);
-      } finally {
-        claim.unsubscribe();
-      }
+      afterEach(async () => {
+        await Promise.allSettled([ownerPubSub.close(), senderPubSub.close()]);
+        await rm(tempDir, { recursive: true, force: true });
+      });
+
+      const sendFromSender = (agent: Agent<any, any, any, any>) =>
+        senderRuntime.sendSignal(
+          agent,
+          { type: 'user-message', contents: 'hello from another instance' },
+          { resourceId: RESOURCE_ID, threadId: 'thread-1', ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+          senderPubSub,
+        ).accepted;
+
+      it('reports blocked when the claimed owner loses the lease to the swept run', async () => {
+        const watcher = await watchThread(ownerPubSub, 'thread-1');
+        await registerSuspendedRun('run-1', 'thread-1', watcher, ownerPubSub);
+        const sweeper = await sweepAfter(SUSPENDED_RUN_TTL_MS + 1, undefined, ownerPubSub);
+        const owner = createWakeableAgent('run-2');
+        const claim = await runtime.claimThreadOwnership(
+          owner.agent,
+          { resourceId: RESOURCE_ID, threadId: 'thread-1' },
+          ownerPubSub,
+        );
+        expect(claim.claimed).toBe(true);
+        const sender = createWakeableAgent('run-3');
+
+        try {
+          await expect(sendFromSender(sender.agent)).resolves.toEqual({
+            action: 'blocked',
+            reason: 'thread-blocked',
+            runId: 'run-1',
+          });
+          await flushPublishes();
+          expect(watcher.has('signal-enqueued', 'run-1')).toBe(false);
+          expect(owner.stream).not.toHaveBeenCalled();
+          expect(sender.stream).not.toHaveBeenCalled();
+        } finally {
+          claim.unsubscribe();
+          sweeper.settle('success');
+        }
+      });
+
+      it('still delivers through the claimed owner when no swept run holds the lease', async () => {
+        const owner = createWakeableAgent('run-2');
+        const claim = await runtime.claimThreadOwnership(
+          owner.agent,
+          { resourceId: RESOURCE_ID, threadId: 'thread-1' },
+          ownerPubSub,
+        );
+        expect(claim.claimed).toBe(true);
+        const sender = createWakeableAgent('run-3');
+
+        try {
+          await expect(sendFromSender(sender.agent)).resolves.toMatchObject({ action: 'deliver' });
+          expect(owner.stream).toHaveBeenCalledTimes(1);
+          expect(sender.stream).not.toHaveBeenCalled();
+        } finally {
+          claim.unsubscribe();
+          owner.run.settle('success');
+        }
+      });
     });
 
     it('wakes a new run once the abandoned lease is gone', async () => {
