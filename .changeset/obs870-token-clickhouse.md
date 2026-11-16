@@ -1,5 +1,5 @@
 ---
-'@mastra/clickhouse': minor
+'@mastra/clickhouse': patch
 ---
 
 Reject unsupported experimental token predicates.
