@@ -253,6 +253,39 @@ describe('optimistic span comments in the trace list', () => {
   });
 });
 
+describe('a caller-provided select', () => {
+  describe('when a comment is submitted', () => {
+    it.each([
+      {
+        name: 'trace',
+        spanId: undefined,
+        useList: () => useTraceFeedback({ traceId: TRACE_ID, queryOptions: { select: data => data.feedback } }),
+        visibleServerRows: 2,
+      },
+      {
+        name: 'span',
+        spanId: SPAN_ID,
+        useList: () =>
+          useSpanFeedback({ traceId: TRACE_ID, spanId: SPAN_ID, queryOptions: { select: data => data.feedback } }),
+        visibleServerRows: 1,
+      },
+    ])('receives the pending $name comment', async ({ spanId, useList, visibleServerRows }) => {
+      eventuallyConsistentFeedbackServer(spanId ? [...spanRows] : [...traceRows]);
+      const { result } = renderHook(
+        () => ({ list: useList(), create: useCreateFeedback({ traceId: TRACE_ID, spanId }) }),
+        { wrapper: makeWrapper() },
+      );
+      // The trace selector still only sees trace-level rows.
+      await waitFor(() => expect(result.current.list.data).toHaveLength(visibleServerRows));
+
+      await act(() => result.current.create.mutateAsync({ text: 'selected note' }));
+
+      await waitFor(() => expect(result.current.list.data?.[0]?.value).toBe('selected note'));
+      expect(result.current.list.data).toHaveLength(visibleServerRows + 1);
+    });
+  });
+});
+
 describe('useCreateFeedback caller callbacks', () => {
   describe('when the caller passes onMutate and onSuccess', () => {
     it('still runs caller onMutate/onSuccess and passes their context through', async () => {

@@ -35,7 +35,15 @@ export const useSpanFeedback = <TData = SpanFeedbackResponse,>({
   const queryClient = useQueryClient();
   const pageNumber = page ?? 0;
   const pending = usePendingFeedback({ traceId, spanId, enabled: pageNumber === 0 });
-  const select = useCallback((data: SpanFeedbackResponse) => mergePendingFeedback(data, pending) as TData, [pending]);
+  const { select: callerSelect, ...restQueryOptions } = queryOptions ?? {};
+  // The caller's selector runs on the merged data, so it still sees pending comments.
+  const select = useCallback(
+    (data: SpanFeedbackResponse) => {
+      const merged = mergePendingFeedback(data, pending);
+      return callerSelect ? callerSelect(merged) : (merged as TData);
+    },
+    [pending, callerSelect],
+  );
   return useQuery({
     // `spanId` must stay in the key, otherwise React Query serves the previously
     // selected span's feedback when switching spans within the same trace.
@@ -52,6 +60,6 @@ export const useSpanFeedback = <TData = SpanFeedbackResponse,>({
     refetchInterval: getFeedbackRefetchInterval,
     gcTime: 0,
     staleTime: 0,
-    ...queryOptions,
+    ...restQueryOptions,
   });
 };

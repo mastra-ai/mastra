@@ -31,16 +31,20 @@ export const useTraceFeedback = <TData = TraceFeedbackResponse,>({
   const queryClient = useQueryClient();
   const pageNumber = page ?? 0;
   const pending = usePendingFeedback({ traceId, enabled: pageNumber === 0 });
+  const { select: callerSelect, ...restQueryOptions } = queryOptions ?? {};
   // The API can't express "spanId is null", so trace-level records are isolated client-side.
   // Note: this runs after server-side pagination, so a page may hold fewer than `perPage` rows.
+  // The caller's selector runs last, so it still sees pending comments and only trace-level rows.
   const select = useCallback(
     (data: TraceFeedbackResponse) => {
       const merged = mergePendingFeedback(data, pending);
       const feedback = merged.feedback.filter(item => !item.spanId);
-      if (!merged.pagination) return { ...merged, feedback } as TData;
-      return { ...merged, feedback, pagination: { ...merged.pagination, total: feedback.length } } as TData;
+      const traceLevel: TraceFeedbackResponse = merged.pagination
+        ? { ...merged, feedback, pagination: { ...merged.pagination, total: feedback.length } }
+        : { ...merged, feedback };
+      return callerSelect ? callerSelect(traceLevel) : (traceLevel as TData);
     },
-    [pending],
+    [pending, callerSelect],
   );
   return useQuery({
     queryKey: ['trace-feedback', traceId, pageNumber],
@@ -56,6 +60,6 @@ export const useTraceFeedback = <TData = TraceFeedbackResponse,>({
     refetchInterval: getFeedbackRefetchInterval,
     gcTime: 0,
     staleTime: 0,
-    ...queryOptions,
+    ...restQueryOptions,
   });
 };
