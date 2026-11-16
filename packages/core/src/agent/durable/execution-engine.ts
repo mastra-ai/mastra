@@ -8,17 +8,24 @@ import {
   settledOrElapsed,
 } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
+import type { MastraMemory } from '../../memory/memory';
 import { createObservabilityContext } from '../../observability';
+import type { RequestContext } from '../../request-context';
+import type { MemoryStorage, WorkflowsStorage } from '../../storage';
 import type { ShouldPersistSnapshotFn, WorkflowRunStatus } from '../../workflows/types';
 import { whenRunStepsSettle } from '../run-lease-fence';
 import { DurableStepIds } from './constants';
-import type { ExecutionFence } from './execution-fence';
+import { ExecutionFence, fencePubSub, resolveLeaseProvider, supportsRunFencing } from './execution-fence';
+import type { UntrackedRunLiveness } from './execution-fence';
+import { withExecutionStreamPublisher } from './execution-stream-publisher';
 import { getRunRegistryEntry } from './run-registry';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from './types';
 import { createDurableAgenticWorkflow } from './workflows/create-durable-agentic-workflow';
 import { deadlineMessageListState, runDurableDeadlineOutputPass } from './workflows/finalize-run';
 
 type DurableWorkflow = ReturnType<typeof createDurableAgenticWorkflow>;
+
+const unfencedStoresWarned = new WeakSet<WorkflowsStorage | MemoryStorage>();
 
 /** Live services and existing Agent subclass hooks, read at invocation time. */
 export interface DurableExecutionHost {
@@ -31,6 +38,8 @@ export interface DurableExecutionHost {
   readonly storesRunsInJournal: boolean;
   readonly suspendPersistedOnReturn: boolean;
   readonly userShouldPersistSnapshot: ShouldPersistSnapshotFn | undefined;
+  readonly pubsub: PubSub;
+  getMemory(options: { requestContext: RequestContext }): Promise<MastraMemory | undefined>;
   getMastraInstance(): Mastra | undefined;
   getPubSub(): PubSub | undefined;
   getWorkflow(): DurableWorkflow;
@@ -62,6 +71,86 @@ export class DurableExecutionEngine {
   #recoveredEntries = new WeakMap<ExecutionFence, RunRegistryEntry>();
 
   constructor(protected readonly host: DurableExecutionHost) {}
+
+  async claimExecution(
+    runId: string,
+    mode: 'acquire' | 'recover' | 'takeover',
+    requestContext?: RequestContext,
+    untrackedRun?: UntrackedRunLiveness,
+  ): Promise<ExecutionFence> {
+    const fence = await ExecutionFence.claim({
+      leaseProvider: resolveLeaseProvider(this.host.pubsub),
+      workflowsStore: await this.host.mastra?.getStorage()?.getStore('workflows'),
+      agentId: this.host.id,
+      runId,
+      mode,
+      untrackedRun,
+      logger: this.host.logger,
+    });
+    if (requestContext) await this.coverMemory(fence, requestContext);
+    return fence;
+  }
+
+  async coverMemory(fence: ExecutionFence, requestContext: RequestContext, recovering = false): Promise<void> {
+    if (fence.generation === undefined) return;
+    let store: MemoryStorage | undefined;
+    try {
+      const memory = await this.host.getMemory({ requestContext });
+      store = memory ? await memory.storage.getStore('memory') : undefined;
+    } catch (error) {
+      this.host.logger.warn(`[DurableAgent] run ${fence.runId}: memory is not fenced, failed to resolve its store`, {
+        runId: fence.runId,
+        error,
+      });
+    }
+    if (recovering || this.host.mastra?.recoveryConfig?.durableAgents === 'auto') {
+      await this.warnIfUnfenced(store, 'memory');
+    }
+    try {
+      await fence.coverMemory(store);
+    } catch (error) {
+      await fence.settle(async () => {});
+      throw error;
+    }
+  }
+
+  async warnIfUnfenced(
+    store: WorkflowsStorage | MemoryStorage | undefined,
+    domain: 'workflows' | 'memory',
+  ): Promise<boolean> {
+    if (!store || (await supportsRunFencing(store).catch(() => true))) return false;
+    if (unfencedStoresWarned.has(store)) return true;
+    unfencedStoresWarned.add(store);
+    const consequence =
+      domain === 'workflows'
+        ? `Recovery can only tell that a run is still live through the pubsub lease, which works only when every instance shares the pubsub, and writes from an execution that lost its run are not rejected. A run recovered while it is still live can end with the stale execution's output.`
+        : `When recovery takes a run over, the memory writes (messages, threads, working memory) of the execution that lost it are not rejected.`;
+    this.host.guardrailLogger?.warn(
+      `DurableAgent '${this.host.id}': the ${domain} store (${store.constructor.name}) can't fence run writes. ${consequence} ` +
+        `Use a storage adapter that supports run fencing.`,
+    );
+    return true;
+  }
+
+  fenceRunPubSub(
+    executionFence: ExecutionFence | undefined,
+    abortController: AbortController | undefined,
+    pubsub: PubSub = this.host.pubsub,
+  ): PubSub {
+    if (executionFence) {
+      pubsub = withExecutionStreamPublisher(pubsub, {
+        runId: executionFence.runId,
+        agentId: this.host.id,
+        mastra: this.host.mastra,
+        claim: executionFence.claim,
+      });
+    }
+    if (!executionFence || this.host.resolveWorkflowEngine() !== 'default') return pubsub;
+    executionFence.onLost(error => {
+      if (abortController && !abortController.signal.aborted) abortController.abort(error);
+    });
+    return fencePubSub(pubsub, executionFence);
+  }
 
   hasTimedOut(fence: ExecutionFence): boolean {
     return this.#timedOutExecutions.has(fence);

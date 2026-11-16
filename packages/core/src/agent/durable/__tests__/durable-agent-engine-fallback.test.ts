@@ -20,6 +20,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createTextStreamModel } from '@internal/test-utils';
 import { describe, expect, it, vi } from 'vitest';
+import type { PubSub } from '../../../events';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { UnixSocketPubSub } from '../../../events/unix-socket-pubsub';
 import { noopLogger } from '../../../logger/noop-logger';
@@ -71,6 +72,16 @@ describe('Durable workflow subclass dispatch', () => {
         executionStatuses: (string | undefined)[] = [];
         settledRuns: string[] = [];
         deletedRuns: string[] = [];
+        fencedRuns: string[] = [];
+
+        protected override fenceRunPubSub(
+          fence: ExecutionFence | undefined,
+          abortController: AbortController | undefined,
+          pubsub: PubSub = this.pubsub,
+        ): PubSub {
+          if (fence) this.fencedRuns.push(fence.runId);
+          return super.fenceRunPubSub(fence, abortController, pubsub);
+        }
 
         protected override async settleExecution(
           runId: string,
@@ -122,6 +133,7 @@ describe('Durable workflow subclass dispatch', () => {
         await expect.poll(() => agent.executionStatuses).toEqual([expectedStatus]);
         await expect.poll(() => agent.settledRuns).toHaveLength(1);
         expect(agent.deletedRuns).toEqual(agent.settledRuns);
+        expect(agent.fencedRuns).toContain(agent.settledRuns[0]);
         expect(getWorkflow).toHaveBeenCalled();
       } finally {
         getWorkflow.mockRestore();
