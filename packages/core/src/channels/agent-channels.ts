@@ -1694,7 +1694,10 @@ export class AgentChannels {
     // carries the history. Agents without memory can't persist rows, so they
     // keep receiving the history as one text block ahead of the trigger.
     let legacyHistoryBlock: string | undefined;
-    const maxMessages = this.threadContext.maxMessages ?? 10;
+    // A platform can narrow or widen the window for itself; the instance-wide
+    // value stays the default for every platform that doesn't.
+    const maxMessages =
+      this.adapterConfigs[platform]?.threadContext?.maxMessages ?? this.threadContext.maxMessages ?? 10;
     if (maxMessages > 0 && !chatThread.isDM) {
       const alreadySubscribed = await chatThread.isSubscribed();
       if (!alreadySubscribed) {

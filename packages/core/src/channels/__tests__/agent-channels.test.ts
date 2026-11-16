@@ -3499,7 +3499,15 @@ describe('thread history', () => {
     metadata: { dateSent: new Date(BASE_TIME + 100_000), edited: false },
   });
 
-  async function setup(options: { agent?: any; threadContext?: Record<string, unknown>; spyHook?: boolean } = {}) {
+  async function setup(
+    options: {
+      agent?: any;
+      threadContext?: Record<string, unknown>;
+      /** Per-platform options for the `slack` adapter entry. */
+      slackAdapterConfig?: Record<string, unknown>;
+      spyHook?: boolean;
+    } = {},
+  ) {
     const chatMod = await getChatModule();
     let wrapper: ((...args: any[]) => unknown) | undefined;
     vi.spyOn(chatMod.Chat.prototype as any, 'onNewMention').mockImplementation((handler: any) => {
@@ -3508,7 +3516,11 @@ describe('thread history', () => {
     const agent = options.agent ?? createMockAgent();
     const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const channels = new AgentChannels({
-      adapters: { slack: createMockAdapter('slack') },
+      adapters: {
+        slack: options.slackAdapterConfig
+          ? { adapter: createMockAdapter('slack'), ...options.slackAdapterConfig }
+          : createMockAdapter('slack'),
+      },
       ...(options.threadContext ? { threadContext: options.threadContext } : {}),
     });
     channels.__setAgent(agent);
@@ -3592,6 +3604,64 @@ describe('thread history', () => {
     expect(serialized).not.toContain('[Thread context');
     expect(serialized).not.toContain('message 0');
     expect(serialized).toContain('hi there');
+  });
+
+  it('uses the per-platform maxMessages over the instance-wide one', async () => {
+    const t = await setup({
+      threadContext: { maxMessages: 10 },
+      slackAdapterConfig: { threadContext: { maxMessages: 3 } },
+    });
+    const history = Array.from({ length: 15 }, (_, i) => historyMessage(i));
+    await t.run(makeChatThread(history));
+
+    const signals = t.signals();
+    const mastraThreadId = t.dispatches[0].thread.id;
+    expect(signals.map(s => s.contents)).toEqual([
+      'message 0',
+      '[… 12 earlier Slack messages omitted]',
+      'message 13',
+      'message 14',
+    ]);
+    expect(signals.map(s => s.id)).toEqual([
+      `thread-history:${mastraThreadId}:h0`,
+      `thread-history:${mastraThreadId}:gap`,
+      `thread-history:${mastraThreadId}:h13`,
+      `thread-history:${mastraThreadId}:h14`,
+    ]);
+    expect(signals[1].attributes).toEqual({
+      platform: 'slack',
+      source: 'thread-history',
+      kind: 'gap',
+      omitted: '12',
+    });
+    expect(t.dispatches).toHaveLength(1);
+  });
+
+  it('disables the history fetch for one platform without touching the instance-wide window', async () => {
+    const t = await setup({
+      threadContext: { maxMessages: 10 },
+      slackAdapterConfig: { threadContext: { maxMessages: 0 } },
+    });
+    await t.run(makeChatThread(Array.from({ length: 15 }, (_, i) => historyMessage(i))));
+
+    expect(t.hook).not.toHaveBeenCalled();
+    expect(t.signals()).toHaveLength(0);
+    expect(t.dispatches).toHaveLength(1);
+  });
+
+  it('falls back to the instance-wide maxMessages when a platform sets none', async () => {
+    const t = await setup({
+      threadContext: { maxMessages: 3 },
+      slackAdapterConfig: { toolDisplay: 'text' },
+    });
+    await t.run(makeChatThread(Array.from({ length: 15 }, (_, i) => historyMessage(i))));
+
+    expect(t.signals().map(s => s.contents)).toEqual([
+      'message 0',
+      '[… 12 earlier Slack messages omitted]',
+      'message 13',
+      'message 14',
+    ]);
   });
 
   it('includes Slack layout-block text in history rows without repeating the fallback', async () => {
