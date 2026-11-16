@@ -10,8 +10,11 @@ import { ConnectionManagementButton } from './common/ConnectionManagementButton'
 import { IntegrationItem } from './IntegrationItem';
 import { RetryRow } from './common/ConnectionStateRows';
 import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
+import { useOrgKeyAdminQuery } from '../../../../hooks/use-providers';
 
 const slack = { provider: 'slack', name: 'Slack' } as const;
+const SLACK_SETUP_DOCS_URL = 'https://factory.mastra.ai/configure/slack';
 
 // Env vars alone do not prove the deployment registers SlackIntegration.
 export function SlackNotConfigured() {
@@ -22,8 +25,32 @@ export function SlackNotConfigured() {
   );
 }
 
+// Setting Slack up means creating a Slack app and configuring the deployment, which members can't do.
 function SlackUnavailableRow() {
-  return <IntegrationItem {...slack} description="Slack is not set up for this factory." />;
+  const orgAdminQuery = useOrgKeyAdminQuery();
+
+  if (orgAdminQuery.data === false) {
+    return (
+      <IntegrationItem
+        {...slack}
+        description="Slack is not set up for this factory. Ask an organization admin to set it up."
+      />
+    );
+  }
+
+  return (
+    <IntegrationItem {...slack} description="Slack is not set up for this factory.">
+      {orgAdminQuery.data && (
+        <Button
+          size="sm"
+          render={<a href={SLACK_SETUP_DOCS_URL} target="_blank" rel="noopener noreferrer" />}
+          iconEnd={<IconSquareArrowTopRight aria-hidden />}
+        >
+          Set up Slack
+        </Button>
+      )}
+    </IntegrationItem>
+  );
 }
 
 export function ConnectedAccountsSection() {

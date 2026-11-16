@@ -46,6 +46,36 @@ describe('ConnectedAccountsSection', () => {
     expect(screen.queryByRole('button', { name: /Connect/ })).not.toBeInTheDocument();
   });
 
+  it('given Slack is not set up and the viewer is an org admin, when rendered, then it links to the Slack setup guide', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/channel-accounts`, () =>
+        HttpResponse.json({ accounts: [], canConnect: false, reason: 'not_registered' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ orgKeyAdmin: true, providers: [] })),
+    );
+
+    renderSection();
+
+    const link = await screen.findByRole('link', { name: /Set up Slack/ });
+    expect(link).toHaveAttribute('href', 'https://factory.mastra.ai/configure/slack');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(screen.queryByText(/Ask an organization admin/)).not.toBeInTheDocument();
+  });
+
+  it('given Slack is not set up and the viewer is not an org admin, when rendered, then it tells them to ask an admin', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/channel-accounts`, () =>
+        HttpResponse.json({ accounts: [], canConnect: false, reason: 'not_registered' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ orgKeyAdmin: false, providers: [] })),
+    );
+
+    renderSection();
+
+    expect(await screen.findByText(/Ask an organization admin to set it up/)).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Set up Slack/ })).not.toBeInTheDocument();
+  });
+
   it('given an old server with no channel route, when rendered, then it shows the not-configured card instead of a parse error', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/channel-accounts`, () =>
