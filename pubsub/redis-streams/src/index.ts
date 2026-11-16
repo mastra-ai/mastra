@@ -593,6 +593,28 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     return `${this.#keyPrefix}:${topic}`;
   }
 
+  /** The Redis key of `topic`'s stream, for read-only inspection (e.g. `XINFO GROUPS`). */
+  streamKey(topic: string): string {
+    return this.#streamKey(topic);
+  }
+
+  /**
+   * A new, unconnected client with this pubsub's connection options, for health checks that must
+   * not queue behind pub/sub traffic. Commands fail fast while disconnected instead of queueing.
+   * The caller owns it: connect it, and close it when done.
+   */
+  createMonitorClient(): RedisClientType {
+    const cluster = this.#writeClient as unknown as Partial<Pick<RedisClusterType, '_options'>>;
+    if (cluster._options) {
+      // A cluster's node clients take their options from `defaults`, not the root.
+      const duplicate = (this.#writeClient as unknown as RedisClusterType).duplicate({
+        defaults: { ...cluster._options.defaults, disableOfflineQueue: true },
+      });
+      return duplicate as unknown as RedisClientType;
+    }
+    return this.#writeClient.duplicate({ disableOfflineQueue: true }) as RedisClientType;
+  }
+
   async publish(
     topic: string,
     event: Omit<Event, 'id' | 'createdAt'>,
@@ -1280,7 +1302,9 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
    * from other processes.
    */
   async releaseLease(key: string, owner: string): Promise<void> {
-    if (this.#closed) return;
+    // Not `#closed`: a nack during close() still republishes through the
+    // writer, and the redelivery must not find the lease still held.
+    if (this.#writerReleased) return;
     await this.#ensureWriterConnected();
     const script = `
       if redis.call("GET", KEYS[1]) == ARGV[1] then

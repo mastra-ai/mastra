@@ -43,7 +43,9 @@ export function ChangesBody({ workspacePath, scope, visible, layout, diffsRef }:
     return (
       <>
         <ChangesNotice changes={patches.data} />
-        <ChangesEmptyState workspacePath={workspacePath} sandboxRunning={patches.data.available} />
+        {patches.data.available || !patches.data.repositories ? (
+          <ChangesEmptyState workspacePath={workspacePath} sandboxRunning={patches.data.available} />
+        ) : null}
       </>
     );
   }

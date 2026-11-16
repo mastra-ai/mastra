@@ -16,6 +16,7 @@
  */
 
 import type { RepositoryAccess } from '../../capabilities/version-control.js';
+import { recordSandboxCommand } from '../../metrics/sandbox.js';
 import { isValidGitRef } from '../../sandbox/git-ref.js';
 import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
 import { appliedSandboxEnv, maskSandboxEnvValues } from '../../sandbox/sandbox-env.js';
@@ -113,17 +114,23 @@ async function execute(
         ...options,
         timeoutMs: Math.max(deadlineMs - Date.now(), 1),
       });
-      if (options.phase && bootDiagnosticsEnabled) {
-        process.stderr.write(
-          `[factory:timing] ${options.phase} attempt=${attempt + 1} exit=${result.exitCode} ${Math.round(performance.now() - started)}ms\n`,
-        );
+      if (options.phase) {
+        const elapsed = performance.now() - started;
+        if (bootDiagnosticsEnabled) {
+          process.stderr.write(
+            `[factory:timing] ${options.phase} attempt=${attempt + 1} exit=${result.exitCode} ${Math.round(elapsed)}ms\n`,
+          );
+        }
+        recordSandboxCommand(options.phase, elapsed, result.exitCode === 0 ? 'ok' : 'exit');
       }
       return result;
     } catch (error) {
       if (options.phase) {
+        const elapsed = performance.now() - started;
         process.stderr.write(
-          `[factory:timing] ${options.phase} attempt=${attempt + 1} threw after ${Math.round(performance.now() - started)}ms: ${error instanceof Error ? error.message : String(error)}\n`,
+          `[factory:timing] ${options.phase} attempt=${attempt + 1} threw after ${Math.round(elapsed)}ms: ${error instanceof Error ? error.message : String(error)}\n`,
         );
+        recordSandboxCommand(options.phase, elapsed, 'threw');
       }
       if (attempt >= SH_RETRIES || !isTransientTransportError(error)) throw error;
       const delayMs = SH_RETRY_DELAY_MS * (attempt + 1);

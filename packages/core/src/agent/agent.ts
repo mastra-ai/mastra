@@ -1794,6 +1794,17 @@ export class Agent<
     return false;
   }
 
+  /** Whether this class executes through the plain Agent publisher. @internal */
+  protected __ownsPlainStreamPublisher(): boolean {
+    return true;
+  }
+
+  // Sharing transport does not opt durable execution into plain run records or abort checks.
+  #ownStreamBus(): AgentStreamBus | undefined {
+    if (!this.__ownsPlainStreamPublisher() || !areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
+    return this.__getStreamBus();
+  }
+
   /**
    * Whether runs of this agent can be followed from another reader with
    * `observe()` (or the server's observe route): true when its runs publish

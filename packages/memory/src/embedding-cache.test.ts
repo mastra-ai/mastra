@@ -112,9 +112,19 @@ describe('observation indexing IDs', () => {
       {
         id: 'v1',
         score: 0.9,
-        metadata: { group_id: 'group-1', thread_id: 'thread-1', record_id: 'record-1', text: 'x' },
+        metadata: {
+          group_id: 'group-1',
+          thread_id: 'thread-1',
+          resource_id: 'resource-1',
+          record_id: 'record-1',
+          text: 'x',
+        },
       },
-      { id: 'v2', score: 0.8, metadata: { group_id: 'group-2', thread_id: 'thread-1', text: 'y' } },
+      {
+        id: 'v2',
+        score: 0.8,
+        metadata: { group_id: 'group-2', thread_id: 'thread-1', resource_id: 'resource-1', text: 'y' },
+      },
     ]);
     const { results } = await memory.searchMessages({ query: 'x', resourceId: 'resource-1' });
     expect(results.map(r => [r.groupId, r.recordId])).toEqual([

@@ -1,4 +1,5 @@
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconChevronRight } from '@mastra/playground-ui/icons/central/IconChevronRight';
 import { useState } from 'react';
 
 import { Badge } from '@mastra/playground-ui/components/Badge';
@@ -68,9 +69,9 @@ function BuildHistoryRows({
               onClick={() => setOpen(expanded ? undefined : build.buildId)}
             >
               {expanded ? (
-                <ChevronDown className="size-3.5 shrink-0" aria-hidden />
+                <IconChevronBottom className="size-3.5 shrink-0" aria-hidden />
               ) : (
-                <ChevronRight className="size-3.5 shrink-0" aria-hidden />
+                <IconChevronRight className="size-3.5 shrink-0" aria-hidden />
               )}
               <Badge size="sm" variant={status.variant}>
                 {status.label}

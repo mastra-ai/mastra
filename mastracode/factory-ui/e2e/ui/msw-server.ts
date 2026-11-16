@@ -31,7 +31,14 @@ export const server = setupServer(
   http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json(builtinBoardCatalog)),
   // Ambient run queue: no automated run waits for a slot. Run-queue tests override it with `server.use(...)`.
   http.get('*/web/factory/projects/:id/run-queue', () =>
-    HttpResponse.json({ slots: null, running: 0, claimed: [], queuedCount: 0, queued: [] }),
+    HttpResponse.json({
+      slots: null,
+      running: 0,
+      claimed: [],
+      queuedCount: 0,
+      queuedByLane: { automated: 0, interactive: 0 },
+      queued: [],
+    }),
   ),
   // The sidebar and the board page read the intake routes to learn whether the caller may change
   // boards. The ambient caller is a member who may not; board tests override it with `server.use(...)`.
@@ -53,10 +60,6 @@ export const server = setupServer(
   ),
   // Board filters read connection status even when no provider is configured.
   http.get('*/web/github/status', () => HttpResponse.json({ enabled: false, connected: false, installations: [] })),
-  // Ambient pull requests: Work and Review both list their linked repositories'
-  // open pull requests. Pull-request tests override these with `server.use(...)`.
-  http.get('*/web/github/projects/:id/prs', () => HttpResponse.json({ pullRequests: [], nextPage: null })),
-  http.get('*/web/gitlab/projects/:id/prs', () => HttpResponse.json({ pullRequests: [], nextPage: null })),
   // GitLab intake is optional; feature tests override these ambient 404s.
   http.get('*/web/gitlab/status', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   http.get('*/web/gitlab/projects', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),

@@ -995,6 +995,11 @@ export class DurableAgent<
     return !!this.#mastra && this.resolveWorkflowEngine() === 'evented';
   }
 
+  /** Durable execution uses its lifecycle publisher, not the plain Agent entry point. @internal */
+  protected override __ownsPlainStreamPublisher(): boolean {
+    return false;
+  }
+
   /** Kept `false`, the value this getter has always reported for durable agents. */
   override get durable(): AgentDurableOption | undefined {
     return false;

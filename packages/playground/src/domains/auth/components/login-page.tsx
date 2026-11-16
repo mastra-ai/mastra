@@ -4,8 +4,9 @@ import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowBoxRight } from '@mastra/playground-ui/icons/central/IconArrowBoxRight';
+import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
 import { useSSOLogin, useAuthCapabilities, useCredentialsLogin, useCredentialsSignUp } from '@mastra/react/hooks/auth';
-import { Lock, LogIn } from 'lucide-react';
 import { useState } from 'react';
 import { LoginLayout } from './login-layout';
 import { withStudioBasePath } from '@/lib/studio-base-path';
@@ -109,7 +110,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
 
   const description = login.description ? (
     <div className="flex items-start gap-2.5 rounded-md border border-border bg-sidebar p-3">
-      <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+      <IconLock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
       <Txt tone="muted">{login.description}</Txt>
     </div>
   ) : null;
@@ -182,7 +183,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
             </div>
           ) : null}
 
-          <Button icon={<LogIn />} type="submit" disabled={isPending} className="w-full" size="lg">
+          <Button icon={<IconArrowBoxRight />} type="submit" disabled={isPending} className="w-full" size="lg">
             {isPending ? (isSignIn ? 'Signing in...' : 'Creating account...') : isSignIn ? 'Sign in' : 'Create account'}
           </Button>
 

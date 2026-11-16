@@ -3,7 +3,6 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronDown, ScrollText } from 'lucide-react';
 import { useId, useState } from 'react';
 
 import { traySurface } from '../../../../ui/tray';
@@ -17,6 +16,8 @@ import { ActivityChart } from './ActivityChart';
 import { ActivityPeriodMenu } from './ActivityPeriodMenu';
 import { ActivityReveal } from './ActivityReveal';
 import { ActivityTotals } from './ActivityTotals';
+import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconScript } from '@mastra/playground-ui/icons/central/IconScript';
 
 const RECAPS: Record<ActivityPeriod, { label: string; since: string }> = {
   today: { label: 'Recap today', since: 'today' },
@@ -39,7 +40,7 @@ function RecapButton({ period }: { period: ActivityPeriod }) {
         focusRing,
       )}
     >
-      <ScrollText aria-hidden className="size-3.5" />
+      <IconScript aria-hidden className="size-3.5" />
       {label}
     </button>
   );
@@ -98,7 +99,7 @@ export function FactoryActivity({ factoryId }: { factoryId: string }) {
                 <RecapButton period={period} />
               </div>
             )}
-            <ChevronDown
+            <IconChevronBottom
               aria-hidden
               className={cn(
                 'text-muted-foreground duration-slow ease-out-custom size-3.5 transition-[rotate,color] group-has-[[aria-controls]:hover]/band:text-foreground motion-reduce:transition-none',
