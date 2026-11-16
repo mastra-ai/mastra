@@ -8,14 +8,14 @@ import { BillingDatabase } from './database.js';
 
 /** Durable artifact claims protected by the current billing execution and identity. */
 export class ExecutionArtifacts implements ArtifactPersistence {
+  private database: Promise<BillingDatabase> | undefined;
   constructor(private readonly databaseUrl: string) {}
   private async sql<T>(work: (tx: Transaction) => Promise<T>) {
-    const database = await BillingDatabase.open({ url: this.databaseUrl });
-    try {
-      return await database.write(work);
-    } finally {
-      database.close();
-    }
+    this.database ??= BillingDatabase.open({ url: this.databaseUrl }).catch(error => {
+      this.database = undefined;
+      throw error;
+    });
+    return (await this.database).write(work);
   }
   private async owned(tx: Transaction, identity: AdmissionIdentity) {
     if (identity.validUntil !== null && identity.validUntil <= Date.now()) throw new BillingError('unauthenticated');
