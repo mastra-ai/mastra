@@ -1,5 +1,112 @@
 # @mastra/playground-ui
 
+## 69.1.0-alpha.3
+
+### Minor Changes
+
+- Added `unavailableReason` to `ModelPicker`. When set, the picker shows its usual trigger, disabled, and hovering or focusing it shows the reason in a tooltip. Use it when the current user can see the model but is not allowed to change it. ([#30471](https://github.com/mastra-ai/mastra/pull/30471))
+
+  ```tsx
+  <ModelPicker
+    providers={providers}
+    value={value}
+    onValueChange={setValue}
+    unavailableReason="Only the session owner can change the model."
+  />
+  ```
+
+- On phones and tablets, the default sidebar (`mobileMode="takeover"`) now sits under the page instead of covering it. Opening it slides the whole page to the right, and the navigation underneath grows into place as it fades in, like the ChatGPT iOS app. While it moves, the page gets rounded corners, a thin edge and a soft shadow, so it reads as a card lifted above the navigation. ([#30440](https://github.com/mastra-ai/mastra/pull/30440))
+
+  - Swipe the page right to open the sidebar and swipe left to close it. The page follows your finger. When you let go, it finishes in the direction you were last moving: a short swipe is enough, swiping back partway cancels, and a nudge of a few pixels springs back. It keeps the speed of your swipe and eases to a stop. Dragging moves only the page and the sidebar, so it stays smooth on long pages.
+  - While the sidebar is open, a faint tint of the opposite colour (light in dark mode, dark in light mode) covers the strip of page still in view, setting it apart from the navigation. Tap that strip, or press Escape, to close the sidebar. Focus returns to the menu button. Until then, Tab and Shift+Tab cycle through the sidebar, and the page and toasts behind it are out of reach.
+  - Swipes that start in content that scrolls sideways, or on sliders and other controls that handle their own drags, are left to that content.
+  - With reduced motion turned on, the sidebar opens and closes without sliding.
+
+  `AppShell` slides its content automatically. A `Sidebar` rendered outside `AppShell` has no page to slide, so either move the page into `AppShell` or keep the previous drawer:
+
+  ```tsx
+  <AppShell sidebar={<Sidebar>{nav}</Sidebar>}>{page}</AppShell>
+
+  // or, without AppShell
+  <Sidebar mobileMode="drawer">{nav}</Sidebar>
+  ```
+
+  On desktop, dragging the sidebar's edge no longer restyles the whole page on every move, so resizing stays smooth beside long pages. The live width is set on the sidebar panel itself, so `var(--sidebar-width)` read outside the sidebar keeps the initial width.
+
+- Switched `@mastra/playground-ui` components from Lucide to Central Icons, and added Central Icons for your own UI. Each icon is its own module under `@mastra/playground-ui/icons/central/` and works inside `Icon` like any other icon. The icons are licensed under the Central Icons license, not Apache-2.0. See `CENTRAL-ICONS-LICENSE.md` in the package. ([#29934](https://github.com/mastra-ai/mastra/pull/29934))
+
+  ```tsx
+  import { Icon } from '@mastra/playground-ui/icons/Icon';
+  import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
+
+  <Icon size="sm">
+    <IconMagnifyingGlass />
+  </Icon>;
+  ```
+
+### Patch Changes
+
+- Central Icons now cover every interface icon in Studio and Factory, and each icon family, such as speech bubbles, bells, folders and settings, uses one consistent shape. ([#30438](https://github.com/mastra-ai/mastra/pull/30438))
+
+- `CodeDiff` now paints its code on the card surface instead of the syntax theme's own background, so a diff matches the card around it in light and dark mode. ([#30388](https://github.com/mastra-ai/mastra/pull/30388))
+
+- Studio and Factory now use Central Icons for their interface icons. ([#29934](https://github.com/mastra-ai/mastra/pull/29934))
+
+- Fixed the right padding of `Sidebar.CommandHeader`: its buttons now line up with the right edge of the nav rows below. ([#30471](https://github.com/mastra-ai/mastra/pull/30471))
+
+  A `Button` rendered as a link no longer puts its `type` on the anchor, so `Sidebar.NavAction` used as a link renders a valid `<a>`.
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`adc0a70`](https://github.com/mastra-ai/mastra/commit/adc0a70bf835d1f81f7bf0af11b247ca115a6683), [`1072f7c`](https://github.com/mastra-ai/mastra/commit/1072f7c6268db5fb515460fdcdda173592bce450), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b), [`b666fdb`](https://github.com/mastra-ai/mastra/commit/b666fdbf03a95a8fbe4cf02d150f4576dad6512f)]:
+  - @mastra/core@1.84.0-alpha.3
+  - @mastra/memory@1.41.2-alpha.2
+  - @mastra/client-js@1.60.1-alpha.3
+  - @mastra/ai-sdk@1.12.0
+  - @mastra/react@1.15.1-alpha.3
+
+## 69.1.0-alpha.2
+
+### Patch Changes
+
+- Connect providers that use OAuth client credentials (`OAUTH2_CC`) or no authentication (`NONE`) without leaving Studio. Client-credential providers ask for a client ID and secret in the connect dialog; providers with no authentication connect immediately instead of opening an OAuth popup. ([#30336](https://github.com/mastra-ai/mastra/pull/30336))
+
+  Providers whose catalog lists only connection settings (for example a subdomain) now also ask for their API key, username and password, or client ID and secret. Previously the dialog showed only the settings, and the connection failed.
+
+  The headless connect helpers in `@mastra/playground-ui/domains/connect` now return a fully resolved `HeadlessAuthField` and support conditional fields (`visibleWhen`), so other apps can import them instead of keeping their own copy.
+
+  ```ts
+  import {
+    headlessAuthFieldKey,
+    headlessAuthFields,
+    isHeadlessAuthFieldVisible,
+    splitHeadlessAuthValues,
+    startHeadlessAuth,
+  } from '@mastra/playground-ui/domains/connect';
+
+  // Every field comes back fully resolved: label, target, required, and so on are always set.
+  const fields = headlessAuthFields(provider);
+
+  // Render only the fields whose `visibleWhen` condition matches the current values.
+  const visible = fields.filter(field => isHeadlessAuthFieldVisible(fields, field, values));
+  const missingRequired = visible.some(field => field.required && !values[headlessAuthFieldKey(field)]);
+
+  // On submit, values for hidden fields are dropped.
+  const { credentials, params } = splitHeadlessAuthValues(fields, values);
+  await startHeadlessAuth({
+    sessionToken,
+    integrationId: provider.id,
+    authType: provider.authType,
+    credentials,
+    params,
+  }).result;
+  ```
+
+- Updated dependencies [[`7277766`](https://github.com/mastra-ai/mastra/commit/7277766d6c967c475675d58ff2d0e5c6d7be7c84), [`9eae968`](https://github.com/mastra-ai/mastra/commit/9eae9680d2be2c9596156c1426998c173f80618f), [`951a18b`](https://github.com/mastra-ai/mastra/commit/951a18b08571b87eae318bcd0f5970b8e70ca3c8), [`f4458ee`](https://github.com/mastra-ai/mastra/commit/f4458eea7f221a5b741a4846bba9b95139a8aef8), [`a3b4ef9`](https://github.com/mastra-ai/mastra/commit/a3b4ef9ecda76f961cb9992a2c8787d37d8ce1b3), [`547600d`](https://github.com/mastra-ai/mastra/commit/547600d004e08ecb8b08c84312b535ae5b016c92)]:
+  - @mastra/core@1.84.0-alpha.2
+  - @mastra/memory@1.41.2-alpha.1
+  - @mastra/client-js@1.60.1-alpha.2
+  - @mastra/ai-sdk@1.12.0
+  - @mastra/react@1.15.1-alpha.2
+
 ## 69.1.0-alpha.1
 
 ### Minor Changes

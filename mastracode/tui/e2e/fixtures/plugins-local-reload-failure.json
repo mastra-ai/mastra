@@ -1,0 +1,62 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Call the reload failure plugin before the broken edit.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_reload_failure_before",
+            "name": "e2e_plugin_lookup",
+            "arguments": {
+              "query": "before"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "hasToolResult": true,
+        "toolCallId": "call_reload_failure_before",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Reload failure plugin answered."
+      }
+    },
+    {
+      "match": {
+        "hasToolResult": true,
+        "toolCallId": "call_reload_failure_after",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Reload failure plugin follow-up complete."
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_reload_failure_after",
+            "name": "e2e_plugin_lookup",
+            "arguments": {
+              "query": "after"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

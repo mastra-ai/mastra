@@ -1,10 +1,10 @@
 import { Drawer as DrawerPrimitive } from '@base-ui/react/drawer';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
-import { XIcon } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '@/ds/components/Button';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { dialogSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
@@ -494,7 +494,7 @@ DrawerContent.displayName = 'DrawerContent';
 const DrawerDefaultCloseButton = () => (
   <DrawerClose asChild>
     <Button type="button" variant="ghost" size="icon-sm" className="absolute top-3 right-3 z-10" aria-label="Close">
-      <XIcon />
+      <IconCrossMedium />
     </Button>
   </DrawerClose>
 );

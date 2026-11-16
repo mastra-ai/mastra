@@ -22,8 +22,17 @@ export type StoredPhaseInfo = StoredBoardInfo['phases'][number];
 export type ReplaceBoardBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.boardReplace.bodySchema>;
 export type IntakeRouteListResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteList.responseSchema>;
 export type IntakeRouteInfo = IntakeRouteListResponse['intakeRoutes'][number];
+export type IntakeOrderResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeOrderGet.responseSchema>;
+export type IntakeNotRoutedResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeNotRoutedList.responseSchema>;
+export type IntakeDecisionInfo = IntakeNotRoutedResponse['notRouted'][number];
+export type IntakeRouteAgainResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteAgain.responseSchema>;
+export type IntakeSkippedResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeSkippedList.responseSchema>;
 export type IntakeRouteInput = z.input<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteCreate.bodySchema>;
 export type IntakeRoutePatch = z.input<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteUpdate.bodySchema>;
+export type IntakeDryRunBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.intakeDryRun.bodySchema>;
+export type IntakeDryRunResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeDryRun.responseSchema>;
+export type IntakeTestBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.intakeTest.bodySchema>;
+export type IntakeTestResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeTest.responseSchema>;
 export type CreateBoardBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.boardCreate.bodySchema>;
 export type WorkItemStarters = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemStarters.responseSchema>;
 export type WorkItemActivity = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemActivity.responseSchema>;
@@ -51,6 +60,23 @@ export interface BoardPhasesRequest {
   item?: string;
 }
 
+type SessionRowsQuery = z.output<typeof FACTORY_ROUTE_CONTRACTS.sessionRows.querySchema>;
+export type SessionRowsResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.sessionRows.responseSchema>;
+export type SessionRowWire = SessionRowsResponse['groups'][number]['rows'][number];
+export type SessionActivity = z.infer<typeof FACTORY_ROUTE_CONTRACTS.sessionActivity.responseSchema>;
+
+export interface SessionRowsRequest {
+  sort: SessionRowsQuery['sort'];
+  groupBy: SessionRowsQuery['groupBy'];
+  owner: string;
+  status?: SessionRowsQuery['status'];
+  updated?: SessionRowsQuery['updated'];
+  children: boolean;
+  pin: readonly string[];
+  open?: string;
+  windows: Readonly<Record<string, number>>;
+}
+
 import type {
   CustomProviderInfo,
   OMConfigInfo,
@@ -69,6 +95,7 @@ import type {
   WorkspaceChangesScope,
   WorkspaceChangeStatus,
   WorkspaceFile,
+  WorkspaceFileIndex,
   WorkspaceTreeEntry,
   WorkspaceTreeListing,
   WorkspaceRenderedEntry,
@@ -91,6 +118,7 @@ export type {
   WorkspaceChangesScope,
   WorkspaceChangeStatus,
   WorkspaceFile,
+  WorkspaceFileIndex,
   WorkspaceTreeEntry,
   WorkspaceTreeListing,
   WorkspaceRenderedEntry,

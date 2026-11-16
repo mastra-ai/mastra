@@ -123,10 +123,10 @@ describe('Creating a board', () => {
     expect(form.getByRole('button', { name: 'Create board' })).toBeDisabled();
     await user.type(form.getByLabelText('Board name'), 'Bug Triage');
     expect(form.getByLabelText('Board key')).toHaveValue('bug-triage');
-    // Cards only reach a new board through an intake route, which has its own settings.
-    expect(form.getByRole('link', { name: 'Intake routes' })).toHaveAttribute(
+    // Cards only reach a new board through its rules, checked in the project's intake order.
+    expect(form.getByRole('link', { name: 'intake order' })).toHaveAttribute(
       'href',
-      `/factories/${FACTORY_ID}/settings/intake#new-cards`,
+      `/factories/${FACTORY_ID}/settings/intake#intake-order`,
     );
     await user.click(form.getByRole('button', { name: 'Create board' }));
 

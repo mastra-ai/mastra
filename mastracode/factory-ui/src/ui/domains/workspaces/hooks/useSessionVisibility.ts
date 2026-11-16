@@ -2,6 +2,7 @@ import { useIsMutating, useMutation, useQueryClient } from '@tanstack/react-quer
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
+import { invalidateSessionQueries } from '../../../../hooks/useWorkspaces';
 import { setUserSessionVisibility } from '../services/user-sessions';
 import type { UserSessionVisibility } from '../services/user-sessions';
 
@@ -14,7 +15,7 @@ export function useSessionVisibility(factoryId: string, sessionId: string) {
     mutationKey,
     mutationFn: (visibility: UserSessionVisibility) => setUserSessionVisibility(baseUrl, sessionId, visibility),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) });
+      void invalidateSessionQueries(queryClient, factoryId);
       void queryClient.invalidateQueries({ queryKey: queryKeys.userSession(sessionId) });
     },
   });

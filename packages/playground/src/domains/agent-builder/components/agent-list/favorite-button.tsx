@@ -1,8 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconStar } from '@mastra/playground-ui/icons/central/IconStar';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
-import { Star } from 'lucide-react';
 import type { MouseEvent } from 'react';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
 import { useToggleStoredAgentFavorite } from '@/domains/agent-builder/hooks/use-stored-agent-favorite';
@@ -16,11 +16,6 @@ export interface FavoriteButtonProps {
   /** Show the count badge next to the icon. Defaults to true. */
   showCount?: boolean;
 }
-
-const iconSizes = {
-  sm: 14,
-  md: 16,
-} as const;
 
 /**
  * Toggles the favorite state for a stored agent. Renders nothing if the EE
@@ -70,7 +65,7 @@ export const FavoriteButton = ({
         className,
       )}
     >
-      <Star size={iconSizes[size]} className={cn('shrink-0', isFavorited && 'fill-current')} aria-hidden />
+      <IconStar className={cn('shrink-0', isFavorited && 'fill-current')} aria-hidden />
       {showCount && typeof favoriteCount === 'number' && (
         <Txt as="span" variant="label" className="whitespace-nowrap">
           <span className="tabular-nums">{favoriteCount}</span> {countLabel}

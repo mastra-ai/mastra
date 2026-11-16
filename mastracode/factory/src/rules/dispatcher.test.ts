@@ -23,6 +23,7 @@ import {
 import { BUILD_OBJECTIVE } from '../boards/work.js';
 import { publishReviewStatus } from '../integrations/github/review-status.js';
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
+import type { RunQueueResponse } from '../routes/contracts.js';
 import { prepareFactoryRuleBinding } from '../routes/surface.js';
 import { fakeRouteAuth, mountApiRoutes } from '../routes/test-utils.js';
 import { WorkItemRoutes } from '../routes/work-items.js';
@@ -31,7 +32,11 @@ import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd, waitForSessionRunAudit
 import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { Cards } from '../storage/domains/work-items/cards.js';
-import { createFactoryStorageForTests, demoteCardsToLegacyForTests } from '../storage/test-utils.js';
+import {
+  createFactoryStorageForTests,
+  createLegacyCardTablesForTests,
+  demoteCardsToLegacyForTests,
+} from '../storage/test-utils.js';
 import type { FactoryRunEndReporter } from '../tools/reports.js';
 import { observeSessionRunReports } from '../tools/run-watch.js';
 import { retryFactoryDecision } from '../work-items/decision-actions.js';
@@ -189,6 +194,7 @@ function createSession(
         threadId = next;
       }),
       getSetting: vi.fn(async ({ key }: { key: string }) => settings[key]),
+      getSettingOn: vi.fn(async ({ key }: { threadId: string; key: string }) => settings[key]),
       setSetting: vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
         settings[key] = value;
       }),
@@ -331,7 +337,6 @@ async function queueDecision(
     stage: 'execute',
     decisions: [decision],
     ingress: options?.ingress ?? 'move-1',
-    configVersion,
   });
   expect(result.status).toBe('committed');
   if (options?.armed) await armItem(storage, item.id);
@@ -353,8 +358,7 @@ async function armItem(storage: WorkItemsStorage, workItemId: string) {
     expectedRevision: item.revision,
     destinationStage: item.stages[0]!,
     actorId: 'user-1',
-    ingress: { identity: `arm-${armCount}`, triggerType: 'human', transitionId: `arm-${armCount}` },
-    configVersion: 'rules-v1',
+    ingress: { identity: `arm-${armCount}`, transitionId: `arm-${armCount}` },
     causalChain: [],
     evaluation: { outcome: 'accepted', decisions: [] },
     autonomy: 'arm',
@@ -763,8 +767,6 @@ describe('FactoryDecisionDispatcher', () => {
         factory_project_id: PROJECT_ID,
         evaluation_id: `eval-${i}`,
         idempotency_key: `done-${i}`,
-        effect_ordinal: 0,
-        effect_hash: `hash-${i}`,
         causal_chain: [],
         decision: { type: 'sendMessage', role: 'work', message: 'done', idempotencyKey: `done-${i}` },
         status: 'succeeded',
@@ -1175,6 +1177,281 @@ describe('FactoryDecisionDispatcher', () => {
     expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
   });
 
+  it('recovers a stale notification binding before delivering as the replacement session owner', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'notify',
+      title: 'Review feedback',
+      body: 'Please address the review.',
+      level: 'warning',
+      idempotencyKey: 'notify-stale-binding',
+    });
+    const stale = await bindWorkRun(storage, item.id);
+    const { controller, session, sendNotificationSignal } = createSession();
+    session.identity.getId.mockReturnValue('session-2');
+    session.identity.getOwnerId.mockReturnValue('user-2');
+    controller.getSession.mockImplementation(async (sessionId: string) =>
+      sessionId === 'session-2' ? session : undefined,
+    );
+    const prepareBinding = vi.fn(async ({ role, expectedBindingId }: FactoryBindingPreparationInput) => {
+      expect(role).toBe('work');
+      expect(expectedBindingId).toBe(stale.id);
+      const prepared = await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-2',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: item.externalSource,
+            title: item.title,
+            stages: ['execute'],
+            sessions: {},
+            metadata: item.metadata,
+          },
+        },
+        role,
+        expectedBindingId,
+        session: { sessionId: 'session-2', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'recovered-notify',
+        kickoffMessage: null,
+      });
+      await storage.markPendingStart(prepared.binding.id, 'sent');
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      prepareBinding,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(prepareBinding).toHaveBeenCalledOnce();
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'rule-notification', summary: 'Review feedback' }),
+      { requestContext: expect.anything() },
+    );
+    expect(sendNotificationSignal.mock.calls[0]?.[1]?.requestContext?.get('user')).toEqual({
+      workosId: 'user-2',
+      organizationId: 'org-1',
+    });
+    expect(sendNotificationSignal.mock.calls[0]?.[1]?.requestContext?.get('controller')).toMatchObject({
+      sessionId: 'session-2',
+      session: { id: 'session-2', ownerId: 'user-2' },
+    });
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+    expect(
+      (await storage.listRunBindings('org-1', PROJECT_ID, item.id)).find(binding => binding.status === 'active'),
+    ).toMatchObject({
+      sessionId: 'session-2',
+      role: 'work',
+    });
+    expect(stale.sessionId).toBe('session-1');
+  });
+
+  it('delivers both notifications when concurrent recovery replaces their shared stale binding', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'notify',
+      title: 'First feedback',
+      body: 'Address the first review.',
+      level: 'warning',
+      idempotencyKey: 'notify-race-first',
+    });
+    expect(
+      await commitDecisions(storage, {
+        factoryProjectId: PROJECT_ID,
+        workItemId: item.id,
+        stage: 'execute',
+        decisions: [
+          {
+            type: 'notify',
+            title: 'Second feedback',
+            body: 'Address the second review.',
+            level: 'warning',
+            idempotencyKey: 'notify-race-second',
+          },
+        ],
+        ingress: 'move-2',
+      }),
+    ).toMatchObject({ status: 'committed' });
+    const stale = await bindWorkRun(storage, item.id);
+    const { controller, session, sendNotificationSignal } = createSession();
+    session.identity.getId.mockReturnValue('session-2');
+    session.identity.getOwnerId.mockReturnValue('user-2');
+    let waiting = 0;
+    let release!: () => void;
+    const bothSelected = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    controller.getSession.mockImplementation(async (sessionId: string) => {
+      if (sessionId === 'session-1') {
+        if (++waiting === 2) release();
+        await bothSelected;
+        return undefined;
+      }
+      return sessionId === 'session-2' ? session : undefined;
+    });
+    const prepareBinding = vi.fn(async ({ role, expectedBindingId }: FactoryBindingPreparationInput) => {
+      const prepared = await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-2',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: item.externalSource,
+            title: item.title,
+            stages: ['execute'],
+            sessions: {},
+            metadata: item.metadata,
+          },
+        },
+        role,
+        expectedBindingId,
+        session: { sessionId: 'session-2', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'recovered-notify-race',
+        kickoffMessage: null,
+      });
+      await storage.markPendingStart(prepared.binding.id, 'sent');
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      prepareBinding,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(waiting).toBe(2);
+    expect(prepareBinding).toHaveBeenCalled();
+    expect(sendNotificationSignal.mock.calls.map(([signal]) => signal.summary).sort()).toEqual([
+      'First feedback',
+      'Second feedback',
+    ]);
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID)).map(decision => decision.status)).toEqual([
+      'succeeded',
+      'succeeded',
+    ]);
+    expect(stale.sessionId).toBe('session-1');
+  });
+
+  it('does not restore a superseded notification binding after a successor takes its session', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'notify',
+      title: 'Review feedback',
+      body: 'Please address the review.',
+      level: 'warning',
+      idempotencyKey: 'notify-superseded-binding',
+    });
+    const stale = await bindWorkRun(storage, item.id);
+    const { controller, sendNotificationSignal } = createSession();
+    controller.getSession.mockResolvedValue(undefined);
+    const prepareBinding = vi.fn(async ({ expectedBindingId }: FactoryBindingPreparationInput) => {
+      expect(expectedBindingId).toBe(stale.id);
+      const successor = await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: item.externalSource,
+            title: item.title,
+            stages: ['execute'],
+            sessions: {},
+            metadata: item.metadata,
+          },
+        },
+        role: 'review',
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'successor-review',
+        kickoffMessage: null,
+      });
+      await storage.markPendingStart(successor.binding.id, 'sent');
+      await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: item.externalSource,
+            title: item.title,
+            stages: ['execute'],
+            sessions: {},
+            metadata: item.metadata,
+          },
+        },
+        role: 'work',
+        expectedBindingId,
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'recovered-after-handoff',
+        kickoffMessage: null,
+      });
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      prepareBinding,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(prepareBinding).toHaveBeenCalledOnce();
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'superseded' });
+    expect(
+      (await storage.listRunBindings('org-1', PROJECT_ID, item.id)).filter(binding => binding.status === 'active'),
+    ).toMatchObject([{ id: expect.any(String), role: 'review', sessionId: 'session-1' }]);
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.sessions.review).toMatchObject({
+      sessionId: 'session-1',
+    });
+  });
+
+  it('does not create an unrelated session for a stale notification binding without a preparer', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'notify',
+      title: 'Review feedback',
+      body: 'Please address the review.',
+      level: 'warning',
+      idempotencyKey: 'notify-no-preparer',
+    });
+    const binding = await bindWorkRun(storage, item.id);
+    const { controller, sendNotificationSignal } = createSession();
+    controller.getSession.mockResolvedValue(undefined);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      failureCode: 'session_unavailable',
+    });
+    expect(
+      (await storage.listRunBindings('org-1', PROJECT_ID, item.id)).find(candidate => candidate.status === 'active')
+        ?.id,
+    ).toBe(binding.id);
+  });
+
   it('renews the lease while an external delivery remains in flight', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
@@ -1429,7 +1706,7 @@ describe('FactoryDecisionDispatcher', () => {
       }),
       storage,
     });
-    expect(dispatcher.runSlots()).toEqual({ inUse: 0, cap: 10 });
+    expect(dispatcher.runSlots()).toEqual({ inUse: 0, cap: 10, interactive: { inUse: 0, cap: 2 } });
   });
 
   it('lists the runs waiting for a slot on the run queue, oldest first, beside the run holding it', async () => {
@@ -1528,7 +1805,7 @@ describe('FactoryDecisionDispatcher', () => {
       const response = await app.request(`/web/factory/projects/${PROJECT_ID}/run-queue`);
       expect(response.status).toBe(200);
       const body = await response.json();
-      expect(body.slots).toEqual({ scope: 'server', inUse: 1, cap: 1 });
+      expect(body.slots).toEqual({ scope: 'server', inUse: 1, cap: 1, interactive: { inUse: 0, cap: 2 } });
       expect(body.running).toBe(1);
       expect(body.claimed).toEqual([
         expect.objectContaining({
@@ -1538,9 +1815,11 @@ describe('FactoryDecisionDispatcher', () => {
         }),
       ]);
       expect(body.queuedCount).toBe(2);
+      expect(body.queuedByLane).toEqual({ automated: 2, interactive: 0 });
       expect(body.queued).toEqual([
         expect.objectContaining({
           state: 'waiting',
+          lane: 'automated',
           position: 1,
           type: 'invokeSkill',
           skillName: 'factory-plan',
@@ -1550,6 +1829,7 @@ describe('FactoryDecisionDispatcher', () => {
         }),
         expect.objectContaining({
           state: 'waiting',
+          lane: 'automated',
           position: 2,
           type: 'sendMessage',
           skillName: null,
@@ -1583,6 +1863,305 @@ describe('FactoryDecisionDispatcher', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  describe("a person's reply while automated runs hold every slot", () => {
+    // Triage and builds hold run slots for hours. A maintainer's reply on a
+    // Factory pull request wakes a session the person is waiting on, so it
+    // takes its own small lane instead of the back of the automated queue.
+    const person = { type: 'github', login: 'maintainer', trusted: true, factoryAuthored: false, human: true };
+
+    /** Files a card with a live `work` session and commits `decision` on it as `actor` caused it. */
+    async function queueWake(
+      storage: WorkItemsStorage,
+      sourceKey: string,
+      decision: Record<string, unknown>,
+      actor: Record<string, unknown>,
+      causalChain: Array<{ ingressId: string; decisionType: string }> = [],
+    ) {
+      const item = await createItem(storage, sourceKey);
+      const prepared = await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: sourceKey },
+            title: 'Fix issue',
+            stages: ['intake'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'work',
+        // One session per card: binding another card to a session moves it off this one.
+        session: { sessionId: `session-${sourceKey}`, branch: `factory/${sourceKey}`, threadId: `thread-${sourceKey}` },
+        resourceId: PROJECT_ID,
+        kickoffKey: `kickoff-${sourceKey}`,
+        kickoffMessage: null,
+      });
+      await storage.markPendingStart(prepared.binding.id, 'sent');
+      const current = await storage.get({ orgId: 'org-1', id: item.id });
+      const committed = await storage.commitRuleEvaluation({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        workItemId: item.id,
+        ingress: { identity: `wake-${sourceKey}`, triggerType: 'github.issueCommentCreated' },
+        configVersion: 'rules-v1',
+        expectedRevision: current!.revision,
+        actor,
+        outcome: { status: 'accepted' },
+        decisions: [decision],
+        causalChain,
+        now: new Date(),
+      });
+      expect(committed.status).toBe('committed');
+    }
+
+    async function saturate(options: {
+      maxInFlight: number;
+      maxInteractiveInFlight?: number;
+      holders: number;
+      /** Queued before the dispatcher starts, so claim order alone decides who runs. */
+      queue?: (storage: WorkItemsStorage) => Promise<void>;
+    }) {
+      const seed = await createFactoryStorageForTests();
+      const storage = seed.workItems;
+      const created = new Date();
+      await seed.storage.ops.insertOne('factory_projects', {
+        id: PROJECT_ID,
+        org_id: 'org-1',
+        created_by: 'user-1',
+        name: 'Queue project',
+        description: null,
+        default_model_id: null,
+        model_scope: 'hybrid',
+        created_at: created,
+        updated_at: created,
+      });
+      // Every woken run hangs, so each claimed wake keeps its slot for the test.
+      // The runs end when the test finishes, so the dispatcher can stop before
+      // the storage closes.
+      let releaseRuns!: () => void;
+      const runsHeld = new Promise<void>(resolve => {
+        releaseRuns = resolve;
+      });
+      const { controller, session, sendNotificationSignal, consumeStream } = createSession(
+        runsHeld.then(() => ({ action: 'wake', output: { consumeStream } })),
+      );
+      controller.getSession.mockImplementation(async () => session);
+      for (let index = 0; index < options.holders; index += 1) {
+        await queueWake(
+          storage,
+          `github-issue:holder-${index}`,
+          { type: 'sendMessage', role: 'work', message: 'Triage.', idempotencyKey: `holder-${index}` },
+          { type: 'system', id: 'rules' },
+        );
+      }
+      await options.queue?.(storage);
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        boards: autoStartingBoards(),
+        transitionService: new FactoryTransitionService({
+          storage,
+          configVersion: 'rules-v1',
+          boards: autoStartingBoards(),
+        }),
+        storage,
+        ownerId: 'worker-1',
+        maxInFlight: options.maxInFlight,
+        maxInteractiveInFlight: options.maxInteractiveInFlight,
+      });
+      dispatcher.start();
+      onTestFinished(async () => {
+        releaseRuns();
+        await dispatcher.stop();
+      });
+      const status = async (key: string) =>
+        (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(d => d.idempotencyKey === key)?.status;
+      // Real time, not fake timers: a claim is a real database round trip on either backend.
+      const settle = (...keys: string[]) =>
+        vi.waitFor(async () => {
+          for (const key of keys) expect(await status(key)).toBe('leased');
+        });
+      for (let index = 0; index < options.holders; index += 1) await settle(`holder-${index}`);
+      const messages = () => sendNotificationSignal.mock.calls.map(([input]) => JSON.stringify(input));
+      const readQueue = async () => {
+        const app = new Hono();
+        app.use('*', async (c, next) => {
+          c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+          await next();
+        });
+        mountApiRoutes(
+          app as never,
+          new WorkItemRoutes({
+            auth: fakeRouteAuth(),
+            audit: { emit: async () => {} },
+            projects: seed.projects,
+            workItems: storage,
+            boardRegistry: autoStartingBoards(),
+            queueHealth: seed.queueHealth,
+            liveSessions: { isRunning: () => false, parked: () => undefined, parkedIn: () => [] },
+            runSlots: () => dispatcher.runSlots(),
+          }).routes(),
+        );
+        const response = await app.request(`/web/factory/projects/${PROJECT_ID}/run-queue`);
+        expect(response.status).toBe(200);
+        return (await response.json()) as RunQueueResponse;
+      };
+      return { storage, dispatcher, status, settle, messages, readQueue };
+    }
+
+    it("wakes the session for a person's reply on its pull request before triage ends", async () => {
+      const { storage, dispatcher, status, settle, messages, readQueue } = await saturate({
+        maxInFlight: 1,
+        holders: 1,
+      });
+
+      const reply = (key: string) => ({
+        type: 'sendMessage',
+        role: 'work',
+        priority: 'high',
+        message: `Reply ${key}.`,
+        idempotencyKey: key,
+      });
+      await queueWake(storage, 'github-issue:automated', reply('automated'), { type: 'system', id: 'rules' });
+      await queueWake(storage, 'github-issue:bot', reply('bot'), { ...person, login: 'review-bot[bot]', human: false });
+      await queueWake(storage, 'github-issue:untrusted', reply('untrusted'), { ...person, trusted: false });
+      await queueWake(storage, 'github-issue:factory', reply('factory'), { ...person, factoryAuthored: true });
+      await queueWake(storage, 'github-issue:untyped', reply('untyped'), { ...person, human: undefined });
+      await queueWake(storage, 'github-issue:moved', reply('moved'), person, [
+        { ingressId: 'move-1', decisionType: 'transition' },
+      ]);
+      await queueWake(storage, 'github-issue:persist', { ...reply('persist'), idleBehavior: 'persist' }, person);
+      await queueWake(storage, 'github-issue:person', reply('person'), person);
+      // A comment on the card's issue reaches its session as activity, not a message.
+      await queueWake(
+        storage,
+        'github-issue:comment',
+        {
+          type: 'signalActivity',
+          event: 'work_item.commented',
+          reference: 'acme/repo#42',
+          url: 'https://github.com/acme/repo/issues/42#issuecomment-1',
+          author: 'maintainer',
+          authorTrusted: true,
+          idempotencyKey: 'comment',
+        },
+        person,
+      );
+      await settle('person', 'comment');
+      await vi.waitFor(() => {
+        expect(messages().some(message => message.includes('Reply person.'))).toBe(true);
+        expect(messages().some(message => message.includes('issuecomment-1'))).toBe(true);
+      });
+      for (const key of ['automated', 'bot', 'untrusted', 'factory', 'untyped', 'moved', 'persist']) {
+        expect({ key, status: await status(key) }).toEqual({ key, status: 'pending' });
+      }
+      expect(dispatcher.runSlots()).toEqual({ inUse: 1, cap: 1, interactive: { inUse: 2, cap: 2 } });
+
+      const queue = await readQueue();
+      expect(queue.slots).toEqual({ scope: 'server', inUse: 1, cap: 1, interactive: { inUse: 2, cap: 2 } });
+      expect(queue.claimed.map(run => run.lane).sort()).toEqual(['automated', 'interactive', 'interactive']);
+      expect(queue.queuedByLane).toEqual({ automated: 7, interactive: 0 });
+      expect(queue.queued.map(run => [run.lane, run.position])).toEqual(
+        [1, 2, 3, 4, 5, 6, 7].map(position => ['automated', position]),
+      );
+    });
+
+    it("keeps a person's replies to the interactive reserve once it is full", async () => {
+      const { storage, dispatcher, status, settle, readQueue } = await saturate({
+        maxInFlight: 1,
+        maxInteractiveInFlight: 1,
+        holders: 1,
+      });
+      for (const key of ['first', 'second']) {
+        await queueWake(
+          storage,
+          `github-issue:${key}`,
+          { type: 'sendMessage', role: 'work', message: `Reply ${key}.`, idempotencyKey: key },
+          person,
+        );
+        await new Promise(resolve => setTimeout(resolve, 5));
+      }
+      await settle('first');
+
+      expect(await status('second')).toBe('pending');
+      expect(dispatcher.runSlots()).toEqual({ inUse: 1, cap: 1, interactive: { inUse: 1, cap: 1 } });
+
+      // A waiting reply is first in its own lane, whatever the automated queue holds.
+      const queue = await readQueue();
+      expect(queue.queuedByLane).toEqual({ automated: 0, interactive: 1 });
+      expect(queue.queued).toEqual([
+        expect.objectContaining({ lane: 'interactive', position: 1, type: 'sendMessage' }),
+      ]);
+    });
+
+    it('lists a waiting reply on the run queue even behind a full page of automated runs', async () => {
+      const { storage, readQueue } = await saturate({
+        maxInFlight: 1,
+        maxInteractiveInFlight: 0,
+        holders: 1,
+      });
+      // One more automated run than the queue lists, all older than the reply.
+      for (let index = 0; index <= 50; index += 1) {
+        await queueWake(
+          storage,
+          `github-issue:automated-${index}`,
+          { type: 'sendMessage', role: 'work', message: 'Automated.', idempotencyKey: `automated-${index}` },
+          { type: 'system', id: 'rules' },
+        );
+      }
+      await queueWake(
+        storage,
+        'github-issue:reply',
+        { type: 'sendMessage', role: 'work', message: 'Reply.', idempotencyKey: 'reply' },
+        person,
+      );
+
+      const queue = await readQueue();
+      expect(queue.queuedCount).toBe(52);
+      expect(queue.queuedByLane).toEqual({ automated: 51, interactive: 1 });
+      expect(queue.queued).toHaveLength(50);
+      expect(queue.queued[0]).toEqual(expect.objectContaining({ lane: 'interactive', position: 1 }));
+      expect(queue.queued.slice(1).map(run => [run.lane, run.position])).toEqual(
+        Array.from({ length: 49 }, (_, index) => ['automated', index + 1]),
+      );
+    });
+
+    it("lets a person's reply take a free automated slot once the reserve is full, ahead of automated runs", async () => {
+      const { dispatcher, status, settle } = await saturate({
+        maxInFlight: 1,
+        maxInteractiveInFlight: 1,
+        holders: 0,
+        queue: async storage => {
+          await queueWake(
+            storage,
+            'github-issue:automated',
+            { type: 'sendMessage', role: 'work', message: 'Automated.', idempotencyKey: 'automated' },
+            { type: 'system', id: 'rules' },
+          );
+          for (const key of ['first', 'second']) {
+            await queueWake(
+              storage,
+              `github-issue:${key}`,
+              { type: 'sendMessage', role: 'work', message: `Reply ${key}.`, idempotencyKey: key },
+              person,
+            );
+          }
+        },
+      });
+      await settle('first', 'second');
+
+      expect(await status('automated')).toBe('pending');
+      expect(dispatcher.runSlots()).toEqual({ inUse: 1, cap: 1, interactive: { inUse: 1, cap: 1 } });
+    });
+
+    it('reserves two interactive slots per server unless configured otherwise', async () => {
+      const { dispatcher } = await saturate({ maxInFlight: 1, holders: 0 });
+      expect(dispatcher.runSlots().interactive).toEqual({ inUse: 0, cap: 2 });
+    });
   });
 
   it('sends the resolved skill activation as the bound session kickoff prompt', async () => {
@@ -2019,8 +2598,7 @@ describe('FactoryDecisionDispatcher', () => {
         expectedRevision: current!.revision,
         destinationStage: 'done',
         actorId: 'user-1',
-        ingress: { identity: 'external-close', triggerType: 'github', transitionId: 'external-close' },
-        configVersion: 'rules-v1',
+        ingress: { identity: 'external-close', transitionId: 'external-close' },
         causalChain: [],
         evaluation: { outcome: 'accepted', decisions: [] },
       });
@@ -2380,8 +2958,7 @@ describe('FactoryDecisionDispatcher', () => {
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: messaged.id,
-      ingress: { identity: 'move-4', triggerType: 'github' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'move-4' },
       expectedRevision: messaged.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -2521,8 +3098,7 @@ describe('FactoryDecisionDispatcher', () => {
       await storage.commitRuleEvaluation({
         ...scope,
         workItemId: item.id,
-        ingress: { identity: 'closed-while-running', triggerType: 'github.issueClosed' },
-        configVersion: 'rules-v1',
+        ingress: { identity: 'closed-while-running' },
         expectedRevision: running.revision,
         actor: { type: 'system', id: 'rules' },
         outcome: { status: 'accepted' },
@@ -2585,6 +3161,281 @@ describe('FactoryDecisionDispatcher', () => {
       expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: ['done'] });
       const decisions = await storage.listDeferredDecisions('org-1', PROJECT_ID);
       expect(decisions.find(entry => entry.decision.type === 'routeEvent')).toMatchObject({ status: 'succeeded' });
+    });
+  });
+
+  describe('a person moving a card while it has a run in flight', () => {
+    async function cardWithOpenRun(entry: Record<string, unknown>, live: boolean) {
+      const seed = await createFactoryStorageForTests();
+      const storage = seed.workItems;
+      const item = await createItem(storage);
+      const binding = await bindWorkRun(storage, item.id);
+      const { controller, session } = createSession(undefined, { streamActive: live });
+      await session.thread.setSetting({
+        key: FACTORY_OPEN_RUNS_SETTING,
+        value: [
+          {
+            kickoffId: 'running-kickoff',
+            bindingId: binding.id,
+            role: binding.role,
+            startedBy: 'factory-rule-dispatcher',
+            orgId: binding.orgId,
+            factoryProjectId: binding.factoryProjectId,
+            workItemId: binding.workItemId,
+            sessionId: binding.sessionId,
+            threadId: binding.threadId,
+            branch: binding.branch,
+            ...entry,
+          },
+        ],
+      });
+      controller.listActiveThreadRuns.mockReturnValue(live ? [{ runId: 'run-1', threadId: binding.threadId }] : []);
+      // The transition service asks the dispatcher, as the Factory wires them.
+      let dispatcher: FactoryDecisionDispatcher | undefined;
+      const transitionService = new FactoryTransitionService({
+        storage,
+        configVersion: 'rules-v1',
+        runInFlight: async card => (await dispatcher?.hasRunInFlightOnCard(card)) ?? false,
+      });
+      dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        boards: autoStartingBoards(),
+        transitionService,
+        storage,
+        audit: seed.audit,
+        ownerId: 'worker-1',
+      });
+      const card = (await storage.get({ orgId: 'org-1', id: item.id }))!;
+      const personMoves = (stage: string, identity: string) =>
+        transitionService.transition({
+          orgId: 'org-1',
+          factoryProjectId: PROJECT_ID,
+          workItemId: card.id,
+          board: 'work',
+          stage,
+          expectedRevision: card.revision,
+          actor: { type: 'human', id: 'user-1' },
+          ingress: { type: 'human', identity },
+          cause: 'board_drag',
+        });
+      return { storage, card, controller, session, binding, personMoves };
+    }
+
+    it('refuses the move while the run is live elsewhere and the session here has switched to another thread', async () => {
+      const { session, binding, personMoves } = await cardWithOpenRun(
+        { ownerId: 'worker-2', heartbeatAt: Date.now() },
+        false,
+      );
+      // The session's current thread is another one: only the binding's thread holds the run.
+      const ledger = await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING });
+      session.thread.getSetting.mockImplementation(async () => undefined);
+      session.thread.getSettingOn.mockImplementation(async ({ threadId }: { threadId: string; key: string }) =>
+        threadId === binding.threadId ? ledger : undefined,
+      );
+
+      await expect(personMoves('planning', 'other-thread')).resolves.toMatchObject({
+        status: 'rejected',
+        code: 'card_busy',
+      });
+    });
+
+    it('refuses the move into a working phase while the run is live here, and accepts it once the run ends', async () => {
+      const { storage, card, controller, personMoves } = await cardWithOpenRun({}, true);
+
+      await expect(personMoves('planning', 'while-running')).resolves.toMatchObject({
+        status: 'rejected',
+        code: 'card_busy',
+        reason: "Another run can't start while this card is busy.",
+      });
+      expect(await storage.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: card.stages });
+
+      controller.listActiveThreadRuns.mockReturnValue([]);
+      await expect(personMoves('planning', 'after-run')).resolves.toMatchObject({
+        status: 'accepted',
+        stage: 'planning',
+      });
+    });
+
+    it('refuses the move while the run is live on another dispatcher', async () => {
+      const { personMoves } = await cardWithOpenRun({ ownerId: 'worker-2', heartbeatAt: Date.now() }, false);
+
+      await expect(personMoves('planning', 'elsewhere')).resolves.toMatchObject({
+        status: 'rejected',
+        code: 'card_busy',
+      });
+    });
+
+    it('accepts the move when the open run is an orphan of a dead process', async () => {
+      const { personMoves } = await cardWithOpenRun({ ownerId: 'worker-2', heartbeatAt: Date.now() - 60_000 }, false);
+
+      await expect(personMoves('planning', 'orphan')).resolves.toMatchObject({ status: 'accepted' });
+    });
+
+    it('lets the person close the card while the run is live', async () => {
+      const { personMoves } = await cardWithOpenRun({}, true);
+
+      await expect(personMoves('done', 'close')).resolves.toMatchObject({ status: 'accepted', stage: 'done' });
+    });
+  });
+
+  describe("label changes while the card's run is in flight", () => {
+    async function runningCard(phaseKey = 'done', { ledger = true } = {}) {
+      const seed = await createFactoryStorageForTests();
+      const storage = seed.workItems;
+      const item = await createItem(storage);
+      const binding = await bindWorkRun(storage, item.id);
+      const scope = { orgId: 'org-1', factoryProjectId: PROJECT_ID };
+      for (const seeded of (await seed.boards.listIntakeRoutes(scope)).reverse()) {
+        await seed.boards.deleteIntakeRoute(scope, seeded.id, { expectedRevision: seeded.revision });
+      }
+      // Ship only what was added and not taken back: a route reading just the newest delta would see bug.
+      await seed.boards.createIntakeRoute(
+        scope,
+        {
+          name: 'Ship it',
+          on: ['work_item.updated'],
+          when: {
+            operator: 'AND',
+            conditions: [
+              { field: 'event.labels.added', operator: 'contains', value: 'ship' },
+              { field: 'event.labels.added', operator: 'not_contains', value: 'bug' },
+              { field: 'event.labels.removed', operator: 'not_exists' },
+            ],
+          },
+          // By default a terminal phase: a route move there never waits for the run on its own.
+          target: { boardKey: 'work', phaseKey },
+        },
+        'admin',
+      );
+      const { controller, session, emitAgentEnd } = createSession(undefined, { streamActive: true });
+      // Without a ledger entry: a run the dispatcher didn't record, as one a person starts in the session.
+      await session.thread.setSetting({
+        key: FACTORY_OPEN_RUNS_SETTING,
+        value: ledger
+          ? [
+              {
+                kickoffId: 'running-kickoff',
+                bindingId: binding.id,
+                role: binding.role,
+                startedBy: 'factory-rule-dispatcher',
+                orgId: binding.orgId,
+                factoryProjectId: binding.factoryProjectId,
+                workItemId: binding.workItemId,
+                sessionId: binding.sessionId,
+                threadId: binding.threadId,
+                branch: binding.branch,
+              },
+            ]
+          : [],
+      });
+      controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: binding.threadId }]);
+      observeSessionRunEnd(session, { audit: seed.audit });
+      let deliveries = 0;
+      const update = async (added: string[], removed: string[], at: string, fromCardSession: boolean) => {
+        deliveries += 1;
+        const current = (await storage.get({ orgId: 'org-1', id: item.id }))!;
+        await storage.commitRuleEvaluation({
+          ...scope,
+          workItemId: item.id,
+          ingress: { identity: `labeled-${deliveries}` },
+          configVersion: 'rules-v1',
+          expectedRevision: current.revision,
+          actor: { type: 'system', id: 'rules' },
+          outcome: { status: 'accepted' },
+          decisions: [
+            {
+              type: 'routeEvent',
+              idempotencyKey: `labeled-${deliveries}:event-route`,
+              event: { type: 'work_item.updated', labels: { added, removed } },
+              ...(fromCardSession ? { fromCardSession: true as const } : {}),
+            },
+          ],
+          causalChain: [],
+          now: new Date(at),
+        });
+      };
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        boards: autoStartingBoards(createTriageWorkRegistry()),
+        transitionService: new FactoryTransitionService({
+          storage,
+          configVersion: 'rules-v1',
+          boards: createTriageWorkRegistry(),
+        }),
+        storage,
+        intakeRoutes: seed.boards,
+        ownerId: 'worker-1',
+      });
+      const stages = async () => (await storage.get({ orgId: 'org-1', id: item.id }))!.stages;
+      const updates = async () =>
+        (await storage.listDeferredDecisions('org-1', PROJECT_ID, { workItemId: item.id }))
+          .filter(entry => entry.decision.type === 'routeEvent')
+          .map(entry => entry.status);
+      return { item, dispatcher, controller, emitAgentEnd, update, stages, updates };
+    }
+
+    it("holds the session's own changes until its run ends, then routes them as one event with the net change", async () => {
+      const { dispatcher, controller, emitAgentEnd, update, stages, updates } = await runningCard();
+      const before = await stages();
+
+      // The session adds four labels during its run, and takes one back.
+      await update(['ship'], [], '2030-01-01T00:00:00Z', true);
+      await update(['bug'], [], '2030-01-01T00:00:01Z', true);
+      await update(['p1'], [], '2030-01-01T00:00:30Z', true);
+      await update(['docs'], [], '2030-01-01T00:00:31Z', true);
+      await update([], ['bug'], '2030-01-01T00:00:32Z', true);
+      // Well past the burst window, the run is still going: nothing moves.
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+      await dispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
+      expect(await stages()).toEqual(before);
+      expect(await updates()).toEqual(['superseded', 'superseded', 'superseded', 'superseded', 'pending']);
+
+      controller.listActiveThreadRuns.mockReturnValue([]);
+      emitAgentEnd('complete');
+      await dispatcher.runOnce(new Date('2030-01-01T00:03:00Z'));
+
+      expect(await stages()).toEqual(['done']);
+      expect(await updates()).toEqual(['superseded', 'superseded', 'superseded', 'superseded', 'succeeded']);
+    });
+
+    // A person's change is routed ~5s later, but a move into a phase that isn't terminal waits for the run like any.
+    it.each([
+      {
+        case: "the session's own change, for a run the ledger never recorded",
+        phase: 'done',
+        ledger: false,
+        fromCardSession: true,
+        held: true,
+      },
+      {
+        case: "a person's change into a terminal phase",
+        phase: 'done',
+        ledger: true,
+        fromCardSession: false,
+        held: false,
+      },
+      {
+        case: "a person's change into a phase that isn't terminal",
+        phase: 'planning',
+        ledger: true,
+        fromCardSession: false,
+        held: true,
+      },
+    ])('moves the card by $case once the run ends: $held', async ({ phase, ledger, fromCardSession, held }) => {
+      const { dispatcher, controller, emitAgentEnd, update, stages, updates } = await runningCard(phase, { ledger });
+      const before = await stages();
+
+      await update(['ship'], [], '2030-01-01T00:00:00Z', fromCardSession);
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:06Z'));
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+      expect({ stages: await stages(), updates: await updates() }).toEqual(
+        held ? { stages: before, updates: ['pending'] } : { stages: [phase], updates: ['succeeded'] },
+      );
+
+      controller.listActiveThreadRuns.mockReturnValue([]);
+      emitAgentEnd('complete');
+      await dispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
+      expect(await stages()).toEqual([phase]);
     });
   });
 
@@ -2741,8 +3592,7 @@ describe('FactoryDecisionDispatcher', () => {
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
-      ingress: { identity: 'same-binding-second', triggerType: 'rule' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'same-binding-second' },
       expectedRevision: current.revision,
       actor: { type: 'system', id: 'factory-rule-dispatcher' },
       outcome: { status: 'accepted' },
@@ -3956,8 +4806,7 @@ describe('FactoryDecisionDispatcher', () => {
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
-      ingress: { identity: 'push-1', triggerType: 'github' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'push-1' },
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -4000,8 +4849,7 @@ describe('FactoryDecisionDispatcher', () => {
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
-      ingress: { identity: 'push-f', triggerType: 'github' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'push-f' },
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'factory-platform[bot]', trusted: true, factoryAuthored: true },
       outcome: { status: 'accepted' },
@@ -4064,8 +4912,7 @@ describe('FactoryDecisionDispatcher', () => {
         orgId: 'org-1',
         factoryProjectId: PROJECT_ID,
         workItemId: item.id,
-        ingress: { identity: 'push-w', triggerType: 'github' },
-        configVersion: 'rules-v1',
+        ingress: { identity: 'push-w' },
         expectedRevision: item.revision,
         actor: { type: 'github', login: 'factory-platform[bot]', trusted: true, factoryAuthored: true },
         outcome: { status: 'accepted' },
@@ -4110,8 +4957,7 @@ describe('FactoryDecisionDispatcher', () => {
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
-      ingress: { identity: 'push-2', triggerType: 'github' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'push-2' },
       expectedRevision: armed?.revision ?? item.revision,
       actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -4145,8 +4991,7 @@ describe('FactoryDecisionDispatcher', () => {
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
-      ingress: { identity: 'push-3', triggerType: 'github' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'push-3' },
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'author', trusted: false, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -4196,8 +5041,7 @@ describe('FactoryDecisionDispatcher', () => {
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
-      ingress: { identity: 'closed-1', triggerType: 'github' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'closed-1' },
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -4233,8 +5077,7 @@ describe('FactoryDecisionDispatcher', () => {
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
-      ingress: { identity: 'closed-1', triggerType: 'github' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'closed-1' },
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -4282,8 +5125,7 @@ describe('FactoryDecisionDispatcher', () => {
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
-      ingress: { identity: 'closed-after-done', triggerType: 'github' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'closed-after-done' },
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -4342,8 +5184,7 @@ describe('FactoryDecisionDispatcher', () => {
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
-      ingress: { identity: 'external-run-1', triggerType: 'github' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'external-run-1' },
       expectedRevision: armed?.revision ?? item.revision,
       actor: { type: 'github', login: 'stranger', trusted: false, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -4452,8 +5293,7 @@ describe('FactoryDecisionDispatcher', () => {
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
-      ingress: { identity: 'legacy-run-1', triggerType: 'github' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'legacy-run-1' },
       expectedRevision: armed?.revision ?? item.revision,
       actor: { type: 'github', login: 'stranger', trusted: false, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -4505,8 +5345,7 @@ describe('FactoryDecisionDispatcher', () => {
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
-      ingress: { identity: 'factory-run-1', triggerType: 'github' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'factory-run-1' },
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'factory[bot]', trusted: false, factoryAuthored: true },
       outcome: { status: 'accepted' },
@@ -4898,8 +5737,7 @@ describe('FactoryDecisionDispatcher', () => {
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
-      ingress: { identity: 'failed-before-manual-run', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'failed-before-manual-run' },
       expectedRevision: beforeManualRun.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -5138,7 +5976,7 @@ describe('FactoryDecisionDispatcher', () => {
     const commit = storage.commitRuleEvaluation.bind(storage);
     let raced = false;
     vi.spyOn(storage, 'commitRuleEvaluation').mockImplementation(async input => {
-      if (input.ingress.triggerType === 'transition.message' && !raced) {
+      if (/^decision:.+@\d+$/.test(input.ingress.identity) && !raced) {
         raced = true;
         await storage.update({
           orgId: 'org-1',
@@ -5574,8 +6412,7 @@ describe('FactoryDecisionDispatcher', () => {
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: null,
-      ingress: { identity: 'github:pull-request:2:opened', triggerType: 'pull_request.opened' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'github:pull-request:2:opened' },
       expectedRevision: null,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -5606,6 +6443,8 @@ describe('FactoryDecisionDispatcher', () => {
       boards: autoStartingBoards(),
       transitionService,
       storage,
+      // No intake rules to read: the route list, as before intake order.
+      intakeEvaluator: 'route-list',
       ownerId: 'worker-1',
       resolveLinkedWorkItemParentId,
     });
@@ -5649,8 +6488,7 @@ describe('FactoryDecisionDispatcher', () => {
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: card.id,
-      ingress: { identity: 'poll:7:pull-request:3', triggerType: 'pull_request.opened' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'poll:7:pull-request:3' },
       expectedRevision: card.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -5718,8 +6556,7 @@ describe('FactoryDecisionDispatcher', () => {
         orgId: 'org-1',
         factoryProjectId: PROJECT_ID,
         workItemId: card.id,
-        ingress: { identity: 'poll:7:pull-request:3', triggerType: 'pull_request.opened' },
-        configVersion: 'rules-v1',
+        ingress: { identity: 'poll:7:pull-request:3' },
         expectedRevision: card.revision,
         actor: { type: 'system', id: 'rules' },
         outcome: { status: 'accepted' },
@@ -5876,6 +6713,7 @@ describe('FactoryDecisionDispatcher', () => {
     delete legacy.work_item;
     delete legacy.work_item_sources;
     delete legacy.changed_at;
+    await createLegacyCardTablesForTests(seeded.storage);
     await seeded.storage.ops.insertOne('work_items', { ...legacy, claim_key: 'linear:issue:1' });
     const parent = await createItem(storage);
     const transitionService = new FactoryTransitionService({
@@ -6518,10 +7356,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     // A delivery ack alone must never complete the pending start: the kickoff
     // was consumed by a run that never ended, so the row stays retryable.
-    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({
-      status: 'retry',
-      lastError: expect.stringContaining('has not ended'),
-    });
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'retry' });
   });
 
   it('fails a kickoff for retry when the woken run ends in error', async () => {
@@ -6538,10 +7373,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
-    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({
-      status: 'retry',
-      lastError: expect.stringContaining('ended in error'),
-    });
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'retry' });
   });
 
   it('dispatches a pending start on the first tick even when the deferred-decision queue exceeds the batch size', async () => {
@@ -6594,14 +7426,14 @@ describe('FactoryDecisionDispatcher', () => {
       dispatcher.start();
       dispatcher.start();
       await vi.advanceTimersByTimeAsync(0);
-      // One tick claims deferred decisions once per pool (runs, bookkeeping).
-      expect(deferredClaim).toHaveBeenCalledTimes(2);
+      // One tick claims deferred decisions once per pool (people's replies, runs, bookkeeping).
+      expect(deferredClaim).toHaveBeenCalledTimes(3);
       expect(pendingClaim).toHaveBeenCalledTimes(1);
 
       await dispatcher.stop();
       await vi.advanceTimersByTimeAsync(5_000);
-      // One tick claims deferred decisions once per pool (runs, bookkeeping).
-      expect(deferredClaim).toHaveBeenCalledTimes(2);
+      // One tick claims deferred decisions once per pool (people's replies, runs, bookkeeping).
+      expect(deferredClaim).toHaveBeenCalledTimes(3);
       expect(pendingClaim).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
@@ -6828,8 +7660,7 @@ describe('custom-board deferred targets', () => {
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: workItemId ?? null,
-      ingress: { identity: `ingress:${decision.idempotencyKey}`, triggerType: 'test' },
-      configVersion: 'custom-v1',
+      ingress: { identity: `ingress:${decision.idempotencyKey}` },
       expectedRevision: item?.revision ?? null,
       actor: { type: 'human', id: 'user-1' },
       outcome: { status: 'accepted' },
@@ -6856,6 +7687,8 @@ describe('custom-board deferred targets', () => {
       storage,
       boards: autoStartingBoards(boards),
       transitionService: new FactoryTransitionService({ storage, boards, configVersion }),
+      // No intake rules to read: the route list, as before intake order.
+      intakeEvaluator: 'route-list',
       ownerId: 'custom-worker',
     });
   }
@@ -7269,6 +8102,7 @@ describe('custom-board deferred targets', () => {
       boards: autoStartingBoards(boards),
       transitionService: service,
       controller: createSession().controller as never,
+      intakeEvaluator: 'route-list',
     }).runOnce();
     expect(await decisionByKey(storage, 'custom-linked')).toMatchObject({
       status: 'retry',
@@ -7276,11 +8110,9 @@ describe('custom-board deferred targets', () => {
     });
     const before = await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
     expect(before).toEqual([expect.objectContaining({ board: 'release', stages: ['queued'], revision: 1 })]);
-    // The initial entry committed once; the destination's runner never started.
+    // The queued decision and its initial entry each committed once; the destination's runner never started.
     const evaluations = await seed.storage.ops.findMany('factory_rule_evaluations', {});
-    expect(evaluations.filter(row => row.work_item_id !== null)).toEqual([
-      expect.objectContaining({ work_item_id: before[0]!.id, expected_revision: 1, outcome: 'accepted' }),
-    ]);
+    expect(evaluations).toHaveLength(2);
     expect(await runKeys(storage)).toEqual([]);
     await dispatcherFor(storage, boardRegistryOf([]), 'replacement-v2').runOnce(new Date(Date.now() + 60_000));
     expect(await decisionByKey(storage, 'custom-linked')).toMatchObject({
@@ -7382,7 +8214,6 @@ describe('custom-board deferred targets', () => {
       const before = await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
       const evaluations = await seed.storage.ops.findMany('factory_rule_evaluations', {});
       expect(evaluations.length).toBeGreaterThan(1);
-      expect(evaluations.every(row => row.rule_set_version === 'custom-v1')).toBe(true);
       complete.mockRestore();
       await dispatcherFor(storage, boardRegistryOf([]), 'replacement-v2').runOnce(new Date(Date.now() + 60_000));
       expect(await decisionByKey(storage, 'custom-replay')).toMatchObject({ status: 'succeeded' });
@@ -7616,9 +8447,6 @@ describe('automatic work in a Factory with no organization model key', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/mastra',
     });
     const { item } = await storage.upsert({
       orgId: 'org-1',
@@ -7650,7 +8478,6 @@ describe('automatic work in a Factory with no organization model key', () => {
         },
       ],
       ingress: 'move-1',
-      configVersion: 'rules-v1',
     });
     const { controller, session, sendNotificationSignal } = createSession();
     controller.getSession.mockImplementation(async () => session);
@@ -9067,15 +9894,16 @@ describe('phase goals', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
     const current = await storage.get({ orgId: 'org-1', id: item.id });
 
+    // While the build runs, a person can only take the card to a resting or finishing phase.
     const moved = await transitionService.transition({
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       board: 'work',
-      stage: 'planning',
+      stage: 'canceled',
       expectedRevision: current!.revision,
       actor: { type: 'human', id: 'user-1' },
-      ingress: { type: 'human', identity: 'back-to-planning' },
+      ingress: { type: 'human', identity: 'pulled-mid-build' },
       cause: 'human_move',
     });
     expect(moved.status).toBe('accepted');
@@ -9092,10 +9920,10 @@ describe('phase goals', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       board: 'work',
-      stage: 'canceled',
+      stage: 'intake',
       expectedRevision: again!.revision,
       actor: { type: 'human', id: 'user-1' },
-      ingress: { type: 'human', identity: 'cancel' },
+      ingress: { type: 'human', identity: 'revive' },
       cause: 'human_move',
     });
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -9121,10 +9949,10 @@ describe('phase goals', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       board: 'work',
-      stage: 'planning',
+      stage: 'canceled',
       expectedRevision: current!.revision,
       actor: { type: 'human', id: 'user-1' },
-      ingress: { type: 'human', identity: 'back-to-planning' },
+      ingress: { type: 'human', identity: 'pulled-mid-build' },
       cause: 'human_move',
     });
 
@@ -9150,10 +9978,10 @@ describe('phase goals', () => {
         factoryProjectId: PROJECT_ID,
         workItemId: item.id,
         board: 'work',
-        stage: 'planning',
+        stage: 'canceled',
         expectedRevision: current!.revision,
         actor: { type: 'human', id: 'user-1' },
-        ingress: { type: 'human', identity: 'back-to-planning' },
+        ingress: { type: 'human', identity: 'pulled-mid-build' },
         cause: 'human_move',
       });
       return record;

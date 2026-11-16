@@ -61,7 +61,7 @@ const audit: AuditEmitter = {
     }
   },
 };
-import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { createFactoryStorageForTests, finishQueuedRunsForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { boardCheck } from '../work-items/board-check.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
@@ -95,6 +95,8 @@ function buildApp(
       projects: seed.projects,
       workItems: seed.workItems,
       boardRegistry,
+      // No intake rules to read: the route list, as before intake order.
+      intakeEvaluator: 'route-list',
       queueHealth: seed.queueHealth,
       transitionService: new FactoryTransitionService({
         configVersion: 'factory-config-v1',
@@ -947,6 +949,7 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     expect(stayed.status).toBe(200);
     expect(await decisionCount()).toBe(1);
 
+    await finishQueuedRunsForTests(seed.workItems);
     const reentered = await transition(
       { id: item.id, revision: (await stayed.json()).result.revision },
       { stage: 'triage', reenter: true, requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3' },
@@ -960,6 +963,100 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     const res = await transition(item, { board: 'review' });
     expect(res.status).toBe(422);
     expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'invalid_transition' } });
+  });
+});
+
+describe('PUT /web/factory/projects/:id/work-items/:workItemId/working-pull-request', () => {
+  async function issueWithPullRequests() {
+    const res = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({ externalSource: { integrationId: 'github', type: 'issue', externalId: 'github:7:issue:1' } }),
+    );
+    const { workItem } = await res.json();
+    const attach = (
+      number: number,
+      state: string,
+      cardMetadata?: (metadata: Record<string, unknown>) => Record<string, unknown>,
+    ) =>
+      seed.workItems.attachSource({
+        orgId: 'org1',
+        id: workItem.id,
+        source: { integrationId: 'github', type: 'pull-request', externalId: `github:7:pull-request:${number}` },
+        metadata: { githubPullRequestNumber: number, state },
+        cardMetadata,
+      });
+    await attach(2, 'open', metadata => ({
+      ...metadata,
+      pullRequestHeadSha: 'abc',
+      untrustedPullRequests: ['github:pull-request:github:7:pull-request:2'],
+    }));
+    await attach(3, 'closed');
+    return (await seed.workItems.get({ orgId: 'org1', id: workItem.id }))!;
+  }
+  const pick = (item: { id: string; revision: number }, pullRequest: number, expectedRevision = item.revision) =>
+    json('PUT', `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/working-pull-request`, {
+      pullRequest,
+      expectedRevision,
+    });
+
+  it("makes an outsider's linked pull request the card's working one when a person picks it", async () => {
+    const item = await issueWithPullRequests();
+    auditRecorded = [];
+
+    const res = await pick(item, 2);
+
+    expect(res.status).toBe(200);
+    const stored = await seed.workItems.get({ orgId: 'org1', id: item.id });
+    expect(stored?.metadata).toMatchObject({ openPullRequestNumber: 2, pullRequestHeadSha: null });
+    expect(stored?.metadata?.untrustedPullRequests).toEqual(['github:pull-request:github:7:pull-request:2']);
+    expect(auditRecorded).toContainEqual(expect.objectContaining({ action: 'factory.work_item.updated' }));
+  });
+
+  it('refuses a pull request that is not linked to the card, or is closed', async () => {
+    const item = await issueWithPullRequests();
+
+    expect(await (await pick(item, 9)).json()).toMatchObject({ error: 'pull_request_not_linked' });
+    expect(await (await pick(item, 3)).json()).toMatchObject({ error: 'pull_request_not_open' });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.metadata).not.toHaveProperty(
+      'openPullRequestNumber',
+    );
+  });
+
+  it('refuses a pick when the pull request closes while the pick is being made', async () => {
+    const item = await issueWithPullRequests();
+    const update = seed.workItems.update.bind(seed.workItems);
+    const closing = vi.spyOn(seed.workItems, 'update').mockImplementationOnce(async input => {
+      // The provider closes it after the endpoint read the card; closing touches the source, not the card's revision.
+      await seed.workItems.syncWorkItemSource({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        provider: 'github',
+        externalId: 'pull-request:github:7:pull-request:2',
+        patch: { state: 'closed' },
+      });
+      return update(input);
+    });
+
+    const res = await pick(item, 2);
+
+    closing.mockRestore();
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ error: 'pull_request_not_open' });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.metadata).not.toHaveProperty(
+      'openPullRequestNumber',
+    );
+  });
+
+  it('refuses a pick made against an older revision of the card', async () => {
+    const item = await issueWithPullRequests();
+
+    const res = await pick(item, 2, item.revision - 1);
+
+    expect(res.status).toBe(409);
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.metadata).not.toHaveProperty(
+      'openPullRequestNumber',
+    );
   });
 });
 
@@ -1222,8 +1319,7 @@ describe('GET /web/factory/projects/:id/decisions', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: null,
-      ingress: { identity: 'decision-source', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'decision-source' },
       expectedRevision: null,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1275,8 +1371,7 @@ describe('GET /web/factory/projects/:id/decisions retry eligibility', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
-      ingress: { identity: 'not-failed', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'not-failed' },
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1335,8 +1430,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
-      ingress: { identity: 'stale-retry', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'stale-retry' },
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1391,8 +1485,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
-      ingress: { identity: 'attention-failure', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'attention-failure' },
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1611,8 +1704,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
-      ingress: { identity: 'approval-queue', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'approval-queue' },
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1676,8 +1768,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
-      ingress: { identity: 'approve-attribution', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'approve-attribution' },
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1717,8 +1808,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: null,
-      ingress: { identity: 'attention-refailure-order', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'attention-refailure-order' },
       expectedRevision: null,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1847,8 +1937,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: null,
-      ingress: { identity: 'legacy-attention-failure', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'legacy-attention-failure' },
       expectedRevision: null,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1907,8 +1996,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
-      ingress: { identity: 'attention-pagination', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'attention-pagination' },
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -2970,8 +3058,7 @@ describe('GET /web/factory/projects/:id/work-items/starters', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: card.id,
-      ingress: { identity: 'failing-run', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'failing-run' },
       expectedRevision: card.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -3745,7 +3832,7 @@ describe('audit events', () => {
     return (await res.json()).workItem;
   }
 
-  it('records work_item.created on POST with actor, project, and target', async () => {
+  it('records work_item.opened on POST with actor, project, and target', async () => {
     const item = await createItem();
     expect(auditRecorded).toHaveLength(1);
     expect(auditRecorded[0]).toMatchObject({

@@ -1,12 +1,13 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
-import { ChevronDown, X } from 'lucide-react';
 import { Fragment, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { DropdownMenu } from '../DropdownMenu/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext, TabsContext } from './tabs-context';
 import type { TabMeasurement } from './tabs-context';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { controlHeight } from '@/ds/primitives/control-size';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -230,7 +231,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                     }
                   >
                     <span className="sr-only">Close {tab.label}</span>
-                    <X aria-hidden="true" className="size-3" />
+                    <IconCrossMedium aria-hidden="true" className="size-icon-xs" />
                   </TooltipTrigger>
                   <TooltipContent>Close {tab.label}</TooltipContent>
                 </Tooltip>
@@ -251,7 +252,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                   className="tabular-nums"
                 >
                   +{hiddenTabs.length}
-                  <ChevronDown aria-hidden="true" className="size-3" />
+                  <IconChevronDownMedium aria-hidden="true" className="size-icon-xs" />
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content>
                   {hiddenTabs.map((tab, index) => (
@@ -281,7 +282,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                             }
                           >
                             <span className="sr-only">Close {tab.label}</span>
-                            <X aria-hidden="true" className="size-3" />
+                            <IconCrossMedium aria-hidden="true" className="size-icon-xs" />
                           </TooltipTrigger>
                           <TooltipContent side="right">Close {tab.label}</TooltipContent>
                         </Tooltip>

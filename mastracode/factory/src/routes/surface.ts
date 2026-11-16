@@ -16,6 +16,7 @@ import {
   reviewedChangeRequest,
 } from '../boards/index.js';
 import type { BoardRegistry, InstalledBoard } from '../boards/index.js';
+import type { ForcedIntakeEvaluator } from '../boards/intake-routing.js';
 import { legacyPlanRoleFor, workLaneForRole } from '../boards/legacy-plan-role.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardCache, ProjectBoardSource } from '../boards/project-boards.js';
@@ -26,6 +27,7 @@ import { MaterializeError } from '../integrations/github/sandbox.js';
 import type { CardSource } from '../integrations/kept-cards.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
+import type { NotRoutedLookup } from '../rules/event-rules.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import { workItemSource } from '../rules/types.js';
@@ -40,15 +42,14 @@ import {
 } from '../session/factory-session.js';
 import type { EnsuredFactorySourceSession, OrganizationModelSources } from '../session/factory-session.js';
 import type { LiveSessions } from '../session/live-sessions.js';
-import { resolveWorkItemRepository } from '../session/work-item-repository.js';
+import { repositoryChosenByRun, resolveRunRepository } from '../session/work-item-repository.js';
 import type { StateSigner } from '../state-signing.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
-import type { StoredBoardsStorage } from '../storage/domains/boards/base.js';
+import type { IntakeEvaluator, StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
-import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
@@ -82,6 +83,7 @@ import { IntakeRouteRoutes } from './intake-routes.js';
 import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
+import { createProjectSessionsReader } from './project-sessions.js';
 import type { RouteAuth } from './route.js';
 import { SkillRoutes } from './skills.js';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
@@ -137,7 +139,6 @@ export interface FactoryApiRoutesDeps {
     modelCredentials: ModelCredentialsStorage;
     memorySettings: MemorySettingsStorage;
     customProviders: CustomProvidersStorage;
-    filesystem: FilesystemStorage;
     modelDefaults: ModelDefaultsStorage;
     projects: FactoryProjectsStorage;
     queueHealth: QueueHealthStorage;
@@ -161,14 +162,21 @@ export interface FactoryApiRoutesDeps {
   configVersion: string;
   /** Each project's boards; integrations use the code boards (`codeRegistry`). */
   boardRegistry: BoardRegistry | ProjectBoardSource;
+  /** Forces an evaluator on every project; without it each project uses its own setting. */
+  intakeEvaluator?: IntakeEvaluator;
+  /** What forced `intakeEvaluator`. */
+  intakeEvaluatorSource?: ForcedIntakeEvaluator['source'];
   /** Stored boards and their cache; mounts the board management routes when present. */
-  storedBoards?: { storage: StoredBoardsStorage; cache: ProjectBoardCache };
+  storedBoards?: {
+    storage: StoredBoardsStorage;
+    cache: ProjectBoardCache;
+  };
   factoryTransitionService?: FactoryTransitionService;
   sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
   /** Moves a thread with its observation vectors onto another memory resource. */
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
   /** This process's dispatcher run slots, for the run queue; `undefined` until the dispatcher exists. */
-  runSlots?: () => { inUse: number; cap: number } | undefined;
+  runSlots?: () => { inUse: number; cap: number; interactive: { inUse: number; cap: number } } | undefined;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
     startCoordinator: FactoryStartCoordinator;
@@ -441,53 +449,48 @@ export async function prepareFactoryRuleBinding(
         `Factory model policy is unavailable for project ${input.record.factoryProjectId}.`,
       );
     }
-    // A retry may already own a role session. Check it before treating a
-    // repository-less card as ambiguous, but never override an explicit signal.
+    // A retry may already own a role session; a card that names no repository stays in it.
     const reusable = await reuseBoundSession(sourceControl, input);
     // The review seat moves between branches on one card (self-review on the builder's branch,
     // PR review on each pull request's), so its session is reused only on the branch it holds.
     const boundSession =
       reusable && input.role === REVIEW_CONTEXT && !sameBranch(reusable.branch, branch) ? undefined : reusable;
     const intakeConfig = await intake?.getConfig({ orgId: input.record.orgId, integrationIds: ['linear'] });
-    let repository = await resolveWorkItemRepository({
+    // A card that names no repository keeps a retry in its role session's
+    // repository, else starts in the environment's first one; its agent
+    // determines which repository the card belongs to. An explicit signal is
+    // never overridden.
+    const repository = await resolveRunRepository({
       sourceControl,
       orgId: input.record.orgId,
       factoryProjectId: input.record.factoryProjectId,
       item: input.item,
       linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
+      ...(boundSession ? { boundProjectRepositoryId: boundSession.projectRepositoryId } : {}),
     });
-    if (repository.status === 'ambiguous' && boundSession) {
-      const link = await sourceControl.projectRepositories.get({
-        orgId: input.record.orgId,
-        id: boundSession.projectRepositoryId,
-      });
-      const linked =
-        link && (await sourceControl.repositories.get({ orgId: input.record.orgId, id: link.repositoryId }));
-      if (linked && repository.candidates.includes(linked.slug)) {
-        repository = { status: 'resolved', slug: linked.slug, projectRepositoryId: link.id };
-      }
-    }
     if (repository.status !== 'resolved') {
-      const detail =
-        repository.status === 'ambiguous'
-          ? `Choose one of the linked repositories: ${repository.candidates.join(', ')}.`
-          : repository.hint;
-      throw new FactoryDispatchError('source_repository_ambiguous', detail);
+      throw new FactoryDispatchError('source_repository_ambiguous', repository.hint);
     }
     // Re-preparing a binding (server restart, retired controller session) must
     // land in the role's existing session: minting a replacement would repoint
     // the work item, flip the session's owner to the approver, and orphan the
-    // previous sandbox.
+    // previous sandbox. A session may work on a card outside its own repository
+    // only when a run recorded that repository on a card that named none.
     const approver = input.record.approvedBy ?? undefined;
-    if (boundSession && boundSession.projectRepositoryId !== repository.projectRepositoryId) {
+    if (
+      boundSession &&
+      boundSession.projectRepositoryId !== repository.projectRepositoryId &&
+      !repositoryChosenByRun(input.item, repository.slug)
+    ) {
       throw new FactoryDispatchError(
         'source_repository_ambiguous',
-        `The existing session is bound to a different repository than ${repository.slug}. Choose the correct repository and retry.`,
+        `The existing session is bound to a different repository than ${repository.slug}. Set the card's repository back, or end that session and retry.`,
       );
     }
-    // The session is filed under the card's repository: the sandbox holds
-    // every environment repository, but the coordinator, the PR tools and the
-    // subscriptions follow the session's link, and the card names which one.
+    // The session is filed under the card's repository, or the environment's
+    // first one when the card names none: the sandbox holds every environment
+    // repository, but the coordinator, the PR tools and the subscriptions
+    // follow the session's link.
     const existingSession =
       boundSession ?? (await legacyPlanSession(sourceControl, input, boardId, branch, repository.projectRepositoryId));
     const ownerUserId =
@@ -534,6 +537,7 @@ export async function prepareFactoryRuleBinding(
       ...(approver ? { startedBy: await starterOf(owner?.workItems, project, approver) } : {}),
       factoryProjectId: input.record.factoryProjectId,
       sessionId: preparedSession.sessionId,
+      expectedBindingId: input.expectedBindingId,
       modelScope,
       defaultModelId: modelScope === 'factory' ? (project.defaultModelId ?? undefined) : undefined,
       threadTitle: workItemThreadTitle({ source, title: input.item.title, metadata: input.item.workItem.metadata }),
@@ -594,6 +598,8 @@ export function buildIntegrationContext(
     boardRegistry: BoardRegistry | ProjectBoardSource;
     /** Passed for the workers' context only: routes do not sweep. */
     keptCards?: CardSource;
+    /** Which items intake turned away, so integrations run intake again when one changes. */
+    notRouted?: NotRoutedLookup;
     factoryReady: boolean;
     domains: Pick<
       FactoryApiRoutesDeps['domains'],
@@ -648,6 +654,7 @@ export function buildIntegrationContext(
             workItems: deps.domains.workItems,
             boards: deps.boardRegistry,
             ...(deps.keptCards ? { keptCards: deps.keptCards } : {}),
+            ...(deps.notRouted ? { notRouted: deps.notRouted } : {}),
           },
         }
       : {}),
@@ -818,6 +825,11 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   ];
   const sourceControls = sourceControlIntegrationIds.map(id => deps.sourceControlStorage.forIntegration(id));
   const sourceControlSessions = createSourceControlSessionLookup(sourceControls);
+  const projectSessions = createProjectSessionsReader({
+    sourceControls,
+    ...(deps.users ? { users: deps.users } : {}),
+    ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
+  });
 
   const integrationRoutes = registrations.flatMap(registration => {
     const { integration } = registration;
@@ -827,6 +839,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         ...deps,
         // Integrations evaluate code behaviors and place new cards with the code boards.
         boardRegistry: toBoardSource(deps.boardRegistry).codeRegistry,
+        ...(deps.storedBoards ? { notRouted: deps.storedBoards.storage } : {}),
         stateSigner: deps.stateSigner,
         emitAudit,
         ...(githubRegistration ? { sourceControlOwnerId: 'github' } : {}),
@@ -835,20 +848,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     );
     return guardIntegrationRoutes({ ...registration, routes: integration.routes(context) });
   });
-  // Session persistence belongs to the linked source-control provider, not to
-  // GitHub. Replace legacy GitHub-owned handlers with one resolver spanning
-  // the legacy GitHub partition and every registered source-control partition.
-  const sharedSessionRouteKeys = new Set([
-    'GET /web/github/projects/:id/sessions',
-    'POST /web/github/projects/:id/sessions',
-    'GET /web/user-sessions/:sessionId',
-    'DELETE /web/user-sessions/:sessionId',
-    'POST /web/user-sessions/:sessionId/owner',
-    'POST /web/user-sessions/:sessionId/title',
-  ]);
-  const providerRoutes = integrationRoutes.filter(
-    route => !sharedSessionRouteKeys.has(route.method + ' ' + route.path),
-  );
   const sourceControlSessionRoutes =
     sourceControls.length === 0
       ? []
@@ -857,6 +856,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           sourceControls,
           projects: deps.domains.projects,
           ...(deps.users ? { users: deps.users } : {}),
+          projectSessions,
           controller: deps.controller,
           audit: deps.audit,
           memorySettings: deps.domains.memorySettings,
@@ -864,7 +864,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           // A local sandbox's destroy keeps the session directory, so recreate
           // couldn't deliver the fresh checkout it promises there.
           sandboxRecreateSupported: deps.sandbox !== undefined && deps.sandbox.provider !== 'local',
-          filesystem: deps.domains.filesystem,
           ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
           ...(deps.moveThread ? { moveThread: deps.moveThread } : {}),
           ...(githubStorage ? { githubRepositories: githubStorage.repositories } : {}),
@@ -1001,7 +1000,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           sourceControls,
           ...(deps.onEnvironmentSaved ? { onEnvironmentSaved: deps.onEnvironmentSaved } : {}),
         })),
-    ...providerRoutes,
+    ...integrationRoutes,
     ...absentStubs,
     ...slackAbsentStubs,
     ...(deps.intakeReady
@@ -1032,11 +1031,14 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           workItems: deps.domains.workItems,
           boardRegistry: deps.boardRegistry,
           intakeRoutes: deps.storedBoards?.storage,
+          intakeEvaluator: deps.intakeEvaluator,
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,
           liveSessions: deps.liveSessions,
           runSlots: deps.runSlots,
+          projectSessions,
+          activeRuns: () => deps.controller.listActiveThreadRuns(),
         }).routes()
       : []),
     ...(deps.factoryReady && deps.storedBoards
@@ -1057,6 +1059,11 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           workItems: deps.domains.workItems,
           storage: deps.storedBoards.storage,
           boards: deps.storedBoards.cache,
+          intakeEvaluator: deps.intakeEvaluator,
+          intakeEvaluatorSource: deps.intakeEvaluatorSource,
+          intakeLookups: (deps.integrations ?? []).flatMap(({ integration, ready }) =>
+            ready && integration.intakeLookup ? [integration.intakeLookup] : [],
+          ),
         }).routes()
       : []),
     ...(deps.factoryReady
@@ -1065,7 +1072,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
-          configVersion: deps.configVersion,
           boards: deps.boardRegistry,
         })
       : []),

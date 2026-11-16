@@ -225,16 +225,19 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
     const step1Action = vi.fn().mockResolvedValue({ value: 'step1-done' });
     const step2Action = vi
       .fn()
-      .mockImplementationOnce(async ({ suspend, state, setState }: any) => {
+      .mockImplementationOnce(async ({ suspend, getState, setState }: any) => {
+        const state = await getState();
         // Set state and then suspend
         await setState({ ...state, value: state.value + '-modified' });
         return suspend({ reason: 'waiting' });
       })
-      .mockImplementationOnce(async ({ state }: any) => {
+      .mockImplementationOnce(async ({ getState }: any) => {
+        const state = await getState();
         // On resume, state should be preserved
         return { result: 'resumed', stateValue: state.value };
       });
-    const step3Action = vi.fn().mockImplementation(async ({ state }: any) => {
+    const step3Action = vi.fn().mockImplementation(async ({ getState }: any) => {
+      const state = await getState();
       return { final: 'done', stateValue: state.value };
     });
 
@@ -547,7 +550,8 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
   {
     const stateValuesObserved: Array<{ step: string; state: any }> = [];
 
-    const step1Action = vi.fn().mockImplementation(async ({ state, setState, suspend, resumeData }) => {
+    const step1Action = vi.fn().mockImplementation(async ({ getState, setState, suspend, resumeData }) => {
+      const state = await getState();
       stateValuesObserved.push({ step: 'step-1', state: { ...state } });
 
       if (!resumeData) {
@@ -561,7 +565,8 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
       return {};
     });
 
-    const step2Action = vi.fn().mockImplementation(async ({ state }) => {
+    const step2Action = vi.fn().mockImplementation(async ({ getState }) => {
+      const state = await getState();
       stateValuesObserved.push({ step: 'step-2', state: { ...state } });
       return { finalCount: state.count, itemCount: state.items.length };
     });

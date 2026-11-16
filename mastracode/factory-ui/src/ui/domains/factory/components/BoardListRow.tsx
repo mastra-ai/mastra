@@ -6,13 +6,14 @@ import { DataList } from '@mastra/playground-ui/components/DataList';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { EllipsisVertical, Maximize2 } from 'lucide-react';
 import type { MouseEvent, ReactNode, RefCallback } from 'react';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { setDragPayload } from '../boardDrag';
 import type { DragPayload } from '../boardDrag';
 import { BOARD_LIST_ROW_LAYOUT_CLASS } from '../boardLayout';
+import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
+import { IconExpand45 } from '@mastra/playground-ui/icons/central/IconExpand45';
 
 const stopRowClick = (event: MouseEvent) => event.stopPropagation();
 
@@ -42,7 +43,6 @@ type BoardListRowCells = {
 };
 
 export function BoardListRow({
-  testId,
   title,
   cardRef,
   detailsRef,
@@ -57,7 +57,6 @@ export function BoardListRow({
   createdAt,
   cells,
 }: {
-  testId: 'work-item-card' | 'candidate-card';
   title: string;
   cardRef: RefCallback<HTMLElement>;
   detailsRef?: (element: HTMLElement | null) => void;
@@ -150,7 +149,7 @@ export function BoardListRow({
             }}
             className={REVEAL_ROW_CONTROLS}
           >
-            <Maximize2 size={13} aria-hidden />
+            <IconExpand45 aria-hidden />
           </Button>
           <DropdownMenu>
             <DropdownMenu.Trigger
@@ -165,7 +164,7 @@ export function BoardListRow({
                   onClick={stopRowClick}
                   className={REVEAL_ROW_CONTROLS}
                 >
-                  <EllipsisVertical size={13} aria-hidden />
+                  <IconDotGrid1x3Vertical aria-hidden />
                 </Button>
               }
             />
@@ -183,7 +182,7 @@ export function BoardListRow({
       ref={cardRef}
       role="article"
       aria-label={title}
-      data-testid={testId}
+      data-testid="work-item-card"
       data-highlighted={highlighted || undefined}
       data-featured={expanded || undefined}
       aria-busy={busy || locked || undefined}

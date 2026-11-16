@@ -45,9 +45,9 @@ export function SeriesMark({ color, icon, className, style }: SeriesMarkProps) {
       aria-hidden
       data-slot="series-mark"
       // Logos ship their own fills; the mark paints every path in the series color (or muted) instead.
-      // Line icons (lucide) keep their strokes.
+      // Line icons (lucide and Central) keep their strokes.
       className={cn(
-        'grid size-4.5 shrink-0 place-items-center rounded-[4px] [&_svg:not(.lucide)_*]:fill-current [&_svg:not(.lucide)_*]:stroke-none',
+        'grid size-4.5 shrink-0 place-items-center rounded-[4px] [&_svg:not(.lucide,[data-central-icon])_*]:fill-current [&_svg:not(.lucide,[data-central-icon])_*]:stroke-none',
         !color && 'bg-fill-subtle text-muted-foreground',
         className,
       )}

@@ -18,8 +18,6 @@ const githubRepository: GithubRepo = {
   private: false,
   installationId: 7,
   installationStorageId: 'inst-7',
-  sandboxProvider: 'local',
-  sandboxWorkdir: '/workspace/widgets',
 };
 
 const gitlabProject: GitLabRepository = {
@@ -31,8 +29,6 @@ const gitlabProject: GitLabRepository = {
   owner: 'acme',
   defaultBranch: 'main',
   private: true,
-  sandboxProvider: 'local',
-  sandboxWorkdir: '/workspace/platform',
 };
 
 function renderRow(overrides: Partial<OnboardingWorkRowProps> = {}) {

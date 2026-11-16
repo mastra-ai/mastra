@@ -95,22 +95,6 @@ describe('GitHub signal subscription store', () => {
     ).toEqual([]);
   });
 
-  it('ignores the scope stored on rows written before sessions dropped scopes', async () => {
-    const { listPullRequestSubscriptionsForThread, subscribeToPullRequest, unsubscribeFromPullRequest } =
-      await import('./subscriptions.js');
-    const legacy = await subscribeToPullRequest(baseInput, storage);
-    await storage.subscriptions.delete(legacy.id);
-    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...row } = legacy;
-    const stored = await storage.subscriptions.create({ ...row, sessionScope: '/workspace/a' });
-    expect(stored.sessionScope).toBe('/workspace/a');
-
-    expect((await listPullRequestSubscriptionsForThread(baseInput, storage)).map(r => r.id)).toEqual([stored.id]);
-    // Subscribing again resolves to the legacy row instead of adding a second one.
-    expect((await subscribeToPullRequest(baseInput, storage)).id).toBe(stored.id);
-    await unsubscribeFromPullRequest(baseInput, storage);
-    expect(await listPullRequestSubscriptionsForThread(baseInput, storage)).toEqual([]);
-  });
-
   it('returns the existing row for duplicate subscriptions', async () => {
     const { listPullRequestSubscriptionsForThread, subscribeToPullRequest } = await import('./subscriptions.js');
     const first = await subscribeToPullRequest(baseInput, storage);

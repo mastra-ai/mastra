@@ -6,45 +6,21 @@
 import { screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
+import { recordProviderListRequests } from '../../../e2e/ui/provider-list-requests';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
-import { FACTORY_ID, REPO_ID, stubWorkBoard, workItem } from './workBoardStubs';
-
-const openIssue = {
-  number: 41,
-  title: 'Issue with no card',
-  url: 'https://github.com/acme/app/issues/41',
-  author: 'alice',
-  assignee: null,
-  labels: ['status: auto-triaged'],
-  comments: 0,
-  createdAt: '2026-08-01T00:00:00.000Z',
-  updatedAt: '2026-08-01T00:00:00.000Z',
-};
-
-const openPullRequest = {
-  number: 42,
-  title: 'Pull request with no card',
-  url: 'https://github.com/acme/app/pull/42',
-  author: 'alice',
-  assignees: [],
-  requestedReviewers: [],
-  baseBranch: 'main',
-  headBranch: 'feat/42',
-  createdAt: '2026-08-01T00:00:00.000Z',
-  updatedAt: '2026-08-01T00:00:00.000Z',
-};
+import { FACTORY_ID, stubWorkBoard, workItem } from './workBoardStubs';
 
 /**
  * Opens the Work board of a project taking GitHub issues from its repository, holding `cards` in
- * Intake, while GitHub has one issue and one pull request no card is filed from. Records every
- * request for a provider's list, and every lookup of which provider items already have a card.
+ * Intake. Records every request for a provider's list, and every lookup of which provider items
+ * already have a card.
  */
 function openWorkBoard(cards: number) {
-  const asked = { providerLists: new Array<string>(), filedLookups: 0 };
+  const asked = { providerLists: recordProviderListRequests(), filedLookups: 0 };
   stubWorkBoard();
   server.use(
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
@@ -62,24 +38,7 @@ function openWorkBoard(cards: number) {
         })),
       });
     }),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
-      HttpResponse.json({ issues: [openIssue], nextPage: 2 }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs`, () =>
-      HttpResponse.json({ pullRequests: [openPullRequest], nextPage: 2 }),
-    ),
   );
-  const record = ({ request }: { request: Request }) => {
-    const { pathname } = new URL(request.url);
-    const listsIssues = /^\/web\/(github|gitlab)\/projects\/[^/]+\/(issues|prs)$/.test(pathname);
-    if (listsIssues || /^\/web\/(gitlab|linear|jira|incidentio)\/issues$/.test(pathname)) {
-      asked.providerLists.push(pathname);
-    }
-  };
-  server.events.on('request:start', record);
-  onTestFinished(() => {
-    server.events.removeListener('request:start', record);
-  });
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
   const { client } = renderWithProviders(<RouterProvider router={router} />);
   return { asked, client };
@@ -88,7 +47,7 @@ function openWorkBoard(cards: number) {
 describe('The Work board of a project taking GitHub issues', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('given open issues and pull requests with no card, when the board opens, then it shows its cards and asks no provider for a list', async () => {
+  it('when the board opens, then it shows its cards and asks no provider for a list', async () => {
     const { asked, client } = openWorkBoard(1);
 
     const intake = await screen.findByTestId('board-column-intake');
@@ -96,8 +55,6 @@ describe('The Work board of a project taking GitHub issues', () => {
     await waitForMutationsIdle(client);
 
     expect(screen.getByRole('button', { name: 'Intake, 1' })).toBeInTheDocument();
-    expect(screen.queryByText('Issue with no card')).not.toBeInTheDocument();
-    expect(screen.queryByText('Pull request with no card')).not.toBeInTheDocument();
     expect(asked.providerLists).toEqual([]);
     expect(asked.filedLookups).toBe(0);
   });
