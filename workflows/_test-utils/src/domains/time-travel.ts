@@ -2123,7 +2123,9 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
             runId,
             outputOptions: { includeState: true },
           });
+          expect(replayedAgain.status).toBe('failed');
           expect(mocks.chargeSawOrder.mock.calls).toEqual([[42], [42], [42]]);
+          expect(mocks.receiptSawOrder).not.toHaveBeenCalled();
           expect(replayedAgain.state).toEqual({ order: 42 });
         }
       },
