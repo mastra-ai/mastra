@@ -9,6 +9,7 @@ import {
   INTAKE_ORDER_SAMPLE,
   intakeEvaluatorFrom,
   intakeTargetProblem,
+  planEventMove,
   resolveIntake,
   resolveIntakePlacement,
 } from './intake-routing.js';
@@ -293,5 +294,53 @@ describe('intakeTargetProblem', () => {
     // The board and phase must still exist.
     expect(intakeTargetProblem(registry, closes('work', 'gone'))).toMatchObject({ code: 'unknown_phase' });
     expect(intakeTargetProblem(registry, closes('gone', 'done'))).toMatchObject({ code: 'unknown_board' });
+  });
+});
+
+describe('card-move traces', () => {
+  const twoBoards = boardRegistryOf([simpleBoard('work', 'Work'), simpleBoard('ship', 'Ship')]);
+  const toShip = route({
+    id: 'to-ship',
+    on: ['work_item.updated'],
+    target: { boardKey: 'work', phaseKey: null, moveToBoardKey: 'ship' },
+  });
+  const gone = route({
+    id: 'gone',
+    on: ['work_item.updated'],
+    target: { boardKey: 'work', phaseKey: null, moveToBoardKey: 'platform' },
+  });
+  const card = {
+    id: 'card-1',
+    board: 'work',
+    stages: ['inbox'],
+    title: 'Card',
+    metadata: {},
+    externalSource: { integrationId: 'github', type: 'issue', externalId: '1' },
+  } as unknown as Card;
+
+  // Filing logs a skip only on its way to the winner; the trace names every skip, never as beaten.
+  it.each([
+    { routes: [gone, toShip], logged: ['gone'] },
+    { routes: [toShip, gone], logged: [] },
+  ])('shows a match whose target is gone as skipped, wherever it sits', ({ routes, logged }) => {
+    const seen: string[] = [];
+    const plan = planEventMove(
+      {
+        routes,
+        event: { type: 'work_item.updated', labels: { added: ['x'], removed: [] } },
+        item: card,
+        registry: twoBoards,
+        onSkip: skipped => seen.push(skipped.routeId),
+      },
+      { full: true },
+    );
+    expect(plan.move).toEqual({ board: 'ship', phase: 'inbox', routeId: 'to-ship' });
+    expect(plan.rules.find(rule => rule.routeId === 'gone')).toEqual({
+      routeId: 'gone',
+      name: null,
+      outcome: 'skipped',
+      reason: 'board "platform" is not installed',
+    });
+    expect(seen).toEqual(logged);
   });
 });

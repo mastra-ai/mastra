@@ -234,7 +234,7 @@ export class IntakeCheck {
     // Each update's fold group, built once rather than per record.
     const groups = new Map<string, typeof records>();
     const groupOf = (decision: Extract<FactoryCommitDecision, { type: 'routeEvent' }>) => {
-      const key = `${decision.event.type}:${decision.fromCardSession === true}`;
+      const key = `${decision.event.type}:${decision.event.pullRequest ?? ''}:${decision.fromCardSession === true}`;
       let group = groups.get(key);
       if (!group) groups.set(key, (group = updateGroup(records, decision)));
       return group;
