@@ -15,6 +15,8 @@ import {
   isDurableEngineVariant,
 } from '../aimock-scenario';
 import { BackgroundTaskManager } from '../../../../background-tasks/manager';
+import type { Mastra } from '../../../../mastra';
+import { SCENARIO_MODEL_ID } from '../types';
 
 /**
  * Regression classes: the end-to-end background-task lifecycle driven by real
@@ -578,7 +580,11 @@ describeForAllEngines(
     // A chat that reloads the thread while a deferred background tool waits for input must
     // still see the open request on the tool call, and the resumed tool must know which
     // request it is answering. (#28986)
-    function makeSuspendingResearchTool(seenOnResume: unknown[], transform?: ToolPayloadTransform) {
+    function makeSuspendingResearchTool(
+      seenOnResume: unknown[],
+      transform?: ToolPayloadTransform,
+      gate?: Promise<void>,
+    ) {
       return createTool({
         id: 'research-with-approval',
         description: 'Research a topic after analyst approval',
@@ -589,6 +595,7 @@ describeForAllEngines(
         execute: async ({ topic }, options) => {
           const resumeData = options?.agent?.resumeData as { notes?: string } | undefined;
           if (!resumeData) {
+            await gate;
             return options?.agent?.suspend?.({ awaiting: 'analyst-approval', topic }) as any;
           }
           seenOnResume.push(options?.agent?.suspendPayload);
@@ -718,6 +725,176 @@ describeForAllEngines(
         (t: any) => t?.status === 'completed',
       );
       expect(seenOnResume).toEqual([{ awaiting: 'analyst-approval', topic: 'solana' }]);
+    }, 30_000);
+
+    // Durable engines release the run's claim once it finishes. Tests that need the run fully
+    // over before a background task acts wait for storage to show that. Runs without a claim
+    // have no record.
+    async function waitForRunToRelease(mastra: Mastra, runId: string) {
+      const workflows = await mastra.getStorage()!.getStore('workflows');
+      await waitFor(
+        async () => (await workflows?.getRunOwnership?.({ runId }))?.live ?? false,
+        live => !live,
+      );
+    }
+
+    // Technical: the background executor runs the origin run's suspend bookkeeping before the
+    // task's own suspend. Its memory save required the finished run to still own its claim,
+    // which can't be verified once the claim is released, so the task failed with
+    // DURABLE_AGENT_EXECUTION_UNVERIFIED instead of suspending. (#30182)
+    it('parks a deferred tool that asks for input after the reply was sent, and resumes it (#30182)', async () => {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const seenOnResume: unknown[] = [];
+      const memory = new MockMemory();
+      const thread = { threadId: 'bg-suspend-after-finish-thread', resourceId: 'bg-suspend-after-finish-user' };
+      const { chunks, mastra, output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Research near',
+        tools: { researchWithApproval: makeSuspendingResearchTool(seenOnResume, undefined, gate) },
+        agentBackgroundTasks: { tools: { researchWithApproval: true } },
+        backgroundTasks: BG_CONFIG,
+        memory,
+        ...thread,
+        stopWhen: stepCountIs(3),
+        collectChunks: true,
+        fixtures: llm =>
+          onReportTurns(llm, 'Research near', {
+            dispatch: {
+              toolCalls: [{ id: 'call-bg-1', name: 'researchWithApproval', arguments: { topic: 'near' } }],
+            },
+            ack: 'Waiting for the analyst.',
+            report: 'The analyst answered.',
+          }),
+      });
+      // The run has replied and ended before the tool asks for input.
+      expect(await output.text).toBe('Waiting for the analyst.');
+      const manager = mastra.backgroundTaskManager!;
+      const started = chunks!.find(c => c.type === 'background-task-started') as Chunk & { runId: string };
+      const taskId = started.payload.taskId as string;
+      await waitForRunToRelease(mastra, started.runId);
+      release();
+
+      const parked = (await waitFor(
+        () => manager.getTask(taskId),
+        (t: any) => t?.status !== 'pending' && t?.status !== 'running',
+      )) as any;
+      expect({ status: parked.status, error: parked.error?.message }).toEqual({
+        status: 'suspended',
+        error: undefined,
+      });
+      expect(parked.suspendPayload).toEqual({ awaiting: 'analyst-approval', topic: 'near' });
+      const open = await waitFor(
+        () => storedToolCall(memory, thread),
+        s => s.suspended?.taskId !== undefined,
+      );
+      expect(open.suspended).toMatchObject({ taskId, suspendPayload: { awaiting: 'analyst-approval', topic: 'near' } });
+
+      await manager.resume(taskId, { notes: 'looks promising' });
+      const done = (await waitFor(
+        () => manager.getTask(taskId),
+        (t: any) => t?.status === 'completed',
+      )) as any;
+      expect(done.result).toEqual({ summary: 'Research on "near": looks promising' });
+      expect(seenOnResume).toEqual([{ awaiting: 'analyst-approval', topic: 'near' }]);
+    }, 30_000);
+
+    // Technical: same path as above, reached through a deferred sub-agent: when its tool needs
+    // approval, the delegation tool suspends the background task with that approval. (#30182)
+    it('parks a deferred sub-agent whose tool needs approval after the reply was sent, and resumes it (#30182)', async () => {
+      const mock = getMock();
+      const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${mock.url.replace(/\/+$/, '')}/v1` });
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const published: string[] = [];
+      const publishTool = createTool({
+        id: 'publish',
+        description: 'Publish a post',
+        inputSchema: z.object({ title: z.string() }),
+        requireApproval: true,
+        execute: async ({ title }) => {
+          published.push(title);
+          return { published: title };
+        },
+      });
+      const helper = new Agent({
+        id: 'helper',
+        name: 'Helper',
+        description: 'Publishes posts',
+        instructions: 'Publish posts with publishTool.',
+        model: openai(SCENARIO_MODEL_ID),
+        tools: { publishTool },
+        // Holds the sub-agent until the supervisor's run is over.
+        inputProcessors: [
+          {
+            id: 'wait-for-supervisor',
+            processInput: async ({ messages }) => {
+              await gate;
+              return messages;
+            },
+          },
+        ],
+      });
+      const toolNames = (req: any): string[] => (req?.tools ?? []).map((t: any) => t.function?.name);
+      const isSupervisor = (req: unknown) => toolNames(req).includes('agent-helper');
+      const isHelper = (req: unknown) => toolNames(req).includes('publishTool');
+      const memory = new MockMemory();
+      const thread = { threadId: 'bg-subagent-approval-thread', resourceId: 'bg-subagent-approval-user' };
+      const { chunks, mastra, output } = await runLoopScenario({
+        engine,
+        llm: mock,
+        prompt: 'Publish the launch post',
+        agents: { helper },
+        agentBackgroundTasks: { tools: { helper: true } },
+        backgroundTasks: BG_CONFIG,
+        memory,
+        ...thread,
+        stopWhen: stepCountIs(3),
+        collectChunks: true,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', predicate: (req: unknown) => isSupervisor(req) && !hasToolResult(req) },
+            { toolCalls: [{ id: 'call-bg-1', name: 'agent-helper', arguments: { prompt: 'Publish "Launch"' } }] },
+          );
+          llm.on(
+            { endpoint: 'chat', predicate: (req: unknown) => isSupervisor(req) && hasToolResult(req) },
+            { content: 'Handed to the helper.' },
+          );
+          llm.on(
+            { endpoint: 'chat', predicate: (req: unknown) => isHelper(req) && !hasToolResult(req) },
+            { toolCalls: [{ id: 'call-publish-1', name: 'publishTool', arguments: { title: 'Launch' } }] },
+          );
+          llm.on(
+            { endpoint: 'chat', predicate: (req: unknown) => isHelper(req) && hasToolResult(req) },
+            { content: 'Published Launch.' },
+          );
+        },
+      });
+      expect(await output.text).toBe('Handed to the helper.');
+      const manager = mastra.backgroundTaskManager!;
+      const started = chunks!.find(c => c.type === 'background-task-started') as Chunk & { runId: string };
+      const taskId = started.payload.taskId as string;
+      await waitForRunToRelease(mastra, started.runId);
+      release();
+
+      const parked = (await waitFor(
+        () => manager.getTask(taskId),
+        (t: any) => t?.status !== 'pending' && t?.status !== 'running',
+      )) as any;
+      expect({ status: parked.status, error: parked.error?.message }).toEqual({
+        status: 'suspended',
+        error: undefined,
+      });
+      expect(published).toEqual([]);
+
+      await manager.resume(taskId, { approved: true });
+      const done = (await waitFor(
+        () => manager.getTask(taskId),
+        (t: any) => t?.status !== 'suspended' && t?.status !== 'running' && t?.status !== 'pending',
+      )) as any;
+      expect({ status: done.status, error: done.error?.message }).toEqual({ status: 'completed', error: undefined });
+      expect(published).toEqual(['Launch']);
     }, 30_000);
 
     it('clears the open request from memory when a suspended deferred task is cancelled (#28986)', async () => {
