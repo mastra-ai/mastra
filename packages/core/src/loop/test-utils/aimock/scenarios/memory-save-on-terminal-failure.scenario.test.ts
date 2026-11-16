@@ -16,7 +16,15 @@ import { InMemoryStore } from '../../../../storage';
 import { createTool } from '../../../../tools';
 import { TOOL_ABORT_NOTICE } from '../../../shared/tool-abort-grace';
 import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { createRecordingModel } from '../parity';
+import type { ModelTape } from '../parity';
 import type { EngineVariant } from '../types';
+
+const TAPE_HEAD = [
+  { type: 'stream-start', warnings: [] },
+  { type: 'response-metadata', id: 'r', modelId: 'm', timestamp: new Date(0) },
+];
+const TAPE_USAGE = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
 /**
  * A run that ends without a finish chunk must still save the turn.
@@ -1559,6 +1567,148 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
       expect(messages.some(message => message.role === 'user')).toBe(true);
       expect(toolResultIds(messages)).toContain('call_echo');
       expect(JSON.stringify(messages)).toContain('The echo ran.');
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // A provider-executed result can be rejected too, and its raw value is already in the stream's
+  // collected chunks when `processToolResult` runs. A keep-save that materializes those chunks must
+  // leave the rejected result out while keeping the call, or the value the processor refused lands
+  // in history and in the next turn's model input.
+  // Durable engines only: they keep the turn after this mid-stream bail, so the rejection would show
+  // up in the thread there. The in-process engines end the run before the output-processor pass and
+  // save nothing at all on this path.
+  const itKeptTurnEngine = engine === 'durable' || engine === 'evented' ? it : it.skip;
+  itKeptTurnEngine(
+    'keeps the turn without the tool result a processToolResult hook rejected',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-tool-result-partial-${engine}`;
+      const REJECTED = 'CARD-4242-DO-NOT-STORE';
+      let blocked = 0;
+      const rejector: Processor = {
+        id: 'rejecting-tool-result',
+        processToolResult: ({ abort }) => {
+          blocked++;
+          abort('Rejected by policy', { persist: 'partial' });
+        },
+      };
+      const recording = createRecordingModel({
+        tapes: [
+          [
+            ...TAPE_HEAD,
+            { type: 'text-start', id: 't1' },
+            { type: 'text-delta', id: 't1', delta: 'Looking that up. ' },
+            { type: 'text-end', id: 't1' },
+            { type: 'tool-input-start', id: 'call_lookup', toolName: 'lookup', providerExecuted: true },
+            { type: 'tool-input-delta', id: 'call_lookup', delta: '{"q":"card"}' },
+            { type: 'tool-input-end', id: 'call_lookup' },
+            {
+              type: 'tool-result',
+              toolCallId: 'call_lookup',
+              toolName: 'lookup',
+              result: { secret: REJECTED },
+              providerExecuted: true,
+            },
+            { type: 'finish', finishReason: 'tool-calls', usage: TAPE_USAGE },
+          ],
+          // Reached only if the run continues past the rejected result.
+          [
+            ...TAPE_HEAD,
+            { type: 'text-start', id: 't2' },
+            { type: 'text-delta', id: 't2', delta: 'Continued after the rejection.' },
+            { type: 'text-end', id: 't2' },
+            { type: 'finish', finishReason: 'stop', usage: TAPE_USAGE },
+          ],
+        ] satisfies ModelTape[],
+      });
+
+      const { output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Look the card up, then answer.',
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        agentOutputProcessors: [rejector],
+        model: () => recording.model,
+        stopWhen: stepCountIs(5),
+        tools: {
+          lookup: createTool({
+            id: 'lookup',
+            description: 'Looks a card up.',
+            inputSchema: z.object({ q: z.string() }),
+            execute: async () => ({ secret: 'executed locally' }),
+          }),
+        },
+        fixtures: () => {},
+      });
+
+      expect(blocked).toBe(1);
+      expect(output.tripwire).toMatchObject({ reason: 'Rejected by policy', persist: 'partial' });
+
+      const messages = await vi.waitFor(
+        async () => {
+          const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+          expect(messages.map(message => message.role)).toContain('assistant');
+          return messages;
+        },
+        { timeout: 5_000, interval: 100 },
+      );
+      const saved = JSON.stringify(messages);
+      // The rejected value never reaches the thread, but the call it belonged to stays.
+      expect(saved).not.toContain(REJECTED);
+      expect(saved).toContain('call_lookup');
+      expect(saved).toContain('Looking that up.');
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // A stream processor can stop a reply that has already streamed text. The text accepted before the
+  // trip belongs to the turn, and the aborter's choice decides whether memory keeps it.
+  // Same engines as the rejected tool result above: the in-process engines save nothing on this bail.
+  itKeptTurnEngine(
+    'keeps the text accepted before a stream processor aborted',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-stream-partial-${engine}`;
+      let deltas = 0;
+      const breaker: Processor = {
+        id: 'stream-keeper',
+        processOutputStream: async ({ part, abort }) => {
+          if (part.type === 'text-delta' && ++deltas === 2) abort('Stream stopped by policy', { persist: 'partial' });
+          return part;
+        },
+      };
+
+      const { output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Answer slowly.',
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        agentOutputProcessors: [breaker],
+        collectChunks: true,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { content: 'KEPT-THEN-STOPPED' },
+            { chunkSize: 4, latency: 10 },
+          );
+        },
+      });
+
+      expect(deltas).toBeGreaterThanOrEqual(2);
+      expect(output.tripwire).toMatchObject({ reason: 'Stream stopped by policy', persist: 'partial' });
+
+      // Absence can't be polled for; give a late write time to land.
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+      const saved = JSON.stringify(messages);
+      expect(saved).toContain('KEPT');
+      // The chunk the processor rejected never reaches the thread.
+      expect(saved).not.toContain('STOPPED');
     },
     TEST_TIMEOUT_MS,
   );

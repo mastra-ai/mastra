@@ -15,7 +15,10 @@ import type { SaveQueueManager } from './index';
  *
  * Observational Memory owns its own saving, so no keep-save runs under it — the same rule
  * `onStepFinish` applies to per-step saves. Errors are logged, not thrown: a failed keep-save
- * must never change the outcome of a run that already tripped.
+ * must never change the outcome of a run that already tripped. The one exception is an error
+ * the caller names through `rethrow` — the durable ownership fence, which the ordinary save
+ * rethrows so a superseded run stops before it reaches structured output, title generation and
+ * the finish event.
  */
 export async function persistPartialTurn({
   memory,
@@ -25,6 +28,7 @@ export async function persistPartialTurn({
   saveQueueManager,
   authorize,
   beforePersist,
+  rethrow,
   logger,
   runId,
 }: {
@@ -39,6 +43,11 @@ export async function persistPartialTurn({
    * fence (`assertExecutionOwned`). A rejection skips the save, as a failed authorization does.
    */
   beforePersist?: () => Promise<void>;
+  /**
+   * Errors that must fail the run instead of being logged, e.g. `isExecutionFenceError`. Losing
+   * the execution means this run no longer owns the thread, so the caller has to stop.
+   */
+  rethrow?: (error: unknown) => boolean;
   logger: IMastraLogger;
   runId: string;
 }) {
@@ -49,6 +58,7 @@ export async function persistPartialTurn({
     await authorize?.();
     await saveQueueManager?.flushMessages(messageList, threadId, memoryConfig, { beforePersist });
   } catch (error) {
+    if (rethrow?.(error)) throw error;
     logger.error('Failed to keep a partial turn after an output processor tripwire', { error, runId, threadId });
   }
 }

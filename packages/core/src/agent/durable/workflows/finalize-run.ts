@@ -380,8 +380,10 @@ export async function runDurableFinishSideEffects({
                 }
               },
               // The same fence the save below passes: a superseded execution must not write the
-              // kept turn either (#23734).
+              // kept turn either (#23734), and losing the fence has to end the run here rather
+              // than be logged — the normal save rethrows it for the same reason.
               beforePersist: assertOwned,
+              rethrow: isExecutionFenceError,
               logger: effectiveLogger,
               runId,
             });

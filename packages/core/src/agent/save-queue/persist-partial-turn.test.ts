@@ -84,4 +84,25 @@ describe('persistPartialTurn', () => {
     expect(error).toHaveBeenCalledOnce();
     expect(error.mock.calls[0][1]).toMatchObject({ runId: 'run-1', threadId: 'thread-1' });
   });
+
+  // The durable keep-save names the execution-ownership fence: a superseded run has to stop
+  // rather than carry on to structured output, title generation and the finish event.
+  it('rethrows the error the caller names instead of swallowing it', async () => {
+    const { run, flushMessages, error } = setup();
+    const fenceError = Object.assign(new Error('execution fenced'), { name: 'ExecutionFenceError' });
+    flushMessages.mockRejectedValue(fenceError);
+
+    await expect(run({ rethrow: (thrown: unknown) => thrown === fenceError })).rejects.toBe(fenceError);
+
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('swallows an error the caller does not name', async () => {
+    const { run, flushMessages, error } = setup();
+    flushMessages.mockRejectedValue(new Error('storage down'));
+
+    await expect(run({ rethrow: () => false })).resolves.toBeUndefined();
+
+    expect(error).toHaveBeenCalledOnce();
+  });
 });

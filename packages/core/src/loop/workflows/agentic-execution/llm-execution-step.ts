@@ -163,6 +163,8 @@ function getRequestInputProcessors({
 type ProcessOutputStreamResult = {
   collectedChunks: CollectedChunk[];
   toolResultTripwire: TripWire | null;
+  /** Tool call whose result a `processToolResult` hook rejected; its raw value is still in `collectedChunks`. */
+  blockedToolResultCallId?: string;
 };
 
 type ProcessOutputStreamOptions<OUTPUT = undefined> = {
@@ -572,6 +574,10 @@ async function processOutputStream<OUTPUT = undefined>({
   let transportSet = false;
   let hasStepContent = false;
   let toolResultTripwire: TripWire | null = null;
+  // The rejected tool result is already in `collectedChunks` (it is collected before the
+  // processToolResult hooks run), so remember which call it belonged to and leave it out of
+  // any message built from those chunks.
+  let blockedToolResultCallId: string | undefined;
   let toolResultProcessorRunner: ProcessorRunner | null = null;
   const getToolResultProcessorRunner = (): ProcessorRunner => {
     if (toolResultProcessorRunner) return toolResultProcessorRunner;
@@ -1101,7 +1107,10 @@ async function processOutputStream<OUTPUT = undefined>({
                 // Stop processing further chunks; the outer LLM execution step
                 // joins this tripwire with the existing processOutputStep tripwire path.
                 // The raw tool result was never persisted to messageList — the abort
-                // honors the "scan before history" guarantee.
+                // honors the "scan before history" guarantee. It was collected above,
+                // though, so record the call id to keep it out of any keep-save that
+                // materializes these chunks.
+                blockedToolResultCallId = chunk.payload.toolCallId;
                 runState.setState({ hasErrored: true });
                 break;
               }
@@ -1193,7 +1202,7 @@ async function processOutputStream<OUTPUT = undefined>({
   }
   clientToolArgsTextByToolCallId.clear();
 
-  return { collectedChunks, toolResultTripwire };
+  return { collectedChunks, toolResultTripwire, blockedToolResultCallId };
 }
 
 function executeStreamWithFallbackModels<T>(
@@ -2349,7 +2358,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
         };
         try {
-          const { collectedChunks, toolResultTripwire: streamToolResultTripwire } = await processOutputStream({
+          const {
+            collectedChunks,
+            toolResultTripwire: streamToolResultTripwire,
+            blockedToolResultCallId,
+          } = await processOutputStream({
             collectedChunks: attemptChunks,
             outputStream,
             openReasoningIds: subscribePendingSignals ? openReasoningIds : undefined,
@@ -2554,7 +2567,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // in it; the default rollback never touches the list (#22593 for the abort returns).
             if (toolResultTripwireFromStream.options?.persist === 'partial') {
               const acceptedMessages = buildMessagesFromChunks({
-                chunks: collectedChunks,
+                // Leave out the result the processor rejected. It is the one part of the
+                // stream that never reached the message list, so materializing it here would
+                // put a rejected value back into history and the next turn's model input.
+                // Its tool-call chunk stays, exactly as the durable engine keeps it.
+                chunks: collectedChunks.filter(
+                  chunk => !(chunk.type === 'tool-result' && chunk.payload?.toolCallId === blockedToolResultCallId),
+                ),
                 messageId: currentStep.messageId,
                 responseModelMetadata: buildResponseModelMetadata(
                   runState,

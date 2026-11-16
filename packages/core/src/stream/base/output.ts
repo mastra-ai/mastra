@@ -1674,7 +1674,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     retry: stepTripwire?.retry,
                     metadata: stepTripwire?.metadata,
                     processorId: stepTripwire?.processorId,
-                    persist: stepTripwire?.persist,
+                    // A stream processor's tripwire chunk already recorded the aborter's
+                    // choice; the step only has one when the *step* processor tripped.
+                    // Keep the earlier value rather than dropping it here.
+                    persist: stepTripwire?.persist ?? self.#tripwire?.persist,
                   };
                 }
               }
