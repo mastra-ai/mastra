@@ -629,12 +629,25 @@ export const posthogScenario: Scenario = {
     }
     if (tools['posthog_run_query']) {
       try {
-        await call('posthog_run_query', {
+        const result = await call<{ types?: unknown }>('posthog_run_query', {
           project_id: pidNum,
           query: 'select event, count() from events limit 1',
           name: `smoke-${runId}`,
         });
-        steps.push(makeStep('run query', 'posthog_run_query', 'pass'));
+        // #30528: column types come back as [columnName, clickhouseType] pairs.
+        const types = result.types;
+        const typesOk =
+          types == null ||
+          (Array.isArray(types) &&
+            types.every(pair => Array.isArray(pair) && pair.length === 2 && pair.every(v => typeof v === 'string')));
+        steps.push(
+          makeStep(
+            'run query',
+            'posthog_run_query',
+            typesOk ? 'pass' : 'fail',
+            typesOk ? undefined : `unexpected types: ${JSON.stringify(types)}`,
+          ),
+        );
       } catch (error) {
         steps.push(makeStep('run query', 'posthog_run_query', 'fail', errorMessage(error)));
       }
