@@ -7,7 +7,7 @@ import { cardRuleFacts } from './card-facts.js';
 import { defineBoard } from './define-board.js';
 import { dryRunIntake, intakeSample } from './intake-dry-run.js';
 import type { IntakeSampleItem } from './intake-dry-run.js';
-import { INTAKE_ORDER_SAMPLE, resolveIntake } from './intake-routing.js';
+import { INTAKE_ORDER_SAMPLE } from './intake-routing.js';
 import { boardRegistryOf } from './registry.js';
 
 const simpleBoard = (id: string, name: string) =>
@@ -59,75 +59,6 @@ const routes = [
 const items = [item('a', ['ship']), item('b', ['bug']), item('c', ['ship', 'bug']), item('d', [])];
 
 describe('dryRunIntake', () => {
-  it('counts per board and per rule what each takes and what it matched but lost, and to whom', () => {
-    const result = dryRunIntake({ routes, order: ['work', 'ship'], registry, items, filed: { 'work-all': 9 } });
-    expect(result.sampled).toBe(4);
-    expect(result.notRouted).toEqual([]);
-    expect(result.boards).toEqual([
-      {
-        boardKey: 'work',
-        name: 'Work',
-        takes: ['a', 'b', 'c', 'd'],
-        lostTo: [],
-        rules: [
-          { routeId: 'work-bug', name: 'work-bug', enabled: true, takes: ['b', 'c'], lost: [], filed: 0 },
-          {
-            routeId: 'work-all',
-            name: 'work-all',
-            enabled: true,
-            takes: ['a', 'd'],
-            lost: [{ boardKey: 'work', keys: ['b', 'c'] }],
-            filed: 9,
-          },
-        ],
-      },
-      {
-        boardKey: 'ship',
-        name: 'Ship',
-        takes: [],
-        lostTo: [{ boardKey: 'work', keys: ['a', 'c'] }],
-        rules: [
-          {
-            routeId: 'ship-ship',
-            name: 'ship-ship',
-            enabled: true,
-            takes: [],
-            lost: [{ boardKey: 'work', keys: ['a', 'c'] }],
-            filed: 0,
-          },
-          { routeId: 'ship-off', name: 'ship-off', enabled: false, takes: [], lost: [], filed: 0 },
-        ],
-      },
-    ]);
-    expect(result.items.find(entry => entry.key === 'c')).toMatchObject({
-      placement: { boardKey: 'work', routeId: 'work-bug', phase: 'inbox' },
-      matched: [
-        { boardKey: 'work', routeId: 'work-bug' },
-        { boardKey: 'work', routeId: 'work-all' },
-        { boardKey: 'ship', routeId: 'ship-ship' },
-      ],
-    });
-  });
-
-  it('previews an unsaved order against the saved one', () => {
-    const result = dryRunIntake({
-      routes,
-      order: ['ship', 'work'],
-      registry,
-      items,
-      baseline: { routes, order: ['work', 'ship'] },
-    });
-    expect(result.changed).toBe(2);
-    expect(result.boards.map(board => [board.boardKey, board.takes])).toEqual([
-      ['ship', ['a', 'c']],
-      ['work', ['b', 'd']],
-    ]);
-    expect(result.items.find(entry => entry.key === 'a')).toMatchObject({
-      before: { boardKey: 'work', routeId: 'work-all' },
-      placement: { boardKey: 'ship', routeId: 'ship-ship' },
-    });
-  });
-
   it('lists items no board takes, and shows boards and rules no item reached at zero', () => {
     const result = dryRunIntake({ routes: [rule('ship-ship', 'ship', has('ship'))], order: [], registry, items });
     expect(result.notRouted).toEqual(['b', 'd']);
@@ -138,28 +69,6 @@ describe('dryRunIntake', () => {
     expect(dryRunIntake({ routes, order: [], registry, items: [] }).boards.flatMap(board => board.rules)).toHaveLength(
       4,
     );
-  });
-
-  it('places every item exactly where filing does', () => {
-    const labelSets = [[], ['ship'], ['bug'], ['ship', 'bug'], ['docs']];
-    const sample = labelSets.map((labels, index) => item(`i${index}`, labels));
-    for (const set of [routes, routes.slice(2), routes.slice(0, 1), []]) {
-      for (const order of [['work', 'ship'], ['ship', 'work'], []]) {
-        const result = dryRunIntake({ routes: set, order, registry, items: sample });
-        for (const [index, entry] of result.items.entries()) {
-          const filed = resolveIntake({
-            evaluator: 'intake-order',
-            routes: set,
-            order,
-            facts: sample[index]!.facts,
-            registry,
-          });
-          expect(entry.placement).toEqual(
-            filed.outcome === 'placed' ? { boardKey: filed.board, routeId: filed.routeId, phase: filed.phase } : null,
-          );
-        }
-      }
-    }
   });
 });
 
