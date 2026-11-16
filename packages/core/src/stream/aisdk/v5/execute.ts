@@ -144,6 +144,44 @@ export function usesOpenAIStrictJsonSchema(
   return true;
 }
 
+/**
+ * Azure rejects a strict json_schema that contains a free-form object (`z.record()`), and the AI SDK 6+
+ * Azure models send strict by default, so such a schema would go out strict and be rejected. Mastra cannot
+ * prepare it for strict mode (that would strip every free-form key), so the request falls back to non-strict
+ * through the provider-options key the model type actually reads.
+ *
+ * An explicit `strictJsonSchema` is left alone: the caller asked for strict, so the request is sent as asked,
+ * matching an explicit `strictJsonSchema: true` with a free-form schema on native OpenAI (#25235).
+ *
+ * Returns `providerOptions` unchanged when no fallback applies.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/29628
+ */
+function withAzureNonStrictFreeFormSchema(
+  model: { provider: string; specificationVersion?: unknown },
+  providerOptions: SharedProviderOptions | undefined,
+): SharedProviderOptions | undefined {
+  // AI SDK 5 Azure models already default to non-strict, and the flag also relaxes tool schemas there.
+  if (model.specificationVersion === 'v2') return providerOptions;
+
+  // Mirrors the lookup in azureSendsStrictJsonSchema: the gateway and AI SDK 6 Responses read `azure`
+  // (falling back to `openai` only when the `azure` record is absent); Chat models read `openai`.
+  const options = providerOptions as Record<string, unknown> | undefined;
+  const readsAzureKey = model.provider === 'azure-openai' || model.provider === 'azure.responses';
+  const explicit = readStrictJsonSchemaOption(readsAzureKey ? (options?.azure ?? options?.openai) : options?.openai);
+  if (explicit !== undefined) return providerOptions;
+
+  return readsAzureKey
+    ? {
+        ...(providerOptions ?? {}),
+        azure: { ...(providerOptions?.azure ?? {}), strictJsonSchema: false },
+      }
+    : {
+        ...(providerOptions ?? {}),
+        openai: { ...(providerOptions?.openai ?? {}), strictJsonSchema: false },
+      };
+}
+
 export function resolveJsonPromptInjection(
   value: JsonPromptInjection,
   capability: boolean | undefined,
@@ -394,8 +432,8 @@ export function execute<OUTPUT = undefined>({
   // rewriting them into objects that can hold no keys. Mastra still validates the result against the schema.
   const hasFreeFormOutput = hasFreeFormObject(responseFormat?.type === 'json' ? responseFormat.schema : undefined);
   const sendNonStrict = isOpenAIProvider && providerOptions?.openai?.strictJsonSchema !== true && hasFreeFormOutput;
-  // The Azure strict flag is sent as the user set it, so a free-form schema cannot fall back to non-strict.
-  // Preparing it would remove every free-form key, so send it unprepared.
+  // A free-form schema is sent unprepared for Azure, and falls back to non-strict below (#29628):
+  // preparing it would remove every free-form key, and a strict Azure request carrying one is rejected.
   const keepAzureFreeFormSchema = isAzureOpenAIProvider(model.provider) && hasFreeFormOutput;
   const isStrictJsonSchemaMode =
     responseFormat?.type === 'json' &&
@@ -408,18 +446,24 @@ export function execute<OUTPUT = undefined>({
     responseFormat.schema = prepareJsonSchemaForOpenAIStrictMode(responseFormat.schema);
   }
 
+  // Only relax Azure strictness for a request that carries a native response format; `responseFormat`
+  // exists in processor and prompt-injection modes too, where it is never sent to the model.
+  const azureNonStrictFreeForm = keepAzureFreeFormSchema && structuredOutputMode === 'direct' && !injectionMode;
+
   // Only OpenAI providers read `providerOptions.openai`; OpenAI-compatible providers send strict by default
   // and read their own provider key.
-  const providerOptionsToUse: SharedProviderOptions | undefined =
-    (isStrictJsonSchemaMode || sendNonStrict) && isOpenAIProvider
-      ? {
-          ...(providerOptions ?? {}),
-          openai: {
-            strictJsonSchema: isStrictJsonSchemaMode,
-            ...(providerOptions?.openai ?? {}),
-          },
-        }
-      : providerOptions;
+  let providerOptionsToUse: SharedProviderOptions | undefined = providerOptions;
+  if ((isStrictJsonSchemaMode || sendNonStrict) && isOpenAIProvider) {
+    providerOptionsToUse = {
+      ...(providerOptions ?? {}),
+      openai: {
+        strictJsonSchema: isStrictJsonSchemaMode,
+        ...(providerOptions?.openai ?? {}),
+      },
+    };
+  } else if (azureNonStrictFreeForm) {
+    providerOptionsToUse = withAzureNonStrictFreeFormSchema(model, providerOptions);
+  }
 
   const stream = v5.initialize({
     runId,

@@ -32,6 +32,10 @@ const schema = z.object({
 // Strict mode answers optional keys with null.
 const strictAnswer = { reply: 'hi', note: null, items: [{ name: 'apple', qty: null }] };
 
+// Azure cannot express a free-form object in a strict json_schema, so such a request is sent non-strict (#29628).
+const freeFormSchema = z.object({ summary: z.string(), labels: z.record(z.string(), z.string()) });
+const freeFormAnswer = { summary: 'ok', labels: { a: '1' } };
+
 const strictLanes: Array<{ name: string; model: () => any; providerOptions?: Record<string, any> }> = [
   {
     name: 'AI SDK 6 Azure Responses model',
@@ -260,4 +264,47 @@ describeForAllEngines('AIMock loop scenario: Azure OpenAI structured output', en
     expect(strict).toBe(false);
     expect(parameters.properties.tags.uniqueItems).toBe(true);
   });
+
+  // A free-form object cannot be sent in a strict Azure json_schema, so AI SDK 6 models, which send
+  // strict by default, fall back to non-strict for such a schema instead of being refused (#29628).
+  async function runFreeForm(model: () => any) {
+    const { output } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Reply with a structured object.',
+      model,
+      structuredOutput: { schema: freeFormSchema },
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: JSON.stringify(freeFormAnswer) });
+      },
+    });
+    return (output as unknown as { object: Promise<unknown> }).object.catch((error: unknown) => error);
+  }
+
+  function sentFreeFormFormat() {
+    const body = sentBodies[0] ?? {};
+    const format = body.text?.format ?? body.response_format?.json_schema;
+    return { strict: format?.strict, labels: format?.schema?.properties?.labels };
+  }
+
+  const freeFormLanes: Array<{ name: string; model: () => any }> = [
+    {
+      name: 'Responses',
+      model: () => createAzureV6({ resourceName: RESOURCE, apiKey: 'test-key' }).responses('gpt-5.4'),
+    },
+    {
+      name: 'Chat',
+      model: () => createAzureV6({ resourceName: RESOURCE, apiKey: 'test-key' }).chat('gpt-5.4'),
+    },
+  ];
+
+  for (const lane of freeFormLanes) {
+    it(`AI SDK 6 Azure ${lane.name} model sends a free-form schema non-strict (#29628)`, async () => {
+      const object = await runFreeForm(lane.model);
+
+      expect(sentFreeFormFormat().strict).toBe(false);
+      expect(sentFreeFormFormat().labels?.additionalProperties).toEqual({ type: 'string' });
+      expect(object).toEqual(freeFormAnswer);
+    });
+  }
 });

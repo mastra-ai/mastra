@@ -787,6 +787,91 @@ describe('execute OpenAI strict-mode schema preparation (issue #23795)', () => {
   ])('%s (%s) with %j sends strict json_schema: %s', (provider, specificationVersion, providerOptions, expected) => {
     expect(usesOpenAIStrictJsonSchema({ provider, specificationVersion }, providerOptions as any)).toBe(expected);
   });
+
+  // Azure rejects a strict json_schema that carries a free-form object, and the AI SDK 6+ Azure models
+  // send strict by default, so that combination falls back to non-strict without touching the schema (#29628).
+  const recordSchema = z.object({ summary: z.string(), labels: z.record(z.string(), z.string()) });
+
+  // MockLanguageModelV2 defaults to 'v2' (AI SDK 5, which is non-strict by default); AI SDK 6+ Azure
+  // models are 'v3' and send strict json_schema unless the request opts out.
+  function makeStrictAzureModel(provider: string) {
+    const { model, captured } = makeCapturingModel(provider);
+    Object.assign(model, { specificationVersion: 'v3' });
+    return { model, captured };
+  }
+
+  const expectFreeFormLabels = (responseFormat: any) =>
+    expect(responseFormat.schema.properties.labels.additionalProperties).toEqual({ type: 'string' });
+
+  it('sends a free-form schema non-strict for strict-by-default Azure Responses models (#29628)', async () => {
+    const { model, captured } = makeStrictAzureModel('azure.responses');
+    await run(model, { schema: recordSchema });
+    expectFreeFormLabels(captured.options.responseFormat);
+    expect(captured.options.providerOptions).toEqual({ azure: { strictJsonSchema: false } });
+  });
+
+  it('sends a free-form schema non-strict for strict-by-default Azure Chat models (#29628)', async () => {
+    const { model, captured } = makeStrictAzureModel('azure.chat');
+    await run(model, { schema: recordSchema });
+    expectFreeFormLabels(captured.options.responseFormat);
+    expect(captured.options.providerOptions).toEqual({ openai: { strictJsonSchema: false } });
+  });
+
+  it('keeps unrelated Azure provider options when falling back to non-strict (#29628)', async () => {
+    const { model, captured } = makeStrictAzureModel('azure.responses');
+    await run(model, { schema: recordSchema, providerOptions: { azure: { parallelToolCalls: false } } });
+    expect(captured.options.providerOptions).toEqual({
+      azure: { parallelToolCalls: false, strictJsonSchema: false },
+    });
+  });
+
+  it('honors an explicit azure strictJsonSchema on strict-by-default Azure models (#29628)', async () => {
+    const { model, captured } = makeStrictAzureModel('azure.responses');
+    await run(model, { schema: recordSchema, providerOptions: { azure: { strictJsonSchema: true } } });
+    expect(captured.options.providerOptions).toEqual({ azure: { strictJsonSchema: true } });
+    expectFreeFormLabels(captured.options.responseFormat);
+  });
+
+  it('honors an explicit openai strictJsonSchema on Azure Chat models (#29628)', async () => {
+    const { model, captured } = makeStrictAzureModel('azure.chat');
+    await run(model, { schema: recordSchema, providerOptions: { openai: { strictJsonSchema: true } } });
+    expect(captured.options.providerOptions).toEqual({ openai: { strictJsonSchema: true } });
+  });
+
+  it('leaves AI SDK 5 Azure requests untouched (#29628)', async () => {
+    const { model, captured } = makeCapturingModel('azure.responses');
+    await run(model, { schema: recordSchema });
+    expectFreeFormLabels(captured.options.responseFormat);
+    expect(captured.options.providerOptions).toBeUndefined();
+  });
+
+  it('does not switch Azure to non-strict when the schema is injected into the prompt (#29628)', async () => {
+    const { model, captured } = makeStrictAzureModel('azure.responses');
+    await run(model, { schema: recordSchema, jsonPromptInjection: true });
+    expect(captured.options.responseFormat).toBeUndefined();
+    expect(captured.options.providerOptions).toBeUndefined();
+  });
+
+  it('still prepares non-free-form schemas for strict-by-default Azure models (#29628)', async () => {
+    const { model, captured } = makeStrictAzureModel('azure.responses');
+    await run(model);
+    expectPreparedSchema(captured.options.responseFormat);
+    expect(captured.options.providerOptions).toBeUndefined();
+  });
+
+  // The model reads the `azure` record and ignores `openai` whenever `azure` is present, so the user's
+  // `openai.strictJsonSchema` was never in effect and the fallback writes into the key that is read.
+  it('resolves an explicit setting through the Azure key precedence (#29628)', async () => {
+    const { model, captured } = makeStrictAzureModel('azure.responses');
+    await run(model, {
+      schema: recordSchema,
+      providerOptions: { azure: { parallelToolCalls: false }, openai: { strictJsonSchema: true } },
+    });
+    expect(captured.options.providerOptions).toEqual({
+      azure: { parallelToolCalls: false, strictJsonSchema: false },
+      openai: { strictJsonSchema: true },
+    });
+  });
 });
 
 describe("execute toolChoice 'none' (issue #25908)", () => {
