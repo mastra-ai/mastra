@@ -299,22 +299,31 @@ describeParity('prepare-step parity', target => {
     expect(toolNames(requests[1]!)).toEqual(['allowedTool']);
   });
 
-  it('stores the prepareStep closure on the run registry, never on workflowInput', async () => {
+  it('prepares a serializable invocation without executing its live prepareStep closure', async () => {
+    const { model, requests } = createRecordingModel({ tapes: [textOnlyTape('x')] });
     const baseAgent = new Agent({
       id: 'prepare-step-prep-agent',
       name: 'Prepare Step Prep Agent',
       instructions: 'noop',
-      model: createRecordingModel({ tapes: [textOnlyTape('x')] }).model,
+      model,
     });
     const wrapper =
       target === 'durable' ? createDurableAgent({ agent: baseAgent }) : createEventedAgent({ agent: baseAgent });
     hosts.push(new Mastra({ agents: { [baseAgent.id]: wrapper }, storage: new InMemoryStore(), logger: false }));
 
     const prepareStep = vi.fn();
-    const { workflowInput, registryEntry } = await wrapper.prepare('hello', { prepareStep });
+    const runId = `prepared-${target}`;
+    const prepared = await wrapper.prepare('hello', { runId, prepareStep });
+    const { workflowInput, registryEntry } = prepared;
 
-    expect((workflowInput.options as any).prepareStep).toBeUndefined();
+    expect(prepared.runId).toBe(runId);
+    expect(workflowInput.runId).toBe(runId);
+    expect(workflowInput.messageId).toBe(prepared.messageId);
+    expect(workflowInput.options).not.toHaveProperty('prepareStep');
+    expect(JSON.parse(JSON.stringify(workflowInput))).toEqual(workflowInput);
     expect(registryEntry.prepareStep).toBe(prepareStep);
+    expect(prepareStep).not.toHaveBeenCalled();
+    expect(requests).toHaveLength(0);
   });
 
   it('rejects a tool call removed by prepareStep for the current step on every engine', async () => {
