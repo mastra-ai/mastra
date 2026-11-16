@@ -937,7 +937,7 @@ describe('IntakeRoutesSection', () => {
       'outside-authors',
       'pull-requests',
       'outside-author-pull-requests',
-      ...DEFAULT_INTAKE_ROUTES.slice(4).map(({ key }) => key),
+      ...DEFAULT_INTAKE_ROUTES.slice(3).map(({ key }) => key),
     ]);
     expect(state.requests[1]?.body).toEqual({ enabled: false, expectedRevision: 2 });
     expect(state.requests[2]?.body).toBe(1);

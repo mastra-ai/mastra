@@ -89,7 +89,7 @@ describe('describeRule on routes', () => {
     );
     expect(Object.values(lines).join(' ')).not.toMatch(/[a-z]+\.[a-zA-Z]+|_/);
     expect(describeRule(route('everything-else').when)).toBe('Every card');
-    expect(describeRule(route('pull-requests').when)).toBe('Every card');
+    expect(describeRule(route('pull-requests').when)).toBe('Source kind is pull request');
   });
 
   it('reads a repository condition as typed, since repository keys are names', () => {

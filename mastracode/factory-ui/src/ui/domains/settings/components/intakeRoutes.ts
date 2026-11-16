@@ -1,5 +1,6 @@
 import { arrivalKinds, STATUS_EVENTS } from '@mastra/factory/boards/board-events';
 import type { ArrivalKind } from '@mastra/factory/boards/board-events';
+import { kindsTakenWhole } from '@mastra/factory/boards/intake-order';
 import type { RuleGroup } from '@mastra/factory/rules/rule-group';
 import type { FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
 
@@ -15,12 +16,13 @@ const ARRIVAL_KINDS: readonly ArrivalKind[] = ['issue', 'pull_request'];
 
 /**
  * Whether `route` places every new `kind` of item that reaches it (issues or pull requests), like the
- * default "Everything else" and "Pull requests go to Review" routes; with no `kind`, either.
+ * default "Everything else" and "Pull requests go to Review" routes; with no `kind`, either. A rule
+ * testing nothing but the item's kind still takes all of that kind.
  */
 export function catchesEveryArrival(route: IntakeRouteInfo, kind?: ArrivalKind): boolean {
-  if (!route.enabled || route.when !== null || route.target.joinClosedIssue) return false;
-  const kinds = arrivalKinds(route);
-  return kind ? kinds.has(kind) : kinds.size > 0;
+  if (!route.enabled || route.target.joinClosedIssue) return false;
+  const kinds: readonly string[] = kindsTakenWhole(route);
+  return kind ? kinds.includes(kind) : kinds.length > 0;
 }
 
 /** The first route taking every new item of each kind, in route order: issues, then pull requests. */
@@ -143,6 +145,17 @@ function sameRule(a: RuleGroup | null, b: RuleGroup | null): boolean {
  * status event only moves a card through routes on the card's own board. A copy is skipped when
  * `boardKey` has no phase playing the same part, or already has such a route.
  */
+/**
+ * Whether a route tests the issue a pull request closes, a fact only an issue's card has when a pull
+ * request links to it: it never places a new card, only moves that one.
+ */
+function movesLinkedCardsOnly(route: IntakeRouteInfo): boolean {
+  return (
+    route.when?.operator === 'AND' &&
+    route.when.conditions.some(condition => 'field' in condition && condition.field.startsWith('closedIssue.'))
+  );
+}
+
 export function sendNewCardsTo(
   routes: readonly IntakeRouteInfo[],
   boards: readonly InstalledBoardInfo[],
@@ -191,7 +204,8 @@ export function sendNewCardsTo(
   if (from && from.id !== to.id) {
     for (const route of routes) {
       // Routes placing new cards stay where they are: the catch-alls above already send them on.
-      if (route.target.boardKey !== from.id || placesNewCards(route) || route.target.joinClosedIssue) continue;
+      if (route.target.boardKey !== from.id || route.target.joinClosedIssue) continue;
+      if (placesNewCards(route) && !movesLinkedCardsOnly(route)) continue;
       const phaseKey = matchingPhase(from, to, route.target.phaseKey);
       if (phaseKey === undefined) continue;
       const exists = routes.some(
