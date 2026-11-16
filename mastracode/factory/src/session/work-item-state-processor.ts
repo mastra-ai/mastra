@@ -163,23 +163,22 @@ export class FactoryWorkItemStateProcessor implements Processor<'factory-work-it
 
 const VERDICT_TOOL = 'factory_record_review_verdict';
 
-type ToolPart = { toolName?: unknown; type?: unknown; output?: { type?: unknown } | null };
+type RunStep = ComputeStateSignalArgs['steps'][number];
+type RunStepPart = RunStep['content'][number];
 
-/** A failed call reaches a step as a result whose output is an error, or as a `tool-error` part. */
-function failed(part: ToolPart): boolean {
-  const output = part.output?.type;
-  return part.type === 'tool-error' || output === 'error-text' || output === 'error-json';
+function isVerdictToolPart(part: RunStepPart): part is Extract<RunStepPart, { toolName: string }> {
+  return 'toolName' in part && part.toolName === VERDICT_TOOL;
 }
 
-/** Whether `parts` (a step's tool calls, tool results or content) has an entry for the verdict tool. */
-function hasVerdictToolPart(parts: unknown, matches: (part: ToolPart) => boolean = () => true): boolean {
-  return (
-    Array.isArray(parts) &&
-    parts.some(raw => {
-      const part = (raw ?? {}) as ToolPart;
-      return part.toolName === VERDICT_TOOL && matches(part);
-    })
-  );
+/**
+ * A failed call reaches a step as a result whose output is an error, or as a `tool-error` part.
+ * The step types a result's output as the tool's own value; here it is the stored model output.
+ */
+function failed(part: RunStepPart): boolean {
+  if (part.type === 'tool-error') return true;
+  if (part.type !== 'tool-result') return false;
+  const output = (part.output as { type?: unknown } | null | undefined)?.type;
+  return output === 'error-text' || output === 'error-json';
 }
 
 /**
@@ -187,11 +186,10 @@ function hasVerdictToolPart(parts: unknown, matches: (part: ToolPart) => boolean
  * count: a later turn (a re-requested review, or a person disputing a finding) starts with none.
  * A step can reach here without its tool results, so the call counts too, unless it failed.
  */
-function recordedVerdict(steps: unknown[]): boolean {
-  return steps.some(raw => {
-    const step = (raw ?? {}) as { toolCalls?: unknown; toolResults?: unknown; content?: unknown };
-    if (hasVerdictToolPart(step.content, failed) || hasVerdictToolPart(step.toolResults, failed)) return false;
-    return hasVerdictToolPart(step.toolResults) || hasVerdictToolPart(step.toolCalls);
+function recordedVerdict(steps: RunStep[]): boolean {
+  return steps.some(step => {
+    const parts = step.content.filter(isVerdictToolPart);
+    return parts.length > 0 && !parts.some(failed);
   });
 }
 
