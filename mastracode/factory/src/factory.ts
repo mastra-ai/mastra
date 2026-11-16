@@ -2530,7 +2530,8 @@ export class MastraFactory {
         controller: prepared.base.controller,
         invalidateSession: sessionId => workspaceRegistry.invalidateSession(sessionId),
         settle: waitForSessionRunAudit,
-        ...this.#config.idleSessionUnload,
+        idleMs: this.#config.idleSessionUnload?.idleMs,
+        sweepIntervalMs: this.#config.idleSessionUnload?.sweepIntervalMs,
       });
     }
 

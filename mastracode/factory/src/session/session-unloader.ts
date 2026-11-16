@@ -92,6 +92,14 @@ export class SessionUnloader {
     this.#settle = options.settle ?? (async () => {});
     this.#idleMs = options.idleMs ?? DEFAULT_IDLE_SESSION_UNLOAD_MS;
     this.#sweepIntervalMs = options.sweepIntervalMs ?? DEFAULT_IDLE_SESSION_SWEEP_INTERVAL_MS;
+    if (!Number.isFinite(this.#idleMs) || this.#idleMs < 0) {
+      throw new Error(`idleSessionUnload.idleMs must be a non-negative number of milliseconds, got ${this.#idleMs}`);
+    }
+    if (!Number.isFinite(this.#sweepIntervalMs) || this.#sweepIntervalMs <= 0) {
+      throw new Error(
+        `idleSessionUnload.sweepIntervalMs must be a positive number of milliseconds, got ${this.#sweepIntervalMs}`,
+      );
+    }
     this.#now = options.now ?? Date.now;
     this.#warn = options.warn ?? ((message, details) => console.warn(`[Mastra Factory] ${message}`, details));
     this.#unsubscribes.push(
@@ -143,6 +151,7 @@ export class SessionUnloader {
     for (const unsubscribe of this.#unsubscribes.splice(0)) unsubscribe();
     for (const tracked of this.#byId.values()) tracked.unsubscribe();
     this.#byId.clear();
+    this.#pendingWatchers.clear();
     await this.#sweeping;
   }
 
@@ -186,11 +195,16 @@ export class SessionUnloader {
   async unloadReleased(sessionId: string): Promise<SessionUnloadResult> {
     const tracked = this.#byId.get(sessionId);
     if (!tracked) return 'not-loaded';
-    if (this.#inUse(tracked)) {
-      tracked.unloadWhenIdle = true;
-      return 'deferred';
+    const idleSince = tracked.lastActiveAt;
+    if (!this.#inUse(tracked)) {
+      // Anything that touched the session since, such as its run's end, leaves it to the sweep.
+      if (await this.#unload(tracked, () => !this.#inUse(tracked) && tracked.lastActiveAt === idleSince)) {
+        return 'unloaded';
+      }
+      if (this.#byId.get(sessionId) !== tracked) return 'not-loaded';
     }
-    return (await this.#unload(tracked, () => !this.#inUse(tracked))) ? 'unloaded' : 'deferred';
+    tracked.unloadWhenIdle = true;
+    return 'deferred';
   }
 
   /** Unload every session idle past `idleMs`, and every released one now idle. Resolves how many were unloaded. */

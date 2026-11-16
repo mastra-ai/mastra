@@ -284,6 +284,13 @@ describe('SessionUnloader on a real controller', () => {
     await vi.waitFor(async () => expect(await loaded(mounted.controller, 'released')).toBe(false));
     expect(await loaded(mounted.controller, 'kept')).toBe(true);
   });
+
+  it('rejects idle settings that would unload sessions in use or spin the sweep', async () => {
+    const mounted = await mountController();
+    for (const options of [{ idleMs: -1 }, { idleMs: Number.NaN }, { sweepIntervalMs: 0 }, { sweepIntervalMs: -5 }]) {
+      expect(() => new SessionUnloader({ controller: mounted.controller, ...options })).toThrow(/idleSessionUnload/);
+    }
+  });
 });
 
 describe('a browser tab following a session, through the real server', () => {

@@ -446,7 +446,7 @@ async function gatedController() {
     initialState: { yolo: true } as never,
   });
   await controller.init();
-  return { controller, store, release };
+  return { controller, release };
 }
 
 describe.each(backends)('a run in flight on the session the card left, on a real controller, on %s', backend => {
@@ -454,7 +454,7 @@ describe.each(backends)('a run in flight on the session the card left, on a real
     const root = await mkdtemp(join(tmpdir(), 'factory-sandboxes-'));
     onTestFinished(() => rm(root, { recursive: true, force: true }));
     const local = new LocalFactorySandbox({ root });
-    const { controller, store, release } = await gatedController();
+    const { controller, release } = await gatedController();
     const [storage] = await sharedDatabase(backend);
     const unloader = new SessionUnloader({ controller, warn: () => {} });
     onTestFinished(() => unloader.stop());
@@ -476,7 +476,7 @@ describe.each(backends)('a run in flight on the session the card left, on a real
     const github = factory.seed.sourceControl.forIntegration('github');
     /** Whether the session is still in this process's controller. */
     const loaded = async (sessionId: string) => (await controller.getSession(sessionId)) !== undefined;
-    return { ...factory, card, controller, store, session, triage, release, unloader, github, loaded };
+    return { ...factory, card, controller, session, triage, release, unloader, github, loaded };
   }
 
   it('keeps the triage sandbox and session until the run ends, then stops the sandbox and unloads the session', async () => {
@@ -509,7 +509,7 @@ describe.each(backends)('a run in flight on the session the card left, on a real
     expect(moved).toMatchObject({ status: 'accepted', stage: 'planning' });
     expect(triage.status).toBe('stopped');
     expect(await loaded(card.rows.triage.sessionId)).toBe(false);
-    // Unloading keeps the row, its sandbox and the thread; the work session the card moved to stays.
+    // Unloading keeps the row and the thread.
     expect(await github.sessions.getBySessionId(card.rows.triage.sessionId)).toMatchObject({ id: card.rows.triage.id });
     expect(await controller.queryThreadById({ threadId })).not.toBeNull();
   });
