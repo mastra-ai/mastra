@@ -340,6 +340,13 @@ describe('Knowledge read routes', () => {
     ]);
   });
 
+  it('400s a cursor the store did not issue', async () => {
+    const { mastra, acme } = await setup();
+    const args = { mastra, knowledgeKey: 'main', cursor: 'not-a-cursor' };
+    await expect(call(GET_KNOWLEDGE_TREE_ROUTE, { ...args, parentId: acme.id })).rejects.toMatchObject({ status: 400 });
+    await expect(call(GET_KNOWLEDGE_ACTIVITY_ROUTE, args)).rejects.toMatchObject({ status: 400 });
+  });
+
   it('filters instances and gates reads by FGA when configured', async () => {
     const { mastra } = await setup();
     const filterAccessible = vi.fn(async (_user: unknown, items: Array<{ key: string }>) =>
