@@ -23,6 +23,7 @@ import { ModelProviderMark } from './ModelProviderMark';
 import { useOrganizationScopedFactory } from './useOrganizationScopedFactory';
 import { SessionThinkingIcon } from './SessionThinkingIcon';
 import { SessionThinkingSettings } from './SessionThinkingSettings';
+import { useSessionThinking } from './useSessionThinking';
 import { IconKey2 } from '@mastra/playground-ui/icons/central/IconKey2';
 
 function groupByProvider(models: AvailableModelOption[]): [string, AvailableModelOption[]][] {
@@ -180,6 +181,32 @@ function ModelMenu({
   );
 }
 
+function LockedModelMenu({
+  modelSwitch,
+  lockedReason,
+  modelAriaLabel,
+  triggerClassName,
+  children,
+}: Pick<ModelMenuProps, 'modelSwitch' | 'triggerClassName' | 'children'> & {
+  lockedReason: string;
+  modelAriaLabel: string;
+}) {
+  const { summary } = useSessionThinking(modelSwitch.activeModelId, modelSwitch.busy);
+  return (
+    <>
+      <ModelCredential />
+      <ModelMenu
+        modelSwitch={modelSwitch}
+        triggerAriaLabel={`${modelAriaLabel}. Thinking: ${summary}`}
+        triggerClassName={triggerClassName}
+        unavailableReason={lockedReason}
+      >
+        {children}
+      </ModelMenu>
+    </>
+  );
+}
+
 export function ModelPicker() {
   const modelSwitch = useModelSwitch();
   const { modelsQuery, activeModelId, selectedModelId, scopeLoading, switchable, busy } = modelSwitch;
@@ -219,14 +246,14 @@ export function ModelPicker() {
 
   if (modelLockedReason && selectedModelId) {
     return (
-      <ModelMenu
+      <LockedModelMenu
         modelSwitch={modelSwitch}
-        triggerAriaLabel={notConfigured ? `Session model, ${label} is not configured` : `Session model: ${label}`}
+        lockedReason={modelLockedReason}
+        modelAriaLabel={notConfigured ? `Session model, ${label} is not configured` : `Session model: ${label}`}
         triggerClassName={notConfigured ? 'text-destructive-foreground' : undefined}
-        unavailableReason={modelLockedReason}
       >
         {trigger}
-      </ModelMenu>
+      </LockedModelMenu>
     );
   }
 
