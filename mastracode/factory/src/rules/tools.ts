@@ -248,18 +248,6 @@ function createReviewVerdictTool(
         }
         // An issue card can carry several pull requests; the verdict names the one it covers.
         const reviewedNumber = reviewedChangeRequest({ ...item, source })?.number;
-        // The same verdict again in the pass that recorded it changes nothing: writing it would
-        // bump the card and send the reviewer the card once more, for one more verdict.
-        const recordedAt = item.metadata?.reviewedAt;
-        if (
-          item.metadata?.reviewVerdict === verdict &&
-          item.metadata?.reviewedHeadSha === reviewedHeadSha.toLowerCase() &&
-          item.metadata?.reviewedPullRequestNumber === reviewedNumber &&
-          typeof recordedAt === 'string' &&
-          Date.parse(recordedAt) >= binding.createdAt.getTime()
-        ) {
-          return { status: 'recorded', verdict, reviewedHeadSha, reviewedAt: recordedAt };
-        }
         const reviewedAt = new Date().toISOString();
         // Revision-checked, so a merge that moves the card between the stage
         // check and this write fails the call instead of stamping a Done card.
