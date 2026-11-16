@@ -1955,6 +1955,33 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect((await h.cards())[0]).toMatchObject({ id: issue.id, stages: ['pr-review'] });
     });
 
+    it.each([
+      ['an outsider', 10, 'external-author', false],
+      ['a maintainer', 40, 'maintainer', true],
+    ])(
+      "hands a label change on %s's linked merge request to the issue's card with that merge request's trust",
+      async (_who, accessLevel, author, trusted) => {
+        const h = await harness(accessLevel);
+        const issue = await h.issueCard('intake');
+        await h.ingest(mergeRequest(17, 'Closes #42', { author }));
+        const before = (await h.decisions()).length;
+
+        const labelled = mergeRequest(17, 'Closes #42', { author, action: 'update', deliveryId: 'd-label-17' });
+        await h.ingest({
+          ...labelled,
+          payload: { ...labelled.payload, changes: { labels: { previous: [], current: [{ title: 'ready' }] } } },
+        });
+
+        const updates = (await h.decisions())
+          .slice(before)
+          .filter(entry => entry.workItemId === issue.id && entry.decision.type === 'routeEvent')
+          .map(entry => entry.decision.event);
+        expect(updates).toEqual([
+          { type: 'pull_request.updated', labels: { added: ['ready'], removed: [] }, pullRequestTrusted: trusted },
+        ]);
+      },
+    );
+
     it('gives a merge request that closes no issue on the board its own card', async () => {
       const h = await harness();
       const issue = await h.issueCard('intake');

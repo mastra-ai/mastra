@@ -989,7 +989,7 @@ describe('PUT /web/factory/projects/:id/work-items/:workItemId/working-pull-requ
     await attach(2, 'open', metadata => ({
       ...metadata,
       pullRequestHeadSha: 'abc',
-      untrustedPullRequests: ['github:github:7:pull-request:2'],
+      untrustedPullRequests: ['github:pull-request:github:7:pull-request:2'],
     }));
     await attach(3, 'closed');
     return (await seed.workItems.get({ orgId: 'org1', id: workItem.id }))!;
@@ -1009,7 +1009,7 @@ describe('PUT /web/factory/projects/:id/work-items/:workItemId/working-pull-requ
     expect(res.status).toBe(200);
     const stored = await seed.workItems.get({ orgId: 'org1', id: item.id });
     expect(stored?.metadata).toMatchObject({ openPullRequestNumber: 2, pullRequestHeadSha: null });
-    expect(stored?.metadata?.untrustedPullRequests).toEqual(['github:github:7:pull-request:2']);
+    expect(stored?.metadata?.untrustedPullRequests).toEqual(['github:pull-request:github:7:pull-request:2']);
     expect(auditRecorded).toContainEqual(expect.objectContaining({ action: 'factory.work_item.updated' }));
   });
 

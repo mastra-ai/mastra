@@ -1,7 +1,12 @@
 import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { boardRegistryOf, createBoardRegistry, defineBoard } from '../../boards/index.js';
+import {
+  boardRegistryOf,
+  createBoardRegistry,
+  defineBoard,
+  UNTRUSTED_PULL_REQUESTS_KEY,
+} from '../../boards/index.js';
 import { ProjectBoardCache, toBoardSource } from '../../boards/project-boards.js';
 import { reviewBoard } from '../../boards/review.js';
 import { autoStartingBoards, createTestBoard, createTriageWorkRegistry, selfReviewWorkBoard } from '../../boards/test-utils.js';

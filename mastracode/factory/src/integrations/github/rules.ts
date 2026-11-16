@@ -855,15 +855,21 @@ export class GithubRules {
     // A pull request intake turned away arrives again, now that it may match a board's rule.
     if (!item) return this.#intakeIfNotRouted(parsed, repositoryId, repositoryName, project, pullRequestNumber, 'pull-request');
     const ownCard = item.externalSource?.type === 'pull-request';
-    if (!ownCard && !attachedPullRequestSource(item, repositoryId, repositoryName, pullRequestNumber)) {
-      return { status: 'ignored' };
-    }
+    const attached = ownCard ? undefined : attachedPullRequestSource(item, repositoryId, repositoryName, pullRequestNumber);
+    if (!ownCard && !attached) return { status: 'ignored' };
     const labelChange = action === 'labeled' || action === 'unlabeled';
     const delta =
       action === 'labeled' || action === 'assigned' ? { added: [name], removed: [] } : { added: [], removed: [name] };
-    if (!ownCard) {
+    if (attached) {
       const event = updateEventFacts('pull_request.updated', labelChange ? { labels: delta } : { assignees: delta });
-      const queued = await this.#commitUpdate(parsed, repositoryName, project, item, event);
+      // `pullRequest.trusted` is the attached pull request's author, never whoever labelled it.
+      const queued = await this.#commitUpdate(
+        parsed,
+        repositoryName,
+        project,
+        item,
+        event && { ...event, pullRequestTrusted: trustedPullRequestSource(item, attached) },
+      );
       return { status: queued === 'committed' || queued === 'replayed' ? 'committed' : 'ignored' };
     }
     // The pull request is the card's source: record its current labels and assignees on the card,
