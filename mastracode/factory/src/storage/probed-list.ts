@@ -13,7 +13,7 @@ const MAX_KEYS = 100;
 
 // Held arrays are frozen and shared between callers.
 export class ProbedList<T> {
-  readonly #held = new Map<string, { stamp: string; takenAt: number; rows: Promise<readonly T[]> }>();
+  readonly #held = new Map<string, { stamp: string; takenAt: number; loading: boolean; rows: Promise<readonly T[]> }>();
 
   async read(
     key: string,
@@ -27,10 +27,14 @@ export class ProbedList<T> {
     }
     const now = Date.now();
     const hit = this.#held.get(key);
-    if (hit?.stamp === found.stamp && now - hit.takenAt < TTL_MS && hit.takenAt - found.newestAt >= SETTLE_MS) {
+    if (
+      hit?.stamp === found.stamp &&
+      now - hit.takenAt < TTL_MS &&
+      (hit.loading || hit.takenAt - found.newestAt >= SETTLE_MS)
+    ) {
       return hit.rows;
     }
-    const entry = { stamp: found.stamp, takenAt: now, rows: load().then(rows => Object.freeze(rows)) };
+    const entry = { stamp: found.stamp, takenAt: now, loading: true, rows: load().then(rows => Object.freeze(rows)) };
     this.#held.delete(key);
     this.#held.set(key, entry);
     if (this.#held.size > MAX_KEYS) {
@@ -42,6 +46,8 @@ export class ProbedList<T> {
     } catch (error) {
       if (this.#held.get(key) === entry) this.#held.delete(key);
       throw error;
+    } finally {
+      entry.loading = false;
     }
   }
 }

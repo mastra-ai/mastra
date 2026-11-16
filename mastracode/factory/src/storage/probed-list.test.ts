@@ -119,8 +119,8 @@ describe('ProbedList', () => {
     expect(t.loads).toBe(4);
   });
 
-  it('shares one read between concurrent callers', async () => {
-    const t = table([settledRow('a', 'first')]);
+  it('shares one read between callers that arrive while it runs, even right after a write', async () => {
+    const t = table([{ id: 'a', title: 'first', at: Date.now() }]);
     const list = new ProbedList<Row>();
     const gate = Promise.withResolvers<void>();
     const load = async () => {
