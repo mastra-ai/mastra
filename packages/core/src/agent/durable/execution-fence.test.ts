@@ -1560,6 +1560,78 @@ describe('ExecutionFence.verifyNotSuperseded with a release only storage shows',
     expect(coordinator.isLost()).toBe(false);
   });
 
+  it("passes through assertExecutionNotSuperseded when the heartbeat sees another process's release while the check reads the claim as held", async () => {
+    vi.useFakeTimers();
+    const { storage, workflowsStore, coordinator, own } = await setup();
+    const mastra = new Mastra({ storage, logger: false });
+    const requestContext = new RequestContext();
+    setExecutionClaim(requestContext, 'run-1', coordinator.claim);
+    const args = { runId: 'run-1', agentId, requestContext, mastra };
+
+    // The check's next read finds the claim live. Before that read returns, another worker releases
+    // the claim and this fence's heartbeat renewal finds it released and marks the fence lost.
+    let signalReleased!: () => void;
+    const released = new Promise<void>(resolve => (signalReleased = resolve));
+    let resumeRead!: () => void;
+    const readResumed = new Promise<void>(resolve => (resumeRead = resolve));
+    const reads = failTwoReads(workflowsStore, {
+      after: async () => {
+        expect(await workflowsStore.releaseRunOwnership(own)).toBe(true);
+        signalReleased();
+        await readResumed;
+      },
+    });
+
+    const check = assertExecutionNotSuperseded(args);
+    // Past the first read's retry delay.
+    await vi.advanceTimersByTimeAsync(1_000);
+    await released;
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    expect(coordinator.isLost()).toBe(true);
+    resumeRead();
+
+    await expect(check).resolves.toBeUndefined();
+    reads.mockRestore();
+    expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({ ...own, leaseExpiresAt: null });
+    await expect(assertExecutionNotSuperseded(args)).resolves.toBeUndefined();
+  });
+
+  it('refuses through assertExecutionNotSuperseded when the heartbeat sees a successor while the check reads the claim as held', async () => {
+    vi.useFakeTimers();
+    const { storage, workflowsStore, coordinator } = await setup();
+    const mastra = new Mastra({ storage, logger: false });
+    const requestContext = new RequestContext();
+    setExecutionClaim(requestContext, 'run-1', coordinator.claim);
+    const args = { runId: 'run-1', agentId, requestContext, mastra };
+
+    // As above, but the claim is taken over, not released, before the heartbeat renews.
+    let signalTakenOver!: () => void;
+    const takenOver = new Promise<void>(resolve => (signalTakenOver = resolve));
+    let resumeRead!: () => void;
+    const readResumed = new Promise<void>(resolve => (resumeRead = resolve));
+    failTwoReads(workflowsStore, {
+      after: async () => {
+        await workflowsStore.claimRunOwnership({ runId: 'run-1', ownerId: 'successor', leaseMs: 60_000, force: true });
+        signalTakenOver();
+        await readResumed;
+      },
+    });
+
+    const check = assertExecutionNotSuperseded(args);
+    void check.catch(() => {});
+    await vi.advanceTimersByTimeAsync(1_000);
+    await takenOver;
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    expect(coordinator.isLost()).toBe(true);
+    resumeRead();
+
+    await expect(check).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+    expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
+      ownerId: 'successor',
+      live: true,
+    });
+  });
+
   it('refuses when another execution claims the run between the reads of one check', async () => {
     const { workflowsStore, coordinator, own } = await setup();
     coordinator.stopHeartbeat();

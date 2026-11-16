@@ -1150,17 +1150,16 @@ export class ExecutionFence implements RunFenceScope {
    * claim released, which then counts as released. The release may have
    * happened after the check that failed, even between two reads here. A
    * lapsed or replaced claim, or a failed read, marks the execution lost as
-   * {@link verify} does. A fence already lost only reads for a release. Lease
-   * backends can't tell a release from a lapse and run {@link verify}.
+   * {@link verify} does. A fence already lost only reads for a release. A
+   * loss recorded while the read was on its way, such as a heartbeat renewal
+   * that found the claim released after the read, reads the claim once more:
+   * the same claim released still counts. Lease backends can't tell a release
+   * from a lapse and run {@link verify}.
    */
   async #verifyOrConfirmRelease(): Promise<boolean> {
-    let state: Awaited<ReturnType<OwnershipBackend['inspect']>>;
-    try {
-      state = await this.#backend.inspect(this.claim, this.#details());
-    } catch (error) {
-      if (this.#lossError) throw this.#lossError;
-      return this.#fail(error as DurableExecutionFenceError);
-    }
+    const lostBefore = this.#lossError !== undefined;
+    let state = await this.#inspectForRelease();
+    if (state === 'held' && this.#lossError && !lostBefore) state = await this.#inspectForRelease();
     if (state === 'released') {
       this.#released = true;
       return true;
@@ -1168,6 +1167,16 @@ export class ExecutionFence implements RunFenceScope {
     if (state === undefined) await this.verify();
     else if (this.#lossError) throw this.#lossError;
     return false;
+  }
+
+  /** One {@link OwnershipBackend.inspect} read. A failed read throws the recorded loss, or marks the execution lost. */
+  async #inspectForRelease(): Promise<Awaited<ReturnType<OwnershipBackend['inspect']>>> {
+    try {
+      return await this.#backend.inspect(this.claim, this.#details());
+    } catch (error) {
+      if (this.#lossError) throw this.#lossError;
+      return this.#fail(error as DurableExecutionFenceError);
+    }
   }
 
   /** Mark a settled fence retired in memory so `memory.runFences` retention can prune it. */
