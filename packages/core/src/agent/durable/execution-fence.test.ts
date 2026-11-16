@@ -174,6 +174,35 @@ describe('ExecutionFence heartbeat', () => {
     expect(acquire).not.toHaveBeenCalled();
     expect(await pubsub.getLeaseOwner(key('run-1'))).toBe('foreign');
   });
+
+  // A released lease is gone, so a renewal that reaches the provider after settle() released it can't tell the
+  // release from a takeover and still counts as a loss. Only storage run fencing can confirm the release. (#30206)
+  it('still marks a lease-backed execution lost when a renewal returns false after it settled (#30206)', async () => {
+    vi.useFakeTimers();
+    const pubsub = new EventEmitterPubSub();
+    const fence = await claim(pubsub, 'run-1');
+    const renew = pubsub.renewLease.bind(pubsub);
+    let unblock!: () => void;
+    const blocked = new Promise<void>(resolve => (unblock = resolve));
+    let renewed: boolean | undefined;
+    vi.spyOn(pubsub, 'renewLease').mockImplementationOnce(async (...args) => {
+      await blocked;
+      renewed = await renew(...args);
+      return renewed;
+    });
+
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    expect(await fence.settle(async () => {})).toBe('owned');
+    const lost = vi.fn();
+    fence.onLost(lost);
+    unblock();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(renewed).toBe(false);
+    expect(fence.isLost()).toBe(true);
+    expect(lost).toHaveBeenCalledTimes(1);
+    await pubsub.close();
+  });
 });
 
 describe('ExecutionFence.settle', () => {

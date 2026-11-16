@@ -1357,6 +1357,74 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       },
     );
 
+    // The lease backend can't tell its own release from a takeover: a released lease leaves nothing behind. A renewal
+    // that lands after the suspension released the lease is still a loss, as before. (#30206)
+    it.skipIf(backend !== 'lease')(
+      'a renewal that lands after the run suspends still marks a lease-backed run lost (#30206)',
+      async () => {
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+        const storage = createStorage(backend);
+        const firstCall = gate();
+        const { model, prompts } = recordingModel([firstCall.opened], 'lookup');
+        const lookup = createTool({
+          id: 'lookup',
+          description: 'Look something up',
+          inputSchema: z.object({}),
+          requireApproval: true,
+          execute: async () => ({ found: true }),
+        });
+        const durableAgent = buildAgent({ model, storage, tools: { lookup } });
+
+        let suspended = false;
+        const started = await durableAgent.stream('Look it up', {
+          requireToolApproval: true,
+          onSuspended: () => {
+            suspended = true;
+          },
+        });
+        const { runId } = started;
+        const suspendedFence = ExecutionFence.getLocalActive(runId)!;
+        const lost = vi.fn();
+        suspendedFence.onLost(lost);
+
+        // Hold the heartbeat's renewal of this run's lease until the suspension has released it. Only the renewal sent
+        // by the heartbeat tick below, while the model call is pending, is held.
+        const renewal = gate();
+        let holdNextRenewal = false;
+        let renewalSent = false;
+        let renewedAfterRelease: boolean | undefined;
+        const leases = resolveLeaseProvider(durableAgent.pubsub);
+        const renew = leases.renewLease.bind(leases);
+        const leaseKey = executionLeaseKey(suspendedFence.agentId, runId);
+        vi.spyOn(leases, 'renewLease').mockImplementation(async (key, ...rest) => {
+          if (key !== leaseKey || !holdNextRenewal) return renew(key, ...rest);
+          holdNextRenewal = false;
+          renewalSent = true;
+          await renewal.opened;
+          renewedAfterRelease = await renew(key, ...rest);
+          return renewedAfterRelease;
+        });
+
+        await vi.waitFor(() => expect(prompts).toHaveLength(1));
+        holdNextRenewal = true;
+        await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+        expect(renewalSent).toBe(true);
+        firstCall.open();
+        await vi.waitFor(() => expect(suspended).toBe(true));
+        await suspendedFence.whenSettled;
+        expect(lost).not.toHaveBeenCalled();
+
+        renewal.open();
+        await vi.waitFor(() => expect(renewedAfterRelease).toBe(false));
+        await new Promise(resolve => setImmediate(resolve));
+
+        expect(suspendedFence.isLost()).toBe(true);
+        expect(lost).toHaveBeenCalledTimes(1);
+
+        started.cleanup();
+      },
+    );
+
     it('a resume() that fails to read the suspended run after claiming it releases the run, so a retry resumes it', async () => {
       const storage = createStorage(backend);
       const model = toolCallThenTextModel('lookup', { query: 'the answer' }, 'looked it up');

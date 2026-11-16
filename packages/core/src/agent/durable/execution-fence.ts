@@ -509,7 +509,8 @@ function storageBackend(store: WorkflowsStorage, runId: string): OwnershipBacken
     // claim raises the generation, so a record still naming `claim` with no lease means `claim` was released.
     async renew(claim) {
       const result = await store.renewRunOwnership({ ...fence(claim), leaseMs: EXECUTION_LEASE_TTL_MS });
-      if (result.renewed) return { renewed: true, leaseExpiresAt: result.record.leaseExpiresAt };
+      // Some adapters build a renewed result's `record` with `!` from a read that can miss, so it may still be null.
+      if (result.renewed) return { renewed: true, leaseExpiresAt: result.record?.leaseExpiresAt };
       const { record } = result;
       return { renewed: false, released: !!record && matchesRunFence(record, fence(claim)) && !record.leaseExpiresAt };
     },
