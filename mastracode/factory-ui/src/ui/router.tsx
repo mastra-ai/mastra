@@ -11,6 +11,7 @@
  * The URL is the single source of truth for the active factory: everything
  * factory-scoped lives under `/factories/:factoryId/**` behind `FactoryLayout`.
  */
+import { useState } from 'react';
 import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
 import type { RouteObject } from 'react-router';
 
@@ -31,6 +32,7 @@ import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
 import {
   createLoadOnEntry,
   prefetchBoard,
+  prefetchCardDraft,
   prefetchComposer,
   prefetchDraft,
   prefetchFactories,
@@ -42,7 +44,7 @@ import {
 } from './routeLoaders';
 import type { Prefetch, RouteLoaderServices } from './routeLoaders';
 import { pendingCreateFlowFactoryId } from './domains/workspaces/hooks/useCreateFactoryFlow';
-import { createFactoryPath } from './domains/workspaces/services/factoryPaths';
+import { cardDraftPath, createFactoryPath } from './domains/workspaces/services/factoryPaths';
 import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
 
 // Only the boards ship in the startup bundle; every other page loads on first
@@ -55,6 +57,14 @@ const NewPage = lazyPage(
       // A failed preload retries on the visit.
       ThreadPage.preload().catch(() => undefined);
       return module.NewPage;
+    }),
+  <AppPageLoader />,
+);
+const CardDraftPage = lazyPage(
+  () =>
+    import('./pages/CardDraftPage').then(module => {
+      ThreadPage.preload().catch(() => undefined);
+      return module.CardDraftPage;
     }),
   <AppPageLoader />,
 );
@@ -217,6 +227,14 @@ function KnowledgeRoute() {
   return <KnowledgePage />;
 }
 
+/** A card's link names no draft, so each visit starts its own. */
+function CardDraftRedirect() {
+  const { factoryId, workItemId } = useParams<{ factoryId: string; workItemId: string }>();
+  const [draftSessionId] = useState(() => crypto.randomUUID());
+  if (!factoryId || !workItemId) return null;
+  return <Navigate replace to={cardDraftPath(factoryId, workItemId, draftSessionId)} />;
+}
+
 export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
   const loadOnEntry = createLoadOnEntry(services);
   const lazyRoute = (Page: LazyPageComponent, prefetch?: Prefetch) => ({
@@ -247,7 +265,7 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
               children: [
                 {
                   element: <AppLayout />,
-                  // Load the chat code while its session links appear, before "Open session" is clicked.
+                  // Load the chat code while its session links appear, before a card or session is clicked.
                   ...loadOnEntry(prefetchSidebar, ThreadPage),
                   children: [
                     {
@@ -259,6 +277,15 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                         { path: 'workspaces/:sessionId/threads/:threadId', ...lazyRoute(ThreadPage) },
                         { path: 'user/new/:draftSessionId', ...lazyRoute(NewPage, prefetchDraft) },
                         { path: 'user/threads/:threadId', ...lazyRoute(ThreadPage) },
+                        {
+                          path: 'cards/:workItemId',
+                          element: <CardDraftRedirect />,
+                          ...loadOnEntry(prefetchCardDraft, CardDraftPage),
+                        },
+                        {
+                          path: 'cards/:workItemId/new/:draftSessionId',
+                          ...lazyRoute(CardDraftPage, prefetchCardDraft),
+                        },
                         { path: 'new', ...lazyRoute(NewPage, prefetchComposer) },
                         { path: 'new-factory', ...lazyRoute(CreateFactoryPage) },
                         { path: 'new-board', ...lazyRoute(NewBoardPage) },

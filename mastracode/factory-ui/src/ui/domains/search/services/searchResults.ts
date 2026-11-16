@@ -8,6 +8,7 @@ import { SOURCE_LABELS } from '../../factory/boardItems';
 import { currentItemStageLabel } from '../../factory/boardStages';
 import { relationshipLabel, relationshipPath, workItemIdentifier } from '../../factory/services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../../factory/services/workItems';
+import { threadPath } from '../../workspaces/services/factoryPaths';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import {
   getFactorySessionKind,
@@ -96,7 +97,7 @@ function createFactorySessionResult(
     context,
     identifier,
     value: buildValue(session, kind, title, identifier, item, contextSession?.label),
-    path: `/factories/${factoryId}/workspaces/${session.sessionId}/threads/${threadId}`,
+    path: threadPath(factoryId, { sessionId: session.sessionId, threadId }),
     preserveOrigin: true,
     updatedAt: item?.updatedAt ?? session.updatedAt,
   };
