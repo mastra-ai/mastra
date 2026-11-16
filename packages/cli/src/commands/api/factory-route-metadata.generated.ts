@@ -10982,6 +10982,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
+        "evaluator": {
+          "type": "string",
+          "enum": [
+            "route-list",
+            "intake-order"
+          ]
+        },
         "sampled": {
           "type": "integer",
           "minimum": -9007199254740991,
@@ -11152,6 +11159,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         }
       },
       "required": [
+        "evaluator",
         "sampled",
         "boards",
         "notRouted",
@@ -11750,6 +11758,19 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "null"
           ]
         },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "evaluator": {
+          "type": "string",
+          "enum": [
+            "route-list",
+            "intake-order"
+          ]
+        },
         "boards": {
           "type": "array",
           "items": {
@@ -12072,6 +12093,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "item",
         "placement",
         "reason",
+        "note",
+        "evaluator",
         "boards",
         "current",
         "moves"
