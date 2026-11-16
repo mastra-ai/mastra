@@ -11,6 +11,7 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { boardRegistryOf, createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
 import type { BoardPhaseDefinition, BoardRegistry } from '../boards/index.js';
+import { toBoardSource } from '../boards/project-boards.js';
 import { reviewBoard } from '../boards/review.js';
 import {
   autoStartingBoards,
@@ -766,6 +767,57 @@ describe('FactoryDecisionDispatcher', () => {
     );
 
     info.mockRestore();
+    await dispatcher.stop();
+  });
+
+  it('keeps a session on its card when the cleanup cannot read the card', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, 'github-issue:unreadable');
+    const binding = await bindWorkRun(storage, item.id);
+    // Back in Intake and idle: the cleanup would end this assignment if it could read the card.
+    await storage.commitTransition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      expectedRevision: (await storage.get({ orgId: 'org-1', id: item.id }))!.revision,
+      destinationStage: 'intake',
+      actorId: 'user-1',
+      ingress: { identity: 'set-aside', transitionId: 'set-aside' },
+      causalChain: [],
+      evaluation: { outcome: 'accepted', decisions: [] },
+    });
+    const { controller } = createSession();
+    controller.getSession.mockResolvedValue(undefined);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const boards = toBoardSource(autoStartingBoards());
+    const load = vi.spyOn(boards, 'load');
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      boards,
+      transitionService: new FactoryTransitionService({ configVersion: 'rules-v1', storage }),
+      storage,
+      staleBindingSweepIntervalMs: 10 * 60_000,
+      staleBindingTtlMs: 24 * 60 * 60_000,
+    });
+    const status = async () =>
+      (await storage.listRunBindings('org-1', PROJECT_ID, item.id)).find(row => row.id === binding.id)?.status;
+
+    const t0 = new Date();
+    await dispatcher.runOnce(t0);
+    load.mockRejectedValue(new Error('connection lost'));
+    await dispatcher.runOnce(new Date(t0.getTime() + 25 * 60 * 60_000));
+    expect(await status()).toBe('active');
+    expect(warn).toHaveBeenCalledWith(
+      `Factory stale-binding sweep kept binding card=${item.id} session=session-1: could not read its card`,
+      expect.anything(),
+    );
+
+    // Readable again on the next sweep, and the assignment is cleaned up as usual.
+    load.mockRestore();
+    await dispatcher.runOnce(new Date(t0.getTime() + 26 * 60 * 60_000));
+    expect(await status()).toBe('revoked');
+
+    warn.mockRestore();
     await dispatcher.stop();
   });
 
