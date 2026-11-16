@@ -1,3 +1,4 @@
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -11,6 +12,9 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import { ChatSessionTestProvider } from '../../../chat/context/ChatSessionTestProvider';
+import { FactorySessionPage } from '../../../factory/components/RelatedFactorySessions';
+import { WorkspaceFilesProvider } from '../../../workspace-viewer/context/WorkspaceFilesProvider';
 import { SessionsSection } from '../SessionsSection';
 import { testChatSession } from './fixtures/sessionsSection';
 
@@ -34,24 +38,17 @@ const session: FactoryUserSession = {
   updatedAt: '2026-07-23T00:00:00.000Z',
 };
 
+const project = {
+  id: 'fp-1',
+  name: 'Mastra',
+  repositories: [
+    listedRepository(projectRepositoryId, 'octo/hello', { branch: 'main', sandboxWorkdir: '/workspace/hello' }),
+  ],
+};
+
 function useFactoryFixtures(sessions: () => FactoryUserSession[]) {
   server.use(
-    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({
-        projects: [
-          {
-            id: 'fp-1',
-            name: 'Mastra',
-            repositories: [
-              listedRepository(projectRepositoryId, 'octo/hello', {
-                branch: 'main',
-                sandboxWorkdir: '/workspace/hello',
-              }),
-            ],
-          },
-        ],
-      }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [project] })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
       HttpResponse.json({ sessions: sessions() }),
     ),
@@ -70,6 +67,28 @@ function renderSection() {
         </Routes>
       </ChatSessionContext.Provider>
       <Toaster position="bottom-right" />
+    </MemoryRouter>,
+  );
+}
+
+function renderOpenSession() {
+  return renderWithProviders(
+    <MemoryRouter initialEntries={[`/factories/fp-1/user/threads/${sessionId}`]}>
+      <SidebarProvider storageKey="regenerate-title-test">
+        <Routes>
+          <Route
+            path="/factories/:factoryId/user/threads/:threadId"
+            element={
+              <ChatSessionTestProvider threadId={sessionId} deferUntilMessagesReady={false}>
+                <SessionsSection />
+                <WorkspaceFilesProvider>
+                  <FactorySessionPage>{null}</FactorySessionPage>
+                </WorkspaceFilesProvider>
+              </ChatSessionTestProvider>
+            }
+          />
+        </Routes>
+      </SidebarProvider>
     </MemoryRouter>,
   );
 }
@@ -113,6 +132,32 @@ describe('Session title regeneration', () => {
     await waitForMutationsIdle(client);
 
     expect(await screen.findByRole('link', { name: 'Factory audit log review' })).toBeInTheDocument();
+  });
+
+  it('renames the open session in its page header too', async () => {
+    let current = session;
+    useFactoryFixtures(() => [current]);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId`, () => HttpResponse.json({ project })),
+      http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+        HttpResponse.json({ modelId: null, thinkingLevel: null }),
+      ),
+      http.get(`${TEST_BASE_URL}/api/agent-controller/:agentControllerId/sessions/:resourceId/permissions`, () =>
+        HttpResponse.json({}),
+      ),
+      http.get(`${TEST_BASE_URL}/web/user-sessions/${sessionId}`, () => HttpResponse.json({ session: current })),
+      http.post(`${TEST_BASE_URL}/web/user-sessions/:sessionId/title`, () => {
+        current = { ...session, title: 'Factory audit log review' };
+        return HttpResponse.json({ title: 'Factory audit log review' });
+      }),
+    );
+
+    const user = userEvent.setup();
+    const { client } = renderOpenSession();
+    await openTitleAction(user, 'Tell me what have been done in the factory since');
+    await waitForMutationsIdle(client);
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Factory audit log review' })).toBeInTheDocument();
   });
 
   it('keeps a pending session disabled while another session finishes first', async () => {
