@@ -4,6 +4,7 @@ import { createTool } from '@mastra/core/tools';
 import { getEventListeners, once } from 'node:events';
 import { Memory } from '@mastra/memory';
 import { StudioAgentRuntime } from '../../src/studio-billing/studio-agent-decorator.js';
+import { createStudioOperationTools } from '../../src/studio-billing/studio-operation-tools.js';
 import { studioChatProxy } from '../../src/studio-billing/studio-chat-proxy.js';
 import { createBilling } from '../../src/billing/integration.js';
 import { OrganizationService } from '../../src/billing/organizations.js';
@@ -2455,6 +2456,140 @@ it('the socket fixture terminates rejected handlers and broken response bodies',
     await expect(fetch(server.url, { signal: AbortSignal.timeout(1000) })).rejects.toThrow('fetch failed');
   }
 });
+
+it.each(['before-create', 'before-dispatch'] as const)(
+  'Studio recovers an interrupted start %s after reopening without repeating compute',
+  async phase => {
+    const f = await catalogFixture();
+    let executions = 0;
+    const open = async () => {
+      const billing = createBilling({
+        environment: { ...f.environment, BILLING_STUDIO_ENABLED: 'false' },
+        billingKeys: f.catalog.configuration.billingKeys,
+        localAccounts: async () => f.catalog.configuration.localAccounts,
+      });
+      const data = z.strictObject({ value: z.string() });
+      const step = createStep({
+        id: 'compute',
+        inputSchema: data,
+        outputSchema: data,
+        execute: async ({ inputData }) => {
+          executions++;
+          return inputData;
+        },
+      });
+      const workflow = createWorkflow({
+        id: 'report',
+        inputSchema: data,
+        outputSchema: data,
+        options: { autoRestartActiveRuns: false },
+      })
+        .then(step)
+        .commit();
+      const integration = await billing.prepare({
+        agents: {},
+        workflows: {
+          report: billing.workflow(workflow, {
+            policy: { version: 'v1', charge: { type: 'credits', meter: 'credits', units: 3 } },
+          }),
+        },
+      });
+      cleanups.push(integration.close);
+      const runtime = new StudioAgentRuntime(integration);
+      const memory = new Memory({
+        storage: integration.storage,
+        options: { semanticRecall: false, workingMemory: { enabled: false }, generateTitle: false },
+      });
+      const agent = runtime.decorate(
+        new Agent({
+          id: 'recovery-chat',
+          name: 'Recovery chat',
+          instructions: 'Answer.',
+          model: { id: 'billing-test/model', api: 'chat', url: f.model.url, apiKey: 'controlled' },
+          memory,
+        }),
+      );
+      new Mastra({
+        agents: { 'recovery-chat': agent },
+        workflows: integration.workflows,
+        storage: integration.storage,
+        logger: false,
+      });
+      const context = await integration.organizations.context({ credential: f.first.credential! });
+      const owner = await integration.conversations.thread(context, agent.id, 'recovery-thread', true);
+      if (!(await memory.getThreadById({ threadId: owner.threadId })))
+        await memory.createThread({ threadId: owner.threadId, resourceId: owner.resourceId });
+      const conversation = runtime.bind({ billing: context, owner, controller: new AbortController() });
+      return {
+        integration,
+        runtime,
+        memory,
+        context,
+        owner,
+        conversation,
+        tools: createStudioOperationTools(runtime).workflowTools('report'),
+      };
+    };
+    const input = { value: 'Recover the original request' };
+    const first = await open();
+    await first.memory.saveMessages({
+      messages: [
+        {
+          id: 'recovery-user',
+          role: 'user',
+          threadId: first.owner.threadId,
+          resourceId: first.owner.resourceId,
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'Start the saved request.' }] },
+        },
+      ],
+    });
+    const operation = await first.integration.conversations.claim(first.context, first.owner, {
+      messageId: 'recovery-user',
+      toolCallId: 'recovery-call',
+      resourceId: 'report',
+      action: 'start',
+      input,
+    });
+    if (phase === 'before-dispatch') {
+      const run = await first.integration.execution.createRun('report', first.context, operation.requestKey);
+      await first.integration.conversations.bindExecution(first.context, first.owner, operation.id, run.executionId);
+    }
+    await first.integration.close();
+    const reopened = await open();
+    const executeTool = async (
+      tool: { execute?: unknown },
+      input: unknown,
+      context: unknown = {},
+    ): Promise<unknown> => {
+      if (typeof tool.execute !== 'function') throw new Error('Missing operation tool');
+      return tool.execute(input, context);
+    };
+    const context = { agent: { threadId: reopened.owner.threadId, toolCallId: 'recovery-call' } };
+    const invoke = () =>
+      reopened.runtime.request.run(reopened.conversation, () =>
+        executeTool(reopened.tools['report-start'], input, context),
+      );
+    await Promise.all(Array.from({ length: 20 }, invoke));
+    const queryTool = reopened.tools['report-query'];
+    const result = await reopened.runtime.request.run(reopened.conversation, () =>
+      executeTool(queryTool, { operationId: operation.id }),
+    );
+    expect(result).toMatchObject({
+      result: { status: 'completed', output: input },
+      billing: { billedUnits: 3, settlementStatus: 'settled' },
+    });
+    expect(executions).toBe(1);
+    const observer = await independentClient(f.database.url);
+    cleanups.push(() => observer.close());
+    expect((await observer.execute('SELECT units FROM billing_ledger')).rows).toEqual([{ units: 3n }]);
+    expect(
+      (await observer.execute("SELECT COUNT(*) AS count FROM billing_workflow_operations WHERE operation = 'start'"))
+        .rows[0].count,
+    ).toBe(1n);
+    expect(f.model.requests).toHaveLength(0);
+  },
+);
 
 async function conversationFixture() {
   const f = await catalogFixture();

@@ -309,7 +309,17 @@ export function createStudioOperationTools(runtime: StudioAgentRuntime) {
               context.agent!.toolCallId,
               context,
             );
-            if (!operation.claimed) return read(conversation, operation);
+            if (!operation.claimed) {
+              const saved = await read(conversation, operation);
+              const projection = (saved as { result?: Json }).result;
+              // Only a missing run or one still awaiting admission may resume startup.
+              // The durable create/start claims reuse this request key and prevent repeated compute.
+              if (
+                projection !== null &&
+                (typeof projection !== 'object' || Array.isArray(projection) || projection.status !== 'created')
+              )
+                return saved;
+            }
             return root(async () => {
               const run = await integration.execution.createRun(id, conversation.billing, operation.requestKey);
               await integration.conversations.bindExecution(

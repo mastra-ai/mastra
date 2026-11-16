@@ -202,8 +202,8 @@ export class ConversationStorage {
     const digest = fingerprint(input.input);
     return this.authorized(context, async tx => {
       await this.requireOwner(tx, context, owner.agentId, owner.threadId);
-      // Inserting the link is the irrevocable dispatch claim. A missing billing
-      // admission after this claim is uncertain, never permission to repeat compute.
+      // The link fixes the immutable request identity. Workflow starts also use
+      // durable create/start claims to recover before dispatch without repeating compute.
       const id = randomUUID();
       const inserted = await tx.execute({
         sql: 'INSERT INTO billing_studio_operations VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (thread_id, tool_call_id) DO NOTHING',
