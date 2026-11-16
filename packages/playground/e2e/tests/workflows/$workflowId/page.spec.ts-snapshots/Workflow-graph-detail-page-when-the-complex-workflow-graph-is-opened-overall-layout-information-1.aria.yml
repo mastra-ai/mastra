@@ -5,7 +5,7 @@
                 - /url: /workflows
                 - img
                 - text: Workflows
-        - separator:
-            - img
+        - separator
         - listitem:
-            - combobox: complex-workflow
+            - text: complex-workflow
+            - combobox "Switch workflow": complex-workflow
