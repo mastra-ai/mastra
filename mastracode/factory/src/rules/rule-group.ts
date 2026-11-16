@@ -228,7 +228,7 @@ export function explainRuleGroup(group: RuleGroup | null | undefined, facts: Rul
       ? explainRuleGroup(member, facts)
       : evaluateCondition(member, facts)
         ? { matched: true, failed: [] }
-        : { matched: false, failed: [{ ...member, actual: facts[member.field] ?? null }] },
+        : { matched: false, failed: [{ ...member, actual: facts[currentField(member.field)] ?? null }] },
   );
   const matched = group.operator === 'AND' ? results.every(r => r.matched) : results.some(r => r.matched);
   return { matched, failed: matched ? [] : results.flatMap(r => r.failed) };

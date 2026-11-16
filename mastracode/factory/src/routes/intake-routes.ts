@@ -52,7 +52,7 @@ export interface IntakeRouteRoutesDeps extends RouteDependencies {
   /** Cards an intake route change may move to another board. */
   workItems: Pick<
     WorkItemsStorage,
-    'listShared' | 'update' | 'supersedeDecisionsForWorkItem' | 'get' | 'commitRuleEvaluation'
+    'listShared' | 'update' | 'supersedeDecisionsForWorkItem' | 'get' | 'commitRuleEvaluation' | 'listDeferredDecisions'
   >;
   /** The project's installed boards, to check route targets against. */
   boards: Pick<ProjectBoardCache, 'describe'>;

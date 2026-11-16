@@ -3,7 +3,13 @@ import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { validateSkillContent } from '@mastra/core/skills';
 import { z } from 'zod';
 
-import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem, ROUTE_EVENTS } from '../boards/board-events.js';
+import {
+  CLOSE_REASONS,
+  INTAKE_ROUTE_RULE_FIELDS,
+  routeEventsProblem,
+  ROUTE_EVENTS,
+  STATUS_EVENTS,
+} from '../boards/board-events.js';
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
 import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
@@ -323,7 +329,11 @@ const intakeDraftBoardSchema = z
             enabled: intakeRouteFields.enabled.default(true),
             when: intakeRouteFields.when.default(null),
             target: z
-              .object({ phaseKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH).nullable().optional() })
+              .object({
+                phaseKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH).nullable().optional(),
+                /** On a card-move rule: the board the card moves to; unset keeps it on this board. */
+                moveToBoardKey: intakeRouteTargetSchema.shape.moveToBoardKey,
+              })
               .strict(),
             on: intakeRouteFields.on.optional(),
           })
@@ -396,6 +406,27 @@ const intakeDryRunResponseSchema = z.object({
   /** Whether the caller may run unsaved rules or order. */
   canEdit: z.boolean(),
 });
+/** The most labels or assignees one test event may name on each side. */
+const MAX_TEST_EVENT_NAMES = 100;
+const itemChangeSchema = z
+  .object({
+    added: z.array(z.string().min(1).max(500)).max(MAX_TEST_EVENT_NAMES).default([]),
+    removed: z.array(z.string().min(1).max(500)).max(MAX_TEST_EVENT_NAMES).default([]),
+  })
+  .strict();
+/** A status event as card-move rules read it. */
+const intakeTestEventSchema = z
+  .object({
+    type: z.enum(STATUS_EVENTS),
+    /** On `work_item.closed`. */
+    reason: z.enum(CLOSE_REASONS).optional(),
+    /** On an update: the labels and assignees it changed. */
+    labels: itemChangeSchema.optional(),
+    assignees: itemChangeSchema.optional(),
+    /** On a pull request event: whether that pull request's author is trusted. */
+    pullRequestTrusted: z.boolean().optional(),
+  })
+  .strict();
 export const intakeTestBodySchema = z
   .object({
     ...intakeDraftFields,
@@ -403,6 +434,8 @@ export const intakeTestBodySchema = z
     url: z.string().trim().url().max(2000).optional(),
     /** A recent item: a card's id, or a Not routed decision's. */
     itemId: uuidSchema.optional(),
+    /** A status event to try on the item's card, as if it had just happened; its recent events are replayed either way. */
+    event: intakeTestEventSchema.optional(),
   })
   .strict()
   .refine(body => (body.url === undefined) !== (body.itemId === undefined), {
@@ -442,6 +475,47 @@ const intakeTestResponseSchema = z.object({
           failed: z.array(failedConditionSchema).optional(),
           /** With `lost`: the rule that took it. */
           to: z.object({ boardKey: z.string(), routeId: z.string() }).optional(),
+        }),
+      ),
+    }),
+  ),
+  /** On a card: where it is now, and the intake rule that filed it, if one did. */
+  current: z.object({ boardKey: z.string(), phase: z.string().nullable(), routeId: z.string().nullable() }).nullable(),
+  /**
+   * On a card: the event sent in the request, then its recent status events newest first, each
+   * replayed against today's rules (or the draft) and the card as it is now.
+   */
+  moves: z.array(
+    z.object({
+      /** The stored event's decision; null for the event sent in the request. */
+      decisionId: z.string().nullable(),
+      at: z.string().nullable(),
+      event: z.object({
+        type: z.enum(STATUS_EVENTS),
+        reason: z.enum(CLOSE_REASONS).optional(),
+        labels: z.object({ added: z.array(z.string()), removed: z.array(z.string()) }).optional(),
+        assignees: z.object({ added: z.array(z.string()), removed: z.array(z.string()) }).optional(),
+        pullRequestTrusted: z.boolean().optional(),
+      }),
+      /**
+       * `moves` to `to`; `stays` where it is; `rule_default` leaves it to the integration's own move
+       * (to `phase`, when there is one) because no rule takes it; `ignored` when the event can't move
+       * a card in its state, with `reason`.
+       */
+      outcome: z.enum(['moves', 'stays', 'rule_default', 'ignored']),
+      to: z.object({ boardKey: z.string(), phase: z.string(), routeId: z.string() }).nullable(),
+      phase: z.string().nullable(),
+      reason: z.string().nullable(),
+      /** Every rule on the card's board that handles the event, top to bottom. */
+      rules: z.array(
+        z.object({
+          routeId: z.string(),
+          name: z.string().nullable(),
+          /** `skipped` matched but its target board or phase can't take the card, with `reason`. */
+          outcome: z.enum(['took', 'lost', 'no_match', 'skipped', 'disabled']),
+          failed: z.array(failedConditionSchema).optional(),
+          to: z.object({ boardKey: z.string(), routeId: z.string() }).optional(),
+          reason: z.string().optional(),
         }),
       ),
     }),

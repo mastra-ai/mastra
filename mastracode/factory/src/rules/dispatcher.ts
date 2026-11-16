@@ -5,13 +5,12 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { GoalObjectiveRecord } from '@mastra/core/storage';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
-import { combineUpdates, eventMovesCard, isPullRequestEvent, isUpdateEvent } from '../boards/board-events.js';
+import { combineUpdates, isUpdateEvent } from '../boards/board-events.js';
 import type { BoardEventFacts } from '../boards/board-events.js';
 import {
   boardFlow,
   boardForWorkItem,
   cardBoardFlow,
-  cardRuleFacts,
   hasPullRequest,
   isPullRequestCard,
   isTerminalWorkItem,
@@ -32,11 +31,10 @@ import {
   INTAKE_ROUTE_METADATA_KEY,
   landingPhase,
   placedByIntakeRoute,
-  resolveEventRoute,
+  planEventMove,
   resolveIntake,
   projectIntakeEvaluator,
   ROUTE_AGAIN_KEY_PREFIX,
-  routesHandleEvent,
 } from '../boards/intake-routing.js';
 import type { IntakeRoutesReader, SkippedEventRoute } from '../boards/intake-routing.js';
 import { autoApprovedExitTool, startsInAutoPhase } from '../boards/phase-automation.js';
@@ -2638,33 +2636,22 @@ export class FactoryDecisionDispatcher {
       const boards = await this.#boards.load(record);
       const board = boards.get(boardForWorkItem(item));
       if (!board) return undefined;
-      const stage = item.stages.length === 1 ? item.stages[0] : undefined;
-      const finished = stage !== undefined && board.isTerminal(stage);
-      if (!eventMovesCard(event.type, finished)) return undefined;
       const routes = this.#intakeRoutes
         ? await this.#intakeRoutes.listIntakeRoutes({ orgId: record.orgId, factoryProjectId: record.factoryProjectId })
         : [];
-      if (!routesHandleEvent(routes, event, board)) return { item, board, fallback: true as const };
-      const facts = { ...cardRuleFacts(item), ...(stage !== undefined ? { 'card.phase': stage } : {}) };
       const skipped: SkippedEventRoute[] = [];
-      const route = resolveEventRoute(routes, event, facts, board, {
+      const plan = planEventMove({
+        routes,
+        event,
+        item,
         registry: boards,
-        carriesPullRequest: hasPullRequest(item),
+        ...(fallback && { fallback: { stage: fallback.stage } }),
         onSkip: skip => skipped.push(skip),
       });
       await this.#logSkippedRoutes(record, item, event, skipped);
-      // A pull request event the rules already decided keeps that decision when no enabled route
-      // takes the card: disabling or narrowing a route must not strand a merged card in review.
-      if (!route)
-        return fallback && isPullRequestEvent(event.type) ? { item, board, fallback: true as const } : undefined;
-      // A route that agrees with the rule's own pull request move keeps it whole: its message, and
-      // the re-entry that restarts a review in the phase the card already sits in.
-      const crossesBoards = route.board !== board.id;
-      if (!crossesBoards && fallback && isPullRequestEvent(event.type) && route.phase === fallback.stage) {
-        return { item, board, fallback: true as const };
-      }
-      if (!crossesBoards && stage === route.phase) return undefined;
-      return { item, board, route, target: boards.get(route.board)! };
+      if (plan.outcome === 'rule_default') return { item, board, fallback: true as const };
+      if (plan.outcome !== 'moves') return undefined;
+      return { item, board, route: plan.move, target: boards.get(plan.move.board)! };
     };
     const first = await resolve();
     if (!first) return;

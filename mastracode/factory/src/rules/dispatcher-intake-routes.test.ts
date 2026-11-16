@@ -1965,3 +1965,76 @@ describe('intake by intake order', () => {
     expect(filed).toBe(cards.length);
   });
 });
+
+describe('the tester replaying card moves', () => {
+  it('predicts, before the dispatcher files it, every card move the dispatcher then makes', async () => {
+    const seeded = await setup();
+    await seeded.boards.create(seeded.scope, docsBoard, 'admin');
+    const docsAdded = await seeded.route({
+      name: 'Docs added',
+      on: ['work_item.updated'],
+      when: { operator: 'AND', conditions: [{ field: 'event.labels.added', operator: 'contains', value: 'docs' }] },
+      target: { boardKey: 'work', moveToBoardKey: 'docs', phaseKey: null },
+    });
+    await seeded.route({
+      name: 'Closed as completed',
+      on: ['work_item.closed'],
+      when: CLOSED_AS('completed'),
+      target: { boardKey: 'work', phaseKey: 'done' },
+    });
+    await seeded.route({
+      name: 'Reopened',
+      on: ['work_item.reopened'],
+      target: { boardKey: 'work', phaseKey: 'intake' },
+    });
+    await seeded.route({
+      name: 'Triaged in intake',
+      on: ['work_item.updated'],
+      when: { operator: 'AND', conditions: [{ field: 'card.phase', operator: 'equals', value: 'intake' }] },
+      target: { boardKey: 'work', phaseKey: 'triage' },
+    });
+    const cases: { event: BoardEventFacts; at?: string }[] = [
+      { event: { type: 'work_item.updated', labels: { added: ['docs'], removed: [] } } },
+      { event: { type: 'work_item.updated', labels: { added: ['bug'], removed: [] } } },
+      { event: { type: 'work_item.updated', assignees: { added: ['ada'], removed: [] } }, at: 'done' },
+      { event: { type: 'work_item.closed', reason: 'completed' } },
+      { event: { type: 'work_item.closed', reason: 'canceled' } },
+      { event: { type: 'work_item.reopened' } },
+      { event: { type: 'work_item.reopened' }, at: 'done' },
+      // No rule on Work handles a merge: the integration's own move, here none, decides.
+      { event: { type: 'pull_request.merged', pullRequestTrusted: true } },
+    ];
+    const { IntakeCheck } = await import('../routes/intake-check.js');
+    const registry = (
+      await new ProjectBoardCache({
+        codeRegistry: createTriageWorkRegistry(),
+        storage: seeded.boards,
+        recheckMs: 0,
+      }).describe(seeded.scope)
+    ).registry;
+    const check = new IntakeCheck({ storage: seeded.boards, workItems: seeded.workItems });
+    const predicted: { id: string; replay: Awaited<ReturnType<typeof check.test>>['moves'][number] }[] = [];
+    for (const [index, { event, at }] of cases.entries()) {
+      const card = (await seeded.deliver({ sourceKey: `github-issue:${index + 1}` }))!;
+      if (at) await seeded.putAt(card.id, at);
+      await seeded.commitUpdate(card.id, event, '2030-01-01T00:00:00Z');
+      const [replay] = (await check.test(seeded.scope, registry, { itemId: card.id })).moves;
+      predicted.push({ id: card.id, replay: replay! });
+    }
+    await seeded.retry(new Date('2030-01-02T00:00:00Z'));
+
+    const outcomes = new Set<string>();
+    for (const { id, replay } of predicted) {
+      const card = (await seeded.workItems.get({ orgId: 'org-1', id }))!;
+      outcomes.add(replay.outcome);
+      if (replay.outcome === 'moves') {
+        expect(placed(card)).toEqual({ board: replay.to!.boardKey, stages: [replay.to!.phase] });
+        expect(card.stageHistory.at(-1)).toMatchObject({ by: `intake-route:${replay.to!.routeId}` });
+      } else {
+        expect(card.stageHistory.at(-1)?.by ?? '').not.toMatch(/^intake-route:/);
+      }
+    }
+    expect(predicted[0]!.replay.to).toMatchObject({ boardKey: 'docs', routeId: docsAdded.id });
+    expect(outcomes).toEqual(new Set(['moves', 'stays', 'ignored', 'rule_default']));
+  });
+});

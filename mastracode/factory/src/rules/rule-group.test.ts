@@ -160,11 +160,22 @@ describe('a condition stored under author.trusted', () => {
 });
 
 describe('explainRuleGroup', () => {
+  it('reads a renamed field under its new name, as the rule does', () => {
+    const group: RuleGroup = {
+      operator: 'AND',
+      conditions: [{ field: 'author.trusted', operator: 'equals', value: true }],
+    };
+    expect(explainRuleGroup(group, { 'item.trusted': false })).toEqual({
+      matched: false,
+      failed: [{ field: 'author.trusted', operator: 'equals', value: true, actual: false }],
+    });
+  });
+
   const issue = {
     'source.kind': 'issue',
     'source.repository': 'mastra-ai/mastra',
     'item.labels': ['bug'],
-    'author.trusted': true,
+    'item.trusted': true,
   };
 
   it('names each condition an AND group fails on, with the fact it read', () => {

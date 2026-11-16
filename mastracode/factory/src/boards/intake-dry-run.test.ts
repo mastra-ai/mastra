@@ -32,7 +32,7 @@ const rule = (id: string, boardKey: string, when: RuleGroup | null, enabled = tr
   enabled,
   when,
   target: { boardKey, phaseKey: null },
-  on: ['work_item.created' as const],
+  on: ['work_item.opened' as const],
 });
 
 const item = (key: string, labels: string[]): IntakeSampleItem => ({

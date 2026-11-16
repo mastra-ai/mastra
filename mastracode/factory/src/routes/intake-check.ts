@@ -7,6 +7,7 @@
 import type { z } from 'zod';
 
 import { DEFAULT_ROUTE_EVENTS } from '../boards/board-events.js';
+import type { BoardEventFacts } from '../boards/board-events.js';
 import { cardRuleFacts } from '../boards/card-facts.js';
 import { dryRunIntake, intakeSample } from '../boards/intake-dry-run.js';
 import { lookupIntakeItem } from '../boards/intake-lookup.js';
@@ -14,10 +15,13 @@ import type { IntakeItemLookup } from '../boards/intake-lookup.js';
 import {
   arrivalRuleFacts,
   INTAKE_ORDER_SAMPLE,
+  INTAKE_ROUTE_METADATA_KEY,
   intakeTargetProblem,
+  planEventMove,
   traceIntakeOrder,
 } from '../boards/intake-routing.js';
 import type { BoardRegistry } from '../boards/registry.js';
+import { boardForWorkItem } from '../boards/semantics.js';
 import type { RuleFacts } from '../rules/rule-group.js';
 import type { FactoryCommitDecision } from '../rules/types.js';
 import type {
@@ -34,6 +38,9 @@ type TestBody = z.infer<typeof intakeTestBodySchema>;
 type Draft = Pick<DryRunBody, 'boards' | 'order'>;
 type DraftRoute = Pick<StoredIntakeRouteRecord, 'id' | 'name' | 'enabled' | 'when' | 'target' | 'on'>;
 type LinkedDecision = Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>;
+
+/** How many of a card's newest status events the tester replays. */
+export const RECENT_CARD_EVENTS = 10;
 
 /** How far back the live counts read the decision log. */
 export const INTAKE_FILED_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
@@ -54,7 +61,7 @@ export interface IntakeCheckDeps {
     StoredBoardsStorage,
     'listIntakeRoutes' | 'readIntakeOrder' | 'listRecentNotRouted' | 'countPlacedByRoute' | 'getIntakeDecision'
   >;
-  workItems: Pick<WorkItemsStorage, 'listShared' | 'get'>;
+  workItems: Pick<WorkItemsStorage, 'listShared' | 'get' | 'listDeferredDecisions'>;
   /** Providers that can read an item by URL; Linear, Jira and incident.io items are picked from recent ones. */
   lookups?: readonly IntakeItemLookup[];
   now?: () => Date;
@@ -88,7 +95,12 @@ export class IntakeCheck {
         name: route.name,
         enabled: route.enabled,
         when: route.when,
-        target: { boardKey: board.boardKey, phaseKey: route.target.phaseKey ?? null, joinClosedIssue: false },
+        target: {
+          boardKey: board.boardKey,
+          phaseKey: route.target.phaseKey ?? null,
+          joinClosedIssue: false,
+          moveToBoardKey: route.target.moveToBoardKey ?? null,
+        },
         on: route.on ?? [...DEFAULT_ROUTE_EVENTS],
       }));
       // Held to the checks saving it would face, so a typo'd phase can't quietly land on the first one.
@@ -142,8 +154,20 @@ export class IntakeCheck {
     const { routes, order } = this.#draft(await this.#saved(scope, registry), body, registry);
     const item = await this.#item(scope, registry, body);
     const { resolution, boards } = traceIntakeOrder({ routes, order, facts: item.facts, registry }, { full: true });
+    const { card } = item;
     return {
       item: { title: item.title, url: item.url, kind: item.kind, id: item.id },
+      current: card
+        ? {
+            boardKey: boardForWorkItem(card),
+            phase: card.stages.length === 1 ? card.stages[0]! : null,
+            routeId:
+              typeof card.metadata?.[INTAKE_ROUTE_METADATA_KEY] === 'string'
+                ? (card.metadata[INTAKE_ROUTE_METADATA_KEY] as string)
+                : null,
+          }
+        : null,
+      moves: card ? await this.#moves(scope, registry, routes, card, body.event) : [],
       placement:
         resolution.outcome === 'placed' && resolution.routeId !== null
           ? { boardKey: resolution.board, routeId: resolution.routeId, phase: resolution.phase }
@@ -151,6 +175,64 @@ export class IntakeCheck {
       reason: resolution.outcome === 'not_routed' ? resolution.reason : null,
       boards,
     };
+  }
+
+  /**
+   * The event sent in the request, then the card's newest status events, each replayed through the
+   * card-move rules (`planEventMove`, as the dispatcher files them) against the card as it is now.
+   */
+  async #moves(
+    scope: StoredBoardScope,
+    registry: BoardRegistry,
+    routes: readonly DraftRoute[],
+    card: Card,
+    tried: BoardEventFacts | undefined,
+  ) {
+    const stored = (
+      await this.deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, { workItemId: card.id })
+    ).flatMap((record): { record: typeof record; event: BoardEventFacts; fallback?: { stage: string } }[] => {
+      // Stored decisions are JSON; these two kinds are the ones that carry a status event.
+      const decision = record.decision as unknown as FactoryCommitDecision;
+      if (decision.type === 'routeEvent') return [{ record, event: decision.event }];
+      if (decision.type === 'transition' && decision.event) {
+        return [{ record, event: decision.event, fallback: { stage: decision.stage } }];
+      }
+      return [];
+    });
+    const replays: {
+      decisionId: string | null;
+      at: string | null;
+      event: BoardEventFacts;
+      fallback?: { stage: string };
+    }[] = [
+      ...(tried ? [{ decisionId: null, at: null, event: tried }] : []),
+      ...stored
+        .slice(-RECENT_CARD_EVENTS)
+        .toReversed()
+        .map(({ record, event, fallback }) => ({
+          decisionId: record.id,
+          at: record.createdAt.toISOString(),
+          event,
+          ...(fallback && { fallback }),
+        })),
+    ];
+    return replays.map(({ fallback, ...replay }) => {
+      const plan = planEventMove(
+        { routes, event: replay.event, item: card, registry, ...(fallback && { fallback }) },
+        { full: true },
+      );
+      return {
+        ...replay,
+        outcome: plan.outcome,
+        to:
+          plan.outcome === 'moves'
+            ? { boardKey: plan.move.board, phase: plan.move.phase, routeId: plan.move.routeId }
+            : null,
+        phase: plan.outcome === 'rule_default' ? plan.phase : null,
+        reason: plan.outcome === 'ignored' ? plan.reason : null,
+        rules: plan.rules,
+      };
+    });
   }
 
   /** The item to test: a recent card or Not routed item by id or URL, else one read from its provider. */
@@ -164,12 +246,26 @@ export class IntakeCheck {
     kind: 'card' | 'not_routed' | 'fetched';
     id: string | null;
     facts: RuleFacts;
+    card?: Card;
   }> {
+    // Only a card moves: an event refuses anything else before a provider is asked for it.
+    const needsCard = () => {
+      if (body.event) {
+        throw new IntakeCheckRefusal(
+          422,
+          'intake_event_needs_card',
+          "Only a card moves on an event; pick one of the project's cards.",
+        );
+      }
+    };
     if (body.itemId) {
       const card = await this.deps.workItems.get({ orgId: scope.orgId, id: body.itemId });
       if (card && card.factoryProjectId === scope.factoryProjectId) return fromCard(card);
       const decision = await this.deps.storage.getIntakeDecision(scope, body.itemId);
-      if (decision?.arrival) return this.#notRouted(scope, registry, decision);
+      if (decision?.arrival) {
+        needsCard();
+        return this.#notRouted(scope, registry, decision);
+      }
       throw new IntakeCheckRefusal(404, 'intake_item_not_found', 'No such item in this project.');
     }
     const url = body.url!;
@@ -177,6 +273,7 @@ export class IntakeCheck {
       entry => entry.externalSource?.url !== undefined && sameUrl(entry.externalSource.url, url),
     );
     if (card) return fromCard(card);
+    needsCard();
     const decision = (await this.deps.storage.listRecentNotRouted(scope, INTAKE_ORDER_SAMPLE)).find(
       entry => entry.arrival && entry.url !== null && sameUrl(entry.url, url),
     );
@@ -227,6 +324,7 @@ function fromCard(card: Card) {
     kind: 'card' as const,
     id: card.id,
     facts: cardRuleFacts(card),
+    card,
   };
 }
 

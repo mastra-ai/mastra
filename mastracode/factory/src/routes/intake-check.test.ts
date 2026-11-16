@@ -178,7 +178,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake dry run 
       routes: await domains.boards.listIntakeRoutes(scope),
       order: await domains.boards.readIntakeOrder(scope, { boards: ['work', 'docs'] }),
     });
-    return { send, docsRule, workAll, docsCard, notRouted, lookups, snapshot };
+    return { send, docsRule, workAll, docsCard, notRouted, lookups, snapshot, domains, scope };
   }
 
   it('dry-runs the saved rules for a member, with live counts, and writes nothing', async () => {
@@ -319,6 +319,97 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake dry run 
     expect((await send('/intake/test', { url: 'https://github.com/a/b/issues/1', itemId: randomUUID() })).status).toBe(
       422,
     );
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("replays a card's recent events and a tried one through its board's card-move rules, writing nothing", async () => {
+    const { send, docsCard, notRouted, snapshot, domains, scope } = await setup();
+    const shipAdded = await domains.boards.createIntakeRoute(
+      scope,
+      {
+        name: 'Docs label added',
+        on: ['work_item.updated'],
+        when: { operator: 'AND', conditions: [{ field: 'event.labels.added', operator: 'contains', value: 'docs' }] },
+        target: { boardKey: 'work', moveToBoardKey: 'docs', phaseKey: null },
+      },
+      ADMIN,
+    );
+    // A label update the dispatcher hasn't filed yet: the card's own history holds it.
+    const committed = await domains.workItems.commitRuleEvaluation({
+      ...scope,
+      workItemId: docsCard.id,
+      ingress: { identity: 'update-1', triggerType: 'github.issueUpdated' },
+      configVersion: 'test',
+      expectedRevision: docsCard.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'routeEvent',
+          idempotencyKey: 'update-1:event-route',
+          event: { type: 'work_item.updated', labels: { added: ['bug'], removed: [] } },
+        },
+      ],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    expect(committed.status).toBe('committed');
+    const before = await snapshot();
+
+    const tried = await send(
+      '/intake/test',
+      { itemId: docsCard.id, event: { type: 'work_item.updated', labels: { added: ['docs'] } } },
+      MEMBER,
+    );
+    expect(tried.status).toBe(200);
+    expect(tried.body.item).toMatchObject({ kind: 'card', id: docsCard.id });
+    expect(tried.body.current).toEqual({ boardKey: 'work', phase: 'intake', routeId: null });
+    expect(tried.body.moves).toMatchObject([
+      {
+        decisionId: null,
+        event: { type: 'work_item.updated', labels: { added: ['docs'], removed: [] } },
+        outcome: 'moves',
+        to: { boardKey: 'docs', phase: 'inbox', routeId: shipAdded.id },
+        rules: [{ routeId: shipAdded.id, name: 'Docs label added', outcome: 'took' }],
+      },
+      {
+        decisionId: expect.any(String),
+        at: '2030-01-01T00:00:00.000Z',
+        outcome: 'stays',
+        to: null,
+        rules: [
+          {
+            routeId: shipAdded.id,
+            outcome: 'no_match',
+            failed: [{ field: 'event.labels.added', operator: 'contains', value: 'docs', actual: ['bug'] }],
+          },
+        ],
+      },
+    ]);
+
+    // A draft card-move rule is tried the same way, by an admin.
+    const drafted = await send('/intake/test', {
+      itemId: docsCard.id,
+      event: { type: 'work_item.closed', reason: 'completed' },
+      boards: [
+        {
+          boardKey: 'work',
+          routes: [
+            { name: 'Closed', on: ['work_item.closed'], target: { moveToBoardKey: 'docs', phaseKey: 'published' } },
+          ],
+        },
+      ],
+    });
+    expect(drafted.body.moves[0]).toMatchObject({
+      outcome: 'moves',
+      to: { boardKey: 'docs', phase: 'published', routeId: 'draft:work:0' },
+    });
+
+    // Only a card moves; an item without one is refused before anything is read for it.
+    expect(await send('/intake/test', { itemId: notRouted.id, event: { type: 'work_item.closed' } })).toMatchObject({
+      status: 422,
+      body: { error: 'intake_event_needs_card' },
+    });
     expect(await snapshot()).toEqual(before);
   });
 });
