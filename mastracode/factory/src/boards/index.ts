@@ -7,6 +7,7 @@ export {
 } from './define-board.js';
 export { DEFAULT_BOARD_ID } from './default-board.js';
 export { cardRuleFacts } from './card-facts.js';
+export { resolveBoardRef } from './board-ref.js';
 export type {
   BoardDefinition,
   BoardEventIntegration,
