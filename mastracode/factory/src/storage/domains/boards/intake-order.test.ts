@@ -176,6 +176,26 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake order on
     expect((await boards.readIntakeOrder(scope)).boardKeys).toEqual(['work']);
   });
 
+  it('lists the newest unresolved Not routed items first, up to a limit', async () => {
+    const { boards, scope } = await setup(['work']);
+    const day = (n: number) => new Date(Date.UTC(2026, 10, n));
+    for (const n of [3, 1, 2, 4, 5]) {
+      await boards.recordIntakeDecision(
+        scope,
+        {
+          idempotencyKey: `k${n}`,
+          outcome: 'not_routed',
+          evaluator: 'intake-order',
+          title: `item ${n}`,
+          sourceKey: `gh:${n}`,
+        },
+        day(n),
+      );
+    }
+    await boards.resolveNotRouted(scope, 'gh:5', 'factory');
+    expect((await boards.listRecentNotRouted(scope, 2)).map(item => item.title)).toEqual(['item 4', 'item 3']);
+  });
+
   it('counts placed items per rule over a window, across pages, ignoring Not routed and other projects', async () => {
     const { boards, scope } = await setup(['work']);
     const now = new Date(Date.UTC(2026, 10, 30));

@@ -354,10 +354,12 @@ export class IntakeCheck {
     const decision = (await this.deps.storage.listRecentNotRouted(scope, INTAKE_ORDER_SAMPLE)).find(
       entry => entry.arrival && entry.url !== null && sameUrl(entry.url, url),
     );
-    if (decision?.arrival) return this.#notRouted(scope, registry, decision);
     const found = await lookupIntakeItem(this.deps.lookups ?? [], scope, url);
+    // A Not routed item may have changed since: a label or a reopen takes it in again with the facts it
+    // has now, so those answer. Its stored arrival answers only when the provider can't be read.
     if (found.status === 'found')
       return { title: found.title, url: found.url, kind: 'fetched', id: null, facts: found.facts };
+    if (decision?.arrival) return this.#notRouted(scope, registry, decision);
     if (found.status === 'not_linked') {
       throw new IntakeCheckRefusal(
         422,
