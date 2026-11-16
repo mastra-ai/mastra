@@ -93,10 +93,15 @@ export function withGithubEventInstallation(event: ParsedGithubWebhook, installa
  * Feeds one webhook to Factory: the rules engine for the events it ingests,
  * then the pull request subscription dispatcher. Throws when ingest fails so
  * the events worker retries; ingest and delivery are idempotent per delivery id.
+ *
+ * Only `orgIds`' subscriptions are woken: when orgs on different apps link the
+ * same repository, each app's copy of the webhook belongs to its own orgs.
+ * Ingest needs no filter, because each org's rows carry its own installation.
  */
 export async function deliverGithubEvent(
   config: GithubEventDeliveryConfig,
   event: ParsedGithubWebhook,
+  orgIds: readonly string[],
   logger?: GithubEventLogger,
 ): Promise<void> {
   if (isFactoryIngestedEvent(event)) {
@@ -112,8 +117,10 @@ export async function deliverGithubEvent(
   const github = config.github;
   const result = await dispatch(event, {
     controller: config.controller,
-    listSubscriptions: (target, options) =>
-      listPullRequestSubscriptionsForWebhook(target, options, github.integrationStorage),
+    listSubscriptions: async (target, options) =>
+      (await listPullRequestSubscriptionsForWebhook(target, options, github.integrationStorage)).filter(row =>
+        orgIds.includes(row.orgId),
+      ),
     retireSubscription: (id, status) => retirePullRequestSubscription(id, status, github.integrationStorage),
     github,
     isAuthorizedSender: notification => isAuthorizedSender(github, notification),

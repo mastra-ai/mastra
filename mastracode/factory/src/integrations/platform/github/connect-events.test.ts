@@ -8,6 +8,7 @@ import {
   FACTORY_GITHUB_PROVIDER_KEY,
   FACTORY_REVIEWS_GITHUB_PROVIDER_KEY,
 } from './connect-events.js';
+import { legacyGithubTopicSubscription } from './legacy-events.js';
 import { LinkedGithubRepositories } from './linked-repositories.js';
 import { PlatformGithubModes } from './mode.js';
 import type { PlatformGithubModeRecord, PlatformGithubModeStorage } from './mode.js';
@@ -226,5 +227,115 @@ describe('factory-github connect events', () => {
     await expect(gate(notification('mastra-factory-reviews[bot]'))).resolves.toBe(true);
     await expect(gate(notification('mastra-platform[bot]'))).resolves.toBe(true);
     await expect(gate(notification('other-reviewer[bot]'))).resolves.toBe(false);
+  });
+
+  it('wakes only the orgs each app serves when orgs on different apps link the same repository', async () => {
+    // org-1 switched to installation 900; org-2 still links the repository through the legacy app's installation 7.
+    const repositories = linked([
+      { installationId: 900, repositoryId: 101, orgId: 'org-1' },
+      { installationId: 7, repositoryId: 101, orgId: 'org-2' },
+    ]);
+    const modes = new PlatformGithubModes(() => modeStorage({ 'org-1': switched }));
+    const subscriptions = [
+      { id: 'sub-org-1', orgId: 'org-1', status: 'open' },
+      { id: 'sub-org-2', orgId: 'org-2', status: 'open' },
+    ];
+    const github = {
+      integrationStorage: { subscriptions: { listByTarget: async () => subscriptions } },
+      sourceControlStorage: { sessions: { getBySessionId: async () => null } },
+      identity: new GithubAppIdentity('mastra-platform', ['mastra-factory', 'mastra-factory-reviews']),
+      slug: 'mastra-platform',
+      getRepositoryCollaboratorPermission: vi.fn(async () => 'none' as const),
+    } as unknown as GithubWebhookDispatchIntegration;
+    const woken: string[][] = [];
+    const dispatch = vi.fn<typeof dispatchGithubWebhook>(async (_event, context) => {
+      const rows = await context.listSubscriptions({ owner: 'acme', repo: 'repo', number: 17 } as never, undefined);
+      woken.push(rows.map(row => row.id));
+      return { delivered: rows.length, failed: 0, skipped: 0, ignored: false };
+    });
+    const delivery = {
+      controller: {} as never,
+      github,
+      ingestFactoryEvent: vi.fn(async () => ({}) as never),
+      dispatch,
+    };
+    const connect = connectGithubEventHandler({ delivery, repositories, modes });
+    const legacy = legacyGithubTopicSubscription({ delivery, repositories, modes, reconcile: vi.fn() });
+
+    // GitHub sends each app its own copy of one comment, under its own delivery id.
+    await connect(connectEvent('issue_comment.created', pullRequestPayload('created', 900)));
+    await legacy.route(
+      {
+        id: 'legacy-1',
+        timestamp: SWITCHED_AT + 1,
+        fields: {
+          kind: 'issue_comment',
+          deliveryId: 'legacy-delivery-1',
+          payload: JSON.stringify(pullRequestPayload('created', 7)),
+        },
+      },
+      { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never },
+    );
+
+    expect(woken).toEqual([['sub-org-1'], ['sub-org-2']]);
+  });
+
+  it("re-reads links and modes before dropping an event another replica's switch made this one's", async () => {
+    // This replica holds the events lease and cached org-1 as legacy, linked through the legacy installation.
+    const links = [{ installationId: 7, repositoryId: 101, orgId: 'org-1' }];
+    const storage = modeStorage({});
+    const reads = vi.fn();
+    const counted = {
+      ...storage,
+      settings: {
+        ...storage.settings,
+        get: async (orgId: string, userId: string) => (reads(), storage.settings.get(orgId, userId)),
+      },
+    } as unknown as PlatformGithubModeStorage;
+    const repositories = linked(links);
+    const modes = new PlatformGithubModes(() => counted);
+    let now = 100_000;
+    const dispatch = vi.fn<typeof dispatchGithubWebhook>().mockResolvedValue({
+      delivered: 1,
+      failed: 0,
+      skipped: 0,
+      ignored: false,
+    });
+    const github = {
+      integrationStorage: {} as never,
+      sourceControlStorage: { sessions: { getBySessionId: async () => null } },
+      identity: new GithubAppIdentity('mastra-platform', ['mastra-factory']),
+      slug: 'mastra-platform',
+      getRepositoryCollaboratorPermission: vi.fn(async () => 'none' as const),
+    } as unknown as GithubWebhookDispatchIntegration;
+    const handle = connectGithubEventHandler({
+      delivery: { controller: {} as never, github, ingestFactoryEvent: vi.fn(async () => ({}) as never), dispatch },
+      repositories,
+      modes,
+      now: () => now,
+    });
+    await expect(repositories.forRepository(101)).resolves.toHaveLength(1);
+    await expect(modes.get('org-1')).resolves.toMatchObject({ mode: 'legacy' });
+
+    // Another replica switches org-1: links are re-pointed and the mode saved, but no broadcast has arrived yet.
+    links[0] = { installationId: 900, repositoryId: 101, orgId: 'org-1' };
+    await storage.settings.save('org-1', '__platform_github_mode__', switched);
+
+    await handle(connectEvent('pull_request.opened', pullRequestPayload()));
+    expect(dispatch).toHaveBeenCalledTimes(1);
+
+    // An event for a repository Factory doesn't link never sends this replica back to storage.
+    reads.mockClear();
+    const invalidate = vi.spyOn(repositories, 'invalidate');
+    now += 60_000;
+    await handle(
+      connectEvent('pull_request.opened', {
+        ...pullRequestPayload(),
+        repository: { id: 555, full_name: 'acme/other' },
+      }),
+    );
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(reads).not.toHaveBeenCalled();
+    expect(invalidate).not.toHaveBeenCalled();
   });
 });

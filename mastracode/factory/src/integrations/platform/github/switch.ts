@@ -174,6 +174,9 @@ export type GithubSwitchResult =
   | { status: 'blocked'; plan: GithubSwitchPlan }
   | { status: 'conflict'; conflicts: SourceControlInstallationMoveConflict[] };
 
+/** How often a switched org's installations are re-read from the apps. */
+const REFRESH_INTERVAL_MS = 5 * 60_000;
+
 export interface PlatformGithubSwitchOptions {
   integrationId: string;
   connect: ConnectClient;
@@ -193,6 +196,7 @@ export interface PlatformGithubSwitchOptions {
  */
 export class PlatformGithubSwitch {
   readonly #options: PlatformGithubSwitchOptions;
+  readonly #refreshedAt = new Map<string, number>();
 
   constructor(options: PlatformGithubSwitchOptions) {
     this.#options = options;
@@ -256,6 +260,50 @@ export class PlatformGithubSwitch {
       sourceControl.linkedRepositoriesChanged({ integrationId: this.#options.integrationId, local: true });
     }
     return result;
+  }
+
+  /**
+   * Records the accounts both apps were installed on since a switched org's
+   * switch, and a reconnected installation's new connections. Never removes
+   * one: an uninstalled app's installation fails as inactive instead.
+   * Re-reads at most every few minutes per org; returns the record in force.
+   */
+  async refresh(orgId: string): Promise<PlatformGithubModeRecord> {
+    const record = await this.#options.modes.get(orgId);
+    const now = (this.#options.now ?? Date.now)();
+    if (record.mode !== 'connect' || now - (this.#refreshedAt.get(orgId) ?? -Infinity) < REFRESH_INTERVAL_MS) {
+      return record;
+    }
+    this.#refreshedAt.set(orgId, now);
+    const { installations: found } = planGithubSwitch({
+      scans: await this.#scan(await this.#appConnections()),
+      legacy: [],
+    });
+    const recorded = record.installations ?? [];
+    const merged = recorded.map(installation => {
+      const current = found.find(candidate => candidate.installationId === installation.installationId);
+      return current
+        ? { ...installation, connectionId: current.connectionId, reviewsConnectionId: current.reviewsConnectionId }
+        : installation;
+    });
+    for (const installation of found) {
+      if (!recorded.some(candidate => candidate.installationId === installation.installationId))
+        merged.push(installation);
+    }
+    const changed = merged.some((installation, index) => {
+      const before = recorded[index];
+      return (
+        !before ||
+        before.connectionId !== installation.connectionId ||
+        before.reviewsConnectionId !== installation.reviewsConnectionId
+      );
+    });
+    if (!changed || record.switchedAt === undefined) return record;
+    return this.#options.modes.saveConnect(orgId, {
+      switchedAt: record.switchedAt,
+      ...(record.switchedBy ? { switchedBy: record.switchedBy } : {}),
+      installations: merged,
+    });
   }
 
   #sourceControl(storage: FactoryStorage): SourceControlStorage {
