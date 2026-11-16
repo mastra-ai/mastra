@@ -1031,6 +1031,40 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     }
   }
 
+  /**
+   * How often each card-move rule was skipped since `since`, with its newest skip, keyed by rule id.
+   * Reads skipped rows newest first, a page at a time, and stops at the first one older than `since`.
+   */
+  async summarizeSkippedByRoute(
+    scope: StoredBoardScope,
+    since: Date,
+    options: { pageSize?: number } = {},
+  ): Promise<Record<string, { count: number; latest: StoredIntakeDecisionRecord }>> {
+    const pageSize = options.pageSize ?? 500;
+    const summary: Record<string, { count: number; latest: StoredIntakeDecisionRecord }> = {};
+    let cursor: IntakeDecisionRow | undefined;
+    for (;;) {
+      const rows = await this.ops.findMany<IntakeDecisionRow>(
+        INTAKE_DECISIONS,
+        { ...scopeWhere(scope), outcome: 'rule_skipped' },
+        {
+          orderBy: NEWEST_DECISION_ORDER,
+          limit: pageSize,
+          ...(cursor && { cursor: { values: [cursor.decided_at, cursor.id] } }),
+        },
+      );
+      for (const row of rows) {
+        if (row.decided_at < since) return summary;
+        if (!row.route_id) continue;
+        const seen = summary[row.route_id];
+        if (seen) seen.count += 1;
+        else summary[row.route_id] = { count: 1, latest: toIntakeDecisionRecord(row) };
+      }
+      if (rows.length < pageSize) return summary;
+      cursor = rows.at(-1);
+    }
+  }
+
   /** Marks the Not routed rows for a source resolved once a card is filed for it. Returns how many. */
   async resolveNotRouted(scope: StoredBoardScope, sourceKey: string, by: string, now = new Date()): Promise<number> {
     return this.ops.updateMany(

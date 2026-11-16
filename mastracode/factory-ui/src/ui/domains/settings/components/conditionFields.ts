@@ -64,18 +64,32 @@ const ROUTE_FACT_PROPERTIES = {
   },
 } as const;
 
+/** The events that fire on a label or assignee change, and so carry what changed. */
+const UPDATE_EVENTS = new Set(['work_item.updated', 'pull_request.updated']);
+/** What changed, keyed by path below `event` so each reads as one fact: `event.labels.added`. */
+const CHANGE_FACTS = {
+  'labels.added': { type: 'string', title: 'Label added' },
+  'labels.removed': { type: 'string', title: 'Label removed' },
+  'assignees.added': { type: 'string', title: 'Assignee added' },
+  'assignees.removed': { type: 'string', title: 'Assignee removed' },
+};
+
+/** Events that only file a new issue, so they carry no event facts. */
+const ISSUE_ARRIVAL = new Set(['work_item.opened', 'work_item.created']);
+
 /**
- * The facts an intake route handling `on` can test. As the route API requires, event facts
- * apply only to a route handling an event besides a bare arrival (`work_item.opened` or the older
- * `work_item.created`), and `event.reason` only
- * to one handling `work_item.closed`, the one event that carries a reason.
+ * The facts an intake route handling `on` can test. As the route API requires, event facts apply only to a route
+ * handling an event besides an issue arriving (`work_item.opened`, or the legacy `work_item.created`);
+ * `pull_request.opened` also moves cards, so it keeps them. `event.reason` applies only to a route handling
+ * `work_item.closed`, the one event that carries a reason. What changed (`event.labels.added` and the like) applies only
+ * to one handling an update event.
  */
 export function intakeRouteFacts(on: readonly string[]): Facts {
-  if (on.every(type => type === 'work_item.opened' || type === 'work_item.created'))
-    return { type: 'object', properties: ROUTE_FACT_PROPERTIES };
+  if (on.every(type => ISSUE_ARRIVAL.has(type))) return { type: 'object', properties: ROUTE_FACT_PROPERTIES };
   const event = {
     type: { type: 'string', title: 'Type' },
     ...(on.includes('work_item.closed') ? { reason: { type: 'string', title: 'Reason' } } : {}),
+    ...(on.some(type => UPDATE_EVENTS.has(type)) ? CHANGE_FACTS : {}),
   };
   return {
     type: 'object',
@@ -177,15 +191,22 @@ const FIELD_SHAPES: Record<string, FieldShape> = {
   'pullRequest.closesIssue': { label: 'Pull request closes an issue', options: yesNo(), strict: true },
   'closedIssue.phase': { label: 'Closed issue phase' },
   'closedIssue.hasPullRequest': { label: 'Closed issue has a pull request', options: yesNo(), strict: true },
+  'event.labels.added': { label: 'Label added', list: true },
+  'event.labels.removed': { label: 'Label removed', list: true },
+  'event.assignees.added': { label: 'Assignee added', list: true },
+  'event.assignees.removed': { label: 'Assignee removed', list: true },
   'event.type': {
     label: 'Event',
     strict: true,
     options: [
-      { value: 'work_item.opened', label: 'New issue' },
+      { value: 'work_item.opened', label: 'Issue opened' },
       { value: 'work_item.closed', label: 'Closed' },
       { value: 'work_item.reopened', label: 'Reopened' },
+      { value: 'work_item.updated', label: 'Labels or assignees changed' },
       { value: 'pull_request.opened', label: 'PR opened' },
-      { value: 'pull_request.synchronized', label: 'PR updated' },
+      { value: 'pull_request.reopened', label: 'PR reopened' },
+      { value: 'pull_request.updated', label: 'PR labels or assignees changed' },
+      { value: 'pull_request.synchronized', label: 'PR got new commits' },
       { value: 'pull_request.review_requested', label: 'Review requested' },
       { value: 'pull_request.merged', label: 'PR merged' },
       { value: 'pull_request.closed', label: 'PR closed' },
@@ -200,6 +221,11 @@ const FIELD_SHAPES: Record<string, FieldShape> = {
     ],
   },
 };
+
+/** The name the rule builder gives a fact, such as `Pull request author trust` for `pullRequest.trusted`. */
+export function fieldLabel(field: string): string | undefined {
+  return FIELD_SHAPES[field]?.label;
+}
 
 /**
  * The facts a rule can test, as condition editor fields: one per leaf fact, with its values to
@@ -242,7 +268,7 @@ const BOOLEAN_TEXT: Record<string, readonly [yes: string, no: string]> = {
 /** Values named after a product or a phase keep their capitals mid-sentence. */
 const PROPER_VALUES = new Set(['source.integration', 'source.provider', 'closedIssue.phase']);
 
-const EVERY_FACT = intakeRouteFacts(['work_item.opened', 'work_item.closed']);
+const EVERY_FACT = intakeRouteFacts(['work_item.opened', 'work_item.closed', 'work_item.updated']);
 
 function describeMember(member: RuleCondition | RuleGroup, fields: ReadonlyMap<string, FilterBarField>): string {
   if ('conditions' in member) return `(${describeMembers(member, fields)})`;

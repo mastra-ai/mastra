@@ -982,6 +982,11 @@ export function registerApiCommand(program: CommanderCommand): void {
       },
     ],
   });
+  addAction(factoryIntake, 'skipped', FACTORY_API_ROUTE_CATALOG.intakeSkippedList, {
+    description:
+      "How often each card-move rule was skipped in the last 30 days because its target couldn't take the card, with the newest skip",
+    routePlacement: 'origin',
+  });
   addAction(factoryIntake, 'test', FACTORY_API_ROUTE_CATALOG.intakeTest, {
     description: 'Show where intake would file one item, by URL or item id, and what every rule answered',
     input: 'required',

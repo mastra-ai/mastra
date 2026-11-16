@@ -1,4 +1,5 @@
 import type { IntakeDryRunResponse, IntakeTestResponse } from '../../../api/types';
+import { fieldLabel } from '../settings/components/conditionFields';
 
 type DryRunBoard = IntakeDryRunResponse['boards'][number];
 type DryRunRule = DryRunBoard['rules'][number];
@@ -130,7 +131,15 @@ export function moveVerdictLabel(move: CardMove, boardName: (key: string) => str
   }
 }
 
-/** What one card-move rule answered: `yes`, `no, …`, `matched, but Ship added took it first`. */
+/** A server reason with each fact it names (`pullRequest.trusted`) given its rule-builder name. */
+function readableReason(reason: string): string {
+  return reason.replace(/\b[a-z][A-Za-z]*(?:\.[A-Za-z]+)+\b/g, field => {
+    const label = fieldLabel(field);
+    return label ? `“${label}”` : field;
+  });
+}
+
+/** What one card-move rule answered: `yes`, `no, …`, `matched, but Ship added took it first`, `skipped, …`. */
 export function moveRuleVerdictLabel(rule: MoveRule, ruleName: (routeId: string) => string): string {
   switch (rule.outcome) {
     case 'took':
@@ -140,7 +149,7 @@ export function moveRuleVerdictLabel(rule: MoveRule, ruleName: (routeId: string)
         ? `matched, but ${ruleName(rule.to.routeId)} took it first`
         : 'matched, but an earlier rule took it';
     case 'skipped':
-      return rule.reason ? `matched, but ${rule.reason}` : "matched, but its target can't take the card";
+      return rule.reason ? `skipped, ${readableReason(rule.reason)}` : "skipped, its target can't take the card";
     case 'disabled':
       return 'off';
     case 'no_match':

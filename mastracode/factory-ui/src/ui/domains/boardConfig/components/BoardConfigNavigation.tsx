@@ -15,11 +15,11 @@ import { SidebarNavigationSkeleton } from '../../../ui/SidebarNavigationSkeleton
 import { orderedBoards } from '../../factory/boardCatalog';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
 import { useBoardDraft, useShownDraft } from '../BoardDraftProvider';
-import { boardCardMovesPath, boardConfigPath, boardSkillsPath, newBoardPath } from '../boardConfigPaths';
+import { boardRulesPath, boardConfigPath, boardSkillsPath, newBoardPath } from '../boardConfigPaths';
 import type { BoardConfigLocation } from '../boardConfigPaths';
 import { movePhase } from '../boardDraft';
 import { AddPhaseButton } from './AddPhaseButton';
-import { IconArrowRightLeft } from '@mastra/playground-ui/icons/central/IconArrowRightLeft';
+import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
 import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
 import { IconDotGrid2x3 } from '@mastra/playground-ui/icons/central/IconDotGrid2x3';
 import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
@@ -29,10 +29,10 @@ import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedi
 import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 
 /**
- * The factory's skills no phase runs, then the board switcher and the open board's pages: General, Card moves,
+ * The factory's skills no phase runs, then the board switcher and the open board's pages: General, Rules,
  * then one page per phase, in board order. Skills sit above the switcher because they belong to no board.
  */
-export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills, moves }: BoardConfigLocation) {
+export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills, rules }: BoardConfigLocation) {
   const query = useBoardQuery(factoryId, boardId);
 
   return (
@@ -49,15 +49,15 @@ export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills, mo
       <Sidebar.NavList>
         <ConfigLink
           to={boardConfigPath(factoryId, boardId)}
-          isActive={!phaseKey && !skills && !moves}
+          isActive={!phaseKey && !skills && !rules}
           icon={<IconSettingsSliderHor />}
           label="General"
         />
         <ConfigLink
-          to={boardCardMovesPath(factoryId, boardId)}
-          isActive={moves === true}
-          icon={<IconArrowRightLeft />}
-          label="Card moves"
+          to={boardRulesPath(factoryId, boardId)}
+          isActive={rules === true}
+          icon={<IconBranch />}
+          label="Rules"
         />
       </Sidebar.NavList>
       <section className="flex flex-col gap-1" aria-label="Phases">
@@ -74,7 +74,7 @@ export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills, mo
             boardId={boardId}
             phaseKey={phaseKey}
             skills={skills}
-            moves={moves}
+            rules={rules}
             response={query.data}
           />
         )}
@@ -143,7 +143,7 @@ function PhaseList({
   boardId,
   phaseKey,
   skills,
-  moves,
+  rules,
   response,
 }: BoardConfigLocation & {
   response: StoredBoardResponse;
@@ -151,8 +151,8 @@ function PhaseList({
   const { board, canEdit } = response;
   const { draft, locked, setDraft } = useBoardDraft(factoryId, boardId, board);
   const editable = canEdit === true && board.editable === true;
-  // The skills and card moves pages have no save bar to keep a reorder made there.
-  const sortable = editable && !skills && !moves && !locked && draft.phases.length > 2;
+  // The skills and rules pages have no save bar to keep a reorder made there.
+  const sortable = editable && !skills && !rules && !locked && draft.phases.length > 2;
   const [drag, setDrag] = useState<Drag>();
   const [announcement, setAnnouncement] = useState('');
 

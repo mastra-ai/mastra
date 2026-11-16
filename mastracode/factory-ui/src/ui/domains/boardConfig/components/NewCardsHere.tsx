@@ -1,57 +1,57 @@
-import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Link } from 'react-router';
 
 import type { InstalledBoardInfo } from '../../../../api/types';
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { useIntakeRoutesQuery } from '../../../../hooks/useIntakeRoutes';
-import { finalCatchAll, placesNewCards } from '../../settings/components/intakeRoutes';
+import { useBoardRulesQuery } from '../../../../hooks/useIntakeRoutes';
+import { useIntakeOrderQuery } from '../../../../hooks/useIntakeOrder';
+import { newItemRules, ordinal } from '../../boardRules/ruleLanes';
 import { SettingsSubsection } from '../../settings/components/SettingsSubsection';
-import { NEW_CARD_ROUTES_ANCHOR, settingsSectionPath } from '../../settings/settingsSections';
+import { boardRulesPath } from '../boardConfigPaths';
 
 /**
- * How many intake routes land new cards on this board. Routes are one Factory-wide ordered list, so they are listed
- * and edited in Work Intake; routes below the first one taking every new card never place a card and aren't counted.
+ * What this board takes when a new item arrives: how many of its rules can file one, and where it sits in the intake
+ * order. Rules below an arrival lane's first rule taking every item are never reached, so they aren't counted.
  */
 export function NewCardsHere({ factoryId, board }: { factoryId: string; board: InstalledBoardInfo }) {
-  const query = useIntakeRoutesQuery(factoryId);
-  const boards = useBoardCatalog(factoryId).data ?? [];
-  const arrivals = (query.data?.intakeRoutes ?? []).filter(route => route.enabled && placesNewCards(route));
-  const catchAll = finalCatchAll(arrivals);
-  const catchAllIndex = catchAll ? arrivals.indexOf(catchAll) : -1;
-  const reachable = catchAllIndex === -1 ? arrivals : arrivals.slice(0, catchAllIndex + 1);
-  // A route joining a pull request to its issue's card adds no card, so it isn't counted.
-  const count = reachable.filter(route => !route.target.joinClosedIssue && route.target.boardKey === board.id).length;
-  const defaultBoard = boards.find(candidate => candidate.id === DEFAULT_BOARD_ID) ?? boards[0];
-  const takesLeftovers = catchAllIndex === -1 && defaultBoard?.id === board.id;
+  const rulesQuery = useBoardRulesQuery(factoryId, board.id);
+  const orderQuery = useIntakeOrderQuery(factoryId);
+  const { count } = newItemRules(rulesQuery.data?.intakeRoutes ?? []);
+  const at = (orderQuery.data?.boards ?? []).findIndex(entry => entry.boardKey === board.id);
+  const failed = rulesQuery.isError || orderQuery.isError;
 
   return (
     <SettingsSubsection
-      title="New cards"
+      title="New items"
       action={
-        <Button
-          size="sm"
-          variant="ghost"
-          render={<Link to={settingsSectionPath(factoryId, 'intake', NEW_CARD_ROUTES_ANCHOR)} />}
-        >
-          Edit routes
+        <Button size="sm" variant="ghost" render={<Link to={boardRulesPath(factoryId, board.id)} />}>
+          Edit rules
         </Button>
       }
     >
-      <Txt as="p" variant="caption" tone="muted" role={query.isError ? 'alert' : 'status'}>
-        {statusText(query, count, takesLeftovers)}
+      <Txt
+        as="p"
+        variant="caption"
+        tone="muted"
+        role={failed ? 'alert' : 'status'}
+        className="flex flex-wrap gap-x-3 gap-y-1"
+      >
+        {rulesQuery.isPending || orderQuery.isPending ? (
+          'Loading rules…'
+        ) : failed ? (
+          'Rules didn’t load.'
+        ) : (
+          <>
+            <span>{ruleCount(count)}</span>
+            <span>{at === -1 ? 'Not in the intake order' : `Checked ${ordinal(at + 1)}`}</span>
+          </>
+        )}
       </Txt>
     </SettingsSubsection>
   );
 }
 
-function statusText(query: { isPending: boolean; isError: boolean }, count: number, takesLeftovers: boolean) {
-  if (query.isPending) return 'Loading intake routes…';
-  if (query.isError) return 'Intake routes didn’t load.';
-  if (count === 0) {
-    return takesLeftovers ? 'Cards no intake route takes land here.' : 'No intake route sends new cards here.';
-  }
-  const routes = count === 1 ? '1 intake route sends' : `${count} intake routes send`;
-  return `${routes} new cards here${takesLeftovers ? ', plus cards no route takes' : ''}.`;
+function ruleCount(count: number) {
+  if (count === 0) return 'No rules for new items';
+  return count === 1 ? '1 rule for new items' : `${count} rules for new items`;
 }

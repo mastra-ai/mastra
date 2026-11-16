@@ -43,7 +43,7 @@ function CardMoves({ moves, boardName }: { moves: IntakeTestResponse['moves']; b
   return (
     <div className="flex flex-col gap-2">
       <Txt as="p" variant="caption" tone="muted">
-        Replayed against the card's current phase and facts.
+        Replays run against the card's current phase and facts.
       </Txt>
       <ul aria-label="Card moves" className="flex flex-col gap-2">
         {moves.map((move, index) => {

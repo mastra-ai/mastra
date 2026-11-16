@@ -99,6 +99,12 @@ export const queryKeys = {
   // Under the routes' key: a rule or order change refreshes the counts.
   intakeDryRun: (factoryProjectId: string | undefined) =>
     [...queryKeys.intakeRoutes(factoryProjectId), 'dry-run'] as const,
+  intakeOrder: (factoryProjectId: string | undefined) => ['intake', 'order', factoryProjectId ?? null] as const,
+  // Under the routes' key: a rule change refreshes its skips.
+  intakeSkipped: (factoryProjectId: string | undefined) =>
+    [...queryKeys.intakeRoutes(factoryProjectId), 'skipped'] as const,
+  intakeNotRouted: (factoryProjectId: string | undefined) =>
+    ['intake', 'not-routed', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
   // Under the board's key: whatever refreshes or rewrites the board's cards reaches these too.

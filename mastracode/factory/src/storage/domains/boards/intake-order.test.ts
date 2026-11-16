@@ -221,4 +221,40 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake order on
     expect(await boards.countPlacedByRoute(scope, since, { pageSize: 3 })).toEqual({ 'route-a': 7, 'route-b': 1 });
     expect(await boards.countPlacedByRoute(scope, since)).toEqual({ 'route-a': 7, 'route-b': 1 });
   });
+
+  // What the route lists (window, newest skip, other projects, placed rows) is covered by
+  // "lists how often each card-move rule was skipped…" in routes/intake-routes.test.ts; this pins paging.
+  it('sums skipped card-move rules across pages, stopping at the window', async () => {
+    const { boards, scope } = await setup(['work']);
+    const now = new Date(Date.UTC(2026, 10, 30));
+    const daysAgo = (n: number) => new Date(now.getTime() - n * 86_400_000);
+    const skipped = (key: string, routeId: string, n: number) =>
+      boards.recordIntakeDecision(
+        scope,
+        {
+          idempotencyKey: key,
+          outcome: 'rule_skipped',
+          evaluator: 'intake-order',
+          title: key,
+          boardKey: 'work',
+          routeId,
+        },
+        daysAgo(n),
+      );
+    for (const [key, n] of [
+      ['a-old', 5],
+      ['a-new', 1],
+      ['a-mid', 3],
+      ['a-late', 29],
+      ['a-expired', 31],
+    ] as const) {
+      await skipped(key, 'route-a', n);
+    }
+    await skipped('b1', 'route-b', 10);
+
+    expect(await boards.summarizeSkippedByRoute(scope, daysAgo(30), { pageSize: 2 })).toMatchObject({
+      'route-a': { count: 4, latest: { title: 'a-new' } },
+      'route-b': { count: 1, latest: { title: 'b1' } },
+    });
+  });
 });
