@@ -240,14 +240,17 @@ export class IntegrationStorage extends FactoryStorageDomain {
     });
   }
 
-  /** A typed handle pre-scoped to `integrationId`. */
+  /**
+   * A typed handle pre-scoped to `integrationId`. Pass a transaction's `ops`
+   * to read and write inside that transaction.
+   */
   forIntegration<
     TConnection = Record<string, unknown>,
     TSettings = Record<string, unknown>,
     TSubscription = Record<string, unknown>,
-  >(integrationId: string): IntegrationStorageHandle<TConnection, TSettings, TSubscription> {
+  >(integrationId: string, ops?: FactoryStorageOps): IntegrationStorageHandle<TConnection, TSettings, TSubscription> {
     if (!integrationId) throw new Error('[IntegrationStorage] integrationId is required.');
-    const db = () => this.#db;
+    const db = () => ops ?? this.#db;
     const scoped = { integration_id: integrationId };
 
     const mapConnection = async (row: ConnectionRow): Promise<IntegrationConnection<TConnection>> => ({

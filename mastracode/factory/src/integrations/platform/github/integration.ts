@@ -85,6 +85,7 @@ import { parseAuthorizedBotsEnv } from '../../github/webhook.js';
 import { PlatformConnectIntegration } from '../foundation/index.js';
 import type { PlatformConnectEventDelivery, PlatformTopicSubscription } from '../foundation/index.js';
 import { logPlatformBootInfo, logPlatformError, logPlatformInfo, logPlatformWarn } from '../logging.js';
+import { platformErrorMessage, platformErrorStatus } from '../platform-connect.js';
 import type { PlatformConnectOption } from '../platform-connect.js';
 import {
   connectGithubEventHandler,
@@ -103,6 +104,8 @@ import type {
 import { LinkedGithubRepositories } from './linked-repositories.js';
 import { PlatformGithubModes } from './mode.js';
 import type { PlatformGithubConnectInstallation, PlatformGithubModeRecord, PlatformGithubModeStorage } from './mode.js';
+import { PlatformGithubSwitch } from './switch.js';
+import type { GithubSwitchResult } from './switch.js';
 import type {
   GithubCall,
   GithubComment,
@@ -226,6 +229,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
   });
   /** One Connect transport per switched installation, keeping its token cache warm. */
   readonly #connectTransports = new Map<string, ConnectGithubTransport>();
+  readonly #switch: PlatformGithubSwitch;
   readonly #githubApiUrl: string | undefined;
   readonly #endpointHost: string;
   readonly #slug: string | undefined;
@@ -576,6 +580,10 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     super({
       id: 'github',
       providerKeys: PLATFORM_GITHUB_PROVIDER_KEYS,
+      connectProviders: [
+        { provider: FACTORY_GITHUB_PROVIDER_KEY, integrationId: FACTORY_GITHUB_PROVIDER_KEY },
+        { provider: FACTORY_REVIEWS_GITHUB_PROVIDER_KEY, integrationId: FACTORY_REVIEWS_GITHUB_PROVIDER_KEY },
+      ],
       ...(options.connect ? { connect: options.connect } : {}),
     });
     this.#rules = resolveGithubRules(options.rules);
@@ -583,6 +591,14 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     this.#endpointHost = new URL(this.connect.baseUrl).host;
     this.#slug = options.slug;
     this.#githubApiUrl = options.githubApiUrl;
+    this.#switch = new PlatformGithubSwitch({
+      integrationId: this.id,
+      connect: this.connect,
+      tokens: this.#tokens,
+      listConnections: () => this.listConnections({ fresh: true }),
+      modes: this.#modes,
+      ...(options.githubApiUrl ? { githubApiUrl: options.githubApiUrl } : {}),
+    });
     // Identity is deliberately NOT taken from `options.slug`. That slug names
     // the deployment's own self-hosted GitHub App, which is a different App
     // than the one this integration posts as — and on a Platform deployment it
@@ -685,6 +701,8 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
       this.#connectRoute(ctx),
       this.#connectUserRoute(ctx),
       ...this.#userPatRoutes(ctx),
+      ...this.#userConnectionRoutes(ctx),
+      ...this.#switchRoutes(ctx),
       ...buildGithubRoutes({
         auth: ctx.auth,
         sandbox: ctx.sandbox,
@@ -821,7 +839,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
    * Saving checks the token against GitHub; the token is never sent back.
    */
   #userPatRoutes(ctx: IntegrationContext): ApiRoute[] {
-    const caller = async (c: Parameters<typeof loose>[0]) => {
+    const caller = async (c: ReturnType<typeof loose>) => {
       await ctx.auth.ensureUser(loose(c));
       const tenant = ctx.auth.tenant(loose(c));
       return tenant?.orgId && tenant.userId ? { orgId: tenant.orgId, userId: tenant.userId } : null;
@@ -881,6 +899,168 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
           await clearGithubUserPat(this.integrationStorage, user.orgId, user.userId);
           this.#tokens.invalidateUser(user.orgId, user.userId);
           return c.json(await getGithubUserPatStatus(this.integrationStorage, user.orgId, user.userId));
+        },
+      }),
+    ];
+  }
+
+  /**
+   * The signed-in user's own end-user `factory-github` connection: writes made
+   * for them in a switched org run as them. Starting one mints a connect
+   * session scoped to the user, so the connection is theirs, not the org's.
+   */
+  #userConnectionRoutes(ctx: IntegrationContext): ApiRoute[] {
+    const caller = async (c: ReturnType<typeof loose>) => {
+      await ctx.auth.ensureUser(loose(c));
+      const tenant = ctx.auth.tenant(loose(c));
+      return tenant?.orgId && tenant.userId ? { orgId: tenant.orgId, userId: tenant.userId } : null;
+    };
+    return [
+      registerApiRoute('/web/github/user-connection', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async rawContext => {
+          const c = loose(rawContext);
+          const user = await caller(c);
+          if (!user) return c.json({ error: 'unauthorized' }, 401);
+          try {
+            const connections = await this.connect.withResource(user.userId).listConnections();
+            const own = connections.find(
+              connection =>
+                connection.integrationId === FACTORY_GITHUB_PROVIDER_KEY && connection.resourceId === user.userId,
+            );
+            return c.json({
+              connection: own ? { id: own.id, status: own.status, accountLabel: own.accountLabel ?? null } : null,
+              pat: await getGithubUserPatStatus(this.integrationStorage, user.orgId, user.userId),
+            });
+          } catch (error) {
+            return c.json({ error: 'platform_request_failed', message: platformErrorMessage(error) }, 502);
+          }
+        },
+      }),
+      registerApiRoute('/web/github/user-connection/connect-session', {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async rawContext => {
+          const c = loose(rawContext);
+          const user = await caller(c);
+          if (!user) return c.json({ error: 'unauthorized' }, 401);
+          try {
+            const session = await this.connect
+              .withResource(user.userId)
+              .createConnectSession(FACTORY_GITHUB_PROVIDER_KEY);
+            this.#tokens.invalidateUser(user.orgId, user.userId);
+            c.header('Cache-Control', 'no-store');
+            return c.json(session, 201);
+          } catch (error) {
+            const status = platformErrorStatus(error);
+            return c.json(
+              { error: 'platform_request_failed', message: platformErrorMessage(error) },
+              status === 403 ? 403 : 502,
+            );
+          }
+        },
+      }),
+    ];
+  }
+
+  /**
+   * The org admin's move from the legacy GitHub App to the Mastra Factory
+   * apps. `GET` reports the mode, the apps' connections and what still blocks
+   * the switch; `POST` switches, once, and never back.
+   */
+  #switchRoutes(ctx: IntegrationContext): ApiRoute[] {
+    const tenantOf = async (c: ReturnType<typeof loose>) => {
+      if (!ctx.auth.enabled()) return { response: c.json({ error: 'auth_disabled' }, 403) } as const;
+      await ctx.auth.ensureUser(loose(c));
+      const tenant = ctx.auth.tenant(loose(c));
+      if (!tenant) return { response: c.json({ error: 'unauthorized' }, 401) } as const;
+      if (!tenant.orgId) return { response: c.json({ error: 'organization_required' }, 403) } as const;
+      if (!ctx.factoryStorage) return { response: c.json({ error: 'storage_unavailable' }, 503) } as const;
+      return {
+        tenant: { orgId: tenant.orgId, userId: tenant.userId },
+        storage: ctx.factoryStorage,
+        admin: await ctx.auth.isOrganizationAdmin(loose(c), tenant.orgId),
+      } as const;
+    };
+    const adminRequired = (c: ReturnType<typeof loose>) =>
+      c.json(
+        {
+          error: 'organization_admin_required',
+          message: 'Organization administrator access is required to switch GitHub apps.',
+        },
+        403,
+      );
+    return [
+      registerApiRoute('/web/integrations/platform/github/switch', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async rawContext => {
+          const c = loose(rawContext);
+          const resolved = await tenantOf(c);
+          if ('response' in resolved) return resolved.response;
+          if (!resolved.admin) return adminRequired(c);
+          try {
+            return c.json(await this.#switch.status(resolved.storage, resolved.tenant.orgId));
+          } catch (error) {
+            return c.json({ error: 'platform_request_failed', message: platformErrorMessage(error) }, 502);
+          }
+        },
+      }),
+      registerApiRoute('/web/integrations/platform/github/switch', {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async rawContext => {
+          const c = loose(rawContext);
+          const resolved = await tenantOf(c);
+          if ('response' in resolved) return resolved.response;
+          if (!resolved.admin) return adminRequired(c);
+          const { orgId, userId } = resolved.tenant;
+          let result: GithubSwitchResult;
+          try {
+            result = await this.#switch.switch(resolved.storage, { orgId, userId });
+          } catch (error) {
+            return c.json({ error: 'switch_failed', message: platformErrorMessage(error) }, 502);
+          }
+          if (result.status === 'blocked') {
+            return c.json({ error: 'switch_preconditions_failed', plan: result.plan }, 409);
+          }
+          if (result.status === 'conflict') {
+            return c.json({ error: 'installation_conflict', conflicts: result.conflicts }, 409);
+          }
+          if (result.status === 'already_switched') {
+            return c.json({ switched: false, mode: result.record.mode, switchedAt: result.record.switchedAt ?? null });
+          }
+          logPlatformInfo('Org switched GitHub to the Mastra Factory apps', {
+            orgId,
+            installations: result.record.installations?.length ?? 0,
+          });
+          // The switch has committed; a failed audit write must not report it as failed.
+          try {
+            await ctx.hooks?.emitAudit?.({
+              context: c,
+              input: {
+                action: 'factory.integration.github_apps_switched',
+                targets: (result.record.installations ?? []).map(installation => ({
+                  type: 'github_installation',
+                  id: String(installation.installationId),
+                  name: installation.accountLogin,
+                })),
+                metadata: {
+                  installations: result.record.installations?.length ?? 0,
+                  installationRowsMoved: result.plan.moves.reduce((sum, move) => sum + move.installationIds.length, 0),
+                },
+              },
+            });
+          } catch (error) {
+            logPlatformWarn('Failed to record the GitHub app switch audit event', {
+              orgId,
+              error: platformErrorMessage(error),
+            });
+          }
+          // No gaps at the cutover: sweep what events may have missed.
+          this.#reconcileWorker?.requestRun();
+          return c.json({ switched: true, mode: result.record.mode, switchedAt: result.record.switchedAt ?? null });
         },
       }),
     ];

@@ -14,6 +14,7 @@ export const AUDIT_ACTIONS = {
   skill: ['created', 'updated', 'reverted', 'deleted'],
   intake_route: ['created', 'updated', 'deleted', 'reordered', 'rerouted'],
   sandbox_env: ['set', 'updated', 'deleted'],
+  integration: ['github_apps_switched'],
 } as const;
 
 export type AuditNamespace = keyof typeof AUDIT_ACTIONS;

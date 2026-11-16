@@ -14,8 +14,8 @@ export interface PlatformGithubConnectInstallation {
   connectionId: string;
   /** The `factory-reviews-github` Connect connection for the same account. */
   reviewsConnectionId: string;
-  /** The legacy installation whose storage row was re-pointed here, if any. */
-  legacyInstallationId?: number;
+  /** The legacy installations whose storage rows were moved here at the switch. */
+  legacyInstallationIds?: number[];
 }
 
 export interface PlatformGithubModeRecord {
@@ -27,8 +27,6 @@ export interface PlatformGithubModeRecord {
   installations?: PlatformGithubConnectInstallation[];
 }
 
-type ModeIndex = { version: 1; installations: Record<string, string> };
-
 export type PlatformGithubModeStorage = IntegrationStorageHandle<
   Record<string, unknown>,
   Record<string, unknown>,
@@ -37,9 +35,13 @@ export type PlatformGithubModeStorage = IntegrationStorageHandle<
 
 /** Settings user the per-org mode record is stored under. */
 const MODE_USER_ID = '__platform_github_mode__';
-/** Settings row (org, user) holding the deployment-wide installation → org index. */
+/**
+ * Settings org of the deployment-wide installation → org index. Each
+ * installation has its own row, so two orgs switching at once never
+ * overwrite each other's entries.
+ */
 const INDEX_ORG_ID = '__platform_github__';
-const INDEX_USER_ID = '__connect_installations__';
+const indexUserId = (installationId: number) => `__connect_installation__:${installationId}`;
 
 const LEGACY: PlatformGithubModeRecord = { version: 1, mode: 'legacy' };
 /** How long a read record is trusted, so a switch made on another replica is seen. */
@@ -56,7 +58,7 @@ export class PlatformGithubModes {
   readonly #cacheTtlMs: number;
   readonly #now: () => number;
   readonly #cache = new Map<string, { record: PlatformGithubModeRecord; at: number }>();
-  #index: { installations: Map<number, string>; at: number } | undefined;
+  readonly #index = new Map<number, { orgId: string | undefined; at: number }>();
 
   constructor(storage: () => PlatformGithubModeStorage, options: { cacheTtlMs?: number; now?: () => number } = {}) {
     this.#storage = storage;
@@ -78,16 +80,12 @@ export class PlatformGithubModes {
 
   /** The org that switched to this `factory-github` installation, if any. */
   async orgForInstallation(installationId: number): Promise<string | undefined> {
-    if (!this.#index || this.#now() - this.#index.at >= this.#cacheTtlMs) {
-      const stored = (await this.#storage().settings.get(INDEX_ORG_ID, INDEX_USER_ID)) as Partial<ModeIndex> | null;
-      const installations = new Map(
-        Object.entries(stored?.installations ?? {}).flatMap(([id, orgId]) =>
-          typeof orgId === 'string' && Number.isSafeInteger(Number(id)) ? [[Number(id), orgId] as const] : [],
-        ),
-      );
-      this.#index = { installations, at: this.#now() };
-    }
-    return this.#index.installations.get(installationId);
+    const cached = this.#index.get(installationId);
+    if (cached && this.#now() - cached.at < this.#cacheTtlMs) return cached.orgId;
+    const stored = await this.#storage().settings.get(INDEX_ORG_ID, indexUserId(installationId));
+    const orgId = typeof stored?.orgId === 'string' ? stored.orgId : undefined;
+    this.#index.set(installationId, { orgId, at: this.#now() });
+    return orgId;
   }
 
   /** Records the org's switch to `connect`, and indexes its installations. */
@@ -97,13 +95,12 @@ export class PlatformGithubModes {
   ): Promise<PlatformGithubModeRecord> {
     const next: PlatformGithubModeRecord = { version: 1, mode: 'connect', ...record };
     const storage = this.#storage();
-    const index = (await storage.settings.get(INDEX_ORG_ID, INDEX_USER_ID)) as Partial<ModeIndex> | null;
-    const installations = { ...(index?.installations ?? {}) };
-    for (const installation of record.installations) installations[String(installation.installationId)] = orgId;
-    await storage.settings.save(INDEX_ORG_ID, INDEX_USER_ID, { version: 1, installations } satisfies ModeIndex);
+    for (const installation of record.installations) {
+      await storage.settings.save(INDEX_ORG_ID, indexUserId(installation.installationId), { version: 1, orgId });
+    }
     await storage.settings.save(orgId, MODE_USER_ID, { ...next });
     this.#cache.set(orgId, { record: next, at: this.#now() });
-    this.#index = undefined;
+    for (const installation of record.installations) this.#index.delete(installation.installationId);
     return next;
   }
 
@@ -111,7 +108,7 @@ export class PlatformGithubModes {
   invalidate(orgId?: string): void {
     if (orgId) this.#cache.delete(orgId);
     else this.#cache.clear();
-    this.#index = undefined;
+    this.#index.clear();
   }
 }
 
