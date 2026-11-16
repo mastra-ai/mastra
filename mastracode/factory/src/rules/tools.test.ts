@@ -430,27 +430,37 @@ describe('factory_transition_work_item', () => {
     ).rejects.toThrow(/retired/i);
   });
 
-  it('offers no tool when a revoked binding belongs to an item still in flight', async () => {
+  it('keeps the move tool for a session whose assignment was cleaned up while its card is still open', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBoundItem(storage);
     const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
-    // Binding revoked while the item stays in a working/resting lane (e.g. a peer
-    // role took over on another session): not a retirement, so no tool.
-    await storage.revokeRunBinding({
-      orgId: 'org-1',
-      factoryProjectId: PROJECT_ID,
-      bindingId: prepared.binding.id,
-      revokedAt: new Date(),
+    // The idle cleanup removes the assignment; the card stays in its phase.
+    const removed = await storage.revokeStaleRunBindings({
+      olderThan: new Date(Date.now() + 60_000),
+      now: new Date(),
     });
+    expect(removed).toBe(1);
+
+    const context = requestContext();
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: service,
+      boards: createTriageWorkRegistry(),
+    });
+    const tool = tools.factory_transition_work_item as ExecutableTool;
+    expect(tool).toBeDefined();
+    expect(tool.requireApproval).toBe(true);
+    expect(tools.factory_record_review_verdict).toBeUndefined();
 
     await expect(
-      createFactoryTransitionTools({
-        requestContext: requestContext(),
-        storage,
-        transitionService: service,
-        boards: createTriageWorkRegistry(),
+      execute(tool, context, {
+        stage: 'planning',
+        expectedRevision: prepared.item.revision,
+        rationale: 'The work is ready for planning.',
       }),
-    ).resolves.toEqual({});
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'planning' });
+    expect((await storage.get({ orgId: 'org-1', id: prepared.item.id }))?.stages).toEqual(['planning']);
   });
 
   it('keeps working when the next role takes its turn in the same session', async () => {
