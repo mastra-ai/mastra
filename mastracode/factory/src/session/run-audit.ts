@@ -55,7 +55,7 @@ export interface RunEndCaptureSession {
 
 type RunEndReason = Extract<AgentControllerEvent, { type: 'agent_end' }>['reason'];
 type StepUsage = Extract<AgentControllerEvent, { type: 'usage_update' }>['usage'];
-const pendingWrites = new WeakMap<RunEndCaptureSession, Promise<void>>();
+const pendingWrites = new WeakMap<object, Promise<void>>();
 
 /**
  * JSON budget for the per-step entries on a run's audit record. Audit metadata
@@ -174,7 +174,7 @@ export async function listThreadOpenRuns(
   return z.array(factoryOpenRunSchema).parse(stored ?? []);
 }
 
-export async function waitForSessionRunAudit(session: RunEndCaptureSession): Promise<void> {
+export async function waitForSessionRunAudit(session: object): Promise<void> {
   await (pendingWrites.get(session) ?? Promise.resolve());
 }
 

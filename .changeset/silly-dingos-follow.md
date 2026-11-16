@@ -1,0 +1,14 @@
+---
+'@mastra/factory': minor
+---
+
+Fixed Factory server memory growing with every session it ever opened. Factory now unloads a session from server memory when it stops the session's sandbox (a card leaving a phase's context or finishing), and after 30 minutes without activity. Sessions that are running, waiting on an approval or answer, or open in a browser tab stay loaded. Unloading keeps the thread, its messages, the session row and the sandbox, and the session's next message, run, wake or opened tab loads it again.
+
+Change the timeout with `idleSessionUnload`, or pass `false` to keep every session loaded:
+
+```ts
+const factory = new MastraFactory({
+  storage,
+  idleSessionUnload: { idleMs: 60 * 60_000, sweepIntervalMs: 5 * 60_000 },
+});
+```

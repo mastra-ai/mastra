@@ -164,9 +164,11 @@ import { hydrateSessionMemorySettings } from './session/memory-settings-hydratio
 import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import { migrateSessionResources, privatizeOwnerResourceSessions } from './session/resource-migration.js';
-import { observeSessionRunEnd } from './session/run-audit.js';
+import { observeSessionRunEnd, waitForSessionRunAudit } from './session/run-audit.js';
 import { recordRunRepositoryChoice, selfReviewApprovedHead } from './session/self-review-gate.js';
 import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
+import { createSessionActivityMiddleware, SessionUnloader } from './session/session-unloader.js';
+import type { IdleSessionUnloadOptions } from './session/session-unloader.js';
 import type { ReviewedChangeRequest } from './session/source-control-tools.js';
 import { createSourceControlTools, resolveReviewedChangeRequest } from './session/source-control-tools.js';
 import { resolveFactoryThinkingLevel } from './session/thinking-default.js';
@@ -337,6 +339,15 @@ export interface MastraFactoryConfig {
    * (`'eager'`), so the boot overlaps the model's own latency.
    */
   sandboxStart?: FactorySandboxStart;
+  /**
+   * Unloads agent sessions from server memory once this process no longer needs them: when
+   * Factory stops or releases a session's sandbox, and after `idleMs` (default 30 minutes)
+   * without activity, checked every `sweepIntervalMs` (default 1 minute). Unloading keeps the
+   * thread, its messages, the session row and the sandbox; the session's next message, run or
+   * wake loads it again. A session running, waiting on an approval or answer, or open in a
+   * browser tab stays loaded. Pass `false` to keep every session loaded until it is deleted.
+   */
+  idleSessionUnload?: false | IdleSessionUnloadOptions;
   /**
    * Agent controller built-in tools (e.g. `submit_plan`) removed from every
    * Factory session, along with their prompt guidance. Use this when a custom
@@ -644,6 +655,7 @@ export class MastraFactory {
   #unsubscribeLinkedRepositoryChanges: Promise<() => Promise<void>> | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
+  #sessionUnloader: SessionUnloader | undefined;
   #channelShutdowns: Array<() => Promise<void>> = [];
   #shutdownPromise: Promise<void> | undefined;
   readonly #metrics: FactoryMetrics;
@@ -1291,6 +1303,8 @@ export class MastraFactory {
       sandboxConfig && storage.isDomainReady('source-control')
         ? new SessionRetirementCoordinator({
             invalidateSession: sessionId => workspaceRegistry.invalidateSession(sessionId),
+            // Assigned once the controller exists; retirement only runs after boot.
+            unloadSession: sessionId => this.#sessionUnloader?.unloadReleased(sessionId),
             sandbox: sandboxConfig,
           })
         : undefined;
@@ -2382,12 +2396,14 @@ export class MastraFactory {
           const uiDist = resolveUiDistDir();
           const spa = uiDist ? [createSpaStaticMiddleware(uiDist)] : [];
           const timing = factoryTimingEnabled ? [createRequestTimingMiddleware()] : [];
+          const sessionActivity = createSessionActivityMiddleware(() => this.#sessionUnloader);
           if (!auth) {
             // Auth disabled: no gate. Still prime the sentinel-local custom
             // provider snapshot so model calls see DB rows, then SPA + CORS.
             return {
               middleware: [
                 ...timing,
+                sessionActivity,
                 createFactoryInteractiveMarker(),
                 createCustomProvidersPrimer({ auth: routeAuth, storage: customProvidersStorage, authEnabled: false }),
                 ...spa,
@@ -2426,6 +2442,7 @@ export class MastraFactory {
                 },
                 controller: () => this.#prepared?.base.controller,
               }),
+              sessionActivity,
               createTenantCredentialPrimer({ auth: routeAuth, credentials: modelCredentialsStorage }),
               createCustomProvidersPrimer({
                 auth: routeAuth,
@@ -2507,6 +2524,15 @@ export class MastraFactory {
       session => applyFactoryToolPermissions(session, { sessions: sourceControlSessions }),
       { blocking: true },
     );
+
+    if (this.#config.idleSessionUnload !== false) {
+      this.#sessionUnloader = new SessionUnloader({
+        controller: prepared.base.controller,
+        invalidateSession: sessionId => workspaceRegistry.invalidateSession(sessionId),
+        settle: waitForSessionRunAudit,
+        ...this.#config.idleSessionUnload,
+      });
+    }
 
     this.#prepared = prepared;
     this.#factoryProcessor = factoryProcessor;
@@ -2633,6 +2659,7 @@ export class MastraFactory {
         ),
       );
     this.#dispatcher?.start();
+    this.#sessionUnloader?.start();
     this.#startMetrics();
     // Outside the Mastra logger, which production runs at WARN. Under
     // `mastra factory dev` the CLI's ready banner reports boot time instead.
@@ -2686,6 +2713,9 @@ export class MastraFactory {
       await stopMetrics?.().catch(() => undefined);
       const backfill = this.#workItemSplitBackfill;
       backfill?.controller.abort();
+      const sessionUnloader = this.#sessionUnloader;
+      this.#sessionUnloader = undefined;
+      await sessionUnloader?.stop();
       const results = await Promise.allSettled([
         this.#dispatcher?.stop() ?? Promise.resolve(),
         // Stops between cards; failures are already logged.

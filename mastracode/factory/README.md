@@ -640,7 +640,7 @@ Each session context a card uses (`triage`, `work`, `review`, or a custom board'
 - **Finishing.** Entering a terminal phase stops every sandbox the card holds. A Factory process that never opened a sandbox stops it by identity through the configured sandbox provider, so a card finished on any replica stops its sandboxes.
 - **Coming back.** Stopping keeps the session, its branch and its files. A card that comes back to a context (PR review → Triage) resumes the same sandbox: E2B resumes the paused VM, Docker restarts the container, and the local sandbox reuses its directory. Platform sandboxes are not stopped remotely; they idle out under the environment's policy and the next run reattaches.
 
-Stopping is best-effort: a committed move never fails because a sandbox did not stop, and a card moved again before the stop runs keeps its sandbox. Deleting a session still destroys its sandbox.
+Stopping is best-effort: a committed move never fails because a sandbox did not stop, and a card moved again before the stop runs keeps its sandbox. Deleting a session still destroys its sandbox. A session whose sandbox stops is also unloaded from server memory, see [Unloading idle sessions](#unloading-idle-sessions).
 
 #### The pull request loop on any board
 
@@ -743,6 +743,23 @@ The board shows how many automated runs are waiting, and opens a list of them, o
 - `slots` — this server's automated `inUse` and `cap`, with the reply reserve's `interactive.inUse` and `interactive.cap`, or `null` when it runs no dispatcher. A reply that borrowed an automated slot counts in `inUse`. Other replicas keep their own.
 - `running` and `claimed` — the project's automated runs a server holds a slot for, on any replica. A manual start holding a slot counts in `slots.inUse` but not here, so `running` can be lower than `inUse`.
 - `queuedCount` and `queued` — every run waiting for a slot, and up to 50 of them, waiting replies first, then automated runs, each oldest first, with their `lane` (`interactive` for a person's reply, else `automated`), `position` within that lane, card, phase and the skill they will run. `queuedByLane` splits `queuedCount` by lane. A retry still backing off is not waiting yet.
+
+### Unloading idle sessions
+
+A loaded session holds its conversation, tool results, workspace and process output in server memory. Factory unloads a session from the process when it no longer needs it, so memory follows the sessions in use rather than every session the process has ever opened:
+
+- **Released.** When Factory stops a session's sandbox (a card leaves the context, or finishes) the session is unloaded too.
+- **Idle.** A session with no activity for 30 minutes is unloaded. Each process checks its own sessions once a minute.
+
+A session stays loaded while a run is in flight, while it waits on an approval or an `ask_user` / `submit_plan` answer, and while a browser tab follows its stream. A released session that is busy is unloaded once its work ends.
+
+Unloading keeps the thread, its messages, the session row and the sandbox. The sandbox is not stopped, so background processes keep running. The next message, run, wake or opened tab loads the session again on its thread and reattaches to the sandbox. Without `auth`, a deferred wake for an unloaded session waits until something else loads it, as it does after a restart. What lives only in memory is lost: session state not stored on the thread, auto-approvals granted in the session, and events from before the reload.
+
+Change the timeout and check interval with `idleSessionUnload`. `idleMs: 0` turns off the idle check but still unloads released sessions, and `false` keeps every session loaded until it is deleted:
+
+```ts
+const factory = new MastraFactory({ storage, idleSessionUnload: { idleMs: 60 * 60_000, sweepIntervalMs: 5 * 60_000 } });
+```
 
 ### The `factory-work-item` signal
 
