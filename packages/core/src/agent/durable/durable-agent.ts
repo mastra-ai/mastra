@@ -66,6 +66,7 @@ import type { AgentScopesSnapshot } from '../scopes';
 import { applyResolvedAgentScopes, incomingAgentScopes, resolveAgentScopes, restoreRunAgentScopes } from '../scopes';
 import type { PendingSignalListener, AgentSignalInput } from '../signals';
 import type { AgentStreamBus } from '../streams/bus';
+import { drainInvocationOutput, resolveInvocationRunId } from '../streams/invocation';
 import { replayResponseMessages, withRebuiltResponseMessages } from '../streams/response-messages';
 import type { ResponseMessagesReplay } from '../streams/response-messages';
 import { readAgentRunRecord } from '../streams/run-records';
@@ -3181,7 +3182,7 @@ export class DurableAgent<
 
     // 1. Claim the run before preparing it, so a run that is already executing
     // fails before any span or memory write is made for this call.
-    const runId = options?.runId ?? crypto.randomUUID();
+    const runId = resolveInvocationRunId(options?.runId);
     const requestContext = options?.requestContext ?? new RequestContext();
     const executionFence = await this.#claimExecution(runId, 'acquire', requestContext);
 
@@ -4802,7 +4803,7 @@ export class DurableAgent<
     validateModelTimeoutSettings(options?.modelSettings?.timeout);
 
     // 1. Claim the run before preparing it — see stream().
-    const runId = options?.runId ?? crypto.randomUUID();
+    const runId = resolveInvocationRunId(options?.runId);
     const requestContext = options?.requestContext ?? new RequestContext();
     const executionFence = await this.#claimExecution(runId, 'acquire', requestContext);
 
@@ -4986,10 +4987,7 @@ export class DurableAgent<
 
     let suspended = false;
     try {
-      const fullOutput = (await output.getFullOutput()) as FullOutput<TOutput>;
-      if (fullOutput.error) {
-        throw fullOutput.error;
-      }
+      const fullOutput = (await drainInvocationOutput(output)) as FullOutput<TOutput>;
       suspended = fullOutput.finishReason === 'suspended';
       // On suspend, the SUSPENDED event is emitted from the tool-call step
       // before the workflow engine has persisted the snapshot. Awaiting the
@@ -5046,10 +5044,7 @@ export class DurableAgent<
     } as Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2]);
     let suspended = false;
     try {
-      const fullOutput = (await result.output.getFullOutput()) as FullOutput<TOutput>;
-      if (fullOutput.error) {
-        throw fullOutput.error;
-      }
+      const fullOutput = (await drainInvocationOutput(result.output)) as FullOutput<TOutput>;
       suspended = fullOutput.finishReason === 'suspended';
       if (suspended) {
         await getRunRegistryEntry(result.runId, this.#mastra)?.workflowExecution;

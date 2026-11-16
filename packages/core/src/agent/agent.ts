@@ -246,6 +246,7 @@ import { publishAbortRequest, requestAcknowledgedAbort } from './streams/abort-t
 import { AgentStreamBus } from './streams/bus';
 import { agentStreamsConfig, areAgentStreamsEnabled } from './streams/config';
 import { AGENT_STREAM_TOPIC } from './streams/constants';
+import { drainInvocationOutput, resolveInvocationRunId, successfulInvocationOutput } from './streams/invocation';
 import { createAgentStreamPublisher } from './streams/publisher';
 import type { AgentStreamPublisher } from './streams/publisher';
 import { readAgentRunRecord } from './streams/run-records';
@@ -10196,12 +10197,13 @@ export class Agent<
     // is invisible to signals: a signal sent mid-turn finds an idle thread and wakes a second run that
     // never sees this turn. The wait also reserves the thread for this runId.
     const threadStreamPubSub = this.getPubSub();
-    mergedOptions.runId ??=
+    mergedOptions.runId ??= resolveInvocationRunId(undefined, () =>
       this.#mastra?.generateId({
         idType: 'run',
         source: 'agent',
         entityId: this.id,
-      }) ?? globalThis.crypto.randomUUID();
+      }),
+    );
     await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
       this as Agent<any, any, any, any>,
       { ...loopOptions, runId: mergedOptions.runId } as AgentExecutionOptions<any>,
@@ -10272,15 +10274,7 @@ export class Agent<
         threadStreamPubSub,
       );
 
-      const fullOutput = await result.result.getFullOutput();
-
-      const error = fullOutput.error;
-
-      if (error) {
-        throw error;
-      }
-
-      return fullOutput;
+      return await drainInvocationOutput(result.result);
     } catch (error) {
       // Release the thread reservation taken by waitForCrossAgentThreadRun so
       // a failed setup does not block subsequent runs on this thread.
@@ -11207,12 +11201,13 @@ export class Agent<
     }
 
     const threadStreamPubSub = this.getPubSub();
-    mergedOptions.runId ??=
+    mergedOptions.runId ??= resolveInvocationRunId(undefined, () =>
       this.#mastra?.generateId({
         idType: 'run',
         source: 'agent',
         entityId: this.id,
-      }) ?? globalThis.crypto.randomUUID();
+      }),
+    );
     // The wait also reserves the thread for this runId, so concurrent stream()
     // calls on the same thread serialize instead of racing between this wait
     // and registerRun below.
@@ -11896,13 +11891,7 @@ export class Agent<
       throw error;
     }
 
-    const error = fullOutput.error;
-
-    if (error) {
-      throw error;
-    }
-
-    return fullOutput;
+    return successfulInvocationOutput(fullOutput);
   }
 
   /**
