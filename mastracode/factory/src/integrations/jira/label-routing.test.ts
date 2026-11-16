@@ -190,11 +190,6 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     await bind(factories.mobile, ['mobile', 'ios']);
   });
 
-  const poll = async (factoryProjectId: string) => {
-    const response = await app.request(`/web/jira/issues?factoryProjectId=${factoryProjectId}`);
-    expect(response.status).toBe(200);
-    return ((await response.json()) as { issues: Array<{ identifier: string }> }).issues.map(issue => issue.identifier);
-  };
   const filed = async (factoryProjectId: string) =>
     (await seed.workItems.listDeferredDecisions('org1', factoryProjectId))
       .map(entry => (entry.decision as { metadata?: { identifier?: string } }).metadata?.identifier)
@@ -236,11 +231,8 @@ describe.each(paths)('Jira project shared by label — $name', path => {
       .filter(key => expectedFactory[key] === name)
       .sort();
 
-  it('files every issue in exactly one factory on a sweep, never while a board reads its list', async () => {
-    for (const name of names) {
-      expect((await poll(factories[name])).sort()).toEqual(slice(name));
-      expect(await filed(factories[name])).toEqual([]);
-    }
+  it('files every issue in exactly one factory on a sweep', async () => {
+    for (const name of names) expect(await filed(factories[name])).toEqual([]);
 
     await sweep();
     await sweep();
@@ -281,7 +273,6 @@ describe.each(paths)('Jira project shared by label — $name', path => {
         `/web/jira/issues/${key}?factoryProjectId=${factoryProjectId}&issueRef=${encodeURIComponent(path.issueRef(key))}`,
       );
 
-    expect(await poll(factories.platform)).toContain('OPS-2');
     await sweep();
     expect(await filed(triage)).toEqual([]);
     await fileProposedCards();
@@ -289,9 +280,7 @@ describe.each(paths)('Jira project shared by label — $name', path => {
 
     nextMinute();
     await bindTriage();
-    expect(await poll(factories.platform)).not.toContain('OPS-2');
     expect((await open(factories.platform, 'OPS-2')).status).toBe(200);
-    expect(await poll(triage)).toEqual(['OPS-2']);
     await sweep();
     expect(await filed(triage)).toEqual(['OPS-2']);
     await fileProposedCards();
@@ -307,7 +296,6 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     expect((await app.request(`/web/factory/projects/${factories.platform}`, { method: 'DELETE' })).status).toBe(204);
     const growth = await takeOverWithGrowth();
 
-    expect(await poll(growth)).toEqual(['OPS-1', 'OPS-2']);
     await sweep();
     expect(await filed(growth)).toEqual(['OPS-1', 'OPS-2']);
     await fileProposedCards();

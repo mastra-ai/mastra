@@ -32,7 +32,7 @@ function issueToIngress(issueRef: string, issue: IntakeIssue): JiraIssueIngress 
   };
 }
 
-/** One page of what a board lists; `externalId` and `site` are set by the Platform integration only. */
+/** One page of the site's active issues; `externalId` and `site` are set by the Platform integration only. */
 type ListActiveIssues = (
   cursor: string | undefined,
   scopes: JiraIntakeScope[],

@@ -477,7 +477,6 @@ export const heavySessionHandlers = [
       keys: [],
     } satisfies VoiceSettingsResponse),
   ),
-  http.get('*/web/github/projects/:id/issues', () => HttpResponse.json({ issues: [], nextPage: null })),
   http.get('*/web/github/projects/:id/issues/:number', ({ params }) =>
     HttpResponse.json({ number: Number(params.number), description: ISSUE_BODY }),
   ),

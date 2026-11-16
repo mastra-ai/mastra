@@ -9,13 +9,7 @@ import type { RouteAuth } from '../../routes/route.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import { GitLabApiError } from './api.js';
-import {
-  decodeIssueReference,
-  decodeSourceId,
-  encodeIssueReference,
-  encodeSourceId,
-  gitlabConnection,
-} from './integration.js';
+import { decodeIssueReference, decodeSourceId, encodeSourceId, gitlabConnection } from './integration.js';
 import type { GitLabIntegrationBase } from './integration.js';
 import { listMergeRequestSubscriptionsForThread, mergeRequestUrl } from './subscriptions.js';
 import { handleGitLabWebhook } from './webhook.js';
@@ -85,10 +79,6 @@ function gitlabProjectPayload(source: { id: string; name: string; metadata?: Rec
 export function positiveId(value: string | undefined): number | null {
   const number = Number(value);
   return value && /^[1-9]\d*$/.test(value) && Number.isSafeInteger(number) ? number : null;
-}
-
-function mergeRequestSourceKey(host: string, projectId: number, mergeRequestIid: number): string {
-  return `gitlab-pr:${Buffer.from(JSON.stringify({ version: 1, host, projectId, mergeRequestIid }), 'utf8').toString('base64url')}`;
 }
 
 export const LINKED_BACKLOG_MAX_PAGES = 5;
@@ -449,57 +439,6 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
           }
         },
       }),
-      registerApiRoute('/web/gitlab/projects/:id/prs', {
-        method: 'GET',
-        requiresAuth: false,
-        handler: async c => {
-          const resolved = await resolveOrgTenant(loose(c), auth);
-          if ('response' in resolved) return resolved.response;
-          const factoryProjectId = c.req.query('factoryProjectId')?.trim();
-          const page = positiveId(c.req.query('page') ?? '1');
-          if (!factoryProjectId || !page) return c.json({ error: 'invalid_request' }, 400);
-          if ((await gitlab.resolveOrgId(factoryProjectId)) !== resolved.tenant.orgId)
-            return c.json({ error: 'factory_project_not_found' }, 404);
-          const linked = await gitlab.getLinkedRepository({
-            orgId: resolved.tenant.orgId,
-            factoryProjectId,
-            projectRepositoryId: c.req.param('id'),
-          });
-          if (!linked) return c.json({ error: 'project_repository_not_found' }, 404);
-          const projectId = positiveId(linked.repository.externalId);
-          if (!projectId) return c.json({ error: 'invalid_gitlab_project' }, 502);
-          try {
-            const target = await gitlab.versionControl.getRepositoryTarget({
-              orgId: resolved.tenant.orgId,
-              repositoryId: linked.repository.id,
-            });
-            const result = await gitlab.versionControl.listPullRequests({
-              ...target,
-              includeDrafts: false,
-              cursor: String(page),
-            });
-            return c.json({
-              pullRequests: result.pullRequests.map(pr => ({
-                number: Number(pr.id),
-                externalId: mergeRequestSourceKey(linked.host, projectId, Number(pr.id)),
-                title: pr.title,
-                url: pr.url,
-                author: pr.author,
-                assignees: pr.assignees ?? [],
-                requestedReviewers: pr.requestedReviewers ?? [],
-                labels: pr.labels ?? [],
-                baseBranch: pr.baseBranch,
-                headBranch: pr.headBranch,
-                createdAt: pr.createdAt,
-                updatedAt: pr.updatedAt,
-              })),
-              nextPage: result.nextCursor === null ? null : Number(result.nextCursor),
-            });
-          } catch (error) {
-            return gitlabFetchError(loose(c), error);
-          }
-        },
-      }),
       registerApiRoute('/web/gitlab/projects/:id/prs/:number', {
         method: 'GET',
         requiresAuth: false,
@@ -546,52 +485,6 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
   }
 
   if (gitlab && auth && intake) {
-    routes.push(
-      registerApiRoute('/web/gitlab/issues', {
-        method: 'GET',
-        requiresAuth: false,
-        handler: async c => {
-          const resolved = await resolveOrgTenant(loose(c), auth);
-          if ('response' in resolved) return resolved.response;
-          const factoryProjectId = c.req.query('factoryProjectId')?.trim();
-          if (!factoryProjectId) return c.json({ error: 'invalid_factory_project_id' }, 400);
-          if ((await gitlab.resolveOrgId(factoryProjectId)) !== resolved.tenant.orgId) {
-            return c.json({ error: 'factory_project_not_found' }, 404);
-          }
-
-          const sourceIds = await routedGitLabSourceIds(intake, { orgId: resolved.tenant.orgId, factoryProjectId });
-          if (!sourceIds) {
-            return c.json(
-              { error: 'gitlab_intake_disabled', message: 'GitLab intake is turned off in Settings.' },
-              404,
-            );
-          }
-          if (sourceIds.length === 0) return c.json({ issues: [], nextCursor: null });
-
-          try {
-            const result = await gitlab.intake.listIssues({
-              connection: { type: 'oauth', accessToken: 'gitlab-route' },
-              sourceIds,
-              cursor: c.req.query('after')?.trim() || undefined,
-            });
-            return c.json({
-              ...result,
-              issues: result.issues.map(issue => {
-                const source = decodeSourceId(issue.sourceId ?? '');
-                const issueIid = Number(issue.id);
-                if (!source || !Number.isSafeInteger(issueIid) || issueIid <= 0) {
-                  throw new Error('GitLab returned an invalid routed issue reference.');
-                }
-                return { ...issue, externalId: encodeIssueReference({ ...source, issueIid }) };
-              }),
-            });
-          } catch (error) {
-            return gitlabFetchError(loose(c), error);
-          }
-        },
-      }),
-    );
-
     routes.push(
       registerApiRoute('/web/gitlab/issues/:issueId', {
         method: 'GET',

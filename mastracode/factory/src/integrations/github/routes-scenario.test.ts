@@ -394,7 +394,7 @@ afterEach(() => {
 
 // ── S1: full write-back journey ──────────────────────────────────────────
 describe('S1: full write-back journey through the real route handlers', () => {
-  it('drives create → worktree → commit → push → pr for one user', async () => {
+  it('drives commit → push → pr against one user session workspace', async () => {
     const repositoryAccess = githubStub.versionControl.getRepositoryAccess;
     const projectId = 'project-1';
     tables.projectRepositories.push(
@@ -411,17 +411,19 @@ describe('S1: full write-back journey through the real route handlers', () => {
     );
     const app = buildApp({ workosId: 'u1', organizationId: 'org1' });
 
-    // 2. Session creation persists identity only. The isolated checkout is
-    // materialized later, by the session sandbox's start lifecycle.
-    const sessionRes = await postJson(app, `/web/github/projects/${projectId}/sessions`, { branch: 'feat/x' });
-    expect(sessionRes.status).toBe(200);
-    const session = (await sessionRes.json()).session;
-    expect(session).toMatchObject({ projectRepositoryId: projectId, branch: 'feat/x', baseBranch: 'main' });
-    expect(tables.sessions).toHaveLength(1);
+    // 2. The session identity exists before any checkout. The isolated
+    // checkout is materialized later, by the session sandbox's start lifecycle.
+    const session = await sourceControlStorage.sessions.create({
+      sessionId: 'session-feat-x',
+      projectRepositoryId: projectId,
+      orgId: 'org1',
+      userId: 'u1',
+      branch: 'feat/x',
+      baseBranch: 'main',
+    });
 
-    // Creating that session provisioned nothing: session sandboxes boot lazily
-    // at the first real command, so neither the repo materialization nor the
-    // sandbox callback has run yet.
+    // Session sandboxes boot lazily at the first real command, so neither the
+    // repo materialization nor the sandbox callback has run yet.
     expect(materializeRepo).not.toHaveBeenCalled();
     expect(sandboxCallback).not.toHaveBeenCalled();
     expect(tables.worktrees).toHaveLength(0);

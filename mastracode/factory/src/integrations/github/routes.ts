@@ -12,27 +12,18 @@
  */
 
 import type { MountedMastraCode } from '@mastra/code-sdk';
-import { resolveModel } from '@mastra/code-sdk/agents/model';
-import { RequestContext } from '@mastra/core/request-context';
-import type { ApiRoute, IUserProvider } from '@mastra/core/server';
+import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
-import { canReadSessionResource, canViewSourceControlSession } from '../../routes/session-access.js';
-import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
 import { requireExec } from '../../sandbox/materialization.js';
 import type { ExecutableSandbox } from '../../sandbox/materialization.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
-import { sessionMemoryResourceId, listFactorySessionThreads } from '../../session/session-threads.js';
-import { normalizeSessionTitle } from '../../session/session-title.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
-import type { MemorySettingsStorage } from '../../storage/domains/memory-settings/base.js';
-import { isFactoryPrincipalId } from '../../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
@@ -40,7 +31,6 @@ import type {
   SourceControlInstallation,
   SourceControlRepository,
 } from '../../storage/domains/source-control/base.js';
-import { listRepositoryCommits } from './commits.js';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js';
 import type { GithubIntegration } from './integration.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
@@ -48,7 +38,6 @@ import type { GithubPatKind } from './pat.js';
 import { listedPullRequestState, polledPullRequestEvent } from './rules.js';
 import type { ReconcileRepository } from './rules.js';
 
-import { reclaimDeletedSessionSandbox } from './sandbox-release.js';
 import {
   commitAll,
   isValidGitRef as isValidGitRefSandbox,
@@ -59,9 +48,6 @@ import {
 import type { GitIdentity } from './sandbox.js';
 
 const sessionOperationLocks = new Map<string, Promise<unknown>>();
-const USER_SESSION_BRANCH_PREFIX = 'user/session-';
-// lowercase only (crypto.randomUUID output), so casing cannot fork one logical ID into two sessions
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 /**
  * Serialize same-session mutations within one Factory process. Factory sessions
  * normally issue these operations sequentially, so this lock is probably not
@@ -97,8 +83,6 @@ type RouteContext = Context;
 export interface MountGithubRoutesOptions {
   /** Host auth seam — resolves the signed-in user/tenant for each request. */
   auth: RouteAuth;
-  /** Optional user directory used to resolve session-owner display profiles. */
-  users?: SessionOwnerUserProvider;
   /**
    * The host's session-sandbox callback. Routes only read whether it is
    * configured: without one, `/web/github/status` reports
@@ -129,18 +113,10 @@ export interface MountGithubRoutesOptions {
   redirectUri?: string;
   /** Controller used to route verified webhook notifications to exact subscribed sessions. */
   controller?: MountedMastraCode['controller'];
-  /** Owner-scoped observational-memory settings — the source of the model that names a thread. */
-  memorySettings: Pick<MemorySettingsStorage, 'get'>;
   /** Best-effort audit emission supplied by the factory-owned audit domain. */
   emitAudit?: AuditEmitter['emit'];
   /** Factory projects domain — resolves a project's default triage model. */
   projects?: FactoryProjectsStorage;
-  sessionRetirement?: import('../../sandbox/session-retirement.js').SessionRetirementCoordinator;
-  /** Work-items domain — session deletion strips the refs work items hold on it. */
-  workItems?: Pick<
-    import('../../storage/domains/work-items/base.js').WorkItemsStorage,
-    'clearSessionReferences' | 'hasRunBindingForSession'
-  >;
   /** Authoritative Factory rule ingress for normalized, signature-verified GitHub deliveries. */
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
 }
@@ -171,10 +147,6 @@ function pullRequestNumberFromUrl(value: string, expectedRepo: string): number |
  */
 function isValidGitRef(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 255 && /^[A-Za-z0-9_./-]+$/.test(value);
-}
-
-function isJsonObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -211,29 +183,10 @@ async function resolveOrgTenant(
   return { tenant: { orgId: tenant.orgId, userId: tenant.userId } };
 }
 
-/**
- * Parse a 1-based `page` query param. Missing means page 1; anything that is
- * not a small positive integer is rejected (`null`).
- */
-function parseListPage(raw: string | undefined): number | null {
-  if (raw === undefined) return 1;
-  if (!/^\d{1,5}$/.test(raw)) return null;
-  const page = Number(raw);
-  return page >= 1 ? page : null;
-}
-
 function parseResourceNumber(raw: string | undefined): number | null {
   if (raw === undefined || !/^\d{1,10}$/.test(raw)) return null;
   const parsed = Number(raw);
   return parsed > 0 ? parsed : null;
-}
-
-const VALID_ISSUE_LABEL_FILTERS = new Set<string>([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
-
-function parseIssueLabelFilter(raw: string | undefined): string | undefined | null {
-  if (raw === undefined || raw === '') return undefined;
-  if (VALID_ISSUE_LABEL_FILTERS.has(raw)) return raw;
-  return null;
 }
 
 interface ResolvedProjectRepository extends ProjectRepository {
@@ -405,19 +358,7 @@ export async function ingestLinkedRepositoryBacklog(args: {
  */
 export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
-  const {
-    auth,
-    sandbox,
-    users,
-    storage,
-    github,
-    stateSigner,
-    controller,
-    memorySettings,
-    emitAudit,
-    sessionRetirement,
-    workItems,
-  } = options;
+  const { auth, sandbox, storage, github, stateSigner, emitAudit } = options;
   const diagnostics = () =>
     getGithubFeatureDiagnostics({ github, auth, appDbConfigured: storage !== undefined, stateSigner, sandbox });
 
@@ -719,55 +660,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
     }),
   );
 
-  // ── List a project's open GitHub issues ──────────────────────────────────
-  routes.push(
-    registerApiRoute('/web/github/projects/:id/issues', {
-      method: 'GET',
-      requiresAuth: false,
-      handler: async c => {
-        const loaded = await loadOrgProject({ github, auth, c: loose(c) });
-        if ('response' in loaded) return loaded.response;
-        const page = parseListPage(c.req.query('page'));
-        if (page === null) return c.json({ error: 'invalid_page' }, 400);
-        const label = parseIssueLabelFilter(c.req.query('label'));
-        if (label === null) return c.json({ error: 'invalid_label' }, 400);
-        try {
-          const { issues, nextCursor } = await github.intake.listIssues({
-            connection: {
-              type: 'app-installation',
-              installationId: Number(loaded.project.installation.externalId),
-            },
-            sourceIds: [loaded.project.repository.slug],
-            labels: label ? [label] : undefined,
-            cursor: String(page),
-          });
-          const responseIssues = issues.map(issue => ({
-            repositoryId: Number(loaded.project.repository.externalId),
-            number: Number(issue.id),
-            title: issue.title,
-            url: issue.url,
-            author: issue.author,
-            assignee: issue.assignee,
-            assignees: issue.assignees,
-            labels: issue.labels,
-            comments: issue.commentCount ?? 0,
-            createdAt: issue.createdAt,
-            updatedAt: issue.updatedAt,
-          }));
-          return c.json({
-            issues: responseIssues,
-            nextPage: nextCursor === null ? null : Number(nextCursor),
-          });
-        } catch (err) {
-          return c.json(
-            { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
-            502,
-          );
-        }
-      },
-    }),
-  );
-
   routes.push(
     registerApiRoute('/web/github/projects/:id/issues/:number', {
       method: 'GET',
@@ -798,54 +690,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             createdAt: detail.createdAt,
             updatedAt: detail.updatedAt,
             description: detail.description,
-          });
-        } catch (err) {
-          return c.json(
-            { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
-            502,
-          );
-        }
-      },
-    }),
-  );
-
-  // ── List a project's open (non-draft) pull requests ─────────────────────
-  routes.push(
-    registerApiRoute('/web/github/projects/:id/prs', {
-      method: 'GET',
-      requiresAuth: false,
-      handler: async c => {
-        const loaded = await loadOrgProject({ github, auth, c: loose(c) });
-        if ('response' in loaded) return loaded.response;
-        const page = parseListPage(c.req.query('page'));
-        if (page === null) return c.json({ error: 'invalid_page' }, 400);
-        try {
-          const { pullRequests, nextCursor } = await github.versionControl.listPullRequests({
-            connection: {
-              type: 'app-installation',
-              installationId: Number(loaded.project.installation.externalId),
-            },
-            sourceId: loaded.project.repository.slug,
-            includeDrafts: false,
-            cursor: String(page),
-          });
-          const responsePullRequests = pullRequests.map(pr => ({
-            repositoryId: Number(loaded.project.repository.externalId),
-            number: Number(pr.id),
-            title: pr.title,
-            url: pr.url,
-            author: pr.author,
-            assignees: pr.assignees ?? [],
-            requestedReviewers: pr.requestedReviewers ?? [],
-            labels: pr.labels ?? [],
-            baseBranch: pr.baseBranch,
-            headBranch: pr.headBranch,
-            createdAt: pr.createdAt,
-            updatedAt: pr.updatedAt,
-          }));
-          return c.json({
-            pullRequests: responsePullRequests,
-            nextPage: nextCursor === null ? null : Number(nextCursor),
           });
         } catch (err) {
           return c.json(
@@ -895,79 +739,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             502,
           );
         }
-      },
-    }),
-  );
-
-  // ── Read per-project settings ────────────────────────────────────────────
-  routes.push(
-    registerApiRoute('/web/github/projects/:id/settings', {
-      method: 'GET',
-      requiresAuth: false,
-      handler: async c => {
-        const loaded = await loadOrgProject({ github, auth, c: loose(c) });
-        if ('response' in loaded) return loaded.response;
-        return c.json({
-          setupCommand: loaded.project.setupCommand,
-          teardownCommand: loaded.project.teardownCommand,
-        });
-      },
-    }),
-  );
-
-  // ── Update per-project settings ──────────────────────────────────────────
-  routes.push(
-    registerApiRoute('/web/github/projects/:id/settings', {
-      method: 'POST',
-      requiresAuth: false,
-      handler: async c => {
-        const loaded = await loadOrgProject({ github, auth, c: loose(c) });
-        if ('response' in loaded) return loaded.response;
-
-        let body: { setupCommand?: unknown; teardownCommand?: unknown };
-        try {
-          body = await c.req.json();
-        } catch {
-          return c.json({ error: 'Invalid JSON body' }, 400);
-        }
-
-        const commands = ['setupCommand', 'teardownCommand'] as const;
-        for (const command of commands) {
-          const value = body[command];
-          if (value === undefined) continue;
-          if (value !== null && typeof value !== 'string') {
-            return c.json({ error: `Invalid ${command}` }, 400);
-          }
-          if (typeof value === 'string' && value.length > 2000) {
-            return c.json({ error: `${command} too long (max 2000 characters)` }, 400);
-          }
-          // Reject control characters (except newline/tab). Commands are shell
-          // scripts by design, but escape sequences and NULs can spoof logs or
-          // confuse the sandbox shell.
-          if (typeof value === 'string' && /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value)) {
-            return c.json({ error: `${command} contains control characters` }, 400);
-          }
-        }
-
-        const normalizeCommand = (value: unknown): string | null | undefined => {
-          if (value === undefined) return undefined;
-          return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
-        };
-        const setupCommand = normalizeCommand(body.setupCommand);
-        const teardownCommand = normalizeCommand(body.teardownCommand);
-
-        await github.sourceControlStorage.projectRepositories.update({
-          orgId: loaded.project.installation.orgId,
-          id: loaded.project.id,
-          input: {
-            ...(setupCommand !== undefined ? { setupCommand } : {}),
-            ...(teardownCommand !== undefined ? { teardownCommand } : {}),
-          },
-        });
-        return c.json({
-          setupCommand: setupCommand === undefined ? loaded.project.setupCommand : setupCommand,
-          teardownCommand: teardownCommand === undefined ? loaded.project.teardownCommand : teardownCommand,
-        });
       },
     }),
   );
@@ -1032,27 +803,15 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
     }),
   );
 
-  // ── Sessions / commit / push / PR ────────────────────────────────────────
-  routes.push(
-    ...buildProjectGitRoutes({
-      github,
-      auth,
-      sandbox,
-      users,
-      controller,
-      memorySettings,
-      emitAudit,
-      sessionRetirement,
-      workItems,
-    }),
-  );
+  // ── Commit / push / PR ────────────────────────────────────────
+  routes.push(...buildProjectGitRoutes({ github, auth, sandbox, emitAudit }));
 
   return routes;
 }
 
 /**
  * Load the org-owned project for a read-only GitHub API route. Unlike
- * `loadOwnedProject`, this never touches sandbox state — the issues/PR list
+ * `loadOwnedProject`, this never touches sandbox state — the issue/PR detail
  * routes only need the repo + installation, so they work before a sandbox is
  * ever provisioned.
  */
@@ -1128,373 +887,18 @@ async function loadOwnedProject(options: {
   return { orgId, userId, project };
 }
 
-/**
- * One naming per session at a time: a second caller joins the run already in
- * flight instead of paying for another model call and racing its rename.
- */
-function createSessionNaming() {
-  const inFlight = new Map<string, Promise<string | null>>();
-  return (sessionId: string, run: () => Promise<string | null>) => {
-    const pending = inFlight.get(sessionId);
-    if (pending) return pending;
-    const started = run().finally(() => inFlight.delete(sessionId));
-    inFlight.set(sessionId, started);
-    return started;
-  };
-}
-
-/**
- * Name a thread with a stored model id. Resolution has to go through
- * mastracode's gateway: a bare id handed to core's model router looks for a
- * process env key instead of the caller's stored provider credentials.
- */
-function titleModel(modelId: string) {
-  return ({ requestContext }: { requestContext: RequestContext }) =>
-    resolveModel(modelId, { remapForCodexOAuth: true, requestContext });
-}
-
-interface SessionOwnerProfile {
-  id: string;
-  name: string;
-  avatarUrl?: string;
-}
-
-type SessionOwnerUserProvider = Pick<IUserProvider, 'getUser'> & Partial<Pick<IUserProvider, 'getUsers'>>;
-
-/** A screenful of history; GitHub caps its own page at 100. */
-const DEFAULT_COMMIT_PAGE = 20;
-const MAX_COMMIT_PAGE = 100;
-
-const MAX_SESSION_OWNER_PROFILES = 100;
-const MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES = 500;
-const SESSION_OWNER_PROFILE_TTL_MS = 5 * 60_000;
-
-function createSessionOwnerProfileResolver(users: SessionOwnerUserProvider | undefined) {
-  const cache = new Map<string, { profile?: SessionOwnerProfile; expiresAt: number }>();
-  const cacheProfile = (userId: string, profile: SessionOwnerProfile | undefined, expiresAt: number) => {
-    cache.delete(userId);
-    cache.set(userId, { profile, expiresAt });
-    if (cache.size > MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES) {
-      const oldestUserId = cache.keys().next().value;
-      if (oldestUserId !== undefined) cache.delete(oldestUserId);
-    }
-  };
-
-  return async (userIds: string[]): Promise<Map<string, SessionOwnerProfile>> => {
-    const profiles = new Map<string, SessionOwnerProfile>();
-    // A session the Factory owns has no person to look up; it is named for what it is.
-    for (const userId of userIds) {
-      if (isFactoryPrincipalId(userId)) profiles.set(userId, { id: userId, name: 'Factory' });
-    }
-    if (!users) return profiles;
-
-    const requestedUserIds = [...new Set(userIds)]
-      .filter(userId => !isFactoryPrincipalId(userId))
-      .slice(0, MAX_SESSION_OWNER_PROFILES);
-    const unresolvedUserIds: string[] = [];
-    const now = Date.now();
-
-    for (const userId of requestedUserIds) {
-      const cached = cache.get(userId);
-      if (!cached || cached.expiresAt <= now) {
-        cache.delete(userId);
-        unresolvedUserIds.push(userId);
-      } else if (cached.profile) {
-        profiles.set(userId, cached.profile);
-      }
-    }
-
-    if (unresolvedUserIds.length === 0) return profiles;
-
-    let resolvedUsers: Array<Awaited<ReturnType<SessionOwnerUserProvider['getUser']>>>;
-    if (users.getUsers) {
-      try {
-        resolvedUsers = await users.getUsers(unresolvedUserIds);
-      } catch (error) {
-        console.warn('[GitHub Sessions] Bulk session owner profile lookup failed; falling back to individual lookups', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-        resolvedUsers = (await Promise.allSettled(unresolvedUserIds.map(userId => users.getUser(userId))))
-          .filter(result => result.status === 'fulfilled')
-          .map(result => result.value);
-      }
-    } else {
-      resolvedUsers = (await Promise.allSettled(unresolvedUserIds.map(userId => users.getUser(userId))))
-        .filter(result => result.status === 'fulfilled')
-        .map(result => result.value);
-    }
-
-    for (const user of resolvedUsers) {
-      if (!user) continue;
-      const name = user.name?.trim() || user.email?.trim();
-      if (!name) continue;
-      profiles.set(user.id, {
-        id: user.id,
-        name,
-        ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
-      });
-    }
-
-    const expiresAt = now + SESSION_OWNER_PROFILE_TTL_MS;
-    for (const userId of unresolvedUserIds) {
-      cacheProfile(userId, profiles.get(userId), expiresAt);
-    }
-    return profiles;
-  };
-}
-
 function buildProjectGitRoutes({
   github,
   auth,
   sandbox,
-  users,
-  controller,
-  memorySettings,
   emitAudit,
-  sessionRetirement,
-  workItems,
 }: {
   github: GithubIntegration;
   auth: RouteAuth;
   sandbox?: FactorySandbox;
-  users?: SessionOwnerUserProvider;
-  controller?: MountedMastraCode['controller'];
-  memorySettings: MountGithubRoutesOptions['memorySettings'];
   emitAudit?: AuditEmitter['emit'];
-  sessionRetirement?: MountGithubRoutesOptions['sessionRetirement'];
-  workItems?: MountGithubRoutesOptions['workItems'];
 }): ApiRoute[] {
-  const nameSession = createSessionNaming();
-  const resolveSessionOwnerProfiles = createSessionOwnerProfileResolver(users);
   return [
-    // ── Create / list Factory sessions ──────────────────────────────────────
-    registerApiRoute('/web/github/projects/:id/sessions', {
-      method: 'GET',
-      requiresAuth: false,
-      handler: async c => {
-        const resolved = await resolveOrgTenant(loose(c), auth);
-        if ('response' in resolved) return resolved.response;
-        const { orgId, userId } = resolved.tenant;
-        const projectRepositoryId = c.req.param('id');
-        const project = projectRepositoryId
-          ? await resolveProjectRepository({ github, orgId, projectRepositoryId })
-          : null;
-        if (!project) return c.json({ error: 'Project repository not found' }, 404);
-        const sessions = await github.sourceControlStorage.sessions.list({
-          projectRepositoryId: project.id,
-          viewerUserId: userId,
-        });
-        const owners = await resolveSessionOwnerProfiles(sessions.map(session => session.userId));
-        return c.json({
-          sessions: sessions.map(session => {
-            const owner = owners.get(session.userId);
-            return { ...session, ...(owner ? { owner } : {}) };
-          }),
-        });
-      },
-    }),
-    registerApiRoute('/web/github/projects/:id/sessions', {
-      method: 'POST',
-      requiresAuth: false,
-      handler: async c => {
-        const resolved = await resolveOrgTenant(loose(c), auth);
-        if ('response' in resolved) return resolved.response;
-        const { orgId, userId } = resolved.tenant;
-        const projectRepositoryId = c.req.param('id');
-        const project = projectRepositoryId
-          ? await resolveProjectRepository({ github, orgId, projectRepositoryId })
-          : null;
-        if (!project) return c.json({ error: 'Project repository not found' }, 404);
-        let body: unknown;
-        try {
-          body = await c.req.json();
-        } catch {
-          return c.json({ error: 'Invalid JSON body' }, 400);
-        }
-        if (!isJsonObject(body)) return c.json({ error: 'Invalid JSON body' }, 400);
-        const requestedBaseBranch = body.baseBranch;
-        if (requestedBaseBranch !== undefined && typeof requestedBaseBranch !== 'string') {
-          return c.json({ error: 'Invalid baseBranch' }, 400);
-        }
-        const baseBranch = requestedBaseBranch ?? project.defaultBranch;
-        if (!isValidGitRefSandbox(baseBranch)) return c.json({ error: 'Invalid baseBranch' }, 400);
-
-        const requestedSessionId = body.sessionId;
-        if (
-          requestedSessionId !== undefined &&
-          (typeof requestedSessionId !== 'string' || !UUID_PATTERN.test(requestedSessionId))
-        ) {
-          return c.json({ error: 'Invalid sessionId' }, 400);
-        }
-        const sessionId = requestedSessionId ?? globalThis.crypto.randomUUID();
-
-        const requestedTitle = body.title;
-        if (requestedTitle !== undefined && typeof requestedTitle !== 'string') {
-          return c.json({ error: 'Invalid title' }, 400);
-        }
-        const normalizedTitle = requestedTitle === undefined ? null : normalizeSessionTitle(requestedTitle);
-
-        const requestedBranch = body.branch;
-        let branch: string;
-        if (requestedBranch === undefined) {
-          branch = `${USER_SESSION_BRANCH_PREFIX}${sessionId}`;
-        } else if (typeof requestedBranch === 'string' && isValidGitRefSandbox(requestedBranch)) {
-          branch = requestedBranch;
-        } else {
-          return c.json({ error: 'Invalid branch' }, 400);
-        }
-
-        if (requestedSessionId !== undefined) {
-          const existing = await github.sourceControlStorage.sessions.getBySessionId(sessionId);
-          if (existing) {
-            if (
-              existing.projectRepositoryId !== project.id ||
-              existing.orgId !== orgId ||
-              existing.userId !== userId ||
-              existing.branch !== branch
-            ) {
-              return c.json({ error: 'Session ID conflict' }, 409);
-            }
-            return c.json({ session: existing });
-          }
-        }
-
-        const session = await github.sourceControlStorage.sessions
-          .create({
-            sessionId,
-            projectRepositoryId: project.id,
-            factoryProjectId: project.factoryProjectId,
-            orgId,
-            userId,
-            branch,
-            baseBranch,
-            title: normalizedTitle,
-            visibility: 'org',
-          })
-          .catch(async error => {
-            if (!(error instanceof UniqueViolationError) || requestedSessionId === undefined) throw error;
-            const conflict = await github.sourceControlStorage.sessions.getBySessionId(sessionId);
-            if (!conflict) throw error;
-            return conflict;
-          });
-        if (
-          requestedSessionId !== undefined &&
-          (session.sessionId !== sessionId ||
-            session.projectRepositoryId !== project.id ||
-            session.orgId !== orgId ||
-            session.userId !== userId ||
-            session.branch !== branch)
-        ) {
-          return c.json({ error: 'Session ID conflict' }, 409);
-        }
-        return c.json({ session });
-      },
-    }),
-    registerApiRoute('/web/user-sessions/:sessionId', {
-      method: 'GET',
-      requiresAuth: false,
-      handler: async c => {
-        const resolved = await resolveOrgTenant(loose(c), auth);
-        if ('response' in resolved) return resolved.response;
-        const session = await github.sourceControlStorage.sessions.getBySessionId(c.req.param('sessionId'));
-        // Private sessions 404 (not 403) for non-owners so their IDs do not
-        // leak existence; the body must match the genuinely-missing case.
-        if (!session || !canViewSourceControlSession(session, resolved.tenant)) {
-          return c.json({ error: 'Session not found' }, 404);
-        }
-        const resourceId = await sessionMemoryResourceId(controller, session, workItems);
-        if (!canReadSessionResource(session, resourceId, resolved.tenant)) {
-          return c.json({ error: 'Session not found' }, 404);
-        }
-        return c.json({ session: { ...session, resourceId } });
-      },
-    }),
-    registerApiRoute('/web/user-sessions/:sessionId', {
-      method: 'DELETE',
-      requiresAuth: false,
-      handler: async c => {
-        const resolved = await resolveOrgTenant(loose(c), auth);
-        if ('response' in resolved) return resolved.response;
-        const session = await github.sourceControlStorage.sessions.getBySessionId(c.req.param('sessionId'));
-        if (!session || session.orgId !== resolved.tenant.orgId || session.userId !== resolved.tenant.userId) {
-          return c.json({ error: 'Session not found' }, 404);
-        }
-        try {
-          await controller?.deleteSession({ sessionId: session.sessionId });
-        } catch (error) {
-          console.error('[GitHub Sessions] Failed to tear down live controller session', {
-            sessionId: session.sessionId,
-            error,
-          });
-        }
-        if (sessionRetirement) {
-          await sessionRetirement.retireSession({
-            sourceControl: github.sourceControlStorage,
-            ...(workItems ? { workItems } : {}),
-            orgId: session.orgId,
-            sessionId: session.sessionId,
-            deleteSession: true,
-          });
-        } else {
-          await workItems?.clearSessionReferences({ orgId: session.orgId, sessionId: session.sessionId });
-          await github.sourceControlStorage.sessions.delete(session.id);
-          void reclaimDeletedSessionSandbox({ session }).catch((error: unknown) => {
-            console.error('[GitHub Sessions] Failed to reclaim sandbox for deleted session', {
-              sessionId: session.sessionId,
-              sandboxId: session.sandboxId,
-              error,
-            });
-          });
-        }
-        return c.json({ removed: true });
-      },
-    }),
-
-    // ── Re-name a session's thread with the title model ────────────────────
-    registerApiRoute('/web/user-sessions/:sessionId/title', {
-      method: 'POST',
-      requiresAuth: false,
-      handler: async c => {
-        const resolved = await resolveOrgTenant(loose(c), auth);
-        if ('response' in resolved) return resolved.response;
-        const sessionId = c.req.param('sessionId');
-        const row = await github.sourceControlStorage.sessions.getBySessionId(sessionId);
-        if (!row || row.orgId !== resolved.tenant.orgId || row.userId !== resolved.tenant.userId) {
-          return c.json({ error: 'Session not found' }, 404);
-        }
-        if (!controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
-
-        const threads = await listFactorySessionThreads(controller, row, workItems);
-        const thread = threads.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
-        if (!thread) return c.json({ error: 'This session has no conversation to name yet.' }, 409);
-
-        // A session that is not live carries neither the observer model that names
-        // its threads nor the identity whose provider credentials pay for it.
-        const stored = await memorySettings.get({ orgId: row.orgId, userId: row.userId });
-        const requestContext = new RequestContext();
-        requestContext.set('user', { workosId: row.userId, organizationId: row.orgId });
-        requestContext.set('mastra__factoryMemorySettings', stored);
-
-        try {
-          const title = await nameSession(sessionId, async () => {
-            const generated = await controller.generateThreadTitle({
-              threadId: thread.id,
-              sessionId,
-              requestContext,
-              ...(stored?.observerModelId ? { model: titleModel(stored.observerModelId) } : {}),
-            });
-            const named = generated ? normalizeSessionTitle(generated) : null;
-            if (named) await github.sourceControlStorage.sessions.rename({ sessionId, title: named });
-            return named;
-          });
-          if (!title) return c.json({ error: 'The model returned an empty title. Try again.' }, 502);
-          return c.json({ title });
-        } catch (error) {
-          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-        }
-      },
-    }),
-
     // ── Stage all + commit inside a Factory session workspace ──────────────
     registerApiRoute('/web/github/projects/:id/commit', {
       method: 'POST',
@@ -1541,32 +945,6 @@ function buildProjectGitRoutes({
             }
             return c.json({ committed: result.committed });
           });
-        } catch (err) {
-          return gitErrorResponse(loose(c), err);
-        }
-      },
-    }),
-
-    // ── Recent commits on a repository branch ───────────────────────────────
-    registerApiRoute('/web/github/projects/:id/commits', {
-      method: 'GET',
-      requiresAuth: false,
-      handler: async c => {
-        const loaded = await loadOrgProject({ github, auth, c: loose(c) });
-        if ('response' in loaded) return loaded.response;
-        const { orgId, project } = loaded;
-
-        const branch = c.req.query('branch') ?? project.defaultBranch;
-        if (!isValidGitRefSandbox(branch)) return c.json({ error: 'Invalid branch' }, 400);
-        // GitHub takes `per_page` as an integer, so a fractional limit would go out verbatim.
-        const limit = Math.min(
-          Math.max(Math.floor(Number(c.req.query('limit') ?? DEFAULT_COMMIT_PAGE)) || DEFAULT_COMMIT_PAGE, 1),
-          MAX_COMMIT_PAGE,
-        );
-
-        try {
-          const commits = await listRepositoryCommits(github, { orgId, project, branch, limit });
-          return c.json({ commits, branch });
         } catch (err) {
           return gitErrorResponse(loose(c), err);
         }
