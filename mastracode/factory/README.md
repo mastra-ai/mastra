@@ -1196,6 +1196,27 @@ curl -X PATCH "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes/$DEFAULT
 }'
 ```
 
+### Platform GitHub and the Mastra Factory apps
+
+`PlatformGithubIntegration` serves each organization through one of two sets of GitHub Apps:
+
+- **The Mastra GitHub App** (the default). Factory reaches GitHub through the platform's GitHub routes, as before. The App's webhooks reach Factory as events from the Platform events service (the project's `github-app` topic). Factory no longer polls the platform for them.
+- **The Mastra Factory apps**, after an organization admin switches. They are two Mastra Connect integrations, `factory-github` and `factory-reviews-github`, with one connection for each GitHub account they're installed on. Factory calls GitHub directly with the apps' installation tokens:
+  - reviews, review comments, and the review-status comment and check are posted as **Mastra Factory Reviews**;
+  - everything else is posted as **Mastra Factory**.
+
+  `factory-github`'s webhooks arrive as events on the project's `connect` topic.
+
+In both modes, a reconcile runs hourly, and so does the sweep for pull requests that opened while events were missed. `MASTRACODE_PLATFORM_GITHUB_RECONCILE_INTERVAL_MS`, `MASTRACODE_PLATFORM_GITHUB_PR_RECONCILE_INTERVAL_MS`, `MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_INTERVAL_MS` and `MASTRACODE_PLATFORM_GITHUB_PR_DISCOVERY_INTERVAL_MS` change their cadence. The `MASTRA_PLATFORM_GITHUB_POLLING_*` variables are gone.
+
+**Switching an organization.** In **Settings → Source control**, an organization admin installs both apps on every GitHub account Factory uses, then chooses **Switch**. The switch is allowed only once both apps can reach every repository linked to a Factory project. Until then, the page lists what's missing: an app, an account, or a repository. The switch moves the organization's installations and repositories onto the new apps by GitHub repository id, so project links, cards and sessions carry over. It runs in one transaction, and running it again is a no-op. There is no switch back. The API is `GET` and `POST /web/integrations/platform/github/switch`, both for organization admins only.
+
+**Acting as a person.** After the switch, pull requests and comments a person creates through Factory are authored as that person when they have connected their own GitHub account. They connect it in **Settings → Connected accounts**, either through the Mastra Factory app or by pasting a personal access token. A connection takes precedence over a token. Without either, Factory writes as Mastra Factory and starts the text with `> Opened by @<Factory user id>`, as the Mastra GitHub App does for a person with no connected GitHub account.
+
+**Sandbox tokens.** After the switch, an agent sandbox gets an installation token scoped to its session's repositories (at most 10) with Factory's usual permission set, minted by the platform. A sandbox never gets a token for the whole installation.
+
+Factory recognizes its own writes by the apps' logins. `MASTRA_FACTORY_GITHUB_APP_SLUG` (default `mastra-factory`) and `MASTRA_FACTORY_REVIEWS_GITHUB_APP_SLUG` (default `mastra-factory-reviews`) override them for deployments with differently named apps.
+
 ### GitHub event rules
 
 Both `GithubIntegration` and `PlatformGithubIntegration` own their GitHub event handlers. Existing installations retain the defaults without additional configuration.
