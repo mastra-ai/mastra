@@ -118,7 +118,6 @@ import {
   createDurableAgentStream,
   createRunGenerationFilter,
   createSupersededEventFilter,
-  emitAbortEvent,
   emitChunkEvent,
   emitErrorEvent,
   emitFinishEvent,
@@ -904,8 +903,6 @@ export class DurableAgent<
   #activeStreamUntilIdle = new Map<string, () => void>();
   /** The stream segment (stream() or resume()) that currently owns each run id's shared state. */
   #segmentOwner = new Map<string, symbol>();
-  /** Canceled parked runs whose abort terminal this process already published. */
-  #canceledRunTerminals = new Set<string>();
 
   /**
    * User-supplied snapshot-persistence policy
@@ -2853,29 +2850,7 @@ export class DurableAgent<
    * another server from resuming the run.
    */
   async #cancelParkedRun(runId: string): Promise<boolean> {
-    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    if (!workflowsStore) return false;
-    const workflowName = DurableStepIds.AGENTIC_LOOP;
-    if (workflowsStore.supportsConcurrentUpdates()) {
-      if ((await workflowsStore.loadWorkflowRunStatus({ workflowName, runId })) !== 'suspended') return false;
-      const updated = await workflowsStore.updateWorkflowState({
-        workflowName,
-        runId,
-        opts: { status: 'canceled', expectedStatus: 'suspended' },
-      });
-      return updated !== undefined;
-    }
-    const run = await workflowsStore.getWorkflowRunById({ runId, workflowName });
-    const snapshot = typeof run?.snapshot === 'string' ? (JSON.parse(run.snapshot) as WorkflowRunState) : run?.snapshot;
-    if (snapshot?.status !== 'suspended') return false;
-    const written = await workflowsStore.persistWorkflowSnapshot({
-      workflowName,
-      runId,
-      resourceId: run?.resourceId,
-      snapshot: { ...snapshot, status: 'canceled' },
-      expectedStatus: 'suspended',
-    });
-    return written !== false;
+    return this.executionEngine.cancelParkedRun(runId);
   }
 
   /**
@@ -2886,36 +2861,11 @@ export class DurableAgent<
    * server retries the publish.
    */
   async #announceCanceledRun(runId: string): Promise<void> {
-    try {
-      await this.#publishCanceledRunTerminal(runId);
-    } catch (error) {
-      this.#mastra?.getLogger?.()?.warn?.(`Failed to publish the abort of canceled run ${runId}`, { runId, error });
-    }
-  }
-
-  /**
-   * Publish the abort terminal of a canceled run once per process. Reserved before the
-   * publish, so concurrent callers publish once; released if the publish fails, so the
-   * next caller retries it.
-   */
-  async #publishCanceledRunTerminal(runId: string): Promise<void> {
-    if (this.#canceledRunTerminals.has(runId)) return;
-    this.#canceledRunTerminals.add(runId);
-    if (this.#canceledRunTerminals.size > 1000) {
-      this.#canceledRunTerminals.delete(this.#canceledRunTerminals.values().next().value!);
-    }
-    try {
-      await emitAbortEvent(this.pubsub, runId, { steps: [], text: '' });
-    } catch (error) {
-      this.#canceledRunTerminals.delete(runId);
-      throw error;
-    }
+    return this.executionEngine.announceCanceledRun(runId);
   }
 
   async #isRunCanceledInStorage(runId: string): Promise<boolean> {
-    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const status = await workflowsStore?.loadWorkflowRunStatus({ workflowName: DurableStepIds.AGENTIC_LOOP, runId });
-    return status === 'canceled';
+    return this.executionEngine.isRunCanceledInStorage(runId);
   }
 
   /**
@@ -2931,26 +2881,7 @@ export class DurableAgent<
    * abort, and is published here only if that publish failed.
    */
   async #deleteFencedSuspendedRun(runId: string): Promise<void> {
-    try {
-      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-      const persisted = await workflowsStore?.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
-      const snapshot =
-        typeof persisted?.snapshot === 'string'
-          ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
-          : persisted?.snapshot;
-      if (snapshot?.status === 'canceled') {
-        await this.#publishCanceledRunTerminal(runId);
-        return;
-      }
-      if (snapshot?.status !== 'suspended') return;
-      await this.deleteRunSnapshots(runId);
-      await emitAbortEvent(this.pubsub, runId, { steps: [], text: '' });
-    } catch (error) {
-      this.#mastra?.getLogger?.()?.warn?.(`Failed to delete snapshot of aborted suspended run ${runId}`, {
-        runId,
-        error,
-      });
-    }
+    return this.executionEngine.deleteFencedSuspendedRun(runId);
   }
 
   /** Flip the controller this process holds for `runId`, if it holds one. */
