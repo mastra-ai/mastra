@@ -90,9 +90,9 @@ export interface CreateAgentStreamPublisherOptions {
   listenForAbort?: boolean;
 }
 
-export interface AgentStreamOutput {
+export interface AgentStreamProducer {
   publishEvent(event: Omit<Event, 'id' | 'createdAt'>, transport?: PubSub): Promise<void>;
-  /** Release this worker's output handle, not the run's lifecycle or abort listener. */
+  /** Release this producer handle, not the run owner's handle or abort listener. */
   detach(): Promise<void>;
 }
 
@@ -108,12 +108,12 @@ interface PublicationQueue {
 }
 
 export interface AgentStreamPublisherCoordinator {
-  attachOutput(options: {
+  attachEventProducer(options: {
     publisherId: string;
     pubsub: PubSub;
     assertOwnership: () => Promise<void>;
-  }): AgentStreamOutput;
-  attachLifecycle(options: Omit<CreateAgentStreamPublisherOptions, 'runId'>): AgentStreamPublisher;
+  }): AgentStreamProducer;
+  attachOwner(options: Omit<CreateAgentStreamPublisherOptions, 'runId'>): AgentStreamPublisher;
   listenForAbort(
     pubsub: PubSub,
     onAbortRequested: () => boolean | void,
@@ -129,8 +129,8 @@ export function createAgentStreamPublisherCoordinator(
   runId: string,
   logger?: IMastraLogger,
 ): AgentStreamPublisherCoordinator {
-  const outputs = new Map<string, AgentStreamOutput>();
-  const lifecycles = new Map<string, AgentStreamPublisher>();
+  const producers = new Map<string, AgentStreamProducer>();
+  const owners = new Map<string, AgentStreamPublisher>();
   const listeners = new Set<() => Promise<void>>();
 
   // Keep independent output and lifecycle lanes: abort dispatch never waits on either queue.
@@ -159,12 +159,12 @@ export function createAgentStreamPublisherCoordinator(
   };
 
   const coordinator: AgentStreamPublisherCoordinator = {
-    attachOutput({ publisherId, pubsub, assertOwnership }) {
-      const existing = outputs.get(publisherId);
+    attachEventProducer({ publisherId, pubsub, assertOwnership }) {
+      const existing = producers.get(publisherId);
       if (existing) return existing;
       const publications = createPublicationQueue();
       let released = false;
-      const output: AgentStreamOutput = {
+      const producer: AgentStreamProducer = {
         async publishEvent(event, transport = pubsub) {
           if (!released) await publications.publish(event, transport, assertOwnership);
         },
@@ -173,19 +173,19 @@ export function createAgentStreamPublisherCoordinator(
           await publications.flush();
         },
       };
-      outputs.set(publisherId, output);
-      return output;
+      producers.set(publisherId, producer);
+      return producer;
     },
-    attachLifecycle(options) {
+    attachOwner(options) {
       const publisherId = options.publisherId ?? globalThis.crypto.randomUUID();
-      const existing = lifecycles.get(publisherId);
+      const existing = owners.get(publisherId);
       if (existing) return existing;
-      const handle = createLifecycleHandle(
+      const handle = createOwnerHandle(
         { ...options, runId, publisherId },
         createPublicationQueue(),
         coordinator.listenForAbort,
       );
-      lifecycles.set(publisherId, handle);
+      owners.set(publisherId, handle);
       return handle;
     },
     listenForAbort(pubsub, onAbortRequested) {
@@ -213,8 +213,8 @@ export function createAgentStreamPublisherCoordinator(
     async detach() {
       await Promise.all([
         ...Array.from(listeners, detach => detach()),
-        ...Array.from(outputs.values(), output => output.detach()),
-        ...Array.from(lifecycles.values(), lifecycle => lifecycle.detach()),
+        ...Array.from(producers.values(), producer => producer.detach()),
+        ...Array.from(owners.values(), owner => owner.detach()),
       ]);
     },
   };
@@ -223,7 +223,7 @@ export function createAgentStreamPublisherCoordinator(
 
 /** Plain agents hold the full handle; durable workers only receive the capabilities they need. */
 export function createAgentStreamPublisher(options: CreateAgentStreamPublisherOptions): AgentStreamPublisher {
-  return createAgentStreamPublisherCoordinator(options.runId, options.logger).attachLifecycle(options);
+  return createAgentStreamPublisherCoordinator(options.runId, options.logger).attachOwner(options);
 }
 
 /**
@@ -240,7 +240,7 @@ export function createAgentStreamPublisher(options: CreateAgentStreamPublisherOp
  *   once the run's snapshot is persisted (when the loop closes)
  * - anything else → `chunk`, with errors serialized so they survive JSON transports
  */
-function createLifecycleHandle(
+function createOwnerHandle(
   {
     pubsub,
     runId,

@@ -34,9 +34,9 @@ import {
 } from './execution-fence';
 import { ExecutionOwnershipGuard } from './execution-ownership-guard';
 import {
-  getExecutionStreamLifecycle,
-  getExecutionStreamOutput,
-  withExecutionStreamPublisher,
+  getExecutionStreamOwner,
+  getExecutionStreamProducer,
+  withExecutionStreamProducer,
 } from './execution-stream-publisher';
 import { deleteRunRegistryEntry, setRunRegistryEntry } from './run-registry';
 import type { RunRegistryEntry } from './types';
@@ -92,11 +92,11 @@ describe('execution publisher transport boundaries (COR-1560)', () => {
         sharedEvents.push(event.type);
       });
       const options = { runId, agentId, mastra, claim: fence.claim };
-      const lifecycle = getExecutionStreamLifecycle({
+      const lifecycle = getExecutionStreamOwner({
         ...options,
         ...(registerInner ? { agent } : {}),
       })!;
-      const producer = getExecutionStreamOutput(options)!;
+      const producer = getExecutionStreamProducer(options)!;
       try {
         await lifecycle.ready;
         await producer.publishEvent({ type: 'iteration-start', runId, data: {} });
@@ -130,7 +130,7 @@ describe('execution publisher transport boundaries (COR-1560)', () => {
     });
     const mastra = new Mastra({ agents: { agent }, pubsub, logger: false });
     const options = { runId, agentId, mastra, claim: fence.claim };
-    const publisher = getExecutionStreamOutput(options)!;
+    const publisher = getExecutionStreamProducer(options)!;
     let reportLoss!: (error: DurableExecutionFenceError) => void;
     const guard = new ExecutionOwnershipGuard({
       observe: async () => {},
@@ -147,8 +147,8 @@ describe('execution publisher transport boundaries (COR-1560)', () => {
     await pubsub.subscribe('other-topic', event => {
       received.push(event.type);
     });
-    const step = fencePubSub(withExecutionStreamPublisher(pubsub, options), guard);
-    const nested = withExecutionStreamPublisher(step, options);
+    const step = fencePubSub(withExecutionStreamProducer(pubsub, options), guard);
+    const nested = withExecutionStreamProducer(step, options);
     const checks = vi.spyOn(guard, 'isLost');
     const publications = vi.spyOn(publisher, 'publishEvent');
     try {
@@ -172,7 +172,7 @@ describe('execution publisher transport boundaries (COR-1560)', () => {
       await nested.publish('other-topic', { type: 'other', runId, data: {} });
       expect(received).toEqual(lost ? [] : ['iteration-start', 'other']);
       // The fallback path must still delegate through the original fence.
-      const fallback = withExecutionStreamPublisher(step, { runId: `${runId}-fallback`, agentId });
+      const fallback = withExecutionStreamProducer(step, { runId: `${runId}-fallback`, agentId });
       await pubsub.subscribe(AGENT_STREAM_TOPIC(`${runId}-fallback`), event => {
         received.push(event.type);
       });
@@ -199,7 +199,7 @@ describe('execution publisher transport boundaries (COR-1560)', () => {
     });
     const mastra = new Mastra({ agents: { agent }, pubsub, logger: false });
     const options = { runId, agentId, mastra, claim: fence.claim };
-    const publisher = getExecutionStreamOutput(options)!;
+    const publisher = getExecutionStreamProducer(options)!;
     const received: string[] = [];
     const ownerEvents: string[] = [];
     const stepEvents: string[] = [];
@@ -219,8 +219,8 @@ describe('execution publisher transport boundaries (COR-1560)', () => {
     });
     try {
       const before = publisher.publishEvent({ type: 'before-wrapper', runId, data: {} }, pubsub);
-      const step = withExecutionStreamPublisher(
-        fencePubSub(withExecutionStreamPublisher(stepTransport, options), guard),
+      const step = withExecutionStreamProducer(
+        fencePubSub(withExecutionStreamProducer(stepTransport, options), guard),
         options,
       );
       const after = step.publish(AGENT_STREAM_TOPIC(runId), { type: 'after-wrapper', runId, data: {} });

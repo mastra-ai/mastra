@@ -103,7 +103,7 @@ import {
   supportsRunFencing,
 } from './execution-fence';
 import type { UntrackedRunLiveness } from './execution-fence';
-import { getExecutionStreamLifecycle, withExecutionStreamPublisher } from './execution-stream-publisher';
+import { getExecutionStreamOwner, withExecutionStreamProducer } from './execution-stream-publisher';
 import { detachFullStreamOnEnd } from './observe-full-stream';
 import { persistDurableRunInput } from './persist-run-input';
 import { prepareForDurableExecution } from './preparation';
@@ -1057,7 +1057,7 @@ export class DurableAgent<
    */
   async #attachStreamPublisher(runId: string, owner: { resourceId?: string; threadId?: string }): Promise<void> {
     const claim = getRunRegistryEntry(runId, this.#mastra)?.executionFence?.claim;
-    const publisher = getExecutionStreamLifecycle({
+    const publisher = getExecutionStreamOwner({
       runId,
       agentId: this.id,
       mastra: this.#mastra,
@@ -1079,7 +1079,7 @@ export class DurableAgent<
   }
 
   #owningReaderTerminal(runId: string, executionFence: ExecutionFence) {
-    const publisher = getExecutionStreamLifecycle({
+    const publisher = getExecutionStreamOwner({
       runId,
       agentId: this.id,
       mastra: this.#mastra,
@@ -2816,7 +2816,7 @@ export class DurableAgent<
     pubsub: PubSub = this.pubsub,
   ): PubSub {
     if (executionFence) {
-      pubsub = withExecutionStreamPublisher(pubsub, {
+      pubsub = withExecutionStreamProducer(pubsub, {
         runId: executionFence.runId,
         agentId: this.id,
         mastra: this.#mastra,
@@ -6297,7 +6297,7 @@ export class DurableAgent<
    * which reschedules deletion on that run's terminal end.
    */
   #clearPubsubTopic(runId: string, entry = getRunRegistryEntry(runId, this.#mastra)): void {
-    const publisher = getExecutionStreamLifecycle({
+    const publisher = getExecutionStreamOwner({
       runId,
       agentId: this.id,
       mastra: this.#mastra,

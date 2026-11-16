@@ -38,7 +38,7 @@ import { MASTRA_DURABLE_EXECUTIONS_KEY } from '../request-context-snapshot';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { ExecutionOwnershipGuard } from './execution-ownership-guard';
-import { executionTransport, withExecutionStreamPublisher } from './execution-stream-publisher';
+import { executionTransport, withExecutionStreamProducer } from './execution-stream-publisher';
 import { runInRunFenceScope } from './run-fence-scope';
 import { getRunRegistryEntry } from './run-registry';
 
@@ -1442,7 +1442,7 @@ export function withExecutionFence<TStep extends FenceableStep>(step: TStep): TS
                 value:
                   pubsub &&
                   fencePubSub(
-                    withExecutionStreamPublisher(pubsub, { runId, agentId, mastra: params.mastra, claim }),
+                    withExecutionStreamProducer(pubsub, { runId, agentId, mastra: params.mastra, claim }),
                     guard,
                   ),
               },

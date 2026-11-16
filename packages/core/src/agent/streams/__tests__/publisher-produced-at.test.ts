@@ -22,14 +22,18 @@ describe('agent stream publisher', () => {
     const events: Event[] = [];
     await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => void events.push(event));
     const coordinator = createAgentStreamPublisherCoordinator(runId);
-    const publisher = coordinator.attachOutput({
+    const publisher = coordinator.attachEventProducer({
       pubsub,
       publisherId: 'worker',
       assertOwnership: async () => controller.signal.throwIfAborted(),
     });
     try {
       const pending = publisher.publishEvent({ type: AgentStreamEventTypes.CHUNK, runId, data: { text: 'stale' } });
-      const successor = coordinator.attachOutput({ pubsub, publisherId: 'successor', assertOwnership: async () => {} });
+      const successor = coordinator.attachEventProducer({
+        pubsub,
+        publisherId: 'successor',
+        assertOwnership: async () => {},
+      });
       controller.abort(new Error('Execution superseded'));
       await expect(pending).rejects.toThrow('Execution superseded');
       await successor.publishEvent({ type: AgentStreamEventTypes.CHUNK, runId, data: { text: 'current' } });
@@ -52,14 +56,14 @@ describe('agent stream publisher', () => {
     const publisherId = 'shared-execution';
     const record = { cache, agentId: 'shared-agent' };
     const publisher = createAgentStreamPublisherCoordinator(runId);
-    const owner = publisher.attachLifecycle({
+    const owner = publisher.attachOwner({
       pubsub,
       publisherId,
       cleanupTimeoutMs: 0,
       record: { ...record, resourceId: 'resource', threadId: 'thread' },
     });
     await owner.ready;
-    const worker = publisher.attachOutput({ pubsub, publisherId, assertOwnership: async () => {} });
+    const worker = publisher.attachEventProducer({ pubsub, publisherId, assertOwnership: async () => {} });
     try {
       await worker.publishEvent({ type, runId, data: {} });
       expect(await readAgentRunRecord(cache, record.agentId, runId)).toMatchObject({ status: 'running', publisherId });
@@ -85,11 +89,11 @@ describe('agent stream publisher', () => {
     const events: Event[] = [];
     await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => void events.push(event));
     const publisher = createAgentStreamPublisherCoordinator(runId);
-    const owner = publisher.attachLifecycle({ pubsub, record, publisherId: 'execution', cleanupTimeoutMs: 0 });
+    const owner = publisher.attachOwner({ pubsub, record, publisherId: 'execution', cleanupTimeoutMs: 0 });
     await owner.ready;
     const ownerRecord = await readAgentRunRecord(cache, record.agentId, runId);
-    const worker = publisher.attachOutput({ pubsub, publisherId: 'execution', assertOwnership: async () => {} });
-    const sibling = publisher.attachOutput({ pubsub, publisherId: 'sibling', assertOwnership: async () => {} });
+    const worker = publisher.attachEventProducer({ pubsub, publisherId: 'execution', assertOwnership: async () => {} });
+    const sibling = publisher.attachEventProducer({ pubsub, publisherId: 'sibling', assertOwnership: async () => {} });
     try {
       await worker.publishEvent({ type: AgentStreamEventTypes.CHUNK, runId, data: { text: 'First' } });
       await worker.detach();
@@ -132,14 +136,14 @@ describe('agent stream publisher', () => {
     const controller = new AbortController();
     const listener = publisher.listenForAbort(pubsub, () => controller.abort());
     await listener.ready;
-    const owner = publisher.attachLifecycle({
+    const owner = publisher.attachOwner({
       pubsub,
       publisherId: 'execution',
       cleanupTimeoutMs: 0,
       listenForAbort: false,
       record: { cache, agentId: 'shared-agent' },
     });
-    const worker = publisher.attachOutput({ pubsub, publisherId: 'execution', assertOwnership: async () => {} });
+    const worker = publisher.attachEventProducer({ pubsub, publisherId: 'execution', assertOwnership: async () => {} });
     const pending = worker.publishEvent({ type: AgentStreamEventTypes.CHUNK, runId, data: { text: 'delayed' } });
     try {
       await publishing;
