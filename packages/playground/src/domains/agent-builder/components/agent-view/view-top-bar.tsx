@@ -1,7 +1,7 @@
 import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Header } from '@mastra/playground-ui/components/Header';
-import { RefreshCwIcon } from 'lucide-react';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { WorkspaceMode } from '../../layouts/types';
@@ -55,7 +55,7 @@ export const ViewTopBar = ({
               className="hidden shrink-0 lg:inline-flex"
               data-testid="agent-builder-mode-toggle"
               aria-label={toggleLabel}
-              icon={<RefreshCwIcon />}
+              icon={<IconArrowRotateClockwise />}
             >
               {toggleLabel}
             </Button>

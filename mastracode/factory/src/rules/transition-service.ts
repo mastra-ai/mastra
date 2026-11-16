@@ -670,8 +670,7 @@ export class FactoryTransitionService {
       expectedRevision: request.expectedRevision,
       destinationStage: request.stage,
       actorId: actorId(request.actor),
-      ingress: { identity: request.ingress.identity, triggerType: request.ingress.type, transitionId },
-      configVersion: this.#configVersion,
+      ingress: { identity: request.ingress.identity, transitionId },
       causalChain: [...(request.causalChain ?? [])],
       evaluation,
     });

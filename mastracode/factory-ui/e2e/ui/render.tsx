@@ -86,10 +86,10 @@ export async function waitForMutationsIdle(client: QueryClient) {
   });
 }
 
-/** The routed page's `PageLayout` header (the sidebar renders its own `banner`). */
+/** The chat page's own header (the sidebar renders its own `banner`). */
 export function findPageHeader(): Promise<HTMLElement> {
   return waitFor(() => {
-    const header = document.querySelector<HTMLElement>('[data-slot="page-layout"] > header');
+    const header = document.querySelector<HTMLElement>('[data-slot="chat-page-header"] > header');
     if (!header) throw new Error('Page header not rendered');
     return header;
   });

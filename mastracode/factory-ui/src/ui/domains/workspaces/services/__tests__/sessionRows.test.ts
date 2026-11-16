@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import { releaseBoard, workBoardCatalog } from '../../../../../../e2e/ui/board-catalog';
 import { providerFactsCard } from '../../../../__tests__/fixtures/providerFactsCard';
+import { cardChangeRequest } from '../../../factory/changeRequestState';
 import { EMPTY_SESSION_FILTERS, filterSessionRows } from '../sessionFilters';
 import { groupSessionRows, sessionGroupHeadings } from '../sessionGroups';
 import { oneRowPerCard, pinnedSessionsAfter, sessionActivityStatus, sessionBoard } from '../sessionRows';
+import { sessionWorkItemIndex } from '../sessionWorkItems';
 import { factoryRow, testSession, testWorkItem, userRow } from './fixtures/sessionRows';
 
 describe('sessionBoard', () => {
@@ -66,9 +68,9 @@ describe('external links', () => {
       metadata: { merged: false },
       workItem: { ...providerFactsCard.workItem, state: 'merged', metadata: {} },
     });
-    const row = factoryRow(testSession('s1'), { pullRequest });
+    const row = factoryRow(testSession('s1'), { pullRequest: cardChangeRequest(pullRequest) });
 
-    expect(row.pullRequest).toMatchObject({ knownMerged: true });
+    expect(row.pullRequestStatus).toBe('merged');
   });
 
   const slackThread = testWorkItem({ source: 'slack-thread', url: 'https://app.slack.com/client/T-1/C-1' });
@@ -99,9 +101,40 @@ describe('external links', () => {
     ['an issue tracker by name', linearIssue, undefined, [['Open in Linear', linearIssue.url]]],
     ['nothing for an item without a link', testWorkItem(), undefined, []],
   ] as const)('offers %s', (_case, item, pullRequestItem, links) => {
-    const row = factoryRow(testSession('s1'), { item, pullRequest: pullRequestItem });
+    const row = factoryRow(testSession('s1'), {
+      item,
+      pullRequest: pullRequestItem && cardChangeRequest(pullRequestItem),
+    });
 
     expect(row.externalLinks.map(link => [link.label, link.url])).toEqual(links);
+  });
+
+  it('offers the pull request an issue card opened, next to the issue', () => {
+    const issueUrl = 'https://github.com/acme/app/issues/73';
+    const pullRequestUrl = 'https://github.com/acme/app/pull/74';
+    const issue = testWorkItem({
+      source: 'github-issue',
+      url: issueUrl,
+      sessions: { work: { sessionId: 's1', branch: 'factory/s1', threadId: 's1-thread', startedBy: 'user-1' } },
+      workItem: {
+        ...providerFactsCard.workItem,
+        sources: providerFactsCard.workItem.sources.map(source => ({
+          ...source,
+          id: 'source-pull-request',
+          sourceType: 'pull-request',
+          url: pullRequestUrl,
+          state: 'open',
+          metadata: { githubPullRequestNumber: 74 },
+        })),
+      },
+    });
+    const indexed = sessionWorkItemIndex([issue]).get('s1');
+    const row = factoryRow(testSession('s1'), { item: issue, pullRequest: indexed?.pullRequest });
+
+    expect(row.externalLinks.map(link => [link.label, link.url])).toEqual([
+      ['Open in GitHub', issueUrl],
+      ['Open pull request', pullRequestUrl],
+    ]);
   });
 });
 

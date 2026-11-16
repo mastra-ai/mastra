@@ -43,7 +43,6 @@ export const server = setupServer(
   // Jira-specific tests override these with `server.use(...)`.
   http.get('*/web/jira/status', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   http.get('*/web/jira/projects', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
-  http.get('*/web/jira/issues', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   // incident.io intake is optional; feature tests override this ambient 404.
   http.get('*/web/incidentio/status', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   // A server without Platform machine credentials mounts no platform connect
@@ -54,10 +53,6 @@ export const server = setupServer(
   ),
   // Board filters read connection status even when no provider is configured.
   http.get('*/web/github/status', () => HttpResponse.json({ enabled: false, connected: false, installations: [] })),
-  // Ambient pull requests: Work and Review both list their linked repositories'
-  // open pull requests. Pull-request tests override these with `server.use(...)`.
-  http.get('*/web/github/projects/:id/prs', () => HttpResponse.json({ pullRequests: [], nextPage: null })),
-  http.get('*/web/gitlab/projects/:id/prs', () => HttpResponse.json({ pullRequests: [], nextPage: null })),
   // GitLab intake is optional; feature tests override these ambient 404s.
   http.get('*/web/gitlab/status', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   http.get('*/web/gitlab/projects', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),

@@ -6,10 +6,25 @@ export type WorkSource = 'linear' | 'jira' | 'incident-io';
 
 export const WORK_SOURCES: readonly WorkSource[] = ['linear', 'jira', 'incident-io'];
 
-export const WORK_SOURCE_NAME: Record<WorkSource, string> = {
+/**
+ * The repository hosts a Factory can take issues from. They are not trackers: nothing is
+ * connected up front, the codebase step's repository is what feeds them.
+ */
+export type CodeHostSource = 'github' | 'gitlab';
+
+/** Everything the Work step can preview or list as an issue source. */
+export type BoardSource = WorkSource | CodeHostSource;
+
+export function isCodeHostSource(source: BoardSource): source is CodeHostSource {
+  return source === 'github' || source === 'gitlab';
+}
+
+export const WORK_SOURCE_NAME: Record<BoardSource, string> = {
   linear: 'Linear',
   jira: 'Jira',
   'incident-io': 'incident.io',
+  github: 'GitHub',
+  gitlab: 'GitLab',
 };
 
 export interface WorkSourceConnectionsStatus {

@@ -1356,6 +1356,22 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /memory/working-memory": {
+    "method": "GET",
+    "path": "/memory/working-memory",
+    "pathParams": [],
+    "queryParams": [
+      "agentId",
+      "memoryConfig",
+      "resourceId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /memory/save-messages": {
     "method": "POST",
     "path": "/memory/save-messages",

@@ -14,7 +14,12 @@ import { StoredBoardsStorage } from './domains/boards/base.js';
 import { ChannelIdentityStorage } from './domains/channel-identity/base.js';
 import { ModelCredentialsStorage } from './domains/credentials/base.js';
 import { CustomProvidersStorage } from './domains/custom-providers/base.js';
-import { IntakeStorage } from './domains/intake/base.js';
+import {
+  INTAKE_DATA_MIGRATIONS_SCHEMA,
+  INTAKE_SOURCE_BINDINGS_SCHEMA,
+  IntakeStorage,
+  LEGACY_INTAKE_USER_SETTINGS_SCHEMA,
+} from './domains/intake/base.js';
 import { IntegrationStorage } from './domains/integrations/base.js';
 import { MemorySettingsStorage } from './domains/memory-settings/base.js';
 import { ModelDefaultsStorage } from './domains/model-defaults/base.js';
@@ -28,13 +33,29 @@ import { WorkItemsStorage } from './domains/work-items/base.js';
 import type { ExternalWorkItemSource } from './domains/work-items/base.js';
 import { bumpBoardVersions } from './domains/work-items/board-version.js';
 import { Cards } from './domains/work-items/cards.js';
+import { FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA, WORK_ITEMS_SCHEMA } from './domains/work-items/work-item-schema.js';
 import type { WorkItemRow, WorkItemSourceRow } from './domains/work-items/work-item-schema.js';
+
+/** Create the pre-split card tables a 0.26 Factory left behind, as on a database being upgraded. */
+export async function createLegacyCardTablesForTests(storage: FactoryStorage): Promise<void> {
+  await storage.ensureCollections([WORK_ITEMS_SCHEMA, FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA]);
+}
+
+/** Create the intake tables earlier releases left behind, as on a database being upgraded. */
+export async function createLegacyIntakeTablesForTests(storage: FactoryStorage): Promise<void> {
+  await storage.ensureCollections([
+    LEGACY_INTAKE_USER_SETTINGS_SCHEMA,
+    INTAKE_SOURCE_BINDINGS_SCHEMA,
+    INTAKE_DATA_MIGRATIONS_SCHEMA,
+  ]);
+}
 
 /**
  * Leave cards only where a 0.26 Factory wrote them, the legacy table, and restart the work-items
  * domain so it sees them as not yet copied.
  */
 export async function demoteCardsToLegacyForTests(storage: FactoryStorage, cardIds: readonly string[]): Promise<void> {
+  await createLegacyCardTablesForTests(storage);
   for (const id of cardIds) {
     const legacy = await new Cards(storage.ops).findOne({ id });
     if (!legacy) throw new Error(`No card ${id} to demote`);

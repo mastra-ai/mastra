@@ -1,9 +1,9 @@
 import type { DropResult, DroppableProvided, DroppableStateSnapshot } from '@hello-pangea/dnd';
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconDotGrid2x3 } from '@mastra/playground-ui/icons/central/IconDotGrid2x3';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { GripVertical } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import type { ColumnMapping, FieldType } from '../../hooks/use-column-mapping';
 
@@ -106,7 +106,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                                 className="cursor-grab text-muted-foreground active:cursor-grabbing"
                               >
                                 <Icon>
-                                  <GripVertical className="h-3.5 w-3.5" />
+                                  <IconDotGrid2x3 className="h-3.5 w-3.5" />
                                 </Icon>
                               </span>
                               <Txt as="span" variant="subheading">

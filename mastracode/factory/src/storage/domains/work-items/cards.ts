@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 
 import type { CollectionListOptions, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 
-import { DEFAULT_BOARD_ID } from '../../../boards/default-board.js';
 import { splitLegacyWorkItem } from '../../../work-items/split-migration.js';
 import type { ExternalWorkItemSource, WorkItemDbRow } from './base.js';
 import {
@@ -14,15 +13,6 @@ import {
   widenLegacyReviewBoardFilter,
 } from './legacy-review.js';
 import type { ReviewBoardInUse } from './legacy-review.js';
-import {
-  fanOutSourceFacts,
-  itemsForSourceKeys,
-  linkedItems,
-  linkSource,
-  lockSourceGroup,
-  sourcesForItems,
-  unlinkSource,
-} from './source-links.js';
 import {
   FACTORY_BOARD_ITEMS_SCHEMA,
   FACTORY_WORK_ITEMS_SCHEMA,
@@ -229,30 +219,37 @@ export class Cards {
     const boardWhere = boardColumns(rest as Partial<WorkItemDbRow>, { filter: true }) as CollectionWhere;
     if (boardWhere.board !== undefined) boardWhere.board = widenLegacyReviewBoardFilter(boardWhere.board) as never;
     if (sourceKey === undefined) return boardWhere;
-    // Owners come first, so the card intake filed first is the one a single lookup returns.
-    const items = await itemsForSourceKeys(this.ops, rest, sourceKey);
-    return items.length ? { ...boardWhere, work_item_id: { in: items } } : null;
-  }
-
-  /** Cards matched through a source key, in the order {@link #where} listed their work items. */
-  #sourceOrder(boardWhere: CollectionWhere, rows: WorkItemDbRow[]): WorkItemDbRow[] {
-    const filter = boardWhere.work_item_id;
-    if (!filter || typeof filter !== 'object' || !('in' in filter) || !Array.isArray(filter.in)) return rows;
-    const order = filter.in as string[];
-    const rank = (row: WorkItemDbRow) => order.indexOf(row.work_item!.id);
-    return [...rows].sort((a, b) => rank(a) - rank(b));
+    const scope: CollectionWhere = {};
+    if (rest.org_id !== undefined) scope.org_id = rest.org_id;
+    if (rest.factory_project_id !== undefined) scope.factory_project_id = rest.factory_project_id;
+    const sources = await this.ops.findMany<WorkItemSourceDbRecord>(SOURCES, { ...scope, source_key: sourceKey });
+    return sources.length ? { ...boardWhere, work_item_id: { in: sources.map(source => source.work_item_id) } } : null;
   }
 
   async #join(boards: readonly BoardItemDbRecord[]): Promise<WorkItemDbRow[]> {
     const ids = [...new Set(boards.map(board => board.work_item_id))];
     const items = new Map<string, WorkItemDbRecord>();
+    const sources = new Map<string, WorkItemSourceDbRecord[]>();
     for (let index = 0; index < ids.length; index += ID_BATCH) {
-      const page = await this.ops.findMany<WorkItemDbRecord>(WORK_ITEMS, {
-        id: { in: ids.slice(index, index + ID_BATCH) },
-      });
+      const pageIds = ids.slice(index, index + ID_BATCH);
+      const page = await this.ops.findMany<WorkItemDbRecord>(WORK_ITEMS, { id: { in: pageIds } });
       for (const item of page) items.set(item.id, item);
+      const sourcePage = await this.ops.findMany<WorkItemSourceDbRecord>(
+        SOURCES,
+        { work_item_id: { in: pageIds } },
+        {
+          orderBy: [
+            ['created_at', 'asc'],
+            ['id', 'asc'],
+          ],
+        },
+      );
+      for (const source of sourcePage) {
+        const group = sources.get(source.work_item_id) ?? [];
+        group.push(source);
+        sources.set(source.work_item_id, group);
+      }
     }
-    const sources = await sourcesForItems(this.ops, ids);
     const deletedMidRead = await this.#deletedBoardIds(boards.filter(board => !items.has(board.work_item_id)));
     const usingReview = await this.#projectsUsingReview(boards);
     return boards
@@ -292,7 +289,6 @@ export class Cards {
       // The widened filter may match a row its project keeps on Review; only another row answers.
       return (await this.#findMany(where, boardWhere))[0] ?? null;
     }
-    if (where.source_key !== undefined) return (await this.#findMany(where, boardWhere))[0] ?? null;
     const board = await this.ops.findOne<BoardItemDbRecord>(BOARD_ITEMS, boardWhere);
     return board ? ((await this.#join([board]))[0] ?? null) : null;
   }
@@ -302,8 +298,7 @@ export class Cards {
     boardWhere: CollectionWhere,
     options?: CollectionListOptions,
   ): Promise<WorkItemDbRow[]> {
-    let rows = await this.#join(await this.ops.findMany<BoardItemDbRecord>(BOARD_ITEMS, boardWhere, options));
-    if (where.source_key !== undefined && !options?.orderBy) rows = this.#sourceOrder(boardWhere, rows);
+    const rows = await this.#join(await this.ops.findMany<BoardItemDbRecord>(BOARD_ITEMS, boardWhere, options));
     // A filter that leaves Review out was widened to find redundant Review rows read as Work;
     // rows a project keeps on Review still read as Review, so they don't match it.
     return where.board !== undefined && excludesReview(where.board)
@@ -334,12 +329,8 @@ export class Cards {
       },
       { workItemId: randomUUID() },
     );
-    const now = new Date();
     const work = await this.ops.insertOne<WorkItemDbRecord>(WORK_ITEMS, rows.workItem);
-    if (rows.source) {
-      await this.ops.insertOne(SOURCES, rows.source);
-      await linkSource(this.ops, rows.source, work.id, 'origin', now);
-    }
+    if (rows.source) await this.ops.insertOne(SOURCES, rows.source);
     const board = await this.ops.insertOne<BoardItemDbRecord>(BOARD_ITEMS, {
       ...rows.boardItem,
       changed_at: new Date(),
@@ -359,17 +350,8 @@ export class Cards {
   ): Promise<WorkItemDbRow | null> {
     if (this.legacyMode) return this.ops.updateAtomic(WORK_ITEMS_SCHEMA.name, where, updater);
     await this.#copyLegacyOnMiss(where);
-    let boardWhere = await this.#where(where);
+    const boardWhere = await this.#where(where);
     if (!boardWhere) return null;
-    // A source key can name several cards (one per board); write the one a lookup returns.
-    const target =
-      where.source_key !== undefined
-        ? (await this.#findMany(where, boardWhere)).map(card => ({ id: card.id, work_item_id: card.work_item!.id }))[0]
-        : await this.ops.findOne<BoardItemDbRecord>(BOARD_ITEMS, boardWhere);
-    if (!target) return null;
-    boardWhere = { ...boardWhere, id: target.id };
-    // Shared source facts reach every sibling, so take their cards first, in the group's order.
-    await lockSourceGroup(this.ops, [target.work_item_id]);
     const board = await this.ops.updateAtomic<BoardItemDbRecord>(BOARD_ITEMS, boardWhere, async row => {
       const joined = (await this.#join([row]))[0]!;
       const matchedSource = joined.work_item_sources?.find(source => source.source_key === where.source_key);
@@ -397,6 +379,14 @@ export class Cards {
       const descriptionChanged = patch.description !== undefined && patch.description !== current.description;
       // Both live on the work item, so a card with a source can change without its own row moving.
       let wroteCard = titleChanged || descriptionChanged;
+      if (titleChanged || descriptionChanged) {
+        await this.ops.updateAtomic<WorkItemDbRecord>(WORK_ITEMS, { id: row.work_item_id }, work => ({
+          ...(titleChanged ? { title: patch.title } : {}),
+          ...(descriptionChanged ? { description: patch.description } : {}),
+          revision: work.revision + 1,
+          updated_at: new Date(),
+        }));
+      }
       if (patch.metadata !== undefined || patch.external_source !== undefined) {
         const next = splitCardRows({ ...current, ...patch }, { workItemId: row.work_item_id }).source;
         const previous = current.work_item_sources?.[0];
@@ -410,44 +400,31 @@ export class Cards {
             ),
           );
           wroteCard ||= Object.keys(changed).length > 0;
-          const written = !Object.keys(changed).length
-            ? null
-            : await this.ops.updateAtomic<WorkItemSourceDbRecord>(SOURCES, { id: previous.id }, source => {
-                const metadata = { ...source.metadata };
-                if ('metadata' in changed && next.metadata !== null) {
-                  for (const key of new Set([...Object.keys(before?.metadata ?? {}), ...Object.keys(next.metadata)])) {
-                    if (JSON.stringify(before?.metadata?.[key]) === JSON.stringify(next.metadata[key])) continue;
-                    if (Object.hasOwn(next.metadata, key)) metadata[key] = next.metadata[key];
-                    else delete metadata[key];
-                  }
+          if (Object.keys(changed).length)
+            await this.ops.updateAtomic<WorkItemSourceDbRecord>(SOURCES, { id: previous.id }, source => {
+              const metadata = { ...source.metadata };
+              if ('metadata' in changed && next.metadata !== null) {
+                for (const key of new Set([...Object.keys(before?.metadata ?? {}), ...Object.keys(next.metadata)])) {
+                  if (JSON.stringify(before?.metadata?.[key]) === JSON.stringify(next.metadata[key])) continue;
+                  if (Object.hasOwn(next.metadata, key)) metadata[key] = next.metadata[key];
+                  else delete metadata[key];
                 }
-                return {
-                  ...changed,
-                  ...('metadata' in changed ? { metadata: next.metadata === null ? null : metadata } : {}),
-                  revision: source.revision + 1,
-                  updated_at: new Date(),
-                  synced_at: new Date(),
-                };
-              });
-          if (written) await fanOutSourceFacts(this.ops, written);
+              }
+              return {
+                ...changed,
+                ...('metadata' in changed ? { metadata: next.metadata === null ? null : metadata } : {}),
+                revision: source.revision + 1,
+                updated_at: new Date(),
+                synced_at: new Date(),
+              };
+            });
         } else if (next) {
-          const inserted = await this.ops.insertOne<WorkItemSourceDbRecord>(SOURCES, next);
-          await linkSource(this.ops, inserted, row.work_item_id, 'origin');
+          await this.ops.insertOne(SOURCES, next);
           wroteCard = true;
         } else if (previous) {
-          const stored = await this.ops.findOne<WorkItemSourceDbRecord>(SOURCES, { id: previous.id });
-          if (stored) await unlinkSource(this.ops, stored, row.work_item_id);
+          await this.ops.deleteMany(SOURCES, { id: previous.id });
           wroteCard = true;
         }
-      }
-      // After the source: every write sharing facts takes source, then work item rows.
-      if (titleChanged || descriptionChanged) {
-        await this.ops.updateAtomic<WorkItemDbRecord>(WORK_ITEMS, { id: row.work_item_id }, work => ({
-          ...(titleChanged ? { title: patch.title } : {}),
-          ...(descriptionChanged ? { description: patch.description } : {}),
-          revision: work.revision + 1,
-          updated_at: new Date(),
-        }));
       }
       const nativeTitleChanged = !current.external_source && titleChanged;
       const boardChanged =
@@ -497,10 +474,7 @@ export class Cards {
     expectedRevision?: number,
   ): Promise<{ row: WorkItemDbRow; attached: boolean; ownerWorkItemId?: string; revisionConflict?: true } | null> {
     if (this.legacyMode) throw new Error('[cards] attaching a source needs the split work item tables.');
-    const found = await this.ops.findOne<BoardItemDbRecord>(BOARD_ITEMS, where);
-    if (!found) return null;
-    await lockSourceGroup(this.ops, [found.work_item_id]);
-    const board = await this.ops.findOne<BoardItemDbRecord>(BOARD_ITEMS, { ...where, id: found.id });
+    const board = await this.ops.findOne<BoardItemDbRecord>(BOARD_ITEMS, where);
     if (!board) return null;
     const [joined] = await this.#join([board]);
     if (!joined) return null;
@@ -509,32 +483,16 @@ export class Cards {
       { workItemId: board.work_item_id },
     ).source;
     if (!next) throw new Error('[cards] an attached source must carry provider facts.');
-    const filed = await this.ops.findOne<WorkItemSourceDbRecord>(SOURCES, {
+    const existing = await this.ops.findOne<WorkItemSourceDbRecord>(SOURCES, {
       org_id: board.org_id,
       factory_project_id: board.factory_project_id,
       provider: next.provider,
       external_id: next.external_id,
     });
-    // Lock the card's sources and the pull request's, in id order like every write linking a
-    // source, so neither's holders change under us: a card added to another board meanwhile
-    // waits, then links the pull request too.
-    const locks = [...(joined.work_item_sources ?? []).map(row => row.id), ...(filed ? [filed.id] : [])];
-    let existing: WorkItemSourceDbRecord | null = null;
-    for (const id of [...new Set(locks)].sort()) {
-      const locked = await this.ops.updateAtomic<WorkItemSourceDbRecord>(SOURCES, { id }, () => null);
-      if (id === filed?.id) existing = locked;
-    }
-    // A pull request joins the issue, so every card of the issue carries it.
-    const issueCards = await this.#originSiblings(joined);
     if (existing) {
-      const holders = (await linkedItems(this.ops, [existing])).get(existing.id)!.map(link => link.workItemId);
-      if (!holders.some(holder => issueCards.includes(holder))) {
-        return { row: joined, attached: false, ownerWorkItemId: existing.work_item_id };
-      }
-      for (const item of issueCards) await linkSource(this.ops, existing, item, 'attached', source.now);
-      await fanOutSourceFacts(this.ops, existing, { now: source.now });
-      const [row] = await this.#join([board]);
-      return { row: row ?? joined, attached: false };
+      return existing.work_item_id === board.work_item_id
+        ? { row: joined, attached: false }
+        : { row: joined, attached: false, ownerWorkItemId: existing.work_item_id };
     }
     // Bump the card first: the row lock makes a concurrent attach against the same revision
     // wait, then see the new revision and stop.
@@ -555,7 +513,7 @@ export class Cards {
       };
     });
     if (!bumped || stale) return { row: joined, attached: false, revisionConflict: true };
-    const inserted = await this.ops.insertOne<WorkItemSourceDbRecord>(SOURCES, {
+    await this.ops.insertOne<WorkItemSourceDbRecord>(SOURCES, {
       ...next,
       id: randomUUID(),
       role: 'attached',
@@ -563,97 +521,8 @@ export class Cards {
       updated_at: source.now,
       synced_at: source.now,
     });
-    for (const item of issueCards) await linkSource(this.ops, inserted, item, 'attached', source.now);
-    await fanOutSourceFacts(this.ops, inserted, { now: source.now, stamp: issueCards.length > 1 });
     const [attached] = await this.#join([bumped]);
     return attached ? { row: attached, attached: true } : null;
-  }
-
-  /**
-   * A new card, with a work item of its own, for the external record this card was filed from,
-   * on another board. It reads the same sources (the issue and any pull request joined to it) and
-   * copies their facts and the title; placement and process state start fresh. One card per board:
-   * the source row's lock serializes concurrent adds, so a board that already holds a card for
-   * the record refuses another.
-   */
-  async linkToBoard(
-    where: { org_id: string; id: string },
-    { board: target, stage, by, now }: { board: string; stage: string; by: string; now: Date },
-  ): Promise<{ row: WorkItemDbRow } | { alreadyOn: string } | { noSource: true } | null> {
-    if (this.legacyMode) throw new Error('[cards] linking a card to a board needs the split work item tables.');
-    const found = await this.ops.findOne<BoardItemDbRecord>(BOARD_ITEMS, where);
-    if (!found) return null;
-    await lockSourceGroup(this.ops, [found.work_item_id]);
-    const board = await this.ops.findOne<BoardItemDbRecord>(BOARD_ITEMS, { ...where, id: found.id });
-    if (!board) return null;
-    const [read] = await this.#join([board]);
-    if (!read) return null;
-    if (!read.work_item_sources?.some(source => source.role !== 'attached')) return { noSource: true };
-    // Lock the card's sources in id order, then read them again: a pull request joined or a
-    // source removed between the first read and the locks must be what the new card links to.
-    for (const id of (read.work_item_sources ?? []).map(source => source.id).sort()) {
-      await this.ops.updateAtomic<WorkItemSourceDbRecord>(SOURCES, { id }, () => null);
-    }
-    const [card] = await this.#join([board]);
-    const source = card?.work_item_sources?.find(row => row.role !== 'attached');
-    if (!card || !source) return null;
-    const holders = (await linkedItems(this.ops, [source])).get(source.id)!.map(link => link.workItemId);
-    const placed = await this.#join(
-      await this.ops.findMany<BoardItemDbRecord>(BOARD_ITEMS, { work_item_id: { in: holders } }),
-    );
-    const taken = placed.find(row => (row.board ?? DEFAULT_BOARD_ID) === target);
-    if (taken) return { alreadyOn: taken.id };
-
-    const sources = card.work_item_sources ?? [];
-    const work = await this.ops.insertOne<WorkItemDbRecord>(WORK_ITEMS, {
-      id: randomUUID(),
-      org_id: board.org_id,
-      factory_project_id: board.factory_project_id,
-      title: card.title,
-      description: card.description ?? null,
-      parent_work_item_id: null,
-      revision: 1,
-      created_at: now,
-      updated_at: now,
-    });
-    for (const read of sources) {
-      await linkSource(this.ops, read, work.id, read.id === source.id ? 'origin' : 'attached', now);
-    }
-    const created = await this.ops.insertOne<BoardItemDbRecord>(BOARD_ITEMS, {
-      id: randomUUID(),
-      org_id: board.org_id,
-      factory_project_id: board.factory_project_id,
-      work_item_id: work.id,
-      triage_type: null,
-      accepted_at: null,
-      autonomy_armed_at: null,
-      plans_preapproved_at: null,
-      board: target,
-      parent_board_item_id: null,
-      stages: [stage],
-      stage_history: [{ stage, enteredAt: now.toISOString(), by }],
-      sessions: {},
-      metadata: null,
-      revision: 1,
-      created_by: by,
-      created_at: now,
-      updated_at: now,
-      migrated_from_updated_at: null,
-      migrated_from_hash: null,
-      changed_at: now,
-    });
-    const [row] = await this.#join([created]);
-    return row ? { row } : null;
-  }
-
-  /** Every work item reading this card's origin source (the card's own first), or just the card's. */
-  async #originSiblings(card: WorkItemDbRow): Promise<string[]> {
-    const own = card.work_item!.id;
-    const origin = card.work_item_sources?.find(source => source.role !== 'attached');
-    const stored = origin && (await this.ops.findOne<WorkItemSourceDbRecord>(SOURCES, { id: origin.id }));
-    if (!stored) return [own];
-    const linked = (await linkedItems(this.ops, [stored])).get(stored.id)!.map(link => link.workItemId);
-    return [own, ...linked.filter(id => id !== own)];
   }
 
   async updateMany(where: CollectionWhere, patch: Partial<WorkItemDbRow>): Promise<number> {
@@ -673,29 +542,25 @@ export class Cards {
     let deleted = 0;
     for (const board of boards) {
       const scope = { org_id: board.org_id, factory_project_id: board.factory_project_id };
-      // The card's split lock comes before any card rows, as the split copy takes it.
       const guard = await this.ops.updateAtomic(
         FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA.name,
         { id: board.id },
         () => null,
       );
       if (!guard) await this.ops.insertOne(FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA.name, { ...scope, id: board.id });
-      // Then the cards sharing its sources, in id order, as every write sharing a source takes
-      // them; locking its own row first could deadlock against a sync locking a lower sibling.
-      await lockSourceGroup(this.ops, [board.work_item_id]);
       // Re-check the whole filter under the row lock, so a write that landed since the read
       // above (e.g. a bumped revision) keeps the row.
       const locked = await this.ops.updateAtomic(BOARD_ITEMS, { ...boardWhere, ...scope, id: board.id }, () => null);
       if (!locked) continue;
       deleted++;
-      // Sources before work item rows, the order writes sharing a source take them in.
-      const read = (await sourcesForItems(this.ops, [board.work_item_id])).get(board.work_item_id) ?? [];
-      for (const { id } of [...read].sort((x, y) => x.id.localeCompare(y.id))) {
-        const stored = await this.ops.updateAtomic<WorkItemSourceDbRecord>(SOURCES, { id }, () => null);
-        // Other cards of the issue keep it; the last one out deletes it.
-        if (stored) await unlinkSource(this.ops, stored, board.work_item_id);
-      }
       await this.ops.updateAtomic(WORK_ITEMS, { ...scope, id: board.work_item_id }, () => null);
+      const sources = await this.ops.findMany<WorkItemSourceDbRecord>(
+        SOURCES,
+        { ...scope, work_item_id: board.work_item_id },
+        { orderBy: [['id', 'asc']] },
+      );
+      for (const source of sources) await this.ops.updateAtomic(SOURCES, { id: source.id }, () => null);
+      await this.ops.deleteMany(SOURCES, { ...scope, work_item_id: board.work_item_id });
       await this.ops.deleteMany(BOARD_ITEMS, { ...scope, id: board.id });
       await this.ops.deleteMany(WORK_ITEMS, { ...scope, id: board.work_item_id });
       await this.ops.upsertOne(FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA.name, ['id'], {

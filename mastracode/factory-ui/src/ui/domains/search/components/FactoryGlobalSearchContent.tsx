@@ -1,4 +1,3 @@
-import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { boardIdOf, boardOf } from '../../factory/boardFlow';
 import { CommandEmpty } from '@mastra/playground-ui/components/Command';
@@ -15,14 +14,11 @@ import { useState } from 'react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { BUSY_CARD_MOVE_REFUSAL, boardCardState, canStartRun } from '../../factory/boardCardState';
-import { currentItemStage, itemStageLabel } from '../../factory/boardStages';
-import { candidatePayload } from '../../factory/boardDrag';
+import { currentItemStage, phaseLabel } from '../../factory/boardStages';
 import { cardMoves } from '../../factory/cardPrimaryAction';
 import { useBoardItems } from '../../factory/hooks/useBoardItems';
 import { useBoardRuns } from '../../factory/hooks/useBoardRuns';
 import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
-import { RepositoryPickerDialog } from '../../factory/components/RepositoryPickerDialog';
-import { useGlobalSearchIntake } from '../hooks/useGlobalSearchIntake';
 import { useGlobalSearchNavigation } from '../hooks/useGlobalSearchNavigation';
 import { useGlobalSearchSessions } from '../hooks/useGlobalSearchSessions';
 import { useGlobalSearchWorkItems } from '../hooks/useGlobalSearchWorkItems';
@@ -50,12 +46,9 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const searchableFactoryId = repositoryIds.length > 0 ? factoryId : undefined;
   const sessions = useGlobalSearchSessions(searchableFactoryId);
   const [query, setQuery] = useState('');
-  const intake = useGlobalSearchIntake(factoryId, activeFactory?.repositories ?? []);
-  const workItems = useGlobalSearchWorkItems(searchableFactoryId, query, intake.candidates);
+  const workItems = useGlobalSearchWorkItems(searchableFactoryId, query);
   const toastFailureAfterPaletteCloses = (message: string) => toast.error(message);
   const catalog = useBoardCatalog(searchableFactoryId);
-  const defaultBoard = catalog.data?.find(board => board.id === DEFAULT_BOARD_ID);
-  // Unfiled candidates come from the intake feed, which files onto the default board.
   const workBoard = useBoardItems({
     factoryProjectId: searchableFactoryId,
     kind: boardIdOf({}),
@@ -77,7 +70,6 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const unstartedItems = createWorkItemSearchResults({
     factoryId,
     workItems: workItems.unstarted,
-    candidates: workItems.candidates,
     boards: catalog.data,
   });
   const counts = createGlobalSearchScopeCounts({
@@ -99,20 +91,10 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
         rightSlot={<Kbd>Esc</Kbd>}
       />
 
-      {runs.repositorySelection && (
-        <RepositoryPickerDialog
-          repositories={runs.repositoryChoices}
-          onClose={runs.closeRepositorySelection}
-          onSelect={async repository => {
-            await runs.selectRepository(repository);
-            closeSearch();
-          }}
-        />
-      )}
       <CommandPaletteBody>
         <GlobalSearchRail activeScope={activeScope} counts={counts} onScopeChange={setActiveScope} />
         <CommandPaletteResults aria-label="Search results" footer={<CommandPaletteFooter label="Factory search" />}>
-          {!sessionsPending && !intake.pending && <CommandEmpty>No matching results.</CommandEmpty>}
+          {!sessionsPending && <CommandEmpty>No matching results.</CommandEmpty>}
           {scopeIncludes(activeScope, 'navigation') && (
             <GlobalSearchNavigationResults factoryId={factoryId} onSelect={selectPath} />
           )}
@@ -126,33 +108,14 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
             <GlobalSearchWorkItemResults
               results={unstartedItems}
               onSelect={result => {
-                const target = result.target;
-                if (target.kind === 'candidate') {
-                  // Until the default board's catalog entry loads there is nowhere to file it: stay open.
-                  if (!defaultBoard) {
-                    toast.error('The board is still loading. Try again in a moment.');
-                    return;
-                  }
-                  // A board with no move for it still takes it, filed in its initial phase.
-                  const [move] = cardMoves(target.candidate, target.candidate.column, defaultBoard);
-                  closeSearch();
-                  workBoard.handleDrop(
-                    candidatePayload(target.candidate),
-                    move?.stage ?? defaultBoard.initialPhase,
-                    'card_action',
-                  );
-                  return;
-                }
-                const item = target.item;
+                const item = result.item;
                 const board = workBoard;
                 const definition = boardOf(catalog.data, item);
                 const movingTo = board.evaluatingStages.get(item.id);
                 const { owner } = boardCardState({
                   decision: effectByItem.get(item.id),
                   moving:
-                    movingTo === undefined
-                      ? undefined
-                      : { stage: movingTo, label: itemStageLabel(item, movingTo, definition) },
+                    movingTo === undefined ? undefined : { stage: movingTo, label: phaseLabel(definition, movingTo) },
                   preparing: runs.preparingFor(item.id),
                 });
                 if (!canStartRun(owner.kind)) {
@@ -170,9 +133,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                 }
                 void runs
                   .openOrCreateSession(item)
-                  .then(result => {
-                    if (result !== 'repository-selection-required') closeSearch();
-                  })
+                  .then(closeSearch)
                   .catch(error =>
                     toast.error(error instanceof Error ? error.message : 'The session could not be started.'),
                   );
@@ -186,14 +147,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
             <GlobalSearchSessionsStatus pending={sessionsPending} failed={sessions.failed} onRetry={sessions.retry} />
           )}
           {isWorkItemScope(activeScope) && hasRepositories && (
-            <GlobalSearchWorkItemsStatus
-              boardFailed={workItems.failed}
-              intakeFailed={intake.failed}
-              onRetry={() => {
-                workItems.retry();
-                intake.retry();
-              }}
-            />
+            <GlobalSearchWorkItemsStatus failed={workItems.failed} onRetry={workItems.retry} />
           )}
           {scopeIncludes(activeScope, 'factories') && (
             <GlobalSearchFactoriesResults factories={factories} activeFactoryId={factoryId} onSelect={selectPath} />

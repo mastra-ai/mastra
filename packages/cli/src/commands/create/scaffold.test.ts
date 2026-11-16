@@ -130,6 +130,28 @@ describe('empty scaffold', () => {
     expect(await fs.readFile(path.join(staging.projectPath, 'pnpm-workspace.yaml'), 'utf8')).toBe(PNPM_WORKSPACE);
   });
 
+  it('does not add package-manager metadata or a pnpm workspace when bun is selected', async () => {
+    const invocationCwd = await createInvocationDirectory();
+    const staging = await createOwnedStagingDirectory(invocationCwd, 'bun-project');
+
+    await writeEmptyScaffold({
+      projectPath: staging.projectPath,
+      projectName: 'bun-project',
+      versionTag: 'latest',
+      packageManager: 'bun',
+    });
+
+    expect(await listRelativeFiles(staging.projectPath)).toEqual([
+      '.gitignore',
+      'package.json',
+      'src/mastra/index.ts',
+      'tsconfig.json',
+    ]);
+    const manifest = JSON.parse(await fs.readFile(path.join(staging.projectPath, 'package.json'), 'utf8'));
+    expect(manifest.packageManager).toBeUndefined();
+    expect(manifest.devEngines).toBeUndefined();
+  });
+
   it('allows only package-manager install artifacts beyond the authored scaffold', async () => {
     const invocationCwd = await createInvocationDirectory();
     const staging = await createOwnedStagingDirectory(invocationCwd, 'installed-project');

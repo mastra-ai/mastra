@@ -3,13 +3,14 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { useRouteSessionId } from '../../../../hooks/useRouteSessionId';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import { isFactoryOwnedSession } from '../../workspaces/services/sessionPresentation';
 import { TakeOwnershipDialog } from './TakeOwnershipDialog';
 
 export function TeammateSessionLine() {
-  const { factoryId, sessionId, threadId } = useParams<{ factoryId?: string; sessionId?: string; threadId?: string }>();
-  const session = useUserSessionQuery(sessionId ?? threadId).data;
+  const { factoryId } = useParams<{ factoryId?: string }>();
+  const session = useUserSessionQuery(useRouteSessionId()).data;
   const viewerUserId = useFactoryAuth().data?.user?.userId;
   if (!session || !viewerUserId || session.userId === viewerUserId) return null;
 

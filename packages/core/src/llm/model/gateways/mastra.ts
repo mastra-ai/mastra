@@ -28,6 +28,23 @@ function withGatewayAuthHeader(apiKey: string, headers?: Record<string, string>)
   return result;
 }
 
+/**
+ * Whether the Gateway serves Observational Memory for a given API key.
+ *
+ * Gateway keys come in two shapes with different memory behaviour:
+ * - project keys (`msk_…`) are served with server-side Observational Memory;
+ * - organization keys (`msk-gateway-…`, `mskv2_…`) are served by a gateway without
+ *   the memory API, so memory has to stay local.
+ *
+ * Anything unrecognised (including a missing key) reports `false`: memory is never
+ * assumed to be handled remotely unless the key says so.
+ */
+export function gatewayServesObservationalMemory(apiKey: string | undefined): boolean {
+  if (typeof apiKey !== 'string' || apiKey.length === 0) return false;
+  if (apiKey.startsWith('msk-gateway-') || apiKey.startsWith('mskv2_')) return false;
+  return apiKey.startsWith('msk_');
+}
+
 export class MastraGateway extends MastraModelGateway {
   readonly id = 'mastra';
   readonly name = 'Gateway';
