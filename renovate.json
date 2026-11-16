@@ -94,6 +94,13 @@
       "dependencyDashboardApproval": false
     },
     {
+      "description": "Store tests pin mongo to 7.x: 8.x and 9.x refuse to start on the CI runners' Linux kernel (SERVER-121912).",
+      "matchDatasources": ["docker"],
+      "matchFileNames": ["stores/mongodb/docker-compose.yaml"],
+      "matchPackageNames": ["mongo"],
+      "allowedVersions": "<8"
+    },
+    {
       "groupName": "AI provider SDKs",
       "commitMessageTopic": "AI provider SDKs",
       "matchFileNames": ["+(package.json)", "**/package.json", "!./examples/**", "!./docs/**"],
