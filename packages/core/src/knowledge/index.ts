@@ -313,8 +313,10 @@ export class Knowledge extends MastraBase {
    * `limit` pages (default 50, at most 500) with their notes and returns `nextCursor`; pass it to the
    * next call until it's absent. Handling a page again overwrites its vectors, so a run can stop and
    * resume. Failures are listed, not thrown; if the embedder keeps rate limiting, the call stops
-   * early with `rateLimited: true` and a cursor that retries from that page; wait before resuming. Throws without `vector`
-   * and `embedder`.
+   * early with `rateLimited: true` and a cursor that retries from that page; wait before resuming. The
+   * cursor is not a snapshot: pages added or removed during a run can be missed or handled twice, and
+   * a page read before a concurrent edit can overwrite the vectors that edit wrote, so rerun after
+   * concurrent writes finish. Throws without `vector` and `embedder`.
    *
    * @experimental
    */
