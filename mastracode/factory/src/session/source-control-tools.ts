@@ -26,6 +26,7 @@ import type {
 import { mergeRequestNumberFromBranch } from '../work-item-branch.js';
 import { environmentSlugs, findEnvironmentRepository, resolveSessionRepositories } from './environment-repositories.js';
 import { updateSessionEnvironmentRepository } from './environment-state-processor.js';
+import type { ChangeTarget } from './self-review-gate.js';
 
 type RepositorySessionState = {
   factoryProjectId?: string;
@@ -227,6 +228,10 @@ async function emitAgentAudit(
   }
 }
 
+function changeTarget(target: SessionTarget): ChangeTarget {
+  return { slug: target.repository.slug, ownRepository: target.ownRepository };
+}
+
 const repositorySchema = z.object({ repository: z.string().trim().min(1).optional() });
 const changeRequestSchema = repositorySchema.extend({
   changeRequestId: z.union([z.string().trim().min(1), z.number().int().positive()]),
@@ -236,17 +241,23 @@ export async function createSourceControlTools({
   requestContext,
   providers,
   audit,
-  selfReviewApprovedHead,
+  workItem,
 }: {
   requestContext: RequestContext;
   providers: readonly SourceControlToolProvider[];
   audit: AuditAgentEmitter;
-  /**
-   * Self-review gate for opening a change request. `undefined` means the session
-   * is not gated (no Work item, or its change request predates Self-review);
-   * `null` means Self-review has not approved; a SHA is the approved head.
-   */
-  selfReviewApprovedHead?: () => Promise<string | null | undefined>;
+  /** The session's card, when it is bound to one. */
+  workItem?: {
+    /**
+     * Self-review gate for opening a change request in `target`. `undefined` means
+     * it is not gated (no Work item, another repository than the card's, or its
+     * change request predates Self-review); `null` means Self-review has not
+     * approved; a SHA is the approved head.
+     */
+    selfReviewApprovedHead(target: ChangeTarget): Promise<string | null | undefined>;
+    /** Records `target` as the card's repository when the card names none. */
+    recordRepository(sourceControl: SourceControlStorageHandle, target: ChangeTarget): Promise<void>;
+  };
 }): Promise<IntegrationTools> {
   if (!requestContext || typeof (requestContext as { get?: unknown }).get !== 'function') return {};
   const controller = requestContext.get('controller') as
@@ -333,6 +344,7 @@ export async function createSourceControlTools({
           branch,
         });
         updateSessionEnvironmentRepository(target.session.sessionId, target.repository.slug, { branch });
+        await workItem?.recordRepository(target.provider.storage, changeTarget(target));
         await emitAgentAudit(audit, requestContext, {
           action: 'factory.agent.push',
           targets: [{ type: 'repository', id: target.repository.slug }],
@@ -376,7 +388,7 @@ export async function createSourceControlTools({
       }),
       execute: async (input, execution) => {
         const target = await targetFor(input);
-        const approvedHead = target.ownRepository ? await selfReviewApprovedHead?.() : undefined;
+        const approvedHead = await workItem?.selfReviewApprovedHead(changeTarget(target));
         if (approvedHead === null) {
           throw new Error(
             'Self-review has not approved this branch. Move the work item to Self-review; the change request opens after it approves.',
@@ -414,6 +426,7 @@ export async function createSourceControlTools({
         updateSessionEnvironmentRepository(target.session.sessionId, target.repository.slug, {
           changeRequestUrl: created.url,
         });
+        await workItem?.recordRepository(target.provider.storage, changeTarget(target));
         await emitAgentAudit(audit, requestContext, {
           action: 'factory.agent.pr_opened',
           targets: [

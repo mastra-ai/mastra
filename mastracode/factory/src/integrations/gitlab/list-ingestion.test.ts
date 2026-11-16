@@ -1,16 +1,13 @@
-import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../../boards/index.js';
-import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import type { IntegrationContext } from '../base.js';
 import { recordPullRequestHead } from '../pull-request-head.js';
-import { resolveGitLabRules } from './default-rules.js';
+import { attachGitLabDiscovery } from './discovery.js';
 import { encodeSourceId, GitLabIntegration } from './integration.js';
-import { buildGitLabRoutes } from './routes.js';
-import { GitLabRules } from './rules.js';
 
 describe('GitLab listed merge requests through rules ingress', () => {
-  it('records a newly pushed head when an existing Review MR is listed again', async () => {
+  it('records a newly pushed head when the sweep lists an existing Review MR again', async () => {
     const seeded = await createFactoryStorageForTests();
     const sourceControl = seeded.sourceControl.forIntegration('gitlab');
     const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
@@ -24,9 +21,8 @@ describe('GitLab listed merge requests through rules ingress', () => {
     const connection = await sourceControl.connections.create({
       orgId: 'org-1', factoryProjectId: project.id, installationId: installation.id, createdByUserId: 'user-1',
     });
-    const link = await sourceControl.projectRepositories.link({
+    await sourceControl.projectRepositories.link({
       orgId: 'org-1', connectionId: connection.id, repositoryId: repository.id,
-      createdByUserId: 'user-1', sandboxProvider: 'local', sandboxWorkdir: '/workspace',
     });
     const sourceId = encodeSourceId({ host: 'gitlab.example.com', projectId: '101' });
     await seeded.intake.saveConfig({ orgId: 'org-1', config: { gitlab: { enabled: true, sourceIds: [sourceId] } } });
@@ -52,7 +48,6 @@ describe('GitLab listed merge requests through rules ingress', () => {
       },
     })).item;
     const gitlab = new GitLabIntegration({ accessToken: 'group-token' });
-    vi.spyOn(gitlab, 'resolveOrgId').mockResolvedValue('org-1');
     vi.spyOn(gitlab, 'getLinkedRepository').mockResolvedValue({ repository, host: 'gitlab.example.com' });
     vi.spyOn(gitlab.versionControl, 'getRepositoryTarget').mockResolvedValue({
       connection: { type: 'oauth', accessToken: 'gitlab-connection:direct' }, sourceId: '101:acme/app',
@@ -64,31 +59,20 @@ describe('GitLab listed merge requests through rules ingress', () => {
       headSha: 'aaaa', createdAt: '2030-01-01T00:00:00Z', updatedAt: '2030-01-01T00:00:00Z',
     };
     const list = vi.spyOn(gitlab.versionControl, 'listPullRequests').mockResolvedValue({ pullRequests: [listed], nextCursor: null });
-    const rules = new GitLabRules({
-      gitlab: {
-        rules: resolveGitLabRules(),
-        getProjectMemberAccessLevel: vi.fn().mockResolvedValue(10),
-        getWorkItemAuthorUsername: vi.fn().mockResolvedValue('maintainer'),
-        resolveActiveConnectionForHost: vi.fn().mockResolvedValue('direct'),
-      },
-      sourceControl, projects: seeded.projects, storage: seeded.workItems, intake: seeded.intake,
-      configVersion: 'list-ingestion-test-v1', boards: createBoardRegistry(),
-    });
-    const app = new Hono();
-    app.use('*', async (c, next) => {
-      c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
-      await next();
-    });
-    mountApiRoutes(app, buildGitLabRoutes({
-      gitlab, auth: fakeRouteAuth({ enabled: true }), ingestFactoryEvent: event => rules.ingest(event),
-    }));
-    const path = `/web/gitlab/projects/${link.id}/prs?factoryProjectId=${project.id}&page=1`;
-    expect((await app.request(path)).status).toBe(200);
+    vi.spyOn(gitlab.intake, 'listIssues').mockResolvedValue({ issues: [], nextCursor: null });
+    vi.spyOn(gitlab, 'getProjectMemberAccessLevel').mockResolvedValue(10);
+    vi.spyOn(gitlab, 'getWorkItemAuthorUsername').mockResolvedValue('maintainer');
+    vi.spyOn(gitlab, 'resolveActiveConnectionForHost').mockResolvedValue('direct');
+    const sweep = attachGitLabDiscovery(gitlab, {
+      storage: { projects: seeded.projects, sourceControl, intake: seeded.intake },
+      runtime: { configVersion: 'list-ingestion-test-v1', workItems: seeded.workItems, boards: createBoardRegistry() },
+    } as unknown as IntegrationContext)!;
+    await sweep();
     expect((await seeded.workItems.get({ orgId: 'org-1', id: card.id }))?.metadata.pullRequestHeadSha).toBe('aaaa');
     const priorDecisions = await seeded.workItems.listDeferredDecisions('org-1', project.id);
 
     list.mockResolvedValue({ pullRequests: [{ ...listed, headSha: 'bbbb', updatedAt: '2030-01-02T00:00:00Z' }], nextCursor: null });
-    expect((await app.request(path)).status).toBe(200);
+    await sweep();
     expect((await seeded.workItems.get({ orgId: 'org-1', id: card.id }))?.metadata.pullRequestHeadSha).toBe('bbbb');
     const newDecisions = (await seeded.workItems.listDeferredDecisions('org-1', project.id)).filter(
       decision => !priorDecisions.some(previous => previous.id === decision.id),
@@ -99,17 +83,17 @@ describe('GitLab listed merge requests through rules ingress', () => {
 
     const decisionsAfterPush = await seeded.workItems.listDeferredDecisions('org-1', project.id);
     list.mockResolvedValue({ pullRequests: [{ ...listed, headSha: 'bbbb', updatedAt: '2030-01-02T06:00:00Z' }], nextCursor: null });
-    expect((await app.request(path)).status).toBe(200);
+    await sweep();
     expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.id)).toEqual(
       decisionsAfterPush.map(decision => decision.id),
     );
-    expect((await app.request(path)).status).toBe(200);
+    await sweep();
     expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.id)).toEqual(
       decisionsAfterPush.map(decision => decision.id),
     );
 
     list.mockResolvedValue({ pullRequests: [{ ...listed, updatedAt: '2030-01-03T00:00:00Z' }], nextCursor: null });
-    expect((await app.request(path)).status).toBe(200);
+    await sweep();
     expect((await seeded.workItems.get({ orgId: 'org-1', id: card.id }))?.metadata.pullRequestHeadSha).toBe('aaaa');
     expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).length).toBeGreaterThan(decisionsAfterPush.length);
 
@@ -119,11 +103,11 @@ describe('GitLab listed merge requests through rules ingress', () => {
     });
     const decisionsAfterWebhook = await seeded.workItems.listDeferredDecisions('org-1', project.id);
     list.mockResolvedValue({ pullRequests: [{ ...listed, headSha: 'cccc', updatedAt: webhookHeadAt }], nextCursor: null });
-    expect((await app.request(path)).status).toBe(200);
+    await sweep();
     expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.id)).toEqual(
       decisionsAfterWebhook.map(decision => decision.id),
     );
-    expect((await app.request(path)).status).toBe(200);
+    await sweep();
     expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.id)).toEqual(
       decisionsAfterWebhook.map(decision => decision.id),
     );
@@ -131,7 +115,7 @@ describe('GitLab listed merge requests through rules ingress', () => {
     const commit = seeded.workItems.commitRuleEvaluation.bind(seeded.workItems);
     let failOnce = true;
     const commitSpy = vi.spyOn(seeded.workItems, 'commitRuleEvaluation').mockImplementation(async input => {
-      if (failOnce && input.ingress.triggerType === 'gitlab.mergeRequestUpdated') {
+      if (failOnce && input.ingress.identity.includes(':poll:merge-request-head:')) {
         failOnce = false;
         throw new Error('transient commit failure');
       }
@@ -139,10 +123,10 @@ describe('GitLab listed merge requests through rules ingress', () => {
     });
     list.mockResolvedValue({ pullRequests: [{ ...listed, headSha: 'dddd', updatedAt: '2030-01-05T00:00:00Z' }], nextCursor: null });
     const decisionsBeforeRetry = await seeded.workItems.listDeferredDecisions('org-1', project.id);
-    expect((await app.request(path)).status).toBe(200);
+    await sweep();
     expect((await seeded.workItems.get({ orgId: 'org-1', id: card.id }))?.metadata.pullRequestHeadSha).toBe('dddd');
     expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).length).toBe(decisionsBeforeRetry.length);
-    expect((await app.request(path)).status).toBe(200);
+    await sweep();
     expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).length).toBeGreaterThan(decisionsBeforeRetry.length);
     commitSpy.mockRestore();
   });

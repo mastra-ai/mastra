@@ -58,7 +58,7 @@ afterEach(async () => {
 });
 
 // Graph 1 blocks the second tool call (step 2) on the gate; graph 2 runs freely.
-function toolScenario(kind: 'durable' | 'evented' | 'evented-fallback', runId: string) {
+function toolScenario(kind: 'durable' | 'evented' | 'evented-fallback', runId: string, storageVersion?: 1 | 2) {
   const gate = createGate();
   gates.push(gate);
   const toolCalls: { generation: number; index: number }[] = [];
@@ -66,6 +66,7 @@ function toolScenario(kind: 'durable' | 'evented' | 'evented-fallback', runId: s
   const scenario = createRestartScenario({
     kind,
     runId,
+    storageVersion,
     build: ({ core, generation }) => {
       const calls = { count: 0 };
       modelCalls.set(generation, calls);
@@ -112,6 +113,38 @@ describe('restart harness', () => {
       expect(recovered.onFinishCalls).toBe(1);
       // Graph 2 re-ran the blocked call; it never re-ran the finished first one.
       expect(toolCalls.filter(c => c.generation === 2).map(c => c.index)).toEqual([1]);
+    }, 30_000);
+  }
+
+  // A crash on storage v2: the run is a header plus step entries, which the
+  // fresh graph's discovery and recovery must read back.
+  for (const kind of ['durable', 'evented'] as const) {
+    it(`${kind} on storage v2: recovers a run blocked in a tool at step 2 in a fresh graph`, async () => {
+      const runId = `restart-${kind}-v2-gate`;
+      const { scenario, gate, toolCalls } = toolScenario(kind, runId, 2);
+      const original = await scenario.start(({ agent }) => agent.stream('Look two things up', { runId }));
+      await gate.reached;
+
+      const workflows = original.graph.workflows;
+      const loop = { workflowName: DurableStepIds.AGENTIC_LOOP, runId };
+      expect(await workflows.getWorkflowRunById({ ...loop, storageVersion: 1 })).toBeNull();
+      expect((await workflows.getWorkflowRunById({ ...loop, storageVersion: 2 }))?.snapshot.status).toBe('running');
+      expect((await original.graph.agent.listActiveRuns()).runs.map((run: { runId: string }) => run.runId)).toEqual([
+        runId,
+      ]);
+
+      const recovered = await scenario.restart(await original.checkpoint());
+      expect(recovered.streamErrors).toEqual([]);
+      expect(recovered.executionError).toBeUndefined();
+      expect(recovered.text).toBe('done');
+      expect(recovered.finishEvents).toBe(1);
+      expect(recovered.onFinishCalls).toBe(1);
+      expect(toolCalls.filter(c => c.generation === 2).map(c => c.index)).toEqual([1]);
+      // The recovered run stayed on v2 and was cleaned up there once it finished.
+      expect(await recovered.graph.workflows.getWorkflowRunById({ ...loop, storageVersion: 1 })).toBeNull();
+      await vi.waitFor(async () => expect(await recovered.graph.workflows.getWorkflowRunById(loop)).toBeNull(), {
+        timeout: DEFAULT_TIMEOUT_MS,
+      });
     }, 30_000);
   }
 

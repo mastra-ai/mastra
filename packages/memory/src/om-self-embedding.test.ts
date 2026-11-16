@@ -131,7 +131,13 @@ describe('observational memory retrieval on a store that embeds server-side', ()
       {
         id: 'v1',
         score: 0.9,
-        metadata: { group_id: 'group-1', thread_id: 'thread-1', record_id: 'record-1', text: 'x' },
+        metadata: {
+          group_id: 'group-1',
+          thread_id: 'thread-1',
+          resource_id: 'resource-1',
+          record_id: 'record-1',
+          text: 'x',
+        },
       },
     ]);
     const memory = makeMemory(vector);

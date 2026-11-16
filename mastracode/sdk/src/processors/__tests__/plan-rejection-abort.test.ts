@@ -80,15 +80,38 @@ describe('PlanRejectionAbortProcessor', () => {
     expect(abort).toHaveBeenCalledOnce();
   });
 
-  it('aborts when the rejection includes inline feedback', async () => {
+  it('does NOT abort when the rejection includes inline feedback', async () => {
     const messages = [
       assistantWithToolResult({
         toolName: 'submit_plan',
-        result: { content: 'Plan was not approved. The user wants revisions.\n\nUser feedback: fix step 3' },
+        result: {
+          content:
+            'Plan was not approved. The user wants revisions.\n\nUser feedback: fix step 3\n\nPlease revise the plan based on the feedback and submit again with submit_plan.',
+        },
       }),
     ];
     const abort = await run(messages, 1);
-    expect(abort).toHaveBeenCalledOnce();
+    expect(abort).not.toHaveBeenCalled();
+  });
+
+  it('does NOT abort when the result carries submittedPlan.feedback', async () => {
+    const messages = [
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool_result',
+            name: 'submit_plan',
+            result: {
+              content: 'Plan was not approved. The user wants revisions.',
+              submittedPlan: { action: 'rejected', feedback: 'both envs share one project id' },
+            },
+          },
+        ],
+      },
+    ];
+    const abort = await run(messages, 1);
+    expect(abort).not.toHaveBeenCalled();
   });
 
   it('aborts when the result is a bare string', async () => {

@@ -22,7 +22,7 @@ export function BreakdownEntityMark({ entity }: { entity: MarkedEntity }) {
 /** The model's provider logo; a generic model icon when the usage names no provider. */
 export function BreakdownModelMark({ provider }: { provider: string | undefined }) {
   if (provider) return <ProviderMark provider={provider} />;
-  return <SeriesMark icon={<AiIcon className="size-3" />} />;
+  return <SeriesMark icon={<AiIcon className="size-icon-xs" />} />;
 }
 
 /** What a row is, before its name: the entity's icon (agents, workflows, tools), the model's provider, or nothing. */

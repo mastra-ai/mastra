@@ -1,10 +1,12 @@
-import { Cpu, Factory, Infinity } from 'lucide-react';
+import { Factory } from 'lucide-react';
 import type { Product } from './product-identity';
+import { IconChip } from '@/ds/icons/central/IconChip';
+import { IconInfinity } from '@/ds/icons/central/IconInfinity';
 
 export function ProductIcon({ product }: { product: Product }) {
   if (product === 'factory') return <Factory aria-hidden="true" />;
-  if (product === 'workers') return <Cpu aria-hidden="true" />;
-  if (product === 'persistent-server') return <Infinity aria-hidden="true" />;
+  if (product === 'workers') return <IconChip aria-hidden="true" />;
+  if (product === 'persistent-server') return <IconInfinity aria-hidden="true" />;
   if (product === 'server') {
     return (
       <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
