@@ -236,6 +236,7 @@ createWorkflowTestSuite({
         inputData: options.inputData as any,
         nestedStepsContext: options.nestedStepsContext as any,
         resumeData: options.resumeData as any,
+        outputOptions: options.outputOptions,
       });
 
       return result as WorkflowResult;

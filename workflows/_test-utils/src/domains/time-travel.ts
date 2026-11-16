@@ -1267,8 +1267,8 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
   }
 
   // Test: timeTravel keeps the state earlier steps set (#30022)
-  {
-    const id = 'tt-state-from-earlier-steps';
+  // One workflow per retry outcome: the replayed charge either succeeds or fails again.
+  const createStateFromEarlierStepsWorkflow = (id: string, retrySucceeds: boolean) => {
     const stateSchema = z.object({ order: z.number().optional() });
     const chargeSawOrder = vi.fn();
     const receiptSawOrder = vi.fn();
@@ -1291,8 +1291,9 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
       stateSchema,
       execute: async ({ state }) => {
         chargeSawOrder(state.order);
-        if (chargeAttempts++ === 0) {
-          throw new Error('transient failure');
+        const attempt = chargeAttempts++;
+        if (attempt === 0 || !retrySucceeds) {
+          throw new Error('card declined');
         }
         return {};
       },
@@ -1326,7 +1327,9 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
         chargeAttempts = 0;
       },
     };
-  }
+  };
+  createStateFromEarlierStepsWorkflow('tt-state-from-earlier-steps-retry-succeeds', true);
+  createStateFromEarlierStepsWorkflow('tt-state-from-earlier-steps-retry-fails', false);
 
   return workflows;
 }
@@ -2081,26 +2084,37 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
     );
 
     // A checkout saves the order in workflow state, then the charge fails. Recovering with timeTravel to the
-    // charge must replay it with the saved order, not the run's initialState. The evented engine records
-    // mid-run state in the snapshot's `context.__state` and leaves `value` at the start state, and time
-    // travel only read `value`. (#30022)
-    it.skipIf(skipTests.timeTravelPreviousRun || !timeTravel)(
-      'replays a failed step with the state the earlier steps set (#30022)',
-      async () => {
-        const { workflow, mocks, resetMocks } = registry!['tt-state-from-earlier-steps']!;
+    // charge must replay it with the saved order, not the run's initialState, whether the retried charge
+    // succeeds or is declined again, and the run's returned state must keep the saved order. The evented
+    // engine records mid-run state in the snapshot's `context.__state` and leaves `value` at the start state,
+    // and time travel only read `value`. (#30022)
+    it.skipIf(skipTests.timeTravelPreviousRun || !timeTravel).each([
+      { retry: 'succeeds', status: 'success', receiptCalls: [[42]] },
+      { retry: 'fails', status: 'failed', receiptCalls: [] },
+    ] as const)(
+      'replays a failed step with the state the earlier steps set when the retry $retry (#30022)',
+      async ({ retry, status, receiptCalls }) => {
+        const { workflow, mocks, resetMocks } = registry![`tt-state-from-earlier-steps-retry-${retry}`]!;
         resetMocks?.();
-        const runId = `tt-state-from-earlier-steps-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+        const runId = `tt-state-from-earlier-steps-${retry}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
         const started = await execute(workflow, {}, { runId, initialState: { order: 7 } });
         expect(started.status).toBe('failed');
         expect(mocks.chargeSawOrder.mock.calls).toEqual([[42]]);
 
-        const replayed = await timeTravel!(workflow, { step: 'charge', runId });
+        const replayed = await timeTravel!(workflow, {
+          step: 'charge',
+          runId,
+          outputOptions: { includeState: true },
+        });
 
-        expect(replayed.status).toBe('success');
+        expect(replayed.status).toBe(status);
         expect(mocks.chargeSawOrder.mock.calls).toEqual([[42], [42]]);
-        expect(mocks.receiptSawOrder.mock.calls).toEqual([[42]]);
-        expect(replayed.result).toEqual({ order: 42 });
+        expect(mocks.receiptSawOrder.mock.calls).toEqual(receiptCalls);
+        expect(replayed.state).toEqual({ order: 42 });
+        if (replayed.status === 'success') {
+          expect(replayed.result).toEqual({ order: 42 });
+        }
       },
     );
 
