@@ -14,7 +14,7 @@ const tiers = {
   },
 };
 const files = ['packages/core/src/a.test.ts', 'packages/core/src/b.test.ts', 'packages/core/src/new.test.ts'];
-const base = { files, tiers, changedFiles: ['packages/core/src/a.ts'], fullSuite: false, fullTestsLabel: false };
+const base = { files, tiers, changedFiles: ['packages/memory/src/a.ts'], fullSuite: false, fullTestsLabel: false };
 
 function writeTemp(t, content) {
   const dir = fs.mkdtempSync(path.join(tmpdir(), 'tiers-'));
@@ -34,6 +34,23 @@ test('keeps an out file the PR changes', () => {
   const result = selectUnitTests({ ...base, changedFiles: ['packages/core/src/a.test.ts'] });
   assert.deepEqual(result.dropped, []);
   assert.deepEqual(result.kept, files);
+});
+
+test('a core source change keeps the out core tests the graph selected, not other packages', () => {
+  const t = {
+    version: 1,
+    files: {
+      'packages/core/src/loop/goal-step.test.ts': { tier: 'out' },
+      'packages/memory/src/index.test.ts': { tier: 'out' },
+    },
+  };
+  const files = Object.keys(t.files);
+  const select = changedFiles =>
+    selectUnitTests({ files, tiers: t, changedFiles, fullSuite: false, fullTestsLabel: false }).dropped;
+  assert.deepEqual(select(['packages/core/src/workflows/workflow.ts']), ['packages/memory/src/index.test.ts']);
+  // A core test change alone, or a core file outside src/, isn't a core source change.
+  assert.deepEqual(select(['packages/core/src/other.test.ts']), files);
+  assert.deepEqual(select(['packages/core/package.json']), files);
 });
 
 test('a change to the tier selection or its CI wiring keeps every file', () => {

@@ -3,7 +3,8 @@
 // tiers.json lives on the ci/test-tiers branch and marks each test file, and each job tiered
 // as a whole (`job:<key>`), `in` (runs on every PR that selects it) or `out` (runs only on
 // full-suite runs: the versioning PR, main, a `full-tests` label, or a PR that edits the file
-// or the job's own paths). Anything it doesn't list is `in`. Anything wrong with the file
+// or the job's own paths). A PR that changes @mastra/core source also keeps every `out` core
+// test the import graph selected. Anything it doesn't list is `in`. Anything wrong with the file
 // means nothing is dropped.
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +26,13 @@ export const isPackageE2eTest = file =>
     file.startsWith('packages/rag/src/'));
 export const isExternalE2eTest = file => file.startsWith('e2e-tests/') || file.startsWith('packages/playground/e2e/');
 export const isE2eTest = file => isPackageE2eTest(file) || isExternalE2eTest(file);
+
+// Every package builds on @mastra/core, and a core change often breaks a core test far from the
+// file it edits (#29370 broke goal-step.test.ts through workflow.ts). Waiting for the versioning PR
+// to show those breaks costs too much there, so a core source change keeps the core tests the
+// import graph selected. Other packages keep their `out` files out.
+const CORE_DIR = 'packages/core/';
+const isCoreSource = file => file.startsWith(`${CORE_DIR}src/`) && !/\.(?:test|spec)(?:-d)?\.tsx?$/.test(file);
 
 /** @returns {{ tiers: object | null, problem: string | null }} */
 export function loadTiers(path) {
@@ -62,10 +70,12 @@ export function selectUnitTests({ files, tiers, problem = null, changedFiles, fu
     return { kept: files, dropped: [], reason: 'tier selection changed, running every file' };
 
   const changed = new Set(changedFiles);
+  const coreChanged = changedFiles.some(isCoreSource);
   const kept = [];
   const dropped = [];
   for (const file of files) {
-    if (tiers.files[file]?.tier === 'out' && !changed.has(file)) dropped.push(file);
+    const keepForCore = coreChanged && file.startsWith(CORE_DIR);
+    if (tiers.files[file]?.tier === 'out' && !changed.has(file) && !keepForCore) dropped.push(file);
     else kept.push(file);
   }
   return { kept, dropped, reason: 'tiers applied' };
