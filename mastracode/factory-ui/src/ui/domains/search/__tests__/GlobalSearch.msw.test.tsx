@@ -1,4 +1,5 @@
 import type { ProjectListRepository } from '@mastra/factory/routes/contracts';
+import type { FactoryTransitionResultRejected } from '@mastra/factory/rules/types';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -8,22 +9,21 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { listedRepository } from '../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../e2e/ui/msw-server';
+import { recordProviderListRequests } from '../../../../../e2e/ui/provider-list-requests';
 import { releaseBoard, workBoardInfo } from '../../../../../e2e/ui/board-catalog';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import { workspacesQueryOptions } from '../../../../hooks/useWorkspaces';
 import { createQueryClient } from '../../../../query-client';
-import type { GithubIssue, GithubPullRequest } from '../../factory/services/factory';
 import type { WorkItem } from '../../factory/services/workItems';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { createAppRoutes } from '../../../router';
+import { environmentPayload, environmentRepository } from '../../settings/components/__tests__/fixtures/environment';
 import {
   ACTIVE_FACTORY_ID,
   factoryProjects,
   factoryRepositories,
   FIRST_REPOSITORY_ID,
-  intakeIssues,
-  intakePullRequests,
   listWorkItemsResponse,
   OTHER_FACTORY_ID,
   OTHER_REPOSITORY_ID,
@@ -51,7 +51,7 @@ interface SearchRequestState {
   sessionsCreatedFor: string[];
   created: Record<string, unknown>[];
   transitions: Array<{ itemId: string; body: Record<string, unknown> }>;
-  intakeRequests: number;
+  providerListRequests: string[];
   sessionRequests: Record<string, number>;
   /** The query string of each read of the card list; `''` is a read of the whole board. */
   workItemQueries: string[];
@@ -63,10 +63,7 @@ interface StubSearchOptions {
   failSessionAttempts?: number;
   /** How many reads of the cards holding a session fail before one answers. */
   failSessionCardAttempts?: number;
-  failIntake?: boolean;
   failWorkItems?: boolean;
-  /** The live GitHub intake of `FIRST_REPOSITORY_ID`, instead of the fixtures. */
-  intake?: { issues: GithubIssue[]; pullRequests: GithubPullRequest[] };
   /**
    * A server that narrows the list by session only, as before the palette's reads existed: it
    * ignores `started`, `q`, `limit` and `source`, and sends the whole board with no `total`.
@@ -99,7 +96,6 @@ function activeFactoryRepositories(options: StubSearchOptions): ProjectListRepos
       integrationId: repository.provider ?? 'github',
       externalId: repository.externalId ?? null,
       branch: 'main',
-      sandboxWorkdir: '/repo',
     }),
   );
 }
@@ -116,7 +112,7 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     sessionsCreatedFor: [],
     created: [],
     transitions: [],
-    intakeRequests: 0,
+    providerListRequests: recordProviderListRequests(),
     sessionRequests: {},
     workItemQueries: [],
   };
@@ -132,6 +128,20 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       projectListResponse({ ...factoryRepositories, [ACTIVE_FACTORY_ID]: activeFactoryRepositories(options) }),
+    ),
+    // Every linked repository is in the environment, in link order.
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/environment`, () =>
+      HttpResponse.json({
+        environment: environmentPayload({
+          repositories: activeFactoryRepositories(options).map((repository, index) =>
+            environmentRepository({
+              projectRepositoryId: repository.projectRepositoryId,
+              slug: repository.slug,
+              position: index + 1,
+            }),
+          ),
+        }),
+      }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId`, ({ params }) => {
       const project = factoryProjects.find(candidate => candidate.id === String(params.factoryProjectId));
@@ -168,25 +178,6 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/issues`, ({ params, request }) => {
-      state.intakeRequests += 1;
-      if (options.failIntake) return HttpResponse.json({ error: 'intake unavailable' }, { status: 500 });
-      const label = new URL(request.url).searchParams.get('label');
-      const serveFixtures = !label && String(params.projectRepositoryId) === FIRST_REPOSITORY_ID;
-      return HttpResponse.json({
-        issues: serveFixtures ? (options.intake?.issues ?? intakeIssues) : [],
-        nextPage: null,
-      });
-    }),
-    http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/prs`, ({ params }) => {
-      state.intakeRequests += 1;
-      if (options.failIntake) return HttpResponse.json({ error: 'intake unavailable' }, { status: 500 });
-      const serveFixtures = String(params.projectRepositoryId) === FIRST_REPOSITORY_ID;
-      return HttpResponse.json({
-        pullRequests: serveFixtures ? (options.intake?.pullRequests ?? intakePullRequests) : [],
-        nextPage: null,
-      });
-    }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/sessions`, async ({ params, request }) => {
       const factoryProjectId = String(params.factoryProjectId);
       state.sessionRequests[factoryProjectId] = (state.sessionRequests[factoryProjectId] ?? 0) + 1;
@@ -399,12 +390,13 @@ function expectOriginPathname(locationState: unknown, expectedPathname: string) 
 afterEach(() => {
   window.localStorage.removeItem('mastracode-web:sidebar:state');
   window.localStorage.removeItem('mastracode-web:sidebar:width');
+  vi.restoreAllMocks();
 });
 
 describe('Global search', () => {
   describe.each(['board', 'search'] as const)('%s entry point', entryPoint => {
-    describe.each(['github', 'gitlab'] as const)('%s source-provider repository choices', provider => {
-      it.each([0, 1, 2])('offers usable choices with %s matching repositories', async count => {
+    describe.each(['github', 'gitlab'] as const)('%s source-provider repositories', provider => {
+      it.each([0, 1, 2])('starts a session with %s matching repositories', async count => {
         const sourceRepositories: LinkedRepositoryPayload[] = Array.from({ length: count }, (_, index) => ({
           projectRepositoryId: `${provider}-repo-${index}`,
           provider,
@@ -435,10 +427,6 @@ describe('Global search', () => {
           http.get(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/boards`, () =>
             HttpResponse.json({ boards: [releaseBoard] }),
           ),
-          http.get(`${TEST_BASE_URL}/web/gitlab/issues`, () => HttpResponse.json({ issues: [], nextCursor: null })),
-          http.get(`${TEST_BASE_URL}/web/gitlab/projects/:projectRepositoryId/prs`, () =>
-            HttpResponse.json({ pullRequests: [], nextPage: null }),
-          ),
           http.patch(`${TEST_BASE_URL}/web/factory/work-items/${item.id}`, async ({ request }) => {
             patches.push(await request.json());
             return HttpResponse.json({ workItem: toWireWorkItem(item) });
@@ -459,25 +447,16 @@ describe('Global search', () => {
           expect(
             await screen.findByText("No repository matching this card's provider is linked to this Factory."),
           ).toBeInTheDocument();
-          expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
           expect(requests.createSessionRequests).toBe(0);
           expect(patches).toEqual([]);
           expect(starts).toEqual([]);
           return;
         }
-        if (count > 1) {
-          const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
-          expect(within(picker).queryByRole('button', { name: /other-provider\/repo/ })).not.toBeInTheDocument();
-          expect(within(picker).getAllByRole('button', { name: new RegExp(`${provider}-org/repo-`) })).toHaveLength(
-            count,
-          );
-          expect(requests.createSessionRequests).toBe(0);
-          await user.click(within(picker).getByRole('button', { name: new RegExp(`${provider}-org/repo-0`) }));
-        }
         await waitFor(() => expect(starts).toHaveLength(1));
+        // One matching repository is recorded on the card; among several it opens in the first and leaves it unset.
+        expect(requests.createSessionRequests).toBe(1);
         expect(requests.sessionsCreatedFor).toEqual([`${provider}-repo-0`]);
-        expect(patches).toEqual([{ metadata: { repository: `${provider}-org/repo-0` } }]);
-        expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
+        expect(patches).toEqual(count === 1 ? [{ metadata: { repository: `${provider}-org/repo-0` } }] : []);
         if (search) await waitFor(() => expect(search).not.toBeInTheDocument());
       });
     });
@@ -516,6 +495,31 @@ describe('Global search', () => {
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
     await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
+  it('hands focus back to the menu button when search opened from the phone sidebar closes', async () => {
+    vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    stubSearchApi();
+    const user = userEvent.setup();
+    renderSearchRoute();
+
+    await user.click(await screen.findByRole('button', { name: 'Open navigation menu' }, { timeout: 5_000 }));
+    const navigation = await screen.findByRole('dialog', { name: 'Navigation' });
+    await user.click(within(navigation).getByRole('button', { name: 'Search and navigate' }));
+    await screen.findByRole('dialog', { name: 'Global search' });
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Open navigation menu' })).toHaveFocus());
   });
 
   it.each(['activity', 'overview', 'attention', 'metrics', 'audit'])(
@@ -636,6 +640,22 @@ describe('Global search', () => {
     expect(requests.workItemQueries).not.toContain('');
   });
 
+  it('given open issues and pull requests with no card, when searching, then it asks for cards only and never for a provider list', async () => {
+    const requests = stubSearchApi();
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const dialog = await openWithShortcut();
+    await within(dialog).findByText('Review command palette PR');
+
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), 'universal');
+    expect(await within(dialog).findByText('Add universal command search')).toBeInTheDocument();
+    await waitFor(() => expect(requests.workItemQueries).toContain('started=false&q=universal'));
+
+    expect(requests.providerListRequests).toEqual([]);
+    expect(requests.workItemQueries.filter(query => query.startsWith('source='))).toEqual([]);
+    expect(within(dialog).queryByText('not filed')).not.toBeInTheDocument();
+  });
+
   it('opens on warm sessions without refetching them, and reads the cards in parts instead of the board', async () => {
     const requests = stubSearchApi();
     const { client } = renderSearchRoute();
@@ -646,25 +666,10 @@ describe('Global search', () => {
     await openWithShortcut();
     await screen.findByText('Review command palette PR');
     await screen.findByText('Bump the command palette dependencies');
-    await screen.findByText('Harden the review board drop target');
 
     expect(requests.sessionRequests).toEqual({ [ACTIVE_FACTORY_ID]: 1 });
     // The sidebar already read the cards holding a session: the palette shares that read.
-    expect(requests.workItemQueries.toSorted()).toEqual([
-      'scope=sessions',
-      // Each live candidate, by its key and its URL, to learn which of them a card is already filed from.
-      `source=${[
-        'github-pr:20454',
-        'https://github.com/mastra-ai/mastra/pull/20454',
-        'github-issue:20455',
-        'https://github.com/mastra-ai/mastra/issues/20455',
-        'github-pr:900',
-        'https://github.com/mastra-ai/mastra/pull/900',
-      ]
-        .map(encodeURIComponent)
-        .join('&source=')}`,
-      'started=false&q=',
-    ]);
+    expect(requests.workItemQueries.toSorted()).toEqual(['scope=sessions', 'started=false&q=']);
   });
 
   it('finds a card past the first 20 once its words are typed, while the rail keeps counting every card', async () => {
@@ -679,15 +684,14 @@ describe('Global search', () => {
     const dialog = await openWithShortcut();
     const rail = screen.getByRole('complementary', { name: 'Search categories' });
 
-    // 25 cards, plus the three live candidates no card is filed from.
-    expect(await within(rail).findByRole('button', { name: /^Work items\s*28$/ })).toBeInTheDocument();
+    expect(await within(rail).findByRole('button', { name: /^Work items\s*25$/ })).toBeInTheDocument();
     expect(within(dialog).getByText('Backlog chore 23')).toBeInTheDocument();
     expect(within(dialog).queryByText('Rotate the signing keys')).not.toBeInTheDocument();
 
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), 'SIGNING rotate');
 
     expect(await within(dialog).findByText('Rotate the signing keys')).toBeInTheDocument();
-    expect(within(rail).getByRole('button', { name: /^Work items\s*28$/ })).toBeInTheDocument();
+    expect(within(rail).getByRole('button', { name: /^Work items\s*25$/ })).toBeInTheDocument();
     // One search for the settled text, none for the letters on the way to it.
     expect(requests.workItemQueries.filter(query => query.startsWith('started=false'))).toEqual([
       'started=false&q=',
@@ -699,7 +703,11 @@ describe('Global search', () => {
     const backlog = Array.from({ length: 24 }, (_, index) =>
       unstartedCard(`backlog-${index}`, `Backlog chore ${index}`, `2026-07-${String(index + 1).padStart(2, '0')}`),
     );
-    const [pullRequest] = intakePullRequests;
+    const pullRequest = {
+      number: 20454,
+      title: 'Harden the review board drop target',
+      url: 'https://github.com/mastra-ai/mastra/pull/20454',
+    };
     stubSearchApi({
       workItems: [
         ...backlog,
@@ -727,9 +735,8 @@ describe('Global search', () => {
     const rail = screen.getByRole('complementary', { name: 'Search categories' });
     const results = within(dialog).getByRole('region', { name: 'Search results' });
 
-    // 25 cards and two unfiled candidates: the pull request counts as its card, not as a candidate too.
-    expect(await within(rail).findByRole('button', { name: /^Work items\s*27$/ })).toBeInTheDocument();
-    expect(await within(results).findByText('Rail scopes overflow on narrow viewports')).toBeInTheDocument();
+    expect(await within(rail).findByRole('button', { name: /^Work items\s*25$/ })).toBeInTheDocument();
+    expect(await within(results).findByText('Backlog chore 23')).toBeInTheDocument();
     expect(within(results).queryByText(pullRequest.title)).not.toBeInTheDocument();
 
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), `#${pullRequest.number}`);
@@ -772,44 +779,6 @@ describe('Global search', () => {
     expect(within(results).getByRole('option', { name: /not started/ })).toHaveTextContent('Rotate the signing keys');
   });
 
-  // Technical: only the 20 best candidates are looked up, ranked on the text their rows are filtered on.
-  it('lists the one candidate matching a typed source label when it is the oldest of more than 20', async () => {
-    const issues: GithubIssue[] = Array.from({ length: 21 }, (_, index) => {
-      const at = `2026-07-${String(index + 1).padStart(2, '0')}T08:00:00.000Z`;
-      return {
-        number: 31000 + index,
-        title: `Flaky check ${index}`,
-        url: `https://github.com/mastra-ai/mastra/issues/${31000 + index}`,
-        author: 'cleo',
-        labels: [],
-        comments: 0,
-        createdAt: at,
-        updatedAt: at,
-      };
-    });
-    const pullRequest: GithubPullRequest = {
-      number: 30001,
-      title: 'Tighten the upload size limit',
-      url: 'https://github.com/mastra-ai/mastra/pull/30001',
-      author: 'ana',
-      baseBranch: 'main',
-      headBranch: 'fix/upload-size',
-      createdAt: '2026-06-01T08:00:00.000Z',
-      updatedAt: '2026-06-01T08:00:00.000Z',
-    };
-    stubSearchApi({ intake: { issues, pullRequests: [pullRequest] } });
-    const user = userEvent.setup();
-    renderSearchRoute();
-    const dialog = await openWithShortcut();
-    const results = within(dialog).getByRole('region', { name: 'Search results' });
-    await within(results).findByText('Flaky check 20');
-
-    // Its row reads "PR Review"; nothing else about it, and nothing about any issue, has the word.
-    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), 'review');
-
-    expect(await within(results).findByRole('option', { name: /not filed/ })).toHaveTextContent(pullRequest.title);
-  });
-
   it.each([
     ['a server that searches the cards itself', false],
     ['a server that sends the whole board whatever is asked', true],
@@ -827,22 +796,17 @@ describe('Global search', () => {
         for (const title of titles) expect(within(results).getByText(title)).toBeInTheDocument();
       });
 
-    expect(await within(rail).findByRole('button', { name: /^Work items\s*4$/ })).toBeInTheDocument();
+    expect(await within(rail).findByRole('button', { name: /^Work items\s*2$/ })).toBeInTheDocument();
     await user.click(within(rail).getByRole('button', { name: /Work items/ }));
-    // The cards holding no session and the candidates not filed, each once; no card holding a session.
-    await listed([
-      'Harden the review board drop target',
-      'Rail scopes overflow on narrow viewports',
-      'Bump the command palette dependencies',
-      'Palette keyboard traps focus on mobile',
-    ]);
+    // The cards holding no session, each once; no card holding a session.
+    await listed(['Bump the command palette dependencies', 'Palette keyboard traps focus on mobile']);
 
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), 'palette');
     await listed(['Bump the command palette dependencies', 'Palette keyboard traps focus on mobile']);
-    expect(within(rail).getByRole('button', { name: /^Work items\s*4$/ })).toBeInTheDocument();
+    expect(within(rail).getByRole('button', { name: /^Work items\s*2$/ })).toBeInTheDocument();
   });
 
-  it('keeps search open while choosing a repository for an unattributed work item', async () => {
+  it('starts an unattributed work item in the first repository without asking for one', async () => {
     const item = {
       ...workItems[3],
       board: 'custom',
@@ -858,7 +822,7 @@ describe('Global search', () => {
       }),
       http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
         starts.push(await request.json());
-        return HttpResponse.json({ threadId: 'thread-search' });
+        return HttpResponse.json({ prepared: { threadId: 'thread-search' } });
       }),
     );
     const user = userEvent.setup();
@@ -866,13 +830,10 @@ describe('Global search', () => {
     const search = await openWithShortcut();
     await user.click(await within(search).findByText(item.title));
 
-    const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    expect(search).toBeInTheDocument();
-    expect(requests.createSessionRequests).toBe(0);
-    expect(patches).toHaveLength(0);
-    await user.click(within(picker).getByRole('button', { name: /mastra-ai\/docs/ }));
-    await waitFor(() => expect(patches).toEqual([{ metadata: { number: 777, repository: 'mastra-ai/docs' } }]));
     await waitFor(() => expect(starts).toHaveLength(1));
+    expect(requests.sessionsCreatedFor).toEqual([FIRST_REPOSITORY_ID]);
+    expect(patches).toEqual([]);
+    expect(starts[0]).toHaveProperty('workItem.input.metadata', { number: 777 });
     await waitFor(() => expect(search).not.toBeInTheDocument());
   });
 
@@ -1007,7 +968,7 @@ describe('Global search', () => {
 
   // Technical: with no candidate the filed-cards lookup is disabled, and refetching it fails for good.
   it('recovers from a failed read of the session cards on retry when the intake offers nothing', async () => {
-    stubSearchApi({ failSessionCardAttempts: 1, intake: { issues: [], pullRequests: [] } });
+    stubSearchApi({ failSessionCardAttempts: 1 });
     const user = userEvent.setup();
     renderSearchRoute();
     await openWithShortcut();
@@ -1027,93 +988,6 @@ describe('Global search', () => {
     await openWithShortcut();
     expect(await screen.findByRole('option', { name: /factory\/pr-900/ })).toBeInTheDocument();
     expect(await screen.findByText(/^Board cards could not be loaded/)).toBeInTheDocument();
-  });
-
-  it('searches GitLab issue and MR intake for a GitLab-linked repository without querying GitHub intake', async () => {
-    const requests = stubSearchApi();
-    let githubIntakeRequests = 0;
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        projectListResponse({
-          ...factoryRepositories,
-          [ACTIVE_FACTORY_ID]: [{ ...factoryRepositories[ACTIVE_FACTORY_ID][0], integrationId: 'gitlab' }],
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/gitlab/issues`, () =>
-        HttpResponse.json({
-          issues: [
-            {
-              id: '43',
-              externalId: 'gitlab-issue:43',
-              identifier: 'group/repo#43',
-              title: 'Search GitLab issue',
-              url: 'https://gitlab.com/group/repo/-/issues/43',
-              state: 'opened',
-              stateType: 'unstarted',
-              priority: null,
-              assignee: null,
-              author: 'alice',
-              source: 'group/repo',
-              sourceId: 'gitlab-project:repo',
-              labels: [],
-              createdAt: '2026-07-29T12:00:00.000Z',
-              updatedAt: '2026-07-29T12:00:00.000Z',
-            },
-          ],
-          nextCursor: null,
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/gitlab/projects/${FIRST_REPOSITORY_ID}/prs`, () =>
-        HttpResponse.json({
-          pullRequests: [
-            {
-              number: 44,
-              externalId: 'gitlab-mr:44',
-              title: 'Search GitLab MR',
-              url: 'https://gitlab.com/group/repo/-/merge_requests/44',
-              author: 'alice',
-              assignees: [],
-              requestedReviewers: [],
-              baseBranch: 'main',
-              headBranch: 'feature',
-              createdAt: '2026-07-29T13:00:00.000Z',
-              updatedAt: '2026-07-29T13:00:00.000Z',
-            },
-          ],
-          nextPage: null,
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/issues`, () => {
-        githubIntakeRequests += 1;
-        return HttpResponse.json({ issues: [], nextPage: null });
-      }),
-      http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/prs`, () => {
-        githubIntakeRequests += 1;
-        return HttpResponse.json({ pullRequests: [], nextPage: null });
-      }),
-    );
-    const { client } = renderSearchRoute();
-    await openWithShortcut();
-
-    expect(await screen.findByText('Search GitLab issue')).toBeInTheDocument();
-    const mr = await screen.findByText('Search GitLab MR');
-    expect(githubIntakeRequests).toBe(0);
-
-    await userEvent.click(mr);
-    await waitFor(() => expect(requests.transitions).toHaveLength(1));
-    await waitForMutationsIdle(client);
-    expect(requests.created).toEqual([
-      expect.objectContaining({
-        title: 'Search GitLab MR',
-        board: 'work',
-        stages: ['intake'],
-        externalSource: expect.objectContaining({ integrationId: 'gitlab', type: 'pull-request' }),
-      }),
-    ]);
-    expect(requests.transitions[0]).toMatchObject({
-      itemId: 'work-item-filed',
-      body: { board: 'work', stage: 'pr-review' },
-    });
   });
 
   it('tells apart the sessions one card holds on its branch by the phase each runs, current first', async () => {
@@ -1197,7 +1071,7 @@ describe('Global search', () => {
     await screen.findByText('Review command palette PR');
 
     const rail = screen.getByRole('complementary', { name: 'Search categories' });
-    expect(await within(rail).findByRole('button', { name: /^Work items\s*4$/ })).toBeInTheDocument();
+    expect(await within(rail).findByRole('button', { name: /^Work items\s*2$/ })).toBeInTheDocument();
 
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
     const card = await screen.findByText('Bump the command palette dependencies');
@@ -1261,9 +1135,26 @@ describe('Global search', () => {
     );
   }
 
-  it('refuses to move a card into its lane while automation is already starting a run on it', async () => {
+  // The palette reads no sessions or run queue, so the server decides whether a busy card may move.
+  it("sends a busy card's move to the server and toasts the server's refusal", async () => {
     const requests = stubSearchApi();
     stubAutomationStartingRunOn('work-item-unstarted-review');
+    server.use(
+      http.post<{ itemId: string }, { stage: string }>(
+        `${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/work-items/:itemId/transition`,
+        async ({ params, request }) => {
+          requests.transitions.push({ itemId: params.itemId, body: { stage: (await request.json()).stage } });
+          const result: FactoryTransitionResultRejected = {
+            status: 'rejected',
+            transitionId: 'transition-busy',
+            itemId: params.itemId,
+            code: 'card_busy',
+            reason: 'Another run cannot start on this card yet.',
+          };
+          return HttpResponse.json({ result }, { status: 422 });
+        },
+      ),
+    );
     const user = userEvent.setup();
     const { client } = renderSearchRoute();
     await openWithShortcut();
@@ -1273,8 +1164,13 @@ describe('Global search', () => {
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
     await user.click(await screen.findByText('Bump the command palette dependencies'));
 
-    expect(await screen.findByText("Another run can't start while this card is busy.")).toBeInTheDocument();
-    expect(requests.transitions).toEqual([]);
+    expect(await screen.findByText('Another run cannot start on this card yet.')).toBeInTheDocument();
+    expect(requests.transitions).toEqual([
+      expect.objectContaining({
+        itemId: 'work-item-unstarted-review',
+        body: expect.objectContaining({ stage: 'pr-review' }),
+      }),
+    ]);
   });
 
   it('refuses to open a session on a custom-board card while automation is already starting a run on it', async () => {
@@ -1290,7 +1186,6 @@ describe('Global search', () => {
     await user.click(card);
 
     expect(await screen.findByText("Another run can't start while this card is busy.")).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
     expect(requests.createSessionRequests).toBe(0);
     expect(requests.transitions).toEqual([]);
   });
@@ -1329,7 +1224,7 @@ describe('Global search', () => {
     await waitForMutationsIdle(client);
   });
 
-  it('refuses to open a second session while the session chosen through the repository picker is still starting', async () => {
+  it('refuses to open a second session while an unattributed work item session is still starting', async () => {
     const item = { ...workItems[3], board: 'custom', metadata: { number: 777 } };
     stubSearchApi({ workItems: [item] });
     const starts: unknown[] = [];
@@ -1338,27 +1233,21 @@ describe('Global search', () => {
       releaseStart = resolve;
     });
     server.use(
-      http.patch(`${TEST_BASE_URL}/web/factory/work-items/${item.id}`, () =>
-        HttpResponse.json({ workItem: toWireWorkItem(item) }),
-      ),
       http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
         starts.push(await request.json());
         await startGate;
-        return HttpResponse.json({ threadId: 'thread-search' });
+        return HttpResponse.json({ prepared: { threadId: 'thread-search' } });
       }),
     );
     const user = userEvent.setup();
     const { client } = renderSearchRoute();
     const search = await openWithShortcut();
     await user.click(await within(search).findByText(item.title));
-    const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    await user.click(within(picker).getByRole('button', { name: /mastra-ai\/docs/ }));
     await waitFor(() => expect(starts).toHaveLength(1));
 
     await user.click(within(search).getByText(item.title));
 
     expect(await screen.findByText("Another run can't start while this card is busy.")).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
     releaseStart();
     await waitForMutationsIdle(client);
     expect(starts).toHaveLength(1);
@@ -1376,82 +1265,10 @@ describe('Global search', () => {
 
     expect(within(dialog).getByText('Bump the command palette dependencies')).toBeInTheDocument();
     expect(within(dialog).getByText('Palette keyboard traps focus on mobile')).toBeInTheDocument();
-    expect(within(dialog).getByText('Harden the review board drop target')).toBeInTheDocument();
-    expect(within(dialog).getByText('Rail scopes overflow on narrow viewports')).toBeInTheDocument();
+    expect(within(dialog).queryByText('Harden the review board drop target')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('Rail scopes overflow on narrow viewports')).not.toBeInTheDocument();
     expect(screen.queryByText('Review command palette PR')).not.toBeInTheDocument();
     expect(screen.queryByText('research-notes')).not.toBeInTheDocument();
-  });
-
-  it('finds a pull request that has no card yet, files it, and moves it into its lane', async () => {
-    const requests = stubSearchApi();
-    const user = userEvent.setup();
-    const { client } = renderSearchRoute();
-    const dialog = await openWithShortcut();
-    await screen.findByText('Review command palette PR');
-
-    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#20454');
-    const candidate = await within(dialog).findByRole('option', { name: /Harden the review board drop target/ });
-    expect(within(candidate).getByText('Intake')).toBeInTheDocument();
-    expect(within(candidate).getByText('not filed')).toBeInTheDocument();
-
-    await user.click(candidate);
-
-    await waitFor(() => expect(requests.transitions).toHaveLength(1));
-    await waitForMutationsIdle(client);
-    expect(requests.created).toEqual([
-      expect.objectContaining({ title: 'Harden the review board drop target', board: 'work', stages: ['intake'] }),
-    ]);
-    expect(requests.transitions[0]).toMatchObject({
-      itemId: 'work-item-filed',
-      body: { board: 'work', stage: 'pr-review' },
-    });
-    expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
-    expect(requests.createSessionRequests).toBe(0);
-  });
-
-  it('stays open, and files nothing, when a candidate is picked before the board catalog is available', async () => {
-    const requests = stubSearchApi();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/boards`, () =>
-        HttpResponse.json({ error: 'unavailable' }, { status: 503 }),
-      ),
-    );
-    const user = userEvent.setup();
-    renderSearchRoute();
-    const dialog = await openWithShortcut();
-    await screen.findByText('Review command palette PR');
-
-    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#20454');
-    await user.click(await within(dialog).findByRole('option', { name: /Harden the review board drop target/ }));
-
-    expect(await screen.findByText('The board is still loading. Try again in a moment.')).toBeInTheDocument();
-    expect(screen.getByRole('dialog', { name: 'Global search' })).toBeInTheDocument();
-    expect(requests.created).toEqual([]);
-    expect(requests.transitions).toEqual([]);
-  });
-
-  it('files a candidate in the initial phase of a default board that has no move for it', async () => {
-    const requests = stubSearchApi();
-    const { flow: _flow, ...noLoop } = workBoardInfo;
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/boards`, () =>
-        HttpResponse.json({ boards: [{ ...noLoop, flow: { completed: 'done' } }] }),
-      ),
-    );
-    const user = userEvent.setup();
-    const { client } = renderSearchRoute();
-    const dialog = await openWithShortcut();
-    await screen.findByText('Review command palette PR');
-
-    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#20454');
-    await user.click(await within(dialog).findByRole('option', { name: /Harden the review board drop target/ }));
-
-    await waitFor(() => expect(requests.created).toHaveLength(1));
-    await waitForMutationsIdle(client);
-    expect(requests.created[0]).toMatchObject({ board: 'work', stages: ['intake'] });
-    // This stub answers with a card elsewhere, so the board may put it back; it never moves it on.
-    expect(requests.transitions.map(({ body }) => body.stage).filter(stage => stage !== 'intake')).toEqual([]);
-    expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
   });
 
   // A card in more than one phase sits in its furthest one, as its card label says.
@@ -1488,20 +1305,6 @@ describe('Global search', () => {
     expect(within(results).getByText('Review Sessions')).toBeInTheDocument();
   });
 
-  it('keeps board cards searchable when the GitHub intake feeds fail', async () => {
-    stubSearchApi({ failIntake: true });
-    const user = userEvent.setup();
-    renderSearchRoute();
-    const dialog = await openWithShortcut();
-
-    expect(await screen.findByText('Bump the command palette dependencies')).toBeInTheDocument();
-    expect(await screen.findByText('Intake could not be loaded.')).toBeInTheDocument();
-    expect(within(dialog).queryByText('Harden the review board drop target')).not.toBeInTheDocument();
-
-    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
-    expect(await screen.findByText('Bump the command palette dependencies')).toBeInTheDocument();
-  });
-
   it('runs no session request for a Factory with no linked repository', async () => {
     const requests = stubSearchApi({ activeFactoryHasRepositories: false });
     renderSearchRoute();
@@ -1512,7 +1315,7 @@ describe('Global search', () => {
     expect(within(results).getByText('Factories')).toBeInTheDocument();
     expect(Object.values(requests.sessionRequests)).toHaveLength(0);
     expect(requests.workItemQueries).toHaveLength(0);
-    expect(requests.intakeRequests).toBe(0);
+    expect(requests.providerListRequests).toEqual([]);
   });
 
   it('keeps the sessions request alive when the notification observer also consumes it', async () => {

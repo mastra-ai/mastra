@@ -1253,6 +1253,42 @@ describe('createStep with Processor', () => {
   });
 });
 
+describe('Processor workflow with ProcessorStepOutputSchema', () => {
+  it('passes providerMetadata to processOutputStep in the outputStep phase', async () => {
+    let receivedProviderMetadata: Record<string, unknown> | undefined;
+    const processor: Processor = {
+      id: 'provider-metadata-reader',
+      processOutputStep: async ({ messages, providerMetadata }) => {
+        receivedProviderMetadata = providerMetadata;
+        return messages;
+      },
+    };
+
+    const workflow = createWorkflow({
+      id: 'processor-output-schema-workflow',
+      inputSchema: ProcessorStepOutputSchema,
+      outputSchema: ProcessorStepOutputSchema,
+    })
+      .then(createStep(processor))
+      .commit();
+
+    const providerMetadata = { bedrock: { trace: { guardrail: { action: 'BLOCKED' } } } };
+    const run = await workflow.createRun();
+    const result = await run.start({
+      inputData: {
+        phase: 'outputStep',
+        messages: [],
+        messageList: createMockMessageList(),
+        stepNumber: 0,
+        providerMetadata,
+      },
+    });
+
+    expect(result.status).toBe('success');
+    expect(receivedProviderMetadata).toEqual(providerMetadata);
+  });
+});
+
 describe('Processor Step in Workflow - TripWire handling', () => {
   it('should return tripwire status when processor in workflow calls abort', async () => {
     const tripwireProcessor: Processor = {

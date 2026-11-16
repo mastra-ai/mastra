@@ -50,8 +50,8 @@ export interface GatewayApiKey {
 }
 
 /**
- * Create a Gateway API key by provisioning a Gateway project with a key. Organization (v2) keys
- * aren't released yet, so they aren't issued here; `keyId` stays unset and nothing is revoked.
+ * Create a Gateway API key. The server picks the kind: an organization (v2) key with a `keyId`
+ * for an organization in the Gateway v2 rollout, otherwise a Gateway project key without one.
  */
 export async function createGatewayApiKey(
   token: string,
@@ -59,14 +59,16 @@ export async function createGatewayApiKey(
   label: string,
   signal?: AbortSignal,
 ): Promise<GatewayApiKey> {
-  const result = await request<{ apiKey: string }>(
+  const result = await request<{ apiKey: string; keyId?: string }>(
     token,
     orgId,
     '/v1/gateway/projects/provision',
     { method: 'POST', body: JSON.stringify({ name: label, keyLabel: label }) },
     signal,
   );
-  return { apiKey: result.apiKey };
+  return typeof result.keyId === 'string' && result.keyId
+    ? { apiKey: result.apiKey, keyId: result.keyId }
+    : { apiKey: result.apiKey };
 }
 
 /** Revoke an organization key, e.g. one created for a project that was never written. */

@@ -53,8 +53,7 @@ async function queueDecision(
   await storage.commitRuleEvaluation({
     ...SCOPE,
     workItemId,
-    ingress: { identity: key, triggerType: 'test' },
-    configVersion: 'rules-v1',
+    ingress: { identity: key },
     expectedRevision: workItem.revision,
     actor: { type: 'system', id: 'rules' },
     outcome: { status: 'accepted' },

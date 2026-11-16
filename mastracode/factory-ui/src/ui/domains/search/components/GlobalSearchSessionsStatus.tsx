@@ -1,7 +1,7 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { RefreshCw } from 'lucide-react';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 
 function LoadingSessionsRow() {
   return (
@@ -37,7 +37,7 @@ export function GlobalSearchSessionsStatus({
           variant="destructive"
           action={
             <Notice.Button onClick={onRetry}>
-              Retry <RefreshCw />
+              Retry <IconArrowRotateClockwise />
             </Notice.Button>
           }
         >

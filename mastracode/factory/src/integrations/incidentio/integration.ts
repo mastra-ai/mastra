@@ -11,11 +11,10 @@ import { buildIncidentioAgentTools } from './agent-tools.js';
 import { IncidentioApiClient } from './api.js';
 import { resolveIncidentioRules } from './default-rules.js';
 import type { IncidentioEventRules, IncidentioRuleOverrides } from './default-rules.js';
-import { createIncidentioIntake } from './intake.js';
+import { createIncidentioIntake, INCIDENTIO_FOLLOW_UPS_SOURCE_ID } from './intake.js';
 import { attachIncidentioIssueReconciler } from './issue-reconciler.js';
-import { incidentioReconciliationEnabled, incidentioReconciliationInterval } from './reconciliation-config.js';
+import { incidentioReconciliationInterval } from './reconciliation-config.js';
 import { buildIncidentioRoutes } from './routes.js';
-import { attachIncidentioRules } from './rules.js';
 
 export interface IncidentioIntegrationConfig {
   apiKey?: string;
@@ -146,8 +145,11 @@ export class IncidentioIntegration implements FactoryIntegration {
     return buildIncidentioAgentTools({ requestContext: args.requestContext, incidentio: this });
   }
 
+  isFollowUpSource(sourceId: string): boolean {
+    return sourceId === INCIDENTIO_FOLLOW_UPS_SOURCE_ID;
+  }
+
   workers(ctx: IntegrationContext): MastraWorker[] {
-    if (!incidentioReconciliationEnabled()) return [];
     const reconcile = attachIncidentioIssueReconciler(this, ctx);
     if (!reconcile) return [];
     const intervalMs = incidentioReconciliationInterval();
@@ -163,7 +165,7 @@ export class IncidentioIntegration implements FactoryIntegration {
   /**
    * The integration's HTTP surface: `/web/incidentio/*` Mastra `apiRoutes`
    * (status + follow-up listing/detail for Intake). Handlers operate on this
-   * instance; a board-scoped listing also feeds the incident.io event rules.
+   * instance.
    */
   routes(ctx: IntegrationContext): ApiRoute[] {
     return buildIncidentioRoutes({
@@ -171,7 +173,6 @@ export class IncidentioIntegration implements FactoryIntegration {
       mode: 'api-key',
       auth: ctx.auth,
       intake: ctx.storage.intake,
-      ingestFactoryIssues: attachIncidentioRules(this, ctx),
     });
   }
 

@@ -72,7 +72,7 @@ function stubThreadRoute({
           {
             id: FACTORY_ID,
             name: 'Acme Factory',
-            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main' })],
           },
         ],
       }),
@@ -165,15 +165,15 @@ describe('ThreadPage loading shell', () => {
     expect(within(conversation).getByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
     expect(conversation).not.toContainElement(composer);
     expect(screen.getByRole('region', { name: 'Sessions' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Workspace files' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('status', { name: 'Loading workspace details' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Session panel' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('status', { name: 'Loading overview' })).toBeInTheDocument();
     expect(onChanges).not.toHaveBeenCalled();
     expect(send).toBeDisabled();
     await user.type(textarea, 'Draft written while opening the session');
 
     // Panel details and chat history resolve independently; neither remounts the input.
     sessionGate.resolve();
-    expect(await screen.findByRole('button', { name: 'Files' })).toBeInTheDocument();
+    expect(await screen.findByText(userSession.branch)).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Message' })).toBe(textarea);
     expect(textarea).toHaveValue('Draft written while opening the session');
     expect(send).toBeDisabled();
@@ -192,9 +192,9 @@ describe('ThreadPage loading shell', () => {
     renderThreadRoute();
     sessionGate.resolve();
 
-    const header = await findPageHeader();
+    await findPageHeader();
     expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
-    expect(within(header).getByRole('button', { name: 'Workspace files' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Session panel' })).toBeInTheDocument();
 
     messagesGate.resolve();
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
@@ -316,7 +316,7 @@ describe('ThreadPage when reading the session fails', () => {
     renderThreadRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`);
 
     expect(await screen.findByText(/not found or is private to another user/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Workspace files' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Session panel' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('workspace-files-card')).not.toBeInTheDocument();
   });
 });

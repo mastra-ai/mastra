@@ -7,6 +7,7 @@ export const BOARD_SOURCE_OPTIONS = [
   { value: 'linear', label: 'Linear' },
   { value: 'jira', label: 'Jira' },
   { value: 'incidentio', label: 'incident.io' },
+  { value: 'detail', label: 'Detail' },
   { value: 'manual', label: 'Manual' },
   // Not a provider: any card carrying a pull or merge request, its own or attached to its issue.
   { value: PULL_REQUEST_SOURCE_FILTER, label: 'Pull requests' },

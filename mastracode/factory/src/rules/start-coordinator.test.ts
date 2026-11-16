@@ -101,6 +101,7 @@ function makeSourceControl(integrationId = 'github') {
     sessions: { getBySessionId: vi.fn(async (sessionId: string) => sessions.get(sessionId) ?? null) },
     projectRepositories: {
       get: vi.fn(async ({ id }: { id: string }) => ({ id, connectionId: `connection-${id}` })),
+      listByProject: vi.fn(async () => []),
       list: vi.fn(async ({ connectionId }: { connectionId: string }) => {
         const suffix = connectionId.endsWith('2') ? '2' : '1';
         return [{ id: `project-repository-${suffix}`, repositoryId: `repository-${suffix}` }];

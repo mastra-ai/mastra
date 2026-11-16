@@ -1,5 +1,5 @@
-import { BlocksIcon } from 'lucide-react';
 import { useState } from 'react';
+import { IconBlocks } from '@/ds/icons/central/IconBlocks';
 
 export interface ProviderLogoProps {
   logoUrl?: string | null;
@@ -14,7 +14,7 @@ export function ProviderLogo({ logoUrl }: ProviderLogoProps) {
       {logoUrl && failedSrc !== logoUrl ? (
         <img src={logoUrl} alt="" className="size-full object-contain" onError={() => setFailedSrc(logoUrl)} />
       ) : (
-        <BlocksIcon aria-hidden className="size-4 text-muted-foreground" />
+        <IconBlocks aria-hidden className="size-4 text-muted-foreground" />
       )}
     </span>
   );

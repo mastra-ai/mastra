@@ -1,13 +1,11 @@
 import { boardOf } from '../../factory/boardFlow';
 import type { BoardInfo } from '../../factory/boardFlow';
 import type { WorkspacesData } from '../../../../hooks/useWorkspaces';
-import type { BoardCandidate } from '../../factory/boardCandidates';
 import { cardContextSessions, SOURCE_LABELS } from '../../factory/boardItems';
 import type { CardContextSession } from '../../factory/boardItems';
 import { currentItemStageLabel } from '../../factory/boardStages';
 import { relationshipLabel, relationshipPath, workItemIdentifier } from '../../factory/services/relationships';
 import type { WorkItem } from '../../factory/services/workItems';
-import { stageLabel } from '../../factory/stages';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import {
   getFactorySessionKind,
@@ -37,7 +35,7 @@ export interface WorkItemSearchResult {
   value: string;
   path: string;
   updatedAt: string;
-  target: { kind: 'work-item'; item: WorkItem } | { kind: 'candidate'; candidate: BoardCandidate };
+  item: WorkItem;
 }
 
 interface SessionWorkItem {
@@ -209,54 +207,19 @@ function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInf
     ]),
     path: relationshipPath(item, factoryId),
     updatedAt: item.updatedAt,
-    target: { kind: 'work-item', item },
+    item,
   };
 }
 
-/**
- * The text a candidate's row is filtered on. The search ranks candidates on it too before looking
- * up the best ones, so it never cuts a candidate the palette would list.
- */
-export function candidateSearchValue(candidate: BoardCandidate): string {
-  return joinValue([
-    candidate.title,
-    'work item',
-    SOURCE_LABELS[candidate.source],
-    stageLabel(candidate.column),
-    workItemIdentifier(candidate),
-    candidate.sourceKey,
-  ]);
-}
-
-function createCandidateResult(factoryId: string, candidate: BoardCandidate, updatedAt: string): WorkItemSearchResult {
-  const identifier = workItemIdentifier(candidate);
-  const sourceLabel = SOURCE_LABELS[candidate.source];
-  const stage = stageLabel(candidate.column);
-
-  return {
-    id: candidate.sourceKey,
-    title: candidate.title,
-    context: [sourceLabel, stage, 'not filed'],
-    identifier,
-    value: candidateSearchValue(candidate),
-    path: relationshipPath(candidate, factoryId),
-    updatedAt,
-    target: { kind: 'candidate', candidate },
-  };
-}
-
-/** Board entries with no session to open: unstarted cards, plus live candidates not yet filed as one. */
+/** Board entries with no session to open: the cards nobody has started. */
 export function createWorkItemSearchResults(input: {
   factoryId: string;
   /** The cards holding no session. */
   workItems: WorkItem[];
-  /** The live candidates no card is filed from. */
-  candidates: Array<{ candidate: BoardCandidate; updatedAt: string }>;
   /** The project's boards, once loaded, so each card's phase reads by its own board's name. */
   boards?: readonly BoardInfo[];
 }): WorkItemSearchResult[] {
-  return [
-    ...input.workItems.map(item => createWorkItemResult(input.factoryId, item, boardOf(input.boards, item))),
-    ...input.candidates.map(({ candidate, updatedAt }) => createCandidateResult(input.factoryId, candidate, updatedAt)),
-  ].sort(newestFirst);
+  return input.workItems
+    .map(item => createWorkItemResult(input.factoryId, item, boardOf(input.boards, item)))
+    .sort(newestFirst);
 }

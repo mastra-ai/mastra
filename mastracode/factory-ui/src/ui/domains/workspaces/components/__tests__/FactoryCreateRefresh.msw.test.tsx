@@ -28,8 +28,6 @@ const repo = {
   private: false,
   installationId: 7,
   installationStorageId: 'inst-7',
-  sandboxProvider: 'local',
-  sandboxWorkdir: '/workspace/hello',
 };
 
 let projectCreated = false;
@@ -68,7 +66,6 @@ beforeEach(() => {
         projectRepository: {
           id: 'ghp_1',
           branch: 'main',
-          sandboxWorkdir: '/workspace/hello',
           repository: { slug: 'octo/hello', defaultBranch: 'main' },
         },
       }),
