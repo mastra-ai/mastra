@@ -5,6 +5,7 @@ import type { ZodType as ZodTypeV4 } from 'zod/v4';
 export type {
   PublicSchema,
   InferPublicSchema,
+  InferPublicSchemaInput,
   StandardSchemaWithJSON,
   InferStandardSchemaOutput,
   StandardSchemaIssue,

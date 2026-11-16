@@ -752,13 +752,20 @@ export interface ToolAction<
   TContext extends ToolExecutionContext<TSuspend, TResume, any> = ToolExecutionContext<TSuspend, TResume>,
   TId extends string = string,
   TRequestContext extends Record<string, any> | unknown = unknown,
+  /**
+   * The type an `execute` callback returns for the output schema — the schema's
+   * *input* (pre-transform) shape. Zod transforms run during validation, so
+   * `execute` returns raw values that `TSchemaOut` (the post-transform type) is
+   * derived from. Defaults to `TSchemaOut` for schemas without a transform.
+   */
+  TRawOutput = TSchemaOut,
 > {
   id: TId;
   /** Display name for UIs and MCP clients. Never sent to the model. */
   title?: string;
   description: string;
   inputSchema?: PublicSchema<TSchemaIn>;
-  outputSchema?: PublicSchema<TSchemaOut>;
+  outputSchema?: PublicSchema<TSchemaOut, TRawOutput>;
   suspendSchema?: PublicSchema<TSuspend>;
   resumeSchema?: PublicSchema<TResume>;
   /**
@@ -797,7 +804,7 @@ export interface ToolAction<
   // Note: When no outputSchema is provided, returns any to allow property access
   // Note: For outputSchema, we use the input type because Zod transforms are applied during validation
   // Note: { error?: never } enables inline type narrowing with 'error' in result checks
-  execute?: (inputData: TSchemaIn, context: TContext) => Promise<TSchemaOut | ValidationError | void>;
+  execute?: (inputData: TSchemaIn, context: TContext) => Promise<TRawOutput | ValidationError | void>;
   /**
    * Display-only tool: stream the call to the client, return `{ acknowledged: true }`
    * from the server, and continue the model loop without waiting for a browser result.
