@@ -9107,8 +9107,8 @@ importers:
   voice/google:
     dependencies:
       '@google-cloud/speech':
-        specifier: ^7.5.0
-        version: 7.5.0(supports-color@10.2.2)
+        specifier: ^8.2.1
+        version: 8.2.1(supports-color@10.2.2)
       '@google-cloud/text-to-speech':
         specifier: ^7.2.0
         version: 7.2.0(supports-color@10.2.2)
@@ -14843,10 +14843,6 @@ packages:
     bundledDependencies:
       - '@fly/client-signals'
 
-  '@google-cloud/common@6.1.0':
-    resolution: {integrity: sha512-Ohjxjvusr65+SiEVBrilpyn1ir9CM8ZqWjcf7bA8ph1GCunxI6bbwtcl7iGl67A7Lr4Nz7WpNzITNETwggc7pw==}
-    engines: {node: '>=18'}
-
   '@google-cloud/common@8.2.2':
     resolution: {integrity: sha512-sl6sfukASNpdCHGP8zAHgC+7qx3PBYR0tTEhFbiEPjyZs2QX5Ygl4Yuulql5MoD/VzXe9w55UzNgQQNVEVuVmw==}
     engines: {node: '>=22'}
@@ -14871,17 +14867,9 @@ packages:
     resolution: {integrity: sha512-yCDQg8CoQxNGI0Bk7oWk+I0iMnR/k5KF86edhJYMCxzaQC4CEZOzsdl/rAcNSiy7Najn6TNIdaJ6UxU7y1twFw==}
     engines: {node: '>=22'}
 
-  '@google-cloud/projectify@4.0.0':
-    resolution: {integrity: sha512-MmaX6HeSvyPbWGwFq7mXdo0uQZLGBYCwziiLIGq5JVX+/bdI3SAq6bP98trV5eTWfLuvsMcIC1YJOF2vfteLFA==}
-    engines: {node: '>=14.0.0'}
-
   '@google-cloud/projectify@6.2.1':
     resolution: {integrity: sha512-PV9oy7VpQRXLuqKuU5RSOHFQyWgvw2sT9MoTGykja9j6c9pv5+ttKTJiFsccu500YYIGiz8JCOsb60PfKmiV/w==}
     engines: {node: '>=22'}
-
-  '@google-cloud/promisify@4.1.0':
-    resolution: {integrity: sha512-G/FQx5cE/+DqBbOpA5jKsegGwdPniU6PuIEMt+qxWgFxvxuFOzVmp6zYchtYuwAWV5/8Dgs0yAmjvNZv3uXLQg==}
-    engines: {node: '>=18'}
 
   '@google-cloud/promisify@6.2.1':
     resolution: {integrity: sha512-/+RvLJ5u+WhGay6Z3aY6OApDQmNqq1427Mmt7Eov9kYp69gdUiGSwFnygeTxfz69XBtYZLAnWikGMIoFXtKt+A==}
@@ -14903,9 +14891,9 @@ packages:
     resolution: {integrity: sha512-JW4QtfHNameq+R0F/8MvmefAdMJfAliuKRdeamQSKiiPuZmHVapRJhORDp7UWKITAGdAwz/i0dYRlR/jDPKCYg==}
     engines: {node: '>=22'}
 
-  '@google-cloud/speech@7.5.0':
-    resolution: {integrity: sha512-Tvn9yvNNTGj+AcUVtTBgOASXuUfwqU3L2ugHAORhzPtj0G/Bxstlut9WhDl96FR/rihbJ6mvTMEijsbuOREDPA==}
-    engines: {node: '>=18'}
+  '@google-cloud/speech@8.2.1':
+    resolution: {integrity: sha512-M/cfyrBmECk7txYBbEJsVa37ysp43ep6j4sgYB//tSsOUTWk3pL1OIImCvkdDqoT0OOSYsx1z6ezIgNcxdKbOQ==}
+    engines: {node: '>=22'}
 
   '@google-cloud/storage@8.4.0':
     resolution: {integrity: sha512-M3kA6UA2Tjp5aznCrgKcm9CzOjiQyRMnquqalqXAeS5wvkqqZxN8wpNjjHafOSYs6lQ82U7f2i8we4eTfIrpkA==}
@@ -38118,20 +38106,6 @@ snapshots:
 
   '@fly/sprites@0.2.4': {}
 
-  '@google-cloud/common@6.1.0(supports-color@10.2.2)':
-    dependencies:
-      '@google-cloud/projectify': 4.0.0
-      '@google-cloud/promisify': 4.1.0
-      arrify: 2.0.1
-      duplexify: 4.1.3
-      extend: 3.0.2
-      google-auth-library: 10.9.1(supports-color@10.2.2)
-      html-entities: 2.6.0
-      retry-request: 8.0.4(supports-color@10.2.2)
-      teeny-request: 10.1.4(supports-color@10.2.2)
-    transitivePeerDependencies:
-      - supports-color
-
   '@google-cloud/common@8.2.2(supports-color@10.2.2)':
     dependencies:
       '@google-cloud/projectify': 6.2.1
@@ -38177,11 +38151,7 @@ snapshots:
 
   '@google-cloud/precise-date@6.2.1': {}
 
-  '@google-cloud/projectify@4.0.0': {}
-
   '@google-cloud/projectify@6.2.1': {}
-
-  '@google-cloud/promisify@4.1.0': {}
 
   '@google-cloud/promisify@6.2.1': {}
 
@@ -38255,11 +38225,11 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google-cloud/speech@7.5.0(supports-color@10.2.2)':
+  '@google-cloud/speech@8.2.1(supports-color@10.2.2)':
     dependencies:
-      '@google-cloud/common': 6.1.0(supports-color@10.2.2)
+      '@google-cloud/common': 8.2.2(supports-color@10.2.2)
       '@types/pumpify': 1.4.5
-      google-gax: 5.0.8(supports-color@10.2.2)
+      google-gax: 6.14.0(supports-color@10.2.2)
       pumpify: 2.0.1
       stream-events: 1.0.5
     transitivePeerDependencies:
@@ -49829,6 +49799,7 @@ snapshots:
       jws: 4.0.1
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   google-auth-library@10.9.1(supports-color@10.2.2):
     dependencies:
@@ -49867,6 +49838,7 @@ snapshots:
       rimraf: 5.0.10
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   google-gax@6.14.0(supports-color@10.2.2):
     dependencies:
@@ -49943,6 +49915,7 @@ snapshots:
       jws: 4.0.1
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   guid-typescript@1.0.9: {}
 
@@ -54433,6 +54406,7 @@ snapshots:
   proto3-json-serializer@3.0.4:
     dependencies:
       protobufjs: 8.8.0
+    optional: true
 
   proto3-json-serializer@4.1.0:
     dependencies:
@@ -55534,6 +55508,7 @@ snapshots:
       teeny-request: 10.1.4(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   retry-request@9.1.0:
     dependencies:
@@ -56672,6 +56647,7 @@ snapshots:
       stream-events: 1.0.5
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   teeny-request@11.1.1(supports-color@10.2.2):
     dependencies:
