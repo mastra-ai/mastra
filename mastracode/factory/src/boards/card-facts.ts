@@ -1,9 +1,10 @@
 import type { RuleFacts } from '../rules/rule-group.js';
 import { authorTrusted } from '../rules/types.js';
 import type { Card } from '../storage/domains/work-items/base.js';
+import { pullRequestSources } from '../work-items/change-requests.js';
 import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { stringList, stringValue } from '../work-items/providers/metadata-keys.js';
-import { newestOpenPullRequestNumber, pullRequestSources } from './semantics.js';
+import { newestOpenPullRequestNumber } from './semantics.js';
 
 type WorkItemFacts = Pick<Card['workItem'], 'labels' | 'author'> &
   Partial<Pick<Card['workItem'], 'sources' | 'provider' | 'key' | 'state' | 'metadata'>>;

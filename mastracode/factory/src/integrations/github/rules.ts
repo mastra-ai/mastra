@@ -633,6 +633,7 @@ export class GithubRules {
       repository: repositoryName,
       login,
       factoryAuthored: fromCardSession,
+      human: string(object(parsed.payload.sender)?.type) === 'User',
     });
     const status = await commitCardUpdate(this.options.storage, {
       orgId: project.orgId,
