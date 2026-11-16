@@ -1134,37 +1134,51 @@ describe('legacy ownership', () => {
       });
 
       for (const byo of [false, true]) {
-        it(`a createIndex that read no entry refuses instead of overwriting a claim made since (${byo ? 'BYO' : 'managed'})`, async () => {
+        it(`a createIndex that read no entry refreshes a same-target claim made since and keeps it claimed (${byo ? 'BYO' : 'managed'})`, async () => {
           const X = await legacy();
           const p = holdAfterRead(other, 'afterCreateIndexRead');
-          const create = other
-            .createIndex({ indexName: X, dimension: 4, ...(byo ? { collectionName: X } : {}) })
-            .catch(e => e);
+          const create = other.createIndex({ indexName: X, dimension: 4, ...(byo ? { collectionName: X } : {}) });
           await p.reached.promise;
           await store.claimLegacyIndex({ indexName: X });
-          const claimed = await reg(X);
           p.release.resolve();
-          const err = await create;
-          expect(err.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
-          expect(await reg(X)).toEqual(claimed);
-          expect(claimed).toMatchObject({ isByo: false, ownsCollection: true, claimToken: expect.any(String) });
+          await create;
+          expect(await db.collection(REGISTRY).countDocuments({ _id: X as any })).toBe(1);
+          expect(await reg(X)).toMatchObject({ isByo: false, ownsCollection: true, ownsVectorIndex: true });
           expect(await db.collection(X).countDocuments()).toBe(1);
           expect(await searchIndexNames(db, X)).toContain(`${X}_vector_index`);
         });
       }
 
-      it('two racing createIndex calls: the one that read no entry refuses instead of overwriting the winner', async () => {
+      it('a createIndex for another collection refuses with CONFLICT naming the difference, and the claim stays', async () => {
+        const X = await legacy();
+        const Y = `${X}_byo_coll`;
+        names.push(Y);
+        await seedCollection(db, Y, [{ embedding: [1, 0, 0, 0] }]);
+        const p = holdAfterRead(other, 'afterCreateIndexRead');
+        const create = other.createIndex({ indexName: X, dimension: 4, collectionName: Y }).catch(e => e);
+        await p.reached.promise;
+        await store.claimLegacyIndex({ indexName: X });
+        const claimed = await reg(X);
+        p.release.resolve();
+        const err = await create;
+        expect(err.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+        expect(err.message).toContain(`collection "${X}" instead of "${Y}"`);
+        expect(err.message).not.toMatch(/deleteIndex/);
+        expect(await reg(X)).toEqual(claimed);
+        expect(claimed).toMatchObject({ isByo: false, ownsCollection: true });
+      });
+
+      it('two racing identical createIndex calls both resolve with one registration', async () => {
         const X = uniqueName('claim');
         names.push(X);
         const p = holdAfterRead(other, 'afterCreateIndexRead');
-        const late = other.createIndex({ indexName: X, dimension: 4 }).catch(e => e);
+        const late = other.createIndex({ indexName: X, dimension: 4 });
         await p.reached.promise;
         await store.createIndex({ indexName: X, dimension: 4 });
-        const winner = await reg(X);
         p.release.resolve();
-        expect((await late).id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
-        expect(await reg(X)).toEqual(winner);
-        expect(winner?.ownsCollection).toBe(true);
+        await late;
+        expect(await db.collection(REGISTRY).countDocuments({ _id: X as any })).toBe(1);
+        expect(await reg(X)).toMatchObject({ isByo: false, ownsCollection: true });
       });
 
       it('a registration that starts using the collection during the insert rolls the claim back with IN_USE', async () => {

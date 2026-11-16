@@ -1083,6 +1083,11 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * "index not found" or "index not ready" errors on subsequent operations.
    */
   async createIndex(params: MongoDBCreateIndexParams): Promise<void> {
+    return this.createIndexAttempt(params, false);
+  }
+
+  /** `refresh` marks the single retry after losing a registration race to a compatible entry. */
+  private async createIndexAttempt(params: MongoDBCreateIndexParams, refresh: boolean): Promise<void> {
     const {
       indexName,
       dimension,
@@ -1239,12 +1244,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // the index embeds would persist a config the physical index does not match: the store
       // would read and write one field while Atlas embeds another. Refuse instead.
       const existingAutoEmbed = existingEntry?.autoEmbed;
-      const embeddingChanged =
-        Boolean(existingAutoEmbed) !== Boolean(resolvedAutoEmbed) ||
-        (existingAutoEmbed &&
-          resolvedAutoEmbed &&
-          (existingAutoEmbed.path !== resolvedAutoEmbed.path || existingAutoEmbed.model !== resolvedAutoEmbed.model));
-      if (existingEntry && embeddingChanged) {
+      const sameEmbedding = (other?: { path: string; model: string } | null) =>
+        Boolean(other) === Boolean(resolvedAutoEmbed) &&
+        (!other ||
+          !resolvedAutoEmbed ||
+          (other.path === resolvedAutoEmbed.path && other.model === resolvedAutoEmbed.model));
+      if (existingEntry && !sameEmbedding(existingAutoEmbed)) {
         throw new MastraError({
           id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'),
           domain: ErrorDomain.STORAGE,
@@ -1302,16 +1307,31 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       } catch (error: any) {
         if (error?.code !== 11000) throw error;
         const winner = await this.readRegistryEntry(indexName);
+        this.assertNotDeleting(winner, 'CREATE_INDEX');
+        const sameCollection = winner?.collectionName === targetCollection;
+        // Another call registered the same target first (e.g. replicas creating it at boot): run
+        // once more as an ordinary refresh, which keeps the winner's classification and ownership.
+        if (!existingEntry && !refresh && winner && sameCollection && sameEmbedding(winner.autoEmbed)) {
+          return await this.createIndexAttempt(params, true);
+        }
+        const differs = winner
+          ? [
+              ...(sameCollection ? [] : [`collection "${winner.collectionName}" instead of "${targetCollection}"`]),
+              ...(sameEmbedding(winner.autoEmbed)
+                ? []
+                : [`${describeEmbedding(winner.autoEmbed)} instead of ${describeEmbedding(resolvedAutoEmbed)}`]),
+            ]
+          : [];
         throw new MastraError({
           id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName },
           // The winning entry can be gone again by the time it is read back (a concurrent
-          // deleteIndex), in which case there is nothing to describe and a retry will succeed.
-          text: winner
-            ? `Index "${indexName}" was registered concurrently against collection "${winner.collectionName}" with ${describeEmbedding(winner.autoEmbed)}, but this createIndex call resolves to collection "${targetCollection}" with ${describeEmbedding(resolvedAutoEmbed)}. Call deleteIndex({ indexName: "${indexName}" }) first to rebuild it.`
-            : `Index "${indexName}" was registered concurrently by another process and removed again before this call could read it. Retry createIndex.`,
+          // deleteIndex), or change again during the refresh; either way a retry can succeed.
+          text: differs.length
+            ? `Index "${indexName}" was registered concurrently by another call with ${differs.join(' and ')}. Nothing was changed. Use the registered target, or pick a different indexName.`
+            : `Index "${indexName}" was registered or removed concurrently by another call while this one ran. Nothing was changed. Retry createIndex.`,
         });
       }
       this.indexTargets.set(indexName, {
