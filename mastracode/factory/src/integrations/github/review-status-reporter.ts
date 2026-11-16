@@ -69,7 +69,7 @@ export function createGithubReviewStatusReporter(deps: GithubReviewStatusReporte
       const target = await resolveRepository(deps.sourceControl, event.orgId, event.factoryProjectId, repositoryId);
       if (!target) return;
       const ref: PullRequestRef = {
-        connection: { type: 'app-installation', installationId: target.installationId },
+        connection: { type: 'app-installation', installationId: target.installationId, orgId: event.orgId },
         sourceId: target.slug,
         pullRequestId: String(number),
       };

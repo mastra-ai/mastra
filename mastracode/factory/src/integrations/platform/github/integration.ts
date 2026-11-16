@@ -2093,15 +2093,31 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     return (await this.#connectTransport(connection, repository)) ?? this.#legacy;
   }
 
-  /** The switched org a connection belongs to, or null when it runs on the legacy app. */
+  /**
+   * The switched org a connection belongs to, or null when it runs on the
+   * legacy app. A connection that doesn't name its org takes a switched org
+   * that recorded the installation: only Mastra Factory app installations are
+   * claimed, so a legacy org's installation never resolves here, and every
+   * claimant reaches it through the same project connection.
+   */
   async #connectOrg(
     connection: IntegrationConnection,
   ): Promise<{ orgId: string; record: PlatformGithubModeRecord } | null> {
     if (connection.type !== 'app-installation' || !this.#integrationStorage) return null;
-    const orgId = connection.orgId ?? (await this.#modes.orgForInstallation(connection.installationId));
-    if (!orgId) return null;
-    const record = await this.#modes.get(orgId);
-    return record.mode === 'connect' ? { orgId, record } : null;
+    if (connection.orgId) {
+      const record = await this.#modes.get(connection.orgId);
+      return record.mode === 'connect' ? { orgId: connection.orgId, record } : null;
+    }
+    for (const orgId of await this.#modes.orgsForInstallation(connection.installationId)) {
+      const record = await this.#modes.get(orgId);
+      if (
+        record.mode === 'connect' &&
+        record.installations?.some(installation => installation.installationId === connection.installationId)
+      ) {
+        return { orgId, record };
+      }
+    }
+    return null;
   }
 
   /**

@@ -874,6 +874,8 @@ export interface FactoryNotifyDecision extends FactoryCommitDecisionBase {
 export interface FactoryDismissStaleReviewsDecision extends FactoryCommitDecisionBase {
   type: 'dismissStaleReviews';
   installationId: number;
+  /** The org whose rule decided it, so the installation is reached through that org's GitHub mode. */
+  orgId?: string;
   repository: string;
   pullRequestNumber: number;
   approvingReviewId: string;

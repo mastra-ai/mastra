@@ -720,6 +720,7 @@ describe('built-in board and integration handlers', () => {
           type: 'dismissStaleReviews',
           idempotencyKey: 'delivery-1:dismiss-stale-reviews',
           installationId: 7,
+          orgId: 'org-1',
           repository: context.repository.fullName,
           pullRequestNumber: context.pullRequest!.number,
           approvingReviewId: '101',

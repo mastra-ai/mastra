@@ -15,6 +15,7 @@ import { PlatformGithubModes } from './mode.js';
 import type { PlatformGithubModeStorage } from './mode.js';
 import { startFakeGithub } from './test-utils.js';
 import type { FakeGithub } from './test-utils.js';
+import { setGithubUserPat } from './user-pat.js';
 
 const FUTURE = '2099-01-01T00:00:00.000Z';
 
@@ -126,7 +127,7 @@ async function setup(
     mountApiRoutes(app as never, integration.routes(context));
     return app;
   };
-  return { platform, github, integration, asUser, storage: seed.sourceControl.forIntegration('github') };
+  return { platform, github, integration, asUser, generic, storage: seed.sourceControl.forIntegration('github') };
 }
 
 const openPullRequest = (integration: PlatformGithubIntegration, actingUserId: string) =>
@@ -283,6 +284,50 @@ describe('PlatformGithubIntegration in connect mode', () => {
     expect(request?.token).toBe('tok-github');
     expect((request?.body as { body: string }).body).toMatch(/^> Opened by @user-1\n/);
     expect(github.calls('/repos/acme/app/issues/7/assignees', 'POST')).toEqual([]);
+  });
+
+  it('keeps two orgs switched to the same installation apart, and never routes a legacy installation to the apps', async () => {
+    const { platform, github, integration, generic } = await setup({ pats: { 'pat-org2': 'hubot' } });
+    const modes = new PlatformGithubModes(() => generic as unknown as PlatformGithubModeStorage, { cacheTtlMs: 0 });
+    // Every tenant sees the project's app connections, so a second org can switch to installation 900 too.
+    await modes.saveConnect('org-2', {
+      switchedAt: Date.parse('2026-11-14T00:00:00.000Z'),
+      installations: [
+        { accountLogin: 'acme', installationId: 900, connectionId: 'conn-github', reviewsConnectionId: 'conn-reviews' },
+      ],
+    });
+    await setGithubUserPat(generic as never, 'org-2', 'user-1', 'pat-org2', 'hubot');
+    await expect(modes.orgsForInstallation(900)).resolves.toEqual(['org-1', 'org-2']);
+
+    // The same person is named per the org the call is made in: their org-2 PAT never leaks into org-1.
+    for (const orgId of ['org-1', 'org-2']) {
+      await integration.versionControl.createPullRequest({
+        connection: { type: 'app-installation', installationId: 900, orgId },
+        sourceId: 'acme/app',
+        headBranch: 'fix',
+        baseBranch: 'main',
+        title: 'Fix',
+        body: 'Body',
+        actingUserId: 'user-1',
+      });
+    }
+    expect(
+      github.calls('/repos/acme/app/pulls', 'POST').map(request => (request.body as { body: string }).body.split('\n')[0]),
+    ).toEqual(['> Opened by @user-1', '> Opened by @hubot']);
+
+    // A call that doesn't name its org still reaches the installation through the apps.
+    await integration.versionControl.listPullRequests({
+      connection: { type: 'app-installation', installationId: 900 },
+      sourceId: 'acme/app',
+    });
+    expect(github.calls('/repos/acme/app/pulls', 'GET').map(request => request.token)).toEqual(['tok-github']);
+
+    // A legacy app installation is never claimed, so it stays on the legacy routes.
+    await integration.versionControl
+      .listPullRequests({ connection: { type: 'app-installation', installationId: 7 }, sourceId: 'acme/app' })
+      .catch(() => undefined);
+    expect(github.calls('/repos/acme/app/pulls', 'GET')).toHaveLength(1);
+    expect(platform.requests.some(request => request.path.startsWith('/v1/server/github'))).toBe(true);
   });
 
   it("never treats a user's end-user factory-github connection as the org's", async () => {

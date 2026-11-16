@@ -247,7 +247,7 @@ describe('GitHub app switch', () => {
         },
       ],
     });
-    await expect(modes.orgForInstallation(900)).resolves.toBe('org-1');
+    await expect(modes.orgsForInstallation(900)).resolves.toEqual(['org-1']);
     expect(requestRun).toHaveBeenCalledTimes(1);
     expect(emitAudit).toHaveBeenCalledTimes(1);
     expect(emitAudit.mock.calls[0]).toMatchObject([

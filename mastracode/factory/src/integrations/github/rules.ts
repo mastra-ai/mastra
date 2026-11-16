@@ -1922,6 +1922,8 @@ export type GithubOpenIssueLister = (input: {
  */
 export type GithubOpenPullRequestLister = (input: {
   installationId: number;
+  /** An org the repository is linked in, so the installation is reached through that org's GitHub mode. */
+  orgId?: string;
   repository: string;
   createdSince: number;
 }) => Promise<Array<PolledPullRequestState & { number: number }>>;
@@ -1963,13 +1965,13 @@ const OPEN_PULL_REQUEST_DISCOVERY_MAX_PAGES = 20;
 export function openPullRequestLister(
   versionControl: Pick<VersionControl, 'listPullRequests'>,
 ): GithubOpenPullRequestLister {
-  return async ({ installationId, repository, createdSince }) => {
+  return async ({ installationId, orgId, repository, createdSince }) => {
     const states: Array<PolledPullRequestState & { number: number }> = [];
     let cursor: string | null = '1';
     for (let page = 0; cursor !== null && page < OPEN_PULL_REQUEST_DISCOVERY_MAX_PAGES; page += 1) {
       // Drafts are listed too: a page of drafts still tells how far back the listing has reached.
       const listed: PullRequestPage = await versionControl.listPullRequests({
-        connection: { type: 'app-installation', installationId },
+        connection: { type: 'app-installation', installationId, ...(orgId ? { orgId } : {}) },
         sourceId: repository,
         state: 'open',
         includeDrafts: true,
@@ -2611,6 +2613,7 @@ export function createGithubPullRequestDiscovery(
       // Every pull request some card holds, terminal cards included, so discovery never re-mints one.
       const carded = new Set<number>();
       const unmarked = new Map<number, Card[]>();
+      let orgId: string | undefined;
       let linkedAt: number;
       try {
         const projects =
@@ -2621,6 +2624,7 @@ export function createGithubPullRequestDiscovery(
           }));
         if (projects.length === 0) continue;
         linkedAt = Math.min(...projects.map(project => project.projectRepository.createdAt.getTime()));
+        orgId = projects[0]?.orgId;
         const items: Readonly<Card>[] = [];
         for (const project of projects) {
           items.push(...(await cards.cards({ orgId: project.orgId, factoryProjectId: project.factoryProjectId })));
@@ -2657,6 +2661,7 @@ export function createGithubPullRequestDiscovery(
       try {
         open = await listOpenPullRequests({
           installationId: repository.installationId,
+          ...(orgId ? { orgId } : {}),
           repository: repository.fullName,
           // Linking never backfills: the link-time import owns the backlog filed before it.
           createdSince: linkedAt,

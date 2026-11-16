@@ -484,7 +484,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
     expect(repositoryAccess.mock.calls.length).toBe(accessBeforePr);
     expect(createPullRequest).toHaveBeenCalledWith(
       expect.objectContaining({
-        connection: { type: 'app-installation', installationId: 7 },
+        connection: { type: 'app-installation', installationId: 7, orgId: 'org1' },
         sourceId: 'octo/hello',
         baseBranch: 'main',
         headBranch: 'feat/x',

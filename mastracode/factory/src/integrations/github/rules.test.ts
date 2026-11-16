@@ -6469,6 +6469,7 @@ describe('createGithubPullRequestReconciler', () => {
       // Only pull requests opened since the link are asked for: the link-time import owns the backlog.
       expect(listOpenPullRequests).toHaveBeenCalledWith({
         installationId: 7,
+        orgId: 'org-1',
         repository: 'acme/repo',
         createdSince: context.projectRepository.createdAt.getTime(),
       });
