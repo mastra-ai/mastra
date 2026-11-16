@@ -23,7 +23,13 @@ const message = z.union([
 ]);
 const emptyContext = z.union([z.strictObject({}), z.strictObject({ requestContext: z.strictObject({}) })]);
 const conversationModelSettings = z.strictObject({ maxRetries: z.number().int().min(0).max(2).optional() });
+// Only a router identifier crosses the browser boundary. Connection details stay server-owned.
+const conversationModel = z
+  .string()
+  .max(512)
+  .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*(?:\/[a-zA-Z0-9@~][a-zA-Z0-9._:@+~-]*)+$/);
 const conversationStreamOptions = z.strictObject({
+  model: conversationModel.optional(),
   maxSteps: z.number().int().min(1).max(32).optional(),
   modelSettings: conversationModelSettings.optional(),
   // Studio echoes the server's tool-compatible model default. Other provider overrides stay closed.
@@ -62,10 +68,14 @@ const forbiddenKeys = new Set([
   'versionStatus',
   'editorAgentId',
 ]);
-function validateOptions(value: unknown, depth = 0): void {
+function validateOptions(value: unknown, modelOptions: readonly unknown[], depth = 0): void {
   if (!value || typeof value !== 'object') return;
   if (depth > 12) throw new BillingError('invalid_input');
   for (const [key, entry] of Object.entries(value)) {
+    if (key === 'model' && modelOptions.includes(value)) {
+      if (!conversationModel.safeParse(entry).success) throw new BillingError('forbidden');
+      continue;
+    }
     if (
       (key === 'modelSettings' && !conversationModelSettings.safeParse(entry).success) ||
       forbiddenKeys.has(key) ||
@@ -73,7 +83,7 @@ function validateOptions(value: unknown, depth = 0): void {
     )
       throw new BillingError('forbidden');
     // Text message/tool input content is data, not execution options.
-    if (!['message', 'messages', 'signal', 'resumeData'].includes(key)) validateOptions(entry, depth + 1);
+    if (!['message', 'messages', 'signal', 'resumeData'].includes(key)) validateOptions(entry, modelOptions, depth + 1);
   }
 }
 export const studioChatFailure = (context: Context, error: unknown) => {
@@ -241,7 +251,7 @@ export function studioChatProxy(
       const body: Record<string, any> = method === 'POST' ? await context.req.json() : {};
       if (Number(context.req.header('content-length') ?? 0) > 32768 || JSON.stringify(body).length > 32768)
         throw new BillingError('invalid_input');
-      validateOptions(body);
+      validateOptions(body, [body.streamOptions, body.ifIdle?.streamOptions]);
       if ('modelSettings' in body) throw new BillingError('forbidden');
       for (const options of [body.streamOptions, body.ifIdle?.streamOptions]) {
         if (options !== undefined && !conversationStreamOptions.safeParse(options).success)

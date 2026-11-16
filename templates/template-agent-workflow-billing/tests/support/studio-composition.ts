@@ -7,6 +7,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import {
+  GET_PROVIDERS_ROUTE,
   GENERATE_AGENT_ROUTE,
   STREAM_GENERATE_ROUTE,
   SEND_AGENT_MESSAGE_ROUTE,
@@ -27,6 +28,10 @@ import {
   LIST_THREADS_ROUTE,
   CREATE_THREAD_ROUTE,
 } from '@mastra/server/handlers/memory';
+import {
+  GET_EDITOR_BUILDER_SETTINGS_ROUTE,
+  GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE,
+} from '@mastra/server/handlers/editor-builder';
 import { EXECUTE_TOOL_ROUTE } from '@mastra/server/handlers/tools';
 import { z } from 'zod';
 import { createBilling } from '../../src/billing/integration.js';
@@ -191,6 +196,9 @@ export async function studioComposition(
   app.get('/status', context => context.json({ ready: true }));
   // Use installed native handlers with complete options; shared Memory must exercise the real boundary.
   for (const route of [
+    GET_PROVIDERS_ROUTE,
+    GET_EDITOR_BUILDER_SETTINGS_ROUTE,
+    GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE,
     GENERATE_AGENT_ROUTE,
     STREAM_GENERATE_ROUTE,
     SEND_AGENT_MESSAGE_ROUTE,

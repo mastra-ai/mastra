@@ -88,7 +88,13 @@ async function studioDefinitions(server: Server) {
     expect(await response.text()).toContain('Mastra Studio');
   }
   expect((await fetch(server.url + '/api/auth/capabilities')).status).toBe(200);
-  for (const path of ['/api/tools', '/api/agents']) {
+  for (const path of [
+    '/api/tools',
+    '/api/agents',
+    '/api/agents/providers',
+    '/api/editor/builder/settings',
+    '/api/editor/builder/models/available',
+  ]) {
     expect((await fetch(server.url + path)).status).toBe(401);
     expect((await fetch(server.url + path, { headers: { authorization: 'Bearer invalid' } })).status).toBe(401);
     expect((await server.call(path)).status).toBe(200);
@@ -416,7 +422,15 @@ it('Studio forged identity native routes and private image bypasses are denied',
       // The narrow read-only Studio catalog and public auth capabilities are exercised separately.
       if (
         method === 'GET' &&
-        ['/api/tools', '/api/tools/billing-image-generate', '/api/agents', '/api/auth/capabilities'].includes(path)
+        [
+          '/api/tools',
+          '/api/tools/billing-image-generate',
+          '/api/agents',
+          '/api/agents/providers',
+          '/api/editor/builder/settings',
+          '/api/editor/builder/models/available',
+          '/api/auth/capabilities',
+        ].includes(path)
       )
         continue;
       // Billed standalone execution is exercised above; no other native tool execution is allowed.
@@ -507,6 +521,178 @@ async function waitForHistory(
   }
   throw new Error(`Conversation did not persist ${expected}: ${JSON.stringify(history)}`);
 }
+it('Studio model selector lists providers and changes only the conversation model in dev and built serving', async () => {
+  const f = await fixture();
+  const environment = {
+    ...f.env,
+    GROQ_API_KEY: 'controlled',
+    GROQ_BASE_URL: f.boundary.url,
+    OPENROUTER_API_KEY: 'controlled',
+    OPENROUTER_BASE_URL: f.boundary.url,
+  };
+  const workspaceId = f.manifest.profiles.owner!.workspaceId;
+  let server = await serve(f.root, environment);
+  cleanups.push(() => server.close());
+  let spent = 0;
+  for (const mode of ['dev', 'start'] as const) {
+    if (mode === 'start') {
+      await server.close();
+      await command(f.root, ['run', 'build'], environment);
+      server = await serve(f.root, environment, 'start');
+    }
+    const providersPath = '/api/agents/providers';
+    for (const credential of [undefined, 'invalid']) {
+      const response = await fetch(server.url + providersPath, {
+        headers: credential ? { authorization: `Bearer ${credential}` } : {},
+      });
+      expect(response.status).toBe(401);
+    }
+    const providers = await server.call(providersPath);
+    expect(providers.status, JSON.stringify(providers.body)).toBe(200);
+    expect(providers.body.providers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'groq',
+          connected: true,
+          models: expect.arrayContaining(['llama-3.3-70b-versatile']),
+        }),
+      ]),
+    );
+    expect(JSON.stringify(providers.body)).not.toContain('controlled');
+    for (const path of ['/api/editor/builder/settings', '/api/editor/builder/models/available']) {
+      expect((await fetch(server.url + path)).status).toBe(401);
+      const response = await server.call(path);
+      expect(response.status, path).toBe(200);
+      if (path.endsWith('/settings'))
+        expect(response.body).toMatchObject({ enabled: false, modelPolicy: { active: false } });
+      else
+        expect(response.body.providers).toEqual(
+          expect.arrayContaining([expect.objectContaining({ id: 'groq', connected: true })]),
+        );
+      expect((await server.call(path, {})).status).toBe(403);
+    }
+    expect((await server.call(providersPath, {})).status).toBe(403);
+    const ledgerBefore = await query(f.root, 'SELECT * FROM billing_ledger ORDER BY execution_id');
+    const conversationThread = `selector-${mode}-conversation`;
+    let completedReplies = 0;
+    for (const [route, selection, payload] of [
+      ['send-message', 'groq/llama-3.3-70b-versatile', { message: 'First selected model' }],
+      ['signals', 'groq/llama-3.1-8b-instant', { signal: { type: 'user', contents: 'Second selected model' } }],
+      ['send-message', 'openrouter/~anthropic/claude-sonnet-latest', { message: 'A namespaced catalog model' }],
+      ['queue-message', undefined, { message: 'Reset to the configured model' }],
+    ] as const) {
+      const threadId = conversationThread;
+      const response = await server.call(`${chatAgent}/${route}`, {
+        threadId,
+        resourceId: 'default',
+        ...payload,
+        ifIdle: {
+          streamOptions: {
+            ...(selection ? { model: selection } : {}),
+            providerOptions: { openai: { reasoningEffort: 'none' } },
+          },
+        },
+      });
+      expect(response.status, JSON.stringify(response.body)).toBe(200);
+      completedReplies++;
+      let persistedReplies = 0;
+      for (let attempt = 0; attempt < 200; attempt++) {
+        const history = await chatHistory(server, threadId);
+        persistedReplies =
+          history.body.messages?.filter(
+            (message: any) =>
+              message.role === 'assistant' &&
+              message.content.parts?.some(
+                (part: any) => part.type === 'text' && part.text === 'Saved conversation result.',
+              ),
+          ).length ?? 0;
+        if (persistedReplies === completedReplies) break;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      expect(persistedReplies).toBe(completedReplies);
+      expect(f.boundary.models.at(-1)!.body.model).toBe(selection?.split('/').slice(1).join('/') ?? 'gpt-6-luna');
+    }
+    expect(await query(f.root, 'SELECT * FROM billing_ledger ORDER BY execution_id')).toEqual(ledgerBefore);
+    const privateThread = conversationThread;
+    const beforeInvalid = f.boundary.models.length;
+    const beforeOperations = await query(f.root, 'SELECT * FROM billing_studio_operations');
+    for (const extra of [
+      {
+        ifIdle: {
+          streamOptions: {
+            model: { id: 'groq/llama-3.3-70b-versatile', url: 'https://attacker.invalid', apiKey: 'forged' },
+          },
+        },
+      },
+      { ifIdle: { streamOptions: { model: 'https://attacker.invalid/model' } } },
+      { ifIdle: { streamOptions: { model: 'groq/llama-3.3-70b-versatile', tools: { bypass: {} } } } },
+      { ifIdle: { streamOptions: { model: 'groq/llama-3.3-70b-versatile', requestContext: { actorId: 'forged' } } } },
+      { model: 'groq/llama-3.3-70b-versatile' },
+    ]) {
+      expect(
+        (
+          await server.call(`${chatAgent}/send-message`, {
+            threadId: privateThread,
+            resourceId: 'default',
+            message: 'Reject unsafe overrides',
+            ...extra,
+          })
+        ).status,
+      ).toBe(403);
+    }
+    expect(
+      (
+        await server.call(
+          `${chatAgent}/send-message`,
+          {
+            threadId: privateThread,
+            resourceId: 'default',
+            message: 'Steal another conversation',
+            ifIdle: { streamOptions: { model: 'groq/llama-3.3-70b-versatile' } },
+          },
+          'outsider',
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await server.call('/api/agents/image-agent/send-message', {
+          threadId: privateThread,
+          message: 'Bypass billing',
+          ifIdle: { streamOptions: { model: 'groq/llama-3.3-70b-versatile' } },
+        })
+      ).status,
+    ).toBe(403);
+    expect(f.boundary.models).toHaveLength(beforeInvalid);
+    expect(await query(f.root, 'SELECT * FROM billing_studio_operations')).toEqual(beforeOperations);
+    expect(await query(f.root, 'SELECT * FROM billing_ledger ORDER BY execution_id')).toEqual(ledgerBefore);
+    const paidThread = `selector-${mode}-paid`;
+    const paid = await server.call(`${chatAgent}/send-message`, {
+      threadId: paidThread,
+      resourceId: 'default',
+      message:
+        'CALL image {"action":"execute","prompt":"A bird with the selected conversation model","operationId":null}',
+      ifIdle: { streamOptions: { model: 'groq/llama-3.3-70b-versatile' } },
+    });
+    expect(paid.status, JSON.stringify(paid.body)).toBe(200);
+    await waitForHistory(server, paidThread, 'Saved conversation result.');
+    const history = await waitForHistory(server, paidThread, 'billedUnits');
+    expect(JSON.stringify(history)).toContain('artifacts');
+    spent++;
+    expect(await query(f.root, 'SELECT units FROM billing_ledger')).toEqual(
+      Array.from({ length: spent }, () => ({ units: 1 })),
+    );
+    expect(f.boundary.images).toHaveLength(spent);
+    expect(f.boundary.images.every(image => image.model === 'gpt-image-2.5-flare')).toBe(true);
+    expect(
+      f.boundary.models
+        .filter(model => model.path.endsWith('/responses'))
+        .every(model => model.body.model === 'gpt-6-luna'),
+    ).toBe(true);
+    expect(await account(server, workspaceId)).toMatchObject({ confirmedBalance: 30 - spent, consumedUnits: spent });
+  }
+}, 600000);
+
 it('Studio chat persists history and returns one billed agent result through native signals', async () => {
   const f = await fixture();
   const server = await serve(f.root, f.env);
@@ -1138,7 +1324,7 @@ it('Studio chat ownership revocation and forged context close native and operati
     { requestContext: { actorId: owner!.actorId, workspaceId: owner!.workspaceId } },
     { ifIdle: { streamOptions: { requestContext: { credential: owner!.credential } } } },
     { ifIdle: { streamOptions: { versions: { 'studio-assistant': 'forged' } } } },
-    { ifIdle: { streamOptions: { model: 'attacker/model' } } },
+    { ifIdle: { streamOptions: { model: { id: 'openai/gpt-6-luna', url: 'https://attacker.invalid' } } } },
     { ifIdle: { streamOptions: { modelSettings: { maxRetries: 3 } } } },
     { ifIdle: { streamOptions: { modelSettings: { headers: { authorization: 'forged' } } } } },
     { ifIdle: { streamOptions: { tools: { forged: {} } } } },
@@ -1222,6 +1408,9 @@ it('Studio chat ownership revocation and forged context close native and operati
   await query(f.root, 'UPDATE local_credentials SET active = 0 WHERE identity_id = ?', [owner!.actorId]);
   try {
     for (const [path, body] of [
+      ['/api/agents/providers', undefined],
+      ['/api/editor/builder/settings', undefined],
+      ['/api/editor/builder/models/available', undefined],
       [`/api/memory/threads/${threadId}/messages?agentId=studio-assistant`, undefined],
       [`${chatAgent}/send-message`, { threadId, resourceId: 'default', message: 'revoked input' }],
       [`${chatAgent}/send-tool-approval`, { threadId, resourceId: 'default', toolCallId: 'unknown', approved: true }],
@@ -1641,6 +1830,17 @@ it('Studio wrapper composition preserves public SDK results middleware and exist
       }),
     };
   };
+  for (const path of ['/private-api/editor/builder/settings', '/private-api/editor/builder/models/available']) {
+    expect(await call(path, undefined, false)).toMatchObject({ status: 401 });
+    expect(await call(path)).toMatchObject({ status: 200, calls: '1' });
+    expect(await call(path, {})).toMatchObject({ status: 403 });
+  }
+  expect(await call('/private-api/agents/providers', undefined, false)).toMatchObject({ status: 401 });
+  expect(await call('/private-api/agents/providers')).toMatchObject({
+    status: 200,
+    calls: '1',
+    body: { providers: expect.arrayContaining([expect.objectContaining({ id: 'openai' })]) },
+  });
   expect(() => createStudioBillingWrapper({ integration: {} as any })).toThrow('Billing configuration is invalid');
   expect(() => createStudioBillingWrapper(undefined as any)).toThrow('Billing configuration is invalid');
   expect(() => createStudioBillingWrapper({ integration: application.integration, extra: true } as any)).toThrow(

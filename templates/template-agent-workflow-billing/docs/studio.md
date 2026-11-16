@@ -14,6 +14,10 @@ Local setup creates John, Emma and Alex with separate personal organizations and
 
 Open **Agents → Image Assistant**. It calls **Image Generation** (`image-agent`, one credit) or **Image Kit** (`image-kit`, three credits). These technical IDs, including the conversation ID `studio-assistant`, are retained for saved history and operations. Conversation consumes no template credits but still uses the operator's text-model account.
 
+Choose a conversation model with the model selector below the message input. The provider must have credentials configured on the server. **Reset to the agent's model** restores the configured default. Selection applies to the conversation, including its native message and signal requests; business agents and workflows keep their server-owned models, credit policies and reservations. Conversation model usage is billed by its provider, independently of template credits.
+
+The selector reads the authenticated `GET /api/agents/providers` catalog and the native model-policy reads at `GET /api/editor/builder/settings` and `GET /api/editor/builder/models/available`. These read-only endpoints preserve the server's model policy; editor mutations remain blocked. Requests accept only a `provider/model` identifier in native conversation stream options. Browser-supplied model configuration objects, URLs, keys, headers, tools and identity overrides are rejected.
+
 1. Ask for one image. The business tool calls the billing facade; the gateway authenticates, checks access and reserves one credit before invoking the business agent.
 2. Successful durable output confirms the reservation. The tool returns an `operationId`, artifact metadata and a receipt. A rejected reservation returns `insufficient_credits` without business compute.
 3. For a kit, the gateway reserves three credits and the workflow saves three prompts before suspension. Review them and select **Approve**. Only complete success confirms three credits; nested agents have no separate charge.

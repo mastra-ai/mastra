@@ -91,7 +91,14 @@ export function createBillingStudio({
     if (publicShell) return next();
     const match = /^\/api\/tools\/([a-zA-Z0-9-]+)(\/execute)?$/.exec(path);
     const toolRoute =
-      (['/api/tools', '/api/agents'].includes(path) && method === 'GET') ||
+      (method === 'GET' &&
+        [
+          '/api/tools',
+          '/api/agents',
+          '/api/agents/providers',
+          '/api/editor/builder/settings',
+          '/api/editor/builder/models/available',
+        ].includes(path)) ||
       (match && toolIds.has(match[1]) && (match[2] ? method === 'POST' : method === 'GET'));
     if (!toolRoute) return context.json({ error: 'billing_gateway_required' }, 403);
     const bearer = /^Bearer ([^\s]+)$/.exec(context.req.header('authorization') ?? '');
