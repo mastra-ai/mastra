@@ -234,14 +234,29 @@ export async function fanOutSourceFacts(
 
 /**
  * Drop one work item's link to a source. The source row goes with its last link; otherwise a
- * removed owner hands it to the oldest remaining linked work item.
+ * removed owner hands it to the oldest remaining linked work item. A link whose work item is gone
+ * (a release without links deleted its card) holds nothing and is dropped with it.
  */
 export async function unlinkSource(
   ops: FactoryStorageOps,
   source: WorkItemSourceDbRecord,
   workItemId: string,
 ): Promise<void> {
-  const remaining = (await linkedItems(ops, [source])).get(source.id)!.filter(link => link.workItemId !== workItemId);
+  const others = (await linkedItems(ops, [source])).get(source.id)!.filter(link => link.workItemId !== workItemId);
+  const live = new Set(
+    (
+      await findIn<{ id: string }>(
+        ops,
+        WORK_ITEMS,
+        'id',
+        others.map(link => link.workItemId),
+      )
+    ).map(item => item.id),
+  );
+  const remaining = others.filter(link => live.has(link.workItemId));
+  for (const gone of others.filter(link => !live.has(link.workItemId))) {
+    await ops.deleteMany(LINKS, { source_id: source.id, work_item_id: gone.workItemId });
+  }
   await ops.deleteMany(LINKS, { source_id: source.id, work_item_id: workItemId });
   if (!remaining.length) {
     await ops.deleteMany(LINKS, { source_id: source.id });
@@ -255,65 +270,4 @@ export async function unlinkSource(
     role: next!.role,
     updated_at: new Date(),
   }));
-}
-
-export interface SourceLinkBackfillReport {
-  /** Owner links added. */
-  links: number;
-  /** Links dropped because their work item is gone. */
-  dropped: number;
-  aborted: boolean;
-}
-
-/**
- * Bring every source's links current: give its owner a link, drop links to work items that no
- * longer exist, and copy the source's facts onto every remaining link. Idempotent and resumable.
- * Each source is locked and read again first, so its owner is current (a card deleted since the
- * page was read is not linked back) and two passes never both insert one link: every link insert
- * holds its source's row lock. Reads fall back to the source row for any link it has not reached
- * yet whose facts are older than the source's last sync.
- */
-export async function backfillSourceLinks(
-  storage: { ops: FactoryStorageOps; withTransaction<T>(fn: (ops: FactoryStorageOps) => Promise<T>): Promise<T> },
-  { signal, pageSize = BATCH }: { signal?: AbortSignal; pageSize?: number } = {},
-): Promise<SourceLinkBackfillReport> {
-  const report: SourceLinkBackfillReport = { links: 0, dropped: 0, aborted: false };
-  const orderBy: Array<[string, 'asc']> = [['id', 'asc']];
-  let cursor: string | undefined;
-  pages: while (!signal?.aborted) {
-    const page = await storage.ops.findMany<WorkItemSourceDbRecord>(
-      SOURCES,
-      {},
-      { orderBy, limit: pageSize, ...(cursor ? { cursor: { values: [cursor] } } : {}) },
-    );
-    if (!page.length) break;
-    cursor = page[page.length - 1]!.id;
-    for (const { id } of page) {
-      if (signal?.aborted) break pages;
-      await storage.withTransaction(async ops => {
-        const source = await ops.updateAtomic<WorkItemSourceDbRecord>(SOURCES, { id }, () => null);
-        if (!source) return;
-        if (await linkSource(ops, source, source.work_item_id, ownerRole(source), source.created_at)) report.links++;
-        const links = await ops.findMany<WorkItemSourceLinkDbRecord>(LINKS, { source_id: source.id });
-        const live = new Set(
-          (
-            await findIn<{ id: string }>(
-              ops,
-              WORK_ITEMS,
-              'id',
-              links.map(link => link.work_item_id),
-            )
-          ).map(item => item.id),
-        );
-        for (const link of links) {
-          if (live.has(link.work_item_id)) continue;
-          await ops.deleteMany(LINKS, { id: link.id });
-          report.dropped++;
-        }
-        await ops.updateMany(LINKS, { source_id: source.id }, linkFacts(source, new Date()));
-      });
-    }
-  }
-  report.aborted = signal?.aborted ?? false;
-  return report;
 }

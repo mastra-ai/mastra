@@ -598,6 +598,41 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     ]);
   });
 
+  it("skips moving an issue's card onto a board that already holds a card for the issue", async () => {
+    const { a, scope, projectPath, base, replicaA } = await setup();
+    expect((await replicaA.send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);
+    const { item: work } = await a.workItems.upsert({
+      ...scope,
+      userId: ADMIN,
+      input: {
+        title: 'Docs issue',
+        board: 'work',
+        stages: ['intake'],
+        externalSource: { integrationId: 'github', type: 'issue', externalId: 'github:10:issue:7' },
+        metadata: { labels: ['docs'] },
+      },
+    });
+    const docs = (await a.workItems.linkWorkItemToBoard({
+      orgId: scope.orgId,
+      id: work.id,
+      board: 'docs',
+      stage: 'inbox',
+      userId: ADMIN,
+    }))!;
+    expect((await replicaA.send('POST', base, { name: 'Docs', when: DOCS, target: { boardKey: 'docs' } })).status).toBe(
+      201,
+    );
+
+    expect(await replicaA.send('POST', `${base}/reroute`)).toEqual({ status: 200, body: { moved: 0, skipped: 1 } });
+    const after = await a.workItems.listShared(scope);
+    expect(after.filter(item => item.id === work.id || item.id === docs.id).map(item => [item.id, item.board])).toEqual(
+      expect.arrayContaining([
+        [work.id, 'work'],
+        [docs.id, 'docs'],
+      ]),
+    );
+  });
+
   it('accepts a stored board as a target and reports the route once that board is gone', async () => {
     const { projectPath, base, replicaA } = await setup();
     expect((await replicaA.send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);

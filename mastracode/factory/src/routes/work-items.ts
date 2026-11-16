@@ -43,6 +43,7 @@ import type {
 import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
   FACTORY_RULE_MATERIALIZATION_KEY,
+  WorkItemAlreadyOnBoardError,
   WorkItemRelationError,
   WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
@@ -1018,6 +1019,9 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           } catch (error) {
             if (error instanceof WorkItemRelationError) {
               return c.json({ error: error.code, message: error.message }, 400);
+            }
+            if (error instanceof WorkItemAlreadyOnBoardError) {
+              return c.json({ error: error.code, message: error.message }, 409);
             }
             if (error instanceof WorkItemUpdateConflictError) {
               return c.json({ error: error.reason === 'board' ? 'board_already_assigned' : error.code }, 409);

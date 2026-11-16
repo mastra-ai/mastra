@@ -36,7 +36,7 @@ import {
   trackBoardWrites,
 } from './board-version.js';
 import type { BoardScope } from './board-version.js';
-import { Cards, splitCardRows } from './cards.js';
+import { Cards, splitCardRows, WorkItemAlreadyOnBoardError } from './cards.js';
 import { LEASE_TABLES, trackClaimableWrites } from './claimable-work.js';
 import type { FactoryClaimableWorkScope } from './claimable-work.js';
 import {
@@ -48,8 +48,7 @@ import {
   releaseLegacyReviewCards,
 } from './legacy-review.js';
 import type { ReviewBoardInUse, ReviewBoardScope } from './legacy-review.js';
-import { backfillSourceLinks, fanOutSourceFacts, linkedItems, lockSourceGroup } from './source-links.js';
-import type { SourceLinkBackfillReport } from './source-links.js';
+import { fanOutSourceFacts, linkedItems, lockSourceGroup } from './source-links.js';
 import type {
   WorkItemRow as ProviderWorkItemRow,
   WorkItemDbRecord,
@@ -68,10 +67,7 @@ import {
   WORK_ITEMS_SCHEMA,
 } from './work-item-schema.js';
 
-/** `factory_work_item_split_state` row recording that every source has its owner's link. */
-// `source-links` marked the first pass, which databases that later ran a release without links
-// already hold; this pass must run again on them.
-const SOURCE_LINKS_MARKER_ID = 'source-links-resync';
+export { WorkItemAlreadyOnBoardError };
 
 export type { FactoryClaimableWorkScope } from './claimable-work.js';
 
@@ -859,18 +855,6 @@ export class WorkItemSourceConflictError extends Error {
   }
 }
 
-/** A board already holds a card for the external record this card was filed from. */
-export class WorkItemAlreadyOnBoardError extends Error {
-  readonly code = 'work_item_already_on_board';
-
-  constructor(
-    readonly board: string,
-    readonly cardId: string,
-  ) {
-    super(`Board ${board} already holds card ${cardId} for this item.`);
-  }
-}
-
 /** Only a card filed from an external record can be put on another board yet. */
 export class WorkItemHasNoSourceError extends Error {
   readonly code = 'work_item_has_no_source';
@@ -1362,52 +1346,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return this.#split.pending;
   }
 
-  /** Whether link rows may still hold facts or holders a release without links left behind. */
-  get sourceLinkBackfillPending(): boolean {
-    return this.#sourceLinksPending;
-  }
-
-  #sourceLinksPending = false;
-
-  /**
-   * Pending until the resync marker is set. Only a database with the split state table can hold
-   * links the first rollout wrote: every database created since starts without it and only ever
-   * gets links this release keeps current.
-   */
-  async #sourceLinkResyncPending(hasSplitState: boolean): Promise<boolean> {
-    if (!hasSplitState) return false;
-    return !(await super.ops.findOne(FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA.name, { id: SOURCE_LINKS_MARKER_ID }));
-  }
-
-  /**
-   * Bring every source's links current, then mark the pass done: link its owner, drop links to
-   * work items that are gone, and copy the source's facts onto every link. A release without links
-   * kept writing source rows only, leaving links with old facts and links to cards it deleted.
-   * Reads fall back to source rows for links older than their source's last sync meanwhile.
-   * Returns null once done.
-   */
-  async backfillSourceLinks({ signal }: { signal?: AbortSignal } = {}): Promise<SourceLinkBackfillReport | null> {
-    if (this.#legacyMode || !this.#sourceLinksPending) return null;
-    if (await super.ops.findOne(FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA.name, { id: SOURCE_LINKS_MARKER_ID })) {
-      this.#sourceLinksPending = false;
-      return null;
-    }
-    const report = await backfillSourceLinks(
-      { ops: super.ops, withTransaction: fn => this.#withTransaction(fn) },
-      { signal },
-    );
-    if (!report.aborted) {
-      await super.ops.upsertOne(FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA.name, ['id'], {
-        id: SOURCE_LINKS_MARKER_ID,
-        legacy_updated_at: null,
-        legacy_id: null,
-        completed_at: new Date(),
-      });
-      this.#sourceLinksPending = false;
-    }
-    return report;
-  }
-
   /** Projects found not to use the Review board; once redundant it stays so, with no card left to reopen on it. */
   readonly #reviewRedundant = new Set<string>();
 
@@ -1560,7 +1498,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       await migrateWorkItemSplit(this.storage, { dryRun: true, ops: super.ops, log: logSplit });
       return;
     }
-    this.#sourceLinksPending = await this.#sourceLinkResyncPending(hasLegacyCards);
     if (!hasLegacyCards) {
       this.#split = { pending: false, since: null };
       return;

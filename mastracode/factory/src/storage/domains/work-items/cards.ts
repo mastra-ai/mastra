@@ -166,6 +166,18 @@ function boardColumns(patch: Partial<WorkItemDbRow>, { filter = false } = {}): P
   return columns as Partial<BoardItemDbRecord>;
 }
 
+/** A board already holds a card for the external record this card was filed from. */
+export class WorkItemAlreadyOnBoardError extends Error {
+  readonly code = 'work_item_already_on_board';
+
+  constructor(
+    readonly board: string,
+    readonly cardId: string,
+  ) {
+    super(`Board ${board} already holds card ${cardId} for this item.`);
+  }
+}
+
 /** Compatibility row operations over work, source and placement tables. Writes require transaction ops. */
 export class Cards {
   constructor(
@@ -388,6 +400,21 @@ export class Cards {
       const patch = await updater(current);
       if (!patch) return null;
       const columns = boardColumns(patch);
+      if (columns.board !== undefined && (columns.board ?? DEFAULT_BOARD_ID) !== (row.board ?? DEFAULT_BOARD_ID)) {
+        // A record holds one card per board; the group locks above keep a sibling from moving in meanwhile.
+        const destination = columns.board ?? DEFAULT_BOARD_ID;
+        const origins = (current.work_item_sources ?? []).filter(source => source.role !== 'attached');
+        const holders = [...(await linkedItems(this.ops, origins)).values()]
+          .flat()
+          .map(link => link.workItemId)
+          .filter(id => id !== row.work_item_id);
+        const taken = holders.length
+          ? (await this.ops.findMany<BoardItemDbRecord>(BOARD_ITEMS, { work_item_id: { in: holders } })).find(
+              sibling => (sibling.board ?? DEFAULT_BOARD_ID) === destination,
+            )
+          : undefined;
+        if (taken) throw new WorkItemAlreadyOnBoardError(destination, taken.id);
+      }
       if (patch.metadata !== undefined) {
         const next = { ...current, ...patch };
         const split = splitCardRows(next, { workItemId: row.work_item_id });

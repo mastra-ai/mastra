@@ -5,7 +5,6 @@ import { describe, expect, it } from 'vitest';
 import type { WorkItemsStorage, CreateWorkItemInput, WorkItemDbRow } from '../storage/domains/work-items/base.js';
 import { readBoardVersion } from '../storage/domains/work-items/board-version.js';
 import { Cards } from '../storage/domains/work-items/cards.js';
-import { backfillSourceLinks } from '../storage/domains/work-items/source-links.js';
 import {
   FACTORY_BOARD_ITEMS_SCHEMA,
   FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA,
@@ -682,7 +681,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
     expect((await readSplit(storage)).boardItems.get(id)?.autonomy_armed_at).toEqual(later);
   });
 
-  it("shows an old replica's rewrite on every card of the issue once it is recopied, after links were backfilled", async () => {
+  it("shows an old replica's rewrite on every card of the issue once it is recopied", async () => {
     const { storage, workItems } = await createStorage(backend);
     const cards = await seed(workItems);
     await seedLegacy(storage);
@@ -695,7 +694,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
       stage: 'triage',
       userId: USER,
     }))!;
-    await backfillSourceLinks(storage);
     const legacy = (await storage.ops.findOne<WorkItemDbRow>('work_items', { id }))!;
     await storage.ops.updateMany(
       'work_items',
