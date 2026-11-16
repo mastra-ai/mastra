@@ -80,7 +80,10 @@ export interface DurableFinishSideEffectsResult {
    * matching the in-process loop.
    */
   outputResultChunks?: ChunkType[];
-  /** Set when an output processor aborted in processOutputResult; nothing was persisted. */
+  /**
+   * Set when an output processor aborted in `processOutputResult`. The aborted reply is rolled back
+   * unless the processor passed `persist: 'partial'`, which keeps what the run already saved.
+   */
   tripwire?: {
     reason: string;
     processorId?: string;
@@ -339,36 +342,50 @@ export async function runDurableFinishSideEffects({
         const tripwireMemory = registryEntry?.memory ?? rebuiltMemory;
         const tripwireSaveQueueManager = registryEntry?.saveQueueManager ?? rebuiltSaveQueueManager;
         if (error.options?.persist === 'partial') {
-          // The aborter asked to keep the run's messages instead of rolling them back.
-          await persistPartialTurn({
-            memory: tripwireMemory,
-            threadId: durableState?.threadId,
-            memoryConfig: durableState?.memoryConfig,
-            messageList,
-            saveQueueManager: tripwireSaveQueueManager,
-            authorize: async () => {
-              if (!durableState?.threadId || !durableState.resourceId) return;
-              await authorizeDurableMemory(getDurableMemoryAuthorizationChecks(registryEntry), {
-                mastra,
-                user: effectiveRequestContext.get('user'),
-                threadId: durableState.threadId,
-                resourceId: durableState.resourceId,
-                agentId: initData.agentId,
-                requestContext: effectiveRequestContext,
-                permission: MastraFGAPermissions.MEMORY_WRITE,
-                actor: initData.options?.actor,
-              });
-              if (!durableState.threadExists) {
-                await tripwireMemory?.createThread?.({
-                  threadId: durableState.threadId,
-                  resourceId: durableState.resourceId,
-                  memoryConfig: durableState.memoryConfig,
+          // The aborter asked to keep the run's messages instead of rolling them back. Check write
+          // access first: this is a memory write like the save below, which insists on both ids.
+          const keepResourceId =
+            durableState?.resourceId ??
+            (effectiveRequestContext.get('MastraMemory') as { resourceId?: string } | undefined)?.resourceId;
+          if (!durableState?.threadId || !keepResourceId) {
+            effectiveLogger.warn(
+              '[DurableAgent] The blocked turn is not kept: no thread or resource id to authorize the save',
+              { runId, threadId: durableState?.threadId },
+            );
+          } else {
+            const keepThreadId = durableState.threadId;
+            await persistPartialTurn({
+              memory: tripwireMemory,
+              threadId: keepThreadId,
+              memoryConfig: durableState.memoryConfig,
+              messageList,
+              saveQueueManager: tripwireSaveQueueManager,
+              authorize: async () => {
+                await authorizeDurableMemory(getDurableMemoryAuthorizationChecks(registryEntry), {
+                  mastra,
+                  user: effectiveRequestContext.get('user'),
+                  threadId: keepThreadId,
+                  resourceId: keepResourceId,
+                  agentId: initData.agentId,
+                  requestContext: effectiveRequestContext,
+                  permission: MastraFGAPermissions.MEMORY_WRITE,
+                  actor: initData.options?.actor,
                 });
-              }
-            },
-            logger: effectiveLogger,
-            runId,
-          });
+                if (!durableState.threadExists) {
+                  await tripwireMemory?.createThread?.({
+                    threadId: keepThreadId,
+                    resourceId: keepResourceId,
+                    memoryConfig: durableState.memoryConfig,
+                  });
+                }
+              },
+              // The same fence the save below passes: a superseded execution must not write the
+              // kept turn either (#23734).
+              beforePersist: assertOwned,
+              logger: effectiveLogger,
+              runId,
+            });
+          }
         } else {
           // Match Agent: a tripwire rejects the answer, so skip persistence and title generation,
           // and remove any response messages this run already saved.
@@ -758,18 +775,46 @@ export async function runDurableDeadlineOutputPass({
       );
     } catch (processorError) {
       // A tripwire rejects the turn, as it does at finish: remove response messages already saved,
-      // or keep them when the aborter opted in. Write access was checked before this pass ran.
+      // or keep them when the aborter opted in.
       if (processorError instanceof TripWire) {
         if (processorError.options?.persist === 'partial') {
-          await persistPartialTurn({
-            memory: entry.memory,
-            threadId: durableState?.threadId,
-            memoryConfig: durableState?.memoryConfig,
-            messageList,
-            saveQueueManager: entry.saveQueueManager,
-            logger,
-            runId,
-          });
+          // The keep is a memory write, so it needs the same write access as any other save here.
+          // The pre-pass above only checked when both ids were present, so fail closed on the rest.
+          const keepThreadId = durableState?.threadId;
+          if (!keepThreadId || !resourceId) {
+            logger.warn(
+              '[DurableAgent] The turn cut off at the total deadline is not kept: no thread or resource id to authorize the save',
+              { runId, threadId: keepThreadId },
+            );
+          } else {
+            await persistPartialTurn({
+              memory: entry.memory,
+              threadId: keepThreadId,
+              memoryConfig: durableState.memoryConfig,
+              messageList,
+              saveQueueManager: entry.saveQueueManager,
+              authorize: async () => {
+                // Same threads and same per-thread grant as the pre-pass: the run's cached check
+                // covers its own thread, a thread the request context points at is checked anew.
+                const threadIds = new Set([keepThreadId, memoryContext?.thread?.id].filter(Boolean) as string[]);
+                for (const threadId of threadIds) {
+                  const checks = threadId === keepThreadId ? getDurableMemoryAuthorizationChecks(entry) : new Map();
+                  await authorizeDurableMemory(checks, {
+                    mastra,
+                    user: requestContext.get('user'),
+                    threadId,
+                    resourceId,
+                    agentId: initData.agentId,
+                    requestContext,
+                    permission: MastraFGAPermissions.MEMORY_WRITE,
+                    actor: initData.options?.actor,
+                  });
+                }
+              },
+              logger,
+              runId,
+            });
+          }
           return;
         }
         await undoSavedResponseMessages({

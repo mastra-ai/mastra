@@ -132,7 +132,7 @@ For an AI SDK example, see [Using Mastra Memory](/integrations/agentic-ui/ai-sdk
 
 ### Retrying a failed turn
 
-When a request fails before the model produces output, the user message is already in the thread. If your client retries that turn, reuse the **same message ID** for the user message. Storage writes by message ID, so the retry overwrites the earlier row instead of adding a second copy.
+When a request fails before the model produces output, the user message is already in the thread. If your client retries that turn, reuse the **same message ID** for the user message. Storage writes by message ID. The retry overwrites the earlier row instead of adding a second copy.
 
 Sending the same text under a new ID stores the turn twice, and the model sees the question repeated the next time the thread runs.
 

@@ -24,6 +24,7 @@ export async function persistPartialTurn({
   messageList,
   saveQueueManager,
   authorize,
+  beforePersist,
   logger,
   runId,
 }: {
@@ -33,6 +34,11 @@ export async function persistPartialTurn({
   messageList: MessageList;
   saveQueueManager: SaveQueueManager | undefined;
   authorize?: () => Promise<void>;
+  /**
+   * Guard the save queue runs immediately before writing, e.g. the durable execution-ownership
+   * fence (`assertExecutionOwned`). A rejection skips the save, as a failed authorization does.
+   */
+  beforePersist?: () => Promise<void>;
   logger: IMastraLogger;
   runId: string;
 }) {
@@ -41,7 +47,7 @@ export async function persistPartialTurn({
 
   try {
     await authorize?.();
-    await saveQueueManager?.flushMessages(messageList, threadId, memoryConfig);
+    await saveQueueManager?.flushMessages(messageList, threadId, memoryConfig, { beforePersist });
   } catch (error) {
     logger.error('Failed to keep a partial turn after an output processor tripwire', { error, runId, threadId });
   }

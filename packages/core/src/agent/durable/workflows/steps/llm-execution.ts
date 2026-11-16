@@ -2782,6 +2782,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   },
                 });
               }
+              // The serialized transcript is the only channel to finish-time persistence, so a run
+              // that keeps its messages has to materialize the text accepted before the trip first,
+              // like the abort returns above (#22593). Rolling the turn back stays the default.
+              if (toolResultTripwire?.options?.persist === 'partial') materializeStreamedMessages();
               return {
                 ...(await storeStepTranscript()),
                 text: textDeltas.join(''),
@@ -2851,6 +2855,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       },
                     });
                   }
+                  // Same as the tool-result bail above: the keep needs the accepted text in the
+                  // serialized transcript, the default rollback does not.
+                  if (error.options?.persist === 'partial') materializeStreamedMessages();
                   return {
                     ...(await storeStepTranscript()),
                     text: textDeltas.join(''),

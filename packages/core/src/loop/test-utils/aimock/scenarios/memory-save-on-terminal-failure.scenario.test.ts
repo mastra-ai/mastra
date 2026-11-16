@@ -1626,6 +1626,168 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     },
     TEST_TIMEOUT_MS,
   );
+
+  // The keep-save writes memory, so it has to check write access like every other save. The FGA
+  // only starts denying once the guardrail has tripped, so the denial is the only thing that can
+  // stop the write. In-process engines only: the durable engines authorize `memory:write` during
+  // preparation and their keep-save reuses that grant, so the denial is not observable there.
+  const itInProcessEngine = engine === 'normal' || engine === 'fs' ? it : it.skip;
+  itInProcessEngine(
+    'finish does not keep the turn when the caller cannot write memory',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-finish-keep-fga-${engine}`;
+      // Pre-create the thread: a run that creates it authorizes `memory:write` up front, so the
+      // keep-save would reuse that grant instead of asking again.
+      await memory.createThread({ threadId, resourceId: RESOURCE });
+      let tripped = false;
+      const denied: string[] = [];
+      const fga: IFGAProvider = {
+        check: async (_user, { resource, permission }) =>
+          !(tripped && String(permission) === 'memory:write' && resource.id === threadId),
+        require: async (user, { resource, permission }) => {
+          if (tripped && String(permission) === 'memory:write' && resource.id === threadId) {
+            denied.push(resource.id);
+            throw new FGADeniedError(user, resource, permission);
+          }
+        },
+        filterAccessible: async (_user, resources) => resources,
+      };
+      const keeper: Processor = {
+        id: 'keeping-guardrail',
+        processOutputResult: ({ abort }) => {
+          tripped = true;
+          abort('Kept but not authorized', { persist: 'partial' });
+        },
+      };
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'reader' });
+      const { output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Echo first, then answer.',
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        agentOutputProcessors: [keeper],
+        server: { fga },
+        requestContext,
+        stopWhen: stepCountIs(5),
+        tools: { echoTool },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+          );
+          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'The echo ran.' });
+        },
+      });
+      expect(output.tripwire).toMatchObject({ reason: 'Kept but not authorized' });
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      expect(denied).toContain(threadId);
+      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+      expect(JSON.stringify(messages)).not.toContain('The echo ran.');
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // A keep-save needs a resource id to authorize against. Without one it has to fail closed
+  // instead of writing the thread the run pointed at. Durable engines only: their ordinary save
+  // insists on both ids, so their keep-save has to as well. The in-process loop authorizes the
+  // thread directly, the way its own save does.
+  const itDurableEngine = engine === 'durable' || engine === 'evented' ? it : it.skip;
+  itDurableEngine(
+    'finish does not keep the turn when the run has no resource id',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-finish-keep-no-resource-${engine}`;
+      const keeper: Processor = {
+        id: 'keeping-guardrail',
+        processOutputResult: ({ abort }) => abort('Kept without a resource id', { persist: 'partial' }),
+      };
+      const { output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Echo first, then answer.',
+        memory,
+        threadId,
+        agentOutputProcessors: [keeper],
+        stopWhen: stepCountIs(5),
+        tools: { echoTool },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+          );
+          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'The echo ran.' });
+        },
+      });
+      expect(output.tripwire).toMatchObject({ reason: 'Kept without a resource id' });
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const { messages } = await memory.recall({ threadId });
+      expect(messages.map(message => message.role)).not.toContain('assistant');
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // The deadline keep-save needs the same ids as the finish one, so without a resource id it must
+  // not write the cut-off turn either. The deadline save itself also requires a resource id, so the
+  // keep-save is the only writer that could put the turn in the thread.
+  itDurableEngine(
+    'total-timeout does not keep the turn when the run has no resource id',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-keep-no-resource-${engine}`;
+      const keeper: Processor = {
+        id: 'deadline-keeper',
+        processOutputResult: ({ abort }) => abort('Kept without a resource id', { persist: 'partial' }),
+      };
+      const hang = Promise.withResolvers<unknown>();
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Echo first, then wait.',
+          memory,
+          threadId,
+          agentOutputProcessors: [keeper],
+          stopWhen: stepCountIs(5),
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          expectStreamError: true,
+          collectChunks: true,
+          tools: {
+            echoTool,
+            hanging: createTool({
+              id: 'hanging',
+              description: 'Never returns.',
+              inputSchema: z.object({}),
+              execute: async () => hang.promise,
+            }),
+          },
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+            );
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 1 },
+              { toolCalls: [{ id: 'call_hang', name: 'hanging', arguments: {} }] },
+            );
+          },
+        });
+        expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+        await new Promise(resolve => setTimeout(resolve, 1_000));
+
+        const { messages } = await memory.recall({ threadId });
+        expect(messages.map(message => message.role)).not.toContain('assistant');
+      } finally {
+        hang.resolve({});
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
 });
 
 // What the retry note in the memory docs promises: the store writes by message id, so a client that

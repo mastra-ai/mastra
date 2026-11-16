@@ -34,7 +34,17 @@ describe('persistPartialTurn', () => {
 
     expect(authorize).toHaveBeenCalledOnce();
     expect(flushMessages).toHaveBeenCalledOnce();
-    expect(flushMessages).toHaveBeenCalledWith(messageList, 'thread-1', undefined);
+    expect(flushMessages).toHaveBeenCalledWith(messageList, 'thread-1', undefined, { beforePersist: undefined });
+  });
+
+  // The durable keep-save passes the execution-ownership fence, so the queue has to receive it.
+  it('hands the beforePersist fence to the save queue', async () => {
+    const { run, flushMessages, messageList } = setup();
+    const beforePersist = vi.fn(async () => {});
+
+    await run({ beforePersist });
+
+    expect(flushMessages).toHaveBeenCalledWith(messageList, 'thread-1', undefined, { beforePersist });
   });
 
   it.each([

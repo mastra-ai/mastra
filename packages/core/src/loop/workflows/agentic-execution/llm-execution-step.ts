@@ -2550,6 +2550,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           eagerCoordinator?.stop();
 
           if (toolResultTripwireFromStream) {
+            // A keep-save reads the message list, so the text accepted before the tripwire has to be
+            // in it; the default rollback never touches the list (#22593 for the abort returns).
+            if (toolResultTripwireFromStream.options?.persist === 'partial') {
+              const acceptedMessages = buildMessagesFromChunks({
+                chunks: collectedChunks,
+                messageId: currentStep.messageId,
+                responseModelMetadata: buildResponseModelMetadata(
+                  runState,
+                  currentStep.model,
+                  modelSpanTracker?.getTracingContext() ?? tracingContext,
+                ),
+                tools: currentStep.tools,
+              });
+              for (const msg of acceptedMessages) {
+                messageList.add(msg, 'response');
+              }
+            }
             return buildTripWireBailResponse({
               error: toolResultTripwireFromStream,
               controller,
