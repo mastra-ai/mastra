@@ -2229,7 +2229,8 @@ export interface TracingOptions {
   requestContextKeys?: string[];
   /**
    * Trace ID to use for this execution (1-32 hexadecimal characters).
-   * If provided, this trace will be part of the specified trace rather than starting a new one.
+   * If provided, the run joins the specified trace as another top-level run
+   * instead of starting a new trace.
    */
   traceId?: string;
   /**

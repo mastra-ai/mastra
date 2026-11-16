@@ -150,7 +150,7 @@ See [Missing first chunk and token values](#missing-first-chunk-and-token-values
 
 `outcome` records how a span ended, for example `success`, `error`, `abort`, `limit`, or `unknown`. `stopReason` records why, for example `max_steps`. Both are free strings, so custom spans can record their own values. They're separate from `status`, which still reads only whether the span recorded an error.
 
-At trace scope, both fields read the current root span, the span with no parent that started the trace. Inside `spans.some` or `spans.none`, they read each related span. A trace whose root succeeded but whose tool call hit a step limit doesn't match a trace-scope `outcome` of `limit`. Find it through `spans.some`:
+At trace scope, both fields read the trace's root span, the run Mastra uses to represent the trace when it holds multiple top-level runs. Inside `spans.some` or `spans.none`, they read each related span. A trace whose root succeeded but whose tool call hit a step limit doesn't match a trace-scope `outcome` of `limit`. Find it through `spans.some`:
 
 ```typescript
 const hitALimit = {

@@ -1358,13 +1358,16 @@ interface TracingOptions {
 
   /**
    * Trace ID to use for this execution (1-32 hexadecimal characters).
-   * If provided, this trace will be part of the specified trace rather than starting a new one.
+   * If provided, the run joins the specified trace as another top-level run
+   * instead of starting a new trace.
    */
   traceId?: string
 
   /**
    * Parent span ID to use for this execution (1-16 hexadecimal characters).
-   * If provided, the root span will be created as a child of this span.
+   * Intended for correlating with an external tracing system (e.g. an
+   * OpenTelemetry span in the calling service): the ID is exported for
+   * external tracing but isn't treated as a parent within Mastra storage.
    */
   parentSpanId?: string
 

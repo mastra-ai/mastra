@@ -903,6 +903,16 @@ const result = await run.start({
 })
 ```
 
+### Traces with multiple top-level runs
+
+Passing an outside `traceId` puts each call in that trace, but it doesn't change how Mastra stores each run. An outside `parentSpanId` is kept for correlation with the external system and isn't stored as a Mastra parent, so a call made this way is stored as a top-level run of the trace.
+
+If one outside request makes multiple Mastra calls, the trace holds multiple top-level runs. A request that runs two agents and then a tool directly, for example, produces three top-level runs under the same `traceId`.
+
+Trace-scoped filters, timing, aggregates, and the trace list read one of those top-level runs to represent the trace. To reach every run in a trace, query its spans by `traceId`. See [Advanced queries](/reference/observability/tracing/advanced-queries).
+
+A run that continues an earlier Mastra run doesn't add a top-level run. A resumed agent or workflow run is stored as a child of the span it resumed from, and a run started with `nestUnderParent: true` nests under the Mastra run you point it at, as described in the next section.
+
 ### Nesting a run under an earlier Mastra run
 
 A `parentSpanId` can point at two kinds of spans. The span can belong to your own tracing system, as in the examples above. Mastra then treats the run as the top of the trace it exports, and the run sets the trace's name, input, output, and tags.
