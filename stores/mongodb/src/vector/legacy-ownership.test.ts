@@ -687,7 +687,15 @@ describe('legacy ownership', () => {
         expect(await reg(coll)).toEqual(entry);
       });
 
-      it('T16: a managed delete refuses with IN_USE while a BYO index uses its collection', async () => {
+      it('T13a-2: after claimLegacyIndex, deleteIndex drops the flagless managed collection', async () => {
+        const { coll } = await managed('unknown');
+        await a.claimLegacyIndex({ indexName: coll });
+        await a.deleteIndex({ indexName: coll });
+        expect(await exists(coll)).toBe(false);
+        expect(await reg(coll)).toBeNull();
+      });
+
+      it('T16:a managed delete refuses with IN_USE while a BYO index uses its collection', async () => {
         const { coll, entry } = await managed();
         await seedRegistry(db, {
           _id: `${coll}_byo`,
@@ -918,6 +926,240 @@ describe('legacy ownership', () => {
         await a.createSearchIndex({ indexName: coll, fields: ['title'] });
         expect(await searchIndexNames(db, coll)).toContain(`${coll}_search_index`);
       });
+    });
+  });
+
+  describe('claimLegacyIndex', () => {
+    const dyn = { mappings: { dynamic: true } };
+    const vec = { fields: [{ type: 'vector', path: 'embedding', numDimensions: 4, similarity: 'cosine' }] };
+    const names: string[] = [];
+    const pauses: { release: { resolve: () => void } }[] = [];
+    let other: MongoDBVector;
+
+    beforeAll(async () => {
+      other = new MongoDBVector({ uri: ATLAS_LOCAL_URI, dbName: DB_NAME, id: 'claim-other' });
+      await other.connect();
+    });
+
+    afterAll(async () => {
+      await other.disconnect();
+    });
+
+    afterEach(async () => {
+      for (const p of pauses.splice(0)) p.release.resolve();
+      (store as any).testHooks = undefined;
+      for (const n of names.splice(0)) {
+        await db.collection(REGISTRY).deleteMany({ $or: [{ _id: n as any }, { collectionName: n }] });
+        await db.dropCollection(n).catch(() => {});
+      }
+    });
+
+    const errId = (code: string) => createVectorErrorId('MONGODB', 'CLAIM_LEGACY_INDEX', code);
+    const reg = (id: string) => db.collection(REGISTRY).findOne({ _id: id as any });
+    const exists = (c: string) => db.listCollections({ name: c }).hasNext();
+
+    /** A collection created by Mastra before 1.15: physical indexes, no registry entry. */
+    async function legacy(withText = false) {
+      const X = uniqueName('claim');
+      names.push(X);
+      await seedCollection(db, X, [{ title: 'a', embedding: [1, 0, 0, 0] }]);
+      await createRawSearchIndex(db, X, `${X}_vector_index`, vec);
+      if (withText) await createRawSearchIndex(db, X, `${X}_search_index`, dyn, 'search');
+      await waitFor(async () => {
+        const n = await searchIndexNames(db, X);
+        return n.includes(`${X}_vector_index`) && (!withText || n.includes(`${X}_search_index`));
+      });
+      return X;
+    }
+
+    /** A managed registration written by 1.15–1.27 (no ownership flags), seeded directly. */
+    async function flagless(extra: Document = {}) {
+      const X = uniqueName('claim');
+      names.push(X);
+      await seedCollection(db, X, [{ title: 'a' }]);
+      const entry = {
+        _id: X,
+        indexName: X,
+        collectionName: X,
+        searchIndexName: `${X}_vector_index`,
+        isByo: false,
+        allowWrites: true,
+        ...extra,
+      };
+      await seedRegistry(db, entry);
+      return { X, entry };
+    }
+
+    /** Parks the claim right after its first registry read. */
+    function holdAfterRead() {
+      const reached = deferred();
+      const release = deferred();
+      pauses.push({ release });
+      (store as any).testHooks = {
+        afterClaimRead: async () => {
+          reached.resolve();
+          await release.promise;
+        },
+      };
+      return { reached, release };
+    }
+
+    it('T5b: a claimed pre-1.15 collection is dropped by deleteIndex', async () => {
+      const X = await legacy();
+      await store.claimLegacyIndex({ indexName: X });
+      await store.deleteIndex({ indexName: X });
+      expect(await exists(X)).toBe(false);
+      expect(await store.listIndexes()).not.toContain(X);
+    });
+
+    it('T6: a pre-1.15 collection adopted by createIndex is dropped after a claim', async () => {
+      const X = await legacy();
+      await store.createIndex({ indexName: X, dimension: 4 });
+      expect((await reg(X))?.ownsCollection).toBe(false);
+      await store.claimLegacyIndex({ indexName: X });
+      await store.deleteIndex({ indexName: X });
+      expect(await exists(X)).toBe(false);
+    });
+
+    it('T7: a flagless registration can update its text mapping only after a claim', async () => {
+      const { X } = await flagless();
+      await db
+        .collection(REGISTRY)
+        .updateOne({ _id: X as any }, { $set: { textSearchIndexName: `${X}_search_index` } });
+      await createRawSearchIndex(db, X, `${X}_search_index`, dyn, 'search');
+      await waitFor(async () => (await searchIndexNames(db, X)).includes(`${X}_search_index`));
+      const params = { indexName: X, fields: ['title'], searchIndexName: `${X}_search_index` };
+      const err = await store.createSearchIndex(params).catch(e => e);
+      expect(err.id).toBe(createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'));
+      expect(err.message).toMatch(/claimLegacyIndex/);
+      await store.claimLegacyIndex({ indexName: X });
+      await store.createSearchIndex(params);
+      await waitFor(async () => {
+        const [idx] = await db.collection(X).listSearchIndexes(`${X}_search_index`).toArray();
+        return idx?.latestDefinition?.mappings?.dynamic === false && !!idx.latestDefinition.mappings.fields?.title;
+      });
+    });
+
+    it('T8: a claimed pre-1.15 text index is recorded as owned and its mapping can be updated', async () => {
+      const X = await legacy(true);
+      await store.claimLegacyIndex({ indexName: X });
+      expect(await reg(X)).toMatchObject({ textSearchIndexName: `${X}_search_index`, ownsTextIndex: true });
+      await store.createSearchIndex({ indexName: X, fields: ['title'], searchIndexName: `${X}_search_index` });
+    });
+
+    it('T9: an explicit ownsTextIndex: false survives a claim', async () => {
+      const { X } = await flagless({ textSearchIndexName: 'shared_fts', ownsTextIndex: false });
+      await store.claimLegacyIndex({ indexName: X });
+      expect(await reg(X)).toMatchObject({ ownsCollection: true, ownsVectorIndex: true, ownsTextIndex: false });
+    });
+
+    describe('T10: refusals and idempotence', () => {
+      it('a BYO entry refuses with BYO and is unchanged', async () => {
+        const { X, entry } = await flagless({ isByo: true, allowWrites: false });
+        const err = await store.claimLegacyIndex({ indexName: X }).catch(e => e);
+        expect(err.id).toBe(errId('BYO'));
+        expect(err.category).toBe('USER');
+        expect(await reg(X)).toEqual(entry);
+      });
+
+      it('an unknown name refuses with NOT_FOUND', async () => {
+        const X = uniqueName('claim');
+        names.push(X);
+        const err = await store.claimLegacyIndex({ indexName: X }).catch(e => e);
+        expect(err.id).toBe(errId('NOT_FOUND'));
+        expect(err.category).toBe('USER');
+        expect(await reg(X)).toBeNull();
+      });
+
+      it('a collection used by a BYO entry refuses with IN_USE and writes nothing', async () => {
+        const X = await legacy();
+        await seedRegistry(db, {
+          _id: `${X}_byo`,
+          indexName: `${X}_byo`,
+          collectionName: X,
+          searchIndexName: `${X}_byo_vec`,
+          isByo: true,
+          allowWrites: false,
+        });
+        const err = await store.claimLegacyIndex({ indexName: X }).catch(e => e);
+        expect(err.id).toBe(errId('IN_USE'));
+        expect(err.category).toBe('USER');
+        expect(await reg(X)).toBeNull();
+      });
+
+      it('claiming twice resolves', async () => {
+        const X = await legacy();
+        await store.claimLegacyIndex({ indexName: X });
+        const first = await reg(X);
+        await store.claimLegacyIndex({ indexName: X });
+        expect(await reg(X)).toEqual(first);
+      });
+    });
+
+    describe('T11: races', () => {
+      it('two concurrent claims both resolve and one entry exists', async () => {
+        const X = await legacy();
+        await Promise.all([store.claimLegacyIndex({ indexName: X }), other.claimLegacyIndex({ indexName: X })]);
+        expect(await db.collection(REGISTRY).countDocuments({ _id: X as any })).toBe(1);
+        expect(await reg(X)).toMatchObject({ ownsCollection: true, ownsVectorIndex: true });
+      });
+
+      it('a claim racing a BYO createIndex keeps the BYO entry and refuses', async () => {
+        const X = await legacy();
+        const p = holdAfterRead();
+        const claim = store.claimLegacyIndex({ indexName: X }).catch(e => e);
+        await p.reached.promise;
+        await other.createIndex({ indexName: X, collectionName: X, dimension: 4 });
+        const byo = await reg(X);
+        p.release.resolve();
+        const err = await claim;
+        expect([errId('BYO'), errId('CONFLICT')]).toContain(err.id);
+        expect(await reg(X)).toEqual(byo);
+        expect(byo?.isByo).toBe(true);
+      });
+
+      it('an entry retargeted between the read and the claim refuses with CONFLICT', async () => {
+        const { X } = await flagless();
+        const p = holdAfterRead();
+        const claim = store.claimLegacyIndex({ indexName: X }).catch(e => e);
+        await p.reached.promise;
+        await db.collection(REGISTRY).updateOne({ _id: X as any }, { $set: { collectionName: `${X}_moved` } });
+        const moved = await reg(X);
+        p.release.resolve();
+        const err = await claim;
+        expect(err.id).toBe(errId('CONFLICT'));
+        expect(err.category).toBe('USER');
+        expect(await reg(X)).toEqual(moved);
+      });
+
+      it('T11a: a competing managed registration on another collection wins and stays unchanged', async () => {
+        const X = await legacy();
+        const p = holdAfterRead();
+        const claim = store.claimLegacyIndex({ indexName: X }).catch(e => e);
+        await p.reached.promise;
+        const winner = {
+          _id: X,
+          indexName: X,
+          collectionName: `${X}_other`,
+          searchIndexName: `${X}_vector_index`,
+          isByo: false,
+          allowWrites: true,
+          ownsCollection: true,
+        };
+        await seedRegistry(db, winner);
+        p.release.resolve();
+        const err = await claim;
+        expect(err.id).toBe(errId('CONFLICT'));
+        expect(await reg(X)).toEqual(winner);
+      });
+    });
+
+    it('RF4: a deleting entry refuses with INDEX_DELETING and is unchanged', async () => {
+      const { X, entry } = await flagless({ deleting: true, deleteToken: 't' });
+      const err = await store.claimLegacyIndex({ indexName: X }).catch(e => e);
+      expect(err.id).toBe(errId('INDEX_DELETING'));
+      expect(err.message).toMatch(/deleteIndex/);
+      expect(await reg(X)).toEqual(entry);
     });
   });
 });

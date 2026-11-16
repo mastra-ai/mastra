@@ -2722,6 +2722,150 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   }
 
   /**
+   * One-time upgrade helper for managed indexes created before `@mastra/mongodb@1.15.0`, or registered by 1.15–1.27 without ownership records. Calling it asserts that Mastra created the collection and its recorded search indexes; `deleteIndex()` will then drop the collection and all its data.
+   */
+  async claimLegacyIndex({ indexName }: { indexName: string }): Promise<void> {
+    const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
+    const vectorIndex = `${indexName}_vector_index`;
+    const refuse = (
+      code: 'BYO' | 'CONFLICT' | 'IN_USE' | 'NOT_FOUND',
+      text: string,
+      details: Record<string, any> = {},
+    ) =>
+      new MastraError({
+        id: createVectorErrorId('MONGODB', 'CLAIM_LEGACY_INDEX', code),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName, ...details },
+        text,
+      });
+    const byo = (entry: RegistryDoc) =>
+      refuse(
+        'BYO',
+        `Index "${indexName}" is a bring-your-own index on collection "${entry.collectionName}". Its collection belongs to the caller and cannot be claimed.`,
+        { collectionName: entry.collectionName },
+      );
+    const conflict = (current: RegistryDoc | null) =>
+      refuse(
+        'CONFLICT',
+        current
+          ? `Index "${indexName}" now targets collection "${current.collectionName}" (vector index "${current.searchIndexName}"), not the one this claim validated. Nothing was claimed.`
+          : `Index "${indexName}" was removed while it was being claimed. Nothing was claimed.`,
+        { collectionName: current?.collectionName ?? null, searchIndexName: current?.searchIndexName ?? null },
+      );
+    const otherUsers = () =>
+      registry.find({ collectionName: indexName, _id: { $ne: indexName } }, { projection: { _id: 1 } }).toArray();
+    const inUse = (others: { _id: string }[]) =>
+      refuse(
+        'IN_USE',
+        `Collection "${indexName}" is used by ${others.map(o => `"${o._id}"`).join(', ')}, so it cannot be claimed for index "${indexName}". Nothing was claimed.`,
+        { collectionName: indexName, usedBy: others.map(o => o._id).join(', ') },
+      );
+
+    // Claim exactly the observed target, so a claim never applies to a replacement registration.
+    const claimRegistered = async (seen: RegistryDoc) => {
+      const { collectionName, searchIndexName } = seen;
+      const { matchedCount } = await registry.updateOne(
+        { _id: indexName, isByo: { $ne: true }, collectionName, searchIndexName, deleting: { $ne: true } },
+        [
+          {
+            $set: {
+              ownsCollection: true,
+              // An explicit false records that the index existed before registration; keep it.
+              ownsVectorIndex: { $ifNull: ['$ownsVectorIndex', true] },
+              ...(seen.textSearchIndexName ? { ownsTextIndex: { $ifNull: ['$ownsTextIndex', true] } } : {}),
+            },
+          },
+        ],
+      );
+      this.indexTargets.delete(indexName);
+      if (matchedCount === 1) return;
+      const current = await this.readRegistryEntry(indexName);
+      this.assertNotDeleting(current, 'CLAIM_LEGACY_INDEX');
+      if (
+        current &&
+        current.isByo !== true &&
+        current.collectionName === collectionName &&
+        current.searchIndexName === searchIndexName &&
+        current.ownsCollection === true
+      )
+        return;
+      throw conflict(current);
+    };
+
+    try {
+      const entry = await this.readRegistryEntry(indexName);
+      await this.testHooks?.afterClaimRead?.(indexName);
+      if (entry) {
+        this.assertNotDeleting(entry, 'CLAIM_LEGACY_INDEX');
+        if (entry.isByo === true) throw byo(entry);
+        return await claimRegistered(entry);
+      }
+
+      const collectionExists = await this.db.listCollections({ name: indexName }).hasNext();
+      const searchIndexes = collectionExists
+        ? ((await this.db.collection(indexName).listSearchIndexes().toArray()) as SearchIndexInfo[]).map(i => i.name)
+        : [];
+      if (!searchIndexes.includes(vectorIndex)) {
+        throw refuse(
+          'NOT_FOUND',
+          `No collection "${indexName}" with vector index "${vectorIndex}" exists, so there is no legacy managed index to claim.`,
+          { collectionName: indexName },
+        );
+      }
+      const before = await otherUsers();
+      if (before.length) throw inUse(before);
+
+      const textIndex = `${indexName}_search_index`;
+      const claimToken = uuidv4();
+      try {
+        // insertOne, never an upsert: a registration written meanwhile must win, not be overwritten.
+        await registry.insertOne({
+          _id: indexName,
+          indexName,
+          collectionName: indexName,
+          searchIndexName: vectorIndex,
+          isByo: false,
+          allowWrites: true,
+          ownsCollection: true,
+          ownsVectorIndex: true,
+          ...(searchIndexes.includes(textIndex) ? { textSearchIndexName: textIndex, ownsTextIndex: true } : {}),
+          claimToken,
+        });
+      } catch (error: any) {
+        if (error?.code !== 11000) throw error;
+        this.indexTargets.delete(indexName);
+        const winner = await this.readRegistryEntry(indexName);
+        if (winner?.isByo === true) throw byo(winner);
+        // The claim asserted ownership of collection `indexName` only; never extend it to another target.
+        if (!winner || winner.collectionName !== indexName || winner.searchIndexName !== vectorIndex) {
+          throw conflict(winner);
+        }
+        this.assertNotDeleting(winner, 'CLAIM_LEGACY_INDEX');
+        return await claimRegistered(winner);
+      }
+      this.indexTargets.delete(indexName);
+      const after = await otherUsers();
+      if (after.length) {
+        await registry.deleteOne({ _id: indexName, claimToken });
+        this.indexTargets.delete(indexName);
+        throw inUse(after);
+      }
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createVectorErrorId('MONGODB', 'CLAIM_LEGACY_INDEX', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
    * Updates a vector by its ID with the provided vector and/or metadata.
    * @param indexName - The name of the index containing the vector.
    * @param id - The ID of the vector to update.
