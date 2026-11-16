@@ -78,7 +78,8 @@ export const navItemLayoutClasses = ({ isCollapsed, level = 0, size }: NavItemLa
     focusRing,
     !isCollapsed && nestedExpandedItemClasses(level),
     !isCollapsed && withDescriptionClasses,
-    isCollapsed && 'gap-0 px-[13.5px] py-0',
+    // The rail's 40px rows keep the expanded rows' 12px padding, so icons don't move between the two states.
+    isCollapsed && 'gap-0 px-3 py-0',
   );
 
 export const navItemClasses = ({ isActive, isCollapsed, isFeatured, level, size }: ItemStyleOptions = {}) =>

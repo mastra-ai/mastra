@@ -122,6 +122,24 @@ describe('GraphRAG', () => {
       expect(graph.serialize().edges).toEqual([edge]);
       expect(GraphRAG.deserialize(graph.serialize()).getEdges()).toEqual([edge]);
     });
+
+    it('rejects nonfinite weights without adding either direction of the edge (#29876)', () => {
+      const graph = new GraphRAG(2);
+      graph.addNode({ id: 'a', content: 'A', embedding: [1, 0] });
+      graph.addNode({ id: 'b', content: 'B', embedding: [0, 1] });
+
+      for (const weight of [NaN, Infinity, -Infinity]) {
+        expect(() => graph.addEdge({ source: 'a', target: 'b', weight, type: 'semantic' })).toThrow(
+          'Edge weight must be a finite number',
+        );
+        expect(graph.getEdges()).toEqual([]);
+      }
+
+      for (const weight of [0, -1, 1]) {
+        graph.addEdge({ source: 'a', target: 'b', weight, type: 'semantic' });
+      }
+      expect(graph.getEdges().map(edge => edge.weight)).toEqual([0, 0, -1, -1, 1, 1]);
+    });
   });
 
   describe('createGraph', () => {
@@ -195,6 +213,47 @@ describe('GraphRAG', () => {
 
       const edges = graph.getEdges();
       expect(edges.length).toBe(6);
+    });
+
+    it('replaces old nodes and edges when rebuilding with fewer chunks (#29364)', () => {
+      const graph = new GraphRAG(2);
+      graph.createGraph(
+        [
+          { text: 'old A', metadata: {} },
+          { text: 'old B', metadata: {} },
+        ],
+        [{ vector: [1, 0] }, { vector: [1, 0] }],
+      );
+      graph.createGraph([{ text: 'new', metadata: {} }], [{ vector: [0, 1] }]);
+
+      expect(graph.getNodes().map(node => node.content)).toEqual(['new']);
+      expect(graph.getEdges()).toEqual([]);
+      expect(graph.query({ query: [1, 0], topK: 5 }).map(node => node.content)).toEqual(['new']);
+    });
+
+    it('keeps the previous graph when a rebuild has an invalid embedding (#29364)', () => {
+      const graph = new GraphRAG(2);
+      graph.createGraph(
+        [
+          { text: 'old A', metadata: {} },
+          { text: 'old B', metadata: {} },
+        ],
+        [{ vector: [1, 0] }, { vector: [1, 0] }],
+      );
+      const previousNodes = graph.getNodes();
+      const previousEdges = graph.getEdges();
+
+      expect(() =>
+        graph.createGraph(
+          [
+            { text: 'new A', metadata: {} },
+            { text: 'new B', metadata: {} },
+          ],
+          [{ vector: [0, 1] }, { vector: [0] }],
+        ),
+      ).toThrow('Embedding dimension must be 2');
+      expect(graph.getNodes()).toEqual(previousNodes);
+      expect(graph.getEdges()).toEqual(previousEdges);
     });
 
     it('rejects nonfinite embeddings when creating a graph (#29609)', () => {
@@ -593,6 +652,26 @@ describe('GraphRAG', () => {
       const snapshot = buildGraph().serialize();
       snapshot.edges.push({ source: '0', target: 'missing', weight: 1, type: 'semantic' });
       expect(() => GraphRAG.deserialize(snapshot)).toThrowError('Edge references unknown node: missing');
+    });
+
+    it('rejects nonfinite and JSON-round-tripped NaN edge weights on restore (#29876)', () => {
+      const snapshot = buildGraph().serialize();
+      const originalEdgeCount = snapshot.edges.length;
+
+      for (const weight of [NaN, Infinity, -Infinity]) {
+        snapshot.edges[0]!.weight = weight;
+        expect(() => GraphRAG.deserialize(snapshot)).toThrow('Edge weight must be a finite number');
+      }
+
+      snapshot.edges[0]!.weight = NaN;
+      const persisted = JSON.parse(JSON.stringify(snapshot));
+      expect(persisted.edges[0].weight).toBeNull();
+      expect(() => GraphRAG.deserialize(persisted)).toThrow('Edge weight must be a finite number');
+
+      snapshot.edges[0]!.weight = 0;
+      const restored = GraphRAG.deserialize(snapshot);
+      expect(restored.getEdges()).toHaveLength(originalEdgeCount);
+      expect(restored.getEdges()[0]!.weight).toBe(0);
     });
 
     it('should restore a graph with no edges', () => {

@@ -2102,6 +2102,8 @@ describe('agent-controller routes', () => {
         .getAgentController('code')!
         .createSession({ resourceId: 'user-limit', id: 'user-limit', ownerId: 'code' });
       for (let i = 0; i < 4; i++) await session.thread.create({ title: `t${i}` });
+      const memory = (await mastra.getStorage()!.getStore('memory'))!;
+      const listThreads = vi.spyOn(memory, 'listThreads');
 
       const res = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
         mastra,
@@ -2118,6 +2120,28 @@ describe('agent-controller routes', () => {
       );
       const times = res.threads.map(t => Date.parse(t.updatedAt!));
       expect(times[0]).toBeGreaterThanOrEqual(times[1]!);
+      // In-memory storage scans once instead of materializing the whole map for each page.
+      expect(listThreads).toHaveBeenCalledTimes(1);
+      expect(listThreads.mock.calls[0]?.[0]).toMatchObject({
+        perPage: false,
+        orderBy: { field: 'updatedAt', direction: 'DESC' },
+      });
+
+      const fractional = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-limit',
+        limit: 1.2,
+      } as any)) as { threads: { id: string }[] };
+      expect(fractional.threads.length).toBe(1);
+
+      const subOne = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-limit',
+        limit: 0.2,
+      } as any)) as { threads: { id: string }[] };
+      expect(subOne.threads).toEqual([]);
     });
 
     it('scopes the result to `tags` so worktrees sharing a resourceId stay isolated', async () => {

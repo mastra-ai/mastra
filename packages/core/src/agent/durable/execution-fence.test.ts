@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { NoopLeaseProvider } from '../../events/pubsub';
 import type { LeaseProvider } from '../../events/pubsub';
@@ -8,6 +8,7 @@ import { RequestContext } from '../../request-context';
 import { isRunFenceConflictError } from '../../storage';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
 import { InMemoryStore } from '../../storage/mock';
+import { ensureRemoteAbortListener, publishAbortRequest } from './abort-transport';
 import {
   __resetExecutionFencesForTests,
   assertExecutionNotSuperseded,
@@ -548,6 +549,192 @@ describe('storage-backed ExecutionFence', () => {
       live: true,
     });
     expect(await fence.settle(async () => {})).toBe('owned');
+  });
+
+  it('finishes a step whose ownership read outlasts the lease TTL while the claim keeps renewing', async () => {
+    vi.useFakeTimers();
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    const requestContext = new RequestContext();
+    setExecutionClaim(requestContext, 'run-1', fence.claim);
+    const read = workflowsStore.getRunOwnership.bind(workflowsStore);
+    vi.spyOn(workflowsStore, 'getRunOwnership').mockImplementationOnce(async args => {
+      await new Promise(resolve => setTimeout(resolve, EXECUTION_LEASE_TTL_MS + 1_000));
+      return read(args);
+    });
+    const step = withExecutionFence({ id: 'llm', execute: async (_params: unknown) => 'output' });
+
+    const settled = step
+      .execute({
+        runId: 'nested-run',
+        requestContext,
+        mastra: undefined,
+        getInitData: () => ({ runId: 'run-1', agentId }),
+      })
+      .catch(error => error);
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS + 1_000);
+
+    expect(await settled).toBe('output');
+    expect(fence.isLost()).toBe(false);
+    expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
+      ownerId: fence.executionId,
+      generation: fence.generation,
+      live: true,
+    });
+    expect(await fence.settle(async () => {})).toBe('owned');
+  });
+
+  it.each(['before', 'after'] as const)(
+    'ends a cancelled step whose ownership read %s its work never returns',
+    async boundary => {
+      vi.useFakeTimers();
+      const { workflowsStore } = await stores();
+      const fence = await storageClaim(workflowsStore, 'run-1');
+      const requestContext = new RequestContext();
+      setExecutionClaim(requestContext, 'run-1', fence.claim);
+      const run = new AbortController();
+      setRunRegistryEntry(
+        'run-1',
+        { abortController: run, abortSignal: run.signal } as unknown as RunRegistryEntry,
+        undefined,
+      );
+      onTestFinished(() => deleteRunRegistryEntry('run-1', undefined));
+      const read = vi.spyOn(workflowsStore, 'getRunOwnership');
+      const hang = () => read.mockImplementationOnce(() => new Promise(() => {}));
+      if (boundary === 'before') hang();
+      const step = withExecutionFence({
+        id: 'llm',
+        // Durable steps read the run's signal from the registry and return their own abort output.
+        execute: async (_params: unknown) => {
+          if (run.signal.aborted) return 'aborted';
+          if (boundary === 'after') hang();
+          return 'output';
+        },
+      });
+
+      let outcome: unknown = 'pending';
+      const settled = step
+        .execute({
+          runId: 'nested-run',
+          requestContext,
+          mastra: undefined,
+          getInitData: () => ({ runId: 'run-1', agentId }),
+        })
+        .then(
+          value => (outcome = value),
+          error => (outcome = error),
+        );
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+      expect(outcome).toBe('pending');
+
+      run.abort();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(outcome).toBe(boundary === 'before' ? 'aborted' : 'output');
+      await settled;
+      expect(fence.isLost()).toBe(false);
+      expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
+        ownerId: fence.executionId,
+        generation: fence.generation,
+        live: true,
+      });
+      expect(await fence.settle(async () => {})).toBe('owned');
+    },
+  );
+
+  describe('a step of an already-cancelled run', () => {
+    async function cancelledStep() {
+      vi.useFakeTimers();
+      const { workflowsStore } = await stores();
+      const fence = await storageClaim(workflowsStore, 'run-1');
+      const requestContext = new RequestContext();
+      setExecutionClaim(requestContext, 'run-1', fence.claim);
+      const run = new AbortController();
+      run.abort();
+      setRunRegistryEntry(
+        'run-1',
+        { abortController: run, abortSignal: run.signal } as unknown as RunRegistryEntry,
+        undefined,
+      );
+      onTestFinished(() => deleteRunRegistryEntry('run-1', undefined));
+      const step = withExecutionFence({ id: 'llm', execute: async (_params: unknown) => 'aborted' });
+      const execute = () =>
+        step.execute({
+          runId: 'nested-run',
+          requestContext,
+          mastra: undefined,
+          getInitData: () => ({ runId: 'run-1', agentId }),
+        });
+      return { workflowsStore, fence, execute };
+    }
+
+    it('returns its abort output without waiting for the ownership read it started', async () => {
+      const { workflowsStore, fence, execute } = await cancelledStep();
+      const read = vi.spyOn(workflowsStore, 'getRunOwnership').mockImplementation(() => new Promise(() => {}));
+
+      await expect(execute()).resolves.toBe('aborted');
+      expect(read).toHaveBeenCalled();
+      expect(fence.isLost()).toBe(false);
+    });
+
+    it('notices a takeover from that read, before the next heartbeat', async () => {
+      const { workflowsStore, fence, execute } = await cancelledStep();
+      await workflowsStore.claimRunOwnership({
+        runId: 'run-1',
+        ownerId: 'successor',
+        leaseMs: EXECUTION_LEASE_TTL_MS,
+        force: true,
+        expectedGeneration: fence.generation,
+      });
+
+      await execute().catch(() => {});
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(fence.isLost()).toBe(true);
+      await expect(fence.verify()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+    });
+  });
+
+  it('ends a cancelled post-check on a worker whose step created the run registry entry', async () => {
+    vi.useFakeTimers();
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    const pubsub = new EventEmitterPubSub();
+    const requestContext = new RequestContext();
+    setExecutionClaim(requestContext, 'run-1', fence.claim);
+    onTestFinished(() => deleteRunRegistryEntry('run-1', undefined));
+    const read = vi.spyOn(workflowsStore, 'getRunOwnership');
+    const step = withExecutionFence({
+      id: 'llm',
+      execute: async (_params: unknown) => {
+        // Durable steps give a worker without a registry entry its own run controller as they start.
+        await ensureRemoteAbortListener(pubsub, 'run-1');
+        read.mockImplementationOnce(() => new Promise(() => {}));
+        return 'output';
+      },
+    });
+
+    let outcome: unknown = 'pending';
+    const settled = step
+      .execute({
+        runId: 'nested-run',
+        requestContext,
+        mastra: undefined,
+        getInitData: () => ({ runId: 'run-1', agentId }),
+      })
+      .then(
+        value => (outcome = value),
+        error => (outcome = error),
+      );
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    expect(outcome).toBe('pending');
+
+    await publishAbortRequest(pubsub, 'run-1');
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(outcome).toBe('output');
+    await settled;
+    expect(fence.isLost()).toBe(false);
   });
 
   it('marks the fence lost when a storage renewal never returns, so a recovered execution is not split-brain', async () => {

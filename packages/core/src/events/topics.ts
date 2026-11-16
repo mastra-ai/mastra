@@ -1,3 +1,5 @@
+import { slimNestedAgentChunks } from '../stream/strip-model-snapshots';
+
 /**
  * Topic prefixes whose events are only ever consumed by the process that
  * published them.
@@ -42,4 +44,21 @@ const RUN_LOG_TOPIC_PREFIX = 'agent.stream.';
 /** Minimum retention for a topic's cached log, or `undefined` for the cache default. */
 export function cachedLogTtlMs(topic: string): number | undefined {
   return topic.startsWith(RUN_LOG_TOPIC_PREFIX) ? RUN_LOG_TTL_MS : undefined;
+}
+
+/**
+ * The copy of `event` a run's cached log keeps.
+ *
+ * A delegated sub-agent's chunks are forwarded on the run stream inside
+ * `tool-output` / `workflow-step-output`, and each nested step-start,
+ * step-finish and finish carries the sub-agent's full prompt, history and
+ * steps. Stored as-is, every delegated run grows the log by megabytes. The log
+ * keeps them slimmed; live subscribers still receive the event as published,
+ * so a caller reading its own run sees the same chunks as a plain Agent's
+ * caller (see #29035).
+ */
+export function toCachedLogFrame<E extends { type: string; data?: unknown }>(topic: string, event: E): E {
+  if (event.type !== 'chunk' || !topic.startsWith(RUN_LOG_TOPIC_PREFIX)) return event;
+  const data = slimNestedAgentChunks(event.data);
+  return data === event.data ? event : { ...event, data };
 }

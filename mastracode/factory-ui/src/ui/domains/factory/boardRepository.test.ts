@@ -11,7 +11,6 @@ function repository(provider: 'github' | 'gitlab', externalId: string, slug: str
     externalId,
     slug,
     gitBranch: 'main',
-    sandboxWorkdir: `/sandbox/${slug}`,
   };
 }
 

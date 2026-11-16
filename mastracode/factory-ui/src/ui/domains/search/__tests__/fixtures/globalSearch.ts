@@ -1,5 +1,4 @@
 import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
-import type { GithubIssue, GithubPullRequest } from '../../../factory/services/factory';
 import type { WorkItem } from '../../../factory/services/workItems';
 import type { FactoryProjectPayload } from '../../../workspaces/services/github';
 import type { FactoryUserSession } from '../../../workspaces/services/user-sessions';
@@ -17,16 +16,14 @@ export const factoryProjects: FactoryProjectPayload[] = [
 
 export const factoryRepositories = {
   [ACTIVE_FACTORY_ID]: [
-    listedRepository(FIRST_REPOSITORY_ID, 'mastra-ai/mastra', { branch: 'main', sandboxWorkdir: '/workspaces/mastra' }),
+    listedRepository(FIRST_REPOSITORY_ID, 'mastra-ai/mastra', { branch: 'main' }),
     listedRepository(SECOND_REPOSITORY_ID, 'mastra-ai/docs', {
       branch: 'main',
-      sandboxWorkdir: '/workspaces/mastra-docs',
     }),
   ],
   [OTHER_FACTORY_ID]: [
     listedRepository(OTHER_REPOSITORY_ID, 'other-org/other-repo', {
       branch: 'main',
-      sandboxWorkdir: '/workspaces/other',
     }),
   ],
 };
@@ -92,7 +89,7 @@ export const workItems: WorkItem[] = [
     metadata: { number: 321 },
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
+    description: null,
     revision: 2,
     createdAt: '2026-07-29T10:00:00.000Z',
     updatedAt: '2026-07-29T12:30:00.000Z',
@@ -120,7 +117,7 @@ export const workItems: WorkItem[] = [
     metadata: { number: 900 },
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
+    description: null,
     revision: 1,
     createdAt: '2026-07-29T13:30:00.000Z',
     updatedAt: '2026-07-29T14:30:00.000Z',
@@ -139,9 +136,19 @@ export const workItems: WorkItem[] = [
     stageHistory: [],
     sessions: {},
     metadata: { number: 4242 },
+    workItem: {
+      provider: 'github',
+      key: null,
+      url: 'https://github.com/mastra-ai/mastra/pull/4242',
+      title: 'Bump the command palette dependencies',
+      state: 'open',
+      labels: [],
+      author: null,
+      metadata: { number: 4242 },
+    },
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
+    description: null,
     revision: 1,
     createdAt: '2026-07-29T09:00:00.000Z',
     updatedAt: '2026-07-29T09:30:00.000Z',
@@ -162,48 +169,10 @@ export const workItems: WorkItem[] = [
     metadata: { number: 777 },
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
+    description: null,
     revision: 1,
     createdAt: '2026-07-29T08:00:00.000Z',
     updatedAt: '2026-07-29T08:30:00.000Z',
-  },
-];
-
-/** Live GitHub intake for `FIRST_REPOSITORY_ID`: what the board's Intake column offers. */
-export const intakePullRequests: GithubPullRequest[] = [
-  {
-    number: 20454,
-    title: 'Harden the review board drop target',
-    url: 'https://github.com/mastra-ai/mastra/pull/20454',
-    author: 'ana',
-    baseBranch: 'main',
-    headBranch: 'fix/review-drop-target',
-    createdAt: '2026-07-30T09:00:00.000Z',
-    updatedAt: '2026-07-30T09:05:00.000Z',
-  },
-  {
-    // Already filed as `work-item-review`; the live feed still lists it, search must not double it.
-    number: 900,
-    title: 'Review command palette PR',
-    url: 'https://github.com/mastra-ai/mastra/pull/900',
-    author: 'ben',
-    baseBranch: 'main',
-    headBranch: 'feat/command-palette',
-    createdAt: '2026-07-29T13:00:00.000Z',
-    updatedAt: '2026-07-29T13:10:00.000Z',
-  },
-];
-
-export const intakeIssues: GithubIssue[] = [
-  {
-    number: 20455,
-    title: 'Rail scopes overflow on narrow viewports',
-    url: 'https://github.com/mastra-ai/mastra/issues/20455',
-    author: 'cleo',
-    labels: [],
-    comments: 0,
-    createdAt: '2026-07-30T08:00:00.000Z',
-    updatedAt: '2026-07-30T08:10:00.000Z',
   },
 ];
 
@@ -232,5 +201,52 @@ export function toWireWorkItem(item: WorkItem) {
     ...rest,
     factoryProjectId: githubProjectId,
     externalSource: toExternalSource(source, sourceKey, url),
+  };
+}
+
+/**
+ * The list route's answer for a query, by the server's rules: the whole board, or the part the
+ * query narrows it to. `null` is a query the server refuses.
+ */
+export function listWorkItemsResponse(cards: WorkItem[], query: URLSearchParams) {
+  const sessionIds = query.getAll('sessionId');
+  const sources = query.getAll('source');
+  const ids = query.getAll('workItemId');
+  const scope = query.get('scope');
+  const holdsSession = (card: WorkItem) => Object.keys(card.sessions).length > 0;
+  let listed = cards;
+  let total: number | undefined;
+  if (scope !== null && scope !== 'sessions') return null;
+  if (query.get('started') === 'false') {
+    const words = (query.get('q') ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+    const matches = cards
+      .filter(card => !holdsSession(card))
+      .filter(card => {
+        // The number the server's `workItemNumber` reads: the source's own, else the one given to a card filed by hand.
+        const facts = card.workItem?.metadata;
+        const number =
+          facts?.number ?? facts?.githubIssueNumber ?? facts?.githubPullRequestNumber ?? card.metadata.cardNumber;
+        const text = [card.title, card.workItem?.key, typeof number === 'number' ? `#${number}` : null, card.sourceKey]
+          .join(' ')
+          .toLowerCase();
+        return words.every(word => text.includes(word));
+      })
+      .toSorted((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    listed = matches.slice(0, Number(query.get('limit') ?? 20));
+    total = matches.length;
+  } else if (scope === 'sessions') {
+    listed = cards.filter(holdsSession);
+  } else if (sessionIds.length > 0) {
+    listed = cards.filter(card => Object.values(card.sessions).some(ref => sessionIds.includes(ref.sessionId)));
+  } else if (sources.length > 0) {
+    listed = cards.filter(card => [card.sourceKey, card.url].some(key => key !== null && sources.includes(key)));
+  } else if (ids.length > 0) {
+    listed = cards.filter(card => ids.includes(card.id));
+  }
+  return {
+    workItems: listed.map(toWireWorkItem),
+    runningSessionIds: [],
+    parkedSessionIds: [],
+    ...(total === undefined ? {} : { total }),
   };
 }

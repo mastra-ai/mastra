@@ -31,7 +31,7 @@ function workItem(source: WorkItemSource, stages: string[]): WorkItem {
     metadata: {},
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
+    description: null,
     revision: 1,
     createdAt: '2026-07-01T00:00:00.000Z',
     updatedAt: '2026-07-01T00:00:00.000Z',
@@ -64,7 +64,9 @@ function source(sourceType: string, externalId: string, metadata: Record<string,
 
 describe('board stages', () => {
   it('draws every Work lane in the canonical stage order, plus the self-review lane older projects hold', () => {
-    expect(BOARD_STAGES.map(stage => stage.id).filter(id => id !== 'review')).toEqual(Object.keys(workBoard.phases));
+    expect(BOARD_STAGES.map(stage => stage.id).filter(id => id !== 'review')).toEqual(
+      work.phases.map(phase => phase.id),
+    );
     expect(BOARD_STAGES.map(stage => stage.label)).toEqual([
       'Intake',
       'Triage',
@@ -123,7 +125,7 @@ describe('pull request cards on the Work board', () => {
     const issueLanes = itemStageOptions({ ...workItem('github-issue', ['intake']), board: 'work' }, work).map(
       stage => stage.id,
     );
-    expect(issueLanes).toEqual(Object.keys(workBoard.phases).filter(id => id !== 'pr-review'));
+    expect(issueLanes).toEqual(work.phases.map(phase => phase.id).filter(id => id !== 'pr-review'));
     const issue = workItem('github-issue', ['intake']);
     expect(pullRequestMayEnter(work, issue, 'execute')).toBe(true);
     // An issue card enters Review only once it carries a pull request.
@@ -150,7 +152,7 @@ describe('pull request cards on the Work board', () => {
         ],
       },
     };
-    expect(itemStageOptions(issue, work).map(stage => stage.id)).toEqual(Object.keys(workBoard.phases));
+    expect(itemStageOptions(issue, work).map(stage => stage.id)).toEqual(work.phases.map(phase => phase.id));
     expect(pullRequestMayEnter(work, issue, 'pr-review')).toBe(true);
     expect(pullRequestMayEnter(work, issue, 'execute')).toBe(true);
   });
@@ -173,14 +175,13 @@ describe('pull request cards on a board with its own phase names', () => {
 });
 
 describe('boardLoadingStages', () => {
-  it("shows the intake feed loading in the board's own rest and triage columns", () => {
+  it("shows the intake setup loading in the board's own initial column only", () => {
     const loading = boardLoadingStages({
       board: shipBoard,
       stages: shipBoard.phases.map(phase => ({ id: phase.id, label: phase.title })),
       itemsPending: false,
       intakePending: true,
-      triagePending: true,
     });
-    expect([...loading]).toEqual(['inbox', 'think']);
+    expect([...loading]).toEqual(['inbox']);
   });
 });

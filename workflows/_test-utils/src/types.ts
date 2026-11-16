@@ -2,13 +2,13 @@
  * Types for workflow test factory
  */
 
-import type { Workflow } from '@mastra/core/workflows';
-import type { MastraStorage } from '@mastra/core/storage';
-import type { PubSub } from '@mastra/core/events';
 import type { AgentConfig, PublicStructuredOutputOptions, ToolsInput } from '@mastra/core/agent';
-import type { RequestContext } from '@mastra/core/di';
 import type { DurableAgentStreamOptions } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { RequestContext } from '@mastra/core/di';
+import type { PubSub } from '@mastra/core/events';
+import type { MastraStorage } from '@mastra/core/storage';
+import type { Workflow } from '@mastra/core/workflows';
 
 // ============================================================================
 // Durable Agent Test Types
@@ -422,6 +422,8 @@ export type WorkflowTestDomain =
 export type SkippableTest =
   // State-related tests (evented engine WIP)
   | 'state'
+  // setState rejecting updates that break stateSchema (the evented engine never validates setState)
+  | 'stateValidation'
   // Error identity preservation (some engines serialize errors)
   | 'errorIdentity'
   // Schema validation throwing errors
@@ -434,6 +436,9 @@ export type SkippableTest =
   | 'schemaNestedValidation'
   // ZodError cause preservation when validation fails
   | 'schemaZodErrorCause'
+  // Known failure, pinned with it.fails instead of skipped: getInitData() returns the
+  // validated input after inputSchema defaults apply (#29424)
+  | 'schemaInitDataDefaultFails'
   // waitForEvent removed error
   | 'schemaWaitForEvent'
   // Abort returning 'canceled' status
@@ -476,6 +481,8 @@ export type SkippableTest =
   | 'getInitData'
   // Deprecated sync getStepResult (throws on storageVersion: 2 runs)
   | 'getStepResultSync'
+  // Reading the sync `state` field (throws on storageVersion: 2 runs)
+  | 'stateSync'
   // Error cause chain preservation (some engines have memoization issues with error cause chains)
   | 'errorCauseChain'
   // Variable resolution error handling (Inngest has race condition with snapshot persistence)

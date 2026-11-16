@@ -215,6 +215,26 @@ describe('mastra.schedules canonical service', () => {
     expect(typeof resumed.nextFireAt).toBe('number');
   });
 
+  it('resuming a one-off wakes and starts the scheduler runtime', async () => {
+    const { mastra } = makeMastra(['a']);
+    const schedule = await mastra.schedules.create({
+      agentId: 'a',
+      runAt: Date.now() + 60_000,
+      prompt: 'p',
+    });
+    await mastra.schedules.pause(schedule.id);
+
+    const publishWake = vi.spyOn(mastra, '__publishSchedulerWake');
+    const ensureRuntime = vi.spyOn(mastra, '__ensureScheduleRuntimeReady');
+
+    const resumed = await mastra.schedules.resume(schedule.id);
+
+    expect(resumed.status).toBe('active');
+    expect(resumed.nextFireAt).toBe(schedule.runAt);
+    expect(publishWake).toHaveBeenCalledWith(schedule.id);
+    expect(ensureRuntime).toHaveBeenCalledOnce();
+  });
+
   it('rejects pause/resume on completed schedules but reactivates on a timing change', async () => {
     const { mastra } = makeMastra(['a']);
     const schedule = await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'p' });
@@ -350,15 +370,21 @@ describe('mastra.schedules canonical service', () => {
     }
   });
 
-  it('list hides completed schedules unless explicitly filtered by status', async () => {
+  it('list fetches active and paused schedules before storage limits unless status is explicit', async () => {
     const { mastra } = makeMastra(['a']);
     const completed = await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'x' });
     await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'y' });
     const store = await mastra.getStorage()!.getStore('schedules');
     await store!.updateSchedule(completed.id, { status: 'completed' });
+    const listSpy = vi.spyOn(store!, 'listSchedules');
 
     expect((await mastra.schedules.list()).map(schedule => schedule.id)).not.toContain(completed.id);
+    expect(listSpy.mock.calls.map(([filter]) => filter?.status)).toEqual(['active', 'paused']);
+
+    listSpy.mockClear();
     expect((await mastra.schedules.list({ status: 'completed' })).map(schedule => schedule.id)).toEqual([completed.id]);
+    expect(listSpy).toHaveBeenCalledOnce();
+    expect(listSpy).toHaveBeenCalledWith({ status: 'completed' });
   });
 
   it('update({ status: active }) on a paused schedule recomputes nextFireAt like resume()', async () => {
@@ -394,6 +420,95 @@ describe('mastra.schedules canonical service', () => {
     const patched = (await mastra.schedules.update(hb.id, { prompt: 'changed' })) as AgentSchedule;
     expect(patched.prompt).toBe('changed');
     expect(patched.nextFireAt).toBe(prevNext);
+  });
+
+  it('creates one-off schedules from runAt and rejects invalid timing', async () => {
+    const { mastra } = makeMastra(['a']);
+    const runAt = new Date(Date.now() + 60_000);
+
+    const once = await mastra.schedules.create({ agentId: 'a', runAt, prompt: 'later' });
+    expect(once.cron).toBeUndefined();
+    expect(once.runAt).toBe(runAt.getTime());
+    expect(once.nextFireAt).toBe(runAt.getTime());
+    expect(once.status).toBe('active');
+
+    await expect(mastra.schedules.create({ agentId: 'a', prompt: 'x' } as any)).rejects.toMatchObject({
+      details: { status: 400 },
+    });
+    await expect(
+      mastra.schedules.create({ agentId: 'a', runAt, endAt: Date.now() + 120_000, prompt: 'x' } as any),
+    ).rejects.toMatchObject({ details: { status: 400 } });
+    await expect(
+      mastra.schedules.create({ agentId: 'a', cron: '* * * * *', endAt: Date.now() - 1, prompt: 'x' }),
+    ).rejects.toMatchObject({ details: { status: 400 } });
+  });
+
+  it('stores endAt on bounded cron schedules', async () => {
+    const { mastra } = makeMastra(['a']);
+    const endAt = Date.now() + 24 * 60 * 60 * 1000;
+    const hb = await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', endAt, prompt: 'x' });
+    expect(hb.endAt).toBe(endAt);
+    expect(hb.status).toBe('active');
+    expect((await mastra.schedules.get(hb.id))?.endAt).toBe(endAt);
+  });
+
+  it('rejects pause/resume on completed schedules but reactivates on a timing change', async () => {
+    const { mastra } = makeMastra(['a']);
+    const hb = await mastra.schedules.create({ agentId: 'a', runAt: Date.now() + 60_000, prompt: 'x' });
+    const store = await mastra.getStorage()!.getStore('schedules');
+    await store!.updateSchedule(hb.id, { status: 'completed' });
+
+    await expect(mastra.schedules.pause(hb.id)).rejects.toMatchObject({ details: { status: 409 } });
+    await expect(mastra.schedules.resume(hb.id)).rejects.toMatchObject({ details: { status: 409 } });
+
+    const tzOnly = await mastra.schedules.update(hb.id, { timezone: 'UTC' });
+    expect(tzOnly.status).toBe('completed');
+
+    const sameRunAt = await mastra.schedules.update(hb.id, { runAt: new Date(hb.runAt!) });
+    expect(sameRunAt.status).toBe('completed');
+
+    const newRunAt = Date.now() + 120_000;
+    const updated = await mastra.schedules.update(hb.id, { runAt: newRunAt });
+    expect(updated.status).toBe('active');
+    expect(updated.nextFireAt).toBe(newRunAt);
+
+    await expect(mastra.schedules.update(hb.id, { cron: '* * * * *' })).rejects.toMatchObject({
+      details: { status: 400 },
+    });
+  });
+
+  it('completes an exhausted cron on update or resume and maps invalid cron to 400', async () => {
+    const { mastra } = makeMastra(['a']);
+    const pastYearCron = '0 0 0 1 1 * 2020';
+
+    const s = await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'x' });
+    await expect(mastra.schedules.update(s.id, { cron: 'not a cron' })).rejects.toMatchObject({
+      details: { status: 400 },
+    });
+    const exhausted = await mastra.schedules.update(s.id, { cron: pastYearCron });
+    expect(exhausted.status).toBe('completed');
+
+    const p = await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'y' });
+    await mastra.schedules.pause(p.id);
+    const store = await mastra.getStorage()!.getStore('schedules');
+    await store!.updateSchedule(p.id, { cron: pastYearCron });
+    const resumed = await mastra.schedules.resume(p.id);
+    expect(resumed.status).toBe('completed');
+  });
+
+  it('list filters by status', async () => {
+    const { mastra } = makeMastra(['a']);
+    const a = await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'x' });
+    await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'y' });
+    await mastra.schedules.pause(a.id);
+    const paused = await mastra.schedules.list({ status: 'paused' });
+    expect(paused.map(s => s.id)).toEqual([a.id]);
+
+    const once = await mastra.schedules.create({ agentId: 'a', runAt: Date.now() + 60_000, prompt: 'z' });
+    const store = await mastra.getStorage()!.getStore('schedules');
+    await store!.updateSchedule(once.id, { status: 'completed' });
+    expect((await mastra.schedules.list()).map(s => s.id)).not.toContain(once.id);
+    expect((await mastra.schedules.list({ status: 'completed' })).map(s => s.id)).toEqual([once.id]);
   });
 
   it('delete is idempotent', async () => {

@@ -1,12 +1,12 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Entity, EntityContent, EntityName, EntityDescription } from '@mastra/playground-ui/components/Entity';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
+import { IconPlugin1 } from '@mastra/playground-ui/icons/central/IconPlugin1';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { hueFillClass, hueForName } from '@mastra/playground-ui/utils/colors';
 import { useToolProviders } from '@mastra/react/hooks/tool-providers';
-import { Plug } from 'lucide-react';
-import { useMemo, useState } from 'react';
 
+import { useMemo, useState } from 'react';
 import { ToolProviderDialog } from './tool-provider-dialog';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
 
@@ -46,7 +46,7 @@ export function IntegrationToolsSection({ selectedToolIds, onSubmitTools }: Inte
     <>
       <SubSectionRoot>
         <Section.Header>
-          <SubSectionHeader title="Integration Tools" icon={<Plug />} />
+          <SubSectionHeader title="Integration Tools" icon={<IconPlugin1 />} />
         </Section.Header>
 
         <div className="flex flex-col gap-1">

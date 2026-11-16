@@ -65,6 +65,7 @@ export class DevLogger {
     apiPrefix: string,
     startTime?: number,
     https?: HTTPSOptions,
+    factory?: boolean,
   ): void {
     let protocol = 'http';
     if (https && https.key && https.cert) {
@@ -75,9 +76,18 @@ export class DevLogger {
     const timing = startTime ? `${Date.now() - startTime} ms` : 'XXX ms';
     console.info(pc.inverse(pc.green(' mastra ')) + ` ${pc.green(version)} ${pc.gray('ready in')} ${timing}`);
     console.info('');
-    console.info(`${pc.dim('│')} ${pc.bold('Studio:')} ${pc.cyan(`${protocol}://${host}:${port}${studioBasePath}`)}`);
-    console.info(`${pc.dim('│')} ${pc.bold('API:')}    ${protocol}://${host}:${port}${apiPrefix}`);
-    console.info(`${pc.dim('│')} ${pc.bold('Deploy:')} ${pc.cyan('mastra deploy')}`);
+    // Factory serves its own UI at the root in place of Studio.
+    const rows: Array<[string, string]> = [
+      factory
+        ? ['Factory UI:', pc.cyan(`${protocol}://${host}:${port}`)]
+        : ['Studio:', pc.cyan(`${protocol}://${host}:${port}${studioBasePath}`)],
+      ['API:', `${protocol}://${host}:${port}${apiPrefix}`],
+      ['Deploy:', pc.cyan('mastra deploy')],
+    ];
+    const labelWidth = Math.max(...rows.map(([label]) => label.length));
+    for (const [label, value] of rows) {
+      console.info(`${pc.dim('│')} ${pc.bold(label)}${' '.repeat(labelWidth - label.length + 1)}${value}`);
+    }
     console.info('');
   }
 

@@ -283,12 +283,15 @@ Returns: `boolean`
 
 ### Tool approvals
 
-#### `resolveToolApproval(toolName)`
+#### `resolveToolApproval(toolName, scope?)`
 
 Return the effective policy after applying explicit tool rules, session grants, and category rules.
 
+Rules belong to each thread. Pass a run's `RequestContext` as `scope` to use the rules and grants of the thread that run belongs to. A thread ID as `scope` checks that thread's grants against the current thread's rules. Without `scope`, the current thread is used.
+
 ```typescript
 const policy = session.resolveToolApproval('execute_command')
+const policyForRun = session.resolveToolApproval('write_file', requestContext)
 ```
 
 Returns: `PermissionPolicy`

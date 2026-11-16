@@ -341,8 +341,11 @@ const pageSchema = z
   })
   .strict();
 
+export const traceQueryRootSourceSchema = z.enum(['legacy', 'aggregated']);
+
 const traceQueryRequestObjectSchema = z
   .object({
+    rootSource: traceQueryRootSourceSchema.optional(),
     textSearch: observabilityTextSearchSchema.optional(),
     timeRange: traceQueryTimeRangeSchema,
     where: traceQueryPredicateSchema.optional(),
@@ -372,6 +375,9 @@ const traceQueryRequestObjectSchema = z
   })
   .strict()
   .superRefine((request, context) => {
+    if (request.rootSource === 'aggregated' && request.mode === 'delta') {
+      context.addIssue({ code: 'custom', path: ['rootSource'], message: 'Aggregated roots do not support delta mode' });
+    }
     if (request.mode === 'delta') {
       for (const field of ['page', 'pagination', 'group', 'orderBy', 'textSearch'] as const) {
         if (request[field] !== undefined) {
@@ -431,6 +437,9 @@ export const traceQueryTraceSchema = z
   .object({
     traceId: z.string(),
     rootSpanId: z.string(),
+    rootKind: z.enum(['native', 'external']).optional(),
+    runtimeDurationMs: z.number().nonnegative().nullable().optional(),
+    errorCount: z.number().int().nonnegative().nullable().optional(),
     name: z.string(),
     entityId: z.string().nullable(),
     parentSpanId: z.string().nullable(),
@@ -859,6 +868,7 @@ export interface TraceQueryTenantScope {
 }
 
 export interface TrustedTraceQueryBasePlan {
+  rootSource?: 'aggregated';
   timeRange: { from: string; to: string };
   textSearch?: string;
   where?: TrustedTraceQueryPredicate;
@@ -1153,6 +1163,8 @@ export function parseGetTraceQueryValuesArgs(input: unknown): NormalizedGetTrace
 }
 
 export interface TraceQueryPlanOptions {
+  /** The host provides an aggregated-root reader. Defaults to false. */
+  allowAggregatedRoots?: boolean;
   /** Opaque host authorization state bound into keyset cursors. */
   authorizationBinding?: string;
   /** Trusted tenant scope; applied by stores and bound into keyset cursors. */

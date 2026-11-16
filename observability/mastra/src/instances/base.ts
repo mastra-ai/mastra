@@ -34,6 +34,7 @@ import type {
 } from '@mastra/core/observability';
 import { getNestedValue, setNestedValue } from '@mastra/core/utils';
 import { ObservabilityBus } from '../bus';
+import type { ObservabilityHandler } from '../bus/route-event';
 import type { ObservabilityInstanceConfig } from '../config';
 import { SamplingStrategyType } from '../config';
 import { LoggerContextImpl } from '../context/logger';
@@ -392,6 +393,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // The rebuilt span has no live parent, so restore the lineage computed before export
     if (span instanceof BaseSpan) {
       span.restoreEntityLineage(cached);
+      span.restoreErrorCount(cached);
     }
 
     // Rebuilding an existing completed segment must not reopen its outcome.
@@ -619,8 +621,12 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * Internal hook used by RecordedTrace/RecordedSpan hydration to route
    * non-tracing annotation events back through the normal exporter pipeline.
    */
-  __emitRecordedEvent(event: ObservabilityEvent): void {
-    this.emitObservabilityEvent(event);
+  __emitRecordedEvent(event: ObservabilityEvent, shouldHandle?: (handler: ObservabilityHandler) => boolean): void {
+    if (shouldHandle) {
+      this.observabilityBus.emit(event, shouldHandle);
+    } else {
+      this.emitObservabilityEvent(event);
+    }
   }
 
   /**

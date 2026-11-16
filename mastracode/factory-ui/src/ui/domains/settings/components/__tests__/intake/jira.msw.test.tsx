@@ -139,7 +139,7 @@ describe('IntakeSection jira', () => {
     renderIntakeSection();
 
     const section = await screen.findByRole('region', { name: 'Jira' });
-    expect(await within(section).findByText('Loading Jira projects…')).toBeInTheDocument();
+    expect(await within(section).findByRole('status', { name: 'Loading Jira projects' })).toBeInTheDocument();
     expect(within(section).queryByText('10001')).not.toBeInTheDocument();
     expect(within(section).queryByLabelText('Factory to add for 10001')).not.toBeInTheDocument();
 

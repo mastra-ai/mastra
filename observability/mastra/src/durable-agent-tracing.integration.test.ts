@@ -788,6 +788,32 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     },
   );
 
+  // Issue #29779: core 1.82 records the model call from the raw provider stream, whose
+  // `finish` chunk carries no model id. The serving model arrives earlier in
+  // `response-metadata`, so the inference span must keep it instead of falling back to
+  // the requested model (wrong under gateway failover, and lost in PostHog generations).
+  it.each(['plain', 'durable', 'evented'] as const)(
+    '%s agent: each model call span reports the model that actually served the request',
+    async variant => {
+      const agent = new Agent({
+        id: 'a',
+        name: 'a',
+        instructions: 'x',
+        model: namedTextModel('test-provider', 'requested-model', 'Hello') as any,
+      });
+      const { wrapped } = buildMastra(testExporter, agent, variant);
+      if (variant === 'plain') {
+        await (await wrapped.stream('hi')).consumeStream();
+        await settle(testExporter);
+      } else {
+        await runToCompletion(wrapped, 'hi', testExporter);
+      }
+
+      const [inference] = byStart(testExporter.getSpansByType('model_inference' as any)) as any[];
+      expect(inference.attributes).toMatchObject({ model: 'requested-model', responseModel: 'mock-model-id' });
+    },
+  );
+
   // A processor that drops `step-finish` must not leave the model call span open:
   // MODEL_INFERENCE waits for the processed step-finish, so the run's finish settles it.
   it.each(['plain', 'durable', 'evented'] as const)(

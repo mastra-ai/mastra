@@ -19,6 +19,8 @@ import type {
 } from './gateways/base.js';
 import { defaultGateways } from './gateways/defaults.js';
 import { GatewayManager } from './gateways/index.js';
+import { gatewayServesObservationalMemory } from './gateways/mastra.js';
+import { isOpenRouterModel, prepareToolsForMastraGateway } from './mastra-gateway-provider-tools.js';
 
 import { createOpenAIWebSocketFetch } from './openai-websocket-fetch.js';
 import type { OpenAIWebSocketFetch } from './openai-websocket-fetch.js';
@@ -301,6 +303,30 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     }
   }
 
+  /**
+   * Whether the Mastra gateway serves Observational Memory for this model's resolved credential.
+   *
+   * Gateway models do not all get memory from the gateway: only a Gateway project key routes
+   * through the memory-aware gateway, while organization keys (`msk-gateway-…`, `mskv2_…`) are
+   * served by a gateway without the memory API. Callers that would otherwise skip local memory
+   * processing for gateway models (the Observational Memory processor) use this to tell the two
+   * apart.
+   *
+   * Returns `false` for a model that isn't on the Mastra gateway. A credential that cannot be
+   * resolved is thrown rather than reported as local memory: the model call resolves its
+   * credential through this same path, so answering "local" when the lookup failed is how the
+   * gateway and the local store both end up saving the same conversation. That includes a missing
+   * credential (`MASTRA_GATEWAY_NO_API_KEY`, an unset environment variable) — the gateway may
+   * serve memory as soon as the credential resolves, so the ownership check stops the run instead
+   * of guessing.
+   */
+  async isGatewayMemoryManaged(): Promise<boolean> {
+    if (this.gatewayId !== 'mastra') return false;
+    const resolved = this.#manager.resolveModelId(this.config.routerId);
+    const auth = await this.resolveAuth(resolved.providerId, resolved.modelId);
+    return gatewayServesObservationalMemory(auth.apiKey);
+  }
+
   /** @internal */
   _getStreamTransport(): StreamTransport | undefined {
     return this.#lastStreamTransport;
@@ -435,7 +461,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       };
     }
 
-    const sanitizedOptions = this.stripUnsupportedSamplingParams(options);
+    let sanitizedOptions = this.stripUnsupportedSamplingParams(options);
 
     const model = await this.resolveLanguageModel({
       apiKey: auth.apiKey ?? '',
@@ -443,6 +469,9 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       headers: mergeHeaders(this.config.headers, auth.headers),
       ...resolved,
     });
+    if (this.gatewayId === 'mastra' && isOpenRouterModel(model)) {
+      sanitizedOptions = prepareToolsForMastraGateway(sanitizedOptions, this.config.routerId);
+    }
 
     // Handle V2, V3, and V4 models
     if (isLanguageModelV4(model)) {
@@ -480,7 +509,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       };
     }
 
-    const sanitizedOptions = this.stripUnsupportedSamplingParams(options);
+    let sanitizedOptions = this.stripUnsupportedSamplingParams(options);
 
     const { transport, websocket } = getOpenAITransport(
       sanitizedOptions.providerOptions as ProviderOptions | undefined,
@@ -502,6 +531,9 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       responsesWebSocket: websocket,
       ...resolved,
     });
+    if (this.gatewayId === 'mastra' && isOpenRouterModel(model)) {
+      sanitizedOptions = prepareToolsForMastraGateway(sanitizedOptions, this.config.routerId);
+    }
 
     // Handle V2, V3, and V4 models
     const streamTransport = this.#lastStreamTransport;

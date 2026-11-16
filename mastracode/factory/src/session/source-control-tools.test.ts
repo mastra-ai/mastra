@@ -77,7 +77,6 @@ async function fixture(integrationId = 'gitlab') {
     repositoryId,
     createdByUserId: 'user-1',
     branch: null,
-    sandboxProvider: 'custom',
     sandboxWorkdir: '/workspace/repo',
     setupCommand: null,
     teardownCommand: null,
@@ -239,7 +238,7 @@ describe('createSourceControlTools', () => {
         requestContext: requestContext(),
         providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
         audit: setup.audit,
-        selfReviewApprovedHead: async () => approvedHead,
+        workItem: { selfReviewApprovedHead: async () => approvedHead, recordRepository: async () => {} },
       });
       const run = () => (tools.source_control_create_change_request!.execute as any)({ title: 'Ship it' });
       return { setup, run };
@@ -265,7 +264,12 @@ describe('createSourceControlTools', () => {
 
     // The gate as the Factory wires it, reading the bound card and its board from real storage.
     // `olderWork`: the project's Work was stored while Work still had its `review` self-review phase.
-    const boundTo = async (source: 'github-issue' | 'github-pr', role: 'work' | 'review', olderWork = true) => {
+    const boundTo = async (
+      source: 'github-issue' | 'github-pr',
+      role: 'work' | 'review',
+      olderWork = true,
+      cardRepository?: string,
+    ) => {
       const seeded = await createFactoryStorageForTests();
       const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shipyard' } });
       await seeded.workItems.prepareRunStart({
@@ -283,7 +287,7 @@ describe('createSourceControlTools', () => {
             title: 'Factory item',
             stages: [olderWork ? 'review' : 'execute'],
             sessions: {},
-            metadata: { authorTrusted: true },
+            metadata: { authorTrusted: true, ...(cardRepository ? { repository: cardRepository } : {}) },
           },
         },
         role,
@@ -294,6 +298,7 @@ describe('createSourceControlTools', () => {
       });
       const setup = await fixture();
       setup.storage.connectionsRows[0]!.factoryProjectId = project.id;
+      for (const row of setup.storage.sessionsRows) row.factoryProjectId = project.id;
       const context = requestContext();
       const controller = context.get('controller') as AgentControllerRequestContext;
       context.set('controller', {
@@ -304,14 +309,25 @@ describe('createSourceControlTools', () => {
         requestContext: context,
         providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
         audit: setup.audit,
-        selfReviewApprovedHead: () =>
-          selfReviewApprovedHead({
-            requestContext: context,
-            workItems: seeded.workItems,
-            boards: olderWork ? new Map([['work', selfReviewWorkBoard]]) : createBoardRegistry(),
-          }),
+        workItem: {
+          selfReviewApprovedHead: target =>
+            selfReviewApprovedHead({
+              requestContext: context,
+              workItems: seeded.workItems,
+              boards: olderWork ? new Map([['work', selfReviewWorkBoard]]) : createBoardRegistry(),
+              target,
+            }),
+          recordRepository: async () => {},
+        },
       });
-      return { setup, run: () => (tools.source_control_create_change_request!.execute as any)({ title: 'Ship it' }) };
+      return {
+        setup,
+        run: (repository?: string) =>
+          (tools.source_control_create_change_request!.execute as any)({
+            title: 'Ship it',
+            ...(repository ? { repository } : {}),
+          }),
+      };
     };
 
     it("leaves a pull request card's reviewer on Work free to open a change request", async () => {
@@ -324,6 +340,18 @@ describe('createSourceControlTools', () => {
       const { setup, run } = await boundTo('github-issue', 'work');
       await expect(run()).rejects.toThrow('Self-review has not approved');
       expect(setup.createPullRequest).not.toHaveBeenCalled();
+    });
+
+    it('holds a change request in the repository the card names to self-review, even outside the session repository', async () => {
+      const { setup, run } = await boundTo('github-issue', 'work', true, 'acme/other');
+      await expect(run('acme/other')).rejects.toThrow('Self-review has not approved');
+      expect(setup.createPullRequest).not.toHaveBeenCalled();
+    });
+
+    it("leaves a change request in a repository the card doesn't name ungated", async () => {
+      const { setup, run } = await boundTo('github-issue', 'work', true, 'acme/other');
+      await expect(run()).resolves.toMatchObject({ id: '17' });
+      expect(setup.createPullRequest).toHaveBeenCalled();
     });
 
     it("lets the builder on a new project's Work, which has no self-review phase, open its change request", async () => {

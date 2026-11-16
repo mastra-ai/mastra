@@ -49,7 +49,7 @@ function item(sessions: Record<string, WorkItemSessionRef>): WorkItem {
     metadata: {},
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
+    description: null,
     revision: 1,
     createdAt: '2026-08-30T00:00:00.000Z',
     updatedAt: '2026-08-30T00:00:00.000Z',
@@ -242,6 +242,10 @@ describe('cardMoves', () => {
         { label: 'Re-review', role: 'review', stage: 'pr-review' },
       ]);
       expect(cardMoves(carrying('merged', { merged: true }), 'done', work)).toEqual([]);
+    });
+
+    it("offers no Re-review in Done while the pull request's state is unknown", () => {
+      expect(cardMoves(carrying(''), 'done', work)).toEqual([]);
     });
   });
 

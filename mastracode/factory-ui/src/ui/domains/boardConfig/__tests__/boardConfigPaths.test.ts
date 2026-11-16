@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { boardConfigPath, boardSkillsPath, parseBoardConfigPath } from '../boardConfigPaths';
+import { boardRulesPath, boardConfigPath, boardSkillsPath, parseBoardConfigPath } from '../boardConfigPaths';
 
 describe('board config paths', () => {
   it('nests a board configuration under the board it configures', () => {
@@ -44,12 +44,27 @@ describe('board config paths', () => {
     });
   });
 
+  it("keeps a board's rules beside its settings, apart from a phase named rules", () => {
+    expect(boardRulesPath('fp-1', 'work')).toBe('/factories/fp-1/work/rules');
+    expect(parseBoardConfigPath(boardRulesPath('fp-1', 'release notes'))).toEqual({
+      factoryId: 'fp-1',
+      boardId: 'release notes',
+      rules: true,
+    });
+    expect(parseBoardConfigPath(boardConfigPath('fp-1', 'work', 'rules'))).toEqual({
+      factoryId: 'fp-1',
+      boardId: 'work',
+      phaseKey: 'rules',
+    });
+  });
+
   it('ignores the board itself and other pages', () => {
     expect(parseBoardConfigPath('/factories/fp-1/work')).toBeUndefined();
     expect(parseBoardConfigPath('/factories/fp-1/boards/release')).toBeUndefined();
     expect(parseBoardConfigPath('/factories/fp-1/settings/board')).toBeUndefined();
     expect(parseBoardConfigPath('/factories/fp-1/work/config/planning/extra')).toBeUndefined();
     expect(parseBoardConfigPath('/factories/fp-1/work/skills/extra')).toBeUndefined();
+    expect(parseBoardConfigPath('/factories/fp-1/work/rules/extra')).toBeUndefined();
     expect(parseBoardConfigPath('/factories/fp-1/review/config')).toBeUndefined();
   });
 

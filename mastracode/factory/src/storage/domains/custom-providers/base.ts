@@ -53,8 +53,7 @@ export interface CustomProviderInput {
  *   host without giving a key, which would send the saved key there.
  */
 export type CustomProviderWrite =
-  | { saved: CustomProviderRecord }
-  | { refused: 'name_taken' | 'not_found' | 'api_key_required' };
+  { saved: CustomProviderRecord } | { refused: 'name_taken' | 'not_found' | 'api_key_required' };
 
 function sameOrigin(left: string, right: string): boolean {
   try {

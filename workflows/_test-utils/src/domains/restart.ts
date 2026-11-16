@@ -715,28 +715,25 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
         const restartResult = await run.restart();
 
         expect(restartResult.status).toBe('success');
-        expect(restartResult).toMatchObject({
-          status: 'success',
-          steps: {
-            input: { value: 0 },
-            step1: {
-              status: 'success',
-              output: { step1Result: 2 },
-              startedAt: expect.any(Number),
-              endedAt: expect.any(Number),
-            },
-            'restart-nestedWorkflow': {
-              status: 'success',
-              output: { nestedFinal: 4 },
-              startedAt: expect.any(Number),
-              endedAt: expect.any(Number),
-            },
-            step4: {
-              status: 'success',
-              output: { final: 5 },
-              startedAt: expect.any(Number),
-              endedAt: expect.any(Number),
-            },
+        expect(await stepsOf(restartResult)).toMatchObject({
+          input: { value: 0 },
+          step1: {
+            status: 'success',
+            output: { step1Result: 2 },
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          'restart-nestedWorkflow': {
+            status: 'success',
+            output: { nestedFinal: 4 },
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          step4: {
+            status: 'success',
+            output: { final: 5 },
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
           },
         });
 

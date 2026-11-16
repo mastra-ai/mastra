@@ -3,7 +3,7 @@ import { AgentController } from '@mastra/core/agent-controller';
 import { InMemoryStore } from '@mastra/core/storage';
 import { Workspace } from '@mastra/core/workspace';
 import { Hono } from 'hono';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { ProjectRoutes } from './projects.js';
@@ -109,12 +109,14 @@ describe('scenario: apply-default-model reaches a live run', () => {
     });
 
     const response = await app.request(`/web/factory/projects/${project.id}/apply-default-model`, { method: 'POST' });
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ applied: [thread.id], skipped: [] });
+    expect(response.status).toBe(202);
+    expect(await response.json()).toEqual({ modelId: 'anthropic/claude-opus-4-6', status: 'started' });
     expect(session.model.get()).toBe('openai/gpt-5.2-codex');
 
-    await session.model.syncFromPersisted();
-    expect(session.model.get()).toBe('anthropic/claude-opus-4-6');
+    await vi.waitFor(async () => {
+      await session.model.syncFromPersisted();
+      expect(session.model.get()).toBe('anthropic/claude-opus-4-6');
+    });
   });
 
   it('updates the bound thread without changing a sibling thread', async () => {
@@ -147,14 +149,17 @@ describe('scenario: apply-default-model reaches a live run', () => {
     });
 
     const response = await app.request(`/web/factory/projects/${project.id}/apply-default-model`, { method: 'POST' });
-    expect(await response.json()).toMatchObject({ applied: [boundThread.id], skipped: [] });
+    expect(response.status).toBe(202);
+    expect(await response.json()).toEqual({ modelId: 'anthropic/claude-opus-4-6', status: 'started' });
 
     expect(session.thread.getId()).toBe(siblingThread.id);
     await session.model.syncFromPersisted();
     expect(session.model.get()).toBe('openai/gpt-5.5');
 
     await session.thread.switch({ threadId: boundThread.id });
-    await session.model.syncFromPersisted();
-    expect(session.model.get()).toBe('anthropic/claude-opus-4-6');
+    await vi.waitFor(async () => {
+      await session.model.syncFromPersisted();
+      expect(session.model.get()).toBe('anthropic/claude-opus-4-6');
+    });
   });
 });

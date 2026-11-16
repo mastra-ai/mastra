@@ -16,10 +16,12 @@
  */
 
 import type { RepositoryAccess } from '../../capabilities/version-control.js';
+import { recordSandboxCommand } from '../../metrics/sandbox.js';
 import { isValidGitRef } from '../../sandbox/git-ref.js';
 import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
+import { appliedSandboxEnv, maskSandboxEnvValues } from '../../sandbox/sandbox-env.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
-import { timedPhase } from '../../timing.js';
+import { bootDiagnosticsEnabled, timedPhase } from '../../timing.js';
 
 type MaterializationStore = Pick<SourceControlStorageHandle['sessions'], 'markMaterialized'>;
 
@@ -88,7 +90,7 @@ const SH_RETRY_DELAY_MS = 2000;
 export async function sh(
   sandbox: ExecutableSandbox,
   script: string,
-  options: ShOptions = {},
+  options: ShOptions & Pick<CommandOptions, 'env'> = {},
 ): Promise<SandboxCommandResult> {
   return execute(sandbox, 'sh', ['-c', script], options);
 }
@@ -113,16 +115,22 @@ async function execute(
         timeoutMs: Math.max(deadlineMs - Date.now(), 1),
       });
       if (options.phase) {
-        process.stderr.write(
-          `[factory:timing] ${options.phase} attempt=${attempt + 1} exit=${result.exitCode} ${Math.round(performance.now() - started)}ms\n`,
-        );
+        const elapsed = performance.now() - started;
+        if (bootDiagnosticsEnabled) {
+          process.stderr.write(
+            `[factory:timing] ${options.phase} attempt=${attempt + 1} exit=${result.exitCode} ${Math.round(elapsed)}ms\n`,
+          );
+        }
+        recordSandboxCommand(options.phase, elapsed, result.exitCode === 0 ? 'ok' : 'exit');
       }
       return result;
     } catch (error) {
       if (options.phase) {
+        const elapsed = performance.now() - started;
         process.stderr.write(
-          `[factory:timing] ${options.phase} attempt=${attempt + 1} threw after ${Math.round(performance.now() - started)}ms: ${error instanceof Error ? error.message : String(error)}\n`,
+          `[factory:timing] ${options.phase} attempt=${attempt + 1} threw after ${Math.round(elapsed)}ms: ${error instanceof Error ? error.message : String(error)}\n`,
         );
+        recordSandboxCommand(options.phase, elapsed, 'threw');
       }
       if (attempt >= SH_RETRIES || !isTransientTransportError(error)) throw error;
       const delayMs = SH_RETRY_DELAY_MS * (attempt + 1);
@@ -420,8 +428,9 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
     // destination with a non-retryable fatal. Nothing here is recoverable,
     // the probe above already ruled out a checkout of this repo, so
     // clear its contents before cloning, exactly as the retry path does. Keep
-    // the workdir itself because LocalSandbox runs commands with this
-    // directory as the child process cwd.
+    // the workdir itself because Factory's own commands use it as their cwd
+    // (`gh pr create`, and the `cd` each lifecycle command starts with), so it
+    // has to exist as a directory.
     const authEnv = gitAuthenticationEnvironment(
       cleanCloneUrl,
       token,
@@ -438,7 +447,7 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         beforeRetry: async () => {
           // A clone that died partway leaves the destination non-empty, which
           // git refuses to clone into. Clear its contents so the retry starts
-          // clean without removing LocalSandbox's process cwd.
+          // clean, leaving a directory Factory's commands still use as cwd.
           await clearWorkdir(sandbox, workdir);
         },
       },
@@ -470,6 +479,18 @@ export interface SessionBranchOptions {
  * answers from the session's `GH_TOKEN`, so no credential is ever written.
  */
 const GH_CREDENTIAL_HELPER = '!gh auth git-credential';
+
+/**
+ * The git credential helper for a GitHub checkout whose repository is covered
+ * by a numbered group token (`GH_TOKEN_2`, ...) instead of `GH_TOKEN`. It
+ * falls back to `GH_TOKEN` while the group token is unset, as it is when an
+ * org PAT is installed.
+ */
+export function githubCredentialHelper(tokenEnvName = 'GH_TOKEN'): string {
+  if (tokenEnvName === 'GH_TOKEN') return GH_CREDENTIAL_HELPER;
+  if (!/^GH_TOKEN_\d+$/.test(tokenEnvName)) throw new Error(`Invalid GitHub token variable: ${tokenEnvName}`);
+  return `!f() { GH_TOKEN="\${${tokenEnvName}:-$GH_TOKEN}" gh auth git-credential "$@"; }; f`;
+}
 
 async function fetchStartPoint(
   sandbox: ExecutableSandbox,
@@ -541,6 +562,11 @@ export interface SyncEnvironmentRepositoryOptions {
   repoFullName: string;
   cloneUrl?: string;
   authUsername?: string;
+  /**
+   * The sandbox variable carrying this GitHub repository's token; the checkout
+   * gets a credential helper reading it. Ignored when `authUsername` is set.
+   */
+  tokenEnvName?: string;
 }
 
 export interface EnvironmentSyncResult {
@@ -569,6 +595,19 @@ export async function syncEnvironmentRepository(
   }
   const cleanCloneUrl = cloneUrl ?? cleanUrl(repoFullName);
   const authEnv = gitAuthenticationEnvironment(cleanCloneUrl, token, authUsername ?? 'x-access-token', 'pull-failed');
+
+  // Raw git in this checkout (push, fetch) authenticates through gh with the
+  // token that covers this repository, like the session repository does.
+  if (!authUsername) {
+    const configured = await execute(sandbox, 'git', [
+      '-C',
+      workdir,
+      'config',
+      'credential.helper',
+      githubCredentialHelper(options.tokenEnvName),
+    ]);
+    if (configured.exitCode !== 0) throw classifyGitFailure(configured, 'pull-failed');
+  }
 
   await configureGitIdentity(sandbox, workdir, options.identity ?? {});
 
@@ -1154,14 +1193,29 @@ async function runLifecycleCommand(
   sandbox: ExecutableSandbox,
   workdir: string,
   command: string,
-  options: { phase: 'setup' | 'teardown'; timeoutMs?: number },
+  options: {
+    phase: 'setup' | 'teardown';
+    timeoutMs?: number;
+    env?: Record<string, string>;
+    /** Values to mask in a failure message, beyond `env`; a function is read once the command has run. */
+    mask?: Record<string, string> | (() => Record<string, string>);
+  },
 ): Promise<void> {
   const result = await sh(sandbox, `cd ${shellQuote(workdir)} && { ${command}\n}`, {
     phase: `${options.phase} command`,
     ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+    // Per-call only: build values must never enter the sandbox's runtime env.
+    ...(options.env && Object.keys(options.env).length > 0 ? { env: options.env } : {}),
   });
   if (result.exitCode !== 0) {
-    const detail = (result.stderr.trim() || result.stdout.trim()).slice(-1800);
+    // The message is stored as build status and shown in the UI, so mask any
+    // Factory value (Build or Runtime) the command printed.
+    // Mask before trimming: a value with an edge newline or space would no longer match once trimmed.
+    const output = result.stderr.trim() ? result.stderr : result.stdout;
+    const mask = typeof options.mask === 'function' ? options.mask() : options.mask;
+    const detail = maskSandboxEnvValues(output, { ...mask, ...options.env })
+      .trim()
+      .slice(-1800);
     const label = options.phase === 'setup' ? 'Setup' : 'Teardown';
     throw new SetupCommandError(
       `${label} command failed (exit ${result.exitCode}): ${detail}`,
@@ -1170,8 +1224,22 @@ async function runLifecycleCommand(
   }
 }
 
-export async function runSetupCommand(sandbox: ExecutableSandbox, workdir: string, command: string): Promise<void> {
-  return runLifecycleCommand(sandbox, workdir, command, { phase: 'setup' });
+/**
+ * @param buildEnv the Factory's Build variables, passed to this command only
+ * @param runtimeEnv the Factory's Runtime variables the command can also see; masked in a failure message
+ */
+export async function runSetupCommand(
+  sandbox: ExecutableSandbox,
+  workdir: string,
+  command: string,
+  buildEnv?: Record<string, string>,
+  runtimeEnv?: Record<string, string>,
+): Promise<void> {
+  return runLifecycleCommand(sandbox, workdir, command, {
+    phase: 'setup',
+    ...(buildEnv ? { env: buildEnv } : {}),
+    ...(runtimeEnv ? { mask: runtimeEnv } : {}),
+  });
 }
 
 /**
@@ -1188,6 +1256,8 @@ export async function runTeardownCommand(
 ): Promise<void> {
   return runLifecycleCommand(sandbox, workdir, command, {
     phase: 'teardown',
+    // The command sees the Factory runtime values applied to this sandbox, so a failure is masked with them.
+    mask: () => appliedSandboxEnv(sandbox),
     ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
   });
 }

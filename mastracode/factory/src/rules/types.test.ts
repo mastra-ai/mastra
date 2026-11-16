@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { awaitsAcceptance, defineBoard, workBoard } from '../boards/index.js';
+import { triageWorkBoard } from '../boards/test-utils.js';
 import { needsApproval } from './types.js';
 
 describe('needsApproval', () => {
@@ -9,7 +10,10 @@ describe('needsApproval', () => {
 
   it('holds a labeled card while it rests in Intake or Triage', () => {
     expect(needsApproval({ ...labeled, stages: ['intake'] }, onWork)).toBe(true);
-    expect(needsApproval({ ...labeled, stages: ['triage'] }, onWork)).toBe(true);
+    // Triage exists on the Work of projects stored before new projects' Work dropped it.
+    expect(needsApproval({ ...labeled, stages: ['triage'] }, stage => awaitsAcceptance(triageWorkBoard, stage))).toBe(
+      true,
+    );
   });
 
   it('lets the card go once a person moved it on, even before the source drops the label', () => {

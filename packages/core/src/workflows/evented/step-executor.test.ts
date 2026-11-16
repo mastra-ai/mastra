@@ -350,6 +350,44 @@ describe('StepExecutor', () => {
     expect(serialized).not.toContain('stack');
   });
 
+  describe('falsy resume data (#29390)', () => {
+    it.each([
+      ['false', false],
+      ['0', 0],
+      ['an empty string', ''],
+      ['null', null],
+    ])('records %s as the resume payload on the step result', async (_label, value) => {
+      let seen: unknown = 'not called';
+      const step = createStep({
+        id: 'approval',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ seen: z.any() }),
+        execute: async ({ resumeData }) => {
+          seen = resumeData;
+          return { seen: resumeData };
+        },
+      });
+
+      const result = await stepExecutor.execute({
+        workflowId: 'test-workflow',
+        entry: { type: 'step', step },
+        runId: 'test-run',
+        input: {},
+        stepResults: {
+          approval: { status: 'suspended', payload: {}, suspendPayload: {}, startedAt: 1, suspendedAt: 2 } as any,
+        },
+        state: {},
+        requestContext,
+        resumeData: value,
+      });
+
+      expect(seen).toBe(value);
+      expect(result.status).toBe('success');
+      expect((result as { resumePayload?: unknown }).resumePayload).toBe(value);
+      expect((result as { resumedAt?: unknown }).resumedAt).toEqual(expect.any(Number));
+    });
+  });
+
   describe('abort signal propagation', () => {
     it('should propagate parent abortController to resolveSleep fn context', async () => {
       // Arrange: Create a parent abort controller and track what abortSignal the fn receives

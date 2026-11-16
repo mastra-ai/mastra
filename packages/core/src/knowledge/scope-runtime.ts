@@ -119,19 +119,57 @@ export class KnowledgeScopeRuntime {
     return renamed;
   }
 
+  /**
+   * Whether a stored scope row belongs to the declaration its address matches today. Rows written
+   * before scope params matched exactly one segment can carry another (`org:acme:viewer` stored
+   * under `org:$orgId`); they must not pick up the rules of the declaration that now matches them.
+   */
+  #isCurrent(scope: KnowledgePage): boolean {
+    return !scope.declaration || this.compiled.match(scope.address!)?.declaration === scope.declaration;
+  }
+
+  #assertCurrent(scope: KnowledgePage): void {
+    if (this.#isCurrent(scope)) return;
+    throw new KnowledgeDeclarationError(
+      `Knowledge scope "${scope.address}" was created from "${scope.declaration}", which no longer matches it ` +
+        `(scope params match one segment; encode colons in ids as %3A). It can't be used as a scope of ` +
+        `"${this.compiled.match(scope.address!)?.declaration}".`,
+    );
+  }
+
   async readScopeFor(principals: readonly string[]): Promise<KnowledgeReadScope> {
     this.validatePrincipals(principals);
     await this.checkDeclarations();
     const storage = await this.getStorage();
-    return knowledgeReadScopeFor(this.compiled, principals, addresses => storage.getScopesByAddress(addresses));
+    // belongsTo parents resolve through current rows only, so a stale row can't parent new children.
+    const read = await knowledgeReadScopeFor(this.compiled, principals, async addresses =>
+      (await storage.getScopesByAddress(addresses)).filter(scope => this.#isCurrent(scope)),
+    );
+    if (read === 'all' || read.addresses.length === 0) return read;
+    const stale = new Set(
+      (await storage.getScopesByAddress(read.addresses))
+        .filter(scope => !this.#isCurrent(scope))
+        .map(scope => scope.address!),
+    );
+    return stale.size ? { ...read, addresses: read.addresses.filter(address => !stale.has(address)) } : read;
   }
 
   async roleOn(principals: readonly string[], scope: KnowledgePage): Promise<KnowledgeRole | null> {
     this.validatePrincipals(principals);
     if (!scope.isScope || !scope.address) throw new Error('Knowledge roles require a scope page.');
+    if (!this.#isCurrent(scope)) return null;
     const storage = await this.getStorage();
-    const parent = scope.parentId ? await storage.getPage({ id: scope.parentId, read: 'all' }) : null;
-    return knowledgeRoleOn(this.compiled, principals, { address: scope.address, parentAddress: parent?.address });
+    return knowledgeRoleOn(this.compiled, principals, {
+      address: scope.address,
+      parentAddress: await this.#currentParentAddress(storage, scope),
+    });
+  }
+
+  // A stale parent row (its address now matches another declaration) must not bind belongsTo rules.
+  async #currentParentAddress(storage: KnowledgeStorage, scope: KnowledgePage): Promise<string | undefined> {
+    if (!scope.parentId) return undefined;
+    const parent = await storage.getPage({ id: scope.parentId, read: 'all' });
+    return parent && this.#isCurrent(parent) ? (parent.address ?? undefined) : undefined;
   }
 
   async explainAccess(
@@ -168,8 +206,13 @@ export class KnowledgeScopeRuntime {
     }
 
     const address = scope?.address ?? (target as { scope: string }).scope;
-    const parent = scope?.parentId ? await storage.getPage({ id: scope.parentId, read: 'all' }) : null;
-    const reasons = knowledgeAccessGrants(this.compiled, principals, { address, parentAddress: parent?.address });
+    const reasons =
+      scope && !this.#isCurrent(scope)
+        ? []
+        : knowledgeAccessGrants(this.compiled, principals, {
+            address,
+            parentAddress: scope ? await this.#currentParentAddress(storage, scope) : undefined,
+          });
     let role: KnowledgeRole | null = null;
     for (const reason of reasons) role = strongerKnowledgeRole(role, reason.role);
     return {
@@ -294,6 +337,7 @@ export class KnowledgeScopeRuntime {
     }
 
     const existing = await lookUp(address);
+    if (existing) this.#assertCurrent(existing);
     let parentId = existing?.parentId;
     const belongsTo = match.compiled.belongsTo;
     if (belongsTo) {
@@ -349,6 +393,7 @@ export class KnowledgeScopeRuntime {
       pages: declaration.pages,
       provenance,
     });
+    this.#assertCurrent(result.scope);
     if (result.created) {
       // A new scope (and its config pages) can resolve body links written before it existed.
       await updateKnowledgeLinks(this.warn, () =>

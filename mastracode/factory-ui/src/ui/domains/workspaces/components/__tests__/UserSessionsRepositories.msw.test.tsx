@@ -45,9 +45,7 @@ function stubRepositories(repositoryIds: string[], sessions: FactoryUserSession[
           {
             id: 'fp-1',
             name: 'Mastra',
-            repositories: repositoryIds.map(id =>
-              listedRepository(id, `octo/${id}`, { branch: 'main', sandboxWorkdir: `/workspace/${id}` }),
-            ),
+            repositories: repositoryIds.map(id => listedRepository(id, `octo/${id}`, { branch: 'main' })),
           },
         ],
       }),

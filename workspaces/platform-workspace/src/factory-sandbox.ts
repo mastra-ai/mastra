@@ -169,9 +169,13 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
     settings: PlatformFactorySandboxSettings,
   ): PlatformRepoTemplateResolver | undefined {
     const { defaults, template } = this.#options;
+    // Factory's build env goes in explicitly, never through the spread.
+    const { buildEnv, buildEnvRevision, ...rest } = ctx;
+    const mergedBuildEnv = { ...template?.buildEnv, ...buildEnv };
     return createRepoTemplate({
-      ...ctx,
-      ...(template?.buildEnv ? { buildEnv: template.buildEnv } : {}),
+      ...rest,
+      ...(Object.keys(mergedBuildEnv).length > 0 ? { buildEnv: mergedBuildEnv } : {}),
+      ...(buildEnvRevision ? { buildEnvRevision } : {}),
       cpuCount: settings.cpuCount ?? defaults?.cpuCount ?? DEFAULT_SETTINGS.cpuCount,
       memoryMB: settings.memoryMb ?? defaults?.memoryMb ?? DEFAULT_SETTINGS.memoryMb,
       docker: settings.docker ?? defaults?.docker ?? DEFAULT_SETTINGS.docker,

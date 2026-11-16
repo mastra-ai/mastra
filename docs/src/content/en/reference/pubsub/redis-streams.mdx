@@ -133,7 +133,7 @@ const pubsub = new RedisStreamsPubSub({
     name: 'reclaimIntervalMs',
     type: 'number',
     description:
-      'How often, in milliseconds, a subscription reclaims events that an earlier consumer read but never acknowledged. Set to 0 to disable.',
+      "How often, in milliseconds, a subscription reclaims events that an earlier consumer read but never acknowledged. Set to 0 to disable. While it's enabled, workflow recovery leaves evented runs to this reclaim instead of restarting them. With 0, the pubsub no longer redelivers a stopped worker's events, so workflow recovery restarts evented runs when an instance boots, as it does without a broker.",
     isOptional: true,
     defaultValue: '30000',
   },
@@ -141,7 +141,7 @@ const pubsub = new RedisStreamsPubSub({
     name: 'reclaimIdleMs',
     type: 'number',
     description:
-      'Minimum idle time, in milliseconds, before a pending event is eligible for reclaim. Keep this well above typical processing time to avoid double delivery.',
+      'Minimum idle time, in milliseconds, before a pending event is eligible for reclaim. Keep this well above typical processing time to avoid double delivery, and at 30000 or more for evented workflows: a step event reclaimed sooner can be dropped as a duplicate.',
     isOptional: true,
     defaultValue: '60000',
   },
@@ -305,7 +305,7 @@ A subscription never reclaims an event its own handler is still processing, so a
 
 With Postgres storage, distributed evented agents publish worker orchestration events through Redis. If a worker exits before acknowledging an event, another worker can reclaim it and finish the run while the original API process stays alive. Configure the API process with `MASTRA_WORKERS=false` and worker processes with `MASTRA_WORKERS=orchestration`. All processes must share the same Postgres database, Redis connection settings, and `keyPrefix`.
 
-Keep `reclaimIdleMs` above 30 seconds (the default is 60 seconds). A lower value can reclaim an event while the stopped worker's step lease is still held, causing the event to be acknowledged without running.
+Keep `reclaimIdleMs` above 30 seconds (the default is 60 seconds). A lower value can reclaim an event while the stopped worker still holds the step, causing the event to be acknowledged without running.
 
 Runs started on older versions can finish after upgrading, but don't have guaranteed crash recovery. Saved steps without occurrence identifiers keep their existing unguarded behavior. Other storage adapters keep distributed internal orchestration on the worker process.
 

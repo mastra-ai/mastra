@@ -1,4 +1,3 @@
-import { ArrowLeftRightIcon, BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { SpanRecord } from '../types';
 import { getSpanChanges } from './span-outcome.utils';
 import {
@@ -17,6 +16,10 @@ import { SpanToolsSection } from './span-payload/span-tools-section';
 import { SpanRunId, SpanSummaryDescription } from './span-summary-description';
 import { TraceIdButton } from './trace-id-button';
 import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
+import { IconArrowLeftRight } from '@/ds/icons/central/IconArrowLeftRight';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
+import { IconFileArrowRightIn } from '@/ds/icons/central/IconFileArrowRightIn';
+import { IconFileArrowRightOut } from '@/ds/icons/central/IconFileArrowRightOut';
 
 const KV = DataDetailsPanel.KeyValueList;
 
@@ -75,7 +78,7 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
           {getSpanChanges(span).length > 0 && (
             <SpanPayloadSection
               title="Changes"
-              icon={<ArrowLeftRightIcon />}
+              icon={<IconArrowLeftRight />}
               raw={getSpanChanges(span)}
               layout="details"
               emphasis
@@ -85,7 +88,7 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
           )}
           <SpanPayloadSection
             title="Input"
-            icon={<FileInputIcon />}
+            icon={<IconFileArrowRightIn />}
             raw={span.input}
             hasPreview={hasSpanInputPreview(span)}
             layout="details"
@@ -94,7 +97,7 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
           </SpanPayloadSection>
           <SpanPayloadSection
             title="Output"
-            icon={<FileOutputIcon />}
+            icon={<IconFileArrowRightOut />}
             raw={getSpanOutputPayload(span)}
             hasPreview={hasSpanOutputPreview(span)}
             layout="details"
@@ -102,8 +105,13 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
             <SpanOutputRenderer span={span} />
           </SpanPayloadSection>
           <SpanToolsSection span={span} layout="details" />
-          <SpanPayloadJsonSection title="Metadata" icon={<BracesIcon />} raw={span.metadata} layout="details" />
-          <SpanPayloadJsonSection title="Attributes" icon={<BracesIcon />} raw={span.attributes} layout="details" />
+          <SpanPayloadJsonSection title="Metadata" icon={<IconCodeBrackets />} raw={span.metadata} layout="details" />
+          <SpanPayloadJsonSection
+            title="Attributes"
+            icon={<IconCodeBrackets />}
+            raw={span.attributes}
+            layout="details"
+          />
         </DataDetailsPanel.Content>
       )}
     </DataDetailsPanel>

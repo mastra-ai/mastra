@@ -5,9 +5,11 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
+import { IconHistory } from '@mastra/playground-ui/icons/central/IconHistory';
+import { IconLaw } from '@mastra/playground-ui/icons/central/IconLaw';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
-import { ArrowLeft, ScaleIcon, HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -107,17 +109,17 @@ function DatasetCompareVersionsPage() {
           <MainHeader>
             <MainHeader.Column>
               <MainHeader.Title>
-                <ScaleIcon /> Compare Dataset Versions
+                <IconLaw /> Compare Dataset Versions
               </MainHeader.Title>
               <MainHeader.Description>
                 <TextAndIcon>
-                  <HistoryIcon /> Comparing {versionNumbers.length} versions of{' '}
+                  <IconHistory /> Comparing {versionNumbers.length} versions of{' '}
                   {dataset?.name || datasetId?.slice(0, 8)}
                 </TextAndIcon>
               </MainHeader.Description>
             </MainHeader.Column>
             <MainHeader.Column>
-              <Button render={<Link to={`/datasets/${datasetId}`} />} icon={<ArrowLeft />}>
+              <Button render={<Link to={`/datasets/${datasetId}`} />} icon={<IconArrowLeft />}>
                 Back to dataset
               </Button>
             </MainHeader.Column>

@@ -197,6 +197,24 @@ const host = useMemo(
 
 To let the user pin widgets too, add `pins: { pinnedIds, onPin, onUnpin }`. `observabilityWidgetPins` is the same helper with only pins.
 
+#### Configuring a widget
+
+Pass `onConfigure` to `observabilityWidgetHost` to show a settings button on each widget, for example to open your own dialog for it:
+
+```tsx
+const host = useMemo(
+  () =>
+    observabilityWidgetHost({
+      resourceUri: 'ui://mastra/observability-widget',
+      onConfigure: ({ widget, datePreset, customRange, filters }) =>
+        openWidgetSettings(widget, { datePreset, customRange, filters }),
+    }),
+  [],
+);
+```
+
+The callback gets the widget as the opening tool returned it, with the date preset (and `customRange` when `custom`) and the filters it is drawn with, like a pin. The button only shows when the host passes `onConfigure` and accepts structured model context. It sits before the pin button and appears on the card's hover or keyboard focus, and always shows on touch screens.
+
 ### Validating stored dashboards
 
 `dashboardDefinitionSchema` from `@mastra/core/storage/dashboards` checks a definition's structure and queries, but not what each widget kind needs. A definition can pass it and still show an error in place of a widget. To store only dashboards that draw, check every write with `strictDashboardDefinitionSchema` in the code that stores them:

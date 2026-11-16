@@ -1,4 +1,3 @@
-import { ExternalLink } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type {
   McpInputAction,
@@ -13,6 +12,7 @@ import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Notice } from '@/ds/components/Notice';
 import { Txt } from '@/ds/components/Txt';
+import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 import { DynamicForm } from '@/lib/form/dynamic-form';
 import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
@@ -242,7 +242,7 @@ function InputRequest({
           <Button
             variant="link"
             render={<a href={view.url} target="_blank" rel="noopener noreferrer" />}
-            iconEnd={<ExternalLink />}
+            iconEnd={<IconSquareArrowTopRight />}
           >
             Open link
           </Button>

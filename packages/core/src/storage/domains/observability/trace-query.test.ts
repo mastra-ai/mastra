@@ -2184,6 +2184,10 @@ describe('trace-query responses and storage capability', () => {
       status: 'success',
     };
     expect(traceQueryTraceResponseSchema.safeParse({ traces: [trace], page: { next: null } }).success).toBe(true);
+    const aggregated = { ...trace, rootKind: 'external', runtimeDurationMs: 125, errorCount: null };
+    expect(traceQueryTraceResponseSchema.parse({ traces: [aggregated], page: { next: null } }).traces[0]).toEqual(
+      aggregated,
+    );
     expect(
       traceQueryTraceResponseSchema.safeParse({
         traces: [
@@ -2287,5 +2291,77 @@ describe('trace text search', () => {
 
   it('rejects text search in delta mode because root updates cannot track matching child arrivals', () => {
     expect(() => parsed({ ...baseRequest, textSearch: 'error', mode: 'delta' })).toThrow(TraceQueryValidationError);
+  });
+});
+
+describe('aggregated trace roots contract', () => {
+  const options = { allowAggregatedRoots: true };
+
+  it('requires an opted-in reader while keeping explicit legacy equivalent to the default', () => {
+    expect(() => planTraceQuery(parsed({ ...baseRequest, rootSource: 'aggregated' }))).toThrow(
+      TraceQueryValidationError,
+    );
+    expect(planTraceQuery(parsed({ ...baseRequest, rootSource: 'legacy' }))).toEqual(planTraceQuery(parsed()));
+  });
+
+  it('binds trace and grouped cursors to their root source', () => {
+    for (const group of [undefined, { by: ['threadId'] }]) {
+      for (const rootSource of ['legacy', 'aggregated'] as const) {
+        const plan = planTraceQuery(parsed({ ...baseRequest, group, rootSource }), options);
+        if (plan.paginationMode !== 'keyset') throw new Error('Expected keyset');
+        const after = encodeTraceQueryCursor(
+          plan,
+          plan.result === 'groups'
+            ? { result: 'groups', threadId: 'thread-1' }
+            : { result: 'traces', traceId: 'trace-1', sortValue: '2026-08-15T00:00:00.000Z' },
+        );
+        expect(planTraceQuery(parsed({ ...baseRequest, group, rootSource, page: { after } }), options).binding).toBe(
+          plan.binding,
+        );
+        expect(() =>
+          planTraceQuery(
+            parsed({
+              ...baseRequest,
+              group,
+              rootSource: rootSource === 'legacy' ? 'aggregated' : 'legacy',
+              page: { after },
+            }),
+            options,
+          ),
+        ).toThrow(TraceQueryCursorError);
+      }
+    }
+  });
+
+  it('keeps legacy delta cursors valid with an explicit legacy source', () => {
+    const plan = planTraceQuery(parsed({ ...baseRequest, pagination: {} }));
+    if (plan.paginationMode !== 'page') throw new Error('Expected page');
+    const after = encodeTraceQueryDeltaCursor(plan, 'adapter', '42');
+    const delta = planTraceQuery(parsed({ ...baseRequest, rootSource: 'legacy', mode: 'delta', after }));
+    if (delta.paginationMode !== 'delta') throw new Error('Expected delta');
+    expect(getTraceQueryDeltaWatermark(delta, 'adapter')).toBe('42');
+    expect(() => parsed({ ...baseRequest, rootSource: 'aggregated', mode: 'delta' })).toThrow(
+      TraceQueryValidationError,
+    );
+  });
+
+  it('rejects metadata predicates nested in boolean expressions only for aggregated roots', () => {
+    const where = { op: 'not', arg: { op: 'or', args: [{ op: 'exists', path: 'metadata.customer' }] } };
+    expect(() => planTraceQuery(parsed({ ...baseRequest, where }))).not.toThrow();
+    expect(() => planTraceQuery(parsed({ ...baseRequest, rootSource: 'aggregated', where }), options)).toThrow(
+      TraceQueryValidationError,
+    );
+  });
+
+  it.each(['runtimeDurationMs', 'errorCount'])('keeps %s response-only', field => {
+    expect(() =>
+      planTraceQuery(
+        parsed({ ...baseRequest, rootSource: 'aggregated', where: { op: 'exists', path: field } }),
+        options,
+      ),
+    ).toThrow(TraceQueryValidationError);
+    expect(() => parsed({ ...baseRequest, rootSource: 'aggregated', orderBy: [{ field, direction: 'desc' }] })).toThrow(
+      TraceQueryValidationError,
+    );
   });
 });

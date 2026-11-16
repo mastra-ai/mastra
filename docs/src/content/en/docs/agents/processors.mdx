@@ -915,7 +915,7 @@ You can use Mastra workflows as processors to create complex processing pipeline
 ```typescript title="src/mastra/processors/moderation-workflow.ts"
 import { createWorkflow, createStep } from '@mastra/core/workflows'
 import {
-  ProcessorStepSchema,
+  ProcessorStepOutputSchema,
   PromptInjectionDetector,
   PIIDetector,
   ModerationProcessor,
@@ -925,8 +925,8 @@ import { Agent } from '@mastra/core/agent'
 // Create a workflow that runs multiple checks in parallel
 const moderationWorkflow = createWorkflow({
   id: 'moderation-pipeline',
-  inputSchema: ProcessorStepSchema,
-  outputSchema: ProcessorStepSchema,
+  inputSchema: ProcessorStepOutputSchema,
+  outputSchema: ProcessorStepOutputSchema,
 })
   .parallel([
     createStep(

@@ -1,11 +1,7 @@
-import { EventEmitterPubSub } from '@mastra/core/events';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
-import { feedTopic } from '../feed-events.js';
-import { fakeRouteAuth } from '../routes/test-utils.js';
 import type { FactoryTransitionService } from '../rules/transition-service.js';
-import { CommentsDomain } from '../storage/domains/comments/domain.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { FactoryDeferredDecisionRecord } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -31,25 +27,17 @@ const FOREIGN_DECISION_ID = '0f9e8d7c-6b5a-4493-8271-605f4e3d2c1b';
 
 async function setup({
   transition,
-  feed,
   actorProfile,
   interactive = true,
+  intakeOrder = false,
 }: {
   interactive?: boolean;
+  /** Files by intake order over the project's stored rules, which start out empty. */
+  intakeOrder?: boolean;
   transition?: Transition;
-  feed?: Pick<CommentsDomain, 'createComment'>;
   actorProfile?: FactoryToolScope['actorProfile'];
 } = {}) {
   const seed = await createFactoryStorageForTests();
-  const pubsub = new EventEmitterPubSub();
-  const publish = vi.spyOn(pubsub, 'publish');
-  const commentsDomain = new CommentsDomain({
-    auth: fakeRouteAuth(),
-    comments: seed.comments,
-    workItems: seed.workItems,
-    projects: seed.projects,
-    pubsub,
-  });
   const boards = createBoardRegistry();
   // Two linked repositories, so a card that names neither is ambiguous. Only
   // the reads the repository check makes are stubbed.
@@ -93,11 +81,20 @@ async function setup({
       boards,
       transitionService,
       auditRecorder,
-      feed: feed ?? commentsDomain,
       sessions: { getSourceControlBySessionId: async () => sourceControl },
+      // Without intake rules to read, the route list, as before intake order.
+      ...(intakeOrder
+        ? { intakeRoutes: seed.boards, intakeEvaluator: 'intake-order' as const }
+        : { intakeEvaluator: 'route-list' as const }),
     },
   ) as Record<string, { requireApproval?: boolean; execute: (input: unknown, context: unknown) => Promise<unknown> }>;
   const run = <T>(name: string, input: unknown) => tools[name]!.execute(input, {}) as Promise<T>;
+  if (intakeOrder) {
+    const project = { orgId: 'org-1', factoryProjectId: 'project-1' };
+    for (const route of (await seed.boards.listIntakeRoutes(project)).toReversed()) {
+      await seed.boards.deleteIntakeRoute(project, route.id, { expectedRevision: route.revision });
+    }
+  }
   const fileItem = (factoryProjectId: string, title: string) =>
     seed.workItems.upsert({
       orgId: 'org-1',
@@ -105,7 +102,7 @@ async function setup({
       factoryProjectId,
       input: { title, stages: ['intake'], metadata: {} },
     });
-  return { ...seed, boards, tools, run, transitionService, auditRecorder, fileItem, publish };
+  return { ...seed, boards, tools, run, transitionService, auditRecorder, fileItem };
 }
 
 function failedDecision(overrides: Partial<FactoryDeferredDecisionRecord> = {}): FactoryDeferredDecisionRecord {
@@ -131,13 +128,30 @@ function failedDecision(overrides: Partial<FactoryDeferredDecisionRecord> = {}):
 }
 
 describe('factory_create_work_item', () => {
+  it('files on the board the person names when no intake rule takes the item', async () => {
+    const { run, workItems } = await setup({ intakeOrder: true });
+    await expect(run('factory_create_work_item', { title: 'Odd one', description: 'x' })).rejects.toThrow(
+      /Pick the board/,
+    );
+
+    const created = await run<{ id: string }>('factory_create_work_item', {
+      title: 'Odd one',
+      description: 'x',
+      board: 'work',
+    });
+    expect(await workItems.getForProject('org-1', 'project-1', created.id)).toMatchObject({
+      board: 'work',
+      stages: ['intake'],
+    });
+  });
+
   it('stamps the caller’s name and avatar on what it records, so the board can show who filed and moved it', async () => {
     const actorProfile = { name: 'Caleb', avatarUrl: 'https://example.com/caleb.png' };
     const { run, transitionService, auditRecorder } = await setup({ actorProfile });
 
     const created = await run<{ id: string }>('factory_create_work_item', {
       title: 'Fix the login redirect',
-      brief: 'Users land on /404.',
+      description: 'Users land on /404.',
     });
     await run('factory_transition_work_item', { workItem: created.id, stage: 'triage' });
 
@@ -150,17 +164,22 @@ describe('factory_create_work_item', () => {
     expect(transitionService.transition).toHaveBeenCalledTimes(2);
   });
 
-  it("files the item as the caller in the board's first phase, posts the brief and follows it", async () => {
-    const { run, workItems, comments, transitionService, auditRecorder, publish } = await setup();
+  it("files the item as the caller in the board's first phase, stores the description and follows it", async () => {
+    const { run, workItems, transitionService, auditRecorder } = await setup();
 
     const created = await run<{ id: string; stage: string; title: string }>('factory_create_work_item', {
       title: 'Fix the login redirect',
-      brief: 'Users land on /404 after signing in.',
+      description: 'Users land on /404 after signing in.',
     });
 
     expect(created).toMatchObject({ title: 'Fix the login redirect', stage: 'intake' });
     const item = await workItems.getForProject('org-1', 'project-1', created.id);
-    expect(item).toMatchObject({ createdBy: 'user-1', board: 'work', stages: ['intake'] });
+    expect(item).toMatchObject({
+      createdBy: 'user-1',
+      board: 'work',
+      stages: ['intake'],
+      description: 'Users land on /404 after signing in.',
+    });
     expect(transitionService.transition).toHaveBeenCalledWith(
       expect.objectContaining({
         workItemId: created.id,
@@ -169,20 +188,6 @@ describe('factory_create_work_item', () => {
         cause: 'work_item_created',
         actor: { type: 'human', id: 'user-1' },
       }),
-    );
-    const feed = await comments.listRecent({
-      orgId: 'org-1',
-      factoryProjectId: 'project-1',
-      workItemId: created.id,
-      limit: 10,
-    });
-    expect(feed.map(comment => [comment.body, comment.author.id])).toEqual([
-      ['Users land on /404 after signing in.', 'user-1'],
-    ]);
-    // Through the comments domain: open boards get a feed touch for the new card.
-    expect(publish).toHaveBeenCalledWith(
-      feedTopic('org-1', 'project-1'),
-      expect.objectContaining({ type: 'factory.feed.touched', data: { workItemId: created.id } }),
     );
     expect(await workItems.listWorkItemSubscribers({ orgId: 'org-1', workItemId: created.id })).toEqual([
       expect.objectContaining({ sessionId: 'session-1', threadId: 'thread-1', userId: 'user-1', reason: 'created' }),
@@ -199,23 +204,6 @@ describe('factory_create_work_item', () => {
     );
   });
 
-  it('reports the item with a warning instead of failing when the brief cannot be posted', async () => {
-    const { run, workItems } = await setup({
-      feed: { createComment: vi.fn(async () => Promise.reject(new Error('feed is down'))) },
-    });
-
-    const created = await run<{ id: string; warnings?: string[] }>('factory_create_work_item', {
-      title: 'Card that exists anyway',
-      brief: 'Brief that fails to post.',
-    });
-
-    expect(created.warnings).toEqual(['The brief was not posted: feed is down']);
-    await expect(workItems.getForProject('org-1', 'project-1', created.id)).resolves.not.toBeNull();
-    expect(await workItems.listWorkItemSubscribers({ orgId: 'org-1', workItemId: created.id })).toEqual([
-      expect.objectContaining({ sessionId: 'session-1', reason: 'created' }),
-    ]);
-  });
-
   it('removes the item again when the first phase refuses it', async () => {
     const { run, workItems, auditRecorder } = await setup({
       transition: async request => ({
@@ -227,21 +215,23 @@ describe('factory_create_work_item', () => {
       }),
     });
 
-    await expect(run('factory_create_work_item', { title: 'Nope', brief: 'x' })).rejects.toThrow('Intake is closed.');
+    await expect(run('factory_create_work_item', { title: 'Nope', description: 'x' })).rejects.toThrow(
+      'Intake is closed.',
+    );
     expect(await workItems.list({ orgId: 'org-1', factoryProjectId: 'project-1' })).toEqual([]);
     expect(auditRecorder.record).not.toHaveBeenCalled();
   });
 
-  it('takes no stage or board: every item enters through the first phase', async () => {
+  it('takes no stage, only a board: every item enters through its board’s first phase', async () => {
     const { tools } = await setup();
     const schema = (
       tools.factory_create_work_item as unknown as {
         inputSchema: { safeParse(input: unknown): { success: boolean } };
       }
     ).inputSchema;
-    expect(schema.safeParse({ title: 't', brief: 'b' }).success).toBe(true);
-    expect(schema.safeParse({ title: 't', brief: 'b', stage: 'execute' }).success).toBe(false);
-    expect(schema.safeParse({ title: 't', brief: 'b', board: 'review' }).success).toBe(false);
+    expect(schema.safeParse({ title: 't', description: 'b' }).success).toBe(true);
+    expect(schema.safeParse({ title: 't', description: 'b', stage: 'execute' }).success).toBe(false);
+    expect(schema.safeParse({ title: 't', description: 'b', board: 'review' }).success).toBe(true);
   });
 });
 
@@ -251,7 +241,7 @@ describe('repositories', () => {
 
     const created = await run<{ id: string }>('factory_create_work_item', {
       title: 'Fix the login redirect',
-      brief: 'Users land on /404 after signing in.',
+      description: 'Users land on /404 after signing in.',
       repository: 'mastra-ai/platform',
     });
 
@@ -263,7 +253,7 @@ describe('repositories', () => {
     const { run, workItems } = await setup();
 
     await expect(
-      run('factory_create_work_item', { title: 'x', brief: 'y', repository: 'someone/else' }),
+      run('factory_create_work_item', { title: 'x', description: 'y', repository: 'someone/else' }),
     ).rejects.toThrow(
       'someone/else is not linked to this Factory. Linked repositories: mastra-ai/mastra, mastra-ai/platform.',
     );
@@ -272,6 +262,18 @@ describe('repositories', () => {
 });
 
 describe('factory_update_work_item', () => {
+  it("sets and clears a card's description", async () => {
+    const { run, workItems, fileItem } = await setup();
+    const { item } = await fileItem('project-1', 'Card');
+
+    const set = await run('factory_update_work_item', { workItem: item.id, description: '  Repro: sign in twice.  ' });
+    expect(set).toMatchObject({ updated: ['description'] });
+    expect((await workItems.getForProject('org-1', 'project-1', item.id))?.description).toBe('Repro: sign in twice.');
+
+    await run('factory_update_work_item', { workItem: item.id, description: '' });
+    expect((await workItems.getForProject('org-1', 'project-1', item.id))?.description).toBeNull();
+  });
+
   it("sets a card's repository, title and parent as the caller and audits the fields", async () => {
     const { run, workItems, fileItem, auditRecorder } = await setup();
     const { item } = await fileItem('project-1', 'Old title');
@@ -422,6 +424,7 @@ describe('approval', () => {
         'factory_list_work_items',
         'factory_inspect_work_item',
         'factory_list_attention',
+        'factory_list_audit_events',
         'factory_create_work_item',
         'factory_update_work_item',
         'factory_transition_work_item',
@@ -466,6 +469,59 @@ describe('factory_transition_work_item', () => {
         ingress: expect.objectContaining({ type: 'human', identity: expect.stringMatching(/^human:user-1:/) }),
       }),
     );
+  });
+
+  // The move can start a phase session the Factory owns; following is how this session hears it wait.
+  it('follows the card it moved, so the session hears from the run the move starts', async () => {
+    const { run, fileItem, workItems } = await setup();
+    const { item } = await fileItem('project-1', 'Move me');
+
+    await run('factory_transition_work_item', { workItem: item.id, stage: 'triage' });
+
+    expect(await workItems.listWorkItemSubscribers({ orgId: 'org-1', workItemId: item.id })).toEqual([
+      expect.objectContaining({ sessionId: 'session-1', userId: 'user-1', reason: 'moved' }),
+    ]);
+  });
+
+  it('still reports the move when following the card fails, so the agent does not move it twice', async () => {
+    const { run, fileItem, workItems } = await setup();
+    const { item } = await fileItem('project-1', 'Move me');
+    vi.spyOn(workItems, 'subscribeToWorkItem').mockRejectedValue(new Error('storage is away'));
+
+    await expect(run('factory_transition_work_item', { workItem: item.id, stage: 'triage' })).resolves.toEqual({
+      workItemId: item.id,
+      stage: 'triage',
+      revision: item.revision + 1,
+      warnings: ['This session does not follow it yet: storage is away'],
+    });
+  });
+
+  it('keeps "created" when a session moves a card it filed', async () => {
+    const { run, workItems } = await setup();
+    const created = await run<{ id: string }>('factory_create_work_item', { title: 'Mine', description: 'b' });
+
+    await run('factory_transition_work_item', { workItem: created.id, stage: 'triage' });
+
+    expect(await workItems.listWorkItemSubscribers({ orgId: 'org-1', workItemId: created.id })).toEqual([
+      expect.objectContaining({ sessionId: 'session-1', reason: 'created' }),
+    ]);
+  });
+
+  it('does not follow a card whose move the board refused', async () => {
+    const { run, fileItem, workItems } = await setup({
+      transition: async request => ({
+        status: 'rejected',
+        transitionId: 't',
+        itemId: request.workItemId,
+        code: 'stale',
+        reason: 'The item changed.',
+      }),
+    });
+    const { item } = await fileItem('project-1', 'Stale');
+
+    await expect(run('factory_transition_work_item', { workItem: item.id, stage: 'triage' })).rejects.toThrow();
+
+    expect(await workItems.listWorkItemSubscribers({ orgId: 'org-1', workItemId: item.id })).toEqual([]);
   });
 
   it("returns the board's refusal as an error", async () => {
@@ -574,7 +630,7 @@ describe('subscriptions', () => {
 
   it('keeps "created" when a session subscribes to an item it filed', async () => {
     const { run } = await setup();
-    const created = await run<{ id: string }>('factory_create_work_item', { title: 'Mine', brief: 'b' });
+    const created = await run<{ id: string }>('factory_create_work_item', { title: 'Mine', description: 'b' });
     await expect(run('factory_subscribe_work_item', { workItem: created.id })).resolves.toMatchObject({
       reason: 'created',
     });

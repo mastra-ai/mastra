@@ -12,6 +12,7 @@ import type { TraceQueryRelatedScope } from '../../trace-query-filters';
 import { getSelectedEntityOption } from './traces-explorer-actions';
 import { useTracesConfig, useTracesFilters } from './traces-explorer-context';
 import { useTracesDiscovery } from './use-traces-discovery';
+import { TEXT_SEARCH_FIELD, textSearchFilterItems } from '@/domains/observability/lib/text-search-filter';
 import { isFilterBarGroup } from '@/ds/components/FilterBar';
 import type { FilterBarExpression, FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
 import {
@@ -26,6 +27,7 @@ const NO_SUGGESTIONS: string[] = [];
 export function useTracesFilterBarFields(): FilterBarField[] {
   const {
     hiddenFieldIds,
+    withTextSearch,
     withQueryTrace,
     withRootDuration,
     withTimeToFirstChunk,
@@ -46,6 +48,7 @@ export function useTracesFilterBarFields(): FilterBarField[] {
   return useMemo(
     () => [
       FILTER_BAR_TIME_RANGE_FIELD,
+      ...(withTextSearch ? [TEXT_SEARCH_FIELD] : []),
       ...createTraceFilterBarFields({
         availableRootEntityNames: rootEntityNames,
         availableEnvironments: environments,
@@ -69,6 +72,7 @@ export function useTracesFilterBarFields(): FilterBarField[] {
       hiddenFieldIds,
       metadataFields,
       canonicalFields,
+      withTextSearch,
       withQueryTrace,
       withRootDuration,
       withTimeToFirstChunk,
@@ -85,10 +89,13 @@ export function useTracesFilterBarFields(): FilterBarField[] {
  * Scope items never show up in the bar; the explorer keeps them on every edit.
  */
 export function useTracesFilterBar() {
-  const { scopedFieldIds } = useTracesConfig();
-  const { filters, setFilterTokens } = useTracesFilters();
+  const { scopedFieldIds, withTextSearch } = useTracesConfig();
+  const { filters, setFilterTokens, setTextSearch } = useTracesFilters();
 
-  const items = traceTokensToFilterBarItems(filters.tokens).filter(item => !scopedFieldIds.has(item.fieldId));
+  const items = [
+    ...textSearchFilterItems(withTextSearch ? filters.textSearch : undefined),
+    ...traceTokensToFilterBarItems(filters.tokens).filter(item => !scopedFieldIds.has(item.fieldId)),
+  ];
   // The time range is a synthetic, always-present item so it takes part in keyboard
   // navigation; it never round-trips to filter tokens. Expression mode so root-level AND/OR
   // groups render as "Advanced filter" chips.
@@ -103,9 +110,17 @@ export function useTracesFilterBar() {
   const onFilterBarChange = (expression: FilterBarExpression) => {
     const { tokens, groups } = filterBarExpressionToTraceFilters({
       ...expression,
-      nodes: expression.nodes.filter(node => isFilterBarGroup(node) || node.fieldId !== FILTER_BAR_TIME_RANGE_FIELD_ID),
+      nodes: expression.nodes.filter(
+        node =>
+          isFilterBarGroup(node) ||
+          (node.fieldId !== FILTER_BAR_TIME_RANGE_FIELD_ID && node.fieldId !== TEXT_SEARCH_FIELD.id),
+      ),
     });
+    const search = expression.nodes.find(node => !isFilterBarGroup(node) && node.fieldId === TEXT_SEARCH_FIELD.id);
+    const textSearch =
+      search && !isFilterBarGroup(search) && typeof search.value === 'string' ? search.value : undefined;
     setFilterTokens(tokens, groups);
+    if (withTextSearch && textSearch !== filters.textSearch) setTextSearch(textSearch);
   };
 
   return {

@@ -37,6 +37,8 @@ export type GithubStatusReason =
   | 'auth_required'
   | 'organization_required'
   | 'not_connected'
+  /** Platform withholds a personal-account install while the Mastra organization has more than one member. */
+  | 'personal_install_hidden'
   | 'ready'
   | 'unavailable';
 
@@ -89,8 +91,6 @@ export interface GithubRepo {
   installationId: number;
   /** Storage UUID of the installation row backing this repo. */
   installationStorageId: string;
-  sandboxProvider: string;
-  sandboxWorkdir: string;
 }
 
 export type SourceControlRepository = GithubRepo | GitLabRepository;
@@ -260,7 +260,6 @@ export interface ListedFactoryProjectPayload extends FactoryProjectPayload {
 interface ProjectRepositoryPayload {
   id: string;
   branch: string | null;
-  sandboxWorkdir: string;
   repository: { externalId: string; slug: string; defaultBranch: string } | null;
 }
 
@@ -277,7 +276,6 @@ export interface LinkedRepositoryPayload {
   externalId?: string;
   slug: string;
   gitBranch?: string;
-  sandboxWorkdir?: string;
 }
 
 /** A Factory project with its linked repositories flattened across connections. */
@@ -291,7 +289,7 @@ function toLinkedRepositoryPayload(
   projectName: string,
   repository: Pick<
     ProjectListRepository,
-    'projectRepositoryId' | 'integrationId' | 'externalId' | 'slug' | 'defaultBranch' | 'branch' | 'sandboxWorkdir'
+    'projectRepositoryId' | 'integrationId' | 'externalId' | 'slug' | 'defaultBranch' | 'branch'
   >,
 ): LinkedRepositoryPayload {
   return {
@@ -300,7 +298,6 @@ function toLinkedRepositoryPayload(
     externalId: repository.externalId ?? undefined,
     slug: repository.slug ?? projectName,
     gitBranch: repository.branch ?? repository.defaultBranch ?? undefined,
-    sandboxWorkdir: repository.sandboxWorkdir,
   };
 }
 
@@ -442,14 +439,10 @@ export async function updateFactoryThinkingDefault(
 
 export interface ApplyFactoryDefaultModelResult {
   modelId: string;
-  applied: string[];
-  skipped: Array<{
-    threadId: string;
-    reason: 'not-running' | 'work-item-missing' | 'stage-inactive' | 'thread-missing' | 'mode-unknown' | 'apply-failed';
-  }>;
+  status: 'started';
 }
 
-/** Apply the Factory default model to currently running work and review sessions. */
+/** Start applying the Factory default model to currently running work and review sessions. */
 export async function applyFactoryDefaultModelToSessions(
   baseUrl: string,
   factoryProjectId: string,
@@ -516,8 +509,6 @@ export async function linkRepository(
       body: JSON.stringify({
         repository: { externalId: gitlab ? repo.externalId : String(repo.id), slug: repo.fullName },
         branch: repo.defaultBranch,
-        sandboxProvider: repo.sandboxProvider,
-        sandboxWorkdir: repo.sandboxWorkdir,
       }),
     },
   );
@@ -532,7 +523,6 @@ export async function linkRepository(
     slug: projectRepository.repository?.slug ?? null,
     defaultBranch: projectRepository.repository?.defaultBranch ?? null,
     branch: projectRepository.branch,
-    sandboxWorkdir: projectRepository.sandboxWorkdir,
   });
 }
 

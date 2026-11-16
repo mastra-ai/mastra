@@ -37,6 +37,17 @@ interface TrackedSession {
 }
 
 /**
+ * Events after which the controller may list different runs for a session, beyond the parking ones.
+ * Leaving a thread drops the run the session started on it, and no `agent_end` reaches a session that has left.
+ */
+const RUN_MAY_HAVE_CHANGED = new Set<AgentControllerEvent['type']>([
+  'agent_start',
+  'thread_changed',
+  'thread_created',
+  'thread_deleted',
+]);
+
+/**
  * The sessions this process has materialized, by session id.
  *
  * Membership comes from the controller's notifications rather than
@@ -77,7 +88,7 @@ export class LiveSessions {
       if (event.type === 'tool_suspended') suspendedAt.set(event.toolCallId, this.#nextParkStamp());
       else if (event.type === 'tool_suspension_cancelled') suspendedAt.delete(event.toolCallId);
       else if (event.type === 'agent_end' && event.reason !== 'suspended') suspendedAt.clear();
-      else if (event.type !== 'agent_start') return;
+      else if (!RUN_MAY_HAVE_CHANGED.has(event.type)) return;
       for (const listener of this.#runListeners) listener(session);
     });
     this.#byId.set(session.identity.getId(), { session, seenAt: Date.now(), suspendedAt, unsubscribe });
@@ -111,7 +122,7 @@ export class LiveSessions {
     return parked;
   }
 
-  /** Fires when a session starts a run, parks, is answered, or finishes a turn: whoever shows runs re-reads. */
+  /** Fires when a session starts a run, parks, is answered, finishes a turn, or leaves its thread: whoever shows runs re-reads. */
   onRunChanged(listener: (session: LiveSession) => void): () => void {
     this.#runListeners.add(listener);
     return () => this.#runListeners.delete(listener);

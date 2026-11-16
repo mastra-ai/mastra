@@ -4,7 +4,9 @@ import type { IMastraLogger } from '../logger';
 import type { RequestContext } from '../request-context';
 import { getRequestContextInputValues } from '../request-context/input-source';
 import type { StandardSchemaWithJSON } from '../schema';
+import { pickStateKeys } from '../storage/domains/workflows/journal';
 import { removeUndefinedValues } from '../utils';
+import { waitMs } from '../utils/test-waits';
 import type { ExecutionGraph } from './execution-engine';
 import { withoutNestedRunStartState } from './nested-state';
 import type { Step } from './step';
@@ -95,7 +97,7 @@ export async function validateStepResumeData({
   resumeData?: any;
   step: Partial<Pick<Step<string, any, any>, 'resumeSchema'>>;
 }) {
-  if (!resumeData) {
+  if (resumeData === undefined) {
     return { resumeData: undefined, validationError: undefined };
   }
 
@@ -160,7 +162,7 @@ export async function validateStepStateData({
   validateInputs,
 }: {
   stateData?: any;
-  step: Step<string, any, any>;
+  step: Partial<Pick<Step<string, any, any>, 'stateSchema'>>;
   validateInputs: boolean;
 }) {
   if (!stateData) {
@@ -305,6 +307,47 @@ export function defineLazyWriter<T extends object, W>(
     configurable: true,
     get: () => (writer ??= createWriter()),
   }) as T & { writer: W };
+}
+
+/**
+ * Defines `getState` on step params, resolving to `view()` or only its named top-level keys. On storage
+ * v2 runs, reading `state` throws and points to `getState`, as sync `getStepResult` does. That getter
+ * isn't enumerable, so spreading the params still works.
+ */
+export function defineStateAccessors<T extends object>(
+  params: T,
+  view: () => Record<string, any>,
+  storageV2: boolean,
+): NoInfer<T> & { getState: (keys?: readonly string[]) => Promise<Record<string, any>> } {
+  Object.defineProperty(params, 'getState', {
+    enumerable: true,
+    configurable: true,
+    writable: true,
+    value: async (keys?: readonly string[]) => pickStateKeys(view(), keys),
+  });
+  if (storageV2) {
+    Object.defineProperty(params, 'state', {
+      enumerable: false,
+      configurable: true,
+      get: (): never => {
+        throw new MastraError({
+          id: 'WORKFLOW_STORAGE_V2_SYNC_STATE',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.USER,
+          text: "`state` isn't available in workflows with storageVersion: 2. Use `await getState()` instead.",
+        });
+      },
+    });
+  }
+  return params as T & { getState: (keys?: readonly string[]) => Promise<Record<string, any>> };
+}
+
+/** Applies a storage v2 `setState` change set to `state`: a key set to `undefined` is deleted. */
+export function applyStateDelta(state: Record<string, any>, delta: Record<string, unknown>): void {
+  for (const [key, value] of Object.entries(delta)) {
+    if (value === undefined) delete state[key];
+    else state[key] = value;
+  }
 }
 
 const SINGLE_STEP_TYPES = ['step', 'agent', 'tool', 'classifier', 'mapping'] as const;
@@ -456,8 +499,8 @@ export const createTimeTravelExecutionParams = (params: {
 
   for (const [index, entry] of graph.steps.entries()) {
     const currentExecPathLength = executionPath.length;
-    //if there is resumeData, steps down the graph until the suspended step will have stepResult info to use
-    if (currentExecPathLength > 0 && !resumeData) {
+    //if resumeData was provided (any value but undefined), steps down the graph until the suspended step will have stepResult info to use
+    if (currentExecPathLength > 0 && resumeData === undefined) {
       break;
     }
     const stepIds = getStepIds(entry);
@@ -487,7 +530,12 @@ export const createTimeTravelExecutionParams = (params: {
 
     //the stepResult input is basically the payload of the first step
     if (index === 0 && stepIds.includes(firstStepId)) {
-      stepResults.input = (context?.[firstStepId]?.payload ?? inputData ?? snapshotContext?.input) as any;
+      // An explicit null inputData replaces the stored input; only an omitted one falls back (#29424).
+      // When the target is inside a nested workflow (steps.length > 1), inputData belongs to that
+      // nested step, so the parent keeps its stored input.
+      const replacesInput = steps.length === 1 && inputData !== undefined;
+      stepResults.input = (context?.[firstStepId]?.payload ??
+        (replacesInput ? inputData : snapshotContext?.input)) as any;
     } else if (index === 0) {
       stepResults.input =
         stepIds?.reduce((acc, stepId) => {
@@ -528,9 +576,18 @@ export const createTimeTravelExecutionParams = (params: {
         ? defaultStepStatus
         : (stepContext?.status ?? defaultStepStatus);
       const isCompleteStatus = ['success', 'failed', 'canceled'].includes(status);
+      // A target in the first entry has no previous step, so it replays the workflow input the
+      // default engine also gives it, kept even when null or undefined instead of becoming {}
+      // (#29424). New inputData replaces it, except when the target is a nested workflow
+      // (steps.length > 1): there inputData belongs to the step inside it.
+      const isFirstEntryTarget = !prevStep && stepId === firstStepId;
+      const firstEntryInput =
+        steps.length === 1 ? stepResults.input : (context?.[stepId]?.payload ?? snapshotContext.input);
       result = {
         status,
-        payload: context?.[stepId]?.payload ?? stepPayload ?? snapshotContext[stepId]?.payload ?? {},
+        payload: isFirstEntryTarget
+          ? firstEntryInput
+          : (context?.[stepId]?.payload ?? stepPayload ?? snapshotContext[stepId]?.payload ?? {}),
         output: isCompleteStatus
           ? (context?.[stepId]?.output ?? stepOutput ?? snapshotContext[stepId]?.output ?? {})
           : undefined,
@@ -697,7 +754,8 @@ export function isEntryFinished(
 export function hydrateSerializedStepErrors(steps: WorkflowRunState['context']) {
   if (steps) {
     for (const step of Object.values(steps)) {
-      if (step.status === 'failed' && 'error' in step && step.error) {
+      // `context.input` holds the raw workflow input, which can be `null`.
+      if (step?.status === 'failed' && 'error' in step && step.error) {
         step.error = getErrorFromUnknown(step.error, { serializeStack: false });
       }
     }
@@ -905,7 +963,7 @@ export async function waitForSuspendedSnapshot(
       return null;
     }
 
-    await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_INTERVAL_MS));
+    await new Promise(resolve => setTimeout(resolve, waitMs(RESUME_SNAPSHOT_POLL_INTERVAL_MS, 1)));
   }
 
   return snapshot;

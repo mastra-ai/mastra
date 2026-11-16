@@ -106,7 +106,7 @@ export function BoardColumnHeader({
           tone="muted"
           as="h2"
           variant="label"
-          className="pointer-events-none absolute top-full right-0 m-0 py-1 [writing-mode:horizontal-tb] lg:right-auto lg:left-1/2 lg:-translate-x-1/2 lg:[writing-mode:vertical-rl]"
+          className="pointer-events-none absolute top-full right-0 m-0 py-1 whitespace-nowrap [writing-mode:horizontal-tb] lg:right-auto lg:left-1/2 lg:-translate-x-1/2 lg:[writing-mode:vertical-rl]"
         >
           {label}
         </Txt>

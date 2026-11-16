@@ -1,46 +1,17 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { builtinBoardCatalog, shipBoard } from '../../../../e2e/ui/board-catalog';
 import { ACTIVITY_KIND_ORDER, periodActivity } from './periodActivity';
 import type { Activity, RunStarts } from './periodActivity';
-import type { WorkItem } from './services/workItems';
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 const NOW = new Date(2026, 9, 27, 10, 30).getTime();
 const originalTimeZone = process.env.TZ;
 
-function card(id: string, createdAt: number, overrides: Partial<WorkItem> = {}): WorkItem {
-  return {
-    id,
-    orgId: 'org-1',
-    createdBy: 'user-1',
-    githubProjectId: 'repo-1',
-    board: 'work',
-    source: 'manual',
-    sourceKey: null,
-    parentWorkItemId: null,
-    title: `Card ${id}`,
-    url: null,
-    stages: ['intake'],
-    stageHistory: [],
-    sessions: {},
-    metadata: {},
-    triageType: null,
-    acceptedAt: null,
-    commentCount: 0,
-    revision: 1,
-    createdAt: new Date(createdAt).toISOString(),
-    updatedAt: new Date(createdAt).toISOString(),
-    ...overrides,
-  };
-}
-
-function shippedCard(id: string, doneAt: number, stages = ['done']): WorkItem {
-  return card(id, doneAt - 20 * DAY, {
-    stages,
-    stageHistory: [{ stage: 'done', enteredAt: new Date(doneAt).toISOString(), by: 'user-1' }],
-  });
+/** The card instants the activity route answers with, from epoch milliseconds. */
+function cardTimes({ created = [], done = [] }: { created?: number[]; done?: number[] }) {
+  const instants = (times: number[]) => times.map(time => new Date(time).toISOString());
+  return { createdAt: instants(created), doneAt: instants(done) };
 }
 
 function slotTotals({ slots }: Activity) {
@@ -63,15 +34,10 @@ describe('periodActivity', () => {
     const week = periodActivity({
       period: 'week',
       now: NOW,
-      cards: [
-        card('new', NOW - HOUR),
-        card('this-week', NOW - 3 * DAY),
-        card('last-week', NOW - 8 * DAY),
-        shippedCard('shipped', NOW - 2 * DAY),
-        shippedCard('shipped-long-ago', NOW - 10 * DAY),
-        shippedCard('reopened', NOW - DAY, ['review']),
-      ],
-      boards: builtinBoardCatalog.boards,
+      cardTimes: cardTimes({
+        created: [NOW - HOUR, NOW - 3 * DAY, NOW - 8 * DAY],
+        done: [NOW - 2 * DAY, NOW - 10 * DAY],
+      }),
       runStarts: allRunStarts(NOW - 5 * HOUR, NOW - 9 * DAY),
     });
 
@@ -79,37 +45,13 @@ describe('periodActivity', () => {
     expect(slotTotals(week)).toEqual(week.totals);
   });
 
-  it("counts a card as shipped when it enters its own board's completed phase, whatever the board names it", () => {
-    const shipped = (id: string, board: string, stage: string) =>
-      card(id, NOW - 20 * DAY, {
-        board,
-        stages: [stage],
-        stageHistory: [{ stage, enteredAt: new Date(NOW - DAY).toISOString(), by: 'user-1' }],
-      });
-    const week = periodActivity({
-      period: 'week',
-      now: NOW,
-      cards: [
-        shipped('work', 'work', 'done'),
-        shipped('ship', 'ship', 'shipped'),
-        shipped('dropped', 'ship', 'dropped'),
-      ],
-      boards: [...builtinBoardCatalog.boards, shipBoard],
-      runStarts: allRunStarts(),
-    });
-
-    expect(week.totals.shipped).toBe(2);
-  });
-
   it('starts Today at local midnight and shows no slot after now', () => {
     const today = periodActivity({
       period: 'today',
       now: NOW,
-      cards: [
-        card('morning', new Date(2026, 9, 27, 9, 15).getTime()),
-        card('last-night', new Date(2026, 9, 26, 23).getTime()),
-      ],
-      boards: builtinBoardCatalog.boards,
+      cardTimes: cardTimes({
+        created: [new Date(2026, 9, 27, 9, 15).getTime(), new Date(2026, 9, 26, 23).getTime()],
+      }),
       runStarts: allRunStarts(),
     });
 
@@ -122,8 +64,7 @@ describe('periodActivity', () => {
     const month = periodActivity({
       period: 'month',
       now: NOW,
-      cards: [card('in-range', NOW - 29 * DAY), card('too-old', NOW - 31 * DAY)],
-      boards: builtinBoardCatalog.boards,
+      cardTimes: cardTimes({ created: [NOW - 29 * DAY, NOW - 31 * DAY] }),
       runStarts: allRunStarts(),
     });
 
@@ -131,12 +72,22 @@ describe('periodActivity', () => {
     expect(slotTotals(month).cameIn).toBe(1);
   });
 
+  it('leaves out what happened just before the period began, though its first slot starts earlier', () => {
+    const week = periodActivity({
+      period: 'week',
+      now: NOW,
+      cardTimes: cardTimes({ created: [NOW - 7 * DAY - HOUR / 2], done: [NOW - 7 * DAY - HOUR / 2] }),
+      runStarts: allRunStarts(),
+    });
+
+    expect(week.totals).toEqual({ cameIn: 0, ran: 0, shipped: 0 });
+  });
+
   it('puts anything stamped after now in the slot holding now, where it shows', () => {
     const today = periodActivity({
       period: 'today',
       now: NOW,
-      cards: [card('clock-skew', NOW + 2 * HOUR)],
-      boards: builtinBoardCatalog.boards,
+      cardTimes: cardTimes({ created: [NOW + 2 * HOUR] }),
       runStarts: allRunStarts(),
     });
 
@@ -149,8 +100,7 @@ describe('periodActivity', () => {
     const week = periodActivity({
       period: 'week',
       now: Date.parse('2026-10-27T09:00:00Z'),
-      cards: [card('a', 0)],
-      boards: builtinBoardCatalog.boards,
+      cardTimes: cardTimes({ created: [0] }),
       runStarts: allRunStarts(),
     });
 
@@ -165,8 +115,7 @@ describe('periodActivity', () => {
     const week = periodActivity({
       period: 'week',
       now: new Date(2026, 2, 30, 0, 30).getTime(),
-      cards: [card('late-sunday', new Date(2026, 2, 22, 23, 45).getTime())],
-      boards: builtinBoardCatalog.boards,
+      cardTimes: cardTimes({ created: [new Date(2026, 2, 22, 23, 45).getTime()] }),
       runStarts: allRunStarts(),
     });
 
@@ -183,8 +132,7 @@ describe('periodActivity', () => {
       const today = periodActivity({
         period: 'today',
         now,
-        cards: [],
-        boards: builtinBoardCatalog.boards,
+        cardTimes: cardTimes({}),
         runStarts: allRunStarts(),
       });
 
@@ -195,12 +143,11 @@ describe('periodActivity', () => {
 
   it('vouches for agent runs only in spans that start after the oldest fetched run start', () => {
     const runStarts: RunStarts = { starts: [NOW - HOUR, NOW - 2 * DAY], completeAfter: NOW - 2 * DAY };
-    const week = periodActivity({ period: 'week', now: NOW, cards: [], boards: builtinBoardCatalog.boards, runStarts });
+    const week = periodActivity({ period: 'week', now: NOW, cardTimes: cardTimes({}), runStarts });
     const today = periodActivity({
       period: 'today',
       now: NOW,
-      cards: [],
-      boards: builtinBoardCatalog.boards,
+      cardTimes: cardTimes({}),
       runStarts,
     });
 

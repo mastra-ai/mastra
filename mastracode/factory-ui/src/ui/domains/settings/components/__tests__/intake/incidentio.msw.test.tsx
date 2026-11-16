@@ -19,7 +19,7 @@ import {
 
 describe('IntakeSection incidentio', () => {
   describe('given incident.io follow-up intake is configured', () => {
-    it('routes only follow-up sources and marks incident board configuration as coming soon', async () => {
+    it('routes only follow-up sources, with no placeholder board settings', async () => {
       seedFactories();
       const { savedBindings } = useIncidentioHandlers();
       server.use(
@@ -33,8 +33,7 @@ describe('IntakeSection incidentio', () => {
         await within(section).findByRole('button', { name: 'Remove Incident follow-ups (acme)' }),
       ).toBeInTheDocument();
       expect(within(section).queryByText('Incidents (acme)')).not.toBeInTheDocument();
-      expect(within(section).getByText('Incident board configuration')).toBeInTheDocument();
-      expect(within(section).getByText('Coming soon')).toBeInTheDocument();
+      expect(within(section).queryByText('Coming soon')).not.toBeInTheDocument();
 
       await userEvent.click(await screen.findByLabelText('Factory for Incident follow-ups (acme)'));
       await userEvent.click(await screen.findByRole('option', { name: 'Acme Web' }));

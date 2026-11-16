@@ -4,6 +4,7 @@
   "include": [
     "../src/**/*.ts",
     "./thread-query.test-d.ts",
+    "./deletion.test-d.ts",
     "./request-context.test-d.ts",
     "./generate-legacy.test-d.ts"
   ],

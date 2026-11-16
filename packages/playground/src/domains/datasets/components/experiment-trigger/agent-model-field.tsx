@@ -3,8 +3,9 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Fieldset, FieldsetLegend } from '@mastra/playground-ui/components/Field';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
 import { useLLMProviders } from '@mastra/react/hooks/llm';
-import { Lock, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import type { RefObject } from 'react';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
@@ -42,7 +43,7 @@ export function AgentModelField({
       <Fieldset className="gap-2">
         <FieldsetLegend>Model</FieldsetLegend>
         <div>
-          <Badge icon={<Lock />}>Locked by admin</Badge>
+          <Badge icon={<IconLock />}>Locked by admin</Badge>
         </div>
       </Fieldset>
     );
@@ -84,7 +85,7 @@ export function AgentModelField({
           </ButtonsGroup>
           {canReset && (
             <Button variant="ghost" size="icon-md" tooltip="Use the agent's model" onClick={onReset}>
-              <RotateCcw />
+              <IconArrowRotateCounterClockwise />
             </Button>
           )}
         </div>

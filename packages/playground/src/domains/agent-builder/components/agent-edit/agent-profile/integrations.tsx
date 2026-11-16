@@ -133,7 +133,7 @@ const IntegrationCard = ({ platform, agentId, disabled, requiresLibrary, onSelec
       data-testid={`integration-card-${platform.id}`}
       className={cn(
         raisedSurfaceStyle,
-        'state-layer flex w-48 flex-col items-center gap-3 rounded-xl px-4 py-4 text-center disabled:cursor-not-allowed disabled:opacity-60',
+        'flex w-48 flex-col items-center gap-3 rounded-xl state-layer px-4 py-4 text-center disabled:cursor-not-allowed disabled:opacity-60',
         surfaceRimFocus,
       )}
     >

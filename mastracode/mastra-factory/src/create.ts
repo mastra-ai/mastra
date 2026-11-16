@@ -21,7 +21,7 @@ import {
   PlatformApiError,
   waitForDatabaseReady,
 } from './platform.js';
-import { cloneTemplate, renameProject } from './utils/clone.js';
+import { canScaffoldInto, cloneTemplate, renameProject } from './utils/clone.js';
 import { detectPackageManager, getInstallArgs } from './utils/pm.js';
 
 export const PLATFORM_TEMPLATE_REPO = 'https://github.com/mastra-ai/template-factory';
@@ -59,11 +59,6 @@ interface PlatformProvisionResult {
   databaseUrl: string;
 }
 
-const PROJECT_REGION_OPTIONS = [
-  { value: 'us', label: '🇺🇸 us' },
-  { value: 'eu', label: '🇪🇺 eu' },
-] as const satisfies ReadonlyArray<{ value: ProjectRegion; label: string }>;
-
 const NEON_REGION_BY_PROJECT_REGION = {
   eu: 'aws-eu-central-1',
   us: 'aws-us-west-2',
@@ -78,24 +73,37 @@ export async function create(args: CreateArgs): Promise<void> {
   p.intro(color.inverse(' Mastra Factory '));
 
   const requestedRegion = args.region ? parseProjectRegion(args.region) : undefined;
-  const projectName =
+  const cwd = process.cwd();
+  const cwdIsUsable = canScaffoldInto(cwd);
+  const nameInput =
     args.projectName ??
     (await p.text({
-      message: 'What do you want to name your project?',
-      placeholder: 'my-mastra-factory',
+      // An empty current directory is the default: pressing Enter scaffolds into it.
+      message: cwdIsUsable
+        ? `What do you want to name your project? Press Enter to use the current directory (${path.basename(cwd)}).`
+        : 'What do you want to name your project?',
+      placeholder: cwdIsUsable ? path.basename(cwd) : 'my-mastra-factory',
       validate: value => {
-        if (!value?.trim()) return `Project name can't be empty`;
-        if (fs.existsSync(path.resolve(value.trim()))) return `Directory ${value.trim()} already exists`;
+        const name = value?.trim() ?? '';
+        if (!name && !cwdIsUsable) return `The current directory isn't empty. Enter a name for a new directory.`;
+        try {
+          if (!canScaffoldInto(path.resolve(name))) return `Directory ${name || '.'} already exists and isn't empty`;
+        } catch {
+          return `${name || '.'} can't be used as a project directory`;
+        }
         return undefined;
       },
     }));
 
-  if (p.isCancel(projectName)) {
+  if (p.isCancel(nameInput)) {
     p.cancel('Operation cancelled');
     process.exit(0);
   }
 
-  const projectPath = path.resolve(projectName);
+  // A blank name or "." means the current directory.
+  const projectPath = path.resolve(nameInput.trim());
+  const projectName = path.basename(projectPath);
+  const cdStep = projectPath === cwd ? '' : `cd ${path.relative(cwd, projectPath)} && `;
   const packageManager = detectPackageManager();
 
   args.analytics.trackEvent('sf_create_started', {
@@ -142,7 +150,7 @@ export async function create(args: CreateArgs): Promise<void> {
   } catch (err) {
     installSpinner.stop('Dependency install failed.');
     throw new Error(
-      `${err instanceof Error ? err.message : String(err)}\nYou can retry manually: cd ${projectName} && ${packageManager} install`,
+      `${err instanceof Error ? err.message : String(err)}\nYou can retry manually: ${cdStep}${packageManager} install`,
     );
   }
 
@@ -211,7 +219,7 @@ export async function create(args: CreateArgs): Promise<void> {
   const lines: string[] = [
     color.green('Your Mastra Factory is ready!'),
     '',
-    `${color.cyan('cd')} ${projectName}`,
+    ...(projectPath === cwd ? [] : [`${color.cyan('cd')} ${path.relative(cwd, projectPath)}`]),
     color.cyan(`${packageManager} run dev`),
     '',
     `Factory UI     ${color.underline('http://localhost:4111')}`,
@@ -296,17 +304,7 @@ async function runPlatformProvisioning({
     p.log.info(`Using organization ${color.cyan(orgName)}.`);
     envAccumulator.MASTRA_ORGANIZATION_ID = orgId;
 
-    const projectRegion =
-      region ??
-      (await p.select({
-        message: 'Where should your Factory project run?',
-        options: [...PROJECT_REGION_OPTIONS],
-        initialValue: 'us',
-      }));
-    if (p.isCancel(projectRegion)) {
-      p.cancel('Operation cancelled');
-      process.exit(0);
-    }
+    const projectRegion = region ?? 'us';
 
     // 3. Project — session-auth POST /v1/server/projects.
     const projectSpinner = p.spinner();

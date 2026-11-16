@@ -33,7 +33,7 @@ export function SidebarNavLabel({ children, className, description, state: state
   }
   if (description != null && description !== false) {
     return (
-      <span {...rest} className={cn('flex min-w-0 flex-1 flex-col text-left', className)}>
+      <span data-slot="sidebar-nav-label" {...rest} className={cn('flex min-w-0 flex-1 flex-col text-left', className)}>
         <span className="truncate">{children}</span>
         {/* The slot attribute both grows the row and out-ranks its 16px svg rule. */}
         <span
@@ -46,7 +46,7 @@ export function SidebarNavLabel({ children, className, description, state: state
     );
   }
   return (
-    <span {...rest} className={cn('min-w-0 flex-1 truncate text-left', className)}>
+    <span data-slot="sidebar-nav-label" {...rest} className={cn('min-w-0 flex-1 truncate text-left', className)}>
       {children}
     </span>
   );

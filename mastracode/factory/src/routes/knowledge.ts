@@ -14,6 +14,7 @@
 
 import type { Knowledge, KnowledgeChangeEvent } from '@mastra/core/knowledge';
 import {
+  encodeKnowledgeScopeId,
   KnowledgeDeclarationError,
   listKnowledgeTreeChildren,
   readKnowledgePage,
@@ -145,7 +146,12 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       };
     }
     try {
-      return { knowledge, store, read: await knowledge.readScopeFor([`org:${tenant.orgId}`, `project:${projectId}`]) };
+      // The same canonical addresses a Factory session's runs hold (see the SDK's resolveKnowledgeSessionScopes).
+      const principals = [
+        `org:${encodeKnowledgeScopeId(tenant.orgId)}`,
+        `project:${encodeKnowledgeScopeId(projectId)}`,
+      ];
+      return { knowledge, store, read: await knowledge.readScopeFor(principals) };
     } catch (error) {
       // The host's Knowledge does not declare the scopes a Factory run holds (`org:` and `project:`): a
       // deployment misconfiguration, which its session runs hit too. Never fall back to a guessed scope.

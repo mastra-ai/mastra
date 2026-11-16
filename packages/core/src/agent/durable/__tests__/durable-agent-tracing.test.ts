@@ -627,6 +627,59 @@ describe('DurableAgent observability tracing', () => {
     }
   }, 30000);
 
+  it('parents the output processor spans of the total-deadline save to AGENT_RUN', async () => {
+    const { spy, agentSpans } = await spyOnSpans();
+
+    try {
+      const processOutputStep = vi.fn(async () => undefined);
+      const processOutputResult = vi.fn(async ({ messageList }: any) => messageList);
+      const outputProcessor = { id: 'deadline-processor', processOutputStep, processOutputResult };
+      // The reply streams some text, then stalls past the total deadline.
+      const model = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'PARTIAL ' });
+            },
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        }),
+      });
+
+      const baseAgent = new Agent({
+        id: 'trace-agent-deadline',
+        name: 'Trace Agent (deadline)',
+        instructions: 'You are a test assistant',
+        model: model as LanguageModelV2,
+        outputProcessors: [outputProcessor as any],
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const { output, cleanup } = await durableAgent.stream('Hi', { modelSettings: { timeout: { totalMs: 300 } } });
+      await output.consumeStream().catch(() => {});
+      await vi.waitFor(() => expect(processOutputResult).toHaveBeenCalled());
+
+      expect(agentSpans.length).toBe(1);
+      for (const name of ['output step processor: deadline-processor', 'output processor: deadline-processor']) {
+        let processorSpan: any;
+        for (const span of createdSpans) {
+          const callIndex = span.createChildSpan.mock.calls.findIndex(
+            (call: any[]) => call[0]?.type === 'processor_run' && call[0]?.name === name,
+          );
+          if (callIndex !== -1) processorSpan = span.createChildSpan.mock.results[callIndex]?.value;
+        }
+        expect(processorSpan, name).toBeDefined();
+        expect(processorSpan.findParent('agent_run'), name).toBe(agentSpans[0]);
+      }
+
+      cleanup();
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
+
   it('forwards AGENT_RUN attributes, metadata and tracingPolicy to match non-durable parity', async () => {
     const { spy, agentSpanOpts } = await spyOnSpans();
 

@@ -256,6 +256,8 @@ const agent = new Agent({
 
 Filters match metadata stored on message embeddings when messages are saved. If thread metadata changes later, existing embeddings keep their previous metadata until those messages are saved or indexed again.
 
+Agent runs store thread metadata on message embeddings. Messages saved by older versions, which didn't store it, don't match a filter until they're saved or indexed again.
+
 Supported filter operators:
 
 - `$and`: Logical AND

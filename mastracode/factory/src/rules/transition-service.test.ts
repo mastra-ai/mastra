@@ -6,13 +6,24 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { compileBoardDefinition } from '../boards/define-board.js';
 import type { BoardPhaseRunner } from '../boards/define-board.js';
-import { createBoardRegistry, defineBoard, workBoard, workItemPhaseSemantics } from '../boards/index.js';
+import {
+  boardRegistryOf,
+  createBoardRegistry,
+  defineBoard,
+  workBoard,
+  workItemPhaseSemantics,
+} from '../boards/index.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import { reviewBoard } from '../boards/review.js';
-import { createLifecycleTestRegistry, createTestBoard, selfReviewWorkBoard } from '../boards/test-utils.js';
+import {
+  createLifecycleTestRegistry,
+  createTestBoard,
+  createTriageWorkRegistry,
+  selfReviewWorkBoard,
+} from '../boards/test-utils.js';
 import type { BoardTransitionPolicy } from '../boards/transition-policy.js';
 import { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { createFactoryStorageForTests, finishQueuedRunsForTests } from '../storage/test-utils.js';
 import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryRuleBoard, FactoryRuleDecision, FactoryRuleStage } from './types.js';
@@ -56,7 +67,7 @@ function lifecycleOptions({
   });
   return {
     configVersion: version,
-    boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+    boards: boardRegistryOf([board]),
   };
 }
 
@@ -174,7 +185,7 @@ describe('installed board runners', () => {
     const service = new FactoryTransitionService({
       storage,
       configVersion: 'release-targets-v1',
-      boards: createBoardRegistry({ boards: [release, distribution], includeDefaultBoards: false }),
+      boards: boardRegistryOf([release, distribution]),
     });
     const input = {
       ...request(item, { stage: 'preparing' }),
@@ -208,7 +219,7 @@ describe('installed board runners', () => {
     const restarted = new FactoryTransitionService({
       storage,
       configVersion: 'release-targets-v2',
-      boards: createBoardRegistry({ includeDefaultBoards: false }),
+      boards: boardRegistryOf([]),
     });
     expect(await restarted.transition(input)).toEqual(result);
     expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toHaveLength(1);
@@ -252,7 +263,7 @@ describe('installed board transition policies', () => {
     const service = new FactoryTransitionService({
       storage,
       configVersion: 'policy-test',
-      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+      boards: boardRegistryOf([board]),
     });
     return { storage, board, item, service };
   }
@@ -321,7 +332,7 @@ describe('installed board transition policies', () => {
     const service = new FactoryTransitionService({
       storage,
       configVersion: 'policy-test',
-      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+      boards: boardRegistryOf([board]),
     });
     expect(
       await service.transition(
@@ -556,6 +567,7 @@ describe('FactoryTransitionService', () => {
       const service = new FactoryTransitionService({
         storage,
         configVersion: 'manual-entry',
+        boards: createTriageWorkRegistry(),
       });
       await expect(
         service.transition({ ...request(item, { stage: 'intake' }), initialEntry: true }),
@@ -588,7 +600,11 @@ describe('FactoryTransitionService', () => {
   it('lets a triage agent send an open non-bug back to Intake, where a person moves it on', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['triage'], metadata: { authorTrusted: true } });
-    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+      boards: createTriageWorkRegistry(),
+    });
     const returned = await service.transition({
       ...request(item, { stage: 'intake', identity: 'triage-feature' }),
       actor: { type: 'agent', bindingId: 'binding-1', role: 'triage' },
@@ -762,6 +778,7 @@ describe('FactoryTransitionService', () => {
       item: { id: item.id, stages: ['planning'] },
     });
     await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+    await finishQueuedRunsForTests(storage);
 
     const moved = await service.transition({
       ...request(
@@ -954,6 +971,7 @@ describe('FactoryTransitionService', () => {
     const service = new FactoryTransitionService({
       configVersion: 'rules-v1',
       storage,
+      boards: createTriageWorkRegistry(),
     });
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeNull();
 
@@ -986,6 +1004,7 @@ describe('FactoryTransitionService', () => {
     const service = new FactoryTransitionService({
       configVersion: 'rules-v1',
       storage,
+      boards: createTriageWorkRegistry(),
     });
     const dragged = await service.transition({ ...request(item, { stage: 'triage' }), cause: 'board_drag' });
     assert(dragged.status === 'accepted');
@@ -1006,6 +1025,7 @@ describe('FactoryTransitionService', () => {
     const service = new FactoryTransitionService({
       configVersion: 'rules-v1',
       storage,
+      boards: createTriageWorkRegistry(),
     });
     const dragged = await service.transition({ ...request(item, { stage: 'triage' }), cause: 'board_drag' });
     assert(dragged.status === 'accepted');
@@ -1026,6 +1046,7 @@ describe('FactoryTransitionService', () => {
     const service = new FactoryTransitionService({
       configVersion: 'rules-v1',
       storage,
+      boards: createTriageWorkRegistry(),
     });
 
     const result = await service.transition({
@@ -1049,6 +1070,7 @@ describe('FactoryTransitionService', () => {
     const service = new FactoryTransitionService({
       configVersion: 'rules-v1',
       storage,
+      boards: createTriageWorkRegistry(),
     });
 
     const result = await service.transition({
@@ -1068,6 +1090,7 @@ describe('FactoryTransitionService', () => {
     const service = new FactoryTransitionService({
       configVersion: 'rules-v1',
       storage,
+      boards: createTriageWorkRegistry(),
     });
 
     const result = await service.transition({
@@ -1096,6 +1119,7 @@ describe('FactoryTransitionService', () => {
     const service = new FactoryTransitionService({
       configVersion: 'rules-v1',
       storage,
+      boards: createTriageWorkRegistry(),
     });
 
     const result = await service.transition({
@@ -1142,7 +1166,11 @@ describe('FactoryTransitionService', () => {
   it('rejects PR review moves outside its declared lifecycle', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { source: 'github-pr', stages: ['pr-review'] });
-    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+      boards: createTriageWorkRegistry(),
+    });
 
     const result = await service.transition(request(item, { stage: 'triage' }));
 
@@ -1158,7 +1186,11 @@ describe('FactoryTransitionService', () => {
   it('names the declared next stages when the requested stage is not a phase', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['triage'] });
-    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+      boards: createTriageWorkRegistry(),
+    });
 
     const result = await service.transition(request(item, { stage: 'plan' as FactoryRuleStage }));
 
@@ -1183,7 +1215,7 @@ describe('FactoryTransitionService', () => {
     const service = new FactoryTransitionService({
       storage,
       configVersion: 'rules-v1',
-      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+      boards: boardRegistryOf([board]),
     });
 
     const result = await service.transition(request(item, { stage: 'queued' }));
@@ -1215,7 +1247,7 @@ describe('FactoryTransitionService', () => {
     const service = new FactoryTransitionService({
       storage,
       configVersion: 'rules-v1',
-      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+      boards: boardRegistryOf([board]),
     });
 
     const result = await service.transition(request(item, { stage: 'missing' as FactoryRuleStage }));
@@ -1675,6 +1707,7 @@ describe('FactoryTransitionService', () => {
       configVersion: 'rules-v1',
       storage: seed.workItems,
       audit: seed.audit,
+      boards: createTriageWorkRegistry(),
     });
     const input = request(item, { stage: 'triage', identity: 'concurrent-ingress' });
     const [first, second] = await Promise.all([service.transition(input), service.transition(input)]);
@@ -1710,7 +1743,7 @@ describe('FactoryTransitionService', () => {
     const board = createTestBoard();
     const service = new FactoryTransitionService({
       configVersion: 'rules-v1',
-      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+      boards: boardRegistryOf([board]),
       storage,
     });
 
@@ -1729,7 +1762,7 @@ describe('FactoryTransitionService', () => {
     const board = createTestBoard({ shippingRunner: { skill: 'ship-release' } });
     const service = new FactoryTransitionService({
       configVersion: 'rules-v1',
-      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+      boards: boardRegistryOf([board]),
       storage,
     });
 
@@ -1818,7 +1851,7 @@ describe('audit trail', () => {
       storage: seed.workItems,
       configVersion: 'audit-test',
       audit: seed.audit,
-      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+      boards: boardRegistryOf([board]),
     });
 
     const moved = await service.transition(request(item, { stage: 'shipped', identity: 'ship-1' }));
@@ -1939,7 +1972,11 @@ describe('phase semantics', () => {
     // Building is entered from Planning; every other lane from Intake.
     const from = stage === 'execute' ? 'planning' : 'intake';
     const item = await createItem(storage, { stages: [from] });
-    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+      boards: createTriageWorkRegistry(),
+    });
 
     const result = await service.transition({ ...request(item, { stage }), cause: 'board_drag' });
 
@@ -1988,7 +2025,7 @@ describe('phase semantics', () => {
       const onTerminalStage = vi.fn();
       const service = new FactoryTransitionService({
         configVersion: 'rules-v1',
-        boards: createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false }),
+        boards: boardRegistryOf([createTestBoard()]),
         storage,
         onTerminalStage,
       });
@@ -2036,7 +2073,7 @@ describe('phase semantics', () => {
       });
       const service = new FactoryTransitionService({
         configVersion: 'rules-v1',
-        boards: createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false }),
+        boards: boardRegistryOf([createTestBoard()]),
         storage,
       });
 
@@ -2065,7 +2102,7 @@ describe('phase semantics', () => {
       const onTerminalStage = vi.fn();
       const service = new FactoryTransitionService({
         configVersion: 'rules-v1',
-        boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+        boards: boardRegistryOf([board]),
         storage,
         onTerminalStage,
       });
@@ -2077,6 +2114,7 @@ describe('phase semantics', () => {
       });
       assert(triaged.status === 'accepted');
       expect(triaged.decisions[0]).toMatchObject({ role: 'bot', prepareBinding: true });
+      await finishQueuedRunsForTests(storage);
 
       const done = await service.transition({
         ...request(item, { board: board.id, stage: 'done', expectedRevision: triaged.revision, identity: 'human-2' }),
@@ -2296,6 +2334,7 @@ describe('Work board plan-approval gate on the stock planning handoff', () => {
     const service = new FactoryTransitionService({
       configVersion: 'plan-gate-v1',
       storage,
+      boards: createTriageWorkRegistry(),
     });
     const item = await createItem(storage, {
       stages: ['triage'],
@@ -2331,7 +2370,7 @@ describe('onTransitionCommitted', () => {
     const service = new FactoryTransitionService({
       storage,
       configVersion: 'notify-test',
-      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+      boards: boardRegistryOf([board]),
       onTransitionCommitted,
     });
     return { item, service, storage };
@@ -2436,7 +2475,7 @@ describe('pull request cards on the Work board', () => {
     });
   });
 
-  it('re-reviews from Done with the PR review runner, and supersedes a live pass on re-entry', async () => {
+  it('re-reviews from Done with the PR review runner, and re-enters for a fresh pass once the last one is done', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const done = await prCard(storage, {
       stages: ['done'],
@@ -2453,6 +2492,12 @@ describe('pull request cards on the Work board', () => {
     expect(fromDone.decisions[0]).not.toHaveProperty('cancelInFlight');
 
     const reviewing = (await storage.get({ orgId: 'org-1', id: done.id }))!;
+    // A person cannot restart the pass while it is still queued.
+    await expect(
+      service.transition({ ...request(reviewing, { stage: 'pr-review', identity: 'too-soon' }), reenter: true }),
+    ).resolves.toMatchObject({ status: 'rejected', code: 'card_busy' });
+
+    await finishQueuedRunsForTests(storage);
     const again = await service.transition({
       ...request(reviewing, { stage: 'pr-review', identity: 'again' }),
       reenter: true,
@@ -2670,7 +2715,12 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
     it('lets the triage agent send an open non-bug back to Intake, and a person moving it on is the approval', async () => {
       const { storage, item } = await card('triage');
       const onAccepted = vi.fn();
-      const service = new FactoryTransitionService({ configVersion: 'work-rules', storage, onAccepted });
+      const service = new FactoryTransitionService({
+        configVersion: 'work-rules',
+        storage,
+        onAccepted,
+        boards: createTriageWorkRegistry(),
+      });
       await expect(
         service.transition({
           ...request(item, { orgId: org, stage: 'intake' }),
@@ -2759,7 +2809,11 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
       };
       org = `org-${randomUUID()}`;
       const storage = await workItemsOn(backend);
-      const service = new FactoryTransitionService({ configVersion: 'work-rules', storage });
+      const service = new FactoryTransitionService({
+        configVersion: 'work-rules',
+        storage,
+        boards: createTriageWorkRegistry(),
+      });
       const seen: string[] = [];
       for (const [from, allowed] of Object.entries(flow)) {
         for (const to of Object.keys(flow).filter(stage => stage !== from)) {
@@ -3093,3 +3147,138 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
     });
   },
 );
+
+describe('a person moving a busy card', () => {
+  /** A card a person just moved into Planning: its plan run is queued and nothing has picked it up. */
+  async function queuedCard({ runInFlight = false } = {}) {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    let started = false;
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+      // The queued run, once picked up, is the one in flight.
+      runInFlight: async () => started && runInFlight,
+    });
+    const created = await createItem(storage, { stages: ['intake'] });
+    await expect(
+      service.transition({
+        ...request(created, { stage: 'planning', identity: 'into-planning' }),
+        cause: 'board_drag',
+      }),
+    ).resolves.toMatchObject({ status: 'accepted' });
+    const item = (await storage.get({ orgId: 'org-1', id: created.id }))!;
+    const queued = await storage.listDeferredDecisions('org-1', PROJECT_ID, { workItemId: item.id });
+    started = true;
+    return { storage, service, item, queued };
+  }
+
+  it('refuses a move into a working phase while a run is queued for the card', async () => {
+    const { storage, service, item, queued } = await queuedCard();
+
+    const result = await service.transition({
+      ...request(item, { stage: 'execute', identity: 'into-building' }),
+      cause: 'board_drag',
+    });
+
+    expect(result).toMatchObject({
+      status: 'rejected',
+      code: 'card_busy',
+      reason: "Another run can't start while this card is busy.",
+    });
+    const after = await storage.get({ orgId: 'org-1', id: item.id });
+    expect(after).toMatchObject({ stages: ['planning'], revision: item.revision });
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID, { workItemId: item.id })).toEqual(queued);
+  });
+
+  it('refuses a move into a working phase while a run is in flight on the card', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const runInFlight = vi.fn(async () => true);
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage, runInFlight });
+    const item = await createItem(storage, { stages: ['planning'] });
+
+    const result = await service.transition({ ...request(item, { stage: 'execute' }), cause: 'board_drag' });
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'card_busy' });
+    expect(runInFlight).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org-1', workItemId: item.id }));
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['planning']);
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID, { workItemId: item.id })).toEqual([]);
+  });
+
+  it("refuses re-entering the card's own working phase while it is busy, so the run is not restarted", async () => {
+    const { storage, service, item, queued } = await queuedCard();
+
+    const result = await service.transition({
+      ...request(item, { stage: 'planning', identity: 'reenter' }),
+      cause: 'board_drag',
+      reenter: true,
+    });
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'card_busy' });
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID, { workItemId: item.id })).toEqual(queued);
+  });
+
+  it('accepts the move once nothing is in flight or queued for the card', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+      runInFlight: async () => false,
+    });
+    const item = await createItem(storage, { stages: ['planning'] });
+
+    await expect(
+      service.transition({ ...request(item, { stage: 'execute' }), cause: 'board_drag' }),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'execute' });
+  });
+
+  it.each(['intake', 'done', 'canceled'])(
+    'lets a person move a busy card into %s, which starts no run',
+    async stage => {
+      const { service, item } = await queuedCard({ runInFlight: true });
+
+      await expect(
+        service.transition({ ...request(item, { stage, identity: `into-${stage}` }), cause: 'board_drag' }),
+      ).resolves.toMatchObject({ status: 'accepted', stage });
+    },
+  );
+
+  it("leaves an agent's move of a busy card to the board", async () => {
+    const { service, item } = await queuedCard({ runInFlight: true });
+
+    await expect(
+      service.transition({
+        ...request(item, { stage: 'execute', identity: 'agent-handoff' }),
+        actor: { type: 'agent', bindingId: 'binding-1', role: 'work' },
+        ingress: { type: 'agent', identity: 'agent-handoff' },
+        cause: 'plan approved',
+        planApproved: true,
+      }),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'execute' });
+  });
+
+  it("leaves a rule's move of a busy card to the board", async () => {
+    const { service, item } = await queuedCard({ runInFlight: true });
+
+    await expect(
+      service.transition({
+        ...request(item, { stage: 'execute' }),
+        actor: { type: 'system', id: 'factory-intake-route' },
+        ingress: { type: 'rule', identity: `work-item:${item.id}:route` },
+        cause: 'route',
+        // Only the plan gate, not the busy rule, holds a rule's move out of Planning.
+        planApproved: true,
+      }),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'execute' });
+  });
+
+  it('lets a run start record the card entering its lane while the card is busy', async () => {
+    const { service, item } = await queuedCard({ runInFlight: true });
+
+    await expect(
+      service.transition({
+        ...request(item, { stage: 'execute', identity: 'start:kickoff-1:transition' }),
+        cause: 'run_start',
+      }),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'execute' });
+  });
+});

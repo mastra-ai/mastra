@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { MoreHorizontal } from 'lucide-react';
+import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
 
 import type { CustomProviderInfo } from '../../../../../../api/types';
 import { useRemoveCustomProvider } from '../../../../../../hooks/use-custom-providers';
@@ -58,7 +58,7 @@ export function CustomProviderRow({
               aria-label={`${provider.name} actions`}
               disabled={disabled || removeMutation.isPending}
             >
-              <MoreHorizontal />
+              <IconDotGrid1x3Horizontal />
             </Button>
           }
         />

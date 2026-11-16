@@ -1094,7 +1094,7 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
     type: '(Processor | ProcessorWorkflow)[] | ({ requestContext: RequestContext }) => (Processor | ProcessorWorkflow)[] | Promise<(Processor | ProcessorWorkflow)[]>',
     isOptional: true,
     description:
-      'Input processors that can modify or validate messages before they are processed by the agent. Can be individual Processor objects or workflows created with `createWorkflow()` using ProcessorStepSchema.',
+      'Input processors that can modify or validate messages before they are processed by the agent. Can be individual Processor objects or workflows created with `createWorkflow()` using ProcessorStepOutputSchema.',
   },
   {
     name: 'outputProcessors',

@@ -30,6 +30,8 @@ export interface ActiveProviderOAuth {
 export interface ProviderConnection {
   isPending: boolean;
   catalogError?: Error;
+  /** The provider list (or auth) is being fetched again, e.g. after Retry. */
+  retrying: boolean;
   authEnabled: boolean;
   orgKeyAdmin: boolean;
   /** The scope new connections are saved at. Absent without sign-in, where there is one store. */
@@ -40,6 +42,8 @@ export interface ProviderConnection {
   keyProviders: ProviderInfo[];
   gatewayProvider?: ProviderInfo;
   provider?: ProviderInfo;
+  /** The selected provider id, even when it is gone from the provider list. */
+  selectedProviderId?: string;
   connected: boolean;
   method?: ProviderConnectionMethod;
   hasConfiguredProvider: boolean;
@@ -52,22 +56,36 @@ export interface ProviderConnection {
   canConfigure: (provider: ProviderInfo, method?: ProviderConnectionMethod) => boolean;
   retry: () => void;
   clear: () => void;
-  chooseSignInProvider: (provider: ProviderInfo) => void;
+  /** Drops a connect error once the user has moved on from the action that failed. */
+  clearError: () => void;
+  /** `onFailedToStart` runs when the sign-in could not start, so a caller can undo what it showed for it. */
+  chooseSignInProvider: (provider: ProviderInfo, onFailedToStart?: () => void) => void;
   chooseKeyProvider: (provider: ProviderInfo) => void;
   chooseCustomProvider: (providerId: string) => void;
   chooseGateway: () => void;
-  closeKeyDialog: () => void;
+  /** `saved` selects the provider the dialog was for; a cancel keeps the previous choice. */
+  closeKeyDialog: (saved: boolean) => void;
   closeOAuth: () => void;
   completeOAuth: () => void;
+}
+
+/**
+ * The Mastra Gateway on a server that has its own key, such as the one the Mastra platform
+ * adds to a deploy. Unlike other server-held credentials, that key serves every scope that
+ * has no stored credential, personal sessions included.
+ */
+function hasServerGatewayKey(provider: ProviderInfo): boolean {
+  return provider.serverKey === true;
 }
 
 export function providerCredentialMethod(
   provider: ProviderInfo,
   scope?: ProviderCredentialScope,
 ): ProviderConnectionMethod | undefined {
-  if (scope === 'user') return credentialAt(provider, 'user');
+  const serverKey = hasServerGatewayKey(provider) ? ('api_key' as const) : undefined;
+  if (scope === 'user') return credentialAt(provider, 'user') ?? serverKey;
   if (provider.source === 'deployment') return 'api_key';
-  if (scope === 'org') return credentialAt(provider, 'org');
+  if (scope === 'org') return credentialAt(provider, 'org') ?? serverKey;
   if (provider.source === 'none') return undefined;
   return provider.source.startsWith('oauth') ? 'oauth' : 'api_key';
 }
@@ -108,12 +126,21 @@ function offersApiKey(provider: ProviderInfo): boolean {
   return ['stored-org', 'stored-user', 'stored'].includes(provider.source);
 }
 
+export interface ProviderSelection {
+  providerId: string;
+  method: ProviderConnectionMethod;
+}
+
 export function useProviderConnection({
   scope,
   initialSelection,
+  onSelectionChange,
 }: {
   scope?: ProviderCredentialScope;
-  initialSelection?: { providerId: string; method: ProviderConnectionMethod };
+  initialSelection?: ProviderSelection;
+  /** Called whenever the user picks or clears a provider. A provider that needs a key or a sign-in is only
+   *  picked once that succeeds, so cancelling keeps the working choice. */
+  onSelectionChange?: (selection: ProviderSelection | undefined) => void;
 } = {}): ProviderConnection {
   const providersQuery = useProvidersQuery();
   const authQuery = useFactoryAuth();
@@ -121,7 +148,7 @@ export function useProviderConnection({
   const startOAuthMutation = useStartProviderOAuth();
   const cancelOAuthMutation = useCancelProviderOAuth();
   const connectGatewayMutation = useConnectMastraGateway();
-  const [selection, setSelection] = useState(initialSelection);
+  const [selection, setSelection] = useState<ProviderSelection | undefined>(initialSelection);
   const [keyDialogProvider, setKeyDialogProvider] = useState<ProviderInfo>();
   const [activeOAuth, setActiveOAuth] = useState<ActiveProviderOAuth>();
   const [error, setError] = useState<string>();
@@ -141,12 +168,13 @@ export function useProviderConnection({
   const gatewayProvider = providers.find(candidate => candidate.connectWithMastraAccount);
   const providerChoices = providers.filter(candidate => candidate !== gatewayProvider);
 
-  const select = (nextSelection: typeof selection) => {
+  const select = (nextSelection: ProviderSelection | undefined) => {
     setSelection(nextSelection);
     setError(undefined);
+    onSelectionChange?.(nextSelection);
   };
 
-  const startOAuth = async (chosen: ProviderInfo) => {
+  const startOAuth = async (chosen: ProviderInfo, onFailedToStart?: () => void) => {
     setError(undefined);
     try {
       const session = await startOAuthMutation.mutateAsync(signInRequest(chosen, credentialScope));
@@ -157,6 +185,7 @@ export function useProviderConnection({
       });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Failed to start provider sign in');
+      onFailedToStart?.();
     }
   };
 
@@ -166,7 +195,7 @@ export function useProviderConnection({
   // A custom endpoint is set up in its own form, never by pasting a key, so it
   // is only offered where it is already saved.
   const offeredForKey = (candidate: ProviderInfo) =>
-    !(hidesDeploymentKeys && candidate.source === 'deployment') &&
+    !(hidesDeploymentKeys && candidate.source === 'deployment' && !hasServerGatewayKey(candidate)) &&
     (candidate.custom ? isConfigured(candidate) : offersApiKey(candidate));
 
   const connectGateway = async (gateway: ProviderInfo) => {
@@ -189,6 +218,7 @@ export function useProviderConnection({
       (scope !== undefined && authQuery.isPending) ||
       (scope === 'org' && authEnabled && orgKeyAdminQuery.isPending),
     catalogError: providersQuery.error ?? (scope !== undefined ? authQuery.error : undefined) ?? undefined,
+    retrying: providersQuery.isFetching || (scope !== undefined && authQuery.isFetching),
     authEnabled,
     orgKeyAdmin,
     credentialScope,
@@ -196,6 +226,7 @@ export function useProviderConnection({
     signInProviders: providerChoices.filter(candidate => candidate.oauth?.supported === true),
     keyProviders: providerChoices.filter(offeredForKey),
     provider,
+    selectedProviderId: selection?.providerId,
     connected: provider ? isConfigured(provider, selection?.method) : false,
     method: selection?.method,
     hasConfiguredProvider: providers.some(candidate => isConfigured(candidate)),
@@ -212,26 +243,38 @@ export function useProviderConnection({
       if (scope !== undefined) void authQuery.refetch();
     },
     clear: () => select(undefined),
-    chooseSignInProvider: chosen => {
+    clearError: () => setError(undefined),
+    chooseSignInProvider: (chosen, onFailedToStart) => {
       if (!canConfigure(chosen, 'oauth')) return;
-      select({ providerId: chosen.provider, method: 'oauth' });
-      if (!isConfigured(chosen, 'oauth')) void startOAuth(chosen);
+      if (isConfigured(chosen, 'oauth')) select({ providerId: chosen.provider, method: 'oauth' });
+      else void startOAuth(chosen, onFailedToStart);
     },
     chooseKeyProvider: chosen => {
       if (!canConfigure(chosen, 'api_key')) return;
-      select({ providerId: chosen.provider, method: 'api_key' });
-      if (!isConfigured(chosen, 'api_key')) setKeyDialogProvider(chosen);
+      if (isConfigured(chosen, 'api_key')) {
+        select({ providerId: chosen.provider, method: 'api_key' });
+        return;
+      }
+      // An earlier failure belongs to another attempt; the dialog shows its own.
+      setError(undefined);
+      setKeyDialogProvider(chosen);
     },
     chooseCustomProvider: providerId => select({ providerId, method: 'api_key' }),
     chooseGateway: () => {
       if (gatewayProvider) void connectGateway(gatewayProvider);
     },
-    closeKeyDialog: () => setKeyDialogProvider(undefined),
+    closeKeyDialog: saved => {
+      setKeyDialogProvider(undefined);
+      if (saved && keyDialogProvider) select({ providerId: keyDialogProvider.provider, method: 'api_key' });
+    },
     closeOAuth: () => {
       const flow = activeOAuth;
       setActiveOAuth(undefined);
       if (flow) cancelOAuthMutation.mutate({ provider: flow.provider, sessionId: flow.session.sessionId });
     },
-    completeOAuth: () => setActiveOAuth(undefined),
+    completeOAuth: () => {
+      setActiveOAuth(undefined);
+      if (activeOAuth) select({ providerId: activeOAuth.provider, method: 'oauth' });
+    },
   };
 }

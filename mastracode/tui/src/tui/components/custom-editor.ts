@@ -11,8 +11,15 @@ import { getClipboardImage, getClipboardText } from '@mastra/code-sdk/clipboard/
 import type { ClipboardImage } from '@mastra/code-sdk/clipboard/index';
 import chalk from 'chalk';
 import { markHoveredRows } from '../mouse/hover-marker.js';
-import { highlightColumns, InputSelection, rangeFits, removeRange, textInRange } from '../mouse/input-selection.js';
-import type { TextPosition } from '../mouse/input-selection.js';
+import {
+  before,
+  highlightColumns,
+  InputSelection,
+  rangeFits,
+  removeRange,
+  textInRange,
+} from '../mouse/input-selection.js';
+import type { TextPosition, TextRange } from '../mouse/input-selection.js';
 import { editorInternals } from '../mouse/pi-tui-internals.js';
 import type { EditorVisualLine } from '../mouse/pi-tui-internals.js';
 import { displayModeColor, mastra, theme } from '../theme.js';
@@ -91,9 +98,30 @@ const EDITING_KEYS = [
   'alt+delete',
 ] as const;
 
+// Presses this close together, on the same cell, count as a double or triple click.
+const MULTI_CLICK_MS = 500;
+
+/** Shift+movement keys that select text, with the plain movement they extend. */
+const SELECT_KEYS: [
+  key: Parameters<typeof matchesKey>[1],
+  move: (editor: ReturnType<typeof editorInternals>) => void,
+][] = [
+  ['shift+left', e => e.moveCursor(0, -1)],
+  ['shift+right', e => e.moveCursor(0, 1)],
+  // At the top or bottom row, go to the start or end instead of browsing prompt history.
+  ['shift+up', e => (e.isOnFirstVisualLine() ? e.moveToLineStart() : e.moveCursor(-1, 0))],
+  ['shift+down', e => (e.isOnLastVisualLine() ? e.moveToLineEnd() : e.moveCursor(1, 0))],
+  ['shift+home', e => e.moveToLineStart()],
+  ['shift+end', e => e.moveToLineEnd()],
+  ['shift+alt+left', e => e.moveWordBackwards()],
+  ['shift+ctrl+left', e => e.moveWordBackwards()],
+  ['shift+alt+right', e => e.moveWordForwards()],
+  ['shift+ctrl+right', e => e.moveWordForwards()],
+];
+
 /** Text input or a key that moves through or deletes text — anything that means "working in the input box". */
 function isEditingInput(data: string): boolean {
-  return isTextInput(data) || EDITING_KEYS.some(key => matchesKey(data, key));
+  return isTextInput(data) || [...EDITING_KEYS, ...SELECT_KEYS.map(([key]) => key)].some(key => matchesKey(data, key));
 }
 
 export type AppAction =
@@ -191,6 +219,10 @@ export class CustomEditor extends Editor {
   private readonly selection = new InputSelection();
   /** Screen row of the first visible text row, captured when a mouse-mode press starts a drag. */
   private dragFirstScreenRow: number | undefined;
+  /** The last press, to recognise double and triple clicks. */
+  private lastPress: { time: number; row: number; col: number; count: number } | undefined;
+  /** After a double or triple click, the word or line it selected; dragging extends by whole words or lines. */
+  private selectionUnit: { kind: 'word' | 'line'; range: TextRange } | undefined;
 
   private _cachedModeColorHex?: string;
   private _cachedColorFn?: (s: string) => string;
@@ -452,8 +484,10 @@ export class CustomEditor extends Editor {
    * Text position under the given row of visible text (0 = first visible row)
    * and 1-based screen column, or undefined outside the text. With `clamp`,
    * rows above/below the text resolve to its start/end, as a drag needs.
+   * With `cell`, the position is the start of the character under the pointer
+   * rather than the nearest gap between characters.
    */
-  private positionAt(textRow: number, screenCol: number, clamp = false): TextPosition | undefined {
+  private positionAt(textRow: number, screenCol: number, clamp = false, cell = false): TextPosition | undefined {
     const layout = this.inputLayout;
     if (!layout || layout.rowCount <= 0) return undefined;
     let row = textRow;
@@ -473,7 +507,7 @@ export class CustomEditor extends Editor {
     // Paste markers segment as one unit, so a click never lands inside one.
     for (const { segment } of editorInternals(this).segment(line.slice(visual.startCol, endCol), 'grapheme')) {
       const segmentWidth = visibleWidth(segment);
-      if (x < width + segmentWidth / 2) break;
+      if (x < width + (cell ? segmentWidth : segmentWidth / 2)) break;
       width += segmentWidth;
       col += segment.length;
     }
@@ -516,18 +550,67 @@ export class CustomEditor extends Editor {
     const position = this.positionAt(screenRow - firstScreenRow, screenCol);
     if (!position) return 'box';
     this.dragFirstScreenRow = firstScreenRow;
-    this.selection.start(position);
-    this.moveCursorTo(position);
+
+    const now = Date.now();
+    const last = this.lastPress;
+    const repeat = last && now - last.time < MULTI_CLICK_MS && last.row === screenRow && last.col === screenCol;
+    const count = repeat ? (last.count % 3) + 1 : 1;
+    this.lastPress = { time: now, row: screenRow, col: screenCol, count };
+    this.selectionUnit = undefined;
+
+    if (count === 1) {
+      this.selection.start(position);
+      this.moveCursorTo(position);
+      return 'text';
+    }
+    const kind = count === 2 ? 'word' : 'line';
+    const range = this.unitRangeAt(kind, this.positionAt(screenRow - firstScreenRow, screenCol, false, true)!);
+    this.selectionUnit = { kind, range };
+    this.selection.set(range.start, range.end);
+    this.moveCursorTo(range.end);
     return 'text';
+  }
+
+  /**
+   * The word (a run of letters, of spaces, or one other character; a paste marker counts as one)
+   * or logical line containing the character at `position`.
+   */
+  private unitRangeAt(kind: 'word' | 'line', position: TextPosition): TextRange {
+    const line = editorInternals(this).state.lines[position.line] ?? '';
+    if (kind === 'line')
+      return { start: { line: position.line, col: 0 }, end: { line: position.line, col: line.length } };
+    let found: { segment: string; index: number } | undefined;
+    for (const segment of editorInternals(this).segment(line, 'word')) {
+      found = segment;
+      if (position.col < segment.index + segment.segment.length) break;
+    }
+    if (!found) return { start: position, end: position };
+    return {
+      start: { line: position.line, col: found.index },
+      end: { line: position.line, col: found.index + found.segment.length },
+    };
   }
 
   /** Mouse mode: drag after pointerPress; extends the selection to the pointer. */
   pointerDrag(screenRow: number, screenCol: number): boolean {
     if (this.dragFirstScreenRow === undefined) return false;
-    const position = this.positionAt(screenRow - this.dragFirstScreenRow, screenCol, true);
+    // A press that moves is a drag, not a click, so it can't start a double click.
+    if (this.lastPress && (this.lastPress.row !== screenRow || this.lastPress.col !== screenCol))
+      this.lastPress = undefined;
+    const unit = this.selectionUnit;
+    const position = this.positionAt(screenRow - this.dragFirstScreenRow, screenCol, true, unit !== undefined);
     if (!position) return false;
-    this.selection.extend(position);
-    this.moveCursorTo(position);
+    if (!unit) {
+      this.selection.extend(position);
+      this.moveCursorTo(position);
+      return true;
+    }
+    // After a double or triple click, grow by whole words or lines, keeping the first one selected.
+    const range = this.unitRangeAt(unit.kind, position);
+    const backwards = before(range.start, unit.range.start);
+    const head = backwards ? range.start : before(unit.range.end, range.end) ? range.end : unit.range.end;
+    this.selection.set(backwards ? unit.range.end : unit.range.start, head);
+    this.moveCursorTo(head);
     return true;
   }
 
@@ -546,7 +629,28 @@ export class CustomEditor extends Editor {
 
   clearInputSelection(): void {
     this.dragFirstScreenRow = undefined;
+    this.selectionUnit = undefined;
     this.selection.clear();
+  }
+
+  /**
+   * Shift+arrow, Shift+Home/End and Shift+Alt/Ctrl+arrow: moves the cursor like the plain key and
+   * selects from where the selection started (or the cursor) to the new position. Returns false for other keys.
+   */
+  private handleSelectKey(data: string): boolean {
+    const move = SELECT_KEYS.find(([key]) => matchesKey(data, key))?.[1];
+    if (!move || this.isShowingAutocomplete()) return false;
+    const internals = editorInternals(this);
+    const anchor = this.selection.anchorPosition() ?? {
+      line: internals.state.cursorLine,
+      col: internals.state.cursorCol,
+    };
+    move(internals);
+    internals.lastAction = null;
+    this.dragFirstScreenRow = undefined;
+    this.selectionUnit = undefined;
+    this.selection.set(anchor, { line: internals.state.cursorLine, col: internals.state.cursorCol });
+    return true;
   }
 
   private highlightSelection(contentLines: string[], paddingX: number): void {
@@ -1084,9 +1188,19 @@ export class CustomEditor extends Editor {
   handleInput(data: string): void {
     if (isEditingInput(data)) this.actionHandlers.get('editInput')?.();
 
-    if (this.selection.range() && this.handleSelectionInput(data)) {
+    if (this.handleSelectKey(data)) {
       this.requestEditorRender();
       return;
+    }
+
+    if (this.selection.range()) {
+      if (this.handleSelectionInput(data)) {
+        this.requestEditorRender();
+        return;
+      }
+    } else {
+      // Drop an empty selection (e.g. Shift+← then Shift+→) so the next Shift+key starts from the cursor.
+      this.selection.clear();
     }
 
     if (this.maybeHandleBracketedPaste(data)) {

@@ -6,15 +6,16 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconChip } from '@mastra/playground-ui/icons/central/IconChip';
+import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
+import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchemaProperty } from '@mastra/playground-ui/utils/json-schema';
 import { useCompareAgentVersions } from '@mastra/react/hooks/agents';
-import { Braces, Wrench, Cpu } from 'lucide-react';
 import { useMemo } from 'react';
-
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { getEditorOwnership } from '../../utils/editor-ownership';
 import { InstructionBlocksPage } from '../agent-cms-pages/instruction-blocks-page';
@@ -625,13 +626,13 @@ function ReadOnlyConfigWithDiff({
     <Tabs<AgentConfigTab> defaultTab="variables" className="flex min-h-full flex-col overflow-visible">
       <TabList variant="pill-ghost" className="shrink-0">
         <Tab value="variables">
-          <ConfigTabLabel title="Variables" icon={<Braces />} badge={variablesBadge} />
+          <ConfigTabLabel title="Variables" icon={<IconCodeBrackets />} badge={variablesBadge} />
         </Tab>
         <Tab value="instructions">
-          <ConfigTabLabel title="System Prompt" icon={<Cpu />} badge={instructionsBadge} />
+          <ConfigTabLabel title="System Prompt" icon={<IconChip />} badge={instructionsBadge} />
         </Tab>
         <Tab value="tools">
-          <ConfigTabLabel title="Tools" icon={<Wrench />} badge={toolsBadge} />
+          <ConfigTabLabel title="Tools" icon={<IconMaintenance />} badge={toolsBadge} />
         </Tab>
       </TabList>
 
@@ -708,15 +709,15 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
           <Tabs<AgentConfigTab> defaultTab="variables" className="flex min-h-full flex-col overflow-visible">
             <TabList variant="pill-ghost" className="shrink-0">
               <Tab value="variables">
-                <ConfigTabLabel title="Variables" icon={<Braces />} />
+                <ConfigTabLabel title="Variables" icon={<IconCodeBrackets />} />
               </Tab>
               <Tab value="instructions">
-                <ConfigTabLabel title="System Prompt" icon={<Cpu />} />
+                <ConfigTabLabel title="System Prompt" icon={<IconChip />} />
               </Tab>
               <Tab value="tools">
                 <ConfigTabLabel
                   title="Tools"
-                  icon={<Wrench />}
+                  icon={<IconMaintenance />}
                   badge={toolCount > 0 ? <Badge size="sm">{`${toolCount}`}</Badge> : undefined}
                 />
               </Tab>

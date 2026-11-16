@@ -1,7 +1,9 @@
 import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@mastra/playground-ui/components/FilterBar';
+import { IconLab } from '@mastra/playground-ui/icons/central/IconLab';
+import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
+import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
 import { hueAccentColor } from '@mastra/playground-ui/utils/colors';
-import { FlaskConicalIcon, SearchIcon, TagIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { DATASET_EXPERIMENT_OPTIONS } from './datasets-list/helpers';
 import {
@@ -71,12 +73,12 @@ export function DatasetsFilterBar({
     const tagSuggestions = tagOptions.filter(option => option.value !== ALL);
     return [
       // Listed first so free text lands on it by default.
-      { id: SEARCH_FIELD_ID, label: 'Search', icon: SearchIcon, search: true, operators: ['contains'] },
+      { id: SEARCH_FIELD_ID, label: 'Search', icon: IconMagnifyingGlass, search: true, operators: ['contains'] },
       ...targetFields,
       {
         id: EXPERIMENTS_FIELD_ID,
         label: 'Experiments',
-        icon: FlaskConicalIcon,
+        icon: IconLab,
         color: hueAccentColor('pink'),
         operators: ['is'],
         strict: true,
@@ -85,7 +87,7 @@ export function DatasetsFilterBar({
       {
         id: TAG_FIELD_ID,
         label: 'Tag',
-        icon: TagIcon,
+        icon: IconTag,
         color: hueAccentColor('pink'),
         operators: ['is'],
         strict: true,

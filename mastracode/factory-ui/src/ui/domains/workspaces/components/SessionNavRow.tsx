@@ -1,10 +1,10 @@
+import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
+import type { CardChangeRequest, PullRequestStatus } from '@mastra/factory/work-items/change-requests';
 import { ContextMenu } from '@mastra/playground-ui/components/ContextMenu';
 import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { Sidebar, useMaybeSidebar } from '@mastra/playground-ui/components/Sidebar';
-import { PullRequestIcon } from '@mastra/playground-ui/components/PullRequestIcon';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Pin, User } from 'lucide-react';
 import { useId, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -13,8 +13,7 @@ import type { Location } from 'react-router';
 import { SourceIcon } from '../../factory/components/BoardIcons';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import type { SessionSource } from '../services/sessionPresentation';
-import type { SessionExternalLink, SessionPullRequest } from '../services/sessionRows';
-import type { SessionRowStatus } from '../services/sessionStatus';
+import type { SessionExternalLink } from '../services/sessionRows';
 import { ActivityBelt } from '@mastra/playground-ui/components/Activity';
 import { SessionActionsMenu } from './SessionActionsMenu';
 import { SessionMenuItems } from './SessionMenuItems';
@@ -22,8 +21,12 @@ import { SessionPreviewCard } from './SessionPreviewCard';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 import { SessionSharingPopover } from './SessionSharingPopover';
 import { relativeTime } from '../../../../lib/date/relativeTime';
-import type { PullRequestStatus } from '../../factory/boardItems';
+import { changeRequestStatusLabel } from '../../factory/changeRequestState';
+import { changeRequestNumberLabel, changeRequestReference } from '../../factory/sessionChangeRequests';
+import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
 import { isPullRequestSource } from '../../factory/services/workItems';
+import { IconPin } from '@mastra/playground-ui/icons/central/IconPin';
+import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 
 /**
  * Shared sidebar row for workspace/user sessions. Built on `Sidebar.NavLink`
@@ -38,6 +41,7 @@ import { isPullRequestSource } from '../../factory/services/workItems';
 export function SessionNavRow({
   name,
   label,
+  runByFactory,
   level,
   title,
   url,
@@ -47,19 +51,21 @@ export function SessionNavRow({
   disabled,
   loading,
   status,
-  merged,
-  changeRequestProvider = 'github',
   preview: previewDetails,
   pinned = false,
   from,
   onPinChange,
   onDelete,
   onRegenerateTitle,
+  onAnswerApproval,
+  answeringApproval,
   regeneratingTitle,
   visibility,
   onVisibilityChange,
   changingVisibility,
   pullRequest,
+  pullRequestStatus,
+  repository,
   updatedAt,
   compact,
   subItems,
@@ -67,6 +73,8 @@ export function SessionNavRow({
   name: string;
   /** Shown instead of the name, which stays in the accessible name: a child session's phase. */
   label?: string;
+  /** The Factory owns this session, though it is listed under a person's. */
+  runByFactory?: boolean;
   /** Indent level: 1 for a card's child sessions. */
   level?: number;
   /** Hover tooltip, typically the branch name. */
@@ -79,10 +87,6 @@ export function SessionNavRow({
   disabled: boolean;
   /** True while this row's async open is in flight — shows a spinner and blocks clicks. */
   loading?: boolean;
-  /** Merged change request for this session's branch — shown only when the row is otherwise idle. */
-  merged?: boolean;
-  /** Names the merged badge: GitHub pull requests or GitLab merge requests. */
-  changeRequestProvider?: 'github' | 'gitlab';
   status?: SessionRowStatus;
   preview?: SessionPreviewDetails;
   pinned?: boolean;
@@ -93,6 +97,9 @@ export function SessionNavRow({
   onDelete?: () => void;
   /** Omitted for sessions the viewer does not own: the server only lets owners rename. */
   onRegenerateTitle?: () => void;
+  /** Set while a followed card's phase session waits on an approval this viewer may give. */
+  onAnswerApproval?: (decision: 'approve' | 'decline') => void;
+  answeringApproval?: boolean;
   regeneratingTitle?: boolean;
   /** Private rows show a sharing popover; shared rows have no visibility badge. */
   visibility?: 'org' | 'private';
@@ -101,10 +108,11 @@ export function SessionNavRow({
   /** Disables the visibility item while a change is in flight, so overlapping requests cannot land out of order. */
   changingVisibility?: boolean;
   /** The change request the session's card is, or links to. */
-  pullRequest?: SessionPullRequest;
-  /** When the session last moved, shown on the second line. */
+  pullRequest?: CardChangeRequest;
+  pullRequestStatus?: PullRequestStatus;
+  repository?: string;
   updatedAt: string;
-  /** Single-line row; otherwise a second line shows when it last moved and its change request. */
+  /** Single-line row; otherwise a second line shows its time and its change request. */
   compact: boolean;
   /** Rows nested under this one: a card's child sessions. */
   subItems?: ReactNode;
@@ -112,29 +120,28 @@ export function SessionNavRow({
   // The row box, not the list item, which also holds any nested rows.
   const anchor = useRef<HTMLSpanElement>(null);
   const statusId = useId();
+  const timeId = useId();
   // Selecting a session navigates away, so the mobile nav drawer must close.
   const sidebar = useMaybeSidebar();
   // Touch has no hover: the card would only open behind the tap that already navigated away.
   const preview = sidebar?.isMobile ? undefined : previewDetails;
-  // The live merge check lands before the work item catches up, so it wins over the item's state
-  // either way; when it says not merged, the item's stale merged state is dropped rather than guessed.
-  const pullRequestStatus = merged
-    ? 'merged'
-    : merged === false && pullRequest?.status === 'merged'
-      ? undefined
-      : pullRequest?.status;
+  const merged = pullRequestStatus === 'merged';
   const statusAt = pullRequestPlacement({ source, pullRequest, pullRequestStatus, compact, merged, loading, status });
   const statusLabel =
-    (statusAt === 'icon' || statusAt === 'line') && pullRequestStatus
-      ? changeRequestLabel(pullRequestStatus, pullRequest)
+    (statusAt === 'icon' || statusAt === 'line') && pullRequest && pullRequestStatus
+      ? [changeRequestStatusLabel(pullRequest.provider, pullRequestStatus), changeRequestNumberLabel(pullRequest)]
+          .filter(Boolean)
+          .join(' ')
       : undefined;
   const link = (
     <Link
       to={url}
       state={from ? { from } : undefined}
       aria-current={active ? 'page' : undefined}
-      aria-label={label ? `${label}: ${name}` : name}
-      aria-describedby={statusLabel ? statusId : undefined}
+      aria-label={[runByFactory ? 'Run by Factory' : undefined, label, name].filter(Boolean).join(': ')}
+      aria-describedby={
+        [statusLabel ? statusId : undefined, compact ? undefined : timeId].filter(Boolean).join(' ') || undefined
+      }
       aria-disabled={disabled || loading || undefined}
       tabIndex={disabled || loading ? -1 : undefined}
       onClick={event => {
@@ -152,23 +159,30 @@ export function SessionNavRow({
       title={preview ? undefined : title}
     >
       {source ? (
-        <SessionSourceIcon source={source} pullRequestStatus={statusAt === 'icon' ? pullRequestStatus : undefined} />
+        <SessionSourceIcon
+          source={source}
+          provider={pullRequest?.provider}
+          pullRequestStatus={statusAt === 'icon' ? pullRequestStatus : undefined}
+        />
       ) : null}
       <Sidebar.NavLabel
         description={
           compact ? undefined : (
             <SessionMetaLine
+              id={timeId}
               updatedAt={updatedAt}
               pullRequest={pullRequest}
+              repository={repository}
               status={statusAt === 'line' ? pullRequestStatus : undefined}
             />
           )
         }
       >
         {label ?? name}
+        {runByFactory ? <span className="text-muted-foreground ml-1.5">run by Factory</span> : null}
       </Sidebar.NavLabel>
       {pinned && !loading ? (
-        <Pin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
+        <IconPin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-icon-xs shrink-0 rotate-45" />
       ) : null}
       {statusLabel ? (
         <span id={statusId} hidden>
@@ -185,13 +199,15 @@ export function SessionNavRow({
     onDelete,
     onRegenerateTitle,
     regeneratingTitle,
+    onAnswerApproval,
+    answeringApproval,
     visibility,
     onVisibilityChange,
     changingVisibility,
   };
   const belt = loading ? undefined : status;
   const trailing = loading ? 'loading' : statusAt === 'badge' ? 'merged' : undefined;
-  const mergedLabel = changeRequestProvider === 'gitlab' ? 'Merge request merged' : 'Pull request merged';
+  const mergedLabel = changeRequestStatusLabel(pullRequest?.provider ?? 'github', 'merged');
   const action = (
     <>
       <span ref={anchor} aria-hidden className="pointer-events-none absolute inset-0" />
@@ -280,7 +296,7 @@ function pullRequestPlacement({
   status,
 }: {
   source?: SessionSource;
-  pullRequest?: SessionPullRequest;
+  pullRequest?: CardChangeRequest;
   pullRequestStatus?: PullRequestStatus;
   compact: boolean;
   merged?: boolean;
@@ -293,52 +309,32 @@ function pullRequestPlacement({
   return undefined;
 }
 
-const CHANGE_REQUEST_STATUS_LABELS: Record<SessionPullRequest['provider'], Record<PullRequestStatus, string>> = {
-  github: {
-    draft: 'Draft pull request',
-    open: 'Open pull request',
-    closed: 'Closed pull request',
-    merged: 'Merged pull request',
-  },
-  gitlab: {
-    draft: 'Draft merge request',
-    open: 'Open merge request',
-    closed: 'Closed merge request',
-    merged: 'Merged merge request',
-  },
-};
-
-function changeRequestReference(pullRequest: SessionPullRequest | undefined) {
-  if (pullRequest?.number === undefined) return undefined;
-  return `${pullRequest.provider === 'gitlab' ? '!' : '#'}${pullRequest.number}`;
-}
-
-function changeRequestLabel(status: PullRequestStatus, pullRequest: SessionPullRequest | undefined) {
-  const label = CHANGE_REQUEST_STATUS_LABELS[pullRequest?.provider ?? 'github'][status];
-  const reference = changeRequestReference(pullRequest);
-  return reference ? `${label} ${reference}` : label;
-}
-
 /** The link describes the change request itself, so the line only draws it. */
 function SessionMetaLine({
+  id,
   updatedAt,
   pullRequest,
+  repository,
   status,
 }: {
+  id: string;
   updatedAt: string;
-  pullRequest: SessionPullRequest | undefined;
+  pullRequest: CardChangeRequest | undefined;
+  repository: string | undefined;
   /** Omitted when the leading icon already shows the change request's state. */
   status: PullRequestStatus | undefined;
 }) {
-  const reference = changeRequestReference(pullRequest);
+  const reference = pullRequest?.number === undefined ? undefined : changeRequestReference(pullRequest, repository);
+  const ago = relativeTime(updatedAt);
   return (
     <>
-      <time dateTime={updatedAt} className="tabular-nums">
-        {relativeTime(updatedAt)}
+      <time id={id} dateTime={updatedAt} title={`Updated ${ago}`} className="tabular-nums">
+        <span className="sr-only">Updated </span>
+        {ago}
       </time>
       {status || reference ? (
         <span aria-hidden className="flex items-center gap-0.5 tabular-nums">
-          {status ? <PullRequestStatusIcon status={status} decorative /> : null}
+          {status ? <PullRequestStatusIcon status={status} provider={pullRequest?.provider} decorative /> : null}
           {reference}
         </span>
       ) : null}
@@ -348,16 +344,18 @@ function SessionMetaLine({
 
 function SessionSourceIcon({
   source,
+  provider,
   pullRequestStatus,
 }: {
   source: SessionSource;
+  provider: ChangeRequestProvider | undefined;
   pullRequestStatus?: PullRequestStatus;
 }) {
   if (source === 'user') {
-    return <User data-source="user" aria-hidden className="text-muted-foreground size-3.5 shrink-0" />;
+    return <IconUser data-source="user" aria-hidden className="text-muted-foreground size-icon-sm shrink-0" />;
   }
   if (pullRequestStatus) {
-    return <PullRequestIcon data-source={source} status={pullRequestStatus} aria-hidden className="size-3.5" />;
+    return <PullRequestStatusIcon status={pullRequestStatus} provider={provider} decorative className="size-3.5" />;
   }
   return <SourceIcon source={source} className="size-3.5" />;
 }

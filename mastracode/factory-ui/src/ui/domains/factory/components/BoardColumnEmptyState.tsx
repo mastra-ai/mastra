@@ -3,8 +3,10 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode } from 'react';
 
 import type { BoardLayout } from '../boardLayout';
-import { stageLabel } from '../stages';
-import type { BoardStageId } from '../stages';
+import type { BoardStage } from '../stages';
+
+/** What the initial phase is missing before cards can arrive: a connected source, or a route to this board. */
+export type IntakeSetup = 'source' | 'route';
 
 interface BoardColumnEmptyCopy {
   title: string;
@@ -12,15 +14,21 @@ interface BoardColumnEmptyCopy {
 }
 
 function boardColumnEmptyCopy(
-  stage: BoardStageId,
-  hasIntakeSource: boolean,
+  stage: BoardStage,
+  intakeSetup: IntakeSetup | undefined,
   isInitialPhase: boolean,
 ): BoardColumnEmptyCopy {
   if (isInitialPhase) {
-    if (!hasIntakeSource) {
+    if (intakeSetup === 'source') {
       return {
         title: 'No intake sources',
         description: 'Create a card or connect an issue source in Work Intake settings.',
+      };
+    }
+    if (intakeSetup === 'route') {
+      return {
+        title: 'No rule here takes new items',
+        description: 'Your connected sources file onto other boards. Create a card or add a rule for new items.',
       };
     }
     return {
@@ -28,7 +36,7 @@ function boardColumnEmptyCopy(
       description: 'New issues from your connected sources appear here.',
     };
   }
-  switch (stage) {
+  switch (stage.id) {
     case 'triage':
       return {
         title: 'Nothing to triage',
@@ -66,17 +74,16 @@ function boardColumnEmptyCopy(
       };
     default:
       return {
-        title: `Nothing in ${stageLabel(stage)}`,
+        title: `Nothing in ${stage.label}`,
         description: 'Drag work here when it reaches this stage.',
       };
   }
 }
 
 function boardEmptyCopy(
-  stage: BoardStageId,
-  hasIntakeSource: boolean,
+  stage: BoardStage,
+  intakeSetup: IntakeSetup | undefined,
   filtersExcludeAll: boolean,
-  alreadyMaterialized: number,
   isInitialPhase: boolean,
 ): BoardColumnEmptyCopy {
   if (filtersExcludeAll) {
@@ -85,35 +92,25 @@ function boardEmptyCopy(
       description: 'Try adjusting or clearing your filters.',
     };
   }
-  const copy = boardColumnEmptyCopy(stage, hasIntakeSource, isInitialPhase);
-  if (alreadyMaterialized <= 0) return copy;
-  const itemsLabel =
-    alreadyMaterialized === 1 ? 'item from this source already has' : 'items from this source already have';
-  return {
-    title: copy.title,
-    description: `${alreadyMaterialized} ${itemsLabel} a card on another board, so the feed only offers new ones.`,
-  };
+  return boardColumnEmptyCopy(stage, intakeSetup, isInitialPhase);
 }
 
 export function BoardColumnEmptyState({
   stage,
   isInitialPhase,
-  hasIntakeSource,
+  intakeSetup,
   filtersExcludeAll = false,
-  alreadyMaterialized = 0,
   layout,
   actionSlot,
 }: {
-  stage: BoardStageId;
+  stage: BoardStage;
   isInitialPhase: boolean;
-  hasIntakeSource: boolean;
+  intakeSetup?: IntakeSetup;
   filtersExcludeAll?: boolean;
-  /** Feed items withheld because their card sits on another board in this Factory. */
-  alreadyMaterialized?: number;
   layout: BoardLayout;
   actionSlot?: ReactNode;
 }) {
-  const copy = boardEmptyCopy(stage, hasIntakeSource, filtersExcludeAll, alreadyMaterialized, isInitialPhase);
+  const copy = boardEmptyCopy(stage, intakeSetup, filtersExcludeAll, isInitialPhase);
   if (layout === 'list') {
     return (
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">

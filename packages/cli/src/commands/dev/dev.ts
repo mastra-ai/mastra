@@ -77,6 +77,7 @@ interface StartOptions {
   mastraPackages?: MastraPackageInfo[];
   peerDepMismatches?: PeerDepMismatch[];
   factory?: boolean;
+  debug?: boolean;
   sourcemap?: boolean;
 }
 
@@ -182,6 +183,7 @@ const startServer = async (
             }
           : {}),
         ...(startOptions.factory ? { MASTRA_FACTORY_DEV: 'true' } : {}),
+        ...(startOptions.factory && startOptions.debug ? { MASTRA_FACTORY_DEBUG: 'true' } : {}),
         ...(factoryUiDist ? { MASTRACODE_UI_DIST: factoryUiDist } : {}),
       },
       stdio: ['inherit', 'pipe', 'pipe', 'ipc'],
@@ -239,7 +241,15 @@ const startServer = async (
     currentServerProcess.on('message', async (message: any) => {
       if (message?.type === 'server-ready') {
         serverIsReady = true;
-        devLogger.ready(host, port, studioBasePath, apiPrefix, serverStartTime, startOptions.https);
+        devLogger.ready(
+          host,
+          port,
+          studioBasePath,
+          apiPrefix,
+          serverStartTime,
+          startOptions.https,
+          startOptions.factory,
+        );
         devLogger.watching();
 
         await restartAllActiveWorkflowRuns({ host, port, https: !!startOptions.https });
@@ -581,6 +591,7 @@ export async function dev({
     mastraPackages,
     peerDepMismatches,
     factory,
+    debug,
     sourcemap: bundler.sourcemapEnabled,
   };
 

@@ -5,9 +5,10 @@
  * `z.any()` and let malformed data flow through execution.
  */
 import { describe, it, expect } from 'vitest';
-import type { z } from 'zod';
+import { z } from 'zod';
 
 import { jsonSchemaToZod, validateStorableJsonSchema } from './json-schema-to-zod';
+import { toJsonSchemaOrUndefined } from './validate/schema-utils';
 
 describe('jsonSchemaToZod', () => {
   it('round-trips supported primitive + object shapes', () => {
@@ -22,6 +23,54 @@ describe('jsonSchemaToZod', () => {
     });
     const parsed = (zod as z.ZodObject<any>).parse({ name: 'Tony', tags: ['a', 'b'] });
     expect(parsed).toEqual({ name: 'Tony', tags: ['a', 'b'] });
+  });
+
+  describe('additionalProperties', () => {
+    const props = { a: { type: 'string' } };
+
+    it('keeps unknown keys when additionalProperties is missing', () => {
+      expect(jsonSchemaToZod({ type: 'object' }).parse({ a: 1, b: 2 })).toEqual({ a: 1, b: 2 });
+      expect(jsonSchemaToZod({ type: 'object', properties: props }).parse({ a: 'x', b: 2 })).toEqual({ a: 'x', b: 2 });
+    });
+
+    it('keeps unknown keys when additionalProperties is true or {}', () => {
+      for (const additionalProperties of [true, {}]) {
+        const zod = jsonSchemaToZod({ type: 'object', properties: props, additionalProperties });
+        expect(zod.parse({ a: 'x', b: 2 })).toEqual({ a: 'x', b: 2 });
+      }
+    });
+
+    it('strips unknown keys when additionalProperties is false', () => {
+      const zod = jsonSchemaToZod({ type: 'object', properties: props, additionalProperties: false });
+      expect(zod.parse({ a: 'x', b: 2 })).toEqual({ a: 'x' });
+    });
+
+    it('keeps and validates unknown keys against a schema-valued additionalProperties', () => {
+      const zod = jsonSchemaToZod({ type: 'object', properties: props, additionalProperties: { type: 'number' } });
+      expect(zod.parse({ a: 'x', b: 2 })).toEqual({ a: 'x', b: 2 });
+      expect(zod.safeParse({ a: 'x', b: 'not a number' }).success).toBe(false);
+    });
+
+    it('round-trips record schemas produced by toJsonSchemaOrUndefined', () => {
+      const json = toJsonSchemaOrUndefined(z.record(z.string(), z.number()))!;
+      const schema = jsonSchemaToZod(json);
+      expect(schema.parse({ a: 1, b: 2 })).toEqual({ a: 1, b: 2 });
+      expect(schema.safeParse({ a: 'x' }).success).toBe(false);
+    });
+
+    it('still strips unknown keys for plain z.object schemas produced by toJsonSchemaOrUndefined', () => {
+      const json = toJsonSchemaOrUndefined(z.object({ a: z.string() }))!;
+      expect(jsonSchemaToZod(json).parse({ a: 'x', b: 2 })).toEqual({ a: 'x' });
+    });
+
+    it('applies unsupported-keyword handling inside additionalProperties', () => {
+      const schema = { type: 'object', additionalProperties: { anyOf: [{ type: 'string' }, { type: 'number' }] } };
+      expect(() => jsonSchemaToZod(schema)).toThrow(/anyOf/);
+      const messages: string[] = [];
+      const zodSchema = jsonSchemaToZod(schema, { onUnsupportedSchema: 'warn', onUnsupported: m => messages.push(m) });
+      expect(zodSchema.parse({ b: true })).toEqual({ b: true });
+      expect(messages[0]).toMatch(/anyOf/);
+    });
   });
 
   it('supports enum', () => {

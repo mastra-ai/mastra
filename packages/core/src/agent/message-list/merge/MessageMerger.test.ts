@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage } from '../';
+import { persistProcessorDataChunk } from '../../../stream/base/output';
 import { CacheKeyGenerator } from '../cache/CacheKeyGenerator';
 import { MessageList } from '../index';
 import { MessageMerger } from './MessageMerger';
@@ -99,6 +100,62 @@ describe('MessageMerger insertion positions', () => {
       text('A'),
       text('B'),
     ]);
+  });
+
+  it('preserves distinct data parts with the same payload and deduplicates repeated IDs', () => {
+    const question = (id: string): Part => ({ type: 'data-question', id, data: { prompt: 'Continue?' } });
+    const list = merge([tool('c1'), question('q1')], [tool('c1', true), question('q2')]);
+    expectParts(list, [tool('c1', true), question('q2'), question('q1')]);
+
+    list.add(message([tool('c1', true), question('q1'), question('q2')]), 'response');
+    expectParts(list, [tool('c1', true), question('q2'), question('q1')]);
+  });
+
+  it('deduplicates a stored data part without an ID against an incoming copy with one', () => {
+    const stored: Part = { type: 'data-question', data: { prompt: 'Continue?' } };
+    const withId: Part = { ...stored, id: 'q1' };
+
+    expectParts(merge([tool('c1', true), stored], [tool('c1', true), withId]), [tool('c1', true), stored]);
+    expectParts(merge([tool('c1', true), withId], [tool('c1', true), stored]), [tool('c1', true), withId]);
+  });
+
+  it('matches a stored data part without an ID to at most one incoming ID with the same payload', () => {
+    const stored: Part = { type: 'data-question', data: { prompt: 'Continue?' } };
+    const q1: Part = { ...stored, id: 'q1' };
+    const q2: Part = { ...stored, id: 'q2' };
+
+    // q1 matches its stored copy by ID, so only q2 is left to match the id-less part.
+    expectParts(merge([tool('c1', true), stored, q1], [tool('c1', true), q1, q2]), [tool('c1', true), stored, q1]);
+    expectParts(merge([tool('c1', true), stored], [tool('c1', true), q1, q2]), [tool('c1', true), q1, stored]);
+    expectParts(merge([stored, tool('c1', true)], [tool('c1', true), q1, q2]), [stored, tool('c1', true), q1]);
+  });
+
+  it('treats an empty-string data part ID as an ID', () => {
+    const empty: Part = { type: 'data-question', id: '', data: { prompt: 'Continue?' } };
+    const q1: Part = { ...empty, id: 'q1' };
+
+    expectParts(merge([tool('c1', true), empty], [tool('c1', true), q1]), [tool('c1', true), q1, empty]);
+  });
+
+  it('only counts IDs from data parts with the same type and payload', () => {
+    const stored: Part = { type: 'data-question', data: { prompt: 'Continue?' } };
+    const status: Part = { type: 'data-status', id: 'q1', data: { state: 'waiting' } };
+    const q1: Part = { ...stored, id: 'q1' };
+
+    expectParts(merge([tool('c1', true), stored, status], [tool('c1', true), q1, status]), [
+      tool('c1', true),
+      stored,
+      status,
+    ]);
+  });
+
+  it('keeps an empty-string ID when persisting a processor data chunk', () => {
+    const list = new MessageList();
+    persistProcessorDataChunk(list, 'assistant-1', { type: 'data-question', id: '', data: { prompt: 'Continue?' } });
+
+    const [part] = list.get.all.db()[0]!.content.parts;
+    expect(part).toMatchObject({ type: 'data-question', data: { prompt: 'Continue?' } });
+    expect(part).toHaveProperty('id', '');
   });
 
   it('does not duplicate parts on repeated updates', () => {

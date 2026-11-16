@@ -91,6 +91,12 @@ describe('ACP runtime factory', () => {
     expect(subagents?.map(agent => agent.id)).toEqual(['explore', 'plan', 'execute']);
   });
 
+  it('tells the agent that plan approval does not start a goal', async () => {
+    vi.mocked(createMastraCode).mockResolvedValueOnce(bootResult() as never);
+    await createAcpSession({ cwd: '/project', mcpServers: [] });
+    expect(createMastraCode).toHaveBeenLastCalledWith(expect.objectContaining({ planApprovalStartsGoal: false }));
+  });
+
   it('preserves co-author configuration when booting a session', async () => {
     const boot = bootResult();
     vi.mocked(createMastraCode).mockResolvedValueOnce(boot as never);

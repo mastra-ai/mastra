@@ -85,10 +85,11 @@ export function keysetSortBounds(
   direction: 'asc' | 'desc',
   sortValue: string | number | null,
   values: unknown[],
+  stringSort = false,
 ): { past: string[]; level: string } {
   if (sortValue === null) return { past: [], level: `${field} IS NULL` };
   values.push(sortValue);
-  const parameter = `$${values.length}::${typeof sortValue === 'number' ? 'float8' : 'timestamptz'}`;
+  const parameter = `$${values.length}::${stringSort ? 'text COLLATE "C"' : typeof sortValue === 'number' ? 'float8' : 'timestamptz'}`;
   return {
     past: [`${field} ${direction === 'asc' ? '>' : '<'} ${parameter}`, `${field} IS NULL`],
     level: `${field} = ${parameter}`,

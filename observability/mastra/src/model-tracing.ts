@@ -1282,6 +1282,10 @@ export class ModelSpanTracker {
    * create MODEL_STEP and MODEL_CHUNK spans for each semantic unit in the stream.
    */
   wrapStream<T extends { pipeThrough: Function }>(stream: T, inferenceOnly = false): T {
+    // The provider names the model that actually serves the request in an earlier
+    // response-metadata chunk; the raw finish chunk carries no model id. Capture it
+    // per stream so it can be merged into the finish the inference closes with.
+    let servedModelId: string | undefined;
     return stream.pipeThrough(
       new TransformStream({
         transform: (chunk, controller) => {
@@ -1289,9 +1293,16 @@ export class ModelSpanTracker {
             try {
               // Raw provider data supplies clocks and usage only. Content is captured
               // downstream, after output processors have redacted or rejected it.
+              if (chunk.type === 'response-metadata' && typeof chunk.payload?.modelId === 'string') {
+                servedModelId = chunk.payload.modelId;
+              }
               if (MODEL_RESPONSE_CHUNK_TYPES.has(chunk.type)) this.#captureCompletionStartTime();
               if (chunk.type === 'finish') {
-                this.#endInferenceSpan(chunk.payload, false);
+                const payload =
+                  servedModelId && !chunk.payload?.metadata?.modelId
+                    ? { ...chunk.payload, metadata: { ...chunk.payload?.metadata, modelId: servedModelId } }
+                    : chunk.payload;
+                this.#endInferenceSpan(payload, false);
               }
             } catch {
               // Optional telemetry must not affect stream delivery.

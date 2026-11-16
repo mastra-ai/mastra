@@ -169,6 +169,59 @@ describe('ConvexVector pagination', () => {
   });
 });
 
+describe('ConvexVector query filters', () => {
+  const indexName = 'idx';
+  const records = [
+    { id: 'alice-low', embedding: [1, 0], metadata: { resource_id: 'alice', score: 0 } },
+    { id: 'alice-mid', embedding: [1, 0], metadata: { resource_id: 'alice', score: 5 } },
+    { id: 'alice-high', embedding: [1, 0], metadata: { resource_id: 'alice', score: 999 } },
+    { id: 'bob-mid', embedding: [1, 0], metadata: { resource_id: 'bob', score: 5 } },
+  ];
+
+  function createVector() {
+    const vector = new ConvexVector({ id: 'test', deploymentUrl: 'http://localhost', adminAuthToken: 'test' });
+    (vector as any).client = {
+      callStorage: vi.fn(async (request: any) => {
+        if (request.op === 'load') return { id: indexName, indexName, dimension: 2, metric: 'cosine' };
+        throw new Error(`Unexpected callStorage op ${request.op}`);
+      }),
+      callStorageRaw: vi.fn(async (request: any) => {
+        if (request.op !== 'queryTable') throw new Error(`Unexpected callStorageRaw op ${request.op}`);
+        return { result: records, hasMore: false, continuationCursor: null };
+      }),
+    };
+    return vector;
+  }
+
+  async function ids(filter: Record<string, any>) {
+    const results = await createVector().query({ indexName, queryVector: [1, 0], topK: 10, filter });
+    return results.map(result => result.id).sort();
+  }
+
+  it('applies every operator on a field, not just the first', async () => {
+    expect(await ids({ score: { $gte: 1, $lte: 10 } })).toEqual(['alice-mid', 'bob-mid']);
+    expect(await ids({ score: { $gt: 0, $lt: 999 } })).toEqual(['alice-mid', 'bob-mid']);
+    expect(await ids({ resource_id: { $in: ['alice', 'bob'], $ne: 'bob' } })).toEqual([
+      'alice-high',
+      'alice-low',
+      'alice-mid',
+    ]);
+  });
+
+  it('keeps the resource condition next to a range', async () => {
+    expect(await ids({ $and: [{ resource_id: 'alice' }, { score: { $gte: 1, $lte: 10 } }] })).toEqual(['alice-mid']);
+  });
+
+  it('supports $eq', async () => {
+    expect(await ids({ $and: [{ resource_id: 'alice' }, { score: { $eq: 5 } }] })).toEqual(['alice-mid']);
+    expect(await ids({ resource_id: { $eq: 'bob' } })).toEqual(['bob-mid']);
+  });
+
+  it('matches nothing for an operator it does not support', async () => {
+    expect(await ids({ score: { $gte: 1, $unknown: 2 } })).toEqual([]);
+  });
+});
+
 if (!deploymentUrl || !adminKey) {
   describe.skip('ConvexVector', () => {
     it('requires CONVEX_TEST_URL and CONVEX_TEST_ADMIN_KEY to run integration tests', () => undefined);

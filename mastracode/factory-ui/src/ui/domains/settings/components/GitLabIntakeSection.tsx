@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { RotateCcw } from 'lucide-react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useGitLabProjectsQuery } from '../../../../hooks/useGitLabData';
 import { isGitLabAuthError, isGitLabReauthRequired } from '../../factory/services/gitlab';
@@ -13,6 +12,7 @@ import { groupGitLabProjectsByAccount } from './intakeSourceGroups';
 import { PlatformConnectButton, PlatformConnectionActions } from './PlatformProviderConnections';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { IntakeSyncControl } from './common/IntakeSyncControl';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 
 export function GitLabIntakeSection({
   config,
@@ -69,7 +69,12 @@ export function GitLabIntakeSection({
       }
       action={
         statusUnavailable && (
-          <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={() => void statusQuery.refetch()}>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<IconArrowRotateCounterClockwise />}
+            onClick={() => void statusQuery.refetch()}
+          >
             Retry
           </Button>
         )

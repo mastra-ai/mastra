@@ -1,8 +1,6 @@
-import { Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Bot } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 
@@ -34,6 +32,7 @@ import { FactoryActivity } from '../domains/factory/components/activity/FactoryA
 import { traySurface } from '../ui/tray';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
 
 const draftStartClass = 'flex min-w-0 w-full flex-col items-stretch gap-6';
 
@@ -76,16 +75,7 @@ export function NewPage() {
     undefined;
 
   return (
-    <ChatPageLayout
-      crumbs={
-        <>
-          <Crumb as="span">User sessions</Crumb>
-          <Crumb as="span" isCurrent>
-            New session
-          </Crumb>
-        </>
-      }
-    >
+    <ChatPageLayout title="New session">
       {/* Remount only the chat content per draft, never the app shell. */}
       <ChatSessionBoundary key={draftSessionId}>
         <NewPageContent
@@ -187,7 +177,7 @@ function DraftStart({
 
   return (
     <section className={draftStartClass} aria-labelledby="draft-start-heading">
-      <Txt as="h1" variant="title" tone="ink" id="draft-start-heading" className="m-0">
+      <Txt as="h2" variant="title" tone="ink" id="draft-start-heading" className="m-0">
         {firstName ? `What should we ship, ${firstName}?` : 'What should we ship?'}
       </Txt>
       {configurationError && (
@@ -219,7 +209,7 @@ function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard
   return (
     <EmptyState
       as="h2"
-      iconSlot={<Bot />}
+      iconSlot={<IconRobot />}
       titleSlot={`You don't have access to ${providerDisplayName(guard.provider)}`}
       descriptionSlot={missingCredentialDescription(guard, anchor)}
       actionSlot={
@@ -237,7 +227,7 @@ function MissingModelState({ factoryId }: { factoryId: string }) {
   return (
     <EmptyState
       as="h2"
-      iconSlot={<Bot />}
+      iconSlot={<IconRobot />}
       titleSlot="No model available"
       descriptionSlot={
         anchor === MODEL_DEFAULTS_ANCHORS.factory

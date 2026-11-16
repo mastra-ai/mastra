@@ -477,12 +477,17 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
 
         await execute(workflow, { value: 0 }, { runId, resourceId });
 
-        const calls = spies.flatMap(spy => spy.mock.calls);
+        // A storage v2 append without a header keeps the stored header, resourceId included.
+        const calls = spies
+          .flatMap(spy => spy.mock.calls as [{ resourceId?: string; steps?: unknown; header?: unknown }][])
+          .filter(([args]) => !args.steps || args.header);
         expect(calls.length).toBeGreaterThan(0);
         for (const [args] of calls) {
           expect(args.resourceId).toBe(resourceId);
         }
         spies.forEach(spy => spy.mockRestore());
+        const { runs } = await (workflow as any).listWorkflowRuns({ resourceId });
+        expect(runs.map((run: { runId: string }) => run.runId)).toContain(runId);
       },
     );
 

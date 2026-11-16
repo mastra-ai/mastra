@@ -35,16 +35,11 @@ export {
   eventBoardId,
   cardOwnsBranch,
   hasPullRequest,
-  isPullRequestCard,
   isPullRequestReviewPhase,
   isTerminalWorkItem,
-  newestOpenPullRequestNumber,
   newestOwnedOpenPullRequestNumber,
-  pullRequestSourceNumber,
-  pullRequestSources,
   resolveBoardClosure,
   reviewedChangeRequest,
-  reviewedPullRequest,
   sourceExternalId,
   reviewsPullRequest,
   resolveBoardToolRule,
@@ -58,12 +53,23 @@ export {
   workItemPhaseSemantics,
 } from './semantics.js';
 export type { PhaseSemantics, ReviewedChangeRequest } from './semantics.js';
+export {
+  isOpenPullRequestSource,
+  isPullRequestCard,
+  pullRequestSourceNumber,
+  pullRequestSources,
+  pullRequestTrustKey,
+  reviewedPullRequest,
+  trustedPullRequestSource,
+  UNTRUSTED_PULL_REQUESTS_KEY,
+  workingPullRequest,
+} from '../work-items/change-requests.js';
 export type {
   BoardTransitionPolicy,
   BoardTransitionPolicyContext,
   BoardTransitionPolicyResult,
 } from './transition-policy.js';
-export { createBoardRegistry, defaultBoards } from './registry.js';
+export { boardRegistryOf, createBoardRegistry, defaultBoards } from './registry.js';
 export type { BoardRegistry, InstalledBoard } from './registry.js';
 export { workBoard } from './work.js';
 export type { WorkBoardPhase } from './work.js';

@@ -59,7 +59,7 @@ const buildingCard: WireWorkItem = {
   ],
   sessions: { triage: triageSession, work: workSession },
   metadata: {},
-  commentCount: 0,
+  description: null,
   revision: 4,
   createdAt: '2026-07-18T00:00:00.000Z',
   updatedAt: '2026-07-18T03:00:00.000Z',
@@ -79,7 +79,7 @@ function stubWorkBoard() {
           {
             id: FACTORY_ID,
             name: 'Acme Factory',
-            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main' })],
           },
         ],
       }),
@@ -96,9 +96,6 @@ function stubWorkBoard() {
     ),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
-      HttpResponse.json({ issues: [], nextPage: null }),
     ),
   );
 }

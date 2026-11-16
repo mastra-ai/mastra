@@ -145,6 +145,31 @@ describe('Tools Handlers', () => {
       expect(result).toHaveProperty('weatherTool');
       expect(result).not.toHaveProperty('get-weather');
     });
+
+    it('keeps FGA-allowed tools registered under a key other than their id', async () => {
+      const deleteAccount = createTool({ id: 'delete-account', description: 'Deletes', execute: vi.fn() });
+      const locked = createTool({ id: 'locked', description: 'Locked', execute: vi.fn() });
+      const checked: string[] = [];
+      const fga = {
+        check: async () => true,
+        require: async () => {},
+        filterAccessible: async (_user: unknown, resources: Array<{ id: string }>) => {
+          checked.push(...resources.map(r => r.id));
+          return resources.filter(r => r.id !== 'locked');
+        },
+      };
+      const mastra = new Mastra({
+        logger: false,
+        tools: { deleteAccountTool: deleteAccount, lockedTool: locked },
+        server: { fga: fga as any },
+      });
+      const context = createTestServerContext({ mastra });
+      context.requestContext.set('user', { id: 'user-1' });
+      const result = await LIST_TOOLS_ROUTE.handler(context);
+      // FGA decides by tool.id, like the execute route; the response stays keyed by registration key.
+      expect(checked.sort()).toEqual(['delete-account', 'locked']);
+      expect(Object.keys(result)).toEqual(['deleteAccountTool']);
+    });
   });
 
   describe('getToolByIdHandler', () => {

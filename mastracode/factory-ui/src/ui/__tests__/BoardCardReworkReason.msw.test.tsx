@@ -50,7 +50,7 @@ function card(id: string, issue: number, title: string, stage: string, metadata:
     stageHistory: [],
     sessions: {},
     metadata,
-    commentCount: 0,
+    description: null,
     revision: 5,
     createdAt: '2026-11-06T08:00:00.000Z',
     updatedAt: '2026-11-06T10:00:00.000Z',
@@ -102,7 +102,7 @@ function stubWorkBoard() {
           {
             id: FACTORY_ID,
             name: 'Acme Factory',
-            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main' })],
           },
         ],
       }),
@@ -120,9 +120,6 @@ function stubWorkBoard() {
     ),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
-      HttpResponse.json({ issues: [], nextPage: null }),
     ),
   );
 }

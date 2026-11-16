@@ -175,7 +175,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board writes on
         ),
       ),
       await refusal(() => writes.create(scope, { ...bugs, key: 'work' }, writer)),
-      await refusal(() => writes.replace(scope, 'review', definition, { expectedRevision: 1, writer })),
       await refusal(() => writes.reset(scope, 'bugs', { expectedRevision: 1, writer })),
       await refusal(() =>
         writes.replace(
@@ -202,7 +201,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board writes on
       [422, 'unknown_skill'],
       [422, 'code_behaviour'],
       [409, 'code_board'],
-      [409, 'reserved_board'],
       [409, 'not_code_board'],
       [409, 'phase_in_use'],
       [409, 'board_in_use'],
@@ -215,31 +213,27 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board writes on
     expect(audits.map(audit => audit.action)).toEqual(['factory.board.created']);
   });
 
-  it("refuses every write under the retired Review board's key, and stores nothing", async () => {
-    const { writes, writer, scope, storage, audits, served } = await setup();
+  it('writes a board under the key `review` like any other key', async () => {
+    const { writes, writer, scope, storage, served } = await setup();
     await served('work');
-    const version = await storage.readVersion(scope);
     const { key: _key, ...definition } = bugs;
     const review = { ...bugs, key: 'review' };
 
-    const refusals = [
-      await refusal(() => writes.create(scope, review, writer)),
-      await refusal(() => writes.upsert(scope, review, writer)),
-      await refusal(() => writes.replace(scope, 'review', definition, { expectedRevision: 1, writer })),
-      await refusal(() => writes.reset(scope, 'review', { expectedRevision: 1, writer })),
-      await refusal(() => writes.remove(scope, 'review', { expectedRevision: 1, writer })),
-      await refusal(async () => writes.validate(review)),
-    ];
-
-    expect(refusals.map(error => error.body)).toEqual(
-      Array(6).fill({
-        error: 'reserved_board',
-        message: 'Board "review" is reserved for the retired Review board.',
-      }),
+    expect(writes.validate(review).key).toBe('review');
+    expect(await writes.upsert(scope, review, writer)).toBe('inserted');
+    expect((await served('review'))!.name).toBe('Bugs');
+    expect((await refusal(() => writes.create(scope, review, writer))).body).toEqual({
+      error: 'board_exists',
+      message: 'Board "review" already exists in this project.',
+    });
+    await writes.replace(scope, 'review', { ...definition, name: 'Reviews' }, { expectedRevision: 1, writer });
+    expect((await served('review'))!.name).toBe('Reviews');
+    expect((await refusal(() => writes.reset(scope, 'review', { expectedRevision: 2, writer }))).code).toBe(
+      'not_code_board',
     );
+    await writes.remove(scope, 'review', { expectedRevision: 2, writer });
     expect(await storage.get(scope, 'review')).toBeNull();
-    expect(await storage.readVersion(scope)).toBe(version);
-    expect(audits).toEqual([]);
+    expect(await served('review')).toBeUndefined();
   });
 
   it('deletes a board no card sits on', async () => {

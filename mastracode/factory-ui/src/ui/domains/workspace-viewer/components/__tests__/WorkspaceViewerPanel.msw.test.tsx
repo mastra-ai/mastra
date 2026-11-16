@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { UserEvent } from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
@@ -107,6 +108,11 @@ function pendingChangesHandler() {
   );
 }
 
+async function openFiles(user: UserEvent) {
+  await user.click(await screen.findByRole('button', { name: /^Changes(,|$)/ }));
+  await user.click(screen.getByRole('tab', { name: 'Files' }));
+}
+
 type ScopedChanges = Pick<WorkspaceChangePatches, 'changes' | 'patches'> &
   Partial<Pick<WorkspaceChangePatches, 'omittedPatches'>>;
 
@@ -151,7 +157,7 @@ describe('WorkspaceViewerPanel', () => {
       );
       const user = userEvent.setup();
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
-      await user.click(await screen.findByRole('button', { name: /Files/ }));
+      await openFiles(user);
       if (file.path.startsWith('src/')) await user.click(await screen.findByRole('button', { name: 'src' }));
       await user.click(await screen.findByText(file.name));
 
@@ -173,7 +179,7 @@ describe('WorkspaceViewerPanel', () => {
       );
       const user = userEvent.setup();
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
-      await user.click(await screen.findByRole('button', { name: /Files/ }));
+      await openFiles(user);
       await user.click(await screen.findByText(unknownLanguageFile.name));
 
       const viewer = await screen.findByLabelText('Workspace file viewer');
@@ -187,7 +193,7 @@ describe('WorkspaceViewerPanel', () => {
       server.use(http.get(FILE_URL, () => HttpResponse.json(markdownFile)));
       const user = userEvent.setup();
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
-      await user.click(await screen.findByRole('button', { name: /Files/ }));
+      await openFiles(user);
       await user.click(await screen.findByText('README.md'));
 
       const viewer = await screen.findByLabelText('Workspace file viewer');
@@ -203,12 +209,49 @@ describe('WorkspaceViewerPanel', () => {
       );
       const user = userEvent.setup();
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
-      await user.click(await screen.findByRole('button', { name: /Files/ }));
+      await openFiles(user);
       await user.click(await screen.findByText(unsupportedFile.name));
 
       const viewer = await screen.findByLabelText('Workspace file viewer');
       expect(await within(viewer).findByText('This file type cannot be previewed as text.')).toBeInTheDocument();
       expect(viewer.querySelector('pre')).toBeNull();
+    });
+  });
+
+  describe('when the viewer moves between the overview and a view by keyboard', () => {
+    it('takes focus into the changes, switches to the files in place, and returns to the row that opened them', async () => {
+      installHandlers();
+      const user = userEvent.setup();
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} readsChanges={false} />);
+
+      (await screen.findByRole('button', { name: 'Changes' })).focus();
+      await user.keyboard('{Enter}');
+      expect(screen.getByRole('button', { name: 'Back to overview' })).toHaveFocus();
+
+      await user.tab();
+      expect(screen.getByRole('tab', { name: 'Changes' })).toHaveFocus();
+      await user.keyboard('{ArrowRight}{Enter}');
+      expect(screen.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true');
+      expect(await screen.findByText('README.md')).toBeInTheDocument();
+
+      screen.getByRole('button', { name: 'Back to overview' }).focus();
+      await user.keyboard('{Enter}');
+      expect(await screen.findByRole('button', { name: 'Changes, 0 files' })).toHaveFocus();
+    });
+  });
+
+  describe('given a branch without changes', () => {
+    it('opens the files from the Changes row, leaving the empty diff one tab away', async () => {
+      installHandlers();
+      const user = userEvent.setup();
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+
+      await user.click(await screen.findByRole('button', { name: 'Changes, 0 files' }));
+
+      expect(screen.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true');
+      expect(await screen.findByText('README.md')).toBeInTheDocument();
+      await user.click(screen.getByRole('tab', { name: 'Changes' }));
+      expect(await screen.findByText('No changes')).toBeInTheDocument();
     });
   });
 
@@ -221,7 +264,7 @@ describe('WorkspaceViewerPanel', () => {
       await screen.findByRole('button', { name: /^Changes/ });
       expect(treeRequests).toEqual([]);
 
-      await user.click(screen.getByRole('button', { name: /^Files/ }));
+      await openFiles(user);
       expect(await screen.findByText('README.md')).toBeInTheDocument();
       expect(screen.queryByText('agent.ts')).not.toBeInTheDocument();
       expect(treeRequests).toEqual(['']);
@@ -249,7 +292,7 @@ describe('WorkspaceViewerPanel', () => {
       );
       const user = userEvent.setup();
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
-      await user.click(await screen.findByRole('button', { name: /^Files/ }));
+      await openFiles(user);
       await screen.findByText('README.md');
       expect(screen.queryByText('.github')).not.toBeInTheDocument();
       expect(screen.queryByText('.env.example')).not.toBeInTheDocument();
@@ -262,7 +305,8 @@ describe('WorkspaceViewerPanel', () => {
       expect(screen.getByText('.env.example')).toBeInTheDocument();
 
       await user.click(screen.getByText('README.md'));
-      await user.click(await screen.findByRole('button', { name: 'Back to workspace files' }));
+      await user.click(await screen.findByRole('button', { name: 'Back to files' }));
+      expect(screen.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true');
       expect(await screen.findByText('.github')).toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: 'Hide hidden files' }));
@@ -302,7 +346,7 @@ describe('WorkspaceViewerPanel', () => {
       );
       const user = userEvent.setup();
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
-      await user.click(await screen.findByRole('button', { name: /^Files/ }));
+      await openFiles(user);
 
       expect(await screen.findByText('→ AGENTS.md')).toBeInTheDocument();
       expect(screen.getByText('→ packages/docs')).toBeInTheDocument();
@@ -316,7 +360,7 @@ describe('WorkspaceViewerPanel', () => {
       const { treeRequests } = installHandlers();
       const user = userEvent.setup();
       const { client } = renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
-      await user.click(await screen.findByRole('button', { name: /^Files/ }));
+      await openFiles(user);
       await user.click(await screen.findByRole('button', { name: 'src' }));
       await screen.findByText('agent.ts');
 
@@ -330,7 +374,7 @@ describe('WorkspaceViewerPanel', () => {
       const fileRequests = installHandlers();
       const user = userEvent.setup();
       const { client } = renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
-      await user.click(await screen.findByRole('button', { name: /^Files/ }));
+      await openFiles(user);
 
       await user.click(await screen.findByRole('button', { name: 'src' }));
       await user.click(await screen.findByText('agent.ts'));
@@ -342,7 +386,7 @@ describe('WorkspaceViewerPanel', () => {
       await user.click(screen.getByRole('button', { name: 'Refresh file' }));
       await waitFor(() => expect(fileRequests).toHaveLength(2));
       await waitForMutationsIdle(client);
-      await user.click(screen.getByRole('button', { name: 'Back to workspace files' }));
+      await user.click(screen.getByRole('button', { name: 'Back to files' }));
 
       expect(screen.getByRole('button', { name: 'src' })).toHaveAttribute('aria-expanded', 'true');
       expect(screen.getByText('agent.ts')).toBeInTheDocument();
@@ -374,7 +418,7 @@ describe('WorkspaceViewerPanel', () => {
       const user = userEvent.setup();
 
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
-      await user.click(await screen.findByRole('button', { name: /^Files/ }));
+      await openFiles(user);
 
       expect(await screen.findByText(/The sandbox isn.t running/)).toBeInTheDocument();
       expect(starts).toEqual([]);
@@ -398,7 +442,7 @@ describe('WorkspaceViewerPanel', () => {
       const user = userEvent.setup();
 
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
-      await user.click(await screen.findByRole('button', { name: /^Files/ }));
+      await openFiles(user);
       await user.click(await screen.findByRole('button', { name: 'Wake sandbox' }));
 
       expect(await screen.findByText('setup failed')).toBeInTheDocument();
@@ -417,7 +461,7 @@ describe('WorkspaceViewerPanel', () => {
       const user = userEvent.setup();
 
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
-      await user.click(await screen.findByRole('button', { name: /^Files/ }));
+      await openFiles(user);
       await user.click(await screen.findByRole('button', { name: 'src' }));
 
       expect(await screen.findByText(/not available in this session/)).toBeInTheDocument();
@@ -536,7 +580,7 @@ describe('WorkspaceViewerPanel', () => {
       expect(await within(changesPanel).findByText('Diff unavailable')).toBeInTheDocument();
     });
 
-    it('shows only uncommitted work once switched away from the whole branch', async () => {
+    it('keeps showing only uncommitted work, once chosen, across a look at the files', async () => {
       installHandlers();
       const notes = { path: 'NOTES.md', status: 'untracked', additions: 1, deletions: 0 } as const;
       const notesPatch =
@@ -564,6 +608,44 @@ describe('WorkspaceViewerPanel', () => {
       await waitFor(() => expect(diffText(changesPanel)).toContain('draft notes'));
       expect(diffText(changesPanel)).not.toContain('export const agent = {};');
       expect(within(changesPanel).getByRole('button', { name: 'Jump to file, 1 file' })).toBeInTheDocument();
+
+      await user.click(screen.getByRole('tab', { name: 'Files' }));
+      await user.click(await screen.findByRole('tab', { name: 'Changes' }));
+
+      const returnedPanel = await screen.findByTestId('workspace-changes-panel');
+      expect(within(returnedPanel).getByRole('button', { name: 'Uncommitted changes' })).toBeInTheDocument();
+      await waitFor(() => expect(diffText(returnedPanel)).toContain('draft notes'));
+      expect(diffText(returnedPanel)).not.toContain('export const agent = {};');
+    });
+
+    it('opens the branch changes the overview counts, even after uncommitted work was shown', async () => {
+      installHandlers();
+      const notes = { path: 'NOTES.md', status: 'untracked', additions: 1, deletions: 0 } as const;
+      const notesPatch =
+        'diff --git a/NOTES.md b/NOTES.md\nnew file mode 100644\nindex 0000000..1111111\n--- /dev/null\n+++ b/NOTES.md\n@@ -0,0 +1 @@\n+draft notes\n';
+      server.use(
+        pendingChangesHandler(),
+        patchesHandler({
+          branch: { changes: [AGENT_CHANGE], patches: { [AGENT_CHANGE.path]: AGENT_PATCH } },
+          uncommitted: { changes: [notes], patches: { [notes.path]: notesPatch } },
+        }),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+      await user.click(await screen.findByRole('button', { name: 'Changes, 1 file' }));
+      const changesPanel = await screen.findByTestId('workspace-changes-panel');
+      await user.click(within(changesPanel).getByRole('button', { name: 'Branch changes' }));
+      await user.click(await screen.findByRole('menuitemradio', { name: 'Uncommitted changes' }));
+      await waitFor(() => expect(diffText(changesPanel)).toContain('draft notes'));
+
+      await user.click(screen.getByRole('button', { name: 'Back to overview' }));
+      await user.click(await screen.findByRole('button', { name: 'Changes, 1 file' }));
+
+      const reopenedPanel = await screen.findByTestId('workspace-changes-panel');
+      expect(within(reopenedPanel).getByRole('button', { name: 'Branch changes' })).toBeInTheDocument();
+      await waitFor(() => expect(diffText(reopenedPanel)).toContain('export const agent = {};'));
+      expect(diffText(reopenedPanel)).not.toContain('draft notes');
     });
 
     it('does not present cached change totals after a refresh fails', async () => {
@@ -593,7 +675,7 @@ describe('WorkspaceViewerPanel', () => {
       await screen.findByText('Unable to read changes');
       expect(within(changesPanel).queryByRole('button', { name: /^Jump to file/ })).not.toBeInTheDocument();
       expect(within(changesPanel).queryByText('+4')).not.toBeInTheDocument();
-      await user.click(screen.getByRole('button', { name: 'Back to workspace' }));
+      await user.click(screen.getByRole('button', { name: 'Back to overview' }));
 
       expect(await screen.findByText('Unavailable')).toBeInTheDocument();
       expect(screen.queryByText('+4')).not.toBeInTheDocument();
@@ -654,9 +736,7 @@ describe('WorkspaceViewerPanel', () => {
 
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
 
-      const changesButton = screen.getByRole('button', { name: /^Changes/ });
-      await waitFor(() => expect(changesButton).toHaveTextContent(/^Changes$/));
-      await user.click(changesButton);
+      await user.click(await screen.findByRole('button', { name: 'Changes' }));
 
       expect(await screen.findByText(/The sandbox isn.t running/)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Wake sandbox' })).toBeInTheDocument();
