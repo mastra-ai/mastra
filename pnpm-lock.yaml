@@ -5003,8 +5003,8 @@ importers:
         specifier: workspace:*
         version: link:../server
       '@optimize-lodash/rollup-plugin':
-        specifier: ^5.1.0
-        version: 5.1.0(rollup@4.67.4)
+        specifier: ^6.0.0
+        version: 6.0.0(rollup@4.67.4)
       '@pnpm/config.parse-overrides':
         specifier: ^1100.1.8
         version: 1100.1.8
@@ -18016,14 +18016,14 @@ packages:
     peerDependencies:
       '@opentelemetry/api': ^1.1.0
 
-  '@optimize-lodash/rollup-plugin@5.1.0':
-    resolution: {integrity: sha512-dBQYGH8+n4Z/877e61PJteVZEc+U1wfRF6IhKqW0cABRIsqMxpWynyov6M6Sd4IUjru0dnh0EG55X86JO6WakQ==}
+  '@optimize-lodash/rollup-plugin@6.0.0':
+    resolution: {integrity: sha512-zTNVDRHGcezQCT2UVK7CSqJi7YKyM1YTJPvCkbE3NecHCsI/mdlizXGqcXgoshzyemsfscY7Tf8MmGnor2HAFg==}
     engines: {node: '>= 18'}
     peerDependencies:
       rollup: '>= 4.x'
 
-  '@optimize-lodash/transform@3.0.6':
-    resolution: {integrity: sha512-9+qMSaDpahC0+vX2ChM46/ls6a5Ankqs6RTLrHSaFpm7o1mFanP82e+jm9/0o5D660ueK8dWJGPCXQrBxBNNWA==}
+  '@optimize-lodash/transform@4.0.0':
+    resolution: {integrity: sha512-/v61xAfj3e3g14UDP9qriYgkifLuSwALrhcSiY3SfuzzDJ5pRBsfp//Ih3daJlUMrODvB6IUk7dGfxgnRwcxjg==}
     engines: {node: '>= 12'}
 
   '@oxc-parser/binding-android-arm-eabi@0.127.0':
@@ -42270,13 +42270,13 @@ snapshots:
       '@opentelemetry/api': 1.10.0
       '@opentelemetry/core': 3.1.1(@opentelemetry/api@1.10.0)
 
-  '@optimize-lodash/rollup-plugin@5.1.0(rollup@4.67.4)':
+  '@optimize-lodash/rollup-plugin@6.0.0(rollup@4.67.4)':
     dependencies:
-      '@optimize-lodash/transform': 3.0.6
+      '@optimize-lodash/transform': 4.0.0
       '@rollup/pluginutils': 5.5.1(rollup@4.67.4)
       rollup: 4.67.4
 
-  '@optimize-lodash/transform@3.0.6':
+  '@optimize-lodash/transform@4.0.0':
     dependencies:
       estree-walker: 2.0.2
       magic-string: 0.30.21
