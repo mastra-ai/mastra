@@ -292,6 +292,41 @@ async function flushMessagesBeforeSuspension({
   }
 }
 
+/**
+ * Bridge a background task's `suspend()` to the suspension bookkeeping of the run
+ * that dispatched the tool, then to the task's own suspension.
+ *
+ * A deferred background task can outlive its origin run. By the time the tool calls
+ * `suspend()`, that run may have settled or been superseded, and its bookkeeping
+ * fails its ownership re-checks — suspending flushes memory first, and that flush
+ * re-verifies the execution still owns the run (#23734). Awaiting it unguarded fails
+ * the task instead of recording its suspension, so fence errors are swallowed here:
+ * the task's suspension is independent of the origin run's ownership. Same contract
+ * as this step's background hooks, which also run outside the step and must not fail
+ * the task.
+ */
+export async function bridgeBackgroundSuspend({
+  originSuspend,
+  taskSuspend,
+  onOriginLost,
+  data,
+  options,
+}: {
+  originSuspend?: (data?: unknown, options?: SuspendOptions) => Promise<unknown>;
+  taskSuspend?: (data?: unknown, options?: SuspendOptions) => Promise<unknown>;
+  onOriginLost?: (error: unknown) => void;
+  data?: unknown;
+  options?: SuspendOptions;
+}): Promise<unknown> {
+  try {
+    await originSuspend?.(data, options);
+  } catch (error) {
+    if (!isExecutionFenceError(error)) throw error;
+    onOriginLost?.(error);
+  }
+  return taskSuspend?.(data, options);
+}
+
 class DurableOutputProcessorError extends Error {
   constructor(error: unknown) {
     super(error instanceof Error ? error.message : String(error), { cause: error });
@@ -1841,10 +1876,18 @@ export function createDurableToolCallStep() {
                     // Framework-resolved delegated run id recovered from persisted
                     // suspension state (#23739) — never the model-authored one.
                     suspendedToolRunId: taskContext?.suspendedToolRunId,
-                    suspend: async (data?: unknown, options?: SuspendOptions) => {
-                      await toolOptions.suspend?.(data, options);
-                      return taskContext?.suspend?.(data, options);
-                    },
+                    suspend: async (data?: unknown, options?: SuspendOptions) =>
+                      bridgeBackgroundSuspend({
+                        originSuspend: toolOptions.suspend,
+                        taskSuspend: taskContext?.suspend,
+                        onOriginLost: () =>
+                          logger?.debug?.(
+                            '[DurableAgent] Skipped origin run suspend bookkeeping: execution settled or superseded',
+                            { runId, toolCallId, taskId },
+                          ),
+                        data,
+                        options,
+                      }),
                     outputWriter: async (chunk: any) => {
                       await taskContext?.onProgress?.(chunk);
                       return toolOptions.outputWriter?.(chunk);
