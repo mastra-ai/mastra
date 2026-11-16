@@ -56,6 +56,7 @@ type Hook = (memory: Memory) => Promise<void>;
 /** Runs one durable turn. Hooks run before the turn and inside the title model call. */
 async function runTurn(hooks: { beforeRun?: Hook; duringTitle?: Hook } = {}) {
   let titleCalls = 0;
+  let titleModelDone = false;
   const observationalMemory = {
     model: textModel('om-model', 'unused'),
     observation: { messageTokens: 100_000 },
@@ -70,6 +71,7 @@ async function runTurn(hooks: { beforeRun?: Hook; duringTitle?: Hook } = {}) {
         model: textModel('title-model', 'Durable OM title', async () => {
           titleCalls++;
           await hooks.duringTitle?.(memory);
+          titleModelDone = true;
         }),
       },
     },
@@ -83,11 +85,12 @@ async function runTurn(hooks: { beforeRun?: Hook; duringTitle?: Hook } = {}) {
   });
   const mastra = new Mastra({ agents: { agent: createDurableAgent({ agent: base }) as any }, storage, logger: false });
   await hooks.beforeRun?.(memory);
-  // The title write starts with an existence check after the title model returns; count those reads.
+  // The title write starts with an existence check once the title model (and its hook) has
+  // returned; count only reads made after that point.
   let readsAfterTitle = 0;
   const getThreadById = memory.getThreadById.bind(memory);
   vi.spyOn(memory, 'getThreadById').mockImplementation(async args => {
-    if (titleCalls > 0) readsAfterTitle++;
+    if (titleModelDone) readsAfterTitle++;
     return getThreadById(args);
   });
   try {
