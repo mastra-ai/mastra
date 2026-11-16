@@ -2,20 +2,16 @@
 '@mastra/playground-ui': minor
 ---
 
-Added `SettingsControlGroup` for settings rows with several controls (for example a period select and an amount). It takes the shared field width, so the controls end on the same edge as the rest of the column, without a hand-set width.
+`SettingsRow` now gives every control the same column: the shared field width (13.75rem), on the right. Selects, comboboxes and inputs fill it, several controls in one row split it, and switches and buttons keep their own size. Every row's controls end on the same edge without the page sizing anything, so drop wrapper `div`s and width classes around row controls. A control that needs more room goes under its label with `controlPlacement="below"`.
 
 ```tsx
-import { SettingsControlGroup, SettingsRow } from '@mastra/playground-ui/new/settings';
-
 <SettingsRow label="Spend limit">
-  <SettingsControlGroup>
-    <Select value={period} onValueChange={setPeriod}>
-      <SelectTrigger aria-label="Period" className="w-32 shrink-0">
-        <SelectValue />
-      </SelectTrigger>
-      {/* … */}
-    </Select>
-    <Input aria-label="Limit" className="flex-1" value={amount} onChange={onAmountChange} />
-  </SettingsControlGroup>
-</SettingsRow>;
+  <Select value={period} onValueChange={setPeriod}>
+    <SelectTrigger aria-label="Period">
+      <SelectValue />
+    </SelectTrigger>
+    {/* … */}
+  </Select>
+  <Input aria-label="Limit" value={amount} onChange={onAmountChange} />
+</SettingsRow>
 ```

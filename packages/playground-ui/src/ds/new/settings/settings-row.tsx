@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import type { ComponentProps, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Field, FieldDescription, FieldError, FieldLabel, Fieldset, FieldsetLegend } from '@/ds/components/Field';
 import type { FieldProps, FieldsetProps } from '@/ds/components/Field';
 import { IconLock } from '@/ds/icons/central/IconLock';
@@ -16,8 +16,8 @@ export type SettingsRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orient
   required?: boolean;
   errorMsg?: ReactNode;
   /**
-   * `side` (default): the control sits on the right. Text fields take one shared width (13.75rem), selects hug
-   * their value up to that width, and switches and buttons keep their own size; all end at the right edge.
+   * `side` (default): the controls sit on the right in a column of the shared field width (13.75rem). Selects and
+   * inputs fill it (several split it), switches and buttons keep their own size; all end at the right edge.
    * `below`: the control goes under the label at full width, for forms with several controls.
    */
   controlPlacement?: 'side' | 'below';
@@ -29,32 +29,14 @@ const rowClassName = 'min-w-0 gap-3';
 const sideRowClassName = 'sm:justify-between sm:gap-6';
 const headingClassName = 'flex min-w-0 flex-col gap-px';
 /**
- * The control column on the right. Inputs fill it (at least 13.75rem); selects and other field triggers hug
- * their value (`--field-width: auto`, see `fieldTriggerWidthStyle`) up to that same width.
+ * The control column on the right: always the shared field width (13.75rem), so every row's controls end on the
+ * same edge without the page sizing anything. Selects, comboboxes and inputs fill it, and several of them split
+ * it; switches and buttons keep their own size, pushed right. Nothing inside can be wider than the column. Put the
+ * controls straight in the row; a control that needs more room goes `below` its label instead. (`InputGroup` is
+ * `flex-1`, so the row resets its basis to let it split the column evenly with a select.)
  */
 const sideControlClassName =
-  'flex min-w-0 items-center justify-end gap-2 [--field-max-width:13.75rem] [--field-width:auto] sm:min-w-55 sm:shrink-0';
-
-export type SettingsControlGroupProps = ComponentProps<'div'>;
-
-/**
- * Several controls that set one value together (a period select and an amount). The group takes the field
- * width (13.75rem) so it ends where every other control in the column ends, whatever it holds. Controls inside
- * share that width: selects fill their share instead of hugging their value; size one with a width class
- * (`w-32`) and give the other `flex-1`. Use it instead of a `div` with its own width.
- */
-export function SettingsControlGroup({ className, ...props }: SettingsControlGroupProps) {
-  return (
-    <div
-      data-slot="settings-control-group"
-      className={cn(
-        'flex w-(--field-max-width) max-w-full min-w-0 items-center gap-2 [--field-width:100%] *:min-w-0',
-        className,
-      )}
-      {...props}
-    />
-  );
-}
+  'flex min-w-0 items-center justify-end gap-2 [--field-width:100%] *:min-w-0 *:max-w-full [&>[data-slot=input-group]]:basis-auto sm:w-55 sm:shrink-0';
 
 export function SettingsRowControl({ viewOnly = false, children }: { viewOnly?: boolean; children: ReactNode }) {
   if (!viewOnly) return children;

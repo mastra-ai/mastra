@@ -22,7 +22,8 @@ export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (
   };
 
   return (
-    <div className="flex items-center">
+    // Fills the settings row's control column like any field: the select takes what the mute button leaves.
+    <div className="flex w-full items-center">
       <button
         type="button"
         role="switch"
@@ -51,7 +52,7 @@ export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (
           size="sm"
           aria-label="Completion sound"
           className={cn(
-            'bg-card relative z-10 w-32',
+            'bg-card relative z-10 min-w-0 flex-1',
             // Opaque even when muted: the mute button is tucked underneath.
             'disabled:opacity-100',
             muted && 'text-placeholder hover:text-placeholder hover:bg-card [&_svg]:opacity-25',

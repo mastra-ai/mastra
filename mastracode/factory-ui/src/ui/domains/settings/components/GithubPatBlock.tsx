@@ -101,27 +101,25 @@ function TokenRow({
 
   return (
     <SettingsRow label={label} description={description} errorMsg={removeMutation.error?.message}>
-      <div className="flex flex-wrap items-center gap-2">
+      <Button
+        ref={editButton}
+        size="sm"
+        icon={configured ? <IconPencil /> : <IconPlusMedium />}
+        disabled={removeMutation.isPending}
+        onClick={() => setEditing(true)}
+      >
+        {configured ? 'Update token' : 'Add token'}
+      </Button>
+      {configured && (
         <Button
-          ref={editButton}
           size="sm"
-          icon={configured ? <IconPencil /> : <IconPlusMedium />}
+          icon={<TrashIcon />}
           disabled={removeMutation.isPending}
-          onClick={() => setEditing(true)}
+          onClick={() => removeMutation.mutate()}
         >
-          {configured ? 'Update token' : 'Add token'}
+          {removeMutation.isPending ? 'Removing…' : 'Remove'}
         </Button>
-        {configured && (
-          <Button
-            size="sm"
-            icon={<TrashIcon />}
-            disabled={removeMutation.isPending}
-            onClick={() => removeMutation.mutate()}
-          >
-            {removeMutation.isPending ? 'Removing…' : 'Remove'}
-          </Button>
-        )}
-      </div>
+      )}
     </SettingsRow>
   );
 }
@@ -149,7 +147,12 @@ function TokenEditor({
   };
 
   return (
-    <SettingsRow label={label} description={description} errorMsg={saveMutation.error?.message}>
+    <SettingsRow
+      label={label}
+      description={description}
+      errorMsg={saveMutation.error?.message}
+      controlPlacement="below"
+    >
       <div className="flex min-w-0 flex-col gap-2">
         <Input
           autoFocus

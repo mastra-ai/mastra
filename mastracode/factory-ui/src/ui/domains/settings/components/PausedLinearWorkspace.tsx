@@ -31,6 +31,7 @@ export function PausedLinearWorkspace({
       }
       description={`${count} ${count === 1 ? 'project or team' : 'projects and teams'} paused. Reconnect to resume. Your saved routing is kept.`}
       errorMsg={reconnect.error}
+      controlPlacement="below"
     >
       <div className="flex flex-wrap items-center gap-2">
         {reconnect.unverified && (

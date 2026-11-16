@@ -168,10 +168,8 @@ export const Controls: Story = {
             <Input placeholder="./scripts/bootstrap.sh" />
           </SettingsRow>
           <SettingsFieldsetRow label="Notify me" description="Where completion alerts go.">
-            <div className="flex items-center gap-3">
-              <Switch aria-label="Bell" defaultChecked />
-              <Switch aria-label="System" />
-            </div>
+            <Switch aria-label="Bell" defaultChecked />
+            <Switch aria-label="System" />
           </SettingsFieldsetRow>
         </SettingsContainer>
       </SettingsGroup>

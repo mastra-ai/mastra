@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { SettingsContainer, SettingsControlGroup, SettingsRow } from './index';
+import { SettingsContainer, SettingsRow } from './index';
 import { Button } from '@/ds/components/Button';
 import { Combobox } from '@/ds/components/Combobox';
 import { Input } from '@/ds/components/Input';
@@ -50,17 +50,17 @@ export const Default: Story = {
   ),
 };
 
-/** Selects and comboboxes beside the label share one width set by the row; other controls keep their own. */
+/** Every control ends on the same edge: selects, comboboxes and inputs fill the row's control column; switches keep their size. */
 export const Controls: Story = {
   render: () => (
     <>
-      <SettingsRow label="Observer model" description="Combobox, sized by the row">
+      <SettingsRow label="Observer model" description="Combobox, fills the column">
         <Combobox options={models} value="openai/gpt-6-luna" />
       </SettingsRow>
-      <SettingsRow label="Reflector model" description="Long values truncate at the row width">
+      <SettingsRow label="Reflector model" description="Long values truncate at the column width">
         <Combobox options={models} value="openrouter/anthropic/claude-opus-5-5" />
       </SettingsRow>
-      <SettingsRow label="Region" description="Select, sized by the row">
+      <SettingsRow label="Region" description="Select, fills the column">
         <Select defaultValue="eu">
           <SelectTrigger>
             <SelectValue />
@@ -71,8 +71,8 @@ export const Controls: Story = {
           </SelectContent>
         </Select>
       </SettingsRow>
-      <SettingsRow label="Max steps" description="Inputs set their own width">
-        <Input className="w-40" defaultValue="5" />
+      <SettingsRow label="Max steps" description="Input, fills the column">
+        <Input defaultValue="5" />
       </SettingsRow>
       <SettingsRow label="Notifications" description="Notify when a run finishes">
         <Switch defaultChecked />
@@ -81,32 +81,28 @@ export const Controls: Story = {
   ),
 };
 
-/** A width class on the trigger overrides the row, e.g. a compact picker next to an action. */
-export const CompactOverride: Story = {
+/** A control and an action in one row: put both straight in the row. The select fills what the button leaves. */
+export const WithAction: Story = {
   render: () => (
     <SettingsRow label="Linear team" description="Routes this team's issues to a Factory">
-      <div className="flex items-center gap-2">
-        <Select defaultValue="mastra">
-          <SelectTrigger size="sm" aria-label="Factory for Linear team" className="w-auto">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="mastra">mastra</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button size="sm" variant="ghost">
-          Remove
-        </Button>
-      </div>
+      <Select defaultValue="mastra">
+        <SelectTrigger aria-label="Factory for Linear team">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="mastra">mastra</SelectItem>
+        </SelectContent>
+      </Select>
+      <Button variant="ghost">Remove</Button>
     </SettingsRow>
   ),
 };
 
 /**
- * Several controls that set one value go in a `SettingsControlGroup`, never a `div` with its own width: the group
- * takes the field width, so it ends on the same edge as the controls above and below it. A lone select fills it.
+ * Several controls that set one value go straight in the row, with no wrapper or widths: they split the control
+ * column and end on the same edge as the rows above. A lone select fills it.
  */
-export const ControlGroup: Story = {
+export const SeveralControls: Story = {
   render: () => (
     <>
       <SettingsRow label="Deploy key" description="Adds a Gateway API key to each deploy">
@@ -116,36 +112,32 @@ export const ControlGroup: Story = {
         <Combobox options={models} value="openai/gpt-6-luna" />
       </SettingsRow>
       <SettingsRow label="Spend limit">
-        <SettingsControlGroup>
-          <Select defaultValue="monthly">
-            <SelectTrigger aria-label="Period" className="w-32 shrink-0">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">No limit</SelectItem>
-              <SelectItem value="monthly">Monthly</SelectItem>
-            </SelectContent>
-          </Select>
-          <InputGroup className="flex-1">
-            <InputGroupAddon>
-              <InputGroupText>$</InputGroupText>
-            </InputGroupAddon>
-            <InputGroupInput aria-label="Limit" defaultValue="50" />
-          </InputGroup>
-        </SettingsControlGroup>
+        <Select defaultValue="monthly">
+          <SelectTrigger aria-label="Period">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No limit</SelectItem>
+            <SelectItem value="monthly">Monthly</SelectItem>
+          </SelectContent>
+        </Select>
+        <InputGroup>
+          <InputGroupAddon>
+            <InputGroupText>$</InputGroupText>
+          </InputGroupAddon>
+          <InputGroupInput aria-label="Limit" defaultValue="50" />
+        </InputGroup>
       </SettingsRow>
-      <SettingsRow label="Spend limit" description="One control left in the group fills it">
-        <SettingsControlGroup>
-          <Select defaultValue="none">
-            <SelectTrigger aria-label="Period">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">No limit</SelectItem>
-              <SelectItem value="monthly">Monthly</SelectItem>
-            </SelectContent>
-          </Select>
-        </SettingsControlGroup>
+      <SettingsRow label="Spend limit" description="One control left fills the column">
+        <Select defaultValue="none">
+          <SelectTrigger aria-label="Period">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No limit</SelectItem>
+            <SelectItem value="monthly">Monthly</SelectItem>
+          </SelectContent>
+        </Select>
       </SettingsRow>
     </>
   ),
@@ -181,7 +173,7 @@ export const Destructive: Story = {
 export const Validation: Story = {
   render: () => (
     <SettingsRow label="Model" required errorMsg="Choose the model this agent runs on.">
-      <Input className="w-56" placeholder="openai/gpt-5.2" />
+      <Input placeholder="openai/gpt-5.2" />
     </SettingsRow>
   ),
 };
