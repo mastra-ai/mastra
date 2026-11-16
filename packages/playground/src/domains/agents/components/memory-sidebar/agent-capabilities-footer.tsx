@@ -95,7 +95,7 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
           enabled ? toneIcon : undefined,
         )}
       >
-        <span className="size-3 shrink-0 [&>svg]:size-3">{icon}</span>
+        <span className="size-icon-xs shrink-0 [&>svg]:size-icon-xs">{icon}</span>
       </span>
     );
   }
@@ -116,7 +116,7 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
     >
       <span
         className={cn(
-          'mt-0.5 size-3.5 shrink-0 text-muted-foreground [&>svg]:size-3.5',
+          'mt-0.5 size-icon-sm shrink-0 text-muted-foreground [&>svg]:size-icon-sm',
           controlStateColorTransition,
           enabled ? toneIcon : 'group-hover/capability-row:text-foreground',
         )}

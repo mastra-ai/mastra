@@ -71,10 +71,10 @@ import {
   movedBody,
   namedBody,
   scopedSnapshot,
+  etagDigest,
   sendJson,
   sendRevalidated,
   sessionIdsWhere,
-  sha1,
 } from './board-snapshot.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { ProjectSessionsReader } from './project-sessions.js';
@@ -137,7 +137,7 @@ const wireVersions = new WeakMap<Card, string>();
  */
 function wireVersion(card: Card): string {
   let version = wireVersions.get(card);
-  if (version === undefined) wireVersions.set(card, (version = sha1(JSON.stringify(toWireWorkItem(card)))));
+  if (version === undefined) wireVersions.set(card, (version = etagDigest(JSON.stringify(toWireWorkItem(card)))));
   return version;
 }
 

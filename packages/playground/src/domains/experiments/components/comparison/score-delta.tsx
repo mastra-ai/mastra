@@ -33,7 +33,7 @@ export function ScoreDelta({ delta, format = formatScore, higherIsBetter = true,
     <>
       {sign}
       {showPercent ? `${((Math.abs(delta) / Math.abs(baseline)) * 100).toFixed(1)}%` : format(Math.abs(delta))}
-      <span aria-hidden className="inline-flex size-3.5 shrink-0 [&>svg]:size-3.5">
+      <span aria-hidden className="inline-flex size-icon-sm shrink-0 [&>svg]:size-icon-sm">
         {delta > 0 ? <IconArrowUpRight /> : delta < 0 ? <IconArrowDownRight /> : null}
       </span>
     </>
