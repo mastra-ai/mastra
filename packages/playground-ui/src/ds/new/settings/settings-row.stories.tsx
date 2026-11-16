@@ -29,7 +29,7 @@ const meta = {
   decorators: [
     Story => (
       <ThemeProvider defaultTheme="dark" storageKey="storybook-new-settings-row">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-160">
           <SettingsContainer>
             <Story />
           </SettingsContainer>
@@ -50,17 +50,17 @@ export const Default: Story = {
   ),
 };
 
-/** Every control ends on the same edge: selects, comboboxes and inputs fill the row's control column; switches keep their size. */
+/** Selects and comboboxes beside the label share one width set by the row; other controls keep their own. */
 export const Controls: Story = {
   render: () => (
     <>
-      <SettingsRow label="Observer model" description="Combobox, fills the column">
+      <SettingsRow label="Observer model" description="Combobox, sized by the row">
         <Combobox options={models} value="openai/gpt-6-luna" />
       </SettingsRow>
-      <SettingsRow label="Reflector model" description="Long values truncate at the column width">
+      <SettingsRow label="Reflector model" description="Long values truncate at the row width">
         <Combobox options={models} value="openrouter/anthropic/claude-opus-5-5" />
       </SettingsRow>
-      <SettingsRow label="Region" description="Select, fills the column">
+      <SettingsRow label="Region" description="Select, sized by the row">
         <Select defaultValue="eu">
           <SelectTrigger>
             <SelectValue />
@@ -71,8 +71,8 @@ export const Controls: Story = {
           </SelectContent>
         </Select>
       </SettingsRow>
-      <SettingsRow label="Max steps" description="Input, fills the column">
-        <Input defaultValue="5" />
+      <SettingsRow label="Max steps" description="Inputs set their own width">
+        <Input className="w-40" defaultValue="5" />
       </SettingsRow>
       <SettingsRow label="Notifications" description="Notify when a run finishes">
         <Switch defaultChecked />
@@ -81,26 +81,30 @@ export const Controls: Story = {
   ),
 };
 
-/** A control and an action in one row: put both straight in the row. The select fills what the button leaves. */
-export const WithAction: Story = {
+/** A width class on the trigger overrides the row, e.g. a compact picker next to an action. */
+export const CompactOverride: Story = {
   render: () => (
     <SettingsRow label="Linear team" description="Routes this team's issues to a Factory">
-      <Select defaultValue="mastra">
-        <SelectTrigger aria-label="Factory for Linear team">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="mastra">mastra</SelectItem>
-        </SelectContent>
-      </Select>
-      <Button variant="ghost">Remove</Button>
+      <div className="flex items-center gap-2">
+        <Select defaultValue="mastra">
+          <SelectTrigger size="sm" aria-label="Factory for Linear team" className="w-auto">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="mastra">mastra</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button size="sm" variant="ghost">
+          Remove
+        </Button>
+      </div>
     </SettingsRow>
   ),
 };
 
 /**
- * Several controls that set one value go straight in the row, with no wrapper or widths: they split the control
- * column and end on the same edge as the rows above. A lone select fills it.
+ * Several controls go straight in the row, with no wrapper or width: the row lines them up on its right edge, the
+ * same edge as every other row. A select hugs its value; an input group next to it takes the rest of the column.
  */
 export const SeveralControls: Story = {
   render: () => (
@@ -128,7 +132,7 @@ export const SeveralControls: Story = {
           <InputGroupInput aria-label="Limit" defaultValue="50" />
         </InputGroup>
       </SettingsRow>
-      <SettingsRow label="Spend limit" description="One control left fills the column">
+      <SettingsRow label="Spend limit" description="With no limit, only the select">
         <Select defaultValue="none">
           <SelectTrigger aria-label="Period">
             <SelectValue />
@@ -138,6 +142,25 @@ export const SeveralControls: Story = {
             <SelectItem value="monthly">Monthly</SelectItem>
           </SelectContent>
         </Select>
+      </SettingsRow>
+    </>
+  ),
+};
+
+/**
+ * Controls too wide to sit beside their label (keeping the label at least 16rem) wrap under it, still on the right
+ * edge: here an inline edit with its field and actions. Narrower controls in the same card stay beside their label.
+ */
+export const WideControl: Story = {
+  render: () => (
+    <>
+      <SettingsRow label="Avatar" description="Shown next to the organization name.">
+        <Input className="w-64" placeholder="https://example.com/avatar.png" />
+        <Button variant="primary">Save</Button>
+        <Button>Cancel</Button>
+      </SettingsRow>
+      <SettingsRow label="Notifications" description="Notify when a run finishes">
+        <Switch defaultChecked />
       </SettingsRow>
     </>
   ),
@@ -173,7 +196,7 @@ export const Destructive: Story = {
 export const Validation: Story = {
   render: () => (
     <SettingsRow label="Model" required errorMsg="Choose the model this agent runs on.">
-      <Input placeholder="openai/gpt-5.2" />
+      <Input className="w-56" placeholder="openai/gpt-5.2" />
     </SettingsRow>
   ),
 };

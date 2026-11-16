@@ -16,8 +16,8 @@ export type SettingsRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orient
   required?: boolean;
   errorMsg?: ReactNode;
   /**
-   * `side` (default): the controls sit on the right in a column of the shared field width (13.75rem). Selects and
-   * inputs fill it (several split it), switches and buttons keep their own size; all end at the right edge.
+   * `side` (default): the control sits on the right. Text fields take one shared width (13.75rem), selects hug
+   * their value up to that width, and switches and buttons keep their own size; all end at the right edge.
    * `below`: the control goes under the label at full width, for forms with several controls.
    */
   controlPlacement?: 'side' | 'below';
@@ -25,18 +25,20 @@ export type SettingsRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orient
 
 /** Label left, control right; stacked below `sm`. The card around the row gives it its spacing. */
 const rowClassName = 'min-w-0 gap-3';
-/** Side by side: label left, control pushed right. A control below its label fills the row instead. */
-const sideRowClassName = 'sm:justify-between sm:gap-6';
-const headingClassName = 'flex min-w-0 flex-col gap-px';
 /**
- * The control column on the right: always the shared field width (13.75rem), so every row's controls end on the
- * same edge without the page sizing anything. Selects, comboboxes and inputs fill it, and several of them split
- * it; switches and buttons keep their own size, pushed right. Nothing inside can be wider than the column. Put the
- * controls straight in the row; a control that needs more room goes `below` its label instead. (`InputGroup` is
- * `flex-1`, so the row resets its basis to let it split the column evenly with a select.)
+ * Side by side: label left, control pushed right. When the control is too wide to sit beside the label (keeping the
+ * label at least 16rem), it wraps under the label and stays on the right edge, so no page has to place it by hand.
+ * A control below its label fills the row instead.
+ */
+const sideRowClassName = 'sm:flex-wrap sm:justify-between sm:gap-x-6 sm:gap-y-3';
+const headingClassName = 'flex min-w-0 flex-col gap-px';
+const sideHeadingClassName = 'sm:flex-[1_1_16rem]';
+/**
+ * The control column on the right. Inputs fill it (at least 13.75rem); selects and other field triggers hug
+ * their value (`--field-width: auto`, see `fieldTriggerWidthStyle`) up to that same width.
  */
 const sideControlClassName =
-  'flex min-w-0 items-center justify-end gap-2 [--field-width:100%] *:min-w-0 *:max-w-full [&>[data-slot=input-group]]:basis-auto sm:w-55 sm:shrink-0';
+  'flex min-w-0 max-w-full items-center justify-end gap-2 [--field-max-width:13.75rem] [--field-width:auto] sm:ml-auto sm:min-w-55 sm:shrink-0';
 
 export function SettingsRowControl({ viewOnly = false, children }: { viewOnly?: boolean; children: ReactNode }) {
   if (!viewOnly) return children;
@@ -75,7 +77,7 @@ export function SettingsRow({
       className={cn(rowClassName, !controlBelow && sideRowClassName, className)}
       {...props}
     >
-      <div className={headingClassName}>
+      <div className={cn(headingClassName, !controlBelow && sideHeadingClassName)}>
         <FieldLabel
           {...(htmlFor ? { htmlFor } : {})}
           required={required}
@@ -138,7 +140,7 @@ export function SettingsFieldsetRow({
       )}
       {...props}
     >
-      <div className={headingClassName}>
+      <div className={cn(headingClassName, !controlBelow && sideHeadingClassName)}>
         <FieldsetLegend>{label}</FieldsetLegend>
         {description != null && (
           <div id={descriptionId} className="flex flex-col gap-0.5 text-caption text-pretty text-muted-foreground">

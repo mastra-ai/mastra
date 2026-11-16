@@ -529,7 +529,7 @@ function AddCreditsDialog() {
         <DialogBody>
           <SettingsContainer>
             <SettingsRow label="Credits to purchase" description="$1.20 went to vCPU beyond your allowance this month.">
-              <InputGroup size="sm">
+              <InputGroup size="sm" className="w-30">
                 <InputGroupAddon>$</InputGroupAddon>
                 <InputGroupInput
                   aria-label="Credits to purchase"
@@ -543,12 +543,14 @@ function AddCreditsDialog() {
               label="Automatically top up"
               description="Keeps workloads funded before the balance reaches zero."
             >
-              <Badge variant="success" emphasis="subtle" size="sm">
-                Recommended
-              </Badge>
-              <Switch checked={autoTopUp} onCheckedChange={setAutoTopUp} aria-label="Automatically top up" />
+              <div className="flex items-center gap-2">
+                <Badge variant="success" emphasis="subtle" size="sm">
+                  Recommended
+                </Badge>
+                <Switch checked={autoTopUp} onCheckedChange={setAutoTopUp} aria-label="Automatically top up" />
+              </div>
             </SettingsRow>
-            <SettingsFieldsetRow label="Top up to" controlPlacement="below">
+            <SettingsFieldsetRow label="Top up to">
               <div className="flex items-center gap-2">
                 <AmountField label="Top up to" value="25" className="w-20" />
                 <Txt as="span" variant="body-sm" tone="muted">

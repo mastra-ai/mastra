@@ -100,13 +100,7 @@ function TokenRow({
   }
 
   return (
-    <SettingsRow
-      label={label}
-      description={description}
-      errorMsg={removeMutation.error?.message}
-      // "Update token" and "Remove" together are wider than the control column, so they sit under the label.
-      controlPlacement={configured ? 'below' : 'side'}
-    >
+    <SettingsRow label={label} description={description} errorMsg={removeMutation.error?.message}>
       <div className="flex flex-wrap items-center gap-2">
         <Button
           ref={editButton}
@@ -155,12 +149,7 @@ function TokenEditor({
   };
 
   return (
-    <SettingsRow
-      label={label}
-      description={description}
-      errorMsg={saveMutation.error?.message}
-      controlPlacement="below"
-    >
+    <SettingsRow label={label} description={description} errorMsg={saveMutation.error?.message}>
       <div className="flex min-w-0 flex-col gap-2">
         <Input
           autoFocus
