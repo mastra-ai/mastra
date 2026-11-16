@@ -197,8 +197,9 @@ export function pinnedSessionsAfter(
   pin: boolean,
 ): ReadonlySet<string> {
   const next = new Set(pinned);
+  next.delete(row.session.sessionId);
   if (pin) next.add(row.session.sessionId);
-  else for (const sessionId of row.cardSessionIds ?? [row.session.sessionId]) next.delete(sessionId);
+  else for (const sessionId of row.cardSessionIds ?? []) next.delete(sessionId);
   return next;
 }
 

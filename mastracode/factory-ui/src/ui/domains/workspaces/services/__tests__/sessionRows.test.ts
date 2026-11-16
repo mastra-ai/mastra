@@ -1,7 +1,9 @@
+import { SESSION_ROW_PINS_MAX } from '@mastra/factory/session/session-row-limits';
 import { describe, expect, it } from 'vitest';
 
 import type { SessionRowWire } from '../../../../../api/types';
 import { pinnedSessionsAfter, presentSessionRow, sessionOwners } from '../sessionRows';
+import { sessionRowsRequest } from '../sessionRowReads';
 import type { SessionRowPresentation } from '../sessionRows';
 
 const FACTORY_ID = 'factory-1';
@@ -215,6 +217,23 @@ describe('pinnedSessionsAfter', () => {
 
     expect([...pinnedSessionsAfter(new Set(['triage', 'other']), shown, false)]).toEqual(['other']);
     expect([...pinnedSessionsAfter(new Set(), shown, true)]).toEqual(['work']);
+  });
+
+  it('pins again a session whose pin fell past the newest the sidebar sends', () => {
+    const newer = Array.from({ length: SESSION_ROW_PINS_MAX }, (_, index) => `newer-${index}`);
+    const repinned = pinnedSessionsAfter(new Set(['old', ...newer]), present(wireRow('old')), true);
+
+    const { pin } = sessionRowsRequest({
+      sort: 'activity',
+      groupBy: 'none',
+      filters: { owner: 'all', status: 'all', updated: 'all' },
+      pinned: repinned,
+      open: undefined,
+      children: false,
+      windows: {},
+    });
+
+    expect(pin).toContain('old');
   });
 });
 
