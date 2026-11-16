@@ -488,18 +488,30 @@ describe('restart while a resumed foreach item runs', () => {
 
   it('keeps a state change the parent never received when the stored resume recorded no target', async () => {
     // The resumed nested run ran item 1, which changed the state, and suspended again; the process
-    // crashed before the parent stored that suspension, on a record without a target.
+    // crashed before the parent stored that suspension, on a record without a target. A sibling
+    // changed `tag` after the nested run took its copy, so only a merge against the state the
+    // parent last received keeps both changes.
     const id = 'fo-unreceived-state';
     const child = `${id}-child`;
     const runId = `${id}-run`;
-    const STATE = z.object({ approvals: z.array(z.number()) });
+    const STATE = z.object({ approvals: z.array(z.number()), tag: z.string() });
     const scenario = createRestartScenario({
       kind: 'workflow',
       runId,
       build: ({ core }) =>
         core
           .createWorkflow({ id, inputSchema: z.array(ITEM), outputSchema: z.any(), stateSchema: STATE })
-          .then(
+          .parallel([
+            core.createStep({
+              id: 'sibling',
+              inputSchema: z.any(),
+              outputSchema: z.object({}),
+              stateSchema: STATE,
+              execute: async ({ state, setState }: any) => {
+                await setState({ ...state, tag: 'sibling' });
+                return {};
+              },
+            }),
             core
               .createWorkflow({ id: child, inputSchema: z.array(ITEM), outputSchema: z.any(), stateSchema: STATE })
               .foreach(
@@ -511,14 +523,14 @@ describe('restart while a resumed foreach item runs', () => {
                   stateSchema: STATE,
                   execute: async ({ inputData, resumeData, suspend, state, setState }: any) => {
                     if (resumeData === undefined) return suspend({}, { resumeLabel: `item-${inputData.k}` });
-                    await setState({ approvals: [...state.approvals, inputData.k] });
+                    await setState({ ...state, approvals: [...state.approvals, inputData.k] });
                     return inputData;
                   },
                 }),
                 { concurrency: 3 },
               )
               .commit(),
-          )
+          ])
           .commit(),
       hold: {
         workflowName: child,
@@ -530,7 +542,8 @@ describe('restart while a resumed foreach item runs', () => {
     scenarios.push(scenario);
     const original = await scenario.start(async ({ workflow }) => {
       const run = await workflow.createRun({ runId });
-      expect((await run.start({ inputData: ITEMS, initialState: { approvals: [] } })).status).toBe('suspended');
+      const started = await run.start({ inputData: ITEMS, initialState: { approvals: [], tag: 'initial' } });
+      expect(started.status).toBe('suspended');
       return run.resume({ label: 'item-1', resumeData: APPROVED });
     });
     await original.held;
@@ -538,8 +551,9 @@ describe('restart while a resumed foreach item runs', () => {
     const record = findRow(checkpoint, id, runId)!.snapshot.context[child] as any;
     expect(record).toMatchObject({ status: 'running', resumePayload: APPROVED });
     // The parent last took in the nested run's state when it first parked; the nested run is ahead.
-    expect(record.suspendPayload.__workflow_meta.startState).toEqual({ approvals: [] });
-    expect(findRow(checkpoint, child, runId)?.snapshot.value).toEqual({ approvals: [1] });
+    expect(record.suspendPayload.__workflow_meta.startState).toEqual({ approvals: [], tag: 'initial' });
+    expect(findRow(checkpoint, id, runId)?.snapshot.value).toEqual({ approvals: [], tag: 'sibling' });
+    expect(findRow(checkpoint, child, runId)?.snapshot.value).toEqual({ approvals: [1], tag: 'initial' });
     delete record.metadata.nestedResumeTarget;
 
     const { result, graph } = await scenario.restart(checkpoint);
@@ -550,7 +564,95 @@ describe('restart while a resumed foreach item runs', () => {
 
     const stored = await graph.workflows.loadWorkflowSnapshot({ workflowName: id, runId });
     expect([...stored.value.approvals].sort()).toEqual([0, 1, 2]);
+    expect(stored.value.tag).toBe('sibling');
   });
+
+  it.each([1, 2] as const)(
+    'keeps a state change of a nested run started without a resume, after a crash before the parent stored its suspension, storage v%s',
+    async storageVersion => {
+      // A plain start: the nested run changes the state and suspends; the process crashes before the
+      // parent stores that suspension. The parent's step is `running` with no resume payload.
+      const id = `plain-nested-v${storageVersion}`;
+      const child = `${id}-child`;
+      const runId = `${id}-run`;
+      const STATE = z.object({ log: z.array(z.string()) });
+      const scenario = createRestartScenario({
+        kind: 'workflow',
+        runId,
+        storageVersion,
+        build: ({ core }) =>
+          core
+            .createWorkflow({
+              id,
+              inputSchema: z.object({}),
+              outputSchema: z.any(),
+              stateSchema: STATE,
+              options: { storageVersion },
+            })
+            .then(
+              core
+                .createWorkflow({ id: child, inputSchema: z.object({}), outputSchema: z.any(), stateSchema: STATE })
+                .then(
+                  core.createStep({
+                    id: 'note',
+                    inputSchema: z.object({}),
+                    outputSchema: z.object({}),
+                    stateSchema: STATE,
+                    execute: async ({ getState, setState }: any) => {
+                      await setState({ log: [...(await getState()).log, 'nested'] });
+                      return {};
+                    },
+                  }),
+                )
+                .then(
+                  core.createStep({
+                    id: 'gate',
+                    inputSchema: z.object({}),
+                    outputSchema: z.object({ approved: z.boolean() }),
+                    // No resumeSchema: the restart resumes the nested run with no data, and the step
+                    // suspends again.
+                    execute: async ({ resumeData, suspend }: any) =>
+                      resumeData === undefined ? suspend({ ask: 'gate' }) : { approved: resumeData.approved },
+                  }),
+                )
+                .commit(),
+            )
+            .commit(),
+      });
+      scenarios.push(scenario);
+      // Graph 1 parks inside the write that stores the nested run suspended, on either version.
+      const parked = newGate();
+      const original = await scenario.start(async ({ workflow, workflows }) => {
+        interceptWrites(workflows, async (args, write) => {
+          const written = await write(args);
+          if (!parked.waiters && args?.workflowName === child) {
+            const snapshot = await workflows.loadWorkflowSnapshot({ workflowName: child, runId });
+            if (snapshot?.status === 'suspended') await parked.wait();
+          }
+          return written;
+        });
+        return (await workflow.createRun({ runId })).start({ inputData: {}, initialState: { log: [] } });
+      });
+      await parked.reached;
+      const checkpoint = await original.checkpoint();
+      expect(findRow(checkpoint, id, runId)?.snapshot.context[child]).toMatchObject({ status: 'running' });
+      expect((findRow(checkpoint, id, runId)?.snapshot.context[child] as any).resumePayload).toBeUndefined();
+      expect(findRow(checkpoint, child, runId)?.snapshot).toMatchObject({
+        status: 'suspended',
+        value: { log: ['nested'] },
+      });
+
+      const { result, graph } = await scenario.restart(checkpoint);
+
+      expect(result.status).toBe('suspended');
+      const steps = typeof result.steps === 'function' ? await (result.steps as any)() : result.steps;
+      expect(steps[child]).toMatchObject({ status: 'suspended', suspendPayload: { ask: 'gate' } });
+      const run = await graph.workflow.createRun({ runId });
+      expect((await run.resume({ step: [child, 'gate'], resumeData: APPROVED })).status).toBe('success');
+      const stored = await graph.workflows.loadWorkflowSnapshot({ workflowName: id, runId });
+      expect(stored.value).toEqual({ log: ['nested'] });
+    },
+  );
 
   it('resumes only the chosen item of a foreach inside a nested workflow, by index', async () => {
     const id = 'foreach-resume-child-index';
