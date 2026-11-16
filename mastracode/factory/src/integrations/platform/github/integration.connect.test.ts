@@ -351,4 +351,32 @@ describe('PlatformGithubIntegration in connect mode', () => {
       ]);
     });
   });
+
+  describe("a user's own GitHub connection", () => {
+    it("shows each user their own end-user connection, never the org's or another user's", async () => {
+      const { asUser } = await setup({ users: { 'user-1': 'ada' } });
+
+      const ada = await (await asUser('user-1').request('/web/github/user-connection')).json();
+      expect(ada).toEqual({
+        connection: { id: 'conn-user-user-1', status: 'active', accountLabel: null },
+        pat: { configured: false, login: null },
+      });
+      const grace = await (await asUser('user-2').request('/web/github/user-connection')).json();
+      expect(grace).toEqual({ connection: null, pat: { configured: false, login: null } });
+    });
+
+    it('starts a factory-github connect session scoped to the signed-in user', async () => {
+      const { platform, asUser } = await setup();
+
+      const response = await asUser('user-1').request('/web/github/user-connection/connect-session', {
+        method: 'POST',
+      });
+      expect(response.status).toBe(201);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(await response.json()).toMatchObject({ integrationId: FACTORY_GITHUB_PROVIDER_KEY });
+      expect(
+        platform.requests.filter(request => request.method === 'POST' && request.path.endsWith('/connect-sessions')),
+      ).toEqual([expect.objectContaining({ path: expect.stringContaining('/factory-github/'), resourceId: 'user-1' })]);
+    });
+  });
 });
