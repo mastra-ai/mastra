@@ -191,7 +191,7 @@ const intakeRouteSchema = z.object({
   on: z.array(z.enum(ROUTE_EVENTS)),
   /**
    * True on a route stored by 0.28 naming `pull_request.opened`: there it only moves a card, and
-   * files no pull request. Sending `on` again in an edit makes it file them too.
+   * files no pull request, through every edit. Add a route to file pull requests.
    */
   pullRequestOpenedMovesOnly: z.literal(true).optional(),
   /** Send it back as `expectedRevision` when editing or deleting. */

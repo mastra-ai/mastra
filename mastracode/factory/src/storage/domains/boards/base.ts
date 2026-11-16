@@ -1070,7 +1070,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       }
       checkRouteEvents(patch.on ?? routeEvents(row), patch.when !== undefined ? patch.when : row.when_condition);
       await updateIntakeRouteRow(ops, row, {
-        ...(patch.on !== undefined && { on_events: patch.on, opened_files_pull_requests: true }),
+        ...(patch.on !== undefined && { on_events: patch.on }),
         ...(patch.name !== undefined && { name: patch.name }),
         ...(patch.enabled !== undefined && { enabled: patch.enabled }),
         ...(patch.when !== undefined && { when_condition: patch.when }),

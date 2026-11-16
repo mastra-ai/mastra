@@ -511,7 +511,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     );
   });
 
-  it('keeps a pull_request.opened route stored by 0.28 a card move through edits and a restore, until its events are written again', async () => {
+  it('keeps a pull_request.opened route stored by 0.28 a card move through every edit, an undone trigger change, and a restore', async () => {
     const { a, scope, base, replicaA } = await setup();
     const id = randomUUID();
     // As 0.28 wrote it: no marker, so `pull_request.opened` only moves a card.
@@ -553,14 +553,21 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     });
     expect(restored).toMatchObject({ status: 201, body: { intakeRoute: moveOnly } });
 
-    // Writing its events again makes `pull_request.opened` file pull requests too.
+    // A trigger change, then the settings page's Undo sending the old `on` back, leaves it a card move.
     const route = restored.body.intakeRoute as Route;
-    const rewritten = await replicaA.send('PATCH', `${base}/${route.id}`, {
-      on: ['pull_request.opened'],
+    const changed = await replicaA.send('PATCH', `${base}/${route.id}`, {
+      on: ['pull_request.opened', 'work_item.closed'],
       expectedRevision: route.revision,
     });
-    expect(rewritten.status).toBe(200);
-    expect(rewritten.body.intakeRoute).not.toHaveProperty('pullRequestOpenedMovesOnly');
+    expect(changed).toMatchObject({
+      status: 200,
+      body: { intakeRoute: { on: ['pull_request.opened', 'work_item.closed'], pullRequestOpenedMovesOnly: true } },
+    });
+    const undone = await replicaA.send('PATCH', `${base}/${route.id}`, {
+      on: ['pull_request.opened'],
+      expectedRevision: route.revision + 1,
+    });
+    expect(undone).toMatchObject({ status: 200, body: { intakeRoute: moveOnly } });
   });
 
   it('refuses a route that joins pull requests to their issue on any event but an arrival', async () => {

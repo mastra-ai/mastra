@@ -96,10 +96,8 @@ function serveRoutes({ canEdit = true, routes = seededRoutes() } = {}) {
       const current = find(params.id);
       if (!current || current.revision !== body.expectedRevision) return stale();
       const { expectedRevision: _, ...patch } = body;
-      // Writing a route's events again makes a 0.28 `pull_request.opened` route file pull requests too.
-      const { pullRequestOpenedMovesOnly: _moveOnly, ...rest } = current;
       const next = {
-        ...(patch.on ? rest : current),
+        ...current,
         ...patch,
         target: patch.target
           ? { ...patch.target, joinClosedIssue: patch.target.joinClosedIssue ?? false }

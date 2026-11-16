@@ -498,11 +498,11 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
               message: `This rule belongs to board "${current.target.boardKey}"; add a rule on the other board instead.`,
             });
           }
-          // Writing `on` again files pull requests on `pull_request.opened`; otherwise a 0.28 route keeps only moving cards.
+          // A 0.28 `pull_request.opened` route stays a card move through every edit, `on` included.
           await this.#checkTarget(scope, {
             target: patch.target ?? current.target,
             on: patch.on ?? current.on,
-            pullRequestOpenedMovesOnly: !patch.on && current.pullRequestOpenedMovesOnly,
+            pullRequestOpenedMovesOnly: current.pullRequestOpenedMovesOnly,
           });
         }
         const route = await storage.updateIntakeRoute(scope, id, patch, { expectedRevision, actor: scope.userId });
