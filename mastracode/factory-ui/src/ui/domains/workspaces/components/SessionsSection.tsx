@@ -1,4 +1,4 @@
-import { SESSION_ROW_WINDOW } from '@mastra/factory/session/session-row-window';
+import { SESSION_ROW_WINDOW } from '@mastra/factory/session/session-row-limits';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar, useMaybeSidebarState } from '@mastra/playground-ui/components/Sidebar';
@@ -63,7 +63,6 @@ export function SessionsSection() {
   const children = view.revealChildSessions && sidebarState !== 'collapsed';
   const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters();
   const pinned = usePinnedSessions();
-  // How deep each group was listed is forgotten when the view changes: its groups start over.
   const viewKey = JSON.stringify([view.sort, view.groupBy, filters, children]);
   const [deepened, setDeepened] = useState({ viewKey, extraRows: NO_EXTRA_ROWS });
   const extraRows = deepened.viewKey === viewKey ? deepened.extraRows : NO_EXTRA_ROWS;

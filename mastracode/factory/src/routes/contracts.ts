@@ -7,6 +7,7 @@ import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem, STATUS_EVENTS } from '../
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
 import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
+import { SESSION_ROW_PINS_MAX, SESSION_ROW_WINDOW_MAX } from '../session/session-row-limits.js';
 import { MAX_INTAKE_ROUTES } from '../storage/domains/boards/base.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 import { PULL_REQUEST_STATUSES } from '../work-items/change-requests.js';
@@ -739,7 +740,7 @@ const sessionRowWindowSchema = z
         .string()
         .regex(/^[1-9]\d{0,2}$/)
         .transform(Number)
-        .pipe(z.number().max(500)),
+        .pipe(z.number().max(SESSION_ROW_WINDOW_MAX)),
     ]),
   );
 
@@ -765,7 +766,7 @@ export const sessionRowsQuerySchema = z.object({
   /** Repeatable. Sessions listed before every other one of their group. */
   pin: z
     .array(sessionIdQuerySchema)
-    .max(100)
+    .max(SESSION_ROW_PINS_MAX)
     .default([])
     .transform(ids => new Set(ids)),
   /** The session the reader has open: its group lists it however deep it lies. */

@@ -241,7 +241,6 @@ export function isStubbedProjectRead(request: Request): boolean {
   return request.headers.has(STUBBED_PROJECT_READ_HEADER);
 }
 
-/** The reads of what the running test stubs for a project, each marked as one of these. */
 export interface StubbedReads {
   project(path: string): Promise<Response>;
   origin(path: string): Promise<Response>;
@@ -257,7 +256,6 @@ export function stubbedReads(request: Request, factoryProjectId: string): Stubbe
   };
 }
 
-/** The signed-in user an `/auth/me` answer names: `user-1` when it names none. */
 export async function stubbedUserId(me: Response): Promise<string> {
   const user = me.ok ? stubbedUserSchema.safeParse(await me.json()) : undefined;
   return user?.success ? user.data.user.userId : 'user-1';

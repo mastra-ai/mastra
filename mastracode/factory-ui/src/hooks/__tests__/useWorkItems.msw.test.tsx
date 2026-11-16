@@ -12,8 +12,8 @@ import type { BoardSnapshot, WorkItem } from '../../ui/domains/factory/services/
 import {
   useBoardPhasesQuery,
   useDeleteWorkItemMutation,
+  useSessionCardsQuery,
   useSessionWorkItemsQuery,
-  useSidebarWorkItemsQuery,
   useTransitionWorkItemMutation,
   useUpdateWorkItemMutation,
   useUpsertWorkItemMutation,
@@ -202,7 +202,7 @@ describe('useDeleteWorkItemMutation', () => {
     );
 
     const { result, client } = renderHookWithProviders(() => ({
-      cards: useSidebarWorkItemsQuery(PROJECT_ID),
+      cards: useSessionCardsQuery(PROJECT_ID),
       remove: useDeleteWorkItemMutation(PROJECT_ID),
     }));
     await waitFor(() => expect(result.current.cards.data?.workItems).toHaveLength(1));

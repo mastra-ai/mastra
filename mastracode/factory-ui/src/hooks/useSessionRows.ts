@@ -16,7 +16,7 @@ export function sessionRowsQueryOptions(
     queryFn: factoryProjectId
       ? ({ signal }) => fetchSessionRows(baseUrl, factoryProjectId, request, signal)
       : skipToken,
-    // The feed provider refreshes this. A hidden tab holds no stream and polls nothing, so refresh immediately on return.
+    // Refreshed by the feed provider and on return to a hidden tab.
     refetchOnWindowFocus: true,
     refetchInterval: query => (query.state.data?.settling ? UNMATERIALIZED_POLL_MS : false),
   });
@@ -35,11 +35,12 @@ export function useSessionRowsQuery(factoryProjectId: string | undefined, reques
   const { baseUrl } = useApiConfig();
   return useQuery({
     ...sessionRowsQueryOptions(baseUrl, factoryProjectId, request),
-    // Another Factory's rows, or rows grouped another way, can't stand in while these load.
-    placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[2] === (factoryProjectId ?? null) && previousQuery.queryKey[3].groupBy === request.groupBy
+    placeholderData: (previous, previousQuery) => {
+      const [, , previousFactoryId, previousRequest] = previousQuery?.queryKey ?? [];
+      return previousFactoryId === (factoryProjectId ?? null) && previousRequest?.groupBy === request.groupBy
         ? previous
-        : undefined,
+        : undefined;
+    },
   });
 }
 

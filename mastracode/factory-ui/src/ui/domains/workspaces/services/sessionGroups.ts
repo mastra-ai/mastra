@@ -23,7 +23,6 @@ export const SESSION_GROUP_BY_OPTIONS: readonly DropdownMenuRadioOption<SessionG
 
 export type SessionGroupIcon = 'board' | 'review' | 'user' | 'slack' | 'status' | 'owner' | 'all';
 
-/** Keyed as the server keys the groups it answers. */
 export interface SessionGroupHeading {
   key: string;
   label: string;
@@ -33,16 +32,13 @@ export interface SessionGroupHeading {
 export const SESSION_GROUP_INCREMENT = 20;
 
 export interface SessionGroup extends SessionGroupHeading {
-  /** Rows of the group that match the filters, listed or not. */
   total: number;
-  /** Where the open session sits in the group, however deep. */
   openIndex?: number;
   rows: readonly SessionListRow[];
 }
 
 export interface SessionGroupContext {
   catalog: readonly InstalledBoardInfo[] | undefined;
-  /** Every board some session sits on. */
   boardIds: readonly string[];
   owners: readonly SessionOwner[];
   viewerUserId: string | undefined;

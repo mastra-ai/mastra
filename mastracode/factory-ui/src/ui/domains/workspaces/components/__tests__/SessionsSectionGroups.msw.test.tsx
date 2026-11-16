@@ -278,7 +278,6 @@ describe('Sessions sidebar groups', () => {
         HttpResponse.json({ workItems: releaseItems.map(item => ({ ...item, stages: ['shipped'] })) }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/boards`, async ({ request }) => {
-        // The server reads its own boards for the rows; only the app's catalog read is slow.
         if (!isStubbedProjectRead(request)) await catalogLoaded;
         return HttpResponse.json({
           boards: [...builtinBoardCatalog.boards, releaseBoard],

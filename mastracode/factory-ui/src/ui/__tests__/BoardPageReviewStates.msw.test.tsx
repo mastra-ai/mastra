@@ -72,7 +72,6 @@ function stubReviewBoard(decision?: FactoryDecisionSummary) {
         runs: data.runningSessionIds.map(resourceId => ({ runId: 'run-42', resourceId, threadId: 'thread-42' })),
       }),
     ),
-    // The server reports only runs of sessions it stores: the ones the cards hold.
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({
         sessions: data.items.flatMap(item =>

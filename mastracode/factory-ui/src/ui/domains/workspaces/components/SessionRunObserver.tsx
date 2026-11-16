@@ -11,7 +11,6 @@ export function resetSessionRunObserverForTests(): void {
   runningByFactory.clear();
 }
 
-/** A session's run ending rings the done sound once and refreshes the sidebar's rows. */
 export function SessionRunObserver({ factoryId }: { factoryId: string | undefined }) {
   const queryClient = useQueryClient();
   const { data } = useSessionActivityQuery(factoryId);

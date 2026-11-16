@@ -69,7 +69,6 @@ export const server = setupServer(
   // What a test stubs here is the project's cards: the board's paged reads are answered from it.
   http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),
   ...boardReadHandlers,
-  // The board's session activity is answered from the project's sessions, which board suites never listed.
   http.get('*/web/factory/projects/:id/sessions', () => HttpResponse.json({ sessions: [] })),
   ...sessionReadHandlers,
   // Ambient empty board for the draft page's starters and activity; their tests override these with `server.use(...)`.

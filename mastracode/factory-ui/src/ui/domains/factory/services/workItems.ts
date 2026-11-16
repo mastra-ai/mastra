@@ -206,7 +206,6 @@ function externalSourceUrl(source: ExternalWorkItemSource | null): string | null
   return source.url ?? null;
 }
 
-/** Where a card came from, and the link that opens it there. */
 export function cardLink({
   externalSource,
   workItemUrl,

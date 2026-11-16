@@ -136,8 +136,6 @@ describe('User sessions sidebar activity', () => {
     await waitForMutationsIdle(client);
     await screen.findByRole('status', { name: 'Initializing feature-d' });
 
-    // The run finishes and the server stamps materializedAt; the sidebar's
-    // rows refetch on their own cadence.
     settled = true;
     active.delete('sess-4');
     await invalidateSessionQueries(client, factoryId);

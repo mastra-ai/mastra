@@ -100,7 +100,6 @@ export const STATUS_MARKER_BY_ACTIVITY: Record<SessionActivityStatus, SessionRow
 
 export interface SessionRowPresentation {
   factoryId: string;
-  /** The session the route shows: a card row is open while any of the card's sessions is. */
   openSessionId: string | undefined;
   viewer: SessionViewerProfile | undefined;
   repositories: readonly Pick<FactoryProject['repositories'][number], 'projectRepositoryId' | 'slug'>[] | undefined;

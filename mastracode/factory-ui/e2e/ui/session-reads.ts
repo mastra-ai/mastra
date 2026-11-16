@@ -17,16 +17,8 @@ import { AGENT_CONTROLLER_ID } from '../../src/ui/domains/chat/services/constant
 import { queryValues, storedCard, stubbedReads, stubbedUserId } from './board-reads';
 import type { StubbedReads } from './board-reads';
 
-/**
- * The server's session rows and session activity reads for the UI suites, answered by the
- * server's own rules from the lists a test stubs: its sessions, its session cards, its boards,
- * decisions, signed-in user and active runs. A test keeps stubbing those lists; the sidebar asks
- * for rows, and gets what the real server would answer for them.
- */
-
 const dateSchema = z.coerce.date();
 
-// What a test's session may leave out, with what the server's rules then read.
 const wireSessionSchema = z
   .object({
     id: z.string().optional(),
@@ -96,7 +88,6 @@ const catalogBoardSchema = z.object({
   ),
 });
 
-/** A board of the catalog as the server installs it; one it could not load is left out, as the server leaves it. */
 function installedBoard(listed: unknown): InstalledBoard[] {
   const board = catalogBoardSchema.safeParse(listed);
   if (!board.success) return [];
@@ -120,7 +111,6 @@ function installedBoard(listed: unknown): InstalledBoard[] {
   }
 }
 
-/** The deferred decisions the server reads for the rows: the stubbed page, as its storage filters it. */
 function cardDecisions(page: unknown) {
   return stubbedDecisionsSchema
     .parse(page)
@@ -131,10 +121,6 @@ function cardDecisions(page: unknown) {
     .slice(0, CARD_DECISION_PAGE_SIZE);
 }
 
-/**
- * What both reads know of the project's sessions, as the route composes it from what the test
- * stubs. An answer that is not one of these is the stub's own failure, which the read then fails with.
- */
 async function stubbedSessionFacts(reads: StubbedReads, factoryProjectId: string) {
   const [listed, list, me, active] = await Promise.all([
     reads.project('sessions'),
@@ -163,7 +149,6 @@ async function stubbedSessionFacts(reads: StubbedReads, factoryProjectId: string
   };
 }
 
-/** Ambient session rows and activity reads, answered from whatever lists the running test stubs. */
 export const sessionReadHandlers = [
   http.get('*/web/factory/projects/:id/session-rows', async ({ request, params }) => {
     const url = new URL(request.url);

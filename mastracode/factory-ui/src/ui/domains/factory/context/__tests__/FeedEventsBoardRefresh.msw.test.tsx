@@ -15,8 +15,8 @@ import { useFactoryDecisionStatus } from '../../../../../hooks/useFactoryDecisio
 import { useSessionActivityQuery, useSessionRowsQuery } from '../../../../../hooks/useSessionRows';
 import {
   useBoardPhasesQuery,
+  useSessionCardsQuery,
   useSessionWorkItemsQuery,
-  useSidebarWorkItemsQuery,
   useTransitionWorkItemMutation,
   workItemActivityQueryOptions,
   workItemStartersQueryOptions,
@@ -88,7 +88,7 @@ function inner({ children }: { children: React.ReactNode }) {
 }
 
 function watchBoard() {
-  const cards = useSidebarWorkItemsQuery(PROJECT_ID);
+  const cards = useSessionCardsQuery(PROJECT_ID);
   return {
     cards: { isSuccess: cards.isSuccess, data: cards.data?.workItems },
     decisions: useFactoryDecisionStatus(PROJECT_ID, ['pending', 'leased']),
@@ -321,7 +321,6 @@ describe('FeedEventsProvider, on the board', () => {
       stream.ping();
       await advance(rendered.client, SERVER_PING_EVERY_MS);
     }
-    // The session reads have no timer of their own while nothing settles: they are read with the board, at most once a minute.
     const safetyRereads = requests.sessionActivity - connected.sessionActivity;
     expect(safetyRereads).toBeLessThanOrEqual(5);
     expect(requests).toEqual(moreRefreshes(connected, safetyRereads));
@@ -533,7 +532,7 @@ describe('FeedEventsProvider, on a session page', () => {
     // The sidebar reads every card holding a session; the header reads the session's cards.
     const rendered = renderHookWithProviders(
       () => ({
-        board: useSidebarWorkItemsQuery(PROJECT_ID),
+        board: useSessionCardsQuery(PROJECT_ID),
         session: useSessionWorkItemsQuery(PROJECT_ID, 'session-1'),
       }),
       { inner },

@@ -141,7 +141,6 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/work-items`, ({ params, request }) => {
       const query = new URL(request.url).searchParams;
-      // The sidebar's session-rows stand-in reads the cards too: only the app's own reads are counted or failed.
       const appRead = !isStubbedProjectRead(request);
       if (appRead) state.workItemQueries.push(query.toString());
       if (appRead && options.failWorkItems) {

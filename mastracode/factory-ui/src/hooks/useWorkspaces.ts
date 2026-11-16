@@ -150,7 +150,6 @@ export async function updateCachedSessionTitle(
   queryClient.setQueryData<FactoryUserSession>(sessionKey, current => current && { ...current, title: trimmedTitle });
 }
 
-/** Everything that lists a project's sessions: the search palette's list, the sidebar's rows and their activity. */
 export async function invalidateSessionQueries(queryClient: QueryClient, factoryId: string | undefined) {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) }),

@@ -292,8 +292,7 @@ export function useSessionWorkItemsQuery(factoryProjectId: string | undefined, s
   });
 }
 
-/** The cards the search palette titles its session results with: the ones holding a session, with the cards related to them. */
-export function useSidebarWorkItemsQuery(factoryProjectId: string | undefined) {
+export function useSessionCardsQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery(sessionCardsQueryOptions(baseUrl, factoryProjectId));
 }

@@ -1,4 +1,4 @@
-import { SESSION_ROW_WINDOW } from '@mastra/factory/session/session-row-window';
+import { SESSION_ROW_WINDOW } from '@mastra/factory/session/session-row-limits';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import type { ReactNode } from 'react';
 import { Fragment, useEffect, useRef } from 'react';

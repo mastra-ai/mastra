@@ -1,8 +1,3 @@
-/**
- * Deleting a session has to leave the sidebar at once, and survive a rows read that was already in flight.
- * Such a read left the server before the delete committed, so it still carries the deleted session —
- * letting it settle would write the row straight back over the removal and offer a dead thread again.
- */
 import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
