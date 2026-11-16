@@ -28,7 +28,6 @@ describeForAllEngines(
   'AIMock loop scenario: autoResumeSuspendedTools',
   engine => {
     const getMock = useLoopScenarioAimock();
-    const itFailsOnEvented = engine === 'evented' ? it.fails : it;
 
     it('auto-resumes a suspended tool when the user sends a follow-up message on the same thread', async () => {
       let toolExecuted = false;
@@ -494,8 +493,9 @@ describeForAllEngines(
       if (engine === 'evented' || engine === 'inngest') await waitForParked();
       expect(seen.siblingFinished).toBe(false);
       await sendFollowUp();
-      // Long enough for a turn the reply started to reach the model.
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Long enough for a turn the reply started to reach the model. A new Inngest turn takes over a second to get
+      // there, so a shorter wait would pass there even if nothing held the reply back.
+      await new Promise(resolve => setTimeout(resolve, engine === 'inngest' ? 3_000 : 300));
       releaseSibling();
       expect((await first).chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
 
@@ -629,127 +629,138 @@ describeForAllEngines(
     // in one step. The approval wins: the follow-up waits on the parked run until the approval is
     // answered. The approved run then parks on the plain tool's suspend(), and the follow-up starts
     // the reply turn that auto-resumes it. (#30190)
-    // Evented asks for approval of the plain tool once the approved call has run, so the run parks
-    // on an approval again and the follow-up keeps waiting. Cause not yet investigated.
-    itFailsOnEvented(
-      'answers a follow-up once after approving a tool that paused beside a tool waiting for input, with auto-resume on (#30190)',
-      async () => {
-        let deletes = 0;
-        const seen = { resumes: 0, resumedWith: undefined as string | undefined };
-        const deleteFileTool = createTool({
-          id: 'delete-file',
-          description: 'Deletes a file',
-          inputSchema: z.object({ path: z.string() }),
-          requireApproval: true,
-          execute: async ({ path }) => {
-            deletes++;
-            return { deleted: true, path };
+    // Evented differs; see the evented branch below.
+    it('answers a follow-up once after approving a tool that paused beside a tool waiting for input, with auto-resume on (#30190)', async () => {
+      let deletes = 0;
+      const seen = { resumes: 0, resumedWith: undefined as string | undefined };
+      const deleteFileTool = createTool({
+        id: 'delete-file',
+        description: 'Deletes a file',
+        inputSchema: z.object({ path: z.string() }),
+        requireApproval: true,
+        execute: async ({ path }) => {
+          deletes++;
+          return { deleted: true, path };
+        },
+      });
+      const findUserTool = createTool({
+        id: 'find-user',
+        description: 'Finds a user by name',
+        inputSchema: z.object({ query: z.string() }),
+        resumeSchema: z.object({ name: z.string() }),
+        execute: async (_inputData, context) => {
+          if (!context?.agent?.resumeData) {
+            return context?.agent?.suspend({ message: 'Which user should I find?' });
+          }
+          seen.resumes++;
+          seen.resumedWith = context.agent.resumeData.name;
+          return { name: seen.resumedWith };
+        },
+      });
+      const memory = new MockMemory();
+      const shared = await createSharedAgent(getMock(), {
+        tools: { deleteFileTool, findUserTool },
+        memory,
+        defaultOptions: { autoResumeSuspendedTools: true },
+        engine,
+      });
+      const threadId = globalThis.crypto.randomUUID();
+      const resourceId = globalThis.crypto.randomUUID();
+
+      const llm = getMock();
+      // Registered first: once the resumed tool answers, the model replies.
+      llm.on({ endpoint: 'chat', toolCallId: 'call-2', hasToolResult: true }, { content: 'FINAL_REPLY Dero Israel' });
+      // The follow-up turn re-calls the suspended tool with the answer read from the user's reply.
+      llm.onMessage(/The user is Dero Israel/, {
+        toolCalls: [
+          {
+            id: 'call-2',
+            name: 'find-user',
+            arguments: { query: 'user by name', suspendedToolCallId: 'call-1', resumeData: { name: 'Dero Israel' } },
           },
-        });
-        const findUserTool = createTool({
-          id: 'find-user',
-          description: 'Finds a user by name',
-          inputSchema: z.object({ query: z.string() }),
-          resumeSchema: z.object({ name: z.string() }),
-          execute: async (_inputData, context) => {
-            if (!context?.agent?.resumeData) {
-              return context?.agent?.suspend({ message: 'Which user should I find?' });
-            }
-            seen.resumes++;
-            seen.resumedWith = context.agent.resumeData.name;
-            return { name: seen.resumedWith };
-          },
-        });
-        const memory = new MockMemory();
-        const shared = await createSharedAgent(getMock(), {
-          tools: { deleteFileTool, findUserTool },
-          memory,
-          defaultOptions: { autoResumeSuspendedTools: true },
-          engine,
-        });
-        const threadId = globalThis.crypto.randomUUID();
-        const resourceId = globalThis.crypto.randomUUID();
+        ],
+      });
+      llm.on({ endpoint: 'chat', toolCallId: 'call-del-1', hasToolResult: true }, { content: 'DELETED_REPLY' });
 
-        const llm = getMock();
-        // Registered first: once the resumed tool answers, the model replies.
-        llm.on({ endpoint: 'chat', toolCallId: 'call-2', hasToolResult: true }, { content: 'FINAL_REPLY Dero Israel' });
-        // The follow-up turn re-calls the suspended tool with the answer read from the user's reply.
-        llm.onMessage(/The user is Dero Israel/, {
-          toolCalls: [
-            {
-              id: 'call-2',
-              name: 'find-user',
-              arguments: { query: 'user by name', suspendedToolCallId: 'call-1', resumeData: { name: 'Dero Israel' } },
-            },
-          ],
-        });
-        llm.on({ endpoint: 'chat', toolCallId: 'call-del-1', hasToolResult: true }, { content: 'DELETED_REPLY' });
+      const first = await runLoopScenario({
+        engine,
+        llm,
+        sharedAgent: shared,
+        prompt: 'Delete the config file and find the user named Dero Israel',
+        memory,
+        threadId,
+        resourceId,
+        fixtures: mock => {
+          mock.onMessage(/Delete the config file/, {
+            toolCalls: [
+              { id: 'call-del-1', name: 'delete-file', arguments: { path: '/etc/config.json' } },
+              { id: 'call-1', name: 'find-user', arguments: { query: 'user by name' } },
+            ],
+          });
+        },
+        collectChunks: true,
+      });
+      expect(first.chunks!.some(c => c.type === 'tool-call-approval')).toBe(true);
+      const runId = first.output.runId;
 
-        const first = await runLoopScenario({
-          engine,
-          llm,
-          sharedAgent: shared,
-          prompt: 'Delete the config file and find the user named Dero Israel',
-          memory,
-          threadId,
-          resourceId,
-          fixtures: mock => {
-            mock.onMessage(/Delete the config file/, {
-              toolCalls: [
-                { id: 'call-del-1', name: 'delete-file', arguments: { path: '/etc/config.json' } },
-                { id: 'call-1', name: 'find-user', arguments: { query: 'user by name' } },
-              ],
-            });
-          },
-          collectChunks: true,
-        });
-        expect(first.chunks!.some(c => c.type === 'tool-call-approval')).toBe(true);
-        const runId = first.output.runId;
+      const view = await shared.agent.subscribeToThread({ resourceId, threadId });
+      onTestFinished(() => view.unsubscribe());
+      const requestsWithReply = () =>
+        llm.getRequests().filter(request => JSON.stringify(request.body?.messages).includes(FOLLOW_UP)).length;
 
-        const view = await shared.agent.subscribeToThread({ resourceId, threadId });
-        onTestFinished(() => view.unsubscribe());
-        const requestsWithReply = () =>
-          llm.getRequests().filter(request => JSON.stringify(request.body?.messages).includes(FOLLOW_UP)).length;
+      await shared.agent.sendMessage(FOLLOW_UP, { resourceId, threadId }).accepted;
+      // Long enough for a turn the follow-up started to reach the model.
+      await new Promise(resolve => setTimeout(resolve, 500));
+      expect(requestsWithReply()).toBe(0);
+      expect(view.activeRunId()).toBe(runId);
+      expect(deletes).toBe(0);
+      expect(seen.resumes).toBe(0);
 
-        await shared.agent.sendMessage(FOLLOW_UP, { resourceId, threadId }).accepted;
+      const approved = (await shared.agent.approveToolCall({ runId, toolCallId: 'call-del-1' })) as unknown as {
+        fullStream: AsyncIterable<ChunkType>;
+      };
+      const approvedChunks: ChunkType[] = [];
+      for await (const chunk of approved.fullStream) approvedChunks.push(chunk);
+      expect(deletes).toBe(1);
+      if (engine === 'evented') {
+        // Evented asks for approval of the plain tool once the approved call has run, though the tool has no
+        // `requireApproval`, so the run parks on an approval again and the follow-up keeps waiting. It does the same
+        // with the thread runtime from `main`, so it does not come from this change; this branch pins today's
+        // behaviour so a different regression still fails here.
+        expect(
+          approvedChunks.some(chunk => chunk.type === 'tool-call-approval' && chunk.payload.toolCallId === 'call-1'),
+        ).toBe(true);
         // Long enough for a turn the follow-up started to reach the model.
         await new Promise(resolve => setTimeout(resolve, 500));
         expect(requestsWithReply()).toBe(0);
         expect(view.activeRunId()).toBe(runId);
-        expect(deletes).toBe(0);
         expect(seen.resumes).toBe(0);
+        return;
+      }
+      // An approval makes the step run its calls one at a time, so the plain tool only runs, and
+      // pauses for its input, once the approved call is done.
+      expect(
+        approvedChunks.some(chunk => chunk.type === 'tool-call-suspended' && chunk.payload.toolCallId === 'call-1'),
+      ).toBe(true);
 
-        const approved = (await shared.agent.approveToolCall({ runId, toolCallId: 'call-del-1' })) as unknown as {
-          fullStream: AsyncIterable<ChunkType>;
-        };
-        const approvedChunks: ChunkType[] = [];
-        for await (const chunk of approved.fullStream) approvedChunks.push(chunk);
-        expect(deletes).toBe(1);
-        // An approval makes the step run its calls one at a time, so the plain tool only runs, and
-        // pauses for its input, once the approved call is done.
-        expect(
-          approvedChunks.some(chunk => chunk.type === 'tool-call-suspended' && chunk.payload.toolCallId === 'call-1'),
-        ).toBe(true);
-
-        const deadline = Date.now() + 5_000;
-        let { messages } = await memory.recall({ threadId, resourceId });
-        while (!messages.some(m => textOf(m).includes('FINAL_REPLY')) && Date.now() < deadline) {
-          await new Promise(resolve => setTimeout(resolve, 50));
-          ({ messages } = await memory.recall({ threadId, resourceId }));
-        }
-        // Count only once no run holds the thread, so a second turn that started late is caught.
-        await vi.waitFor(() => expect(view.activeRunId()).toBeNull(), { timeout: 5_000 });
+      const deadline = Date.now() + 5_000;
+      let { messages } = await memory.recall({ threadId, resourceId });
+      while (!messages.some(m => textOf(m).includes('FINAL_REPLY')) && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 50));
         ({ messages } = await memory.recall({ threadId, resourceId }));
-        expect(messages.filter(m => textOf(m).includes(FOLLOW_UP))).toHaveLength(1);
-        expect(
-          messages.filter(m => m.role === 'assistant' && textOf(m).includes('FINAL_REPLY Dero Israel')),
-        ).toHaveLength(1);
-        expect(seen.resumedWith).toBe('Dero Israel');
-        expect(seen.resumes).toBe(1);
-        expect(requestsWithReply()).toBe(2);
-        expect(deletes).toBe(1);
-      },
-    );
+      }
+      // Count only once no run holds the thread, so a second turn that started late is caught.
+      await vi.waitFor(() => expect(view.activeRunId()).toBeNull(), { timeout: 5_000 });
+      ({ messages } = await memory.recall({ threadId, resourceId }));
+      expect(messages.filter(m => textOf(m).includes(FOLLOW_UP))).toHaveLength(1);
+      expect(
+        messages.filter(m => m.role === 'assistant' && textOf(m).includes('FINAL_REPLY Dero Israel')),
+      ).toHaveLength(1);
+      expect(seen.resumedWith).toBe('Dero Israel');
+      expect(seen.resumes).toBe(1);
+      expect(requestsWithReply()).toBe(2);
+      expect(deletes).toBe(1);
+    });
 
     /** The issue's case: the same workflow run resumes once, and the step before the suspension is not rerun. */
     const expectWorkflowResumedOnce = (seen: Awaited<ReturnType<typeof createStudioThread>>['seen']) => {
