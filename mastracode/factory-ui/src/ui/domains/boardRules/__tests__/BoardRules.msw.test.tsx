@@ -73,7 +73,7 @@ describe('Board rules', () => {
     expect(lane('Issue reopened').getByText('No rules: the card stays where it is')).toBeVisible();
   });
 
-  it('groups lanes into issues and pull requests, with the intake note on every lane that can file an item with no card', async () => {
+  it('groups lanes into issues and pull requests, with the intake note on the two lanes new items arrive on', async () => {
     serveRules({ rules: [bugs(), closed()], order: ['release', 'work'] });
     renderRules();
 
@@ -102,20 +102,22 @@ describe('Board rules', () => {
     ).toBeVisible();
 
     const note = 'No card yet: checked last, after Release Preview; first matching rule files it on this board.';
-    const filing = [
-      'Issue opened',
-      'Issue reopened',
-      'Issue labels or assignees change',
-      'Pull request opened',
-      'Pull request reopened',
-      'Pull request labels or assignees change',
-    ];
-    for (const label of filing) {
+    // Intake files a new issue on Issue opened and a pull request with no card on Pull request opened. A reopened
+    // issue with no card comes back through Issue opened, and a label change never files one.
+    for (const label of ['Issue opened', 'Pull request opened']) {
       expect(
         await lane(label).findByText((_, element) => element?.tagName === 'P' && element.textContent === note),
       ).toBeVisible();
     }
-    for (const label of ['Issue closed', 'Pull request merged', 'Review requested']) {
+    for (const label of [
+      'Issue reopened',
+      'Issue labels or assignees change',
+      'Pull request reopened',
+      'Pull request labels or assignees change',
+      'Issue closed',
+      'Pull request merged',
+      'Review requested',
+    ]) {
       expect(lane(label).queryByText(/No card yet/)).not.toBeInTheDocument();
     }
   });
@@ -379,10 +381,10 @@ describe('Board rules', () => {
     );
   });
 
-  it('reloads the rules and says so when someone else changed one first', async () => {
-    const { state } = serveRules({ rules: [closed()] });
+  it('reloads a rule someone else changed first, and saves the retry against their version', async () => {
+    const { state, sent } = serveRules({ rules: [closed()] });
     const user = userEvent.setup();
-    renderRules();
+    const { client } = renderRules();
 
     await screen.findByRole('region', { name: 'Issue closed' });
     const current = state.rules[0];
@@ -391,11 +393,160 @@ describe('Board rules', () => {
     const dialog = within(await screen.findByRole('dialog', { name: 'Edit rule' }));
     await user.click(dialog.getByRole('button', { name: 'Save rule' }));
 
-    expect(await dialog.findByRole('alert')).toHaveTextContent(
-      'Someone else changed these rules first. They have been reloaded; try again.',
+    // The dialog now shows the teammate's version, so a second Save writes over what they saved, not a stale copy.
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Someone else changed this rule first. It now shows their version; make your change again.',
     );
-    await user.click(dialog.getByRole('button', { name: 'Cancel' }));
-    await waitFor(() => expect(ruleNames('Issue closed')).toEqual(['Renamed by a teammate']));
+    const fresh = within(screen.getByRole('dialog', { name: 'Edit rule' }));
+    await user.click(fresh.getByRole('button', { name: /Review/ }));
+    expect(fresh.getByRole('textbox', { name: 'Name' })).toHaveValue('Renamed by a teammate');
+    await user.click(fresh.getByRole('button', { name: 'Save rule' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitForMutationsIdle(client);
+    expect(
+      sent
+        .filter(request => request.method === 'PATCH')
+        .map(request => (request.body as { expectedRevision: number }).expectedRevision),
+    ).toEqual([1, 2]);
+    expect(ruleNames('Issue closed')).toEqual(['Renamed by a teammate']);
+  });
+
+  it('lets a rule on a reopened issue send the card to another board, and keeps that board when another event is added', async () => {
+    const reopened = rule({
+      id: ruleId('reopened'),
+      name: 'Reopened go to Release',
+      on: ['work_item.reopened'],
+      target: { boardKey: 'work', phaseKey: 'queued', joinClosedIssue: false, moveToBoardKey: 'release' },
+    });
+    const { sent } = serveRules({ rules: [reopened] });
+    const user = userEvent.setup();
+    const { client } = renderRules();
+
+    await screen.findByRole('region', { name: 'Issue reopened' });
+    await user.click(screen.getByRole('button', { name: 'Edit conditions of Reopened go to Release' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Edit rule' }));
+    await user.click(dialog.getByRole('button', { name: /Trigger/ }));
+    await user.click(dialog.getByRole('checkbox', { name: /Issue labels or assignees change/ }));
+    await user.click(dialog.getByRole('button', { name: /Move to/ }));
+    expect(dialog.getByRole('radio', { name: 'Release Preview' })).toBeChecked();
+    await user.click(dialog.getByRole('button', { name: /Review/ }));
+    await user.click(dialog.getByRole('button', { name: 'Save rule' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitForMutationsIdle(client);
+    expect(sent.find(request => request.method === 'PATCH')?.body).toMatchObject({
+      on: ['work_item.reopened', 'work_item.updated'],
+      target: { boardKey: 'work', phaseKey: 'queued', moveToBoardKey: 'release' },
+    });
+  });
+
+  it('puts a new rule above the catch-all of every lane it listens on', async () => {
+    const reopenedAll = rule({
+      id: ruleId('reopened-all'),
+      name: 'Every reopened card goes to Intake',
+      on: ['work_item.reopened'],
+    });
+    const closedAll = rule({
+      id: ruleId('closed-all'),
+      name: 'Every closed card goes to Done',
+      on: ['work_item.closed'],
+    });
+    serveRules({ rules: [reopenedAll, closedAll] });
+    const user = userEvent.setup();
+    const { client } = renderRules();
+
+    const closedLane = within(await screen.findByRole('region', { name: 'Issue closed' }));
+    await user.click(closedLane.getByRole('button', { name: 'Add rule' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
+    await user.click(dialog.getByRole('button', { name: /Trigger/ }));
+    await user.click(dialog.getByRole('checkbox', { name: /Issue reopened/ }));
+    await user.click(dialog.getByRole('button', { name: 'Continue' }));
+    await user.click(dialog.getByRole('radio', { name: /Every card/ }));
+    await user.click(dialog.getByRole('button', { name: 'Continue' }));
+    await user.click(dialog.getByRole('radio', { name: 'Planning' }));
+    const name = dialog.getByRole('textbox', { name: 'Name' });
+    await user.clear(name);
+    await user.type(name, 'Back to Planning');
+    await user.click(dialog.getByRole('button', { name: 'Create rule' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitForMutationsIdle(client);
+    await waitFor(() =>
+      expect(ruleNames('Issue reopened')).toEqual(['Back to Planning', 'Every reopened card goes to Intake']),
+    );
+    expect(ruleNames('Issue closed')).toEqual(['Back to Planning', 'Every closed card goes to Done']);
+  });
+
+  it('lets a rule continue once an unfinished condition is dropped by choosing every item', async () => {
+    serveRules({ rules: [closed()] });
+    const user = userEvent.setup();
+    renderRules();
+
+    const closedLane = within(await screen.findByRole('region', { name: 'Issue closed' }));
+    await user.click(closedLane.getByRole('button', { name: 'Add rule' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
+    await user.click(dialog.getByRole('radio', { name: /Only ones that match/ }));
+    await user.click(dialog.getByRole('button', { name: 'Add condition' }));
+    expect(dialog.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    await user.click(dialog.getByRole('radio', { name: /Every card/ }));
+    await user.click(dialog.getByRole('radio', { name: /Only ones that match/ }));
+
+    expect(dialog.queryByRole('button', { name: 'Remove condition' })).not.toBeInTheDocument();
+    expect(dialog.getByRole('button', { name: 'Continue' })).toBeEnabled();
+  });
+
+  it('picks a board with the arrow keys, as one radio group', async () => {
+    serveRules({ rules: [closed()] });
+    const user = userEvent.setup();
+    renderRules();
+
+    await screen.findByRole('region', { name: 'Issue closed' });
+    await user.click(screen.getByRole('button', { name: 'Edit where Closed issues go to Done moves the card' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Edit rule' }));
+    const work = dialog.getByRole('radio', { name: 'Work (this board)' });
+    expect(work).toBeChecked();
+    work.focus();
+    await user.keyboard('{ArrowDown}');
+    expect(dialog.getByRole('radio', { name: 'Release Preview' })).toBeChecked();
+    expect(dialog.getByRole('radio', { name: 'Release Preview' })).toHaveFocus();
+  });
+
+  it('does not call rules under a catch-all unreachable when that catch-all is skipped', async () => {
+    const broken = rule({
+      id: ruleId('broken'),
+      name: 'Everything to the old board',
+      problems: ['Board "old" is not installed in this project.'],
+    });
+    serveRules({ rules: [broken, everythingElse()] });
+    renderRules();
+
+    await screen.findByRole('region', { name: OPENED });
+    const live = within(lane(OPENED).getByRole('listitem', { name: 'Everything else goes to Intake' }));
+    expect(live.queryByText(/Never reached/)).not.toBeInTheDocument();
+    expect(
+      within(lane(OPENED).getByRole('listitem', { name: 'Everything to the old board' })).getByText(
+        'Board "old" is not installed in this project.',
+      ),
+    ).toBeVisible();
+  });
+
+  it('closes an open rule when the page moves to another board', async () => {
+    serveRules({ rules: [closed()] });
+    const user = userEvent.setup();
+    const { rerender } = renderRules();
+
+    await screen.findByRole('region', { name: 'Issue closed' });
+    await user.click(screen.getByRole('button', { name: 'Edit conditions of Closed issues go to Done' }));
+    await screen.findByRole('dialog', { name: 'Edit rule' });
+    rerender(
+      <MemoryRouter>
+        <BoardRules factoryId={FACTORY_ID} boardId="release" />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole('region', { name: 'Issue closed' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('turns a rule off, which marks it skipped', async () => {

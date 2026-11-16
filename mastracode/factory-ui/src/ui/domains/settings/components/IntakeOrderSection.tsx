@@ -45,7 +45,8 @@ export function IntakeOrderSection({ factoryId }: { factoryId: string }) {
       ) : query.isError ? (
         <Notice variant="destructive">The intake order didn’t load.</Notice>
       ) : (
-        <OrderEditor factoryId={factoryId} order={query.data} />
+        // Keyed so an unsaved order never carries over to another project.
+        <OrderEditor key={factoryId} factoryId={factoryId} order={query.data} />
       )}
     </SettingsSubsection>
   );
@@ -55,8 +56,10 @@ function OrderEditor({ factoryId, order }: { factoryId: string; order: IntakeOrd
   const routes = useIntakeRoutesQuery(factoryId);
   const save = useSaveIntakeOrder(factoryId);
   // Unset while the list shows what is saved; a drag or arrow starts a draft that Save or Discard ends.
-  const [draft, setDraft] = useState<string[]>();
+  const [kept, setDraft] = useState<string[]>();
   const saved = order.boards.map(board => board.boardKey);
+  // A draft only orders the boards it was made for: once a board is added or removed it is dropped, not saved short.
+  const draft = kept && sameBoards(kept, saved) ? kept : undefined;
   const shown = draft ?? saved;
   const names = new Map(order.boards.map(board => [board.boardKey, board.name]));
   const changed = draft !== undefined && draft.some((key, index) => key !== saved[index]);
@@ -80,6 +83,8 @@ function OrderEditor({ factoryId, order }: { factoryId: string; order: IntakeOrd
     });
 
   const sortable = order.canEdit && shown.length > 1;
+  // Held still while saving: a move made then would be cleared by the earlier save landing.
+  const movable = sortable && !save.isPending;
 
   return (
     <div className="flex flex-col gap-3">
@@ -95,8 +100,8 @@ function OrderEditor({ factoryId, order }: { factoryId: string; order: IntakeOrd
               role="listitem"
               data-drop={drag.dropAt(index)}
               style={dragging ? { transform: `translateY(${drag.drag?.offset ?? 0}px)` } : undefined}
-              onPointerDown={sortable ? pointer => drag.onPointerDown(pointer, index) : undefined}
-              onKeyDown={sortable ? key => drag.onKeyDown(key, index) : undefined}
+              onPointerDown={movable ? pointer => drag.onPointerDown(pointer, index) : undefined}
+              onKeyDown={movable ? key => drag.onKeyDown(key, index) : undefined}
               className={cn(DROP_LINE, dragging && 'z-10 opacity-90')}
               media={
                 <SettingsItemIcon>
@@ -122,7 +127,7 @@ function OrderEditor({ factoryId, order }: { factoryId: string; order: IntakeOrd
                       size="icon-sm"
                       variant="ghost"
                       tooltip="Check earlier"
-                      disabled={index === 0}
+                      disabled={!movable || index === 0}
                       onClick={() => move(index, index - 1)}
                     >
                       <ArrowUp />
@@ -131,7 +136,7 @@ function OrderEditor({ factoryId, order }: { factoryId: string; order: IntakeOrd
                       size="icon-sm"
                       variant="ghost"
                       tooltip="Check later"
-                      disabled={index === shown.length - 1}
+                      disabled={!movable || index === shown.length - 1}
                       onClick={() => move(index, index + 1)}
                     >
                       <ArrowDown />
@@ -197,4 +202,9 @@ function OrderStatus({ order, changed }: { order: IntakeOrderResponse; changed: 
       </span>
     </Notice>
   );
+}
+
+function sameBoards(draft: readonly string[], saved: readonly string[]): boolean {
+  const keys = new Set(saved);
+  return draft.length === saved.length && draft.every(key => keys.has(key));
 }

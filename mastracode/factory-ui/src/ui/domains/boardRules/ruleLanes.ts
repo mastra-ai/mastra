@@ -38,17 +38,6 @@ export const LEGACY_OPENED_EVENT = 'work_item.created';
 /** Every event a rule filing new items listens on, legacy included. */
 const ARRIVAL_EVENTS = new Set<string>([...ARRIVAL_LANES, LEGACY_OPENED_EVENT]);
 
-/** Events that can file an item with no card yet, through intake. */
-const FILES_CARDLESS = new Set([
-  LEGACY_OPENED_EVENT,
-  'work_item.opened',
-  'work_item.reopened',
-  'work_item.updated',
-  'pull_request.opened',
-  'pull_request.reopened',
-  'pull_request.updated',
-]);
-
 interface LaneText {
   label: string;
   description: string;
@@ -130,24 +119,20 @@ export function laneText(event: string): LaneText {
   };
 }
 
-/** Whether a lane is where new items arrive, so its rules file items with no card. */
+/**
+ * Whether a lane is where new items arrive, so its rules file items with no card. Only these do: a reopened issue
+ * with no card comes back as opened, and a label or assignee change never files one.
+ */
 export function isOpenedLane(event: string): boolean {
   return ARRIVAL_LANES.some(lane => lane === event);
 }
 
-/** Whether a rule files new items: it listens on an arrival event, legacy `work_item.created` included. */
+/**
+ * Whether a rule files new items: it listens on an arrival event, legacy `work_item.created` included. An item with
+ * no card can only be filed on the rule's own board, so such a rule can't send cards to another one.
+ */
 export function placesArrival(on: readonly string[]): boolean {
   return on.some(event => ARRIVAL_EVENTS.has(event));
-}
-
-/** Whether a lane can file an item with no card yet, through intake. */
-export function filesCardless(event: string): boolean {
-  return FILES_CARDLESS.has(event);
-}
-
-/** Whether a rule may place an item with no card, so it may only name its own board. */
-export function placesCardless(on: readonly string[]): boolean {
-  return on.some(filesCardless);
 }
 
 /** Whether a stored rule still listens on the pre-rename `work_item.created`. */
@@ -177,9 +162,14 @@ export function newItemRules(rules: readonly IntakeRouteInfo[]): { count: number
   return { count: reached.size, catchesAll };
 }
 
-/** The first rule in a lane that takes every item, so no rule below it is ever reached; -1 when none does. */
+/**
+ * The first rule in a lane that takes every item, so no rule below it is ever reached; -1 when none does. A rule
+ * whose target can't take cards (its `problems`, such as a deleted board) is skipped, so it stops nothing.
+ */
 export function catchAllIndex(lane: readonly IntakeRouteInfo[]): number {
-  return lane.findIndex(rule => rule.enabled && rule.when === null && !rule.target.joinClosedIssue);
+  return lane.findIndex(
+    rule => rule.enabled && rule.when === null && !rule.target.joinClosedIssue && rule.problems.length === 0,
+  );
 }
 
 /** Where a board sits in intake order, in words: "Checked after Ship, before Work". */

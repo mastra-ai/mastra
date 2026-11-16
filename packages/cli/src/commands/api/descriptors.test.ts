@@ -165,6 +165,7 @@ describe('api command descriptors', () => {
       'factoryNot-routedList': ['intakeNotRoutedList', ['id'], true, false, false],
       'factoryNot-routedRoute-again': ['intakeRouteAgain', ['id', 'decisionId'], false, false, false],
       'factoryIntakeDry-run': ['intakeDryRun', ['id'], true, false, false],
+      factoryIntakeSkipped: ['intakeSkippedList', ['id'], false, false, false],
       factoryIntakeTest: ['intakeTest', ['id'], true, true, false],
       factoryMetrics: ['metricsGet', ['id'], true, false, false],
       factoryHealthThresholds: ['healthThresholdsGet', ['id'], false, false, false],

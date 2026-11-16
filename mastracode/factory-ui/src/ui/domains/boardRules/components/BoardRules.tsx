@@ -13,7 +13,7 @@ import { useBoardRulesQuery, useIntakeRouteWrites } from '../../../../hooks/useI
 import type { RouteWrite } from '../../../../hooks/useIntakeRoutes';
 import { phaseOptions, reorderWithin } from '../ruleTargets';
 import { INTAKE_ORDER_ANCHOR, settingsSectionPath } from '../../settings/settingsSections';
-import { catchAllIndex, filesCardless, intakePosition, isOpenedLane, LANE_SECTIONS, laneRules } from '../ruleLanes';
+import { catchAllIndex, intakePosition, isOpenedLane, LANE_SECTIONS, laneRules } from '../ruleLanes';
 import type { RuleEvent } from '../ruleLanes';
 import { RuleBuilderDialog } from './RuleBuilderDialog';
 import type { RuleDraft, RuleStep } from './RuleBuilderDialog';
@@ -24,8 +24,12 @@ const STALE_CODES = new Set(['revision_mismatch', 'intake_route_set_mismatch', '
 
 type Editing = { rule?: IntakeRouteInfo; event?: RuleEvent; step: RuleStep };
 
+function isStale(error: unknown): boolean {
+  return error instanceof BoardRequestError && error.code !== undefined && STALE_CODES.has(error.code);
+}
+
 function failureMessage(error: unknown): string {
-  if (error instanceof BoardRequestError && error.code && STALE_CODES.has(error.code)) {
+  if (isStale(error)) {
     return 'Someone else changed these rules first. They have been reloaded; try again.';
   }
   return error instanceof Error ? error.message : 'The change didn’t save.';
@@ -39,7 +43,8 @@ export function BoardRules({ factoryId, boardId }: { factoryId: string; boardId:
   if (catalog.isPending) return <Skeleton className="h-64 w-full" />;
   if (catalog.isError) return <Notice variant="destructive">Boards didn’t load.</Notice>;
   if (!board) return <Notice variant="warning">This board isn’t installed.</Notice>;
-  return <BoardLanes factoryId={factoryId} board={board} boards={catalog.data} />;
+  // Keyed so an open rule never outlives the board it belongs to when the page moves to another one.
+  return <BoardLanes key={`${factoryId}:${board.id}`} factoryId={factoryId} board={board} boards={catalog.data} />;
 }
 
 function BoardLanes({
@@ -102,31 +107,44 @@ function BoardLanes({
         ]);
         // The rule exists from here on: a failed move must not leave the dialog open to create it twice.
         setEditing(undefined);
-        if (created) await keepAboveCatchAll(created, draft.on[0]).catch(error => toast.error(failureMessage(error)));
+        if (created) await keepAboveCatchAll(created, draft.on).catch(error => toast.error(failureMessage(error)));
         return;
       }
       setEditing(undefined);
     } catch (error) {
+      if (rule && isStale(error)) return reopenFresh(rule);
       setSaveError(failureMessage(error));
     }
   };
 
+  // Someone changed the rule first: show their version rather than resend this one over it with a stale revision.
+  const reopenFresh = async (stale: IntakeRouteInfo) => {
+    const fresh = (await query.refetch()).data?.intakeRoutes.find(candidate => candidate.id === stale.id);
+    if (!fresh) {
+      setEditing(undefined);
+      toast.error('Someone else deleted this rule first.');
+      return;
+    }
+    setEditing(current => current && { ...current, rule: fresh });
+    setSaveError('Someone else changed this rule first. It now shows their version; make your change again.');
+  };
+
   // A new rule goes in at the end of its board's list; one under a rule taking everything would never be reached,
-  // so it moves up to just above that rule, as the server does for new items.
-  const keepAboveCatchAll = async (created: IntakeRouteInfo, event: RuleEvent | undefined) => {
-    if (created.target.boardKey !== board.id || event === undefined) return;
+  // so it moves up to just above the earliest such rule in any lane it listens on. The board has one order shared by
+  // every lane, so one slot keeps it above all of them.
+  const keepAboveCatchAll = async (created: IntakeRouteInfo, on: readonly RuleEvent[]) => {
+    if (created.target.boardKey !== board.id) return;
     const fresh = (await query.refetch()).data?.intakeRoutes ?? [];
-    const lane = laneRules(fresh, event);
-    const catchAll = catchAllIndex(lane);
-    const at = lane.findIndex(rule => rule.id === created.id);
-    if (catchAll < 0 || at < catchAll) return;
-    const ids = reorderWithin(
-      fresh,
-      lane.map(rule => rule.id),
-      at,
-      catchAll,
-    );
-    await writes.mutateAsync([{ kind: 'reorder', boardKey: board.id, ids }]);
+    const ids = fresh.map(rule => rule.id);
+    const at = ids.indexOf(created.id);
+    const catchAlls = on.flatMap(event => {
+      const lane = laneRules(fresh, event).filter(rule => rule.id !== created.id);
+      const catchAll = lane[catchAllIndex(lane)];
+      return catchAll ? [ids.indexOf(catchAll.id)] : [];
+    });
+    const above = Math.min(...catchAlls);
+    if (at < 0 || !(above < at)) return;
+    await writes.mutateAsync([{ kind: 'reorder', boardKey: board.id, ids: reorderWithin(fresh, ids, at, above) }]);
   };
 
   const position = order.data ? intakePosition(order.data.boards, board.id) : undefined;
@@ -152,7 +170,7 @@ function BoardLanes({
                 canEdit={canEdit}
                 skips={skips}
                 note={
-                  filesCardless(event) ? (
+                  opened ? (
                     <Txt as="p" variant="caption" tone="muted">
                       No card yet:{' '}
                       {position && (
@@ -190,7 +208,8 @@ function BoardLanes({
 
       {editing && (
         <RuleBuilderDialog
-          key={editing.rule?.id ?? `new-${editing.event}`}
+          // A reloaded rule has a new revision, so the dialog starts over from it.
+          key={editing.rule ? `${editing.rule.id}:${editing.rule.revision}` : `new-${editing.event}`}
           board={board}
           boards={boards}
           initial={editing.rule}

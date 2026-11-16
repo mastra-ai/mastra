@@ -1,4 +1,5 @@
 import { skipToken, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { InfiniteData } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -73,7 +74,21 @@ export function useRouteAgain(factoryProjectId: string | undefined) {
         projectPath(factoryProjectId!, `/intake/not-routed/${encodeURIComponent(decisionId)}/route-again`),
         { method: 'POST' },
       ),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeNotRouted(factoryProjectId) }),
+    // The item stays Not routed on the server until the dispatcher files it, so a refetch now would bring it back:
+    // take it off the list instead. A failure refetches, keeping whatever is still Not routed.
+    onSuccess: (_, decisionId) =>
+      queryClient.setQueryData<InfiniteData<IntakeNotRoutedResponse>>(
+        queryKeys.intakeNotRouted(factoryProjectId),
+        data =>
+          data && {
+            ...data,
+            pages: data.pages.map(page => ({
+              ...page,
+              notRouted: page.notRouted.filter(item => item.id !== decisionId),
+            })),
+          },
+      ),
+    onError: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeNotRouted(factoryProjectId) }),
   });
 }
 

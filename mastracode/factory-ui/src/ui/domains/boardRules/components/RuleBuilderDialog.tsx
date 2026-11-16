@@ -12,6 +12,7 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { RadioGroup } from '@mastra/playground-ui/components/RadioGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowRight, Check, Filter } from 'lucide-react';
@@ -23,9 +24,9 @@ import { ConditionRows } from '../../settings/components/ConditionRows';
 import { describeRule, intakeRouteFacts } from '../../settings/components/conditionFields';
 import { boardName, phaseName, phaseOptions } from '../ruleTargets';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
-import { LANE_SECTIONS, LEGACY_OPENED_EVENT, laneText, placesArrival, placesCardless } from '../ruleLanes';
+import { LANE_SECTIONS, LEGACY_OPENED_EVENT, laneText, placesArrival } from '../ruleLanes';
 import type { RuleEvent } from '../ruleLanes';
-import { ChoiceTile } from './ChoiceTile';
+import { ChoiceTile, RadioTile } from './ChoiceTile';
 import { RuleTarget } from './RuleTarget';
 
 const MAX_RULE_NAME = 120;
@@ -114,7 +115,6 @@ export function RuleBuilderDialog({
   const [name, setName] = useState<string | undefined>(() => initial?.name);
   const [step, setStep] = useState<RuleStep>(initialStep);
 
-  const cardless = placesCardless(on);
   const placesNew = placesArrival(on);
   const targetBoard = boards.find(candidate => candidate.id === boardKey);
   const phases = targetPhases(targetBoard, placesNew);
@@ -136,7 +136,7 @@ export function RuleBuilderDialog({
   const pickEvents = (next: RuleEvent[]) => {
     setOn(next);
     // An item with no card can only be filed on this board, so a rule that files one can't name another.
-    if (placesCardless(next) && boardKey !== board.id) {
+    if (placesArrival(next) && boardKey !== board.id) {
       setBoardKey(board.id);
       setPhaseKey(undefined);
     }
@@ -222,17 +222,27 @@ export function RuleBuilderDialog({
 
               {step === 'conditions' && (
                 <div className="flex flex-col gap-4">
-                  <div role="radiogroup" aria-label="Which items" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <ChoiceTile selected={!filtered} disabled={readOnly} onClick={() => setFiltered(false)}>
+                  <RadioGroup
+                    aria-label="Which items"
+                    value={filtered ? 'matching' : 'every'}
+                    disabled={readOnly}
+                    onValueChange={value => {
+                      setFiltered(value === 'matching');
+                      // The conditions editor rebuilds from the last complete rule, dropping any unfinished row.
+                      setIncomplete(false);
+                    }}
+                    className="grid-cols-1 sm:grid-cols-2"
+                  >
+                    <RadioTile value="every" selected={!filtered} disabled={readOnly}>
                       <TileText title={placesNew ? 'Every item' : 'Every card'} hint="Run whenever this happens." />
-                    </ChoiceTile>
-                    <ChoiceTile selected={filtered} disabled={readOnly} onClick={() => setFiltered(true)}>
+                    </RadioTile>
+                    <RadioTile value="matching" selected={filtered} disabled={readOnly}>
                       <TileText
                         title="Only ones that match"
                         hint="Narrow it down by repository, label, author and more."
                       />
-                    </ChoiceTile>
-                  </div>
+                    </RadioTile>
+                  </RadioGroup>
                   {filtered && (
                     <div className="border-border bg-fill-subtle rounded-xl border p-3">
                       <ConditionRows
@@ -253,7 +263,7 @@ export function RuleBuilderDialog({
 
               {step === 'action' && (
                 <div className="flex flex-col gap-4">
-                  {cardless ? (
+                  {placesNew ? (
                     <Txt as="p" variant="caption" tone="muted">
                       An item with no card yet can only be filed on this board.
                     </Txt>
@@ -262,37 +272,52 @@ export function RuleBuilderDialog({
                       <Txt as="span" variant="eyebrow" tone="muted">
                         Board
                       </Txt>
-                      <div role="radiogroup" aria-label="Board" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <RadioGroup
+                        aria-label="Board"
+                        value={boardKey}
+                        disabled={readOnly}
+                        onValueChange={value => {
+                          if (typeof value !== 'string' || value === boardKey) return;
+                          setBoardKey(value);
+                          setPhaseKey(undefined);
+                        }}
+                        className="grid-cols-1 sm:grid-cols-3"
+                      >
                         {boards.map(candidate => (
-                          <ChoiceTile
+                          <RadioTile
                             key={candidate.id}
+                            value={candidate.id}
                             selected={candidate.id === boardKey}
                             disabled={readOnly}
-                            onClick={() => {
-                              setBoardKey(candidate.id);
-                              if (candidate.id !== boardKey) setPhaseKey(undefined);
-                            }}
                           >
                             <Txt as="span" variant="label" tone="ink">
                               {boardName(candidate)}
                               {candidate.id === board.id ? ' (this board)' : ''}
                             </Txt>
-                          </ChoiceTile>
+                          </RadioTile>
                         ))}
-                      </div>
+                      </RadioGroup>
                     </div>
                   )}
                   <div className="flex flex-col gap-2">
                     <Txt as="span" variant="eyebrow" tone="muted">
                       Phase
                     </Txt>
-                    <div role="radiogroup" aria-label="Phase" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <RadioGroup
+                      aria-label="Phase"
+                      value={phase?.id ?? null}
+                      disabled={readOnly}
+                      onValueChange={value => typeof value === 'string' && setPhaseKey(value)}
+                      className="grid-cols-1 sm:grid-cols-2"
+                    >
                       {targetBoard &&
                         phases.map(candidate => (
-                          <ChoiceTile
+                          <RadioTile
                             key={candidate.id}
+                            value={candidate.id}
                             selected={candidate.id === phase?.id}
                             disabled={readOnly}
+                            // A click picks and moves on; the arrow keys only move the choice.
                             onClick={() => {
                               setPhaseKey(candidate.id);
                               setStep('review');
@@ -308,9 +333,9 @@ export function RuleBuilderDialog({
                                 {phaseName(targetBoard, candidate.id)}
                               </Txt>
                             </span>
-                          </ChoiceTile>
+                          </RadioTile>
                         ))}
-                    </div>
+                    </RadioGroup>
                   </div>
                 </div>
               )}
@@ -446,7 +471,6 @@ function TriggerStep({
               return (
                 <ChoiceTile
                   key={event}
-                  role="checkbox"
                   selected={selected}
                   disabled={disabled || (selected && value.length === 1)}
                   onClick={() => onChange(selected ? value.filter(other => other !== event) : [...value, event])}

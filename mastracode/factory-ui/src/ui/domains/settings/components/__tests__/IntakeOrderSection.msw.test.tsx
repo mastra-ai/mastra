@@ -161,6 +161,108 @@ describe('Intake order', () => {
     expect(screen.getByText('Intake still files cards by the old route list.')).toBeVisible();
   });
 
+  it('drops an unsaved order when the page switches to another project', async () => {
+    serveRules({ rules: [] });
+    const saved: unknown[] = [];
+    server.use(
+      http.get('*/web/factory/projects/:id/intake-routes', () =>
+        HttpResponse.json({ intakeRoutes: [], canEdit: true }),
+      ),
+      http.get('*/web/factory/projects/:id/intake-order', ({ params }) =>
+        HttpResponse.json(
+          params.id === 'fp-2'
+            ? order({
+                boards: [
+                  { boardKey: 'work', name: 'Work' },
+                  { boardKey: 'release', name: 'Release Preview' },
+                ],
+              })
+            : order(),
+        ),
+      ),
+      http.put('*/web/factory/projects/:id/intake-order', async ({ params, request }) => {
+        saved.push({ project: params.id, ...((await request.json()) as object) });
+        return HttpResponse.json(order());
+      }),
+    );
+    const user = userEvent.setup();
+    const at = (factoryId: string) => (
+      <MemoryRouter>
+        <IntakeOrderSection factoryId={factoryId} />
+      </MemoryRouter>
+    );
+    // Both projects' orders are cached, as after visiting each, so the switch shows the other one straight away.
+    const { rerender } = renderWithProviders(at('fp-2'));
+    await screen.findByRole('list', { name: 'Intake order' });
+    rerender(at(FACTORY_ID));
+    await screen.findByRole('list', { name: 'Intake order' });
+    await user.click(within(screen.getAllByRole('listitem')[1]).getByRole('button', { name: 'Check earlier' }));
+    expect(boardNames()).toEqual(['Release Preview', 'Work']);
+    rerender(at('fp-2'));
+
+    await waitFor(() => expect(boardNames()).toEqual(['Work', 'Release Preview']));
+    expect(screen.queryByRole('button', { name: 'Save order' })).not.toBeInTheDocument();
+    expect(saved).toEqual([]);
+  });
+
+  it('shows a board added while an order is being changed, and drops the change that no longer covers it', async () => {
+    serveRules({ rules: [] });
+    let current = order();
+    server.use(http.get(`${PROJECT_URL}/intake-order`, () => HttpResponse.json(current)));
+    const user = userEvent.setup();
+    const { client } = renderWithProviders(
+      <MemoryRouter>
+        <IntakeOrderSection factoryId={FACTORY_ID} />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole('list', { name: 'Intake order' });
+    await user.click(within(screen.getAllByRole('listitem')[1]).getByRole('button', { name: 'Check earlier' }));
+    current = order({ boards: [...order().boards, { boardKey: 'docs', name: 'Docs' }] });
+    await client.invalidateQueries();
+
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
+    expect(within(screen.getAllByRole('listitem')[2]).getByText('Docs')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Save order' })).not.toBeInTheDocument();
+  });
+
+  it('holds the order still while it saves, so a later move is never lost to the earlier save', async () => {
+    serveRules({ rules: [] });
+    let finish: () => void = () => {};
+    server.use(
+      http.get(`${PROJECT_URL}/intake-order`, () => HttpResponse.json(order())),
+      http.put(`${PROJECT_URL}/intake-order`, async ({ request }) => {
+        const body = (await request.json()) as { boardKeys: string[] };
+        await new Promise<void>(resolve => (finish = resolve));
+        return HttpResponse.json(
+          order({
+            boards: body.boardKeys.map(boardKey => ({
+              boardKey,
+              name: boardKey === 'work' ? 'Work' : 'Release Preview',
+            })),
+          }),
+        );
+      }),
+    );
+    const user = userEvent.setup();
+    const { client } = renderWithProviders(
+      <MemoryRouter>
+        <IntakeOrderSection factoryId={FACTORY_ID} />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole('list', { name: 'Intake order' });
+    await user.click(within(screen.getAllByRole('listitem')[1]).getByRole('button', { name: 'Check earlier' }));
+    await user.click(screen.getByRole('button', { name: 'Save order' }));
+
+    await waitFor(() =>
+      expect(within(screen.getAllByRole('listitem')[1]).getByRole('button', { name: 'Check earlier' })).toBeDisabled(),
+    );
+    finish();
+    await waitForMutationsIdle(client);
+    expect(boardNames()).toEqual(['Release Preview', 'Work']);
+  });
+
   it('shows a member the order without controls to change it', async () => {
     serveRules({ rules: [], canEdit: false });
     serveOrder(order({ canEdit: false }));
@@ -177,7 +279,7 @@ describe('Intake order', () => {
 });
 
 describe('Not routed', () => {
-  it('pages through items no board took and routes one again', async () => {
+  it('pages through items no board took and routes one again, taking it off the list once queued', async () => {
     const first = decision({ id: 'd-1', title: 'Crash on start', reason: 'No board’s rules match it.' });
     const second = decision({ id: 'd-2', title: 'Docs typo', sourceKey: 'github:acme/app#2' });
     const routedAgain: string[] = [];
@@ -187,7 +289,8 @@ describe('Not routed', () => {
       ),
       http.get(`${PROJECT_URL}/intake/not-routed`, ({ request }) => {
         const cursor = new URL(request.url).searchParams.get('cursor');
-        const remaining = [first, second].filter(item => !routedAgain.includes(item.id));
+        // Route again only queues the item: it stays Not routed on the server until the dispatcher files it.
+        const remaining = [first, second];
         return HttpResponse.json(
           (cursor
             ? { notRouted: remaining.filter(item => item.id === 'd-2'), nextCursor: null, canEdit: true }
