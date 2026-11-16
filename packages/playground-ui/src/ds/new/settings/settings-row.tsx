@@ -39,7 +39,7 @@ export function SettingsRowControl({ viewOnly = false, children }: { viewOnly?: 
   if (!viewOnly) return children;
   return (
     <>
-      <IconLock className="size-4 shrink-0" aria-hidden />
+      <IconLock className="size-icon-md shrink-0" aria-hidden />
       <span className="sr-only">View only: </span>
       {children}
     </>

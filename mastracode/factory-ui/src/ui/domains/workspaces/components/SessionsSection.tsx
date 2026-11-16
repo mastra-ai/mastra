@@ -102,7 +102,7 @@ export function SessionsSection() {
                 onClick={() => openNewUserSession(factoryId)}
                 disabled={deletion.deleting}
               >
-                <IconPlusMedium size={15} />
+                <IconPlusMedium />
               </Button>
             )}
             <PropertiesMenu

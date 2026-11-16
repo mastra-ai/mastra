@@ -116,7 +116,7 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
         ) : (
           <>
             <Icon className="text-muted-foreground">
-              <IconArrowOutOfBox className="h-8 w-8" />
+              <IconArrowOutOfBox />
             </Icon>
             <div className="flex flex-col items-center gap-1">
               <Txt as="span" variant="subheading" tone="faint">

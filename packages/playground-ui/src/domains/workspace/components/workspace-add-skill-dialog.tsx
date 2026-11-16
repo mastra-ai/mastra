@@ -18,17 +18,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/ds/components/Dialog';
+import { EmptyState } from '@/ds/components/EmptyState';
 import { Field, FieldLabel } from '@/ds/components/Field';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { SearchInput } from '@/ds/components/SearchInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
+import { Spinner } from '@/ds/components/Spinner';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowInbox } from '@/ds/icons/central/IconArrowInbox';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
-import { IconCircleBanSign } from '@/ds/icons/central/IconCircleBanSign';
 import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
-import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
 import { IconPackage } from '@/ds/icons/central/IconPackage';
 import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 import { GithubIcon } from '@/ds/icons/GithubIcon';
@@ -227,13 +227,13 @@ export function WorkspaceAddSkillDialog({
                 >
                   {isLoadingPopular || isSearching ? (
                     <div className="flex items-center justify-center py-5">
-                      <IconLoadingCircle className="size-6 animate-spin text-muted-foreground" />
+                      <Spinner className="text-muted-foreground" />
                     </div>
                   ) : displaySkills.length === 0 ? (
-                    <div className="flex flex-1 flex-col items-center-safe justify-center-safe py-5 text-muted-foreground">
-                      <IconCircleBanSign className="mb-2 size-8" />
-                      <Txt>{hasSearchResults ? 'No skills found' : 'No skills available'}</Txt>
-                    </div>
+                    <EmptyState
+                      className="flex-1"
+                      titleSlot={hasSearchResults ? 'No skills found' : 'No skills available'}
+                    />
                   ) : (
                     <div className="space-y-1 p-2">
                       {displaySkills.map(skill => {
@@ -265,7 +265,7 @@ export function WorkspaceAddSkillDialog({
                                       variant="meta"
                                       className="inline-flex items-center gap-1 rounded bg-info-subtle px-1.5 py-0.5 text-info-subtle-foreground"
                                     >
-                                      <IconCheckmark2Medium className="size-2.5" />
+                                      <IconCheckmark2Medium className="size-icon-xs" />
                                       Installed
                                     </Txt>
                                   )}
@@ -275,7 +275,7 @@ export function WorkspaceAddSkillDialog({
                                 </Txt>
                               </div>
                               <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
-                                <IconArrowInbox className="size-3" />
+                                <IconArrowInbox className="size-icon-xs" />
                                 <Txt as="span" variant="caption">
                                   {skill.installs.toLocaleString()}
                                 </Txt>
@@ -296,16 +296,13 @@ export function WorkspaceAddSkillDialog({
               </Txt>
               <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-border">
                 {!selectedSkill ? (
-                  <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
-                    <IconPackage className="mb-2 size-8" />
-                    <Txt>Select a skill to preview</Txt>
-                  </div>
+                  <EmptyState variant="fill" iconSlot={<IconPackage />} titleSlot="Select a skill to preview" />
                 ) : (
                   <>
                     <div className="border-b border-border bg-card p-4">
                       <div className="flex items-start gap-3">
                         <div className="rounded-lg bg-muted p-2">
-                          <SkillIcon className="size-5 text-muted-foreground" />
+                          <SkillIcon className="size-icon-lg text-muted-foreground" />
                         </div>
                         <div className="min-w-0 flex-1">
                           <Txt as="h3" variant="subheading" tone="ink" className="truncate">
@@ -313,13 +310,13 @@ export function WorkspaceAddSkillDialog({
                           </Txt>
                           <div className="mt-1 flex items-center gap-3 text-muted-foreground">
                             <span className="flex items-center gap-1">
-                              <GithubIcon className="size-3" />
+                              <GithubIcon className="size-icon-xs" />
                               <Txt as="span" variant="caption" className="block">
                                 {selectedSkill.topSource}
                               </Txt>
                             </span>
                             <span className="flex items-center gap-1">
-                              <IconArrowInbox className="size-3" />
+                              <IconArrowInbox className="size-icon-xs" />
                               <Txt as="span" variant="caption" className="block">
                                 {selectedSkill.installs.toLocaleString()} installs
                               </Txt>
@@ -334,7 +331,7 @@ export function WorkspaceAddSkillDialog({
                             className={cn(quietTextHover, controlStateColorTransition)}
                             title="View on GitHub"
                           >
-                            <IconSquareArrowTopRight className="size-4" />
+                            <IconSquareArrowTopRight className="size-icon-md" />
                           </a>
                         )}
                       </div>
@@ -342,7 +339,7 @@ export function WorkspaceAddSkillDialog({
 
                     {isLoadingPreview ? (
                       <div className="flex flex-1 items-center justify-center">
-                        <IconLoadingCircle className="size-6 animate-spin text-muted-foreground" />
+                        <Spinner className="text-muted-foreground" />
                       </div>
                     ) : previewContent ? (
                       <ScrollArea className="flex-1">
@@ -351,23 +348,26 @@ export function WorkspaceAddSkillDialog({
                         </div>
                       </ScrollArea>
                     ) : (
-                      <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground">
-                        <IconPackage className="mb-2 size-8" />
-                        <Txt>Preview unavailable</Txt>
-                        {skillsUrl && (
-                          <a
-                            href={skillsUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="mt-2 flex items-center gap-1 text-info-indicator hover:underline"
-                          >
-                            <Txt as="span" variant="caption" className="block">
-                              View on skills.sh{' '}
-                            </Txt>
-                            <IconSquareArrowTopRight className="size-3" />
-                          </a>
-                        )}
-                      </div>
+                      <EmptyState
+                        className="flex-1"
+                        iconSlot={<IconPackage />}
+                        titleSlot="Preview unavailable"
+                        actionSlot={
+                          skillsUrl && (
+                            <a
+                              href={skillsUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-info-indicator hover:underline"
+                            >
+                              <Txt as="span" variant="caption" className="block">
+                                View on skills.sh{' '}
+                              </Txt>
+                              <IconSquareArrowTopRight className="size-icon-xs" />
+                            </a>
+                          )
+                        }
+                      />
                     )}
                   </>
                 )}
@@ -377,7 +377,7 @@ export function WorkspaceAddSkillDialog({
 
           {selectedSkill && writableMounts && writableMounts.length > 1 && (
             <Field orientation="horizontal" className={cn(raisedSurfaceStyle, 'gap-3 rounded-lg p-3')}>
-              <IconFolder1 className="size-4 shrink-0 text-muted-foreground" />
+              <IconFolder1 className="size-icon-md shrink-0 text-muted-foreground" />
               <FieldLabel className="whitespace-nowrap">Install to</FieldLabel>
               <Select value={installMount} onValueChange={setSelectedMount}>
                 <SelectTrigger className="flex-1">

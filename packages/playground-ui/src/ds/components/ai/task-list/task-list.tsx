@@ -279,7 +279,7 @@ export const TaskList = ({
           )}
         >
           <IconChevronDownMedium
-            className={cn('size-3.5 transition-[rotate]', taskGraphMotion, open ? 'rotate-180' : 'rotate-0')}
+            className={cn('size-icon-sm transition-[rotate]', taskGraphMotion, open ? 'rotate-180' : 'rotate-0')}
           />
         </button>
       </div>

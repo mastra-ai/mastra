@@ -59,7 +59,7 @@ export function WorkItemTray({
         </div>
         {events.length === 0 ? (
           <div className="text-muted-foreground flex items-center justify-center gap-1.5 px-2 py-6">
-            <IconHistory size={14} aria-hidden />
+            <IconHistory className="size-icon-sm" aria-hidden />
             <Txt as="span" variant="caption">
               No activity yet
             </Txt>

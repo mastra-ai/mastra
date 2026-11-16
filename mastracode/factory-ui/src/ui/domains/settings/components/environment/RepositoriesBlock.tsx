@@ -207,7 +207,7 @@ function RepositoryRow({
                     aria-disabled={disabled}
                     tabIndex={disabled ? -1 : dragHandleProps?.tabIndex}
                   >
-                    <IconDotGrid2x3 className="size-4 shrink-0" aria-hidden />
+                    <IconDotGrid2x3 className="size-icon-md shrink-0" aria-hidden />
                   </span>
                 }
               />
@@ -234,7 +234,7 @@ function RepositoryRow({
             <span className="min-w-0 truncate" title={label}>
               {label}
             </span>
-            <IconChevronDownMedium aria-hidden className={cn('size-4 shrink-0', expanded && 'rotate-180')} />
+            <IconChevronDownMedium aria-hidden className={cn('size-icon-md shrink-0', expanded && 'rotate-180')} />
           </button>
         }
         description={repository.inEnvironment ? undefined : 'Skipped'}

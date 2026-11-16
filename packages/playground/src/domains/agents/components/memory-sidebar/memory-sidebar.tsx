@@ -292,15 +292,15 @@ export function MemorySidebarBody({
             >
               <span className="flex items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-1.5 text-foreground">
-                  <MemoryIcon className="h-4 w-4 shrink-0" />
+                  <MemoryIcon className="size-icon-md shrink-0" />
                   <Txt as="span" variant="column">
                     Memory
                   </Txt>
                 </span>
                 {showMemory ? (
-                  <IconChevronDownMedium className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <IconChevronDownMedium className="size-icon-md shrink-0 text-muted-foreground" />
                 ) : (
-                  <IconChevronTopMedium className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <IconChevronTopMedium className="size-icon-md shrink-0 text-muted-foreground" />
                 )}
               </span>
 

@@ -102,7 +102,7 @@ interface ModelMenuProps {
 }
 
 const renderProviderIcon = (provider: string) => (
-  <ProviderBrandIcon provider={provider} fallback={<IconKey2 className="size-3.5" />} />
+  <ProviderBrandIcon provider={provider} fallback={<IconKey2 className="size-icon-sm" />} />
 );
 
 function ModelMenu({

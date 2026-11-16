@@ -134,7 +134,10 @@ export function CustomRangeEditor({
             onTimeChange={setDraftTimeFrom}
             disabled={disabled}
           />
-          <IconArrowRight aria-hidden className="col-start-2 row-start-2 size-4 self-center text-muted-foreground" />
+          <IconArrowRight
+            aria-hidden
+            className="col-start-2 row-start-2 size-icon-md self-center text-muted-foreground"
+          />
           <RangeEnd label="End" date={range?.to} time={draftTimeTo} onTimeChange={setDraftTimeTo} disabled={disabled} />
         </div>
       </div>

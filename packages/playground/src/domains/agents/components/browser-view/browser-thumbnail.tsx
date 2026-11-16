@@ -114,7 +114,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
             <img ref={imgRef} alt="Browser preview" className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
-              <IconStudioDisplay className="h-5 w-5 text-muted-foreground" />
+              <IconStudioDisplay className="size-icon-lg text-muted-foreground" />
             </div>
           )}
           {/* Live indicator dot */}
@@ -138,7 +138,11 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
 
         {/* Expand/collapse indicator */}
         <div className={cn('shrink-0', quietTextHoverInGroup, controlStateColorTransition)}>
-          {isExpanded ? <IconChevronDownMedium className="h-5 w-5" /> : <IconChevronTopMedium className="h-5 w-5" />}
+          {isExpanded ? (
+            <IconChevronDownMedium className="size-icon-lg" />
+          ) : (
+            <IconChevronTopMedium className="size-icon-lg" />
+          )}
         </div>
       </button>
 
@@ -158,7 +162,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
                   onClick={handleOpenModal}
                   className="bg-sidebar/80 backdrop-blur-sm"
                 >
-                  <IconExpand45 className="h-3.5 w-3.5" />
+                  <IconExpand45 />
                 </Button>
                 <Button
                   variant="default"
@@ -167,7 +171,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
                   onClick={handleClose}
                   className="bg-sidebar/80 backdrop-blur-sm"
                 >
-                  <IconCrossMedium className="h-3.5 w-3.5" />
+                  <IconCrossMedium />
                 </Button>
               </div>
             </div>

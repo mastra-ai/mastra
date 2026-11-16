@@ -149,7 +149,7 @@ export function BoardListRow({
             }}
             className={REVEAL_ROW_CONTROLS}
           >
-            <IconExpand45 size={13} aria-hidden />
+            <IconExpand45 aria-hidden />
           </Button>
           <DropdownMenu>
             <DropdownMenu.Trigger
@@ -164,7 +164,7 @@ export function BoardListRow({
                   onClick={stopRowClick}
                   className={REVEAL_ROW_CONTROLS}
                 >
-                  <IconDotGrid1x3Vertical size={13} aria-hidden />
+                  <IconDotGrid1x3Vertical aria-hidden />
                 </Button>
               }
             />

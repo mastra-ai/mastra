@@ -331,7 +331,7 @@ export function WorkItemCard({
                       aria-label={`Actions for ${item.title}`}
                       className={REVEAL_ON_CARD_HOVER}
                     >
-                      <IconDotGrid1x3Vertical size={13} aria-hidden />
+                      <IconDotGrid1x3Vertical aria-hidden />
                     </Button>
                   }
                 />

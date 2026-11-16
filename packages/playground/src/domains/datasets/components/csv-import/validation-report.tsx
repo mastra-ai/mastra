@@ -24,7 +24,7 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
   if (invalidCount === 0) {
     return (
       <div className={cn('flex items-center gap-2 text-success-indicator', className)}>
-        <IconCircleCheck className="h-4 w-4" />
+        <IconCircleCheck className="size-icon-md" />
         <Txt as="span" variant="body" className="block">
           All {totalRows} row{totalRows !== 1 ? 's' : ''} valid
         </Txt>
@@ -36,7 +36,7 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
     <div className={cn('space-y-3', className)}>
       {/* Summary warning */}
       <div className="flex items-center gap-2 text-warning-foreground">
-        <IconExclamationTriangle className="h-4 w-4" />
+        <IconExclamationTriangle className="size-icon-md" />
         <Txt as="span" variant="body" className="block">
           {invalidCount} of {totalRows} rows will be skipped (validation failed)
         </Txt>

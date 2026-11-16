@@ -11,7 +11,7 @@ export function PropertiesMenu({
   onReset,
   align = 'start',
   variant = 'ghost',
-  icon = <IconSettingsSliderHor size={15} aria-hidden />,
+  icon = <IconSettingsSliderHor aria-hidden />,
   children,
 }: {
   label: string;

@@ -106,7 +106,7 @@ function BoardSwitcher({ factoryId, boardId }: { factoryId: string; boardId: str
         <Txt tone="ink" as="span" variant="body" className="min-w-0 flex-1 truncate text-left">
           {title}
         </Txt>
-        <IconChevronDownMedium aria-hidden size={14} className="text-muted-foreground shrink-0" />
+        <IconChevronDownMedium aria-hidden className="text-muted-foreground size-icon-sm shrink-0" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">
         {boards.map(other => (
@@ -297,7 +297,7 @@ function PhaseIcon({ movable, children }: { movable: boolean; children: ReactNod
       </span>
       <IconDotGrid2x3
         aria-hidden
-        className="text-muted-foreground invisible size-4 group-focus-within/phase:visible group-hover/phase:visible pointer-coarse:visible"
+        className="text-muted-foreground size-icon-md invisible group-focus-within/phase:visible group-hover/phase:visible pointer-coarse:visible"
       />
     </span>
   );

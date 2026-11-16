@@ -35,9 +35,9 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
               className="flex w-fit items-center gap-1.5 opacity-70 transition-opacity hover:opacity-100"
             >
               {isExpanded ? (
-                <IconChevronDownMedium className="size-3.5" />
+                <IconChevronDownMedium className="size-icon-sm" />
               ) : (
-                <IconChevronRightMedium className="size-3.5" />
+                <IconChevronRightMedium className="size-icon-sm" />
               )}
               <Txt as="span" variant="caption">
                 Details
@@ -48,7 +48,7 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
               <div className="flex flex-col gap-2">
                 {tripwire.retry !== undefined && (
                   <div className="flex items-center gap-2">
-                    <IconArrowRotateClockwise className="size-3.5 shrink-0 opacity-70" />
+                    <IconArrowRotateClockwise className="size-icon-sm shrink-0 opacity-70" />
                     <Txt as="span" variant="caption">
                       Retry
                     </Txt>
@@ -60,7 +60,7 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
 
                 {tripwire.processorId && (
                   <div className="flex items-center gap-2">
-                    <IconTag className="size-3.5 shrink-0 opacity-70" />
+                    <IconTag className="size-icon-sm shrink-0 opacity-70" />
                     <Txt as="span" variant="caption">
                       Processor
                     </Txt>
