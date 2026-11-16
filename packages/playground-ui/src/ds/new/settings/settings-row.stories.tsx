@@ -122,9 +122,10 @@ export const ViewOnly: Story = {
 
 /**
  * A setting that is on or off is a `Switch` alone, with no "Enabled" or "Disabled" text beside it. When the viewer
- * can't change it (or nobody can, e.g. a value set in code), keep the switch and disable it with `viewOnly` on the
- * row (or `disabled` on the switch) instead of replacing it with text. Text in the control slot is only for a
- * status the user doesn't set.
+ * can't change it (or nobody can, e.g. a value set in code), keep the switch and set `viewOnly` on the row, which
+ * disables it and adds the lock and screen-reader "View only" text, instead of replacing it with text. Use
+ * `disabled` on the switch alone only outside a `SettingsRow`, where `viewOnly` isn't available. Text in the control
+ * slot is only for a status the user doesn't set.
  */
 export const Toggle: Story = {
   render: () => (
