@@ -106,10 +106,10 @@ import { durableReplayOwnerKey, readDurableReplayOwner } from './replay-owners';
 import { createRunAbortController } from './run-abort';
 import { createRunCleanup } from './run-cleanup';
 import { recordRunSavedMessages } from './run-message-refs';
+import type { ExtendedRunRegistry } from './run-registry';
 import {
   deleteRunRegistryEntry,
   endRunSpansWithError,
-  ExtendedRunRegistry,
   getRunRegistryEntry,
   globalRunRegistry,
   markResumeInFlight,
@@ -889,10 +889,6 @@ export class DurableAgent<
   readonly #streamConfig: AgentStreamsConfig;
   #wrapperStreamBus?: AgentStreamBus;
 
-  /** Registry for per-run non-serializable state */
-  readonly #runRegistry: ExtendedRunRegistry;
-  readonly #recoveryAttempts = new Map<string, Promise<DurableAgentRecoveredRun | undefined>>();
-
   /** Maximum steps for the agentic loop */
   readonly #maxSteps?: number;
 
@@ -901,8 +897,6 @@ export class DurableAgent<
 
   /** Active streamUntilIdle wrappers keyed by scope (threadId|resourceId) */
   #activeStreamUntilIdle = new Map<string, () => void>();
-  /** The stream segment (stream() or resume()) that currently owns each run id's shared state. */
-  #segmentOwner = new Map<string, symbol>();
 
   /**
    * User-supplied snapshot-persistence policy
@@ -943,7 +937,6 @@ export class DurableAgent<
     });
 
     this.#wrappedAgent = agent;
-    this.#runRegistry = new ExtendedRunRegistry();
     this.#maxSteps = maxSteps;
     this.#streamConfig = { pubsub, cache, cleanupTimeoutMs, shouldCache };
     this.userShouldPersistSnapshot = shouldPersistSnapshot;
@@ -1040,8 +1033,8 @@ export class DurableAgent<
    * @internal
    */
   override __getRunOwner(runId: string): { resourceId?: string; threadId?: string } | undefined {
-    if (!this.#runRegistry.has(runId)) return undefined;
-    return { ...this.#runRegistry.getMemoryInfo(runId) };
+    if (!this.executionEngine.runRegistry.has(runId)) return undefined;
+    return { ...this.executionEngine.runRegistry.getMemoryInfo(runId) };
   }
 
   override async __getRunRecord(runId: string): Promise<AgentRunRecord | undefined> {
@@ -1432,7 +1425,10 @@ export class DurableAgent<
       executionFence.throwIfLost();
       registryEntry.messageList = messageList;
       registryEntry.agentId = this.id;
-      this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
+      this.executionEngine.runRegistry.registerWithMessageList(runId, registryEntry, messageList, {
+        threadId,
+        resourceId,
+      });
       globalRunRegistry.set(runId, registryEntry);
       await this.#attachStreamPublisher(runId, { threadId, resourceId });
 
@@ -1558,8 +1554,8 @@ export class DurableAgent<
         agentThreadStreamRuntime.closeRunContinuation(streamOutput, this.getPubSub());
       }
       streamCleanup?.();
-      if (this.#runRegistry.get(runId) === registryEntry) {
-        this.#runRegistry.cleanup(runId);
+      if (this.executionEngine.runRegistry.get(runId) === registryEntry) {
+        this.executionEngine.runRegistry.cleanup(runId);
       }
       if (getRunRegistryEntry(runId, this.#mastra) === registryEntry) {
         globalRunRegistry.delete(runId);
@@ -1977,7 +1973,7 @@ export class DurableAgent<
    * Get the run registry (for testing and advanced usage)
    */
   get runRegistry(): ExtendedRunRegistry {
-    return this.#runRegistry;
+    return this.executionEngine.runRegistry;
   }
 
   /**
@@ -2431,7 +2427,7 @@ export class DurableAgent<
    * @internal
    */
   protected get runRegistryInternal(): ExtendedRunRegistry {
-    return this.#runRegistry;
+    return this.executionEngine.runRegistry;
   }
 
   /**
@@ -2783,7 +2779,7 @@ export class DurableAgent<
   override abortRunStream(runId: string): boolean {
     return (
       super.abortRunStream(runId) ||
-      this.#runRegistry.get(runId) !== undefined ||
+      this.executionEngine.runRegistry.get(runId) !== undefined ||
       getRunRegistryEntry(runId, this.#mastra) !== undefined ||
       agentThreadStreamRuntime.hasThreadRun(runId, this.getPubSub())
     );
@@ -2796,7 +2792,8 @@ export class DurableAgent<
       return true;
     }
     const aborted = super.__abortLocalRun(runId);
-    const controller = (this.#runRegistry.get(runId) ?? getRunRegistryEntry(runId, this.#mastra))?.abortController;
+    const controller = (this.executionEngine.runRegistry.get(runId) ?? getRunRegistryEntry(runId, this.#mastra))
+      ?.abortController;
     this.#abortLocalController(runId);
     // An evented run's registry entry can belong to a caller, not its executor.
     // Let the base path send the request to the workers in that case.
@@ -2886,7 +2883,8 @@ export class DurableAgent<
 
   /** Flip the controller this process holds for `runId`, if it holds one. */
   #abortLocalController(runId: string): void {
-    const controller = (this.#runRegistry.get(runId) ?? getRunRegistryEntry(runId, this.#mastra))?.abortController;
+    const controller = (this.executionEngine.runRegistry.get(runId) ?? getRunRegistryEntry(runId, this.#mastra))
+      ?.abortController;
     if (controller && !controller.signal.aborted) {
       controller.abort(new Error('Aborted'));
     }
@@ -3071,12 +3069,14 @@ export class DurableAgent<
 
     // 2. Register non-serializable state (both local and global registries)
     registryEntry.agentId = this.id;
-    this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
+    this.executionEngine.runRegistry.registerWithMessageList(runId, registryEntry, messageList, {
+      threadId,
+      resourceId,
+    });
     const globalRegistryEntry = { ...registryEntry, messageList };
     globalRunRegistry.set(runId, globalRegistryEntry);
     await this.#attachStreamPublisher(runId, { threadId, resourceId });
-    const segment = Symbol(runId);
-    this.#segmentOwner.set(runId, segment);
+    const segment = this.executionEngine.beginSegment(runId);
 
     // Assigned once the stream is created below. Declared here so the shared
     // performCleanup() closure can unsubscribe the pubsub reader (via
@@ -3098,11 +3098,7 @@ export class DurableAgent<
         streamCleanup?.();
         // A deferred cleanup must not tear down a newer segment (e.g. resume())
         // registered under the same run id.
-        if (this.#segmentOwner.get(runId) === segment) {
-          this.#segmentOwner.delete(runId);
-          if (this.#runRegistry.get(runId) === registryEntry) {
-            this.#runRegistry.cleanup(runId);
-          }
+        if (this.executionEngine.releaseSegment(runId, segment, registryEntry)) {
           if (getRunRegistryEntry(runId, this.#mastra) === globalRegistryEntry) {
             globalRunRegistry.delete(runId);
             if (
@@ -3378,7 +3374,7 @@ export class DurableAgent<
     options: DurableAgentResumeOptions<TOutput> | undefined,
     releaseResumeMarker: () => void,
   ): Promise<DurableAgentStreamResult<TOutput>> {
-    let entry = this.#runRegistry.get(runId);
+    let entry = this.executionEngine.runRegistry.get(runId);
     // Scopes persisted with a run rebuilt from storage. They are the suspended run's set even when
     // the caller passes its own request context.
     let rehydratedScopes: unknown;
@@ -3542,13 +3538,13 @@ export class DurableAgent<
         // override wins.
         modelSettings: options?.modelSettings ?? (workflowInput.options?.modelSettings as any),
       } as AgentExecutionOptions<TOutput>);
-      entry = this.#runRegistry.get(runId);
+      entry = this.executionEngine.runRegistry.get(runId);
     }
     if (!entry) {
       throw new Error(`Failed to rehydrate registry entry for run ${runId}. Cannot resume.`);
     }
 
-    const memoryInfo = this.#runRegistry.getMemoryInfo(runId);
+    const memoryInfo = this.executionEngine.runRegistry.getMemoryInfo(runId);
     const registeredMemory = memoryInfo?.threadId
       ? ({
           ...options?.memory,
@@ -3810,8 +3806,7 @@ export class DurableAgent<
       globalEntryForAbort.abortSignal = entry.abortSignal;
     }
 
-    const segment = Symbol(runId);
-    this.#segmentOwner.set(runId, segment);
+    const segment = this.executionEngine.beginSegment(runId);
 
     // Assigned once the stream is created below so the shared performCleanup()
     // closure can unsubscribe the pubsub reader (via streamCleanup) from both
@@ -3832,11 +3827,7 @@ export class DurableAgent<
       release: () => {
         agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
         streamCleanup?.();
-        if (this.#segmentOwner.get(runId) === segment) {
-          this.#segmentOwner.delete(runId);
-          if (this.#runRegistry.get(runId) === entry) {
-            this.#runRegistry.cleanup(runId);
-          }
+        if (this.executionEngine.releaseSegment(runId, segment, entry)) {
           if (getRunRegistryEntry(runId, this.#mastra) === globalEntryForAbort) {
             globalRunRegistry.delete(runId);
             if (
@@ -3977,7 +3968,7 @@ export class DurableAgent<
       // configured default can't override the original run-level request.
       returnScorerData: options?.returnScorerData ?? entry.returnScorerData ?? resolvedOptions.returnScorerData,
       tracingContext: resumeSegmentSpan ? { currentSpan: resumeSegmentSpan } : undefined,
-      messageList: globalEntry?.messageList ?? this.#runRegistry.getMessageList(runId),
+      messageList: globalEntry?.messageList ?? this.executionEngine.runRegistry.getMessageList(runId),
     });
     streamCleanup = createdStreamCleanup;
 
@@ -4348,8 +4339,8 @@ export class DurableAgent<
     const cleanupOwnedRegistryState = () => {
       // A warm resume reuses the registry entry but replaces its execution fence.
       if (registryEntry.executionFence !== executionFence) return;
-      if (this.#runRegistry.get(runId) === registryEntry) {
-        this.#runRegistry.cleanup(runId);
+      if (this.executionEngine.runRegistry.get(runId) === registryEntry) {
+        this.executionEngine.runRegistry.cleanup(runId);
       }
       if (getRunRegistryEntry(runId, this.#mastra) === registryEntry) {
         globalRunRegistry.delete(runId);
@@ -4706,7 +4697,10 @@ export class DurableAgent<
 
     // 2. Register non-serializable state (both local and global registries)
     registryEntry.agentId = this.id;
-    this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
+    this.executionEngine.runRegistry.registerWithMessageList(runId, registryEntry, messageList, {
+      threadId,
+      resourceId,
+    });
     const globalRegistryEntry = { ...registryEntry, messageList };
     globalRunRegistry.set(runId, globalRegistryEntry);
     await this.#attachStreamPublisher(runId, { threadId, resourceId });
@@ -4716,8 +4710,8 @@ export class DurableAgent<
     // process registers its own under the same runId, and one that took the
     // run over, in any process, writes to the topic.
     const releaseRunState = () => {
-      if (this.#runRegistry.get(runId) === registryEntry) {
-        this.#runRegistry.cleanup(runId);
+      if (this.executionEngine.runRegistry.get(runId) === registryEntry) {
+        this.executionEngine.runRegistry.cleanup(runId);
       }
       if (getRunRegistryEntry(runId, this.#mastra) === globalRegistryEntry) {
         globalRunRegistry.delete(runId);
@@ -5126,93 +5120,90 @@ export class DurableAgent<
       DEFAULT_RESTART_CONCURRENCY,
       async ({ targetRunId, index }) => {
         if (this.#mastra?.__shuttingDown) return;
-        if (this.#recoveryAttempts.has(targetRunId)) {
+        if (this.executionEngine.hasRecoveryAttempt(targetRunId)) {
           outcomes[index] = timeoutOutcome(targetRunId);
           return;
         }
-        // Defer execution until the map is populated, including synchronous re-entrant callers.
-        const attempt = Promise.resolve().then(async (): Promise<DurableAgentRecoveredRun | undefined> => {
-          if (this.#mastra?.__shuttingDown) return;
-          let runError: Error | undefined;
-          let started = false;
-          try {
-            // Delegate to the single-run streamable recover path so each run
-            // benefits from the rebuilt registry entry (message list, memory,
-            // saveQueueManager, request context, agent span) and the pubsub
-            // stream / terminal snapshot-cleanup contract stays identical to
-            // `recover()`. We don't surface the per-run stream here — bulk
-            // callers only care about counts — so we just await the workflow
-            // execution promise that `recover()` parks on the registry entry,
-            // capture any failure it surfaces via `onError`, and drop the
-            // stream. `recover()` cleans up on its own after FINISH/ERROR and keeps
-            // suspended runs registered, so thread subscribers still see the
-            // terminal event and a later approval can resume the run (#25891).
-            // With auto-cleanup disabled nothing else releases a finished run, and
-            // bulk callers never get the cleanup handle. Release it once the
-            // terminal event has been delivered; suspended runs never get here.
-            let releaseAfterTerminal: (() => void) | undefined;
-            const onTerminal = () => {
-              if (this.__getStreamBus().cleanupTimeoutMs === 0) setTimeout(() => releaseAfterTerminal?.(), 0);
-            };
-            const { cleanup } = await this.recover(targetRunId, {
-              onError: ({ error }) => {
-                runError = error instanceof Error ? error : new Error(String(error));
-                onTerminal();
-              },
-              onFinish: onTerminal,
-              onAbort: onTerminal,
-            });
-            started = true;
-            releaseAfterTerminal = cleanup;
+        const attempt = this.executionEngine.startRecoveryAttempt(
+          targetRunId,
+          async (): Promise<DurableAgentRecoveredRun | undefined> => {
+            if (this.#mastra?.__shuttingDown) return;
+            let runError: Error | undefined;
+            let started = false;
             try {
-              const workflowExecution = getRunRegistryEntry(targetRunId, this.#mastra)?.workflowExecution;
-              if (workflowExecution) {
-                await workflowExecution;
-              }
-            } catch (error) {
-              cleanup();
-              throw error;
-            }
-            if (runError) throw runError;
-            return { runId: targetRunId, status: 'success' };
-          } catch (error) {
-            const errorId = (error as { id?: unknown })?.id;
-            if (!runError && (errorId === RECOVER_SHUTDOWN_ERROR_ID || errorId === EXECUTION_ABANDONED_ERROR_ID)) {
-              return { runId: targetRunId, status: 'skipped' };
-            }
-            if (!started) {
-              // The checkpoint disappeared or the run suspended between discovery and recovery.
-              if (
-                errorId === RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID ||
-                errorId === RECOVER_CHECKPOINT_NOT_AVAILABLE_ERROR_ID ||
-                errorId === RECOVER_RUN_SUSPENDED_ERROR_ID
-              )
-                return;
-              const skipped = recoverySkip(error);
-              if (skipped) {
-                if (skipped.reason === 'transient-error') {
-                  this.#mastra
-                    ?.getLogger()
-                    ?.warn(`[DurableAgent] Deferring recovery of run ${targetRunId} after a transient error`, {
-                      error,
-                      retryAt: skipped.retryAt,
-                    });
+              // Delegate to the single-run streamable recover path so each run
+              // benefits from the rebuilt registry entry (message list, memory,
+              // saveQueueManager, request context, agent span) and the pubsub
+              // stream / terminal snapshot-cleanup contract stays identical to
+              // `recover()`. We don't surface the per-run stream here — bulk
+              // callers only care about counts — so we just await the workflow
+              // execution promise that `recover()` parks on the registry entry,
+              // capture any failure it surfaces via `onError`, and drop the
+              // stream. `recover()` cleans up on its own after FINISH/ERROR and keeps
+              // suspended runs registered, so thread subscribers still see the
+              // terminal event and a later approval can resume the run (#25891).
+              // With auto-cleanup disabled nothing else releases a finished run, and
+              // bulk callers never get the cleanup handle. Release it once the
+              // terminal event has been delivered; suspended runs never get here.
+              let releaseAfterTerminal: (() => void) | undefined;
+              const onTerminal = () => {
+                if (this.__getStreamBus().cleanupTimeoutMs === 0) setTimeout(() => releaseAfterTerminal?.(), 0);
+              };
+              const { cleanup } = await this.recover(targetRunId, {
+                onError: ({ error }) => {
+                  runError = error instanceof Error ? error : new Error(String(error));
+                  onTerminal();
+                },
+                onFinish: onTerminal,
+                onAbort: onTerminal,
+              });
+              started = true;
+              releaseAfterTerminal = cleanup;
+              try {
+                const workflowExecution = getRunRegistryEntry(targetRunId, this.#mastra)?.workflowExecution;
+                if (workflowExecution) {
+                  await workflowExecution;
                 }
-                return { runId: targetRunId, status: 'skipped', ...skipped };
+              } catch (error) {
+                cleanup();
+                throw error;
               }
+              if (runError) throw runError;
+              return { runId: targetRunId, status: 'success' };
+            } catch (error) {
+              const errorId = (error as { id?: unknown })?.id;
+              if (!runError && (errorId === RECOVER_SHUTDOWN_ERROR_ID || errorId === EXECUTION_ABANDONED_ERROR_ID)) {
+                return { runId: targetRunId, status: 'skipped' };
+              }
+              if (!started) {
+                // The checkpoint disappeared or the run suspended between discovery and recovery.
+                if (
+                  errorId === RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID ||
+                  errorId === RECOVER_CHECKPOINT_NOT_AVAILABLE_ERROR_ID ||
+                  errorId === RECOVER_RUN_SUSPENDED_ERROR_ID
+                )
+                  return;
+                const skipped = recoverySkip(error);
+                if (skipped) {
+                  if (skipped.reason === 'transient-error') {
+                    this.#mastra
+                      ?.getLogger()
+                      ?.warn(`[DurableAgent] Deferring recovery of run ${targetRunId} after a transient error`, {
+                        error,
+                        retryAt: skipped.retryAt,
+                      });
+                  }
+                  return { runId: targetRunId, status: 'skipped', ...skipped };
+                }
+              }
+              const err = runError ?? (error instanceof Error ? error : new Error(String(error)));
+              this.#mastra
+                ?.getLogger?.()
+                ?.error?.(`[DurableAgent] Failed to recover run ${targetRunId}: ${err.message}`, { error: err });
+              return { runId: targetRunId, status: 'failed', error: err };
             }
-            const err = runError ?? (error instanceof Error ? error : new Error(String(error)));
-            this.#mastra
-              ?.getLogger?.()
-              ?.error?.(`[DurableAgent] Failed to recover run ${targetRunId}: ${err.message}`, { error: err });
-            return { runId: targetRunId, status: 'failed', error: err };
-          }
-        });
-        this.#recoveryAttempts.set(targetRunId, attempt);
-        const removeAttempt = () => {
-          if (this.#recoveryAttempts.get(targetRunId) === attempt) this.#recoveryAttempts.delete(targetRunId);
-        };
-        void attempt.then(removeAttempt, removeAttempt);
+          },
+        );
         const bounded = this.#mastra
           ? await this.#mastra.__awaitDurableRecoveryAttempt(attempt, `durable agent ${this.id} run ${targetRunId}`)
           : { value: await attempt };
@@ -5364,7 +5355,7 @@ export class DurableAgent<
         }
         if (!terminal) {
           if (hasHistory || ownership?.live) return false;
-          if (getRunRegistryEntry(runId, this.#mastra) || this.#runRegistry.get(runId)) return false;
+          if (getRunRegistryEntry(runId, this.#mastra) || this.executionEngine.runRegistry.get(runId)) return false;
           if (await resolveLeaseProvider(this.pubsub).getLeaseOwner(executionLeaseKey(this.id, runId))) {
             return false;
           }
@@ -5591,7 +5582,7 @@ export class DurableAgent<
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
   ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }> {
-    let memoryInfo = this.#runRegistry.getMemoryInfo(runId);
+    let memoryInfo = this.executionEngine.runRegistry.getMemoryInfo(runId);
 
     let terminalCompleted = false;
     let abortPending = false;
@@ -5602,7 +5593,7 @@ export class DurableAgent<
       scheduleTimer: cleanup => this.__getStreamBus().scheduleCleanup(cleanup),
       release: () => {
         streamCleanup?.();
-        this.#runRegistry.cleanup(runId);
+        this.executionEngine.runRegistry.cleanup(runId);
         deleteRunRegistryEntry(runId, this.#mastra);
         this.#clearPubsubTopic(runId);
       },
@@ -5620,7 +5611,7 @@ export class DurableAgent<
       }
     };
 
-    const localEntry = this.#runRegistry.get(runId);
+    const localEntry = this.executionEngine.runRegistry.get(runId);
     const observedEntry = localEntry ?? getRunRegistryEntry(runId, this.#mastra);
     const observedAgentSpan = observedEntry?.resumeAgentSpan ?? observedEntry?.agentSpan;
     let structuredOutput = observedEntry?.structuredOutput;
@@ -5629,7 +5620,7 @@ export class DurableAgent<
     let streamAgent: Agent<any, any, any, any> = observedEntry?.agent ?? this.#wrappedAgent;
     let returnScorerData = observedEntry?.returnScorerData;
     let requestContext = observedEntry?.requestContext;
-    let messageList = observedEntry?.messageList ?? this.#runRegistry.getMessageList(runId);
+    let messageList = observedEntry?.messageList ?? this.executionEngine.runRegistry.getMessageList(runId);
     // Worker entries can carry runtime dependencies without the caller's live transcript.
     const liveEntry = messageList ? observedEntry : undefined;
     if (liveEntry?.agentId !== undefined && liveEntry.agentId !== this.id) {
@@ -5930,7 +5921,8 @@ export class DurableAgent<
     // exists precisely to watch runs this process did not start.
     const abort = async (reason?: unknown) => {
       abortPending = !terminalCompleted;
-      const controller = (getRunRegistryEntry(runId, this.#mastra) ?? this.#runRegistry.get(runId))?.abortController;
+      const controller = (getRunRegistryEntry(runId, this.#mastra) ?? this.executionEngine.runRegistry.get(runId))
+        ?.abortController;
       if (controller && !controller.signal.aborted) {
         controller.abort(reason);
       }
@@ -6094,10 +6086,15 @@ export class DurableAgent<
     });
 
     preparation.registryEntry.agentId = this.id;
-    this.#runRegistry.registerWithMessageList(preparation.runId, preparation.registryEntry, preparation.messageList, {
-      threadId: preparation.threadId,
-      resourceId: preparation.resourceId,
-    });
+    this.executionEngine.runRegistry.registerWithMessageList(
+      preparation.runId,
+      preparation.registryEntry,
+      preparation.messageList,
+      {
+        threadId: preparation.threadId,
+        resourceId: preparation.resourceId,
+      },
+    );
     await this.#attachStreamPublisher(preparation.runId, {
       threadId: preparation.threadId,
       resourceId: preparation.resourceId,

@@ -18,7 +18,7 @@ import { DurableStepIds } from './constants';
 import { ExecutionFence, fencePubSub, resolveLeaseProvider, supportsRunFencing } from './execution-fence';
 import type { UntrackedRunLiveness } from './execution-fence';
 import { withExecutionStreamPublisher } from './execution-stream-publisher';
-import { getRunRegistryEntry } from './run-registry';
+import { ExtendedRunRegistry, getRunRegistryEntry } from './run-registry';
 import { emitAbortEvent } from './stream-adapter';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from './types';
 import { createDurableAgenticWorkflow } from './workflows/create-durable-agentic-workflow';
@@ -62,6 +62,9 @@ export interface DurableExecutionHost {
 }
 
 export class DurableExecutionEngine {
+  readonly runRegistry = new ExtendedRunRegistry();
+  readonly #segmentOwner = new Map<string, symbol>();
+  readonly #recoveryAttempts = new Map<string, Promise<unknown>>();
   #workflow: DurableWorkflow | null = null;
   #resolvedWorkflowEngine: 'default' | 'evented' | null = null;
   #warnedPersistencePolicy = false;
@@ -74,6 +77,34 @@ export class DurableExecutionEngine {
   #canceledRunTerminals = new Set<string>();
 
   constructor(protected readonly host: DurableExecutionHost) {}
+
+  beginSegment(runId: string): symbol {
+    const segment = Symbol(runId);
+    this.#segmentOwner.set(runId, segment);
+    return segment;
+  }
+
+  releaseSegment(runId: string, segment: symbol, entry: RunRegistryEntry): boolean {
+    if (this.#segmentOwner.get(runId) !== segment) return false;
+    this.#segmentOwner.delete(runId);
+    if (this.runRegistry.get(runId) === entry) this.runRegistry.cleanup(runId);
+    return true;
+  }
+
+  hasRecoveryAttempt(runId: string): boolean {
+    return this.#recoveryAttempts.has(runId);
+  }
+
+  startRecoveryAttempt<T>(runId: string, recover: () => Promise<T>): Promise<T> {
+    // Defer execution until the map is populated, including synchronous re-entrant callers.
+    const attempt = Promise.resolve().then(recover);
+    this.#recoveryAttempts.set(runId, attempt);
+    const removeAttempt = () => {
+      if (this.#recoveryAttempts.get(runId) === attempt) this.#recoveryAttempts.delete(runId);
+    };
+    void attempt.then(removeAttempt, removeAttempt);
+    return attempt;
+  }
 
   /**
    * Record the abort of a parked run in shared storage, so a resume on any server
