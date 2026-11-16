@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../../../memory';
 import { createTool } from '../../../../tools';
@@ -145,6 +145,123 @@ describeForAllEngines(
       // Assert: final output mentions the user
       const text = await output.text;
       expect(text.length).toBeGreaterThan(0);
+    });
+
+    /**
+     * Studio's flow for #30190: the first message streams on a new thread and the tool
+     * suspends; the follow-up goes through `sendMessage` on the same thread. `release`
+     * lets the test hold the tool inside `execute` until it chooses to suspend.
+     */
+    async function createStudioThread(release: Promise<void> = Promise.resolve()) {
+      const tool = { entered: false, resumedWith: undefined as string | undefined };
+      const findUserTool = createTool({
+        id: 'find-user',
+        description: 'Finds a user by name',
+        inputSchema: z.object({ query: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.object({ name: z.string() }),
+        execute: async (_inputData, context) => {
+          if (!context?.agent?.resumeData) {
+            tool.entered = true;
+            await release;
+            return context?.agent?.suspend({ message: 'Which user should I find?' });
+          }
+          tool.resumedWith = context.agent.resumeData.name;
+          return { name: tool.resumedWith };
+        },
+      });
+      const memory = new MockMemory();
+      const shared = await createSharedAgent(getMock(), {
+        tools: { findUserTool },
+        memory,
+        defaultOptions: { autoResumeSuspendedTools: true },
+        engine,
+      });
+      const threadId = globalThis.crypto.randomUUID();
+      const resourceId = globalThis.crypto.randomUUID();
+
+      const llm = getMock();
+      // Registered first: once the resumed tool answers, the model replies.
+      llm.on({ endpoint: 'chat', toolCallId: 'call-2', hasToolResult: true }, { content: 'FINAL_REPLY Dero Israel' });
+      // The follow-up turn re-calls the tool with the answer read from the user's reply.
+      llm.onMessage(/The user is Dero Israel/, {
+        toolCalls: [
+          {
+            id: 'call-2',
+            name: 'find-user',
+            arguments: { query: 'user by name', suspendedToolCallId: 'call-1', resumeData: { name: 'Dero Israel' } },
+          },
+        ],
+      });
+
+      const firstMessage = () =>
+        runLoopScenario({
+          engine,
+          llm,
+          sharedAgent: shared,
+          prompt: 'Find the user named Dero Israel',
+          memory,
+          threadId,
+          resourceId,
+          fixtures: mock => {
+            mock.onMessage(/find/i, {
+              toolCalls: [{ id: 'call-1', name: 'find-user', arguments: { query: 'user by name' } }],
+            });
+          },
+          collectChunks: true,
+        });
+      const sendFollowUp = () => shared.agent.sendMessage('The user is Dero Israel', { resourceId, threadId });
+      const threadAfterReply = async () => {
+        const deadline = Date.now() + 10_000;
+        let { messages } = await memory.recall({ threadId, resourceId });
+        while (!JSON.stringify(messages).includes('FINAL_REPLY') && Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, 50));
+          ({ messages } = await memory.recall({ threadId, resourceId }));
+        }
+        return JSON.stringify(messages);
+      };
+      return { tool, llm, firstMessage, sendFollowUp, threadAfterReply };
+    }
+
+    // Technical: the runtime treated the run parked on the tool's suspend() as the thread's
+    // active run and queued the follow-up onto it, answering `deliver`; a parked run never
+    // drains its queue, so no next turn ran and auto-resume never fired. (#30190)
+    it('auto-resumes a suspended tool when the follow-up arrives through sendMessage, as Studio sends it (#30190)', async () => {
+      const { tool, llm, firstMessage, sendFollowUp, threadAfterReply } = await createStudioThread();
+
+      const first = await firstMessage();
+      expect(first.chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
+      await sendFollowUp().accepted;
+
+      // The follow-up is saved to the thread, the suspended tool resumes with the user's
+      // answer, and the final reply lands in the same thread.
+      const thread = await threadAfterReply();
+      expect(thread).toContain('The user is Dero Israel');
+      expect(tool.resumedWith).toBe('Dero Israel');
+      expect(thread).toContain('FINAL_REPLY Dero Israel');
+      // The model saw the follow-up in the turn that resumed the tool.
+      expect(JSON.stringify(llm.getRequests().at(-2)?.body.messages)).toContain('The user is Dero Israel');
+    });
+
+    // Technical: a follow-up sent while the tool is still running is queued for the run's next
+    // step, but the run then parks on suspend() and never takes another step. (#30190)
+    it('auto-resumes with a follow-up sent while the tool was still running, once the tool suspends (#30190)', async () => {
+      let releaseTool!: () => void;
+      const { tool, firstMessage, sendFollowUp, threadAfterReply } = await createStudioThread(
+        new Promise<void>(resolve => (releaseTool = resolve)),
+      );
+
+      const first = firstMessage();
+      await vi.waitFor(() => expect(tool.entered).toBe(true));
+      const sent = sendFollowUp();
+      await sent.accepted;
+      releaseTool();
+      expect((await first).chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
+
+      const thread = await threadAfterReply();
+      expect(thread).toContain('The user is Dero Israel');
+      expect(tool.resumedWith).toBe('Dero Israel');
+      expect(thread).toContain('FINAL_REPLY Dero Israel');
     });
 
     // #26673: the model re-calls a plain tool under a new id and names the original call via

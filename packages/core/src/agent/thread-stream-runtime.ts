@@ -4380,6 +4380,40 @@ export class AgentThreadStreamRuntime {
   }
 
   /**
+   * With `autoResumeSuspendedTools`, the next turn is what resumes a run parked on
+   * a tool's suspend(): the model reads the user's answer from the new message.
+   * The parked run itself never drains its queue, so a message queued onto it
+   * would be reported delivered and never run (#30190). Once the run has parked,
+   * queued messages start the next turn the way a stream call on the thread
+   * would; the parked run keeps its record and stays resumable.
+   *
+   * Without auto-resume, the message keeps waiting for the explicit resume (an
+   * AgentController prompt waits for its answer), and a run parked on a tool
+   * approval keeps holding the thread: consent arrives through the approval APIs.
+   */
+  async #startQueuedTurnAfterParkedRun(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    record: AgentThreadRunRecord<any>,
+  ): Promise<void> {
+    const canStart = () =>
+      record.lifecycle === 'suspended' &&
+      !this.#isApprovalSuspendedRun(state, record.runId) &&
+      // Shutdown hands parked runs back as they are; it starts no new turns.
+      !state.shutdownStreams.has(record.streamId) &&
+      this.#hasPendingThreadWork(state, key);
+    if (!canStart()) return;
+    // A call's own option wins over the agent's default, as when the run was started.
+    const autoResume =
+      record.streamOptions.autoResumeSuspendedTools ??
+      (await record.agent.getDefaultOptions({ requestContext: record.streamOptions.requestContext }))
+        .autoResumeSuspendedTools;
+    if (!autoResume || !canStart()) return;
+    this.#releaseSupersededParkedRun(state, this.#getPubSub(pubsub), key, record.runId);
+  }
+
+  /**
    * A parked run no longer holds its thread, so its answer resumes it on a new
    * stream. Subscribers reading its open stream, or with it still queued, move on
    * to the runs queued behind it.
@@ -5404,6 +5438,8 @@ export class AgentThreadStreamRuntime {
       runId: record.runId,
       streamId: record.streamId,
     });
+    // A message queued while the run was still working starts the next turn now.
+    void this.#startQueuedTurnAfterParkedRun(this.#getState(pubsub), pubsub, key, record).catch(() => {});
   }
 
   #watchThreadRunCompletion(
@@ -8207,6 +8243,7 @@ export class AgentThreadStreamRuntime {
         if (activeRecord.agent.id === agent.id) {
           if (scopeMismatch(runId)) return refuseScopes(runId);
           this.#queueForActiveRun(state, pubsub, key, activeRecord, signal);
+          void this.#startQueuedTurnAfterParkedRun(state, pubsub, key, activeRecord).catch(() => {});
           return {
             signal,
             accepted: Promise.resolve({ action: 'deliver' as const, runId }),
