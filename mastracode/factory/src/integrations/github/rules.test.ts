@@ -7249,6 +7249,39 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       ]);
     });
 
+    it('reads a reopened pull request open again on its own card and on the issue card that also holds it', async () => {
+      const h = await harness('write');
+      await h.issueCard(42, 'intake');
+      await h.ingest(openedPullRequest(17, 'Fixes #42'));
+      await h.ingest(openedPullRequest(17, 'Fixes #42', 'delivery-close-17', 'closed'));
+      await h.workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: h.project.id,
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'pull-request',
+            externalId: 'github-pr:17',
+            url: 'https://github.com/acme/repo/pull/17',
+          },
+          title: 'PR 17',
+          stages: ['canceled'],
+          sessions: {},
+          metadata: { state: 'closed', merged: false },
+        },
+      });
+      const pullRequestStates = async () =>
+        (await h.cards()).flatMap(card =>
+          card.workItem.sources.filter(source => source.sourceType === 'pull-request').map(source => source.state),
+        );
+      expect(await pullRequestStates()).toEqual(['closed', 'closed']);
+
+      await h.ingest(openedPullRequest(17, 'Fixes #42', 'delivery-reopen-17', 'reopened'));
+
+      expect(await pullRequestStates()).toEqual(['open', 'open']);
+    });
+
     const builderSession = { threadId: 'thread-work', sessionId: 'session-work', branch: 'factory/issue-42-build', startedBy: 'user-1' };
 
     it("gives someone else's \"Fixes #42\" pull request its own card once the issue's builder has started", async () => {

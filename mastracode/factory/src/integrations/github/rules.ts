@@ -611,7 +611,7 @@ export class GithubRules {
     }
   }
 
-  /** A reopened pull request reads open again; clearing the sweep's settled stamp lets a later close replay. */
+  /** A reopened pull request reads open again on every card that holds it; clearing the sweep's settled stamp lets a later close replay. */
   async #syncReopenedPullRequest(
     parsed: ParsedGithubWebhook,
     repositoryId: number,
@@ -633,9 +633,33 @@ export class GithubRules {
     );
     if (!card) return { status: 'ignored' };
     const open = { state: 'open', merged: false, draft: boolean(pullRequest?.draft) ?? false };
+    const shared = await this.options.storage.listShared({
+      orgId: project.orgId,
+      factoryProjectId: project.factoryProjectId,
+    });
+    const holders = [
+      card,
+      ...shared.filter(
+        item =>
+          item.id !== card.id && attachedPullRequestSource(item, repositoryId, repositoryName, pullRequestNumber),
+      ),
+    ];
+    const reopened = await Promise.all(
+      holders.map(holder => this.#reopenPullRequestOn(holder, repositoryId, repositoryName, pullRequestNumber, open)),
+    );
+    return { status: reopened.some(Boolean) ? 'committed' : 'ignored' };
+  }
+
+  async #reopenPullRequestOn(
+    card: Card,
+    repositoryId: number,
+    repositoryName: string,
+    pullRequestNumber: number,
+    open: { state: string; merged: boolean; draft: boolean },
+  ): Promise<boolean> {
     const attached = attachedPullRequestSource(card, repositoryId, repositoryName, pullRequestNumber);
     if (attached) {
-      if (attached.state !== 'closed') return { status: 'ignored' };
+      if (attached.state !== 'closed') return false;
       await this.options.storage.syncWorkItemSource({
         orgId: card.orgId,
         factoryProjectId: card.factoryProjectId,
@@ -643,11 +667,11 @@ export class GithubRules {
         externalId: attached.externalId,
         patch: { state: 'open', metadata: open },
       });
-      return { status: 'committed' };
+      return true;
     }
-    if (card.externalSource?.type !== 'pull-request') return { status: 'ignored' };
+    if (card.externalSource?.type !== 'pull-request') return false;
     const metadata = { ...card.workItem.metadata, ...card.metadata };
-    if (metadata.state !== 'closed') return { status: 'ignored' };
+    if (metadata.state !== 'closed') return false;
     const updated = await this.options.storage.syncCard({
       orgId: card.orgId,
       id: card.id,
@@ -661,7 +685,7 @@ export class GithubRules {
         },
       },
     });
-    return { status: updated ? 'committed' : 'ignored' };
+    return Boolean(updated);
   }
 
   /** `issues` and `pull_request` actions that are not rule events but still update an existing card. */
