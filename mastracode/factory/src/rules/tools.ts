@@ -2,6 +2,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
+import { FACTORY_INTERACTIVE_KEY } from '../auth.js';
 import {
   boardFlow,
   boardForWorkItem,
@@ -16,7 +17,12 @@ import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
-import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type {
+  Card,
+  FactoryRunBindingAddress,
+  FactoryRunBindingRecord,
+  WorkItemsStorage,
+} from '../storage/domains/work-items/base.js';
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
 import { phaseGrantsTool } from './phase-tools.js';
@@ -59,38 +65,27 @@ export async function createFactoryTransitionTools(options: {
     sessions: options.sessions,
   });
   if (!resolution) return {};
-  const availableBinding = resolution.binding ?? (await options.storage.findActiveRunBinding(resolution.address));
-  if (!availableBinding) {
-    // No live binding for this session. A resumed session whose binding was
-    // revoked when its work item reached a terminal stage was retired out from
-    // under the model: rather than silently drop the tool — which leaves the
-    // resumed run to rationalize a false blocked state — surface a tool that
-    // fails with the concrete reason. Threads that were never bound (or whose
-    // binding was rotated to a peer role, leaving the item still in flight) get
-    // no tool as before.
-    const retired = await options.storage.findRunBindingBySession(resolution.address);
-    if (retired && retired.status === 'revoked' && options.boards) {
-      const item = await options.storage.get({ orgId: retired.orgId, id: retired.workItemId });
-      if (
-        item &&
-        workItemPhaseSemantics(await toBoardSource(options.boards).load(retired), item)?.kind === 'terminal'
-      ) {
-        return { factory_transition_work_item: createRetiredSessionTool(retired.workItemId, item.stages[0]) };
-      }
-    }
-    return {};
-  }
+  const activeBinding = resolution.binding ?? (await options.storage.findActiveRunBinding(resolution.address));
+  // A session keeps the move tool after its assignment to the card ends (the card's run started
+  // in another session, the idle cleanup, or the card finishing). Leaving the tool out gives the
+  // model nothing to act on: it reports a blocked state or invents a workaround, and the card
+  // sits. Whether a move is allowed is decided when the call runs. A session that never worked
+  // on a card has nothing to move, so it gets no tool.
+  const assignment = activeBinding ?? (await pastAssignment(options.storage, resolution.address));
+  if (!assignment) return {};
   // Tools are built for every turn, so a card that moves on takes its phase's tools with it.
   // A failed lookup grants no phase tools but keeps the move tool.
-  const recordsVerdict = await options.storage
-    .get({ orgId: availableBinding.orgId, id: availableBinding.workItemId })
-    .then(item =>
-      item ? phaseGrantsTool(options.boards, availableBinding, item, 'factory_record_review_verdict') : false,
-    )
-    .catch(() => false);
+  const recordsVerdict = activeBinding
+    ? await options.storage
+        .get({ orgId: activeBinding.orgId, id: activeBinding.workItemId })
+        .then(item =>
+          item ? phaseGrantsTool(options.boards, activeBinding, item, 'factory_record_review_verdict') : false,
+        )
+        .catch(() => false)
+    : false;
 
   return {
-    ...(recordsVerdict ? createReviewVerdictTool(options, availableBinding.workItemId) : {}),
+    ...(recordsVerdict ? createReviewVerdictTool(options, assignment.workItemId) : {}),
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',
       description:
@@ -108,36 +103,114 @@ export async function createFactoryTransitionTools(options: {
         if (!currentAddress || !toolCallId) {
           throw new Error('Factory transitions require an authenticated bound agent tool call.');
         }
-        const binding = await options.storage.findActiveRunBinding(currentAddress);
-        // Authority is the work item this session is bound to, not the individual
-        // binding row. Handing the next role its turn in an existing session
-        // rotates the binding, and tools built for the previous role stay live
+        const active = await options.storage.findActiveRunBinding(currentAddress);
+        const current = active ?? (await pastAssignment(options.storage, currentAddress));
+        // Authority is the work item this session works on, not the individual
+        // assignment row. Handing the next role its turn in an existing session
+        // rotates the row, and tools built for the previous role stay live
         // across that rotation; keying on row identity would strand the run that
         // the rotation exists to start. Re-pointing a session at a different item
         // is the hijack this guards against.
-        if (!binding || binding.workItemId !== availableBinding.workItemId) {
-          throw new Error('Factory agent binding is unavailable, revoked, or no longer matches this session.');
+        if (!current || current.workItemId !== assignment.workItemId) {
+          return refuse(
+            {
+              workItemId: assignment.workItemId,
+              sessionId: currentAddress.sessionId,
+              to: stage,
+              code: 'not_this_card',
+            },
+            'This session is no longer working on the card this tool moves, so it cannot move it. Tell the person you are working with which phase the card should move to and ask them to move it.',
+          );
         }
-        const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
-        if (!item) throw new Error('Bound Factory work item not found.');
+        const item = await options.storage.get({ orgId: current.orgId, id: current.workItemId });
+        if (!item) {
+          return refuse(
+            { workItemId: current.workItemId, sessionId: currentAddress.sessionId, to: stage, code: 'card_not_found' },
+            'The card this session worked on no longer exists, so there is nothing to move.',
+          );
+        }
         const board = boardForWorkItem(item);
+        const from = item.stages[0];
+        // A finished card stays finished unless a person asks: a session woken by a notice or a
+        // webhook must not reopen it on its own.
+        if (
+          !active &&
+          execution.requestContext?.get(FACTORY_INTERACTIVE_KEY) !== true &&
+          workItemPhaseSemantics(await toBoardSource(options.boards).load(current), item)?.kind === 'terminal'
+        ) {
+          return refuse(
+            { workItemId: item.id, sessionId: currentAddress.sessionId, from, to: stage, code: 'card_finished' },
+            `This card is finished${from ? ` (${from})` : ''}, and only a person can reopen it. Nobody signed in started this turn; if the card should move, ask the person you are working with to reply here or to move it.`,
+          );
+        }
 
         const result = await options.transitionService.transition({
-          orgId: binding.orgId,
-          factoryProjectId: binding.factoryProjectId,
-          workItemId: binding.workItemId,
+          orgId: current.orgId,
+          factoryProjectId: current.factoryProjectId,
+          workItemId: current.workItemId,
           board,
           stage,
           expectedRevision,
-          actor: { type: 'agent', bindingId: binding.id, role: binding.role },
-          ingress: { type: 'agent', identity: `${binding.id}:${toolCallId}` },
+          // Without a live assignment the session moves the card as itself, not as the role it
+          // once held: the move then starts the destination phase's run like any other.
+          actor: active
+            ? { type: 'agent', bindingId: active.id, role: active.role }
+            : { type: 'agent', bindingId: `session:${currentAddress.sessionId}`, role: 'session' },
+          ingress: {
+            type: 'agent',
+            identity: `${active ? active.id : `session:${currentAddress.sessionId}`}:${toolCallId}`,
+          },
           cause: rationale,
         });
-
+        if (result.status === 'rejected') {
+          logRefusedMove({
+            workItemId: item.id,
+            sessionId: currentAddress.sessionId,
+            from,
+            to: stage,
+            code: result.code,
+          });
+        }
         return result;
       },
     }),
   };
+}
+
+/**
+ * The card this session last worked on, once its assignment has ended. The lookup is by session,
+ * so the org is checked here: a caller from another org never reaches the card.
+ */
+async function pastAssignment(
+  storage: Pick<WorkItemsStorage, 'findRunBindingBySession'>,
+  address: FactoryRunBindingAddress,
+): Promise<FactoryRunBindingRecord | null> {
+  const assignment = await storage.findRunBindingBySession(address);
+  return assignment?.orgId === address.orgId ? assignment : null;
+}
+
+interface RefusedMove {
+  workItemId: string;
+  sessionId: string;
+  from?: string;
+  to: string;
+  code: string;
+}
+
+/**
+ * A refused move reaches the model as a normal tool result, and a tool that throws reaches only
+ * the session that called it. Without this line nothing outside the transcript shows that a card
+ * failed to move.
+ */
+function logRefusedMove(move: RefusedMove): void {
+  console.warn(
+    `[factory:move] refused card=${move.workItemId} session=${move.sessionId} from=${move.from ?? 'unknown'} to=${move.to} code=${move.code}`,
+  );
+}
+
+function refuse(move: RefusedMove, message: string): never {
+  logRefusedMove(move);
+  throw new Error(message);
 }
 
 export const REVIEW_VERDICTS = ['approve', 'request changes'] as const;
@@ -364,28 +437,4 @@ async function recordSelfReviewVerdict(input: {
       : `Self-review requested changes on ${reviewedHeadSha} (round ${rounds}).`,
   });
   return { status: 'recorded', verdict, reviewedHeadSha, reviewedAt, selfReviewRounds: rounds, transition };
-}
-
-/**
- * A retired session's transition tool: it exists only to fail loudly. The run's
- * binding was revoked when its work item settled at a terminal stage, so there
- * is nothing to transition. Registering it (instead of dropping the tool) stops
- * a resumed model from inventing a false "blocked" state when the affordance it
- * expects has silently vanished.
- */
-function createRetiredSessionTool(workItemId: string, stage: string | undefined): IntegrationTools[string] {
-  return createTool({
-    id: 'factory_transition_work_item',
-    description:
-      'This Factory session has been retired: its work item already reached a terminal stage and the run binding was revoked. No further transitions can be requested from this session.',
-    inputSchema: transitionInputSchema,
-    requireApproval: false,
-    execute: async () => {
-      throw new Error(
-        `This Factory session has been retired: work item ${workItemId} reached a terminal stage${
-          stage ? ` (${stage})` : ''
-        } and its run binding was revoked. No transition can be requested from this session.`,
-      );
-    },
-  });
 }

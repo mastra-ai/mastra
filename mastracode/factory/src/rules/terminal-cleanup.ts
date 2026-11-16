@@ -65,7 +65,7 @@ export function createTerminalStageCleanup(options: TerminalStageCleanupOptions)
 
     // Stop the live runs still executing on this item's seats before the
     // bindings are revoked, so no model keeps running unbound (and no parked
-    // run can later be resumed) once its transition tool is gone.
+    // run can later be resumed) once the card is finished.
     if (options.abortSession) {
       try {
         const active = await options.workItems.listRunBindings(args.orgId, args.factoryProjectId, args.workItemId);

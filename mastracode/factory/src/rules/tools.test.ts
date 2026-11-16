@@ -363,7 +363,7 @@ describe('factory_transition_work_item', () => {
     expect(result).toMatchObject({ status: 'accepted' });
   });
 
-  it('rechecks authority at execution and rejects revoked or replaced bindings', async () => {
+  it('rechecks authority at execution and rejects a call from another thread', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBoundItem(storage);
     const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
@@ -375,8 +375,10 @@ describe('factory_transition_work_item', () => {
         expectedRevision: 1,
         rationale: 'Continue.',
       }),
-    ).rejects.toThrow(/binding is unavailable, revoked, or no longer matches/);
+    ).rejects.toThrow(/no longer working on the card this tool moves/);
 
+    // Losing the assignment does not strand the card: the session that worked on it can still
+    // move it, and the board decides the move.
     await storage.revokeRunBinding({
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
@@ -390,10 +392,10 @@ describe('factory_transition_work_item', () => {
         expectedRevision: 1,
         rationale: 'Continue.',
       }),
-    ).rejects.toThrow(/binding is unavailable, revoked, or no longer matches/);
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'planning' });
   });
 
-  it('offers a retired-session tool that fails loudly when the bound item reached a terminal stage', async () => {
+  it('leaves reopening a finished card to a person, then lets the board decide', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBoundItem(storage);
     const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
@@ -416,18 +418,35 @@ describe('factory_transition_work_item', () => {
       revokedAt: new Date(),
     });
 
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const transition = vi.fn(service.transition.bind(service));
     const tools = await createFactoryTransitionTools({
       requestContext: requestContext(),
       storage,
-      transitionService: service,
+      transitionService: { transition },
       boards: createTriageWorkRegistry(),
     });
     const tool = tools.factory_transition_work_item as ExecutableTool;
     expect(tool).toBeDefined();
-    expect(tool.requireApproval).toBe(false);
+    expect(tool.requireApproval).toBe(true);
+
+    // A turn nobody signed in started (a notice, a webhook) cannot reopen a finished card.
     await expect(
-      execute(tool, requestContext(), { stage: 'done', expectedRevision: 2, rationale: 'Continue.' }),
-    ).rejects.toThrow(/retired/i);
+      execute(tool, requestContext(), { stage: 'intake', expectedRevision: 2, rationale: 'Continue.' }),
+    ).rejects.toThrow(/only a person can reopen it/);
+    expect(transition).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringMatching(/^\[factory:move\] refused card=.* to=intake code=card_finished$/),
+    );
+
+    // When a person asks, the board decides, and the session moves the card as itself.
+    const asked = requestContext();
+    asked.set('factoryInteractive', true);
+    await execute(tool, asked, { stage: 'intake', expectedRevision: 2, rationale: 'Asked to reopen it.' });
+    expect(transition).toHaveBeenCalledWith(
+      expect.objectContaining({ actor: { type: 'agent', bindingId: 'session:resource-1', role: 'session' } }),
+    );
+    warn.mockRestore();
   });
 
   it('keeps the move tool for a session whose assignment was cleaned up while its card is still open', async () => {
@@ -461,6 +480,57 @@ describe('factory_transition_work_item', () => {
       }),
     ).resolves.toMatchObject({ status: 'accepted', stage: 'planning' });
     expect((await storage.get({ orgId: 'org-1', id: prepared.item.id }))?.stages).toEqual(['planning']);
+  });
+
+  it('gives a session that never worked on a card no move tool', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepareBoundItem(storage);
+    const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
+    await expect(
+      createFactoryTransitionTools({
+        requestContext: requestContext({ threadId: 'never-assigned', resourceId: 'never-assigned' }),
+        storage,
+        transitionService: service,
+        boards: createTriageWorkRegistry(),
+      }),
+    ).resolves.toEqual({});
+  });
+
+  it('logs a move the board refuses for a session whose assignment ended', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareBoundItem(storage);
+    const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
+    await storage.revokeRunBinding({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      bindingId: prepared.binding.id,
+      revokedAt: new Date(),
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const context = requestContext();
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: service,
+      boards: createTriageWorkRegistry(),
+    });
+    const tool = tools.factory_transition_work_item as ExecutableTool;
+
+    // A stale revision is refused like any other move, and the refusal is logged once.
+    await expect(
+      execute(tool, context, { stage: 'planning', expectedRevision: 99, rationale: 'Continue.' }),
+    ).resolves.toMatchObject({ status: 'rejected', code: 'stale' });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      `[factory:move] refused card=${prepared.item.id} session=resource-1 from=intake to=planning code=stale`,
+    );
+
+    warn.mockClear();
+    await expect(
+      execute(tool, context, { stage: 'planning', expectedRevision: prepared.item.revision, rationale: 'Continue.' }),
+    ).resolves.toMatchObject({ status: 'accepted' });
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it('keeps working when the next role takes its turn in the same session', async () => {
@@ -552,7 +622,7 @@ describe('factory_transition_work_item', () => {
         expectedRevision: 1,
         rationale: 'Continue.',
       }),
-    ).rejects.toThrow(/binding is unavailable, revoked, or no longer matches/);
+    ).rejects.toThrow(/no longer working on the card this tool moves/);
   });
 
   it('returns canonical stale and rule rejection results from transition authority', async () => {
