@@ -91,6 +91,7 @@ import {
   ExecutionFence,
   executionLeaseKey,
   fencePubSub,
+  isReleasedLeaseMarker,
   readRunGeneration,
   RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
   resolveLeaseProvider,
@@ -5643,9 +5644,9 @@ export class DurableAgent<
         if (!terminal) {
           if (hasHistory || ownership?.live) return false;
           if (getRunRegistryEntry(runId, this.#mastra) || this.#runRegistry.get(runId)) return false;
-          if (await resolveLeaseProvider(this.pubsub).getLeaseOwner(executionLeaseKey(this.id, runId))) {
-            return false;
-          }
+          // A release marker holds the lease only while the execution that released the run drops it.
+          const leaseOwner = await resolveLeaseProvider(this.pubsub).getLeaseOwner(executionLeaseKey(this.id, runId));
+          if (leaseOwner !== undefined && !isReleasedLeaseMarker(leaseOwner)) return false;
           if (workflowsStore) {
             for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
               const record = await workflowsStore.getWorkflowRunById({ runId, workflowName });

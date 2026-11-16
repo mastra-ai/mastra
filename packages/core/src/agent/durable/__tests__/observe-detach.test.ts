@@ -17,6 +17,7 @@ import { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import type { DurableAgent } from '../durable-agent';
+import { executionLeaseKey, releasedLeaseMarker } from '../execution-fence';
 import { emitChunkEvent, emitFinishEvent, emitOwnershipClaimedEvent } from '../stream-adapter';
 
 const CLEANUP_MS = 30;
@@ -152,6 +153,28 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
     await delay(CLEANUP_MS * 3);
     expect(s.topicCleared()).toBe(false);
   });
+
+  // An execution that releases its lease hands it to a release marker and drops the marker at once; a failed drop
+  // leaves it until it expires. The marker is no live producer, so a run with nothing else left completes. (#30206)
+  it.each([
+    ['a release marker', true],
+    ['a live execution', false],
+  ] as const)(
+    'completes a run without history when its lease is held by %s: %s (#30206)',
+    async (_holder, completes) => {
+      const runId = crypto.randomUUID();
+      const owner = completes ? releasedLeaseMarker('released-exec') : 'live-exec';
+      await pubsub.acquireLease(executionLeaseKey(agent.id, runId), owner, 60_000);
+      const result = await agent.observe(runId);
+      const consumed = (async () => {
+        for await (const _ of result.fullStream) {
+          // drain
+        }
+      })();
+      expect(await within(consumed, completes ? 1000 : 200)).toBe(completes ? undefined : 'timeout');
+      result.detach();
+    },
+  );
 
   it('idleTimeoutMs + isAlive reporting dead still schedules full cleanup', async () => {
     const runId = 'dead-idle';

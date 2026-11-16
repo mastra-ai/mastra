@@ -27,6 +27,8 @@ import {
   getExecutionClaim,
   getRunFence,
   isExecutionFenceError,
+  isReleasedLeaseMarker,
+  releasedLeaseMarker,
   setExecutionClaim,
   withExecutionFence,
 } from './execution-fence';
@@ -277,13 +279,13 @@ describe('ExecutionFence heartbeat', () => {
     });
     const release = pubsub.releaseLease.bind(pubsub);
     vi.spyOn(pubsub, 'releaseLease').mockImplementation(async (leaseKey, owner) => {
-      if (owner.endsWith(':released')) throw new Error('marker delete transport error');
+      if (isReleasedLeaseMarker(owner)) throw new Error('marker delete transport error');
       return release(leaseKey, owner);
     });
     await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
 
     expect(await fence.settle(async () => {})).toBe('owned');
-    expect(await pubsub.getLeaseOwner(key('run-1'))).toBe(`${fence.executionId}:released`);
+    expect(await pubsub.getLeaseOwner(key('run-1'))).toBe(releasedLeaseMarker(fence.executionId));
     delivery.resolve();
     await vi.advanceTimersByTimeAsync(0);
 
@@ -296,6 +298,29 @@ describe('ExecutionFence heartbeat', () => {
     const successor = await next;
     expect(await pubsub.getLeaseOwner(key('run-1'))).toBe(successor.executionId);
     await successor.settle(async () => {});
+  });
+
+  // While a release marker holds the lease, the execution it names has released the run and nobody claimed it since,
+  // so that execution's late write checks in another process must not read the marker as a successor. Another
+  // execution's marker means that execution claimed the run later, which still supersedes this one. (#30206)
+  it("reads only the execution's own release marker as no successor in a remote write check (#30206)", async () => {
+    const pubsub = new EventEmitterPubSub();
+    onTestFinished(() => pubsub.close());
+    const mastra = new Mastra({ pubsub, logger: false });
+    const requestContext = new RequestContext();
+    setExecutionClaim(requestContext, 'run-1', { executionId: 'remote-exec', agentId });
+    const args = { runId: 'run-1', agentId, requestContext, mastra };
+    await pubsub.acquireLease(key('run-1'), releasedLeaseMarker('remote-exec'), EXECUTION_LEASE_TTL_MS);
+
+    await expect(assertExecutionNotSuperseded(args)).resolves.toBeUndefined();
+
+    await pubsub.transferLease(
+      key('run-1'),
+      releasedLeaseMarker('remote-exec'),
+      releasedLeaseMarker('next-exec'),
+      EXECUTION_LEASE_TTL_MS,
+    );
+    await expect(assertExecutionNotSuperseded(args)).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
   });
 
   // The lease contract lets a backend implement `transferLease` as a release followed by an acquire. Another owner

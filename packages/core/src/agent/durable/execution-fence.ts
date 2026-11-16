@@ -58,8 +58,22 @@ const TAKEOVER_ATTEMPTS = 3;
  * once; a claim that meets it retries until {@link EXECUTION_CLAIM_WAIT_MS}.
  */
 const RELEASED_LEASE_MARKER_TTL_MS = 1_000;
+const RELEASED_LEASE_MARKER_SUFFIX = ':released';
 const EXECUTION_CLAIM_WAIT_MS = 5_000;
 const CLAIM_POLL_INTERVAL_MS = 100;
+
+/**
+ * The owner a lease release hands an execution's lease to before dropping it. While it holds the lease the run has no
+ * live execution: the execution it names released it.
+ */
+export function releasedLeaseMarker(executionId: string): string {
+  return `${executionId}${RELEASED_LEASE_MARKER_SUFFIX}`;
+}
+
+/** Whether `owner`, read from an execution lease, is a release marker rather than a live execution. */
+export function isReleasedLeaseMarker(owner: string): boolean {
+  return owner.endsWith(RELEASED_LEASE_MARKER_SUFFIX);
+}
 
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, Math.max(0, ms)));
 
@@ -430,9 +444,11 @@ function leaseBackend(
       (await provider.renewLease(key, claim.executionId, EXECUTION_LEASE_TTL_MS))
         ? { renewed: true }
         : { renewed: false, released: false },
+    // This claim's own release marker means it released the run, as if the lease were already gone. Another
+    // execution's marker means that execution claimed the run after this one, so it still supersedes it.
     async isSuperseded(claim) {
       const owner = await provider.getLeaseOwner(key);
-      return owner !== undefined && owner !== claim.executionId;
+      return owner !== undefined && owner !== claim.executionId && owner !== releasedLeaseMarker(claim.executionId);
     },
     // `releaseLease` does not report whether it released anything. With `atomicTransfer`, `transferLease` checks the
     // owner and hands the lease to a marker owner in one step, so it confirms nobody took the run over first; the
@@ -444,7 +460,7 @@ function leaseBackend(
         await provider.releaseLease(key, claim.executionId);
         return false;
       }
-      const marker = `${claim.executionId}:released`;
+      const marker = releasedLeaseMarker(claim.executionId);
       const held = await provider
         .transferLease(key, claim.executionId, marker, RELEASED_LEASE_MARKER_TTL_MS)
         .catch(() => false);
@@ -635,7 +651,10 @@ export class ExecutionFence implements RunFenceScope {
    * reach the backend after it and come back unrenewed; only that confirmation shows nobody took the run over first.
    */
   #ownRelease?: Promise<boolean>;
-  /** A renewal found this claim released by a fence of this execution in another process, before this one settled. */
+  /**
+   * The grace for a release seen in storage is spent: a renewal already found this claim released by a fence of this
+   * execution in another process before this one settled, or this process abandoned the claim, which nothing settles.
+   */
   #releaseSeen = false;
   #settlement?: Promise<ExecutionSettlement>;
   #settledAs?: ExecutionSettlement;
@@ -769,9 +788,17 @@ export class ExecutionFence implements RunFenceScope {
     if (!claim.agentId) return;
     const backend = await resolveRemoteBackend(mastra, claim.agentId, runId, claim);
     if (!backend) return;
+    const key = claimKey(runId, claim);
+    // Nothing will settle an abandoned run, so its fences here get no grace: their next failed renewal is the loss.
+    if (reason === 'abandoned') ExecutionFence.#noteAbandonedRelease(key);
     const released = backend.release(claim);
-    if (reason === 'settled') ExecutionFence.#noteOwnRelease(claimKey(runId, claim), released);
+    if (reason === 'settled') ExecutionFence.#noteOwnRelease(key, released);
     await released;
+  }
+
+  /** Tell the fences of the claim at `key` that are still renewing that this process abandoned that claim. */
+  static #noteAbandonedRelease(key: string): void {
+    for (const fence of renewingFencesByClaim.get(key) ?? []) fence.#releaseSeen = true;
   }
 
   /** Tell the fences of the claim at `key` that are still renewing that the execution is releasing that claim. */
@@ -1249,6 +1276,7 @@ export class ExecutionFence implements RunFenceScope {
    * It is ignored once this fence settled. An unsettled fence gets until its
    * next renewal to settle (a released run's terminal event is on its way);
    * a release nothing settles, such as an abandoned terminal, is then a loss.
+   * An abandoned release made in this process gets no grace.
    */
   #startHeartbeat(): void {
     const key = claimKey(this.runId, this.claim);

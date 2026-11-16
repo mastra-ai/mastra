@@ -47,6 +47,29 @@ export class CustomPubSub extends PubSub implements LeaseProvider {
 }
 ```
 
+## Properties
+
+### `atomicTransfer`
+
+Optional. Set `atomicTransfer` to `true` when [`transferLease()`](#transferleasekey-fromowner-toowner-ttlms) checks the current owner and swaps in the new owner in one atomic step. A `true` result from `transferLease()` then proves that `fromOwner` held the lease until the swap and that no other owner held it in between.
+
+[Durable agents](/docs/harness/durable-agents#run-ownership) read this flag when a run releases its lease. With `atomicTransfer: true`, the release calls `transferLease()` to move the lease to a short-lived marker owner, then drops the marker. A successful transfer confirms that no other process took the run over first, and Mastra ignores a lease renewal that was sent before the release but failed after it. When the flag is unset, the release calls `releaseLease()`, and a renewal that fails after the release still counts as losing the run, as in earlier versions.
+
+Set it only when your `transferLease()` is atomic. A transfer that releases and then acquires can succeed after another process claimed and returned the key between the two calls. Its `true` result doesn't prove that the lease stayed with `fromOwner`.
+
+The built-in [`EventEmitterPubSub`](/reference/pubsub/event-emitter), [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub), [`RedisStreamsPubSub`](/reference/pubsub/redis-streams), and [`ValkeyStreamsPubSub`](/reference/pubsub/valkey-streams) set it, while the no-op fallback provider leaves it unset.
+
+```typescript title="src/mastra/pubsub.ts"
+export class CustomPubSub extends PubSub implements LeaseProvider {
+  // transferLease() compares the owner and swaps it in one atomic operation.
+  readonly atomicTransfer = true
+
+  // ...acquireLease, getLeaseOwner, releaseLease, renewLease, transferLease
+}
+```
+
+Type: `true` (optional)
+
 ## Methods
 
 ### Leasing
@@ -130,6 +153,8 @@ Atomically transfers a held lease from `fromOwner` to `toOwner` and refreshes it
 
 Returns `true` if `fromOwner` still held the lease and ownership moved to `toOwner`, or `false` if the lease was already lost, in which case the caller should fall back to a fresh `acquireLease`.
 
+If your implementation checks the owner and swaps in one atomic step, also set [`atomicTransfer`](#atomictransfer) to `true`.
+
 ```typescript
 const transferred = await pubsub.transferLease('thread:abc', currentRunId, nextRunId, 15000)
 
@@ -142,7 +167,7 @@ if (!transferred) {
 Returns: `Promise<boolean>`
 
 :::warning
-Backends that can't transfer a lease atomically must use a best-effort `releaseLease(fromOwner)` followed by `acquireLease(toOwner)`. They must document that the swap is non-atomic because another process can claim the key between those calls. Keeping the method required gives callers one code path while making atomicity an explicit per-backend decision.
+Backends that can't transfer a lease atomically must use a best-effort `releaseLease(fromOwner)` followed by `acquireLease(toOwner)`. They must document that the swap is non-atomic because another process can claim the key between those calls, and must leave [`atomicTransfer`](#atomictransfer) unset. Keeping the method required gives callers one code path while making atomicity an explicit per-backend decision.
 :::
 
 ## Capability detection

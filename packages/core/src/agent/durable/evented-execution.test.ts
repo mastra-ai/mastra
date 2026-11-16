@@ -27,6 +27,7 @@ import {
   participateInDurableExecution,
   retrySettledDurableExecution,
   settleEventedDurableExecution,
+  stopAbandonedDurableExecution,
   stopDurableExecutionParticipants,
 } from './evented-execution';
 import {
@@ -43,6 +44,7 @@ import {
   withExecutionFence,
   executionLeaseKey,
   fencePubSub,
+  isReleasedLeaseMarker,
   MASTRA_DURABLE_EXECUTIONS_KEY,
 } from './execution-fence';
 
@@ -349,7 +351,7 @@ it('resumes a shared EventedAgent run on the socket lease alone when its release
   const release = pubsub.releaseLease.bind(pubsub);
   let markerDropsFailed = 0;
   vi.spyOn(pubsub, 'releaseLease').mockImplementation(async (key, owner) => {
-    if (owner.endsWith(':released')) {
+    if (isReleasedLeaseMarker(owner)) {
       markerDropsFailed++;
       throw new Error('marker delete transport error');
     }
@@ -976,6 +978,57 @@ it('does not mark a coordinator lost when a worker in another process released t
   await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
   expect(renewals).toEqual([false, false]);
   expect(coordinator.isLost()).toBe(true);
+});
+
+// An abandoned release in this process is known at once: nothing will settle the run, so the coordinator's first failed
+// renewal after it reports the loss, as before #30206, without the grace a release made elsewhere gets. (#30206)
+it('marks a coordinator lost on its first failed renewal after this process abandoned the run (#30206)', async () => {
+  vi.useFakeTimers();
+  const storage = new InMemoryStore();
+  const workflowsStore = (await storage.getStore('workflows'))!;
+  const pubsub = new EventEmitterPubSub();
+  const mastra = new Mastra({ storage, pubsub, logger: false });
+  instances.push(mastra);
+  const coordinator = await ExecutionFence.claim({
+    workflowsStore,
+    leaseProvider: pubsub,
+    agentId: 'agent',
+    runId: 'run',
+    mode: 'acquire',
+  });
+  onTestFinished(() => coordinator.stopHeartbeat());
+  const lost = vi.fn();
+  coordinator.onLost(lost);
+  const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+  const renewals: boolean[] = [];
+  vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementation(async args => {
+    const result = await renew(args);
+    renewals.push(result.renewed);
+    return result;
+  });
+  const terminal: Event = {
+    id: 'abandoned-fail',
+    type: 'workflow.fail',
+    runId: 'run',
+    createdAt: new Date(),
+    data: {
+      workflowId: 'durable-agentic-loop',
+      runId: 'run',
+      requestContext: { [MASTRA_DURABLE_EXECUTIONS_KEY]: { run: coordinator.claim } },
+    },
+  };
+
+  await stopAbandonedDurableExecution(mastra, terminal, false);
+  expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({
+    ownerId: coordinator.executionId,
+    generation: coordinator.generation,
+    leaseExpiresAt: null,
+  });
+  await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+
+  expect(renewals).toEqual([false]);
+  expect(coordinator.isLost()).toBe(true);
+  expect(lost).toHaveBeenCalledTimes(1);
 });
 
 // Two workers share a run: the one settling the suspension releases the claim that a participant in the other worker

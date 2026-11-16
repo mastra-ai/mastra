@@ -47,6 +47,7 @@ import {
   __resetExecutionFencesForTests,
   executionLeaseKey,
   getExecutionClaim,
+  isReleasedLeaseMarker,
   resolveLeaseProvider,
 } from '../execution-fence';
 import { runInRunFenceScope } from '../run-fence-scope';
@@ -1328,7 +1329,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
           if (markerDrop === 'marker drop fails') {
             const release = leases.releaseLease.bind(leases);
             vi.spyOn(leases, 'releaseLease').mockImplementation(async (key, owner) => {
-              if (owner.endsWith(':released')) throw new Error('marker delete transport error');
+              if (isReleasedLeaseMarker(owner)) throw new Error('marker delete transport error');
               return release(key, owner);
             });
           }
