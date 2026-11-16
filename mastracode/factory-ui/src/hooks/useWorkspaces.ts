@@ -49,13 +49,21 @@ type SessionRowFields = Omit<SessionRowWire, 'childRows'>;
 function withoutSessionRow(response: SessionRowsResponse, sessionId: string): SessionRowsResponse {
   let dropped = 0;
   const groups = response.groups.flatMap(group => {
-    const rows = group.rows.flatMap(row => {
+    let droppedHere = 0;
+    const rows = group.rows.flatMap((row): SessionRowWire[] => {
       const cardSessionIds = row.cardSessionIds?.filter(id => id !== sessionId);
-      if (cardSessionIds ? cardSessionIds.length === 0 : row.session.sessionId === sessionId) return [];
       const childRows = row.childRows?.filter(child => child.session.sessionId !== sessionId);
-      return [{ ...row, ...(cardSessionIds && { cardSessionIds }), ...(childRows && { childRows }) }];
+      if (row.session.sessionId !== sessionId) {
+        return [{ ...row, ...(cardSessionIds && { cardSessionIds }), ...(childRows && { childRows }) }];
+      }
+      const [next, ...nested] = row.origin === 'factory' ? (childRows ?? []) : [];
+      if (next) {
+        const { phaseLabel: _phaseLabel, ...shown } = next;
+        return [{ ...shown, childRows: nested }];
+      }
+      if (!cardSessionIds?.length) droppedHere += 1;
+      return [];
     });
-    const droppedHere = group.rows.length - rows.length;
     dropped += droppedHere;
     const total = group.total - droppedHere;
     return total > 0 ? [{ ...group, total, rows }] : [];

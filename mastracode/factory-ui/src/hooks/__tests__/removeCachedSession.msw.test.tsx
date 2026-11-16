@@ -106,4 +106,57 @@ describe('removeCachedSession', () => {
     removeCachedSession(client, FACTORY_ID, 'session-1');
     expect(client.getQueryData<SessionRowsResponse>(key)).toMatchObject({ total: 0, matching: 0, groups: [] });
   });
+
+  it('stops linking a folded card to its deleted session, and still counts the card while another session is left', () => {
+    const client = createQueryClient();
+    const key = queryKeys.sessionRows(FACTORY_ID, REQUEST);
+    const card = { origin: 'factory' as const, itemId: 'item-1', cardSessionIds: ['session-1', 'session-2'] };
+    client.setQueryData(key, rowsAnswer([row('session-1', card), row('session-3')], 2));
+
+    removeCachedSession(client, FACTORY_ID, 'session-1');
+
+    const answer = client.getQueryData<SessionRowsResponse>(key);
+    expect(answer?.groups[0]?.rows.map(listed => listed.session.sessionId)).toEqual(['session-3']);
+    expect({ total: answer?.total, groupTotal: answer?.groups[0]?.total }).toEqual({ total: 2, groupTotal: 2 });
+  });
+
+  it("shows a card's next session in its row once the session it showed is deleted, keeping the rest nested", () => {
+    const client = createQueryClient();
+    const key = queryKeys.sessionRows(FACTORY_ID, { ...REQUEST, children: true });
+    const sibling = (sessionId: string) =>
+      row(sessionId, { origin: 'factory', itemId: 'item-1', phaseLabel: 'Review' });
+    client.setQueryData(
+      key,
+      rowsAnswer(
+        [
+          row('session-1', {
+            origin: 'factory',
+            itemId: 'item-1',
+            childRows: [sibling('session-2'), sibling('session-3')],
+          }),
+        ],
+        1,
+      ),
+    );
+
+    removeCachedSession(client, FACTORY_ID, 'session-1');
+
+    const answer = client.getQueryData<SessionRowsResponse>(key);
+    const shown = answer?.groups[0]?.rows[0];
+    expect(shown?.session.sessionId).toBe('session-2');
+    expect(shown?.phaseLabel).toBeUndefined();
+    expect(shown?.childRows?.map(child => child.session.sessionId)).toEqual(['session-3']);
+    expect(answer?.total).toBe(1);
+  });
+
+  it("drops a person's session row with its followed cards' sessions when the person's session is deleted", () => {
+    const client = createQueryClient();
+    const key = queryKeys.sessionRows(FACTORY_ID, { ...REQUEST, children: true });
+    const followed = row('session-2', { origin: 'factory', itemId: 'item-1' });
+    client.setQueryData(key, rowsAnswer([row('session-1', { childRows: [followed] })], 1));
+
+    removeCachedSession(client, FACTORY_ID, 'session-1');
+
+    expect(client.getQueryData<SessionRowsResponse>(key)).toMatchObject({ total: 0, matching: 0, groups: [] });
+  });
 });
