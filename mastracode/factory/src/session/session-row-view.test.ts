@@ -6,7 +6,7 @@ import type { SessionRow } from '../routes/contracts.js';
 import { testCard } from '../routes/test-utils.js';
 import { isSettling, sessionActivity, sessionRowsView } from './session-row-view.js';
 import type { SessionRowsView } from './session-row-view.js';
-import { sessionRows } from './session-rows.js';
+import { SessionRowIndex } from './session-rows.js';
 import type { RowSession } from './session-rows.js';
 
 const VIEWER = 'user-1';
@@ -172,15 +172,16 @@ describe('a card with its sessions revealed', () => {
     createdAt: new Date(AT),
     updatedAt: new Date(AT),
   });
-  const revealed = sessionRows({
-    sessions: [session('triage'), session('work'), session('review')],
-    cards: [
+  const revealed = new SessionRowIndex(
+    [session('triage'), session('work'), session('review')],
+    [
       testCard('c1', {
         stages: ['execute'],
         sessions: { triage: ref('triage'), work: ref('work'), review: ref('review') },
       }),
     ],
-    boards: createTriageWorkRegistry(),
+    createTriageWorkRegistry(),
+  ).rows({
     awaitingPerson: new Set(),
     runningSessionIds: new Set(['review']),
     parkedSessionIds: new Set(),
@@ -422,6 +423,7 @@ describe('sessionActivity', () => {
   it("reports runs on the project's sessions only, and counts each card once by its most urgent session", () => {
     const activity = sessionActivity({
       sessions: [session('listed'), session('coming', null)],
+      hiddenSessionIds: new Set(),
       cards: [
         testCard('working', { sessions: { work: ref('card-run') } }),
         testCard('waiting', { sessions: { work: ref('parked'), review: ref('parked-and-running') } }),

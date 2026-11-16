@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { Card } from '../storage/domains/work-items/base.js';
@@ -8,6 +8,7 @@ import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { SessionActivityResponse, SessionRow, SessionRowsResponse } from './contracts.js';
 import { createProjectSessionsReader } from './project-sessions.js';
+import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import { WorkItemRoutes } from './work-items.js';
 
@@ -22,18 +23,21 @@ let projectRepositoryId = '';
 interface LiveState {
   running?: readonly { threadId: string; resourceId?: string }[];
   parked?: ReadonlySet<string>;
+  authEnabled?: boolean;
 }
 
-function buildApp(viewer: string, { running = [], parked = new Set() }: LiveState = {}) {
+function buildApp(viewer: string, { running = [], parked = new Set(), authEnabled = true }: LiveState = {}) {
   const app = new Hono();
   app.use('*', async (c, next) => {
-    c.set('factoryAuthUser' as never, { workosId: viewer, organizationId: ORG } as never);
+    c.set('factoryAuthUser' as never, { workosId: c.req.header('x-viewer') ?? viewer, organizationId: ORG } as never);
     await next();
   });
+  const auth = fakeRouteAuth({ enabled: authEnabled });
+  const projectSessions = createProjectSessionsReader({ sourceControls: [sourceControl], workItems: seed.workItems });
   mountApiRoutes(
     app as never,
     new WorkItemRoutes({
-      auth: fakeRouteAuth(),
+      auth,
       audit: { emit: async () => {} },
       projects: seed.projects,
       workItems: seed.workItems,
@@ -43,9 +47,19 @@ function buildApp(viewer: string, { running = [], parked = new Set() }: LiveStat
         parked: sessionId => (parked.has(sessionId) ? PARKED_RUN : undefined),
         parkedIn: () => [...parked].map(sessionId => ({ sessionId, run: PARKED_RUN })),
       },
-      projectSessions: createProjectSessionsReader({ sourceControls: [sourceControl], workItems: seed.workItems }),
+      projectSessions,
       activeRuns: () => running,
     }).routes(),
+  );
+  mountApiRoutes(
+    app as never,
+    buildSourceControlSessionRoutes({
+      auth,
+      sourceControls: [sourceControl],
+      projects: seed.projects,
+      memorySettings: seed.memorySettings,
+      projectSessions,
+    }),
   );
   return app;
 }
@@ -73,9 +87,13 @@ async function createSession(
   return session;
 }
 
-async function createCardSession(sessionId: string, title: string): Promise<Card> {
+async function createCardSession(
+  sessionId: string,
+  title: string,
+  session: { userId?: string; visibility?: 'org' | 'private' } = {},
+): Promise<Card> {
   const branch = `factory/${sessionId}`;
-  await createSession(sessionId, { branch });
+  await createSession(sessionId, { ...session, branch });
   const { item } = await seed.workItems.upsert({
     orgId: ORG,
     userId: 'u1',
@@ -143,6 +161,20 @@ async function readActivity(app: Hono): Promise<SessionActivityResponse> {
 function rowOf(body: SessionRowsResponse, sessionId: string): SessionRow | undefined {
   return body.groups.flatMap(group => group.rows).find(row => row.session.sessionId === sessionId);
 }
+
+async function responsesFor(app: Hono, viewer: string): Promise<string[]> {
+  return Promise.all(
+    ['session-rows?groupBy=board&children=true', 'session-rows', 'session-activity', 'sessions'].map(async path => {
+      const res = await app.request(`/web/factory/projects/${projectId}/${path}`, { headers: { 'x-viewer': viewer } });
+      expect(res.status, path).toBe(200);
+      return res.text();
+    }),
+  );
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 beforeEach(async () => {
   seed = await createFactoryStorageForTests();
@@ -331,3 +363,47 @@ describe('GET /web/factory/projects/:id/session-activity', () => {
     });
   });
 });
+
+describe.each([{ authEnabled: true }, { authEnabled: false }])(
+  'a private session, auth enabled: $authEnabled',
+  ({ authEnabled }) => {
+    const privateIds = ['their-card-run', 'their-draft', 'their-starting'];
+
+    it('reaches its owner through rows, activity and the session list, and no one else after the owner read them', async () => {
+      await createSession('team-session');
+      await createCardSession('their-card-run', 'Their card', { userId: 'u2', visibility: 'private' });
+      await createSession('their-draft', { userId: 'u2', visibility: 'private' });
+      await createSession('their-starting', { userId: 'u2', visibility: 'private', materialized: false });
+      // Storage only shares a list once its newest write is a few seconds old.
+      vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 10_000 });
+      const app = buildApp('u2', {
+        authEnabled,
+        running: [
+          { threadId: 'their-card-run', resourceId: projectId },
+          { threadId: 'their-draft', resourceId: 'u2' },
+        ],
+        parked: new Set(['their-card-run']),
+      });
+
+      const [revealedRows, rows, activity, sessions] = await responsesFor(app, 'u2');
+      for (const id of privateIds) {
+        expect(revealedRows).toContain(`"${id}"`);
+        expect(rows).toContain(`"${id}"`);
+        expect(sessions).toContain(`"${id}"`);
+      }
+      expect(JSON.parse(activity ?? '')).toMatchObject({
+        runningSessionIds: ['their-card-run', 'their-draft'],
+        parkedSessionIds: ['their-card-run'],
+        initializingSessionIds: ['their-starting'],
+      });
+
+      for (const viewer of ['u1', 'u3']) {
+        const bodies = await responsesFor(app, viewer);
+        expect(bodies[3], viewer).toContain('"team-session"');
+        for (const body of bodies) {
+          for (const id of privateIds) expect(body, viewer).not.toContain(id);
+        }
+      }
+    });
+  },
+);

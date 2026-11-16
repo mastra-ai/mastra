@@ -1,8 +1,10 @@
 import type { IUserProvider } from '@mastra/core/server';
 
+import type { BoardRegistry } from '../boards/registry.js';
+import { isSeenBy, SessionRowIndex } from '../session/session-rows.js';
 import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
-import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage, WorkItemSubscription } from '../storage/domains/work-items/base.js';
 
 const MAX_SESSION_OWNER_PROFILES = 100;
 const MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES = 500;
@@ -20,11 +22,7 @@ export type SessionOwnerProfileResolver = (userIds: string[]) => Promise<Map<str
 
 export type ListedSession = SourceControlSession & { owner?: SessionOwnerProfile; followedWorkItemIds: string[] };
 
-export type ProjectSessionsReader = (scope: {
-  orgId: string;
-  factoryProjectId: string;
-  userId: string;
-}) => Promise<ListedSession[]>;
+export type ProjectSessionsReader = (scope: { orgId: string; factoryProjectId: string }) => Promise<ProjectSessions>;
 
 export function createSessionOwnerProfileResolver(
   users: SessionOwnerUserProvider | undefined,
@@ -102,6 +100,72 @@ export function withOwnerProfile(session: SourceControlSession, owners: Map<stri
   return owner ? { ...session, owner } : session;
 }
 
+/** What one viewer may see of a project's sessions. */
+export interface SeenSessions {
+  /** In listing order. */
+  readonly sessions: readonly ListedSession[];
+  /** Whether the session is listed and the viewer may see it. */
+  has(sessionId: string): boolean;
+  /** Listed sessions the viewer may not see. */
+  readonly hiddenSessionIds: ReadonlySet<string>;
+}
+
+/**
+ * Every listed session of a project, private ones included, shared by every viewer until a
+ * session, link, follow or owner profile changes. {@link seenBy} and {@link rowIndex} are the
+ * only ways out, and both filter per viewer.
+ */
+export class ProjectSessions {
+  readonly #sessions: readonly ListedSession[];
+  readonly #byId: ReadonlyMap<string, ListedSession>;
+  #rows: { cards: readonly Card[]; boards: BoardRegistry; index: SessionRowIndex } | undefined;
+
+  constructor(sessions: readonly ListedSession[]) {
+    this.#sessions = sessions;
+    this.#byId = new Map(sessions.map(session => [session.sessionId, session]));
+  }
+
+  seenBy(viewerUserId: string): SeenSessions {
+    const byId = this.#byId;
+    return {
+      sessions: this.#sessions.filter(session => isSeenBy(session, viewerUserId)),
+      has: sessionId => {
+        const session = byId.get(sessionId);
+        return session !== undefined && isSeenBy(session, viewerUserId);
+      },
+      hiddenSessionIds: new Set(
+        this.#sessions.flatMap(session => (isSeenBy(session, viewerUserId) ? [] : [session.sessionId])),
+      ),
+    };
+  }
+
+  /** The sidebar rows of these sessions, built once per change of the cards or boards. */
+  rowIndex(cards: readonly Card[], boards: BoardRegistry): SessionRowIndex {
+    if (this.#rows?.cards !== cards || this.#rows.boards !== boards) {
+      this.#rows = { cards, boards, index: new SessionRowIndex(this.#sessions, cards, boards) };
+    }
+    return this.#rows.index;
+  }
+}
+
+interface ProjectSessionsInputs {
+  lists: readonly (readonly SourceControlSession[])[];
+  follows: readonly WorkItemSubscription[] | undefined;
+  owners: ReadonlyMap<string, SessionOwnerProfile>;
+  sessions: ProjectSessions;
+}
+
+const NO_LIST: readonly SourceControlSession[] = Object.freeze([]);
+
+function sameOwners(a: ReadonlyMap<string, SessionOwnerProfile>, b: ReadonlyMap<string, SessionOwnerProfile>) {
+  if (a.size !== b.size) return false;
+  for (const [userId, profile] of a) {
+    const other = b.get(userId);
+    if (other?.id !== profile.id || other.name !== profile.name || other.avatarUrl !== profile.avatarUrl) return false;
+  }
+  return true;
+}
+
 export function createProjectSessionsReader({
   sourceControls,
   users,
@@ -112,26 +176,41 @@ export function createProjectSessionsReader({
   workItems?: Pick<WorkItemsStorage, 'listProjectSubscriptions'>;
 }): ProjectSessionsReader {
   const resolveOwnerProfiles = createSessionOwnerProfileResolver(users);
-  return async ({ orgId, factoryProjectId, userId }) => {
-    // Storage is partitioned per provider; a Factory's sessions can live in any of them.
-    const sessions = (
-      await Promise.all(
-        sourceControls.map(sourceControl =>
-          sourceControl.sessions.listByProject({ orgId, factoryProjectId, viewerUserId: userId }),
-        ),
-      )
-    ).flat();
-    const owners = await resolveOwnerProfiles(sessions.map(session => session.userId));
+  const built = new WeakMap<readonly SourceControlSession[], ProjectSessionsInputs>();
+  return async scope => {
+    const [lists, follows] = await Promise.all([
+      // Storage is partitioned per provider; a Factory's sessions can live in any of them.
+      Promise.all(sourceControls.map(sourceControl => sourceControl.sessions.listSharedByProject(scope))),
+      workItems?.listProjectSubscriptions(scope),
+    ]);
+    const owners = await resolveOwnerProfiles(lists.flatMap(list => list.map(session => session.userId)));
+    const key = lists[0] ?? NO_LIST;
+    const last = built.get(key);
+    if (
+      last !== undefined &&
+      last.follows === follows &&
+      last.lists.length === lists.length &&
+      last.lists.every((list, index) => list === lists[index]) &&
+      sameOwners(last.owners, owners)
+    ) {
+      return last.sessions;
+    }
     // The follow link is the only tie between a person's session and a card's phase sessions.
     const followed = new Map<string, string[]>();
-    for (const link of (await workItems?.listProjectSubscriptions({ orgId, factoryProjectId })) ?? []) {
+    for (const link of follows ?? []) {
       const workItemIds = followed.get(link.sessionId);
       if (workItemIds) workItemIds.push(link.workItemId);
       else followed.set(link.sessionId, [link.workItemId]);
     }
-    return sessions.map(session => ({
-      ...withOwnerProfile(session, owners),
-      followedWorkItemIds: followed.get(session.sessionId) ?? [],
-    }));
+    const sessions = new ProjectSessions(
+      lists.flat().map(session =>
+        Object.freeze({
+          ...withOwnerProfile(session, owners),
+          followedWorkItemIds: followed.get(session.sessionId) ?? [],
+        }),
+      ),
+    );
+    built.set(key, { lists, follows, owners, sessions });
+    return sessions;
   };
 }

@@ -13,6 +13,8 @@ const PROJECT_REPOSITORIES = 'factory_project_repositories';
 const SESSIONS = 'source_control_sessions';
 const SESSION_REPOSITORIES = 'source_control_session_repositories';
 
+const NO_SESSIONS: readonly SourceControlSession[] = Object.freeze([]);
+
 /**
  * The user already holds this branch in a session of the same factory on
  * another repository link, so the insert hit the factory-wide unique index.
@@ -545,6 +547,12 @@ export interface SourceControlStorageHandle {
       factoryProjectId: string;
       viewerUserId: string;
     }): Promise<SourceControlSession[]>;
+    /**
+     * System-level {@link listByProject}: every visibility, for the project session index only,
+     * which filters it per viewer; never expose it to a viewer. Frozen and shared by every caller
+     * until a session of the project or a link of this integration changes.
+     */
+    listSharedByProject(args: { orgId: string; factoryProjectId: string }): Promise<readonly SourceControlSession[]>;
     getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
     /**
      * Sessions started as side sessions by `originSessionId`. System-level (no
@@ -815,9 +823,27 @@ export class SourceControlStorage extends FactoryStorageDomain {
   readonly #linkedRepositoryListeners = new Set<(change: LinkedRepositoriesChange) => void>();
   #linkedRepositoryChangesShared = false;
   readonly #projectSessions = new ProbedList<SourceControlSession>();
+  readonly #linkedSessions = new WeakMap<
+    readonly SourceControlSession[],
+    Map<string, readonly SourceControlSession[]>
+  >();
 
   constructor() {
     super('source-control');
+  }
+
+  #linkedTo(sessions: readonly SourceControlSession[], linkIds: ReadonlySet<string>): readonly SourceControlSession[] {
+    const key = [...linkIds].toSorted().join('\u0000');
+    let byLinks = this.#linkedSessions.get(sessions);
+    if (!byLinks) this.#linkedSessions.set(sessions, (byLinks = new Map()));
+    let linked = byLinks.get(key);
+    if (!linked) {
+      linked = Object.freeze(
+        sessions.filter(session => session.projectRepositoryId !== null && linkIds.has(session.projectRepositoryId)),
+      );
+      byLinks.set(key, linked);
+    }
+    return linked;
   }
 
   /**
@@ -1134,6 +1160,35 @@ export class SourceControlStorage extends FactoryStorageDomain {
       });
       if (!project || !(await getInstallation({ orgId: args.orgId, id: row.installation_id }))) return null;
       return toConnection(row);
+    };
+
+    const linkedProjectSessions = async ({
+      orgId,
+      factoryProjectId,
+    }: {
+      orgId: string;
+      factoryProjectId: string;
+    }): Promise<readonly SourceControlSession[]> => {
+      const connections = await db().findMany<ConnectionDbRow>(CONNECTIONS, {
+        factory_project_id: factoryProjectId,
+        integration_id: integrationId,
+      });
+      if (connections.length === 0) return NO_SESSIONS;
+      const linkIds = new Set<string>();
+      for (const connection of connections) {
+        for (const link of await db().findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
+          connection_id: connection.id,
+        })) {
+          linkIds.add(link.id);
+        }
+      }
+      const where = { factory_project_id: factoryProjectId, org_id: orgId };
+      const sessions = await this.#projectSessions.read(
+        `${orgId}\u0000${factoryProjectId}`,
+        () => probeNewest(db(), SESSIONS, where, 'updated_at'),
+        async () => (await db().findMany<SessionDbRow>(SESSIONS, where)).map(toSession),
+      );
+      return this.#linkedTo(sessions, linkIds);
     };
 
     const requireConnection = async (args: { orgId: string; id: string }): Promise<ProjectSourceControlConnection> => {
@@ -1610,30 +1665,11 @@ export class SourceControlStorage extends FactoryStorageDomain {
             })
           ).map(toSession);
         },
-        listByProject: async ({ orgId, factoryProjectId, viewerUserId }) => {
-          const connections = await db().findMany<ConnectionDbRow>(CONNECTIONS, {
-            factory_project_id: factoryProjectId,
-            integration_id: integrationId,
-          });
-          if (connections.length === 0) return [];
-          const linkIds = new Set<string>();
-          for (const connection of connections) {
-            for (const link of await db().findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
-              connection_id: connection.id,
-            })) {
-              linkIds.add(link.id);
-            }
-          }
-          const where = { factory_project_id: factoryProjectId, org_id: orgId };
-          const sessions = await this.#projectSessions.read(
-            `${orgId}\u0000${factoryProjectId}`,
-            () => probeNewest(db(), SESSIONS, where, 'updated_at'),
-            async () => (await db().findMany<SessionDbRow>(SESSIONS, where)).map(toSession),
-          );
-          return sessions
-            .filter(session => session.projectRepositoryId !== null && linkIds.has(session.projectRepositoryId))
-            .filter(session => session.visibility !== 'private' || session.userId === viewerUserId);
-        },
+        listSharedByProject: linkedProjectSessions,
+        listByProject: async ({ viewerUserId, ...project }) =>
+          (await linkedProjectSessions(project)).filter(
+            session => session.visibility !== 'private' || session.userId === viewerUserId,
+          ),
         getBySessionId: async sessionId => {
           const row = await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId });
           return row && (await getProjectRepositoryById(row.project_repository_id)) ? toSession(row) : null;
