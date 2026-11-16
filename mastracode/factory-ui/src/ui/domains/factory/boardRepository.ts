@@ -57,7 +57,6 @@ interface CardRepositoryFacts {
   workItem?: { metadata: Record<string, unknown> | null };
 }
 
-/** The provider's facts about a card's source outrank what the card stored itself. */
 export function cardSourceMetadata(card: CardRepositoryFacts): Record<string, unknown> {
   return { ...card.metadata, ...card.workItem?.metadata };
 }
@@ -67,7 +66,6 @@ export type CardSessionRepository =
   | { kind: 'firstInEnvironment'; candidates: LinkedRepositoryPayload[] }
   | { kind: 'unavailable'; reason: string };
 
-/** Where a card's own session can start: the repository its source names, else the one it could live in. */
 export function cardSessionRepository(
   repositories: LinkedRepositoryPayload[],
   card: CardRepositoryFacts,
@@ -103,7 +101,6 @@ export function firstEnvironmentRepository(
   return first && candidates.find(candidate => candidate.projectRepositoryId === first.projectRepositoryId);
 }
 
-/** The linked repository a card's source lives in, else the board's primary repository. */
 export function cardProjectRepositoryId<Fallback extends string | undefined>(
   repositories: LinkedRepositoryPayload[],
   card: CardRepositoryFacts,
