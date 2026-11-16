@@ -854,6 +854,71 @@ it('does not mark a coordinator lost when a worker in another process released t
   expect(coordinator.isLost()).toBe(true);
 });
 
+// Documented limit: across processes the release only shows in the ownership record, and the next claim overwrites it.
+// A renewal that reaches storage after another execution has claimed the run sees a newer generation and counts as a
+// takeover, even though this run's own release came first. (#30206)
+it('marks a coordinator lost when its renewal lands after a remote release and a new claim of the run (#30206)', async () => {
+  vi.useFakeTimers();
+  const storage = new InMemoryStore();
+  const workflowsStore = (await storage.getStore('workflows'))!;
+  const pubsub = new EventEmitterPubSub();
+  const mastra = new Mastra({ storage, pubsub, logger: false });
+  instances.push(mastra);
+  const coordinator = await ExecutionFence.claim({
+    workflowsStore,
+    leaseProvider: pubsub,
+    agentId: 'agent',
+    runId: 'run',
+    mode: 'acquire',
+  });
+  onTestFinished(() => coordinator.stopHeartbeat());
+  const lost = vi.fn();
+  coordinator.onLost(lost);
+  const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+  const delivery = Promise.withResolvers<void>();
+  const renewals: boolean[] = [];
+  vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementation(async args => {
+    if (renewals.length === 0) await delivery.promise;
+    const result = await renew(args);
+    renewals.push(result.renewed);
+    return result;
+  });
+  await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+
+  const worker = await otherProcess(storage, pubsub);
+  const suspension: Event = {
+    id: 'suspend',
+    type: 'workflow.suspend',
+    runId: 'run',
+    createdAt: new Date(),
+    data: {
+      workflowId: 'durable-agentic-loop',
+      requestContext: { [MASTRA_DURABLE_EXECUTIONS_KEY]: { run: coordinator.claim } },
+    },
+  };
+  await worker.evented.settleEventedDurableExecution(worker.mastra, suspension);
+  const next = await worker.fences.ExecutionFence.claim({
+    workflowsStore,
+    leaseProvider: pubsub,
+    agentId: 'agent',
+    runId: 'run',
+    mode: 'acquire',
+  });
+  onTestFinished(() => next.stopHeartbeat());
+  expect(next.generation).toBeGreaterThan(coordinator.generation);
+  expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({
+    ownerId: next.executionId,
+    generation: next.generation,
+    live: true,
+  });
+  delivery.resolve();
+  await vi.advanceTimersByTimeAsync(0);
+
+  expect(renewals).toEqual([false]);
+  expect(coordinator.isLost()).toBe(true);
+  expect(lost).toHaveBeenCalledTimes(1);
+});
+
 // An abandoned release in this process is known at once: nothing will settle the run, so the coordinator's first failed
 // renewal after it reports the loss, as before #30206, without the grace a release made elsewhere gets. (#30206)
 it('marks a coordinator lost on its first failed renewal after this process abandoned the run (#30206)', async () => {
