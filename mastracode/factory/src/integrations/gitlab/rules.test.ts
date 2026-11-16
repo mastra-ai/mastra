@@ -158,9 +158,7 @@ async function setup(
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
       sandboxProvider: 'local',
-      sandboxWorkdir: '/workspace',
     });
   }
 

@@ -23,7 +23,7 @@ describe('GitLab listed merge requests through rules ingress', () => {
     });
     await sourceControl.projectRepositories.link({
       orgId: 'org-1', connectionId: connection.id, repositoryId: repository.id,
-      createdByUserId: 'user-1', sandboxProvider: 'local', sandboxWorkdir: '/workspace',
+      sandboxProvider: 'local', 
     });
     const sourceId = encodeSourceId({ host: 'gitlab.example.com', projectId: '101' });
     await seeded.intake.saveConfig({ orgId: 'org-1', config: { gitlab: { enabled: true, sourceIds: [sourceId] } } });
@@ -116,7 +116,7 @@ describe('GitLab listed merge requests through rules ingress', () => {
     const commit = seeded.workItems.commitRuleEvaluation.bind(seeded.workItems);
     let failOnce = true;
     const commitSpy = vi.spyOn(seeded.workItems, 'commitRuleEvaluation').mockImplementation(async input => {
-      if (failOnce && input.ingress.triggerType === 'gitlab.mergeRequestUpdated') {
+      if (failOnce && input.ingress.identity.includes(':poll:merge-request-head:')) {
         failOnce = false;
         throw new Error('transient commit failure');
       }

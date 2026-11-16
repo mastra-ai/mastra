@@ -86,7 +86,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       const config = prepareMock.mock.calls[0]![0];
       await storage.init();
 
-      // A new project: the retired `review_test_checks_enabled` column holds its default, false.
+      // A new project, with no project switch for publishing test checks.
       const project = await storage
         .getDomain<FactoryProjectsStorage>('projects')
         .create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shipyard' } });
@@ -110,9 +110,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         orgId: 'org-1',
         connectionId: connection.id,
         repositoryId: repository.id,
-        createdByUserId: 'user-1',
         sandboxProvider: 'local',
-        sandboxWorkdir: '/sandbox/app',
       });
       await sourceControl.sessions.create({
         sessionId: 'session-1',

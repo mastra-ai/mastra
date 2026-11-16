@@ -66,9 +66,7 @@ test.describe('Factory session navigation', () => {
             {
               id: 'fp-1',
               name: 'Session links',
-              repositories: [
-                listedRepository('repo-1', 'mastra-ai/mastra', { branch: 'main', sandboxWorkdir: '/repo' }),
-              ],
+              repositories: [listedRepository('repo-1', 'mastra-ai/mastra', { branch: 'main' })],
             },
             { id: 'fp-2', name: 'Another Factory', repositories: [] },
           ],

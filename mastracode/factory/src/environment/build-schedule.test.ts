@@ -65,9 +65,7 @@ async function seedProject(seed: FactoryStorageTestSeed) {
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'user-1',
     sandboxProvider: 'platform',
-    sandboxWorkdir: '/workspace/acme/api',
   });
   return project;
 }

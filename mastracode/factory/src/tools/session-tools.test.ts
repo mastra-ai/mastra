@@ -61,9 +61,7 @@ async function seedFactory(parentVisibility: SourceControlSessionVisibility = 'o
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'owner',
     sandboxProvider: 'local',
-    sandboxWorkdir: '/sandbox/mastra',
   });
   await sourceControl.sessions.create({
     sessionId: 'parent-session',
@@ -1280,9 +1278,7 @@ describe('factory_start_session in work-item mode', () => {
       orgId: 'org-1',
       connectionId: env.connection.id,
       repositoryId: second.id,
-      createdByUserId: 'owner',
       sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/docs',
     });
     const rowsBefore = await env.sessionRows();
 

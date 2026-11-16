@@ -48,7 +48,7 @@ function stubReviewBoard(decision?: FactoryDecisionSummary) {
           {
             id: FACTORY_ID,
             name: 'Acme Factory',
-            repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
+            repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main' })],
           },
         ],
       }),

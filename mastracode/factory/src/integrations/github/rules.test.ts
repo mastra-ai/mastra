@@ -62,9 +62,7 @@ async function setup(permission: string | undefined, rules?: GithubRuleOverrides
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'user-1',
     sandboxProvider: 'local',
-    sandboxWorkdir: '/workspace',
   });
   const github = {
     rules: resolveGithubRules(rules),
@@ -670,7 +668,7 @@ describe('GithubRules', () => {
     expect(await workItems.get({ orgId: 'org-1', id: item.id })).toEqual(item);
   });
 
-  it('persists only replacement decisions with the shared audit version', async () => {
+  it('persists only replacement decisions', async () => {
     const handler = vi.fn<NonNullable<GithubRuleOverrides['issueClosed']>>(context => ({
       type: 'transition',
       board: 'work',
@@ -681,7 +679,6 @@ describe('GithubRules', () => {
       issueClosed: handler,
     });
     await createLinkedIssue(workItems, project.id);
-    const commitEvaluation = vi.spyOn(workItems, 'commitRuleEvaluation');
     const service = new GithubRules({
       github,
       sourceControl,
@@ -698,7 +695,6 @@ describe('GithubRules', () => {
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions).toHaveLength(1);
     expect(decisions[0]?.decision).toMatchObject({ type: 'transition', board: 'work', stage: 'canceled' });
-    expect(commitEvaluation).toHaveBeenCalledWith(expect.objectContaining({ configVersion: 'custom-github-v2' }));
   });
 
   it('records disabled ingress without decisions and still evaluates unrelated events', async () => {
@@ -3889,9 +3885,7 @@ describe('GithubRules', () => {
       orgId: 'org-2',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-2',
       sandboxProvider: 'local',
-      sandboxWorkdir: '/workspace',
     });
     const service = new GithubRules({
       github,
@@ -4738,8 +4732,7 @@ describe('createGithubPullRequestReconciler', () => {
       orgId: 'org-1',
       factoryProjectId: context.project.id,
       workItemId: card.item.id,
-      ingress: { identity: 'settled-proposal', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'settled-proposal'},
       expectedRevision: card.item.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -4810,8 +4803,7 @@ describe('createGithubPullRequestReconciler', () => {
       orgId: 'org-1',
       factoryProjectId: context.project.id,
       workItemId: card.item.id,
-      ingress: { identity: 'failed-before-settlement', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'failed-before-settlement'},
       expectedRevision: card.item.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -4873,8 +4865,7 @@ describe('createGithubPullRequestReconciler', () => {
       orgId: 'org-1',
       factoryProjectId: context.project.id,
       workItemId: card.item.id,
-      ingress: { identity: 'failed-on-unknown-board', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'failed-on-unknown-board'},
       expectedRevision: card.item.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -7009,9 +7000,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         orgId: 'org-1',
         connectionId: h.projectRepository.connectionId,
         repositoryId: other.id,
-        createdByUserId: 'user-1',
         sandboxProvider: 'local',
-        sandboxWorkdir: '/workspace',
       });
       await h.integrationStorage.subscriptions.create({
         orgId: 'org-1',

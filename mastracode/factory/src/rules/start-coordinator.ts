@@ -382,7 +382,7 @@ export class FactoryStartCoordinator {
         cause: 'run_start',
       });
       if (transition.status === 'rejected') {
-        await storage.markPendingStart(prepared.binding.id, 'failed', transition.reason);
+        await storage.markPendingStart(prepared.binding.id, 'failed');
         throw new FactoryStartTransitionError(transition);
       }
       revision = transition.revision;

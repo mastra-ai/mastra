@@ -153,7 +153,7 @@ describe('IncidentioRules', () => {
   });
 
   it.each(['completed', 'canceled'])(
-    'closes linked follow-ups in state %s with shared audit metadata',
+    'closes linked follow-ups in state %s',
     async stateType => {
       const { project, service, workItems } = await setup();
       await workItems.upsert({
@@ -176,13 +176,7 @@ describe('IncidentioRules', () => {
       });
       expect(commit).toHaveBeenCalledWith(
         expect.objectContaining({
-          configVersion: 'factory-config-v1',
-          ingress: {
-            identity: `incidentio:${issue.id}:${issue.updatedAt}`,
-            // Closures must be stored under the close trigger, not the
-            // observation trigger, so trigger-based audit queries stay correct.
-            triggerType: 'incidentio.followUpClosed',
-          },
+          ingress: { identity: `incidentio:${issue.id}:${issue.updatedAt}` },
         }),
       );
       expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([

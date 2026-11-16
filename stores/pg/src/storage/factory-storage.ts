@@ -602,6 +602,27 @@ export class PgFactoryStorage extends FactoryStorage {
       await this.#pool.query(`ALTER TABLE "${schema.name}" ALTER COLUMN "${name}" DROP NOT NULL`);
     }
 
+    // Retiring evolution: a column the schema no longer declares stays in the
+    // table with its data, but a NOT NULL on it would fail every insert that
+    // now omits it — drop the constraint. Primary-key columns are left alone.
+    const { rows: required } = await this.#pool.query<{ column_name: string }>(
+      `SELECT c.column_name FROM information_schema.columns c
+        WHERE c.table_schema = current_schema() AND c.table_name = $1 AND c.is_nullable = 'NO'
+          AND NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage k
+              ON k.constraint_schema = tc.constraint_schema AND k.constraint_name = tc.constraint_name
+            WHERE tc.table_schema = c.table_schema AND tc.table_name = c.table_name
+              AND tc.constraint_type = 'PRIMARY KEY' AND k.column_name = c.column_name
+          )`,
+      [schema.name],
+    );
+    for (const { column_name: name } of required) {
+      // Every column this adapter created is a plain identifier; leave anything else untouched.
+      if (name in schema.columns || !IDENTIFIER_RE.test(name)) continue;
+      await this.#pool.query(`ALTER TABLE "${schema.name}" ALTER COLUMN "${name}" DROP NOT NULL`);
+    }
+
     // Widening evolution: a column now declared bigint may still be the
     // INTEGER an older schema created, which epoch-ms values overflow.
     for (const [name, spec] of Object.entries(schema.columns)) {

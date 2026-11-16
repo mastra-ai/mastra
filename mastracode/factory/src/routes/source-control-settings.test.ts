@@ -59,9 +59,7 @@ async function seedRepository(integrationId: 'github' | 'gitlab') {
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'user-1',
     sandboxProvider: 'local',
-    sandboxWorkdir: '/workspace/acme',
   });
   return { sourceControl, linked, project };
 }

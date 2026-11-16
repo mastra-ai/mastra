@@ -25,7 +25,7 @@ function stubFactory({ admin }: { admin: boolean }) {
             id: FACTORY_ID,
             name: 'Acme Factory',
             autoRunEnabled: false,
-            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main' })],
           },
         ],
       }),

@@ -17,16 +17,14 @@ export const factoryProjects: FactoryProjectPayload[] = [
 
 export const factoryRepositories = {
   [ACTIVE_FACTORY_ID]: [
-    listedRepository(FIRST_REPOSITORY_ID, 'mastra-ai/mastra', { branch: 'main', sandboxWorkdir: '/workspaces/mastra' }),
+    listedRepository(FIRST_REPOSITORY_ID, 'mastra-ai/mastra', { branch: 'main' }),
     listedRepository(SECOND_REPOSITORY_ID, 'mastra-ai/docs', {
       branch: 'main',
-      sandboxWorkdir: '/workspaces/mastra-docs',
     }),
   ],
   [OTHER_FACTORY_ID]: [
     listedRepository(OTHER_REPOSITORY_ID, 'other-org/other-repo', {
       branch: 'main',
-      sandboxWorkdir: '/workspaces/other',
     }),
   ],
 };

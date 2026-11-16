@@ -100,7 +100,6 @@ function stubThreadRoute(workItem: ReturnType<typeof createWireWorkItem>, subscr
               listedRepository(REPO_ID, PROJECT_PATH, {
                 integrationId: 'gitlab',
                 branch: 'main',
-                sandboxWorkdir: '/local/app',
               }),
             ],
           },

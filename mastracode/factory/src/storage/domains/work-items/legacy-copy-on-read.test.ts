@@ -130,8 +130,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('legacy cards co
       expectedRevision: updated!.item.revision,
       destinationStage: 'planning',
       actorId: USER,
-      ingress: { identity: `reopen-${card.id}`, triggerType: 'manual', transitionId: `reopen-${card.id}` },
-      configVersion: 'legacy',
+      ingress: { identity: `reopen-${card.id}`, transitionId: `reopen-${card.id}` },
       causalChain: [],
       evaluation: { outcome: 'accepted', decisions: [] },
     });

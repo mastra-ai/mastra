@@ -205,9 +205,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         orgId: ORG,
         connectionId: connection.id,
         repositoryId: repository.id,
-        createdByUserId: OWNER,
         sandboxProvider: 'local',
-        sandboxWorkdir: '/sandbox/mastra',
       });
       // A phase nobody started is the Factory's own; one a person started is theirs.
       const owner = options?.ownedByFactory ? factoryPrincipalId(project.id) : OWNER;

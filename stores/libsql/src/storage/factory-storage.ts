@@ -515,25 +515,39 @@ export class LibSQLFactoryStorage extends FactoryStorage {
 
   /**
    * A table created by an older schema may still say NOT NULL on a column the
-   * current schema declares nullable — inserts of null then fail on databases
-   * that predate the change. SQLite has no `ALTER COLUMN DROP NOT NULL`, so
-   * relaxation swaps in a table rebuilt from the current schema (create shadow
-   * → copy → drop → rename) atomically.
+   * current schema declares nullable, or on a column the schema no longer
+   * declares at all — inserts that write null or omit it then fail on
+   * databases that predate the change. SQLite has no `ALTER COLUMN DROP NOT
+   * NULL`, so relaxation swaps in a rebuilt table (create shadow → copy → drop
+   * → rename) atomically. Columns the schema no longer declares are carried
+   * over, nullable, with their data and defaults.
    */
   async #relaxDriftedNotNulls(schema: CollectionSchema): Promise<void> {
     const info = await this.#client.execute(`PRAGMA table_info("${schema.name}")`);
-    const hasDrift = info.rows.some(row => {
-      const spec = schema.columns[String(row.name)];
-      if (!spec || spec.type === 'uuid-pk' || spec.primaryKey) return false;
-      return spec.nullable === true && Number(row.notnull) === 1;
-    });
+    // Every column this adapter created is a plain identifier; leave anything else untouched.
+    const retired = info.rows.filter(
+      row => !(String(row.name) in schema.columns) && IDENTIFIER_RE.test(String(row.name)),
+    );
+    const hasDrift =
+      retired.some(row => Number(row.notnull) === 1 && Number(row.pk) === 0) ||
+      info.rows.some(row => {
+        const spec = schema.columns[String(row.name)];
+        if (!spec || spec.type === 'uuid-pk' || spec.primaryKey) return false;
+        return spec.nullable === true && Number(row.notnull) === 1;
+      });
     if (!hasDrift) return;
 
     // The additive ADD COLUMN pass has already run, so every schema column
     // exists on the old table and can be copied straight across.
-    const ddl = Object.entries(schema.columns).map(([name, spec]) => this.#columnDdl(name, spec));
+    const ddl = [
+      ...Object.entries(schema.columns).map(([name, spec]) => this.#columnDdl(name, spec)),
+      ...retired.map(row => {
+        const fallback = row.dflt_value === null || row.dflt_value === undefined ? '' : ` DEFAULT ${row.dflt_value}`;
+        return `"${String(row.name)}" ${String(row.type)}${fallback}`;
+      }),
+    ];
     const shadow = `${schema.name}__nullable_rebuild`;
-    const cols = Object.keys(schema.columns)
+    const cols = [...Object.keys(schema.columns), ...retired.map(row => String(row.name))]
       .map(name => `"${name}"`)
       .join(', ');
     await this.#client.batch(

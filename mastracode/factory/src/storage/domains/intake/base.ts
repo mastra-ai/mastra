@@ -98,8 +98,6 @@ export const INTAKE_SOURCE_BINDINGS_SCHEMA: CollectionSchema = {
     integration_id: { type: 'text' },
     source_id: { type: 'text' },
     factory_project_id: { type: 'text' },
-    /** Retired: intake routes decide where a source's cards land. Nothing reads or writes it. */
-    board: { type: 'text', nullable: true },
     created_by_user_id: { type: 'text', nullable: true },
     created_at: { type: 'timestamp' },
     updated_at: { type: 'timestamp' },
@@ -127,8 +125,6 @@ export const INTAKE_SOURCE_SUBSCRIPTIONS_SCHEMA: CollectionSchema = {
     integration_id: { type: 'text' },
     source_id: { type: 'text' },
     factory_project_id: { type: 'text' },
-    /** Retired: intake routes decide where a source's cards land. Nothing reads or writes it. */
-    board: { type: 'text', nullable: true },
     /** Labels whose issues this binding takes, as the user typed them; `null` takes every unclaimed issue. */
     labels: { type: 'json', nullable: true },
     created_by_user_id: { type: 'text', nullable: true },
@@ -228,34 +224,6 @@ export function normalizeBindingLabels(labels: readonly string[]): string[] {
   return kept;
 }
 
-/**
- * Retired: label routes sent labelled items to a board. Intake routes replaced them; the collection
- * stays registered so an earlier build that is rolled back to still finds it, but nothing reads or
- * writes it.
- */
-export const INTAKE_LABEL_ROUTES_SCHEMA: CollectionSchema = {
-  name: 'intake_label_routes',
-  columns: {
-    id: { type: 'uuid-pk' },
-    org_id: { type: 'text' },
-    factory_project_id: { type: 'text' },
-    integration_id: { type: 'text' },
-    /** Label as the provider reports it; matched case-insensitively. */
-    label: { type: 'text' },
-    board: { type: 'text' },
-    created_by_user_id: { type: 'text', nullable: true },
-    created_at: { type: 'timestamp' },
-    updated_at: { type: 'timestamp' },
-  },
-  indexes: [{ name: 'intake_label_routes_project_idx', columns: ['org_id', 'factory_project_id'] }],
-  uniqueIndexes: [
-    {
-      name: 'intake_label_routes_org_project_integration_label_unique',
-      columns: ['org_id', 'factory_project_id', 'integration_id', 'label'],
-    },
-  ],
-};
-
 /** Labels are matched the way GitHub treats them: case-insensitively. */
 export function normalizeIntakeLabel(label: string): string {
   return label.trim().toLowerCase();
@@ -329,7 +297,6 @@ export class IntakeStorage extends FactoryStorageDomain {
       INTAKE_SOURCE_BINDINGS_SCHEMA,
       INTAKE_SOURCE_SUBSCRIPTIONS_SCHEMA,
       INTAKE_DATA_MIGRATIONS_SCHEMA,
-      INTAKE_LABEL_ROUTES_SCHEMA,
     ]);
     await this.#foldLegacyUserSelections();
     await this.#copyLegacyBindings();
@@ -398,7 +365,6 @@ export class IntakeStorage extends FactoryStorageDomain {
     await this.ops.deleteMany('intake_source_bindings', {});
     await this.ops.deleteMany('intake_source_subscriptions', {});
     await this.ops.deleteMany('intake_data_migrations', {});
-    await this.ops.deleteMany('intake_label_routes', {});
   }
 
   get #db(): FactoryStorageOps {

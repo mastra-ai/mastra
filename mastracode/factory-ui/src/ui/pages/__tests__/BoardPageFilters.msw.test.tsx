@@ -86,7 +86,7 @@ function renderBoard(initialSearch = '', issues = [issue(10, ['bug'], 'alice'), 
           {
             id: 'factory-1',
             name: 'Factory',
-            repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main', sandboxWorkdir: '' })],
+            repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main' })],
           },
         ],
       }),

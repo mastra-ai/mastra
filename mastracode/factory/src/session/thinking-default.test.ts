@@ -49,9 +49,7 @@ async function setup(
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'owner',
       sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/mastra',
     });
     await sourceControl.sessions.create({
       orgId: 'org-1',

@@ -116,7 +116,6 @@ function projectRepositoryRow(row: Record<string, any>) {
     repositoryId,
     branch: 'main',
     sandboxProvider: 'railway',
-    sandboxWorkdir: '/workspace/hello',
     setupCommand: null,
     teardownCommand: null,
     createdAt: now,
@@ -579,8 +578,6 @@ describe('install flow binds the installation to the org', () => {
           installationId: 7,
           installationStorageId: tables.installations[0]!.id,
           sandboxProvider: 'custom',
-          // Display-only listing guess: repos clone into the VM's home.
-          sandboxWorkdir: '~/hello',
         },
       ],
     });
