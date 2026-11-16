@@ -25,6 +25,10 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
 
 
+import { factoryWorkItemUrl } from '../../links.js';
+import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import { createAlertThreads } from '../alerts/mention.js';
+import { alertThreadOwnsPullRequestAnnouncements } from '../alerts/slack-status.js';
 import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { announcePullRequest } from '../channel-thread-announcements.js';
 import { parseCreatedPullRequest } from '../github/session-subscriptions.js';
@@ -197,6 +201,8 @@ export class SlackIntegration implements FactoryIntegration {
    * boot before diagnostics are served.
    */
   #repoBackedSessions = false;
+  /** Set by `channels()`; reads the card a run serves when deciding what to announce. */
+  #workItems: Pick<WorkItemsStorage, 'findActiveRunBindingByThread' | 'get'> | undefined;
 
   constructor(config: SlackIntegrationConfig) {
     const mode = config.mode ?? 'webhook';
@@ -266,13 +272,40 @@ export class SlackIntegration implements FactoryIntegration {
     const url = parseCreatedPullRequest(toolContext);
     const threadId = (requestContext?.get('controller') as { threadId?: string } | undefined)?.threadId;
     if (!url || !requestContext || !threadId || !(await isSlackThread(requestContext, this.#deps))) return;
+    if (await this.#alertOwnsAnnouncements(requestContext)) return;
     // Not awaited: the tool call must not wait on Slack.
     void announcePullRequest(this.#channels?.(), threadId, 'opened', url).catch(error =>
       console.warn('[slack] pull request opened announcement failed', error),
     );
   }
 
+  /** A Mastra Alerts card's own Slack status carries its PR link; see `alertThreadOwnsPullRequestAnnouncements`. */
+  async #alertOwnsAnnouncements(requestContext: RequestContext): Promise<boolean> {
+    const controller = requestContext.get('controller') as
+      { threadId?: string; resourceId?: string; sessionId?: string } | undefined;
+    const user = requestContext.get('user') as { organizationId?: string } | undefined;
+    if (!this.#workItems || !controller?.threadId || !controller.resourceId || !controller.sessionId) return false;
+    if (!user?.organizationId) return false;
+    try {
+      const binding = await this.#workItems.findActiveRunBindingByThread({
+        orgId: user.organizationId,
+        threadId: controller.threadId,
+        resourceId: controller.resourceId,
+        sessionId: controller.sessionId,
+      });
+      if (!binding) return false;
+      return alertThreadOwnsPullRequestAnnouncements(
+        await this.#workItems.get({ orgId: binding.orgId, id: binding.workItemId }),
+      );
+    } catch (error) {
+      // A duplicate announcement beats a missing one.
+      console.warn('[slack] Could not check whether an alert owns this thread:', error);
+      return false;
+    }
+  }
+
   channels(ctx: IntegrationContext): FactoryChannelsConfig {
+    this.#workItems = ctx.runtime?.workItems;
     // Repo-backed sessions select the source-control provider from the linked
     // repository on each Factory project.
     const sourceControls =
@@ -296,6 +329,17 @@ export class SlackIntegration implements FactoryIntegration {
       modelCredentials: ctx.storage.modelCredentials,
       voiceSettings: ctx.storage.voiceSettings,
       workItems: ctx.runtime?.workItems,
+      ...(ctx.runtime?.workItems
+        ? {
+            alertThreads: createAlertThreads(ctx.runtime.workItems, {
+              workItemUrl: card =>
+                factoryWorkItemUrl({
+                  factoryProjectId: card.factoryProjectId,
+                  workItemId: card.id,
+                }),
+            }),
+          }
+        : {}),
       adapterOptions: this.#adapterOptions,
     });
   }

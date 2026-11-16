@@ -2347,6 +2347,66 @@ describe('FactoryDecisionDispatcher', () => {
     });
   });
 
+  it('tells beforeSkillRun about the bound session before the skill starts, and starts it even when that hook fails', async () => {
+    for (const fails of [false, true]) {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'invokeSkill',
+        role: 'work',
+        skillName: 'understand-issue',
+        arguments: 'Issue 42',
+        idempotencyKey: 'skill-1',
+      });
+      const { controller, session } = createSession();
+      await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+            title: 'Fix issue',
+            stages: ['execute'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'work',
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'kickoff-null',
+        kickoffMessage: null,
+      });
+      const order: string[] = [];
+      session.sendSignal.mockImplementation(async () => void order.push('skill'));
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const beforeSkillRun = vi.fn(
+        async (input: { item: { id: string }; binding: { threadId: string }; session: unknown }) => {
+          order.push('before');
+          if (fails) throw new Error('slack down');
+          expect(input.item.id).toBe(item.id);
+          expect(input.binding.threadId).toBe('thread-1');
+          expect(input.session).toBe(session);
+        },
+      );
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        boards: autoStartingBoards(),
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        beforeSkillRun: beforeSkillRun as never,
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect(beforeSkillRun).toHaveBeenCalledOnce();
+      expect(order).toEqual(['before', 'skill']);
+      warn.mockRestore();
+    }
+  });
+
   it('sends the resolved skill activation as the bound session kickoff prompt', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {

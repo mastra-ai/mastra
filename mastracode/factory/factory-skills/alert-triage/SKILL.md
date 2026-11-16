@@ -27,6 +27,8 @@ If reads fail (a token error, "resolved too long ago", a read-token limit), say 
 
 Tie the failing spans and logs to code in the card's repository: the agent, tool, workflow or route named in the spans, and the error and stack in the logs. Check recent commits on those paths (`git log -p --since=…`). Say whether the cause is in the code, in configuration, or outside it (a provider outage or rate limit, bad input).
 
+Then, before writing any code, post the diagnosis to the alert's Slack thread with `alert_post_update` (`kind: "diagnosis"`): what's failing, why and how sure you are, and the evidence links (see the handoff format below). People watching the alert read this first. If it returns `posted: false`, carry on; the card has no Slack thread.
+
 ## 3. Fix
 
 When the cause is in the repository and the fix is small and clear, make it on a new branch, add or update a test that reproduces the failure, and open a pull request against the default branch. The title names the alert. The body has the diagnosis, the evidence (the same `dashboardUrl` links, log lines, metric values) and the risk.
@@ -34,6 +36,8 @@ When the cause is in the repository and the fix is small and clear, make it on a
 Never merge, approve or enable auto-merge. A human reviews the pull request.
 
 When there is no safe code fix, open no pull request and say why and what a human should do.
+
+Then post the outcome with `alert_post_update`: `kind: "fix"` with `pullRequestUrl` and a few lines on what the change does and its risk, or `kind: "no_fix"` with why and what a human should do. Post each kind once; calling it again edits the earlier reply.
 
 ## 4. Hand off
 

@@ -418,6 +418,29 @@ describe('createWorkItemRunEndReporter', () => {
     });
   });
 
+  it('tells the run-end hook first, with the same input', async () => {
+    const env = reporting();
+    const order: string[] = [];
+    const onRunEnd = vi.fn(async () => void order.push('hook'));
+    const report = createWorkItemRunEndReporter({
+      workItems: workItems([subscriber('item-7', 'session-1')]),
+      reporting: async () => (order.push('reporting'), env.reporting),
+      onRunEnd,
+    });
+    const input = {
+      orgId: 'org-1',
+      factoryProjectId: 'project-1',
+      workItemId: 'item-7',
+      role: 'work',
+      sender: SENDER,
+      since: new Date(),
+      outcome: { status: 'failed', reason: 'sandbox crashed' },
+    } as const;
+    await report(input);
+    expect(onRunEnd).toHaveBeenCalledWith(input);
+    expect(order).toEqual(['hook', 'reporting']);
+  });
+
   it('never throws when delivery fails', async () => {
     const env = reporting();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

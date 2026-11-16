@@ -376,6 +376,43 @@ describe('handler dispatch gating', () => {
     expect(prime).toHaveBeenCalledExactlyOnceWith(ctx.requestContext);
   });
 
+  it("lands a mention in an alert's thread on the alert card, with the card's context", async () => {
+    const thread = makeThread();
+    thread.id = 'slack:C-1:1700.1';
+    thread.isSubscribed = vi.fn().mockResolvedValue(false);
+    const accountLinks = fullStore({ orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' });
+    const card = { id: 'card-1', orgId: 'org-1', factoryProjectId: 'fp-alerts', preamble: 'ALERT CONTEXT' };
+    const alertThreads = { find: vi.fn().mockResolvedValue(card), recordMention: vi.fn().mockResolvedValue(undefined) };
+    const message = makeMessage('T-1');
+    const defaultHandler = vi.fn();
+    const handlers = createHandlers({ accountLinks, projects: makeProjects([{ id: 'fp-1' }]), alertThreads });
+
+    await handlers.onMention!(thread, message, defaultHandler, handlerCtx(chatOnlyMastra()));
+
+    expect(alertThreads.find).toHaveBeenCalledWith({ teamId: 'T-1', threadId: 'slack:C-1:1700.1' });
+    expect(alertThreads.recordMention).toHaveBeenCalledWith(card, expect.objectContaining({ text: 'hello bot' }));
+    expect(defaultHandler).toHaveBeenCalledWith(
+      thread,
+      expect.objectContaining({ text: 'ALERT CONTEXT\n\nhello bot' }),
+    );
+  });
+
+  it("ignores another organization's alert card in the thread", async () => {
+    const thread = makeThread();
+    thread.id = 'slack:C-1:1700.1';
+    thread.isSubscribed = vi.fn().mockResolvedValue(false);
+    const accountLinks = fullStore({ orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' });
+    const alertThreads = {
+      find: vi.fn().mockResolvedValue({ id: 'c', orgId: 'org-2', factoryProjectId: 'x', preamble: 'P' }),
+      recordMention: vi.fn(),
+    };
+    const message = makeMessage('T-1');
+    const handlers = createHandlers({ accountLinks, projects: makeProjects([{ id: 'fp-1' }]), alertThreads });
+    await handlers.onMention!(thread, message, vi.fn(), handlerCtx(chatOnlyMastra()));
+    expect(alertThreads.recordMention).not.toHaveBeenCalled();
+    expect(message.text).toBe('hello bot');
+  });
+
   it("primes the linked sender's credentials before a fresh mention dispatches", async () => {
     // A mention after a restart: no Factory session exists yet and nothing has
     // warmed the credential snapshot, so the gate itself must prime it.

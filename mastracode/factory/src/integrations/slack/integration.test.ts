@@ -6,6 +6,8 @@ vi.mock('@mastra/slack', () => ({
   createSlackAdapter: vi.fn(() => ({ __adapter: true })),
 }));
 
+import { ALERT_INTEGRATION_ID } from '../alerts/rules.js';
+import { ALERT_SLACK_STATUS_KEY } from '../alerts/slack-status.js';
 import { SlackIntegration } from './integration.js';
 
 function ctxWith(overrides: Record<string, unknown> = {}) {
@@ -340,7 +342,7 @@ describe('SlackIntegration.postToolObserver', () => {
     context: {},
   };
 
-  function setup(platform: string | null) {
+  function setup(platform: string | null, workItems?: Record<string, unknown>) {
     const post = vi.fn(async () => ({ id: 'reply-ts' }));
     const addReaction = vi.fn(async () => {});
     const channels = {
@@ -353,10 +355,10 @@ describe('SlackIntegration.postToolObserver', () => {
     integration.initialize({ channels: () => channels as any });
     integration.channels({
       storage: { projects: {} },
-      runtime: { workItems: {} },
+      runtime: { workItems },
     } as any);
     const requestContext = new Map<string, unknown>([
-      ['controller', { threadId: 'thread-1', sessionId: 'session-1' }],
+      ['controller', { threadId: 'thread-1', resourceId: 'resource-1', sessionId: 'session-1' }],
       ['user', { id: 'user-1', organizationId: 'org-1' }],
     ]);
     return { integration, requestContext: requestContext as any, post, addReaction };
@@ -384,5 +386,41 @@ describe('SlackIntegration.postToolObserver', () => {
       requestContext: linked.requestContext,
     });
     expect(linked.post).not.toHaveBeenCalled();
+  });
+
+  it("leaves the pull request to a Mastra Alerts card's own status in its thread, and announces when the check fails", async () => {
+    const alertCard = {
+      id: 'card-1',
+      externalSource: { integrationId: ALERT_INTEGRATION_ID },
+      workItem: {
+        sources: [
+          {
+            integrationId: 'slack',
+            sourceType: 'slack-thread',
+            workspaceId: 'T1',
+            externalId: 'slack-thread:T1:slack:C1:1700.1',
+          },
+        ],
+      },
+      metadata: {
+        [ALERT_SLACK_STATUS_KEY]: { stage: 'investigating', messages: { status: { ts: '1700.2', claimedAt: 'x' } } },
+      },
+    };
+    const owned = setup('slack', {
+      findActiveRunBindingByThread: vi.fn(async () => ({ orgId: 'org-1', workItemId: 'card-1' })),
+      get: vi.fn(async () => alertCard),
+    });
+    await owned.integration.postToolObserver({ toolContext: prTool, requestContext: owned.requestContext });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(owned.post).not.toHaveBeenCalled();
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const broken = setup('slack', {
+      findActiveRunBindingByThread: vi.fn(async () => Promise.reject(new Error('db down'))),
+      get: vi.fn(),
+    });
+    await broken.integration.postToolObserver({ toolContext: prTool, requestContext: broken.requestContext });
+    await vi.waitFor(() => expect(broken.post).toHaveBeenCalled());
+    warn.mockRestore();
   });
 });

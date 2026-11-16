@@ -46,7 +46,8 @@ import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/bas
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
-import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, FactoryRunBindingRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { FactoryRunEndInput } from '../tools/reports.js';
 import type { CardSource } from './kept-cards.js';
 
 /** A push to a repository linked to a project, as a version-control integration reports it. */
@@ -73,6 +74,11 @@ export interface IntegrationHooks {
  * tools into one dynamic tool set.
  */
 export type IntegrationTools = Extract<NonNullable<MastraCodeConfig['extraTools']>, Record<string, unknown>>;
+
+/** The settings a {@link FactoryIntegration.beforeWorkItemRun} hook may write on a run's memory thread. */
+export interface WorkItemRunThread {
+  setSettingOn(args: { threadId: string; key: string; value: unknown }): Promise<void>;
+}
 
 export interface IntegrationPostToolContext {
   toolName: string;
@@ -283,6 +289,14 @@ export interface FactoryIntegration {
    * integration cannot prevent another from observing the same tool result.
    */
   postToolObserver?(args: { toolContext: IntegrationPostToolContext; requestContext?: RequestContext }): Promise<void>;
+  /**
+   * Called before the dispatcher starts a skill run on a work item's session, once the session is
+   * up. `thread` writes settings on the run's memory thread, e.g. to link it to a chat thread.
+   * Failures are logged; the run starts regardless.
+   */
+  beforeWorkItemRun?(args: { item: Card; binding: FactoryRunBindingRecord; thread: WorkItemRunThread }): Promise<void>;
+  /** Called when a work item's run ends (done, failed or blocked), before its followers are told. Failures are logged. */
+  afterWorkItemRun?(args: FactoryRunEndInput): Promise<void>;
   /**
    * Background workers the integration needs running for its lifecycle
    * (e.g. polling an upstream that doesn't support webhooks). Optional

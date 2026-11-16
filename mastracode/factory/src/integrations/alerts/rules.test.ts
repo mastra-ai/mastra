@@ -4,8 +4,10 @@ import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import type { PlatformAlertEvent } from '../../rules/types.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import { createAlertThreads } from './mention.js';
 import { ALERT_STATE_KEY, ALERT_TIMELINE_KEY, findAlertCardForThread, PlatformAlertRules } from './rules.js';
 import type { PlatformAlertRulesOptions } from './rules.js';
+import { bindAlertRunThread, bindAlertRunsOnThreadLink } from './run-thread.js';
 import type { AlertCardState, AlertTimelineEntry } from './state.js';
 
 const T0 = Date.parse('2026-11-13T10:00:00Z');
@@ -242,5 +244,105 @@ describe('PlatformAlertRules', () => {
     const [card] = await cards();
     expect(timeline(card!)).toEqual(['fired', 'recovered']);
     expect(state(card!).incidents.i1?.resolvedAt).not.toBeNull();
+  });
+
+  it("links the card's run thread to the alert's Slack thread once the thread is known", async () => {
+    const { ingest, drain, cards } = await setup();
+    await ingest(alert('alert.opened', 'i1'));
+    await drain();
+    const setSettingOn = vi.fn(async () => undefined);
+    const thread = { setSettingOn };
+    const binding = { threadId: 'run-thread-1', sessionId: 'session-1' };
+    expect(await bindAlertRunThread({ item: (await cards())[0]!, binding, thread })).toBe(false);
+
+    await ingest(
+      { ...alert('alert.thread_linked', 'i1'), slack: { teamId: 'T1', channelId: 'C1', ts: '1700.1' } },
+      T0 + MIN,
+    );
+    expect(await bindAlertRunThread({ item: (await cards())[0]!, binding, thread })).toBe(true);
+    expect(Object.fromEntries(setSettingOn.mock.calls.map(([call]) => [call.key, call.value]))).toEqual({
+      channel_platform: 'slack',
+      channel_externalThreadId: 'slack:C1:1700.1',
+      channel_externalChannelId: 'C1',
+      factorySessionId: 'session-1',
+    });
+    expect(setSettingOn.mock.calls.every(([call]) => call.threadId === 'run-thread-1')).toBe(true);
+  });
+
+  it('binds a run that started before the thread was known when thread_linked arrives', async () => {
+    const stamps: Record<string, Record<string, unknown>> = {};
+    let workItems: Awaited<ReturnType<typeof setup>>['seeded']['workItems'] | undefined;
+    const { seeded, project, ingest, drain, cards, runs } = await setup({
+      onThreadAttached: async card => {
+        await bindAlertRunsOnThreadLink({
+          card,
+          listRunBindings: (orgId, factoryProjectId, workItemId) =>
+            workItems!.listRunBindings(orgId, factoryProjectId, workItemId),
+          getSession: async sessionId => ({
+            thread: {
+              setSettingOn: async ({ threadId, key, value }) => {
+                (stamps[`${sessionId}/${threadId}`] ??= {})[key] = value;
+              },
+            },
+          }),
+        });
+      },
+    });
+    workItems = seeded.workItems;
+    await ingest(alert('alert.opened', 'i1'));
+    await drain();
+    const [card] = await cards();
+    const started = (session: string) =>
+      seeded.workItems.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        workItem: { id: card!.id, input: { title: card!.title, stages: ['execute'], sessions: {}, metadata: {} } },
+        role: session,
+        session: { sessionId: `session-${session}`, branch: `factory/${session}`, threadId: `thread-${session}` },
+        resourceId: 'resource-1',
+        kickoffKey: `kickoff-${session}`,
+        kickoffMessage: null,
+      });
+    await started('work');
+    const revoked = await started('review');
+    await seeded.workItems.revokeRunBinding({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      bindingId: revoked.binding.id,
+      revokedAt: new Date(T0),
+    });
+    const runsBefore = (await runs()).length;
+
+    await ingest(
+      { ...alert('alert.thread_linked', 'i1'), slack: { teamId: 'T1', channelId: 'C1', ts: '1700.1' } },
+      T0 + MIN,
+    );
+
+    expect(stamps).toEqual({
+      'session-work/thread-work': {
+        channel_platform: 'slack',
+        channel_externalThreadId: 'slack:C1:1700.1',
+        channel_externalChannelId: 'C1',
+        factorySessionId: 'session-work',
+      },
+    });
+    expect((await runs()).length).toBe(runsBefore);
+  });
+
+  it('records a mention in the alert thread on the card and briefs the session', async () => {
+    const { seeded, ingest, drain, cards, timeline } = await setup();
+    await ingest(alert('alert.opened', 'i1'));
+    await drain();
+    await ingest(
+      { ...alert('alert.thread_linked', 'i1'), slack: { teamId: 'T1', channelId: 'C1', ts: '1700.1' } },
+      T0 + MIN,
+    );
+    const threads = createAlertThreads(seeded.workItems);
+    const found = await threads.find({ teamId: 'T1', threadId: 'slack:C1:1700.1' });
+    expect(found?.preamble).toContain('Incident ids: i1');
+    await threads.recordMention(found!, { author: 'daniel', text: 'is this the deploy?', at: new Date(T0 + 2 * MIN) });
+    const [card] = await cards();
+    expect(timeline(card!)).toEqual(['fired', 'mention']);
   });
 });
