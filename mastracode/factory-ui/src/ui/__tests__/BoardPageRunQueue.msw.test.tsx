@@ -134,7 +134,7 @@ describe('Board run queue', () => {
     const user = userEvent.setup();
     renderBoard();
 
-    await user.click(await screen.findByRole('button', { name: '2 queued, 2 running on this server' }));
+    await user.click(await screen.findByRole('button', { name: '2 queued, 4 running on this server' }));
 
     const menu = await screen.findByRole('menu');
     expect(menu.textContent).toMatch(
