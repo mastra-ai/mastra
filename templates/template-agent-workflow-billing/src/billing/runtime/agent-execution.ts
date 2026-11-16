@@ -202,7 +202,7 @@ export class AgentExecution<Agents extends AgentRegistry> {
       false,
       undefined,
       0,
-      undefined,
+      resource.agentDependencies,
       resource.artifactSlots,
     );
     try {

@@ -379,29 +379,60 @@ export function studioChatProxy(
         // Only a long-lived browser subscription disappearing ends conversation activity.
         const subscription = Symbol();
         runtime.subscriptions.set(threadId, subscription);
-        const disconnect = () => {
-          if (runtime.subscriptions.get(threadId!) === subscription)
-            runtime.request.run(conversation, () => runtime.stop(conversation, agent));
+        const signal = context.req.raw.signal;
+        let cleanup: Promise<void> | undefined;
+        const disconnect = () =>
+          (cleanup ??= (async () => {
+            signal.removeEventListener('abort', onAbort);
+            try {
+              if (runtime.subscriptions.get(threadId!) === subscription)
+                runtime.request.run(conversation, () => runtime.stop(conversation, agent));
+            } finally {
+              await runtime.release(conversation, subscription);
+            }
+          })());
+        const onAbort = () => {
+          void disconnect().catch(() => {});
         };
-        context.req.raw.signal.addEventListener('abort', disconnect, { once: true });
-        await runtime.request.run(conversation, next);
-        if (context.res.body) {
-          const stream = context.res.body;
-          const reader = stream.getReader();
+        signal.addEventListener('abort', onAbort, { once: true });
+        try {
+          await runtime.request.run(conversation, next);
+          if (!context.res.body) {
+            await disconnect();
+            return;
+          }
+          const reader = context.res.body.getReader();
           context.res = new Response(
             new ReadableStream({
               async pull(controller) {
-                const part = await reader.read();
-                if (part.done) controller.close();
-                else controller.enqueue(part.value);
+                try {
+                  const part = await reader.read();
+                  if (part.done) {
+                    await disconnect();
+                    reader.releaseLock();
+                    controller.close();
+                  } else controller.enqueue(part.value);
+                } catch (error) {
+                  await disconnect().catch(() => {});
+                  reader.releaseLock();
+                  controller.error(error);
+                }
               },
               async cancel(reason) {
-                disconnect();
-                await reader.cancel(reason);
+                const closing = disconnect();
+                try {
+                  await reader.cancel(reason);
+                } finally {
+                  reader.releaseLock();
+                  await closing;
+                }
               },
             }),
             context.res,
           );
+        } catch (error) {
+          await disconnect().catch(() => {});
+          throw error;
         }
         return;
       }

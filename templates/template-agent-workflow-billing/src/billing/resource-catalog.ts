@@ -292,7 +292,10 @@ export function materializeResources<const D extends readonly ResourceDefinition
     if (definition.kind === 'agent') {
       const native = definition.create(dependencies);
       if (definition.dispose) lifecycle.own(() => definition.dispose!(native));
-      agents[definition.id] = new AgentResource(native, definition.adapter);
+      agents[definition.id] = new AgentResource(native, {
+        ...definition.adapter,
+        agentDependencies: definition.agentDependencies,
+      });
     } else {
       const native = definition.create(dependencies);
       if (definition.dispose) lifecycle.own(() => definition.dispose!(native));

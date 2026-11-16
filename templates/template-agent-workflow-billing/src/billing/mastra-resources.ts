@@ -64,6 +64,7 @@ export class AgentResource<Output, Native extends AnyAgent = AnyAgent> {
   private readonly projections = new WeakMap<object, AgentProjection<Output>>();
   readonly completion: ((scope: ExecutionScope) => Promise<AgentProjection<Output>>) | undefined;
   readonly artifactSlots: number | undefined;
+  readonly agentDependencies: readonly string[];
   readonly limits;
   readonly definition: string;
   constructor(
@@ -75,10 +76,14 @@ export class AgentResource<Output, Native extends AnyAgent = AnyAgent> {
       outputSchema?: z.ZodType<Output, Output>;
       promptSchema?: z.ZodType<string, string>;
       artifactSlots?: number;
+      agentDependencies?: readonly string[];
       completion?: (scope: ExecutionScope) => Promise<AgentProjection<Output>>;
     },
   ) {
-    const { outputSchema, promptSchema, completion, artifactSlots, ...limits } = options;
+    const { outputSchema, promptSchema, completion, artifactSlots, agentDependencies, ...limits } = options;
+    this.agentDependencies = Object.freeze(
+      parseInput(z.array(identifierSchema).max(100).default([]), agentDependencies),
+    );
     this.completion = completion;
     this.artifactSlots = artifactSlots;
     this.promptSchema = promptSchema;
@@ -166,7 +171,12 @@ export class AgentResource<Output, Native extends AnyAgent = AnyAgent> {
     };
   }
 }
-type AgentLimits = { version: string; maxSteps?: number; maxOutputTokens?: number };
+type AgentLimits = {
+  version: string;
+  maxSteps?: number;
+  maxOutputTokens?: number;
+  agentDependencies?: readonly string[];
+};
 export function agentResource<A extends AnyAgent, Output>(
   agent: A,
   options: AgentLimits & { outputSchema: z.ZodType<Output, Output> },

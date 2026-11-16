@@ -104,7 +104,13 @@ export async function query(root: string, sql: string, args: (string | number)[]
     client.close();
   }
 }
-export async function serve(root: string, env: NodeJS.ProcessEnv, mode: 'dev' | 'start' = 'dev', credential?: string) {
+export async function serve(
+  root: string,
+  env: NodeJS.ProcessEnv,
+  mode: 'dev' | 'start' = 'dev',
+  credential?: string,
+  startupTimeoutMs = 90000,
+) {
   const listener = createServer();
   listener.listen(0, '127.0.0.1');
   await once(listener, 'listening');
@@ -112,6 +118,9 @@ export async function serve(root: string, env: NodeJS.ProcessEnv, mode: 'dev' | 
   if (!address || typeof address === 'string') throw new Error('No test port');
   await new Promise<void>(resolve => listener.close(() => resolve()));
   const environment = { ...env, BILLING_PORT: String(address.port) };
+  const manifest = await profileManifest(root);
+  const deadline = performance.now() + startupTimeoutMs;
+  const startup = AbortSignal.timeout(startupTimeoutMs);
   const child = spawn(process.execPath, [npmCli, 'run', mode], {
     cwd: root,
     env: environment,
@@ -138,18 +147,19 @@ export async function serve(root: string, env: NodeJS.ProcessEnv, mode: 'dev' | 
     } catch {
       /* Already stopped. */
     }
+    await exited;
   };
   const url = `http://127.0.0.1:${address.port}`;
-  const manifest = await profileManifest(root);
   const call = async (
     path: string,
     body?: unknown,
     profile: 'owner' | 'member' | 'outsider' = 'owner',
     key = 'image-request',
+    signal: AbortSignal = AbortSignal.timeout(30000),
   ) => {
     const response = await fetch(`${url}${path}`, {
       method: body === undefined ? 'GET' : 'POST',
-      signal: AbortSignal.timeout(30000),
+      signal,
       headers: {
         authorization: `Bearer ${credential ?? manifest.profiles[profile]!.credential}`,
         'content-type': 'application/json',
@@ -160,14 +170,15 @@ export async function serve(root: string, env: NodeJS.ProcessEnv, mode: 'dev' | 
     return { status: response.status, body: (await response.json()) as any };
   };
   try {
-    for (let attempt = 0; attempt < 900; attempt++) {
-      if (child.exitCode !== null) throw new Error(`Template server exited: ${output}`);
+    while (!startup.aborted && performance.now() < deadline) {
+      if (child.exitCode !== null || child.signalCode !== null) throw new Error(`Template server exited: ${output}`);
       try {
-        if ((await call('/billing/context')).status === 200) return { url, call, close, manifest, environment };
+        if ((await call('/billing/context', undefined, 'owner', 'image-request', startup)).status === 200)
+          return { url, call, close, manifest, environment };
       } catch {
         /* Server warming up. */
       }
-      await setTimeout(100);
+      await setTimeout(Math.max(0, Math.min(100, deadline - performance.now())));
     }
     throw new Error(`Template server did not start: ${output}`);
   } catch (error) {

@@ -654,3 +654,19 @@ it('rejects high-bit PNG chunk types even when their CRC and compressed pixels a
   damaged.writeUInt32BE(crc32(damaged.subarray(offset, offset + 4 + length)), offset + 4 + length);
   expect(() => validatePng(damaged)).toThrow(expect.objectContaining({ code: 'state_unavailable' }));
 });
+
+it('an uncertain image slot cannot publish metadata or charge', async () => {
+  const f = await fixture();
+  f.boundary.mode('stall');
+  const pending = f.generate('fenced-uncertain');
+  await f.boundary.started();
+  await f.database.execute("UPDATE image_slots SET state = 'uncertain'");
+  f.boundary.release();
+  const result = await pending;
+  expect((await f.database.execute('SELECT id FROM image_artifacts')).rows).toEqual([]);
+  expect(result.body.billing).toMatchObject({
+    executionStatus: 'failed',
+    billedUnits: 0,
+    settlementStatus: 'released',
+  });
+});

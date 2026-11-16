@@ -3,7 +3,7 @@ import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { temporaryDatabase } from '../support/billing.js';
 import { billingSocket } from '../support/http.js';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { readFile, writeFile, rename, stat } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -463,20 +463,18 @@ it('negative commands must exit normally instead of passing after a timeout or s
   expect((await command(database.directory, ['run', 'reject'], sanitizedEnvironment(), false)).code).toBe(2);
 });
 
-it('the image CLI exposes its generated key before a lost response and replays with clean JSON stdout', async () => {
+it('the image CLI recovers a lost response with its printed key and clean JSON stdout', async () => {
   const database = await temporaryDatabase();
   cleanups.push(database.cleanup);
   const profile = join(database.directory, 'profile.json');
   await writeFile(profile, JSON.stringify({ workspaceId: 'team', credential: 'controlled' }));
   let stderr = '';
   let savedKey = '';
-  let exposedBeforeDispatch = false;
   let requests = 0;
   const server = await billingSocket({
     fetch: async request => {
       const key = request.headers.get('idempotency-key')!;
       if (!requests++) {
-        exposedBeforeDispatch = stderr.includes(`Idempotency key: ${key}`);
         savedKey = key;
         throw new Error('Response lost after saving');
       }
@@ -512,9 +510,83 @@ it('the image CLI exposes its generated key before a lost response and replays w
     return { code, stdout };
   };
   expect(await invoke()).toEqual({ code: 1, stdout: '' });
-  expect(exposedBeforeDispatch).toBe(true);
+  expect(stderr).toContain(`Idempotency key: ${savedKey}`);
   expect(savedKey).toMatch(/^[0-9a-f-]{36}$/);
   const replay = await invoke(savedKey);
   expect(replay.code).toBe(0);
   expect(JSON.parse(replay.stdout)).toEqual({ result: { text: 'Recovered result' }, replayed: true });
+});
+
+it('the CLI writes its generated key before invoking the request', async () => {
+  const database = await temporaryDatabase();
+  cleanups.push(database.cleanup);
+  const profile = join(database.directory, 'profile.json');
+  await writeFile(profile, JSON.stringify({ workspaceId: 'team', credential: 'controlled' }));
+  const argv = process.argv;
+  const events: string[] = [];
+  let printed = '';
+  const error = vi.spyOn(console, 'error').mockImplementation(value => {
+    events.push('stderr');
+    printed = String(value);
+  });
+  const log = vi.spyOn(console, 'log').mockImplementation(() => {
+    events.push('stdout');
+  });
+  const request = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, options) => {
+    events.push('request');
+    expect(printed).toBe(`Idempotency key: ${new Headers(options?.headers).get('idempotency-key')}`);
+    return Response.json({ result: { text: 'ok' } });
+  });
+  try {
+    process.argv = [
+      process.execPath,
+      'images',
+      'generate',
+      '--profile-file',
+      profile,
+      '--json',
+      JSON.stringify({ brief: 'A blue bird in a quiet forest' }),
+    ];
+    await import('../../scripts/images.js');
+    expect(events).toEqual(['stderr', 'request', 'stdout']);
+  } finally {
+    process.argv = argv;
+    request.mockRestore();
+    error.mockRestore();
+    log.mockRestore();
+  }
+});
+
+it('server startup has one deadline even when the child accepts HTTP without responding', async () => {
+  const copy = await templateCopy();
+  cleanups.push(copy.cleanup);
+  const env = { ...sanitizedEnvironment(), OPENAI_API_KEY: 'controlled' };
+  await command(copy.root, ['run', 'setup'], env);
+  await writeFile(
+    join(copy.root, 'package.json'),
+    JSON.stringify({ type: 'module', scripts: { dev: 'node stalled.mjs' } }),
+  );
+  await writeFile(
+    join(copy.root, 'stalled.mjs'),
+    `import { createServer } from 'node:http';
+import { writeFileSync } from 'node:fs';
+writeFileSync('startup-pid', String(process.pid));
+createServer(() => { writeFileSync('startup-requested', 'yes'); }).listen(Number(process.env.BILLING_PORT), '127.0.0.1');
+setTimeout(() => process.exit(0), 5000);`,
+  );
+  const started = performance.now();
+  await expect(serve(copy.root, env, 'dev', undefined, 1000)).rejects.toThrow('Template server did not start');
+  expect(performance.now() - started).toBeLessThan(4000);
+  expect(await readFile(join(copy.root, 'startup-requested'), 'utf8')).toBe('yes');
+  const pid = Number(await readFile(join(copy.root, 'startup-pid'), 'utf8'));
+  for (let attempt = 0; attempt < 100; attempt++) {
+    try {
+      process.kill(pid, 0);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ESRCH') break;
+      throw error;
+    }
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }));
 });

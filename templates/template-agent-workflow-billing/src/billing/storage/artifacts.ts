@@ -114,10 +114,11 @@ export class ExecutionArtifacts implements ArtifactPersistence {
         sql: 'INSERT INTO image_artifacts VALUES (?, ?, ?, ?)',
         args: [artifact.id, scope.collector.executionId, scope.slot, JSON.stringify(artifact)],
       });
-      await tx.execute({
+      const publication = await tx.execute({
         sql: "UPDATE image_slots SET state = 'completed', artifact_id = ? WHERE execution_id = ? AND slot = ? AND state = 'dispatched'",
         args: [artifact.id, scope.collector.executionId, scope.slot],
       });
+      if (publication.rowsAffected !== 1) throw new BillingError('state_unavailable');
       return artifact;
     });
   }

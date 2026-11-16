@@ -49,7 +49,7 @@ The plan supplies the allowance. The template's TypeScript policies decide how m
 3. Open the customer's details and confirm **Studio Sandbox** is active. For an existing customer, enable that plan from the customer's plan controls; auto-enable applies when customers are created.
 4. In **Balances**, confirm **Image Credits** has **30 available credits** and overage is disabled. If you need to adjust a test allowance, open that balance, choose **Set** or **Add**, enter the amount, and save. [Autumn balance management](https://docs.useautumn.com/documentation/customers/managing-balances) describes these controls.
 
-At least four available credits are needed for one image plus one kit. The optional automated provider proof needs six available credits. Setup doesn't attach plans, create customers or refill balances.
+At least seven opening credits are needed for the complete Studio sequence: four are consumed by one image and one approved kit, leaving three to reserve for the cancellation test. The optional automated provider proof needs six available credits. Setup doesn't attach plans, create customers or refill balances.
 
 ### 5. Configure the template environment
 
@@ -132,7 +132,7 @@ Verify the running server without generating images:
 npm run autumn:check
 ```
 
-Expect HTTP 200 for agent definitions and conversation history, followed by an account response with `mode: "autumn"`, `authority: "provider-reservations"` and a `credits` meter. Record its opening `confirmedBalance` as B. The command reads the actual Autumn balance; it doesn't charge credits. Start with at least four available credits.
+Expect HTTP 200 for agent definitions and conversation history, followed by an account response with `mode: "autumn"`, `authority: "provider-reservations"` and a `credits` meter. Record its opening `confirmedBalance` as B. The command reads the actual Autumn balance; it doesn't charge credits. Start with at least seven available credits to complete the generation, approval and cancellation tests below.
 
 ### 8. Test billed operations in Studio
 

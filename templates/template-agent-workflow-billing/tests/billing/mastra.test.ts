@@ -1,3 +1,5 @@
+import { createTool } from '@mastra/core/tools';
+import { getEventListeners } from 'node:events';
 import { Memory } from '@mastra/memory';
 import { StudioAgentRuntime } from '../../src/studio-with-billing/studio-agent-decorator.js';
 import { studioChatProxy } from '../../src/studio-with-billing/studio-chat-proxy.js';
@@ -2395,4 +2397,199 @@ it('a run-specific Stop cannot stop the newer active run in the same conversatio
     f.model.release();
     await output;
   }
+});
+
+it.each(['nestedAgent', 'agent'] as const)('agents only execute declared children through %s', async entrypoint => {
+  for (const dependencies of [undefined, [], ['child']]) {
+    const f = await catalogFixture();
+    let invoke!: () => Promise<unknown>;
+    const outcomes: string[] = [];
+    const native = (id: string) =>
+      new Agent({
+        id,
+        name: id,
+        instructions: 'Use echo once, then answer.',
+        maxRetries: 0,
+        model: { id: 'billing-test/model', api: 'chat', url: f.model.url, apiKey: 'controlled' },
+        ...(id === 'parent'
+          ? {
+              tools: {
+                echo: createTool({
+                  id: 'echo',
+                  description: 'Call a child.',
+                  inputSchema: z.object({ fail: z.boolean() }),
+                  execute: async () => {
+                    try {
+                      await invoke();
+                      outcomes.push('allowed');
+                      return { code: 'allowed' };
+                    } catch (error) {
+                      const code = (error as { code: string }).code;
+                      outcomes.push(code);
+                      return { code };
+                    }
+                  },
+                }),
+              },
+            }
+          : {}),
+      });
+    const definition = (id: string) => ({
+      id,
+      kind: 'agent' as const,
+      create: () => native(id),
+      operations: ['generate'] as const,
+      measurements: [],
+      adapter: { version: 'v1', maxSteps: id === 'parent' ? 2 : 1 },
+      policy: { version: 'v1', charge: { type: 'credits' as const, meter: 'credits', units: 1 } },
+    });
+    const application = await createBillingApplication({
+      environment: f.environment,
+      catalog: {
+        configuration: f.catalog.configuration,
+        definitions: [
+          { ...definition('parent'), ...(dependencies === undefined ? {} : { agentDependencies: dependencies }) },
+          definition('child'),
+        ],
+      },
+    });
+    try {
+      const billing = await application.organizations.context({ credential: f.first.credential! });
+      invoke =
+        entrypoint === 'nestedAgent'
+          ? () => application.runtime.billing.nestedAgent('child').generate('[success] child')
+          : () =>
+              application.runtime.billing
+                .agent('child')
+                .generate('[success] child', { billing, idempotencyKey: 'nested' });
+      const result = await application.runtime.billing
+        .agent('parent')
+        .generate('[multi] parent', { billing, idempotencyKey: 'parent' });
+      if (result.kind === 'nested') throw new Error('Expected a root execution');
+      expect(outcomes).toEqual([dependencies?.includes('child') ? 'allowed' : 'unsupported']);
+      expect(f.model.requests).toHaveLength(dependencies?.includes('child') ? 3 : 2);
+      expect(result.billing).toMatchObject({ billedUnits: 1, settlementStatus: 'settled' });
+      const observer = await independentClient(f.database.url);
+      try {
+        expect((await observer.execute('SELECT resource_id FROM billing_executions')).rows).toEqual([
+          { resource_id: 'parent' },
+        ]);
+      } finally {
+        observer.close();
+      }
+    } finally {
+      await application.close();
+    }
+  }
+});
+
+async function subscriptionFixture(response: 'stream' | 'empty' | 'failure' = 'stream') {
+  const f = await conversationFixture();
+  const sources: ReadableStreamDefaultController<Uint8Array>[] = [];
+  const signals: AbortSignal[] = [];
+  const app = new Hono();
+  app.use(
+    '*',
+    studioChatProxy(f.runtime, '/api', async (_context, next) => next()),
+  );
+  app.post('/api/agents/conversation/threads/subscribe', context => {
+    signals.push(context.req.raw.signal);
+    if (response === 'failure') throw new Error('Subscription failed');
+    return new Response(
+      response === 'empty'
+        ? null
+        : new ReadableStream<Uint8Array>({
+            start(controller) {
+              sources.push(controller);
+            },
+          }),
+    );
+  });
+  const subscribe = (signal?: AbortSignal) =>
+    app.fetch(
+      new Request('http://127.0.0.1/api/agents/conversation/threads/subscribe', {
+        method: 'POST',
+        signal,
+        headers: { authorization: `Bearer ${f.first.credential}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ threadId: f.owner.threadId }),
+      }),
+    );
+  return { ...f, sources, signals, subscribe };
+}
+
+it.each(['end', 'cancel', 'abort', 'error', 'empty', 'failure'] as const)(
+  'Studio subscription %s releases listeners and stopped conversations',
+  async ending => {
+    const f = await subscriptionFixture(ending === 'empty' || ending === 'failure' ? ending : 'stream');
+    const controller = new AbortController();
+    const response = await f.subscribe(controller.signal);
+    if (ending === 'failure') await response.text();
+    if (ending !== 'empty' && ending !== 'failure') {
+      const reader = response.body!.getReader();
+      if (ending === 'end') {
+        f.sources[0].close();
+        expect((await reader.read()).done).toBe(true);
+      }
+      if (ending === 'cancel') await reader.cancel();
+      if (ending === 'abort') {
+        controller.abort();
+        await f.runtime.settled(f.owner.threadId);
+        await reader.cancel();
+      }
+      if (ending === 'error') {
+        f.sources[0].error(new Error('Broken stream'));
+        await expect(reader.read()).rejects.toThrow('Broken stream');
+      }
+    }
+    await f.runtime.settled(f.owner.threadId);
+    expect(f.runtime.subscriptions.has(f.owner.threadId)).toBe(false);
+    expect(getEventListeners(f.signals[0], 'abort')).toHaveLength(0);
+    expect(() => f.agent.abortThreadStream({ threadId: f.owner.threadId, resourceId: f.owner.resourceId })).toThrow(
+      expect.objectContaining({ code: 'forbidden' }),
+    );
+  },
+);
+
+it('an older subscription cannot stop or remove its replacement', async () => {
+  const f = await subscriptionFixture();
+  for (let round = 0; round < 20; round++) {
+    const first = await f.subscribe();
+    const second = await f.subscribe();
+    const token = f.runtime.subscriptions.get(f.owner.threadId);
+    f.sources.shift()!.close();
+    await first.body!.getReader().read();
+    expect(f.runtime.subscriptions.get(f.owner.threadId)).toBe(token);
+    f.sources.shift()!.close();
+    await second.body!.getReader().read();
+    expect(f.runtime.subscriptions.has(f.owner.threadId)).toBe(false);
+  }
+});
+
+it('subscription cleanup finishes after failed transcript finalization recovers', async () => {
+  const f = await subscriptionFixture();
+  const response = await f.subscribe();
+  await f.observer.execute('ALTER TABLE mastra_messages RENAME TO unavailable_messages');
+  f.sources[0].close();
+  await expect(response.body!.getReader().read()).rejects.toThrow();
+  expect(f.runtime.subscriptions.has(f.owner.threadId)).toBe(true);
+  await f.observer.execute('ALTER TABLE unavailable_messages RENAME TO mastra_messages');
+  await f.runtime.settled(f.owner.threadId);
+  expect(f.runtime.subscriptions.has(f.owner.threadId)).toBe(false);
+  expect(() => f.agent.abortThreadStream({ threadId: f.owner.threadId, resourceId: f.owner.resourceId })).toThrow(
+    expect.objectContaining({ code: 'forbidden' }),
+  );
+});
+
+it('a completed subscription preserves a replacement conversation controller', async () => {
+  const f = await subscriptionFixture();
+  const response = await f.subscribe();
+  const replacement = f.runtime.bind({ billing: f.context, owner: f.owner, controller: new AbortController() }, true);
+  f.sources[0].close();
+  expect((await response.body!.getReader().read()).done).toBe(true);
+  expect(replacement.controller.signal.aborted).toBe(false);
+  expect(f.runtime.subscriptions.has(f.owner.threadId)).toBe(false);
+  // A retained replacement still resolves through the decorated public API.
+  f.agent.abortThreadStream({ threadId: f.owner.threadId, resourceId: f.owner.resourceId });
+  expect(replacement.controller.signal.aborted).toBe(true);
+  await f.runtime.settled(f.owner.threadId);
 });

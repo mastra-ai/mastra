@@ -98,11 +98,16 @@ async function fixture(
     run?: (input: Json) => Promise<ExecutorOutcome>;
   } = {},
 ) {
+  const fixtureCleanups: (() => void | Promise<void>)[] = [];
+  const dispose = async () => {
+    for (const cleanup of fixtureCleanups.splice(0).reverse()) await cleanup();
+  };
+  cleanups.push(dispose);
   const database = await temporaryDatabase();
-  cleanups.push(database.cleanup);
+  fixtureCleanups.push(database.cleanup);
   const directory = await OrganizationStorage.open({ url: database.url });
   const organizations = new OrganizationService(directory, { mode: 'local', provider: 'local' });
-  cleanups.push(() => organizations.close());
+  fixtureCleanups.push(() => organizations.close());
   const alice = await organizations.provisionLocal({ profileId: 'alice', displayName: 'Alice' });
   const bob = await organizations.provisionLocal({ profileId: 'bob', displayName: 'Bob' });
   const context = await organizations.context({ credential: alice.credential! });
@@ -147,14 +152,14 @@ async function fixture(
     },
   ];
   const commercial = await LocalBillingStorage.open({ url: database.url });
-  cleanups.push(() => commercial.close());
+  fixtureCleanups.push(() => commercial.close());
   const provider = new LocalBillingProvider(commercial, config);
   const storage = await AccountingStorage.open({ url: database.url }, directory);
-  cleanups.push(() => storage.close());
+  fixtureCleanups.push(() => storage.close());
   const registered = { ...executor(options.run), operation: config.resourcePolicies[0].operations[0] };
   const gateway = new BillingGateway(organizations, storage, provider, config, [registered]);
   const observer = await independentClient(database.url);
-  cleanups.push(() => observer.close());
+  fixtureCleanups.push(() => observer.close());
   const request = (idempotencyKey: string, input: unknown = { prompt: 'hello' }) => ({
     resourceId: 'assistant',
     operation: registered.operation,
@@ -176,6 +181,7 @@ async function fixture(
     gateway,
     observer,
     request,
+    dispose,
   };
 }
 async function totals(f: Awaited<ReturnType<typeof fixture>>) {
@@ -239,35 +245,39 @@ describe('transactional billing gateway', () => {
         for (const [chargeIndex, charge] of charges.entries())
           for (const status of ['succeeded', 'failed', 'canceled'] as const) {
             const f = await fixture(charge, { kind, access, run: async () => ({ ...succeeded, status }) });
-            const result = await f.gateway.execute(f.context, f.request('matrix'));
-            const units =
-              status !== 'succeeded' || charge.type === 'none' ? 0 : charge.type === 'usage' ? 4 : charge.units;
-            expect(result.billing).toMatchObject({
-              policyVersion: 'v1',
-              executionStatus: status === 'succeeded' ? 'completed' : status,
-              billedUnits: units,
-              deliveryStatus: units > 0 && exportOnSuccess[chargeIndex] ? 'pending' : 'not_required',
-            });
-            const persisted = await totals(f);
-            expect(persisted.ledger).toEqual([
-              { units: BigInt(units), outcome: status === 'succeeded' ? 'completed' : status },
-            ]);
-            expect(persisted.holds).toEqual(
-              charge.type === 'none'
-                ? []
-                : [{ units: BigInt(charge.type === 'usage' ? 10 : charge.units), active: 0n }],
-            );
-            expect(persisted.measurements).toEqual([{ id: 'call-1', units: 4n }]);
-            expect(persisted.events).toHaveLength(units > 0 && exportOnSuccess[chargeIndex] ? 1 : 0);
-            if (units > 0 && exportOnSuccess[chargeIndex])
-              expect(JSON.parse(String(persisted.events[0].payload))).toMatchObject({
-                id: persisted.events[0].id,
-                executionId: result.billing.executionId,
+            try {
+              const result = await f.gateway.execute(f.context, f.request('matrix'));
+              const units =
+                status !== 'succeeded' || charge.type === 'none' ? 0 : charge.type === 'usage' ? 4 : charge.units;
+              expect(result.billing).toMatchObject({
                 policyVersion: 'v1',
-                units,
-                metadata: { resourceId: 'assistant', resourceKind: kind },
+                executionStatus: status === 'succeeded' ? 'completed' : status,
+                billedUnits: units,
+                deliveryStatus: units > 0 && exportOnSuccess[chargeIndex] ? 'pending' : 'not_required',
               });
-            expect(JSON.stringify(persisted.events)).not.toContain('private result');
+              const persisted = await totals(f);
+              expect(persisted.ledger).toEqual([
+                { units: BigInt(units), outcome: status === 'succeeded' ? 'completed' : status },
+              ]);
+              expect(persisted.holds).toEqual(
+                charge.type === 'none'
+                  ? []
+                  : [{ units: BigInt(charge.type === 'usage' ? 10 : charge.units), active: 0n }],
+              );
+              expect(persisted.measurements).toEqual([{ id: 'call-1', units: 4n }]);
+              expect(persisted.events).toHaveLength(units > 0 && exportOnSuccess[chargeIndex] ? 1 : 0);
+              if (units > 0 && exportOnSuccess[chargeIndex])
+                expect(JSON.parse(String(persisted.events[0].payload))).toMatchObject({
+                  id: persisted.events[0].id,
+                  executionId: result.billing.executionId,
+                  policyVersion: 'v1',
+                  units,
+                  metadata: { resourceId: 'assistant', resourceKind: kind },
+                });
+              expect(JSON.stringify(persisted.events)).not.toContain('private result');
+            } finally {
+              await f.dispose();
+            }
           }
     const entered = deferred();
     const finish = deferred<ExecutorOutcome>();

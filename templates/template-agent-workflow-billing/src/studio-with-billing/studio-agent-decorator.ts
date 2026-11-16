@@ -7,6 +7,7 @@ import type { StudioBillingIntegration, StudioConversation } from './studio-wrap
 interface Finalization {
   readonly run: () => Promise<void>;
   pending?: Promise<void>;
+  onSettled?: () => void;
 }
 /** Trusted association survives native queued/idle stream re-entry without editable RequestContext. */
 export class StudioAgentRuntime {
@@ -33,6 +34,26 @@ export class StudioAgentRuntime {
         : conversation;
     this.threads.set(active.owner.threadId, active);
     return active;
+  }
+  /** Retire only the subscription and conversation that owned the completed stream. */
+  async release(conversation: StudioConversation, subscription: symbol) {
+    const { threadId } = conversation.owner;
+    if (this.subscriptions.get(threadId) !== subscription) return;
+    const forget = () => {
+      if (this.subscriptions.get(threadId) !== subscription) return;
+      this.subscriptions.delete(threadId);
+      if (this.threads.get(threadId)?.controller === conversation.controller) this.threads.delete(threadId);
+    };
+    const finalization = this.finalizations.get(threadId);
+    if (finalization) {
+      const previous = finalization.onSettled;
+      finalization.onSettled = () => {
+        previous?.();
+        forget();
+      };
+    }
+    await this.settled(threadId);
+    forget();
   }
   current() {
     const conversation = this.request.getStore();
@@ -69,6 +90,7 @@ export class StudioAgentRuntime {
     const pending = (finalization.pending ??= finalization.run());
     try {
       await pending;
+      finalization.onSettled?.();
     } catch (error) {
       if (finalization.pending === pending) finalization.pending = undefined;
       throw error;
@@ -78,6 +100,10 @@ export class StudioAgentRuntime {
     const { threadId, resourceId, agentId } = conversation.owner;
     const previous = this.finalizations.get(threadId);
     const finalization: Finalization = {
+      onSettled: () => {
+        if (!this.subscriptions.has(threadId) && this.threads.get(threadId)?.controller === conversation.controller)
+          this.threads.delete(threadId);
+      },
       run: async () => {
         if (previous) await this.finish(previous);
         const memory = await this.agents[agentId].getMemory();

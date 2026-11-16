@@ -10,6 +10,17 @@ import { modelBoundary, runtimeFixture, operationBarrier } from '../support/mast
 import { independentClient, temporaryDatabase } from '../support/billing.js';
 
 const cleanups: (() => void | Promise<void>)[] = [];
+function forkWorker(...args: Parameters<typeof fork>) {
+  const child = fork(...args);
+  cleanups.push(async () => {
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    const exited = once(child, 'exit');
+    child.kill('SIGKILL');
+    await exited;
+  });
+  return child;
+}
+
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
@@ -49,14 +60,11 @@ describe('durable billing recovery', () => {
       configuration: initial.configuration,
     };
     await initial.close();
-    const child = fork(
+    const child = forkWorker(
       fileURLToPath(new URL('../support/recovery-worker.mjs', import.meta.url)),
       ['metered-delivery', JSON.stringify(reopen)],
       { execArgv: [], stdio: ['ignore', 'pipe', 'pipe', 'ipc'] },
     );
-    cleanups.push(() => {
-      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-    });
     const [committed] = await once(child, 'message');
     expect(committed).toMatchObject({
       boundary: 'metered-committed',
@@ -119,14 +127,11 @@ describe('durable billing recovery', () => {
         configuration: initial.configuration,
       };
       await initial.close();
-      const child = fork(
+      const child = forkWorker(
         fileURLToPath(new URL('../support/recovery-worker.mjs', import.meta.url)),
         [boundary === 'adopted' ? 'initial-acknowledged' : boundary, JSON.stringify(options)],
         { execArgv: [], stdio: ['ignore', 'pipe', 'pipe', 'ipc'] },
       );
-      cleanups.push(() => {
-        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-      });
       const [execution] = (await once(child, 'message')) as [{ executionId: string; boundary: string }];
       expect(execution.boundary).toBe(boundary === 'adopted' ? 'initial-acknowledged' : boundary);
       const observer = await independentClient(database.url);
@@ -249,14 +254,11 @@ describe('durable billing recovery', () => {
     const ids: string[] = [];
     for (const kind of ['agent', 'workflow']) {
       const requests = model.requests.length;
-      const child = fork(
+      const child = forkWorker(
         fileURLToPath(new URL('../support/recovery-worker.mjs', import.meta.url)),
         [kind, JSON.stringify(options)],
         { execArgv: [], stdio: ['ignore', 'pipe', 'pipe', 'ipc'] },
       );
-      cleanups.push(() => {
-        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-      });
       let diagnostics = '';
       child.stderr?.on('data', chunk => {
         diagnostics = (diagnostics + chunk).slice(-4000);
@@ -279,7 +281,7 @@ describe('durable billing recovery', () => {
       expect(await records.recoverInterrupted()).toBe(1);
     }
 
-    const orphan = fork(
+    const orphan = forkWorker(
       fileURLToPath(new URL('../support/recovery-worker.mjs', import.meta.url)),
       ['orphan', JSON.stringify(options)],
       { execArgv: [], stdio: ['ignore', 'pipe', 'pipe', 'ipc'] },
@@ -362,7 +364,7 @@ describe('durable billing recovery', () => {
     expect((await observer.execute('SELECT id FROM billing_measurements')).rows).toEqual([]);
     expect(model.requests).toHaveLength(before);
 
-    const suspendedChild = fork(
+    const suspendedChild = forkWorker(
       fileURLToPath(new URL('../support/mastra-worker.mjs', import.meta.url)),
       [
         'start',
@@ -403,7 +405,7 @@ describe('durable billing recovery', () => {
     const expiryIds: string[] = [];
     for (let round = 0; round < 20; round++) {
       if (round === 0) {
-        const child = fork(
+        const child = forkWorker(
           fileURLToPath(new URL('../support/mastra-worker.mjs', import.meta.url)),
           ['start', JSON.stringify({ ...options, workflowPrompt: undefined })],
           { execArgv: [], stdio: ['ignore', 'pipe', 'pipe', 'ipc'] },
@@ -518,7 +520,7 @@ describe('durable billing recovery', () => {
       cleanups.push(boundaryDatabase.cleanup);
       const boundaryModel = await modelBoundary();
       cleanups.push(boundaryModel.close);
-      const child = fork(
+      const child = forkWorker(
         fileURLToPath(new URL('../support/recovery-worker.mjs', import.meta.url)),
         [
           phase,
@@ -530,9 +532,6 @@ describe('durable billing recovery', () => {
         ],
         { execArgv: [], stdio: ['ignore', 'pipe', 'pipe', 'ipc'] },
       );
-      cleanups.push(() => {
-        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-      });
       const [committed] = (await once(child, 'message')) as [
         {
           executionId: string;
