@@ -1330,7 +1330,15 @@ describe('MongoDBVector filterFields (#18587)', () => {
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
       vi.spyOn(v as any, 'markOwned').mockResolvedValue(undefined);
-      stubRegistered(v, { cat: { collectionName: 'cat', searchIndexName: 'cat_vector_index', isByo: false } });
+      // Already registered under the default field-mapped name, so no rename touches the (unstubbed) registry.
+      stubRegistered(v, {
+        cat: {
+          collectionName: 'cat',
+          searchIndexName: 'cat_vector_index',
+          isByo: false,
+          textSearchIndexName: 'cat_cat_search_fields_index',
+        },
+      });
 
       await v.createSearchIndex({ indexName: 'cat', fields: ['metadata.name', 'metadata.specs.gpu', 'title'] });
 
@@ -1614,7 +1622,15 @@ describe('MongoDBVector filterFields (#18587)', () => {
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
       const target = { collectionName: 'shared_col', searchIndexName: 'a_vec', isByo: true };
-      stubRegistered(v, { logical_a: target, logical_b: { ...target, searchIndexName: 'b_vec' } });
+      // Already registered under the default field-mapped names, so no rename touches the (unstubbed) registry.
+      stubRegistered(v, {
+        logical_a: { ...target, textSearchIndexName: 'shared_col_logical_a_search_fields_index' },
+        logical_b: {
+          ...target,
+          searchIndexName: 'b_vec',
+          textSearchIndexName: 'shared_col_logical_b_search_fields_index',
+        },
+      });
 
       await v.createSearchIndex({ indexName: 'logical_a', fields: ['note'] });
       await v.createSearchIndex({ indexName: 'logical_b', fields: ['note'] });

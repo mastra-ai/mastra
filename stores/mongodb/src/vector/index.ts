@@ -439,6 +439,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     beforeClaimInsert?: (indexName: string) => Promise<void>;
     /** Called by createIndex right after it reads the existing registry entry. */
     afterCreateIndexRead?: (indexName: string) => Promise<void>;
+    /** Called by createSearchIndex right after it reads the existing registry entry. */
+    afterCreateSearchIndexRead?: (indexName: string) => Promise<void>;
     /** Called by createSearchIndex after the registry write and before provisioning; a throw simulates a provisioning failure. */
     beforeSearchIndexProvision?: (indexName: string) => Promise<void>;
   };
@@ -680,8 +682,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   /**
    * Undo a registry write after provisioning failed: remove the entry this call inserted, or
    * restore the one it overwrote. Matching on `claimToken` leaves alone an entry another
-   * process rewrote since. Best effort, so the caller still sees the provisioning error.
-   * Returns true when the inserted entry was removed.
+   * process rewrote since; matching on `rev` and `deleting` leaves alone one a delete
+   * transaction changed since (it never touches `claimToken`). Best effort, so the caller
+   * still sees the provisioning error. Returns true when the inserted entry was removed.
    */
   private async rollbackRegistryEntry(
     indexName: string,
@@ -692,8 +695,15 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     this.declaredFilterPaths.delete(indexName);
     try {
       const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
-      if (!previous) return (await registry.deleteOne({ _id: indexName, claimToken })).deletedCount === 1;
-      await registry.replaceOne({ _id: indexName, claimToken }, previous);
+      // The rolled-back write never changes `rev`, so it still holds the value read before it.
+      const filter = {
+        _id: indexName,
+        claimToken,
+        rev: previous?.rev ?? { $exists: false },
+        deleting: { $ne: true },
+      };
+      if (!previous) return (await registry.deleteOne(filter)).deletedCount === 1;
+      await registry.replaceOne(filter, previous);
     } catch {
       // The entry stays as written. Ownership is never claimed for a failed call, so a later
       // deleteIndex still keeps whatever it cannot prove this store created.
@@ -1587,6 +1597,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     const sameName = name === target.textSearchIndexName;
     const previous = await this.readRegistryEntry(indexName);
     this.assertNotDeleting(previous, 'CREATE_SEARCH_INDEX');
+    await this.testHooks?.afterCreateSearchIndexRead?.(indexName);
     const claimToken = uuidv4();
     let provisioned = false;
     try {
@@ -1602,56 +1613,78 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // An existing entry gets only the text-index fields and no upsert, so this call never
       // overwrites another process's policy or brings back an entry deleted in the meantime.
       const textFields = { textSearchIndexName: name, ...(sameName ? {} : { ownsTextIndex: false }), claimToken };
+      // Raised when the entry this call read was removed, or written by someone else, meanwhile.
+      const concurrentConflict = () =>
+        new MastraError({
+          id: createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: `Index "${indexName}" was ${previous ? 'removed' : 'registered'} by another call while createSearchIndex ran, so nothing was provisioned. Check the index and retry.`,
+        });
       if (previous && !sameName) {
         // One $set stage: every expression reads the pre-write document, so retiring the old
         // name, reactivating a retired one and the ownership flag change atomically.
         const retired = { $ifNull: ['$retiredTextIndexNames', []] };
-        await this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION).updateOne({ _id: indexName }, [
-          {
-            $set: {
-              retiredTextIndexNames: {
-                $setDifference: [
-                  {
-                    $setUnion: [
-                      retired,
-                      {
-                        $cond: [
-                          {
-                            $and: [
-                              { $eq: ['$ownsTextIndex', true] },
-                              { $eq: [{ $type: '$textSearchIndexName' }, 'string'] },
-                            ],
-                          },
-                          ['$textSearchIndexName'],
-                          [],
-                        ],
-                      },
-                    ],
-                  },
-                  [name],
-                ],
+        const renamed = await this.db
+          .collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION)
+          .updateOne({ _id: indexName, deleting: { $ne: true } }, [
+            {
+              $set: {
+                retiredTextIndexNames: {
+                  $setDifference: [
+                    {
+                      $setUnion: [
+                        retired,
+                        {
+                          $cond: [
+                            {
+                              $and: [
+                                { $eq: ['$ownsTextIndex', true] },
+                                { $eq: [{ $type: '$textSearchIndexName' }, 'string'] },
+                              ],
+                            },
+                            ['$textSearchIndexName'],
+                            [],
+                          ],
+                        },
+                      ],
+                    },
+                    [name],
+                  ],
+                },
+                ownsTextIndex: { $cond: [{ $in: [name, retired] }, true, false] },
+                textSearchIndexName: name,
+                claimToken,
               },
-              ownsTextIndex: { $cond: [{ $in: [name, retired] }, true, false] },
-              textSearchIndexName: name,
-              claimToken,
             },
-          },
-        ]);
+          ]);
+        if (renamed.matchedCount === 0) {
+          this.assertNotDeleting(await this.readRegistryEntry(indexName), 'CREATE_SEARCH_INDEX');
+          throw concurrentConflict();
+        }
       } else {
-        await this.writeRegistryEntry(
-          indexName,
-          previous
-            ? textFields
-            : {
-                collectionName: target.collectionName,
-                searchIndexName: target.searchIndexName,
-                isByo: target.isByo,
-                allowWrites: target.allowWrites,
-                ...textFields,
-              },
-          undefined,
-          !previous,
-        );
+        try {
+          await this.writeRegistryEntry(
+            indexName,
+            previous
+              ? textFields
+              : {
+                  collectionName: target.collectionName,
+                  searchIndexName: target.searchIndexName,
+                  isByo: target.isByo,
+                  allowWrites: target.allowWrites,
+                  ...textFields,
+                },
+            // Nothing was registered when this call read the entry: one written since (a claim,
+            // a createIndex) carries a claimToken, so the insert hits 11000 instead of overwriting it.
+            previous ? undefined : { claimToken: { $exists: false } },
+            !previous,
+          );
+        } catch (error: any) {
+          if (error?.code === 11000) throw concurrentConflict();
+          throw error;
+        }
       }
       await this.testHooks?.beforeSearchIndexProvision?.(indexName);
       this.indexTargets.set(indexName, { ...target, textSearchIndexName: name });

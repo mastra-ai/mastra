@@ -991,6 +991,61 @@ describe('legacy ownership', () => {
           await expect(a.createSearchIndex({ indexName: coll, searchIndexName: 'B' })).rejects.toThrow();
           expect(await entry(coll)).toEqual(before);
         });
+
+        it('a rollback after a delete transaction committed leaves the delete state intact', async () => {
+          const coll = await byo();
+          await a.createSearchIndex({ indexName: coll, searchIndexName: 'A' });
+          (a as any).testHooks = {
+            beforeSearchIndexProvision: async () => {
+              // What a committed delete T1 writes: deleting, deleteToken and a rev bump, never claimToken.
+              await db
+                .collection(REGISTRY)
+                .updateOne({ _id: coll as any }, { $set: { deleting: true, deleteToken: 't' }, $inc: { rev: 1 } });
+              throw new Error('provision failed');
+            },
+          };
+          const call = a.createSearchIndex({ indexName: coll, searchIndexName: 'B' });
+          await expect(call).rejects.toThrow('provision failed');
+          expect(await entry(coll)).toMatchObject({
+            deleting: true,
+            deleteToken: 't',
+            rev: 1,
+            textSearchIndexName: 'B',
+          });
+        });
+
+        it('a rename refuses with INDEX_DELETING when a delete starts after its read, and changes nothing', async () => {
+          const coll = await byo();
+          await a.createSearchIndex({ indexName: coll, searchIndexName: 'A' });
+          let marked: Document | null = null;
+          (a as any).testHooks = {
+            afterCreateSearchIndexRead: async () => {
+              await db
+                .collection(REGISTRY)
+                .updateOne({ _id: coll as any }, { $set: { deleting: true, deleteToken: 't' }, $inc: { rev: 1 } });
+              marked = await entry(coll);
+            },
+          };
+          const err = await a.createSearchIndex({ indexName: coll, searchIndexName: 'B' }).catch(e => e);
+          expect(err.id).toBe(createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'INDEX_DELETING'));
+          expect(await entry(coll)).toEqual(marked);
+          expect(await searchIndexNames(db, coll)).not.toContain('B');
+        });
+
+        it('a rename refuses with CONFLICT when the entry vanishes after its read, and writes nothing', async () => {
+          const coll = await byo();
+          await a.createSearchIndex({ indexName: coll, searchIndexName: 'A' });
+          (a as any).testHooks = {
+            afterCreateSearchIndexRead: async () => {
+              await db.collection(REGISTRY).deleteOne({ _id: coll as any });
+            },
+          };
+          const err = await a.createSearchIndex({ indexName: coll, searchIndexName: 'B' }).catch(e => e);
+          expect(err.id).toBe(createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'));
+          expect(err.category).toBe('USER');
+          expect(await entry(coll)).toBeNull();
+          expect(await searchIndexNames(db, coll)).not.toContain('B');
+        });
       });
 
       it('T18: a managed createSearchIndex still provisions the dynamic default index', async () => {
@@ -1241,6 +1296,25 @@ describe('legacy ownership', () => {
         expect(await reg(X)).toEqual(claimed);
         expect(claimed).toMatchObject({ isByo: false, ownsCollection: true });
       });
+
+      for (const by of ['BYO createIndex', 'claimLegacyIndex'] as const) {
+        it(`a createSearchIndex that read no entry refuses with CONFLICT when a ${by} registers it meanwhile`, async () => {
+          const X = await legacy();
+          const p = holdAfterRead(other, 'afterCreateSearchIndexRead');
+          const create = other.createSearchIndex({ indexName: X }).catch(e => e);
+          await p.reached.promise;
+          if (by === 'claimLegacyIndex') await store.claimLegacyIndex({ indexName: X });
+          else await store.createIndex({ indexName: X, collectionName: X, dimension: 4 });
+          const registered = await reg(X);
+          p.release.resolve();
+          const err = await create;
+          expect(err.id).toBe(createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'));
+          expect(err.category).toBe('USER');
+          expect(err.message).toMatch(/registered by another call/);
+          expect(await reg(X)).toEqual(registered);
+          expect(await searchIndexNames(db, X)).not.toContain(`${X}_search_index`);
+        });
+      }
 
       it('two racing identical createIndex calls both resolve with one registration', async () => {
         const X = uniqueName('claim');
