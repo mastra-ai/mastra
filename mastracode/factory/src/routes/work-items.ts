@@ -36,6 +36,7 @@ import type { FactoryTransitionRequest, FactoryTransitionService } from '../rule
 import { workItemSource } from '../rules/types.js';
 import type { FactoryRuleBoardFlow, WorkItemSource } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
+import type { RunRepositoryResolution } from '../session/work-item-repository.js';
 import { auditRequestOrigin } from '../storage/domains/audit/domain.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { IntakeEvaluator } from '../storage/domains/boards/base.js';
@@ -110,6 +111,11 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   transitionService?: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
+  sessionRepository?: (input: {
+    orgId: string;
+    factoryProjectId: string;
+    item: Card;
+  }) => Promise<RunRepositoryResolution>;
   /** Materialized sessions, read to report which of the listed cards are being worked or wait on someone. */
   liveSessions: Pick<LiveSessions, 'isRunning' | 'parked' | 'parkedIn'>;
   /** This process's dispatcher run slots; absent or `undefined` while it runs no dispatcher. */
@@ -926,6 +932,42 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           });
           if (result.status === 'accepted') return c.json({ result });
           return c.json({ result }, result.code === 'stale' ? 409 : 422);
+        },
+      }),
+
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemSessionRepository.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemSessionRepository.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const parsedPath = FACTORY_ROUTE_CONTRACTS.workItemSessionRepository.pathSchema.safeParse({
+            id: resolved.factoryProjectId,
+            workItemId: context.req.param('workItemId'),
+          });
+          if (!parsedPath.success) return c.json({ error: 'Work item not found' }, 404);
+          await workItems.ensureReady();
+          const item = await workItems.get({ orgId: resolved.orgId, id: parsedPath.data.workItemId });
+          if (!item || item.factoryProjectId !== resolved.factoryProjectId) {
+            return c.json({ error: 'Work item not found' }, 404);
+          }
+          const { sessionRepository } = this.deps;
+          if (!sessionRepository) return c.json({ error: 'factory_session_repository_unavailable' }, 503);
+          const resolution = await sessionRepository({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+            item,
+          });
+          return c.json(
+            resolution.status === 'resolved'
+              ? {
+                  status: resolution.status,
+                  projectRepositoryId: resolution.projectRepositoryId,
+                  slug: resolution.slug,
+                }
+              : { status: resolution.status, hint: resolution.hint },
+          );
         },
       }),
 

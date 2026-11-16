@@ -939,6 +939,11 @@ const workItemListQuerySchema = z
 
 const countSchema = z.number().int().nonnegative();
 
+export const workItemSessionRepositoryResponseSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('resolved'), projectRepositoryId: z.string(), slug: z.string() }),
+  z.object({ status: z.literal('unlinked'), hint: z.string() }),
+]);
+
 /** What the draft page's starter buttons count on the project's default board. */
 export const workItemStartersResponseSchema = z.object({
   failed: countSchema,
@@ -1957,6 +1962,13 @@ export const FACTORY_ROUTE_CONTRACTS = {
       expectedRevision: z.number().int().nonnegative(),
     }),
     responseSchema: workItemResponseSchema,
+  },
+  workItemSessionRepository: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/:workItemId/session-repository',
+    description: "The repository a session on the card is filed under, resolved as the card's runs resolve it",
+    pathSchema: transitionPathSchema,
+    responseSchema: workItemSessionRepositoryResponseSchema,
   },
   workItemStart: {
     method: 'POST',

@@ -15,6 +15,7 @@ import type {
   BoardPhasesResponse,
   WorkItemFilterOptions,
   WorkItemListResponse,
+  WorkItemSessionRepository,
   WorkItemStarters,
 } from '../../../../api/types';
 import { requestJson } from './request';
@@ -371,6 +372,18 @@ export function fetchWorkItemStarters(
   return requestJson(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items/starters`, {
     signal,
   });
+}
+
+export function getWorkItemSessionRepository(
+  baseUrl: string,
+  factoryProjectId: string,
+  workItemId: string,
+  signal?: AbortSignal,
+): Promise<WorkItemSessionRepository> {
+  return requestJson(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items/${encodeURIComponent(workItemId)}/session-repository`,
+    { signal },
+  );
 }
 
 /** When the project's cards were created and completed since `since`, and how many cards it has in all. */

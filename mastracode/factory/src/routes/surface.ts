@@ -1035,6 +1035,24 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,
+          ...(sourceControlRegistrations.length > 0
+            ? {
+                sessionRepository: async ({ orgId, factoryProjectId, item }) => {
+                  const sourceControl = await resolveFactorySourceControl({ sourceControls, orgId, factoryProjectId });
+                  if (!sourceControl) {
+                    return { status: 'unlinked', hint: 'Factory project has no linked source-control repository.' };
+                  }
+                  const intakeConfig = await deps.domains.intake?.getConfig({ orgId, integrationIds: ['linear'] });
+                  return resolveRunRepository({
+                    sourceControl,
+                    orgId,
+                    factoryProjectId,
+                    item,
+                    linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
+                  });
+                },
+              }
+            : {}),
           liveSessions: deps.liveSessions,
           runSlots: deps.runSlots,
           projectSessions,

@@ -141,8 +141,13 @@ function CardDraft({
   configurationError: Error | undefined;
 }) {
   useGlobalShortcuts();
-  const sessionRepository = useCardSessionRepository(factory.repositories, item);
-  const draftStart = useStartCardSessionFromDraft(item, sessionRepository);
+  const sessionRepository = useCardSessionRepository(factory.id, item.id);
+  const draftStart = useStartCardSessionFromDraft(item, sessionRepository.data);
+  const repositoryProblem = sessionRepository.error
+    ? `Could not find this card's repository: ${sessionRepository.error.message}`
+    : sessionRepository.data?.status === 'unlinked'
+      ? sessionRepository.data.hint
+      : undefined;
 
   return (
     <DraftSessionStartContext.Provider value={draftStart}>
@@ -159,9 +164,7 @@ function CardDraft({
             </Txt>
             <div className="mt-7 flex w-full max-w-2xl flex-col items-center gap-3">
               {configurationError && <ConfigurationErrorNotice error={configurationError} />}
-              {sessionRepository?.kind === 'unavailable' && (
-                <Notice variant="warning">{sessionRepository.reason}</Notice>
-              )}
+              {repositoryProblem && <Notice variant="warning">{repositoryProblem}</Notice>}
               {board && <CardDraftActions factory={factory} item={item} board={board} />}
             </div>
           </section>
