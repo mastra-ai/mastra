@@ -248,6 +248,13 @@ export abstract class ExecutionEngine extends MastraBase {
     requestContext: RequestContext;
     actor?: ActorSignal;
     workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
+    /**
+     * Called once the run has been handed to workers. Engines that execute in-process ignore it.
+     * `Run.startAsync()` returns at this point and leaves the returned promise to settle in the
+     * background, so lifecycle callbacks still run when the worker reports the finish.
+     * @internal
+     */
+    onDispatched?: () => void;
     retryConfig?: {
       attempts?: number;
       delay?: number;
