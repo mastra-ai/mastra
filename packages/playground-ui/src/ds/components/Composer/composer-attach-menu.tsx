@@ -1,10 +1,13 @@
-import { Camera, FileText, Images, Plus } from 'lucide-react';
 import { Fragment, useRef, useState } from 'react';
 import type { ChangeEvent, ReactNode } from 'react';
 import { Button } from '@/ds/components/Button';
 import { DIALOG_DRAWER_BREAKPOINT_PX } from '@/ds/components/Dialog/dialog-shell';
 import { Drawer, DrawerContent, DrawerTitle, DrawerTrigger } from '@/ds/components/Drawer';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { IconCamera2 } from '@/ds/icons/central/IconCamera2';
+import { IconFileText } from '@/ds/icons/central/IconFileText';
+import { IconImages1 } from '@/ds/icons/central/IconImages1';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { cn } from '@/utils/cn';
 
@@ -29,9 +32,9 @@ export interface ComposerAttachMenuProps {
 
 const SOURCES = [
   // `capture` is ignored on desktop browsers, so the camera entry only shows where it opens a camera.
-  { key: 'camera', label: 'Camera', icon: <Camera />, className: 'pointer-fine:hidden' },
-  { key: 'photos', label: 'Photos', icon: <Images /> },
-  { key: 'files', label: 'Files', icon: <FileText /> },
+  { key: 'camera', label: 'Camera', icon: <IconCamera2 />, className: 'pointer-fine:hidden' },
+  { key: 'photos', label: 'Photos', icon: <IconImages1 /> },
+  { key: 'files', label: 'Files', icon: <IconFileText /> },
 ];
 
 /**
@@ -93,7 +96,7 @@ export function ComposerAttachMenu({
             aria-label={label}
             render={
               <Button variant="ghost" size={size} tooltip={label}>
-                <Plus />
+                <IconPlusMedium />
               </Button>
             }
           />
@@ -132,7 +135,7 @@ export function ComposerAttachMenu({
     <>
       <DropdownMenu>
         <DropdownMenu.Trigger variant="ghost" size={size} aria-label={label} tooltip={label} disabled={disabled}>
-          <Plus />
+          <IconPlusMedium />
         </DropdownMenu.Trigger>
         <DropdownMenu.Content side="top" align="start">
           {entries.map((entry, index) => (

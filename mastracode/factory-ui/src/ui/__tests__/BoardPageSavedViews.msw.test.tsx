@@ -163,8 +163,9 @@ describe('Factory board saved views', () => {
 
     await user.clear(search);
     await user.type(search, 'Moved');
+    // The server searches once typing pauses.
+    await waitFor(() => expect(within(triage).queryByText('Created later')).not.toBeInTheDocument());
     expect(within(triage).queryByText('Moved recently')).not.toBeInTheDocument();
-    expect(within(triage).queryByText('Created later')).not.toBeInTheDocument();
     await user.keyboard('{Escape}');
     expect(search).toHaveValue('');
     expect(within(triage).getByText('Created later')).toBeInTheDocument();
@@ -191,13 +192,13 @@ describe('Factory board saved views', () => {
     await user.click(screen.getByRole('button', { name: 'New view' }));
     await user.click(screen.getByRole('button', { name: 'Save view' }));
     await user.type(screen.getByRole('searchbox', { name: 'Search cards' }), 'Created');
-    expect(within(triage).queryByText('Moved recently')).not.toBeInTheDocument();
+    await waitFor(() => expect(within(triage).queryByText('Moved recently')).not.toBeInTheDocument());
 
     await user.click(screen.getByRole('button', { name: 'All cards' }));
     expect(screen.getByRole('searchbox', { name: 'Search cards' })).toHaveValue('');
     expect(within(triage).getByText('Moved recently')).toBeInTheDocument();
     await user.type(screen.getByRole('searchbox', { name: 'Search cards' }), 'missing');
-    expect(within(triage).queryByText('Created later')).not.toBeInTheDocument();
+    await waitFor(() => expect(within(triage).queryByText('Created later')).not.toBeInTheDocument());
     await openPropertiesMenu(user, 'Board properties');
     expect(screen.queryByRole('menuitem', { name: 'Save as view' })).not.toBeInTheDocument();
     await closePropertiesMenus(user);

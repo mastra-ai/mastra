@@ -27,6 +27,7 @@ export {
   type E2BGCSMountConfig,
   type E2BAzureBlobMountConfig,
   type E2BMountConfig,
+  type MountOwner,
 } from './sandbox/mounts';
 export { e2bSandboxProvider } from './provider';
 export { E2BFactorySandbox, type E2BFactorySandboxOptions, type E2BFactorySandboxSettings } from './factory-sandbox';

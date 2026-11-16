@@ -1,4 +1,5 @@
-import { ChevronDownIcon, ChevronUpIcon } from 'lucide-react';
+import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconChevronTop } from '@/ds/icons/central/IconChevronTop';
 
 /** The list's last row: pages more rows in, or collapses back to the top rows. */
 export function ShowMore({
@@ -25,13 +26,13 @@ export function ShowMore({
     <li className="-mx-2 flex items-center gap-1">
       {left > 0 && (
         <button type="button" onClick={onMore} className={button}>
-          <ChevronDownIcon className="size-3.5 shrink-0" />
+          <IconChevronBottom className="size-3.5 shrink-0" />
           Show {Math.min(left, pageSize)} more
         </button>
       )}
       {shown > limit && (
         <button type="button" onClick={onLess} className={button}>
-          <ChevronUpIcon className="size-3.5 shrink-0" />
+          <IconChevronTop className="size-3.5 shrink-0" />
           Show top {limit}
         </button>
       )}

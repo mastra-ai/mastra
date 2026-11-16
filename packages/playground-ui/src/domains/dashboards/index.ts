@@ -19,6 +19,17 @@ export type { ReadyPreparedWidget, WidgetPlan } from './lib/plan-widget';
 export { widgetGate } from './lib/gate';
 export type { AggregateGateInput, BlockedFields, DashboardEnvironment, PendingGate, WidgetGate } from './lib/gate';
 export * from './kinds';
+export {
+  CHART_COLOR_NAMES,
+  SERIES_COLORS,
+  VALUE_FORMATS,
+  colorSchema,
+  formatSchema,
+  queryRefSchema,
+  valueExprSchema,
+  valueRefSchema,
+} from './lib/values';
+export type { ChartColorName, LabelledValue, ValueExpr, ValueFormat, ValueRef } from './lib/values';
 export { dashboardDefaults } from './lib/definition';
 export type { DashboardScope, OnDashboardDrilldown } from './lib/definition';
 export { buildRequest, emptyAnswer, pageQuery, requestKey, sendRequest } from './lib/requests';

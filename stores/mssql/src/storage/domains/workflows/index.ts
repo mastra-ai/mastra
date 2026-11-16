@@ -48,6 +48,29 @@ import type { Queryable } from '../../db/run-fencing';
 import { getSchemaName, getTableName } from '../utils';
 
 const RUN_OWNER_COLUMNS = `[generation], [ownerId], [leaseExpiresAt], ${DB_NOW_MS} AS [nowMs]`;
+/** Run ids per query in `getRunOwnerships`, well under SQL Server's 2,100 parameters per request. */
+const RUN_OWNERSHIP_BATCH_SIZE = 500;
+
+/**
+ * The summary snapshot `listWorkflowRuns({ summary: true })` returns: `status` and `timestamp`
+ * when set, and `parentWorkflow` with only its `workflowId` and `runId` when both are non-empty.
+ * Only these paths are read, so `context` is never sent. OPENJSON parses each snapshot once, and
+ * FOR JSON PATH leaves out NULL values. A snapshot that isn't valid JSON lists as `{}`, since
+ * OPENJSON would fail the whole listing on it. OPENJSON returns one row per element of a JSON
+ * array, so `TOP (1)` keeps the summary to one object.
+ */
+const SUMMARY_SNAPSHOT_SQL = `COALESCE(CASE WHEN ISJSON([snapshot]) = 1 THEN (
+    SELECT TOP (1) s.[status],
+      TRY_CAST(s.[timestamp] AS BIGINT) AS [timestamp],
+      CASE WHEN s.[workflowId] <> '' AND s.[runId] <> '' THEN s.[workflowId] END AS [parentWorkflow.workflowId],
+      CASE WHEN s.[workflowId] <> '' AND s.[runId] <> '' THEN s.[runId] END AS [parentWorkflow.runId]
+    FROM OPENJSON([snapshot]) WITH (
+      [status] NVARCHAR(MAX) '$.status',
+      [timestamp] NVARCHAR(64) '$.timestamp',
+      [workflowId] NVARCHAR(MAX) '$.parentWorkflow.workflowId',
+      [runId] NVARCHAR(MAX) '$.parentWorkflow.runId'
+    ) AS s
+    FOR JSON PATH, WITHOUT_ARRAY_WRAPPER) END, '{}')`;
 
 function toRunOwnershipRecord(runId: string, row: Record<string, unknown>): RunOwnershipRecord {
   // The driver returns BIGINT columns as strings.
@@ -68,6 +91,8 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
   private needsConnect: boolean;
   private skipDefaultIndexes?: boolean;
   private indexes?: CreateIndexOptions[];
+  /** Set once the snapshot table is seen with a `resourceId` column, which is never dropped. */
+  #hasResourceIdColumn = false;
 
   /** Tables managed by this domain */
   static readonly MANAGED_TABLES = [TABLE_WORKFLOW_SNAPSHOT] as const;
@@ -303,6 +328,54 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     } catch (error) {
       throw this.#ownershipError('GET_RUN_OWNERSHIP', runId, error);
     }
+  }
+
+  /** Reads the records with one query per {@link RUN_OWNERSHIP_BATCH_SIZE} runs. */
+  async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
+    const records = new Map<string, RunOwnershipRecord>();
+    const ids = [...new Set(runIds)];
+
+    try {
+      for (let start = 0; start < ids.length; start += RUN_OWNERSHIP_BATCH_SIZE) {
+        const chunk = ids.slice(start, start + RUN_OWNERSHIP_BATCH_SIZE);
+        const request = this.pool.request();
+        chunk.forEach((runId, i) => request.input(`runId${i}`, runId));
+        // Joining the requested ids lets the column's collation match them, as the single-run
+        // read does (case, trailing spaces), and returns each record under the id asked for.
+        const result = await request.query(
+          `SELECT j.[reqId], ${RUN_OWNER_COLUMNS}
+           FROM (VALUES ${chunk.map((_, i) => `(@runId${i})`).join(', ')}) AS j ([reqId])
+           JOIN ${this.#runOwnersTable} o ON o.[runId] = j.[reqId]`,
+        );
+
+        const rows: Record<string, unknown>[] = result.recordset;
+        for (const row of rows) {
+          const runId = String(row.reqId);
+          records.set(runId, toRunOwnershipRecord(runId, row));
+        }
+      }
+
+      return records;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'GET_RUN_OWNERSHIPS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runCount: ids.length },
+        },
+        error,
+      );
+    }
+  }
+
+  /** Whether the snapshot table has `resourceId`, which tables created before it existed lack. */
+  async #resourceIdColumnExists(): Promise<boolean> {
+    if (!this.#hasResourceIdColumn) {
+      this.#hasResourceIdColumn = await this.db.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
+    }
+
+    return this.#hasResourceIdColumn;
   }
 
   private parseWorkflowRun(row: any): WorkflowRun {
@@ -755,6 +828,10 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     }
   }
 
+  /**
+   * Lists runs newest first, with optional filters and pagination. With `summary`, each run's
+   * snapshot holds only `status`, `timestamp` and `parentWorkflow`.
+   */
   async listWorkflowRuns({
     workflowName,
     fromDate,
@@ -763,6 +840,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     perPage,
     resourceId,
     status,
+    summary,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
@@ -779,8 +857,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       }
 
       if (resourceId) {
-        const hasResourceId = await this.db.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
-        if (hasResourceId) {
+        if (await this.#resourceIdColumnExists()) {
           conditions.push(`[resourceId] = @resourceId`);
           paramMap['resourceId'] = resourceId;
         } else {
@@ -817,7 +894,14 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         total = Number(countResult.recordset[0]?.count || 0);
       }
 
-      let query = `SELECT * FROM ${tableName} ${whereClause} ORDER BY [seq_id] DESC`;
+      let columns = '*';
+      if (summary) {
+        // A table without resourceId lists without it, as `SELECT *` lists it.
+        const resourceIdColumn = (await this.#resourceIdColumnExists()) ? '[resourceId], ' : '';
+        columns = `[workflow_name], [run_id], ${resourceIdColumn}${SUMMARY_SNAPSHOT_SQL} AS [snapshot], [createdAt], [updatedAt]`;
+      }
+
+      let query = `SELECT ${columns} FROM ${tableName} ${whereClause} ORDER BY [seq_id] DESC`;
       if (usePagination) {
         const normalizedPerPage = normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
         const offset = page! * normalizedPerPage;

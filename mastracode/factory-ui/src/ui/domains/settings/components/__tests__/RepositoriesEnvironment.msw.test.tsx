@@ -29,13 +29,11 @@ function useEnvironment(environment: FactoryEnvironmentPayload) {
                     externalId: repositoryId,
                     defaultBranch,
                     branch: defaultBranch,
-                    sandboxWorkdir: '/workspace',
                   })
                 : listedRepository(projectRepositoryId, projectRepositoryId, {
                     slug: null,
                     defaultBranch: null,
                     branch: defaultBranch,
-                    sandboxWorkdir: '/workspace',
                   }),
             ),
           },

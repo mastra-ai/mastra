@@ -698,6 +698,7 @@ const sidebars = {
       label: 'Server',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'server/builtin-mcp-tools', label: 'Built-in MCP tools' },
         { type: 'doc', id: 'server/create-route', label: 'createRoute()' },
         { type: 'doc', id: 'server/dispatch-route', label: 'dispatchRoute()' },
         { type: 'doc', id: 'server/elysia-adapter', label: 'Elysia Adapter' },

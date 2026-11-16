@@ -18,15 +18,13 @@ import type {
   LinearIssueDetail as LinearRouteIssueDetail,
 } from '../../linear/integration.js';
 import { attachLinearIssueReconciler } from '../../linear/issue-reconciler.js';
-import {
-  linearIssueReconciliationEnabled,
-  linearIssueReconciliationInterval,
-} from '../../linear/reconciliation-config.js';
+import { linearIssueReconciliationInterval } from '../../linear/reconciliation-config.js';
 import { buildLinearRoutes } from '../../linear/routes.js';
 import type { LinearWorkspaceListingError } from '../../linear/routes.js';
 import { attachLinearRules } from '../../linear/rules.js';
 import type { LinearConnectionData, LinearConnectionRow, LinearStorageHandle } from '../../linear/storage.js';
 import {
+  logPlatformBootInfo,
   logPlatformInfo,
   logPlatformWarn,
   PlatformApiClient,
@@ -317,7 +315,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   initialize({ projects, auth }: { projects: FactoryProjectsStorage; auth?: RouteAuth }): void {
     this.#projects = projects;
     this.#auth = auth;
-    logPlatformInfo('Platform Linear integration initialized', { endpointHost: this.#endpointHost });
+    logPlatformBootInfo('Platform Linear integration initialized', { endpointHost: this.#endpointHost });
   }
 
   get authEnabled(): boolean {
@@ -399,11 +397,8 @@ export class PlatformLinearIntegration implements FactoryIntegration {
 
   workers(ctx: IntegrationContext): MastraWorker[] {
     const pollingEnabled = process.env.MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
-    const reconcileEnabled = linearIssueReconciliationEnabled();
-    if (!pollingEnabled && !reconcileEnabled) return [];
-
     const ingest = attachLinearRules(this, ctx);
-    const reconcile = reconcileEnabled ? attachLinearIssueReconciler(this, ctx) : undefined;
+    const reconcile = attachLinearIssueReconciler(this, ctx);
     const workItems = ctx.runtime?.workItems;
     if (!workItems) return [];
     if (!ingest && !reconcile) return [];
@@ -453,7 +448,6 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         baseUrl: ctx.baseUrl,
         intake: ctx.storage.intake,
         projects: ctx.storage.projects,
-        ingestFactoryIssues: attachLinearRules(this, ctx),
         workItems: ctx.runtime?.workItems,
         boards: ctx.runtime?.boards,
       }).filter(route => !route.path.startsWith('/auth/linear/')),
@@ -665,6 +659,10 @@ export class PlatformLinearIntegration implements FactoryIntegration {
 
   async listWorkspaces(): Promise<LinearWorkspace[]> {
     return this.#listWorkspaces();
+  }
+
+  async hasActiveConnections(): Promise<boolean> {
+    return (await this.#listWorkspaces()).length > 0;
   }
 
   async #listWorkspaces(): Promise<LinearWorkspace[]> {

@@ -3,8 +3,8 @@ import { createHash } from 'node:crypto';
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { shellQuote } from '../../utils/shell-quote';
-import { LOG_PREFIX, validateGCSBucketName, validatePrefix } from './types';
-import type { MountContext } from './types';
+import { LOG_PREFIX, validateGCSBucketName, validateOwner, validatePrefix } from './types';
+import type { MountContext, MountOwner } from './types';
 
 /**
  * GCS mount config for E2B (mounted via gcsfuse).
@@ -24,6 +24,11 @@ export interface E2BGCSMountConfig extends FilesystemMountConfig {
    * sandbox paths map directly to prefixed GCS keys.
    */
   prefix?: string;
+  /**
+   * Owner of the files inside the mount, as numeric uid/gid.
+   * Defaults to the sandbox user's uid/gid (probed with `id -u && id -g`).
+   */
+  owner?: MountOwner;
 }
 
 /**
@@ -38,6 +43,9 @@ export async function mountGCS(mountPath: string, config: E2BGCSMountConfig, ctx
 
   // Validate inputs before interpolating into shell commands
   validateGCSBucketName(config.bucket);
+  if (config.owner) {
+    validateOwner(config.owner);
+  }
 
   // Install gcsfuse if not present
   const checkResult = await sandbox.commands.run('which gcsfuse || echo "not found"');
@@ -55,9 +63,17 @@ export async function mountGCS(mountPath: string, config: E2BGCSMountConfig, ctx
     );
   }
 
-  // Get user's uid/gid for proper file ownership
-  const idResult = await sandbox.commands.run('id -u && id -g');
-  const [uid, gid] = idResult.stdout.trim().split('\n');
+  // Resolve file ownership: an explicit `owner` wins; otherwise probe the default
+  // user's uid/gid so mounted files are owned by that user, not root.
+  let uid: string | undefined;
+  let gid: string | undefined;
+  if (config.owner) {
+    uid = String(config.owner.uid);
+    gid = String(config.owner.gid);
+  } else {
+    const idResult = await sandbox.commands.run('id -u && id -g');
+    [uid, gid] = idResult.stdout.trim().split('\n');
+  }
 
   // Build gcsfuse flags
   // Note: gcsfuse uses --uid/--gid flags, not -o uid=X style

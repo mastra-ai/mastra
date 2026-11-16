@@ -4,7 +4,6 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
-import { BookOpen, ChevronRight } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useBlocker, useNavigate } from 'react-router';
@@ -24,6 +23,8 @@ import type { RuleField } from '../boardDraft';
 import { AddPhaseButton } from './AddPhaseButton';
 import { NewCardsHere } from './NewCardsHere';
 import { PhaseConfig } from './PhaseConfig';
+import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
+import { IconChevronRight } from '@mastra/playground-ui/icons/central/IconChevronRight';
 
 const RULE_FIELDS: RuleField[] = ['autoStartWhen', 'autoApproveWhen'];
 
@@ -180,7 +181,7 @@ export function BoardConfigEditor({
                       <Txt as="span" variant="label" className="min-w-0 flex-1 truncate">
                         {candidate.name}
                       </Txt>
-                      <ChevronRight className="text-muted-foreground size-4" aria-hidden />
+                      <IconChevronRight className="text-muted-foreground size-4" aria-hidden />
                     </Link>
                   </li>
                 ))}
@@ -196,11 +197,11 @@ export function BoardConfigEditor({
                 to={boardSkillsPath(factory.id, boardId)}
                 className="hover:bg-fill focus-visible:bg-fill flex items-center gap-3 px-4 py-3 focus-visible:outline-hidden"
               >
-                <BookOpen className="text-muted-foreground size-4" aria-hidden />
+                <IconBook className="text-muted-foreground size-4" aria-hidden />
                 <Txt as="span" variant="label" className="min-w-0 flex-1 truncate">
                   Skills
                 </Txt>
-                <ChevronRight className="text-muted-foreground size-4" aria-hidden />
+                <IconChevronRight className="text-muted-foreground size-4" aria-hidden />
               </Link>
             </SettingsContainer>
           </SettingsSubsection>

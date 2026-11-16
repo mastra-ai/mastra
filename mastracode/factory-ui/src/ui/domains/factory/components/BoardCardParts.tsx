@@ -6,25 +6,22 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastr
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Hand, Maximize2, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 
 import type { BoardCardStatus } from '../boardCardState';
-import {
-  HIDDEN_CARD_LABELS,
-  SOURCE_LABELS,
-  metadataLabelColors,
-  metadataLabels,
-  pullRequestStatusForItem,
-  pullRequestStatusForSource,
-  workItemKey,
-} from '../boardItems';
+import { SOURCE_LABELS, cardLabels, metadataLabelColors } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
-import { attachedPullRequestSource } from '../services/workItems';
+import { cardChangeRequest, changeRequestStatus } from '../changeRequestState';
+import type { PullRequestSubscription } from '../services/githubSubscriptions';
+import { workItemReference } from '../services/relationships';
+import { isPullRequestSource } from '../services/workItems';
 import type { WorkItem, WorkItemSource } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
+import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
+import { IconExpand45 } from '@mastra/playground-ui/icons/central/IconExpand45';
+import { IconHand5Finger } from '@mastra/playground-ui/icons/central/IconHand5Finger';
 
 export function SourceTitle({ source, title, id }: { source: WorkItemSource; title: string; id?: string }) {
   return (
@@ -35,20 +32,34 @@ export function SourceTitle({ source, title, id }: { source: WorkItemSource; tit
   );
 }
 
-export function CardKey({ item }: { item: Pick<WorkItem, 'source' | 'metadata'> }) {
+export function CardKey({
+  item,
+  contextRepository,
+}: {
+  item: Pick<WorkItem, 'source' | 'workItem' | 'metadata' | 'sourceKey'>;
+  contextRepository?: string;
+}) {
   // SourceTitle's sr-only prefix already announces the source.
-  return workItemKey(item) ?? <span aria-hidden>{SOURCE_LABELS[item.source]}</span>;
+  return workItemReference(item, contextRepository) ?? <span aria-hidden>{SOURCE_LABELS[item.source]}</span>;
 }
 
-export function WorkItemSourceIcon({ item }: { item: WorkItem }) {
-  if (item.source === 'github-pr') return <PullRequestStatusIcon status={pullRequestStatusForItem(item)} />;
-  const attached = attachedPullRequestSource(item);
-  if (!attached) return <SourceIcon source={item.source} />;
+export function WorkItemSourceIcon({
+  item,
+  subscriptions,
+}: {
+  item: WorkItem;
+  subscriptions?: readonly PullRequestSubscription[];
+}) {
+  const request = cardChangeRequest(item);
+  const pullRequestStatus = request && changeRequestStatus(request, subscriptions);
+  if (!request || pullRequestStatus === undefined) return <SourceIcon source={item.source} />;
+  const status = <PullRequestStatusIcon status={pullRequestStatus} provider={request.provider} />;
+  if (isPullRequestSource(item.source)) return status;
   return (
-    <>
+    <span className="flex shrink-0 items-center gap-1.5">
       <SourceIcon source={item.source} />
-      <PullRequestStatusIcon status={pullRequestStatusForSource(attached)} />
-    </>
+      {status}
+    </span>
   );
 }
 
@@ -76,7 +87,7 @@ export function CardDetailsHint({ onOpen }: { onOpen: () => void }) {
       onClick={onOpen}
       className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), REVEAL_ON_CARD_HOVER)}
     >
-      <Maximize2 size={13} aria-hidden />
+      <IconExpand45 size={13} aria-hidden />
     </button>
   );
 }
@@ -88,7 +99,7 @@ export function CardStatus({ status, compact = false }: { status: BoardCardStatu
 
   if (status.kind === 'held') {
     return (
-      <Badge size="xs" variant="orange" icon={<Hand aria-hidden />} role="status">
+      <Badge size="xs" variant="orange" icon={<IconHand5Finger aria-hidden />} role="status">
         {status.label}
       </Badge>
     );
@@ -124,7 +135,7 @@ export function CardStatus({ status, compact = false }: { status: BoardCardStatu
         status.detail !== undefined && 'underline decoration-dotted underline-offset-2',
       )}
     >
-      <TriangleAlert size={11} aria-hidden className={cn('shrink-0', !compact && 'mt-0.5')} />
+      <IconExclamationTriangle size={11} aria-hidden className={cn('shrink-0', !compact && 'mt-0.5')} />
       <span className={cn('min-w-0', compact ? 'truncate' : 'wrap-anywhere')}>{status.label}</span>
     </Txt>
   );
@@ -157,7 +168,7 @@ function labelDotClass(label: string): string {
 }
 
 export function MetadataLabels({ metadata }: { metadata: Record<string, unknown> }) {
-  const displayLabels = metadataLabels(metadata).filter(label => !HIDDEN_CARD_LABELS.has(label.toLowerCase()));
+  const displayLabels = cardLabels(metadata);
   if (displayLabels.length === 0) return null;
   const colors = metadataLabelColors(metadata);
   return (

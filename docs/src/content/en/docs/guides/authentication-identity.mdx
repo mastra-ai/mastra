@@ -107,7 +107,19 @@ Choose the narrowest boundary that matches how people should share state:
 | Shared memory for an organization | `user.organizationId` |
 | User memory within a workspace and project | `${workspaceId}:${projectId}:${userId}` |
 
-Mastra applies this boundary automatically to memory and thread operations. Application code can continue using the authenticated user in `RequestContext` when it authorizes database records or external services.
+Mastra applies this boundary automatically to memory and thread operations, including Observational Memory. `GET /api/memory/observational-memory`, `POST /api/memory/observational-memory/buffer-status`, and the Observational Memory details in `GET /api/memory/status` return `403` when the requested thread belongs to another resource or an [FGA](/docs/auth/fga) check denies it. Without `server.auth`, these routes use the `resourceId` and `threadId` the client sends, but a thread paired with a different `resourceId` still gets `403`. Application code can continue using the authenticated user in `RequestContext` when it authorizes database records or external services.
+
+### User IDs from JWT providers
+
+[`MastraJwtAuth`](/reference/auth/jwt), [Auth0](/reference/auth/auth0), and [Clerk](/reference/auth/clerk) set the authenticated user's `id` to the token's `sub` claim when the token has no `id` claim. A token with its own `id` claim keeps it. RBAC loads roles by `id`, and `id` is also the owner of the records a user creates when `mapUserToResourceId` isn't set.
+
+Without `mapUserToResourceId`, this means:
+
+- Each user sees their own stored agents, skills, workspaces, and other owned records plus public ones. Records they create are owned by them and private by default. Records created before your app used these user IDs have no owner and stay visible to everyone. Users with an admin permission such as `stored-agents:admin` still see every record.
+- Per-author tool-provider connections are stored under the user's `id`. Connections saved under the shared `default` owner aren't found, so users reconnect them. Shared connections aren't affected.
+- Feedback is recorded with the user's `id` as the user ID.
+
+To keep every user in one shared resource instead, pass `mapUserToResourceId: () => 'default'` to the auth provider. This also shares memory and owned records between all users, so use it only when that's how your app should work.
 
 ## Enforce identity at the data boundary
 

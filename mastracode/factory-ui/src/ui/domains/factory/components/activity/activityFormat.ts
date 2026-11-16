@@ -1,9 +1,10 @@
 import type { LucideIcon } from 'lucide-react';
-import { Bot, Inbox, PackageCheck } from 'lucide-react';
-
 import type { RunsState } from '../../hooks/useFactoryActivity';
 import { ACTIVITY_KIND_ORDER } from '../../periodActivity';
 import type { ActivityCounts, ActivityKind, ActivitySlot } from '../../periodActivity';
+import { IconInboxEmpty } from '@mastra/playground-ui/icons/central/IconInboxEmpty';
+import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
+import { IconPackageCkeck } from '@mastra/playground-ui/icons/central/IconPackageCkeck';
 
 interface ActivityKindLook {
   label: string;
@@ -13,9 +14,14 @@ interface ActivityKindLook {
 }
 
 const LOOKS: Record<ActivityKind, ActivityKindLook> = {
-  cameIn: { label: 'Came in', counted: { one: 'came in', other: 'came in' }, icon: Inbox, tone: 'opacity-20' },
-  ran: { label: 'Agent runs', counted: { one: 'agent run', other: 'agent runs' }, icon: Bot, tone: 'opacity-40' },
-  shipped: { label: 'Shipped', counted: { one: 'shipped', other: 'shipped' }, icon: PackageCheck, tone: 'opacity-70' },
+  cameIn: { label: 'Came in', counted: { one: 'came in', other: 'came in' }, icon: IconInboxEmpty, tone: 'opacity-20' },
+  ran: { label: 'Agent runs', counted: { one: 'agent run', other: 'agent runs' }, icon: IconRobot, tone: 'opacity-40' },
+  shipped: {
+    label: 'Shipped',
+    counted: { one: 'shipped', other: 'shipped' },
+    icon: IconPackageCkeck,
+    tone: 'opacity-70',
+  },
 };
 
 export const ACTIVITY_KINDS = ACTIVITY_KIND_ORDER.map(kind => ({ kind, ...LOOKS[kind] }));

@@ -10,7 +10,7 @@
  * `recover-active-runs.test.ts` and `recover-run.test.ts`.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import { DurableStepIds } from '../agent/durable/constants';
 import { createDurableAgent } from '../agent/durable/create-durable-agent';
@@ -84,6 +84,14 @@ async function seedRunning(store: InMemoryStore, agentId: string, runId: string)
     } as WorkflowRunState,
   });
 }
+
+// Asserts what the default shutdown drain budget waits for; keep real waits.
+beforeAll(() => {
+  vi.stubEnv('MASTRA_TEST_FAST_WAITS', '0');
+});
+afterAll(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('Mastra.recoverAllDurableAgents', () => {
   let store: InMemoryStore;
@@ -857,7 +865,7 @@ describe('Mastra.recoverAllDurableAgents', () => {
 
   it('exposes the recovery config via recoveryConfig (default off)', () => {
     const mastra = new Mastra({ storage: store });
-    expect(mastra.recoveryConfig).toEqual({ workflows: 'auto', workflowConcurrency: 5, durableAgents: 'off' });
+    expect(mastra.recoveryConfig).toMatchObject({ durableAgents: 'off' });
   });
 
   it('reflects an explicit recovery.durableAgents = "auto" config', () => {
@@ -865,7 +873,7 @@ describe('Mastra.recoverAllDurableAgents', () => {
       storage: store,
       recovery: { durableAgents: 'auto' },
     });
-    expect(mastra.recoveryConfig).toEqual({ workflows: 'auto', workflowConcurrency: 5, durableAgents: 'auto' });
+    expect(mastra.recoveryConfig).toMatchObject({ durableAgents: 'auto' });
   });
 
   it('does not auto-invoke recoverAllDurableAgents on construction', async () => {

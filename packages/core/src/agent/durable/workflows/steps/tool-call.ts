@@ -15,7 +15,13 @@ import {
 } from '../../../../loop/shared/steps/background-task-result-core';
 import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core';
 import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk-core';
-import { computeModelOutputProviderMetadata } from '../../../../loop/shared/steps/tool-result-commit-core';
+import {
+  computeModelOutputProviderMetadata,
+  readModelOutput,
+  resolveModelOutputAfterToolResultProcessors,
+  snapshotToolResult,
+  hasToolResultProcessor,
+} from '../../../../loop/shared/steps/tool-result-commit-core';
 import type { ToolResultCommitOutcome } from '../../../../loop/shared/steps/tool-result-commit-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
@@ -2362,6 +2368,12 @@ export function createDurableToolCallStep() {
             agent: registryEntry.agent,
             processorStates: registryEntry.processorStates,
           });
+          const resultBeforeProcessors = result;
+          const resultSnapshotBeforeProcessors =
+            mappingTool?.toModelOutput && hasToolResultProcessor(registryEntry.outputProcessors)
+              ? snapshotToolResult(resultBeforeProcessors)
+              : undefined;
+          let processorsSucceeded = false;
           try {
             await resultProcessorRunner.runProcessToolResult({
               // The accumulated StepResult[] is not reconstructable at
@@ -2375,6 +2387,7 @@ export function createDurableToolCallStep() {
               toolCallId,
               toolArgs: cleanedArgs,
               result,
+              modelOutput: readModelOutput(providerMetadata),
               ...(processorObservabilityContext ?? {}),
               requestContext: registryEntry.requestContext,
               retryCount: 0,
@@ -2404,6 +2417,7 @@ export function createDurableToolCallStep() {
             if (postProcessorResult !== undefined && postProcessorResult !== result) {
               result = postProcessorResult;
             }
+            processorsSucceeded = true;
           } catch (processorError) {
             ownership?.throwIfLost();
             if (processorError instanceof TripWire) {
@@ -2447,6 +2461,38 @@ export function createDurableToolCallStep() {
             // keeps the run alive.
             logger?.warn?.(`[DurableAgent] processToolResult failed for tool "${toolName}": ${processorError}`);
             result = { error: 'Tool result processing failed' };
+            // The mapped output came from the unprocessed value; the model must not read it either.
+            if (providerMetadata?.mastra && 'modelOutput' in providerMetadata.mastra) {
+              const { modelOutput: _unprocessed, ...mastra } = providerMetadata.mastra;
+              providerMetadata = { ...providerMetadata, mastra };
+            }
+          }
+
+          // Carry a model output a processor rewrote (or a re-mapping of the result it
+          // rewrote) into the emitted chunk and the serialized step output. Outside the
+          // try so a failing `toModelOutput` fails the run, as it does before the hook.
+          if (processorsSucceeded && outcome.status === 'success') {
+            let resolvedProviderMetadata: typeof providerMetadata;
+            try {
+              resolvedProviderMetadata = (await resolveModelOutputAfterToolResultProcessors({
+                messageList,
+                tool: mappingTool,
+                toolName,
+                toolCallId,
+                resultBeforeProcessors,
+                resultSnapshotBeforeProcessors,
+                providerMetadata,
+                parentSpan: stepSpan,
+              })) as typeof providerMetadata;
+            } catch (mappingError) {
+              mappingFailure = { error: mappingError };
+              throw mappingError;
+            }
+            ownership?.throwIfLost();
+            if (resolvedProviderMetadata !== providerMetadata) {
+              providerMetadata = resolvedProviderMetadata;
+              modelOutputComputed = true;
+            }
           }
         }
 

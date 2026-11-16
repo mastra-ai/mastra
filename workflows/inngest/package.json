@@ -1,6 +1,6 @@
 {
   "name": "@mastra/inngest",
-  "version": "1.11.2-alpha.9",
+  "version": "1.11.2",
   "description": "Mastra Inngest integration",
   "license": "Apache-2.0",
   "type": "module",
@@ -65,6 +65,7 @@
     "@mastra/libsql": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
+    "@mastra/pg": "workspace:*",
     "@types/express": "^5.0.6",
     "@types/koa": "^3.0.3",
     "@types/koa-bodyparser": "^4.3.13",
