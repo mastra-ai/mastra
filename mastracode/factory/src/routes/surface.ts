@@ -542,6 +542,7 @@ export async function prepareFactoryRuleBinding(
       ...(approver ? { startedBy: await starterOf(owner?.workItems, project, approver) } : {}),
       factoryProjectId: input.record.factoryProjectId,
       sessionId: preparedSession.sessionId,
+      expectedBindingId: input.expectedBindingId,
       modelScope,
       defaultModelId: modelScope === 'factory' ? (project.defaultModelId ?? undefined) : undefined,
       threadTitle: workItemThreadTitle({ source, title: input.item.title, metadata: input.item.workItem.metadata }),

@@ -27,8 +27,8 @@ function deferred() {
   return { promise, resolve };
 }
 
-function stubReviewBoard(candidate = false, decision?: FactoryDecisionSummary) {
-  const items: Card[] = candidate ? [] : [{ ...reviewItem, stages: decision ? ['pr-review'] : ['intake'] }];
+function stubReviewBoard(decision?: FactoryDecisionSummary) {
+  const items: Card[] = [{ ...reviewItem, stages: decision ? ['pr-review'] : ['intake'] }];
   const decisions: FactoryDecisionSummary[] = decision ? [decision] : [];
   const runningSessionIds: string[] = [];
   const data = { items, decisions, runningSessionIds, transitionCommitted: false, decisionRefreshStarted: false };
@@ -61,14 +61,7 @@ function stubReviewBoard(candidate = false, decision?: FactoryDecisionSummary) {
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
-    // Work browses the repository's issues beside its pull requests.
-    http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, () =>
-      HttpResponse.json({ issues: [], nextPage: null }),
-    ),
     http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
-    http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/prs`, () =>
-      HttpResponse.json({ pullRequests: candidate ? [reviewCandidate] : [], nextPage: null }),
-    ),
     http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/prs/42`, () =>
       HttpResponse.json({
         ...reviewCandidate,
@@ -128,8 +121,8 @@ function renderReviewBoard() {
 }
 
 describe('Review card action lifecycle', () => {
-  it.each([true, false])('keeps Review busy from Intake through kickoff (candidate: %s)', async candidate => {
-    const { data, transitions, transitionGate, decisionsGate } = stubReviewBoard(candidate);
+  it('keeps Review busy from Intake through kickoff', async () => {
+    const { data, transitions, transitionGate, decisionsGate } = stubReviewBoard();
     const user = userEvent.setup();
     const { client } = renderReviewBoard();
     // The Review column's own header is a button of that name: press the card's.
@@ -184,7 +177,7 @@ describe('Review card action lifecycle', () => {
   });
 
   it('keeps automatic and manual retries busy, and offers Retry after a final failure', async () => {
-    const { data, retries, retryGate } = stubReviewBoard(false, {
+    const { data, retries, retryGate } = stubReviewBoard({
       ...reviewDecision,
       status: 'retry',
       attempts: 1,

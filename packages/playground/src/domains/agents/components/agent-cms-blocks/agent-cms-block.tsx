@@ -18,16 +18,18 @@ import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { IconBookmarkPlus } from '@mastra/playground-ui/icons/central/IconBookmarkPlus';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconDotGrid2x3 } from '@mastra/playground-ui/icons/central/IconDotGrid2x3';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
+
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
-import { GripVertical, X, BookmarkPlus } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-
 import type { InstructionBlock, InlineInstructionBlock } from '../agent-edit-page/utils/form-validation';
 import { AgentCMSRefBlock } from './agent-cms-ref-block';
 import { DisplayConditionsDialog } from '@/domains/cms';
@@ -204,7 +206,7 @@ const InlineBlockContent = ({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Icon>
-                    <GripVertical />
+                    <IconDotGrid2x3 />
                   </Icon>
                 </TooltipTrigger>
                 <TooltipContent side="left">Drag to reorder</TooltipContent>
@@ -229,13 +231,13 @@ const InlineBlockContent = ({
                 onClick={() => setSaveDialogOpen(true)}
                 tooltip="Save as prompt block"
               >
-                <BookmarkPlus />
+                <IconBookmarkPlus />
               </Button>
             )}
 
             {onDelete && (
               <Button variant="ghost" size="icon-sm" onClick={onDelete} tooltip="Delete block">
-                <X />
+                <IconCrossMedium />
               </Button>
             )}
           </div>

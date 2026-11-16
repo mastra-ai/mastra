@@ -2,13 +2,15 @@ import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
-import { Check, CircleDashed, Code2 } from 'lucide-react';
+import { IconCircleDashed } from '@mastra/playground-ui/icons/central/IconCircleDashed';
 import { isCodeHostSource, useWorkSourceConnections, WORK_SOURCE_NAME } from '../../../hooks/useWorkSourceConnections';
 import type { BoardSource } from '../../../hooks/useWorkSourceConnections';
 import type { SourceControlRepository } from '../../../services/github';
 import { repositoryHost } from '../../../services/sourceControlHosts';
 import { GitLabIcon, IncidentIoIcon, JiraIcon } from '../../../../../ui/icons';
 import { SketchLabel } from './SketchLabel';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
 
 const SOURCES: Record<
   BoardSource,
@@ -104,7 +106,7 @@ export function OnboardingIntakePreview({
       </SketchLabel>
       <SketchLabel x={28} y={162} width={104}>
         <div className="flex items-center gap-1.5">
-          <CircleDashed className="text-muted-foreground size-3" />
+          <IconCircleDashed className="text-muted-foreground size-3" />
           <Txt variant="meta" tone="muted">
             To do
           </Txt>
@@ -112,7 +114,7 @@ export function OnboardingIntakePreview({
       </SketchLabel>
       <SketchLabel x={148} y={162} width={104}>
         <div className="flex items-center gap-1.5">
-          <Code2 className="text-muted-foreground size-3" />
+          <IconCodeBrackets className="text-muted-foreground size-3" />
           <Txt variant="meta" tone="muted">
             Build
           </Txt>
@@ -120,7 +122,7 @@ export function OnboardingIntakePreview({
       </SketchLabel>
       <SketchLabel x={268} y={162} width={104}>
         <div className="flex items-center gap-1.5">
-          <Check className="text-muted-foreground size-3" />
+          <IconCheckmark2Medium className="text-muted-foreground size-3" />
           <Txt variant="meta" tone="muted">
             Review
           </Txt>

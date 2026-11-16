@@ -2,10 +2,12 @@ import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import type { KeyValueListItemData } from '@mastra/playground-ui/components/KeyValueList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
+import { IconCircleInfo } from '@mastra/playground-ui/icons/central/IconCircleInfo';
+import { IconPackage } from '@mastra/playground-ui/icons/central/IconPackage';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { PackageIcon, GitBranchIcon, InfoIcon } from 'lucide-react';
 
 type TemplateInfoProps = {
   title?: string;
@@ -29,7 +31,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
             '[&>svg]:opacity-20': isLoading,
           })}
         >
-          <PackageIcon />
+          <IconPackage />
           <h2
             className={cn({
               'flex min-w-[50%] rounded-lg bg-muted': isLoading,
@@ -56,11 +58,11 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
           {!isLoading && templateSlug && (
             <div className={cn('mb-4 rounded-lg border border-border bg-background p-4', 'flex items-start gap-3')}>
               <div className="mt-0.5 shrink-0">
-                <InfoIcon className="h-[1.1em] w-[1.1em] text-info-indicator" />
+                <IconCircleInfo className="h-[1.1em] w-[1.1em] text-info-indicator" />
               </div>
               <div className="flex-1 space-y-2">
                 <div className="flex items-center gap-2">
-                  <GitBranchIcon className="h-[1em] w-[1em] text-muted-foreground" />
+                  <IconBranch className="h-[1em] w-[1em] text-muted-foreground" />
                   <Txt as="span" variant="subheading" tone="ink">
                     A new Git branch will be created
                   </Txt>

@@ -398,7 +398,6 @@ describe('Board work-item activity', () => {
 
   it('loads and matches Linear teammates while GitHub intake is active', async () => {
     stubBoardEndpoints();
-    const linearIssuesRequested = vi.fn();
     server.use(
       http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
         HttpResponse.json({
@@ -418,30 +417,6 @@ describe('Board work-item activity', () => {
       http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
         HttpResponse.json({ enabled: true, connected: true, workspace: { name: 'Acme', urlKey: 'acme' } }),
       ),
-      http.get(`${TEST_BASE_URL}/web/linear/issues`, () => {
-        linearIssuesRequested();
-        return HttpResponse.json({
-          issues: [
-            {
-              id: 'linear-42',
-              identifier: 'ENG-42',
-              title: 'Linear planning item',
-              url: 'https://linear.app/acme/issue/ENG-42',
-              state: 'Todo',
-              stateType: 'unstarted',
-              priorityLabel: 'High',
-              assignee: 'Linear Grace',
-              creator: 'Linear Ada',
-              team: 'Engineering',
-              sourceId: 'linear-project',
-              labels: [],
-              createdAt: '2026-08-01T09:00:00.000Z',
-              updatedAt: '2026-08-01T09:00:00.000Z',
-            },
-          ],
-          nextCursor: null,
-        });
-      }),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
         HttpResponse.json({ workItems: [linearWorkItem] }),
       ),
@@ -451,7 +426,6 @@ describe('Board work-item activity', () => {
     await waitForMutationsIdle(client);
 
     await screen.findByText('Linear planning item');
-    await waitFor(() => expect(linearIssuesRequested).toHaveBeenCalled());
     await togglePropertyOption(user, 'Board properties', 'Author', /Linear Ada/i);
 
     expect(screen.getByText('Linear planning item')).toBeInTheDocument();

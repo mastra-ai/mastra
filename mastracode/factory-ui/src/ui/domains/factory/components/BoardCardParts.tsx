@@ -7,7 +7,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastr
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Hand, Maximize2, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 
@@ -25,6 +24,9 @@ import { attachedPullRequestSource } from '../services/workItems';
 import type { WorkItem, WorkItemSource } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
+import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
+import { IconExpand45 } from '@mastra/playground-ui/icons/central/IconExpand45';
+import { IconHand5Finger } from '@mastra/playground-ui/icons/central/IconHand5Finger';
 
 export function SourceTitle({ source, title, id }: { source: WorkItemSource; title: string; id?: string }) {
   return (
@@ -76,7 +78,7 @@ export function CardDetailsHint({ onOpen }: { onOpen: () => void }) {
       onClick={onOpen}
       className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), REVEAL_ON_CARD_HOVER)}
     >
-      <Maximize2 size={13} aria-hidden />
+      <IconExpand45 size={13} aria-hidden />
     </button>
   );
 }
@@ -88,7 +90,7 @@ export function CardStatus({ status, compact = false }: { status: BoardCardStatu
 
   if (status.kind === 'held') {
     return (
-      <Badge size="xs" variant="orange" icon={<Hand aria-hidden />} role="status">
+      <Badge size="xs" variant="orange" icon={<IconHand5Finger aria-hidden />} role="status">
         {status.label}
       </Badge>
     );
@@ -124,7 +126,7 @@ export function CardStatus({ status, compact = false }: { status: BoardCardStatu
         status.detail !== undefined && 'underline decoration-dotted underline-offset-2',
       )}
     >
-      <TriangleAlert size={11} aria-hidden className={cn('shrink-0', !compact && 'mt-0.5')} />
+      <IconExclamationTriangle size={11} aria-hidden className={cn('shrink-0', !compact && 'mt-0.5')} />
       <span className={cn('min-w-0', compact ? 'truncate' : 'wrap-anywhere')}>{status.label}</span>
     </Txt>
   );

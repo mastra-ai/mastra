@@ -2072,6 +2072,114 @@ describe('MDocument', () => {
       ).toBe(value);
     });
 
+    describe('long field names and escaped values (#30405)', () => {
+      it('keeps string content when the field name exceeds the fixed split overhead', async () => {
+        const key = 'a_long_document_field_name_that_exceeds_the_fixed_overhead';
+        const value = 'ordinary'.repeat(10);
+        const doc = MDocument.fromJSON(JSON.stringify({ [key]: value }));
+
+        await doc.chunk({
+          strategy: 'json',
+          maxSize: 90,
+          minSize: 1,
+          ensureAscii: false,
+        });
+
+        const chunks = doc.getText();
+        expect(chunks.length).toBeGreaterThan(0);
+        expect(chunks.map(chunk => JSON.parse(chunk)[key]).join('')).toBe(value);
+        chunks.forEach(chunk => {
+          expect(chunk.length).toBeLessThanOrEqual(90);
+        });
+      });
+
+      it.each([12, 13, 14, 20, 40])('keeps every character for a %i-character field name', async keyLength => {
+        const key = 'k'.repeat(keyLength);
+        const value = 'x'.repeat(3000);
+        const doc = MDocument.fromJSON(JSON.stringify({ [key]: value }));
+
+        await doc.chunk({ strategy: 'json', maxSize: 500 });
+
+        const chunks = doc.getText();
+        expect(chunks.map(chunk => JSON.parse(chunk)[key]).join('')).toBe(value);
+        chunks.forEach(chunk => {
+          expect(chunk.length).toBeLessThanOrEqual(500);
+        });
+      });
+
+      it('keeps string content when JSON escaping expands the value', async () => {
+        const value = '"'.repeat(300);
+        const doc = MDocument.fromJSON(JSON.stringify({ text: value }));
+
+        await doc.chunk({ strategy: 'json', maxSize: 60, ensureAscii: false });
+
+        const chunks = doc.getText();
+        expect(chunks.map(chunk => JSON.parse(chunk).text).join('')).toBe(value);
+        chunks.forEach(chunk => {
+          expect(chunk.length).toBeLessThanOrEqual(60);
+        });
+      });
+
+      it('never splits a surrogate pair', async () => {
+        const value = '🌍'.repeat(50);
+        const doc = MDocument.fromJSON(JSON.stringify({ text: value }));
+
+        await doc.chunk({ strategy: 'json', maxSize: 25, ensureAscii: false });
+
+        const chunks = doc.getText();
+        const pieces = chunks.map(chunk => JSON.parse(chunk).text as string);
+        expect(pieces.join('')).toBe(value);
+        pieces.forEach(piece => {
+          expect(piece.isWellFormed()).toBe(true);
+        });
+        chunks.forEach(chunk => {
+          expect(chunk.length).toBeLessThanOrEqual(25);
+        });
+      });
+
+      it('keeps a non-string primitive when the field path exceeds maxSize', async () => {
+        const key = 'k'.repeat(60);
+        const doc = MDocument.fromJSON(JSON.stringify({ [key]: 12345 }));
+
+        await doc.chunk({ strategy: 'json', maxSize: 30 });
+
+        const chunks = doc.getText();
+        expect(chunks.length).toBeGreaterThan(0);
+        expect(chunks.map(chunk => JSON.parse(chunk)[key])).toContain(12345);
+      });
+
+      it('keeps the remainder as an oversized chunk when the field path leaves no room', async () => {
+        const key = 'k'.repeat(40);
+        const value = 'y'.repeat(200);
+        const doc = MDocument.fromJSON(JSON.stringify({ [key]: value }));
+
+        await doc.chunk({ strategy: 'json', maxSize: 21 });
+
+        const chunks = doc.getText();
+        expect(chunks.length).toBeGreaterThan(0);
+        expect(chunks.map(chunk => JSON.parse(chunk)[key]).join('')).toBe(value);
+      });
+
+      it('chunks a very large string in roughly linear time (#30405)', async () => {
+        const value = 'x'.repeat(1_000_000);
+        const doc = MDocument.fromJSON(JSON.stringify({ text: value }));
+
+        const started = performance.now();
+        await doc.chunk({ strategy: 'json', maxSize: 500 });
+        const elapsed = performance.now() - started;
+
+        const chunks = doc.getText();
+        expect(chunks.map(chunk => JSON.parse(chunk).text).join('')).toBe(value);
+        chunks.forEach(chunk => {
+          expect(chunk.length).toBeLessThanOrEqual(500);
+        });
+        // Each piece must search only within maxSize. Searching the whole
+        // remaining value makes this input take seconds instead of tens of
+        // milliseconds.
+        expect(elapsed).toBeLessThan(1000);
+      });
+    });
+
     describe('Unicode handling', () => {
       it('should handle Unicode characters correctly', async () => {
         const input = {

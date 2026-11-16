@@ -5,9 +5,9 @@ import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRende
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
-
 import type { WorkspaceFilePreview } from './workspace-file-preview';
+import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 
 function formatBytes(size: number) {
   if (size < 1024) return `${size} B`;
@@ -47,7 +47,7 @@ export function WorkspaceFileViewer({
           onClick={onBack}
           aria-label="Back to workspace files"
         >
-          <ArrowLeft />
+          <IconArrowLeft />
         </Button>
         <Txt tone="ink" variant="column" className="min-w-0 flex-1 truncate">
           {file?.name ?? filePath}
@@ -63,7 +63,7 @@ export function WorkspaceFileViewer({
             disabled={isRefreshing}
             aria-label={isRefreshing ? 'Refreshing file' : 'Refresh file'}
           >
-            {isRefreshing ? <Spinner size="sm" /> : <RefreshCw />}
+            {isRefreshing ? <Spinner size="sm" /> : <IconArrowRotateClockwise />}
           </Button>
         </div>
       </div>

@@ -39,6 +39,7 @@ import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-owners
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { ExecutionOwnershipGuard } from './execution-ownership-guard';
 import { runInRunFenceScope } from './run-fence-scope';
+import { getRunRegistryEntry } from './run-registry';
 
 /** Execution lease timing follows the agent thread lease (`MASTRA_AGENT_THREAD_LEASE_TTL_MS`). */
 export const EXECUTION_LEASE_TTL_MS = AGENT_LEASE_TTL_MS;
@@ -1354,6 +1355,27 @@ function createOwnershipGuard(
 type FenceableStep = { execute: (params: any) => Promise<any> };
 
 /**
+ * A cancelled run stops waiting for an ownership read: a local claim's read has no deadline, and the step handles
+ * the abort itself, as it does at any other point. The read still runs, so a takeover it finds still marks the
+ * fence lost. Known loss still throws.
+ */
+async function checkUnlessAborted(guard: ExecutionOwnershipGuard, signal: AbortSignal | undefined): Promise<void> {
+  let onAbort: (() => void) | undefined;
+  const aborted = signal?.aborted
+    ? Promise.resolve()
+    : new Promise<void>(resolve => {
+        onAbort = resolve;
+        signal?.addEventListener('abort', onAbort, { once: true });
+      });
+  try {
+    await Promise.race([guard.check(), aborted]);
+  } finally {
+    if (onAbort) signal?.removeEventListener('abort', onAbort);
+  }
+  guard.throwIfLost();
+}
+
+/**
  * Check ownership before a step starts (skipping duplicate model, tool, or
  * scorer work after a takeover) and again after it returns. The post-check
  * throws inside `execute`, so the engine records the step as failed instead
@@ -1375,8 +1397,10 @@ export function withExecutionFence<TStep extends FenceableStep>(step: TStep): TS
       const scope = params.mastra?.__createRunScope(runId) ?? createRunScope();
       const key = createRunScopeKey<ExecutionOwnershipGuard>('durable-step-ownership');
       scope.set(key, guard);
+      // A worker's step creates the run's registry entry as it starts, so each check reads the signal again.
+      const signal = () => getRunRegistryEntry(runId, params.mastra)?.abortSignal ?? params.abortSignal;
       try {
-        await guard.check();
+        await checkUnlessAborted(guard, signal());
         const pubsub = params[PUBSUB_SYMBOL] as PubSub | undefined;
         const output = await execute(
           Object.defineProperties(
@@ -1429,7 +1453,7 @@ export function withExecutionFence<TStep extends FenceableStep>(step: TStep): TS
             },
           ),
         );
-        await guard.check();
+        await checkUnlessAborted(guard, signal());
         return output;
       } catch (error) {
         guard.throwIfLost();

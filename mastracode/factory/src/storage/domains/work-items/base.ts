@@ -100,6 +100,7 @@ function isWorkItemSource(value: unknown): value is WorkItemSource {
     value === 'incidentio-follow-up' ||
     value === 'github-dependabot-alert' ||
     value === 'vanta-vulnerability' ||
+    value === 'detail-finding' ||
     value === 'manual'
   );
 }
@@ -503,12 +504,20 @@ export type CommitFactoryTransitionResult =
   | { status: 'replayed'; item: Card | null; result: Record<string, unknown> }
   | { status: 'missing' };
 
+export class FactoryRunBindingSupersededError extends Error {
+  constructor() {
+    super('Factory run binding was superseded before preparation.');
+  }
+}
+
 export interface PrepareFactoryRunStartInput {
   orgId: string;
   userId: string;
   factoryProjectId: string;
   workItem: { id?: string; input: CreateWorkItemInput };
   role: string;
+  /** Only recover this binding if it still owns the role when the transaction starts. */
+  expectedBindingId?: string;
   session: WorkItemSessionInput;
   resourceId: string;
   kickoffKey: string;
@@ -2366,6 +2375,20 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return (row?.result as Record<string, unknown> | undefined) ?? null;
   }
 
+  async listRecordedIngress(
+    orgId: string,
+    factoryProjectId: string,
+    identities: readonly string[],
+  ): Promise<Set<string>> {
+    if (identities.length === 0) return new Set();
+    const rows = await this.#db.findMany<GovernanceDbRow>('factory_rule_ingress', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      identity: { in: [...new Set(identities)] },
+    });
+    return new Set(rows.map(row => String(row.identity)));
+  }
+
   async commitTransition(input: CommitFactoryTransitionInput): Promise<CommitFactoryTransitionResult> {
     const commit = (): Promise<CommitFactoryTransitionResult> =>
       this.#withTransaction<CommitFactoryTransitionResult>(async ops => {
@@ -3678,6 +3701,19 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   async prepareRunStart(input: PrepareFactoryRunStartInput): Promise<PrepareFactoryRunStartResult> {
     const prepare = () =>
       this.#withTransaction(async ops => {
+        if (input.expectedBindingId) {
+          const workItemId = input.workItem.id;
+          if (!workItemId) throw new FactoryRunBindingSupersededError();
+          const expected = await ops.findOne<GovernanceDbRow>('factory_run_bindings', {
+            id: input.expectedBindingId,
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+            work_item_id: workItemId,
+            role: input.role,
+            status: 'active',
+          });
+          if (!expected) throw new FactoryRunBindingSupersededError();
+        }
         const prior = await ops.findOne<GovernanceDbRow>('factory_pending_starts', {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
