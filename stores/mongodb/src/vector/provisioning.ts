@@ -5,7 +5,7 @@ import type { Document } from 'mongodb';
 export type SearchIndexRow = { name: string; id?: string; status?: string; latestDefinition?: Document };
 
 /** Which protocol step lists a search index name (see `MongoDBVector.listSearchIndexRows`). */
-export type ListPhase = 'P1' | 'P3a' | 'P5' | 'reconciler' | 'orphan' | 'claim' | 'delete';
+export type ListPhase = 'P1' | 'P3a' | 'P5' | 'reconciler' | 'orphan' | 'claim' | 'delete' | 'tofu';
 
 /** What a call's P0 registry write left: the registration's lifetime and the call's rollback pin (I4). */
 export interface P0Pin {

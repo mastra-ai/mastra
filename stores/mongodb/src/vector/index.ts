@@ -520,6 +520,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     beforeAtlasCreate?: (indexName: string, name: string) => Promise<void>;
     /** Called after the create returned or failed. May throw. */
     afterAtlasCreate?: (indexName: string, name: string) => Promise<void>;
+    /** Called by refresh-time TOFU after listing a name, right before recording its id. */
+    beforeTofuWrite?: (indexName: string, name: string) => Promise<void>;
     /** Called right before every search-index drop, which is by `id`. */
     beforeSearchIndexDrop?: (collectionName: string, name: string, id: string) => Promise<void>;
   };
@@ -774,41 +776,56 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   }
 
   /** The id of the live row listed for `name`; a dying row is present but not ours (§3.1), so it counts as none. */
-  private async liveIdOf(collection: Collection<MongoDBDocument>, name: string): Promise<string | undefined> {
-    return (await this.listSearchIndexRows(collection, name, 'delete')).find(isLiveRow)?.id;
+  private async liveIdOf(
+    collection: Collection<MongoDBDocument>,
+    name: string,
+    phase: ListPhase,
+  ): Promise<string | undefined> {
+    return (await this.listSearchIndexRows(collection, name, phase)).find(isLiveRow)?.id;
   }
 
   /**
    * §2.3 refresh-time TOFU (Q5): for each owned name with no `indexIds` entry, list it and record the
-   * observed id. Filtered on `generation`, the name still owned and no entry yet, so concurrent
-   * refreshes record it once. Best effort: delete-time TOFU (§3.7) covers a name it misses.
+   * observed id. Filtered on the name still owned, no entry yet, and the call's P0 pin, so only a
+   * call whose P0 is still the latest write records it, and only once. A write advances `pin` in
+   * place, so the call's rollback (§3.9) still matches and undoes P0's fields; it keeps the id,
+   * which is TOFU proof of a name the registration already owned (§2.3), not part of P0's write.
+   * Best effort: delete-time TOFU (§3.7) covers a name it misses.
    */
   private async tofuIndexIds(
     indexName: string,
-    generation: string,
+    pin: P0Pin,
     names: { role: 'vector' | 'text'; name: string }[],
     collection: Collection<MongoDBDocument>,
   ): Promise<void> {
     try {
       const entry = await this.readRegistryEntry(indexName);
-      if (!entry || entry.generation !== generation) return;
+      if (!entry || entry.generation !== pin.generation) return;
       for (const { role, name } of names) {
         const nameField = role === 'vector' ? 'searchIndexName' : 'textSearchIndexName';
         const ownsField = role === 'vector' ? 'ownsVectorIndex' : 'ownsTextIndex';
         if (entry[nameField] !== name || entry[ownsField] !== true || idFor(entry, name)) continue;
-        const id = await this.liveIdOf(collection, name);
+        const id = await this.liveIdOf(collection, name, 'tofu');
         if (!id) continue;
-        await this.registry().updateOne(
+        await this.testHooks?.beforeTofuWrite?.(indexName, name);
+        const claimToken = uuidv4();
+        const written = await this.registry().updateOne(
           {
             _id: indexName,
-            generation,
+            generation: pin.generation,
+            claimToken: pin.claimToken,
+            rev: pin.rev,
             deleting: { $ne: true },
             [nameField]: name,
             [ownsField]: true,
             indexIds: { $not: { $elemMatch: { name } } },
           },
-          [{ $set: { indexIds: indexIdsWith(name, id), ...mutationFields() } }],
+          [{ $set: { indexIds: indexIdsWith(name, id), ...mutationFields(claimToken) } }],
         );
+        // Someone else wrote since P0: leave it, and the rollback misses as it should.
+        if (written.matchedCount === 0) return;
+        pin.claimToken = claimToken;
+        pin.rev += 1;
       }
     } catch (error) {
       this.logger.warn(`could not record the listed search index ids of index "${indexName}": ${error}`);
@@ -1171,7 +1188,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // Evidence for I11b only (Atlas can't be read inside the transaction): each candidate's listed id.
       const observed: Record<string, string | undefined> = {};
       for (const name of collection ? recordedDropSet(entry) : [])
-        observed[name] = await this.liveIdOf(collection!, name);
+        observed[name] = await this.liveIdOf(collection!, name, 'delete');
       let attempt = 0;
       work = await this.runDeleteTransaction(indexName, async session => {
         attempt++;
@@ -1324,7 +1341,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       if (!(await registry.findOne(users))) return 'drop';
       await this.testHooks?.beforeDeleteHandover?.(indexName, name);
       // A fresh listing right before the transfer, evidence for I11b only.
-      const observed = { [name]: await this.liveIdOf(this.db.collection(collectionName), name) };
+      const observed = { [name]: await this.liveIdOf(this.db.collection(collectionName), name, 'delete') };
       const outcome = await this.runDeleteTransaction(indexName, async session => {
         const own = await registry.findOne({ _id: indexName, deleting: true, deleteToken }, { session });
         if (!own) return 'gone' as const;
@@ -1936,7 +1953,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       }
       await this.tofuIndexIds(
         indexName,
-        pin.generation,
+        pin,
         [
           { role: 'vector', name: targetSearchIndex },
           ...(textSearchIndexName ? [{ role: 'text' as const, name: textSearchIndexName }] : []),
@@ -2134,7 +2151,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * before this listing makes the observed id the stranger's.
    */
   private async dropRecordedOrListed(collectionName: string, name: string, id: string | undefined): Promise<void> {
-    id ??= await this.liveIdOf(this.db.collection(collectionName), name);
+    id ??= await this.liveIdOf(this.db.collection(collectionName), name, 'delete');
     if (id) await this.dropSearchIndexById(collectionName, name, id);
   }
 
@@ -2316,7 +2333,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           throw error;
         }
       }
-      await this.tofuIndexIds(indexName, p0!.pin.generation, [{ role: 'text', name }], collection);
+      await this.tofuIndexIds(indexName, p0!.pin, [{ role: 'text', name }], collection);
       this.indexTargets.set(indexName, { ...target, textSearchIndexName: name });
       let created: Awaited<ReturnType<MongoDBVector['provisionSearchIndex']>>;
       try {
@@ -2360,7 +2377,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       } else {
         if (ours) {
           this.logger.warn(
-            `search index "${name}" on "${collectionName}" is listed with id ${listedId} but recorded with ${recordedId ?? 'no id'}; treated as not created by Mastra and not modified`,
+            `search index "${name}" on "${collectionName}" is ${listedId ? `listed with id ${listedId}` : 'not listed'} but recorded with ${recordedId ? `id ${recordedId}` : 'no id'}; treated as not created by Mastra and not modified`,
           );
         }
         // Someone else's index: attach to it as-is, and refuse if it maps different fields.

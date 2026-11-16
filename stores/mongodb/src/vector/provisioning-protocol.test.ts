@@ -440,6 +440,44 @@ describe('provisioning protocol', () => {
         expect(await entry(coll)).toBeNull();
         expect(await searchIndexNames(db, coll)).toEqual([]);
       });
+
+      it('(vii) a refresh-time TOFU write after P0 moves the pin, so the rollback still undoes P0 and keeps the id', async () => {
+        const coll = await byoColl('prb7');
+        const vec = `${coll}_vector_index`;
+        await createRawSearchIndex(db, coll, vec, {
+          fields: [{ type: 'vector', path: 'embedding', numDimensions: 4, similarity: 'cosine' }],
+        });
+        const v = await listedId(db, coll, vec);
+        // A legacy entry owning its listed vector index, with no recorded id.
+        const legacy = {
+          _id: coll,
+          indexName: coll,
+          collectionName: coll,
+          searchIndexName: vec,
+          isByo: true,
+          allowWrites: false,
+          ownsVectorIndex: true,
+        };
+        await seedRegistry(db, legacy);
+        hooks(a, {
+          beforePendingDropCheck: async () => {
+            throw new Error('provision failed');
+          },
+        });
+        const err = await a.createIndex({ indexName: coll, dimension: 4, collectionName: coll }).catch(e => e);
+        checker.restoreHooks();
+        expect(err?.message).toMatch(/provision failed/);
+        const after = await entry(coll);
+        // P0, the TOFU write and the rollback each bump rev. P0's fields (dimension, metric) are undone;
+        // the TOFU id is proof for a name the entry already owned, so it stays.
+        expect(after).toEqual({
+          ...legacy,
+          indexIds: [{ name: vec, id: v }],
+          generation: after?.generation,
+          rev: 3,
+          claimToken: after?.claimToken,
+        });
+      });
     });
 
     // The seam sends the real create, so a live row exists, then reports `error` instead of the reply.
@@ -861,6 +899,26 @@ describe('provisioning protocol', () => {
         await a.deleteIndex({ indexName: `${coll}_y` });
         expect(drops).toEqual([{ collectionName: coll, name: 'M', id: m }]);
         expect(await listedId(db, coll, 'N')).toBe(n);
+
+        // Two createIndex refreshes, both past P0 and both about to record the listed vector id.
+        const vec = `${coll}_z_vector_index`;
+        await createRawSearchIndex(db, coll, vec, vectorDefinition);
+        const v = await listedId(db, coll, vec);
+        await seedUser(coll, 'z', { searchIndexName: vec, ownsVectorIndex: true });
+        const both = deferred();
+        let arrived = 0;
+        const beforeTofuWrite = async () => {
+          if (++arrived === 2) both.resolve();
+          await reached({ reached: both });
+        };
+        await withHooks([a, b], { beforeTofuWrite }, () =>
+          Promise.all([a, b].map(s => s.createIndex({ indexName: `${coll}_z`, dimension: 4, collectionName: coll }))),
+        );
+        expect(arrived).toBe(2);
+        const z = await entry(`${coll}_z`);
+        expect(z?.indexIds).toEqual([{ name: vec, id: v }]);
+        // Two P0 writes and exactly one TOFU write: the racer whose P0 was superseded records nothing.
+        expect(z?.rev).toBe(3);
       });
 
       it('R7a: without transactions, a recipient that stops using the name makes the delete refuse instead of orphaning it', async () => {
