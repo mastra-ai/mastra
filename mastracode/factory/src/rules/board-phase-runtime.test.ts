@@ -9,10 +9,9 @@ import type { InlineSkill } from '@mastra/core/skills';
 import { MastraSandbox } from '@mastra/core/workspace';
 import type { ProviderStatus } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { RedisStreamsPubSub } from '../../../../pubsub/redis-streams/src/index.js';
 
 import { defineBoard } from '../boards/index.js';
 import { workBoard } from '../boards/work.js';
@@ -374,13 +373,12 @@ describe('board phase fields at runtime', () => {
         const pending = decisions.find(
           record => record.decision.type === 'invokeSkill' && record.status === 'proposed',
         );
-        if (pending) {
-          const approved = await runtime.send(
-            'POST',
-            `/web/factory/projects/${runtime.project.id}/decisions/${pending.id}/approve`,
-          );
-          expect(approved.status, await approved.clone().text()).toBe(200);
-        }
+        expect(pending).toBeDefined();
+        const approved = await runtime.send(
+          'POST',
+          `/web/factory/projects/${runtime.project.id}/decisions/${pending!.id}/approve`,
+        );
+        expect(approved.status, await approved.clone().text()).toBe(200);
         await vi.waitFor(
           async () =>
             expect(
@@ -477,12 +475,15 @@ describe('board phase fields at runtime', () => {
       expect(movedToPlanning.status, await movedToPlanning.clone().text()).toBe(200);
       expect((await movedToPlanning.json()).result).toMatchObject({ status: 'accepted', stage: 'planning' });
       expect((await runtime.read(item)).stages).toEqual(['planning']);
-      const started = await vi.waitFor(async () => {
-        const decision = (await runtime.decisionsFor(item)).find(record => record.decision.type === 'invokeSkill');
-        expect(decision).toBeDefined();
-        expect(['leased', 'succeeded']).toContain(decision!.status);
-        return decision!;
-      });
+      const started = await vi.waitFor(
+        async () => {
+          const decision = (await runtime.decisionsFor(item)).find(record => record.decision.type === 'invokeSkill');
+          expect(decision).toBeDefined();
+          expect(['leased', 'succeeded']).toContain(decision!.status);
+          return decision!;
+        },
+        { timeout: 15_000 },
+      );
       expect(started.decision).toMatchObject({ type: 'invokeSkill' });
       await vi.waitFor(async () => expect(requests.some(text => text.includes('factory-plan'))).toBe(true), {
         timeout: 15_000,

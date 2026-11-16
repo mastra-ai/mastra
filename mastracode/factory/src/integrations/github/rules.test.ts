@@ -3360,8 +3360,8 @@ describe('GithubRules', () => {
     const decisionsBeforeMergeReplay = await workItems.listDeferredDecisions('org-1', project.id);
     expect(await githubRules.ingest(mergedEvent)).toEqual({ status: 'replayed' });
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(decisionsBeforeMergeReplay);
-    await dispatcher.runOnce(new Date('2030-01-01T00:00:03Z'));
-    await dispatcher.runOnce(new Date('2030-01-01T00:00:04Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:07Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:08Z'));
     expect((await current())?.stages).toEqual(['done']);
     expect((await current())?.metadata?.openPullRequestNumber).toBeNull();
     expect((await current())?.stageHistory.map(entry => entry.stage)).toEqual([
@@ -3375,7 +3375,7 @@ describe('GithubRules', () => {
       'pr-review',
       'done',
     ]);
-    await dispatcher.runOnce(new Date('2030-01-01T00:00:05Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:09Z'));
     expect((await current())?.stages).toEqual(['done']);
   });
 

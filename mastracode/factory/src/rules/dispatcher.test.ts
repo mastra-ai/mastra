@@ -3057,7 +3057,7 @@ describe('FactoryDecisionDispatcher', () => {
     ]);
   });
 
-  it('reproduces a card stalled in its working phase when the run terminal event is lost', async () => {
+  it('keeps an admitted skill run failed without redelivery when its terminal event is unobserved', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
     try {

@@ -756,7 +756,7 @@ describe('factory_transition_work_item', () => {
         expect((await storage.get({ orgId: 'org-1', id }))?.metadata).not.toHaveProperty('reviewVerdict');
       });
 
-      it('reproduces a review phase that cannot record a verdict when its board omits the capability', async () => {
+      it('requires a review capability grant before the review phase can record a verdict', async () => {
         const board = defineBoard({
           id: 'release',
           name: 'Release',
