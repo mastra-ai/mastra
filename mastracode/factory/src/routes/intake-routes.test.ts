@@ -1048,6 +1048,36 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       expect((await replicaA.send('GET', `${path}?limit=101`)).status).toBe(422);
     });
 
+    it('lists how often each card-move rule was skipped in the last 30 days, with its newest skip', async () => {
+      const { a, scope, projectPath, replicaA } = await setup({ evaluator: 'intake-order' });
+      const now = Date.now();
+      const skip = (key: string, routeId: string, daysAgo: number) =>
+        a.boards.recordIntakeDecision(
+          scope,
+          {
+            idempotencyKey: key,
+            outcome: 'rule_skipped',
+            evaluator: 'intake-order',
+            title: key,
+            boardKey: 'work',
+            routeId,
+            reason: `reason ${key}`,
+          },
+          new Date(now - daysAgo * 86_400_000),
+        );
+      await skip('older', 'route-a', 4);
+      await skip('newest', 'route-a', 1);
+      await skip('expired', 'route-b', 40);
+
+      const listed = await replicaA.send('GET', `${projectPath}/intake/skipped`);
+      expect(listed).toMatchObject({
+        status: 200,
+        body: {
+          skipped: [{ routeId: 'route-a', count: 2, latest: { title: 'newest', reason: 'reason newest' } }],
+        },
+      });
+    });
+
     it('reports the evaluator a project uses and where it came from: its stamp, none, or a forced one', async () => {
       const { a, orgId, scope, projectPath, replicaA } = await setup();
       const read = async (send = replicaA.send) => (await send('GET', `${projectPath}/intake-order`)).body;

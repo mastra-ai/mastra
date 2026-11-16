@@ -77,6 +77,9 @@ function presentDecision(decision: StoredIntakeDecisionRecord) {
   return { id, outcome, evaluator, boardKey, routeId, reason, sourceKey, title, url, decidedAt };
 }
 
+/** How far back the Rules page counts a card-move rule's skips. */
+const SKIPPED_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
 type Resolved = StoredBoardScope & { userId: string };
 
 /** A response the handler returns as is: a refusal or an error. */
@@ -457,6 +460,18 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
           notRouted: page.notRouted.map(presentDecision),
           nextCursor: page.nextCursor,
           canEdit: await this.#canEdit(c, scope),
+        });
+      }),
+
+      this.#route(contracts.intakeSkippedList, async c => {
+        const scope = await this.#resolve(c);
+        const summary = await storage.summarizeSkippedByRoute(scope, new Date(Date.now() - SKIPPED_WINDOW_MS));
+        return c.json({
+          skipped: Object.entries(summary).map(([routeId, { count, latest }]) => ({
+            routeId,
+            count,
+            latest: presentDecision(latest),
+          })),
         });
       }),
 

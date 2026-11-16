@@ -307,6 +307,10 @@ const intakeNotRoutedResponseSchema = z.object({
   /** Whether the caller may route an item again. */
   canEdit: z.boolean(),
 });
+const intakeSkippedResponseSchema = z.object({
+  /** Card-move rules that matched but whose target couldn't take the card, in the last 30 days. */
+  skipped: z.array(z.object({ routeId: z.string(), count: z.number().int(), latest: intakeDecisionSchema })),
+});
 const intakeDecisionPathSchema = z.object({ id: uuidSchema, decisionId: uuidSchema });
 const intakeRouteAgainResponseSchema = z.object({
   /** The item is queued to be filed here; the card appears once the dispatcher files it. */
@@ -1828,6 +1832,13 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: 'Run intake again for an item no board took, filing it where the rules now say',
     pathSchema: intakeDecisionPathSchema,
     responseSchema: intakeRouteAgainResponseSchema,
+  },
+  intakeSkippedList: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/intake/skipped',
+    description: 'How often each card-move rule was skipped in the last 30 days, with its newest skip',
+    pathSchema: projectPathSchema,
+    responseSchema: intakeSkippedResponseSchema,
   },
   intakeDryRun: {
     method: 'POST',

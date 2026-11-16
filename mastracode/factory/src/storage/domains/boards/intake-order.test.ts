@@ -221,4 +221,40 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake order on
     expect(await boards.countPlacedByRoute(scope, since, { pageSize: 3 })).toEqual({ 'route-a': 7, 'route-b': 1 });
     expect(await boards.countPlacedByRoute(scope, since)).toEqual({ 'route-a': 7, 'route-b': 1 });
   });
+
+  it('sums skipped card-move rules over a window with each rule’s newest skip', async () => {
+    const { boards, scope } = await setup(['work']);
+    const now = new Date(Date.UTC(2026, 10, 30));
+    const daysAgo = (n: number) => new Date(now.getTime() - n * 86_400_000);
+    const skipped = (key: string, routeId: string, at: Date, where = scope) =>
+      boards.recordIntakeDecision(
+        where,
+        {
+          idempotencyKey: key,
+          outcome: 'rule_skipped',
+          evaluator: 'intake-order',
+          title: key,
+          boardKey: 'work',
+          routeId,
+          reason: `skipped ${key}`,
+        },
+        at,
+      );
+    await skipped('a-old', 'route-a', daysAgo(5));
+    await skipped('a-new', 'route-a', daysAgo(1));
+    await skipped('a-mid', 'route-a', daysAgo(3));
+    await skipped('b1', 'route-b', daysAgo(10));
+    await skipped('b-expired', 'route-b', daysAgo(31));
+    await skipped('other', 'route-a', daysAgo(1), { ...scope, factoryProjectId: 'project-2' });
+    await boards.recordIntakeDecision(
+      scope,
+      { idempotencyKey: 'p1', outcome: 'placed', evaluator: 'intake-order', title: 'p1', routeId: 'route-a' },
+      daysAgo(1),
+    );
+
+    const summary = await boards.summarizeSkippedByRoute(scope, daysAgo(30), { pageSize: 2 });
+    expect(Object.keys(summary).sort()).toEqual(['route-a', 'route-b']);
+    expect(summary['route-a']).toMatchObject({ count: 3, latest: { title: 'a-new', reason: 'skipped a-new' } });
+    expect(summary['route-b']).toMatchObject({ count: 1, latest: { title: 'b1' } });
+  });
 });
