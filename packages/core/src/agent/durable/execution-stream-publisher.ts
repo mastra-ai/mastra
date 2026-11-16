@@ -45,25 +45,31 @@ export function getExecutionStreamPublisher({
   role: 'producer' | 'lifecycle';
   entry?: RunRegistryEntry;
 }): AgentStreamPublisher | undefined {
+  // Workers can attach with a claim before a local reader registers the run.
   if (!entry && !claim) return;
   if (!entry) {
     entry = { isPlaceholder: true } as RunRegistryEntry;
     if (!setRunRegistryEntry(runId, entry, mastra)) return;
   }
+
+  // Keep the captured wrapper ahead of registry lookups: the same agent ID can use another bus.
   const scope = (entry.runScope ??= createRunScope());
   if (agent) scope.set(streamOwnerKey, agent);
   const owner = agent ?? scope.get(streamOwnerKey) ?? mastra?.getAgentById(agentId) ?? entry.agent;
   const bus = owner?.__getStreamBus();
   if (!owner || !bus) return;
+
   const usesSharedRunLog = owner.__usesSharedRunLog();
   const runBus = bus.forRun(usesSharedRunLog);
-  claim ??= entry.executionFence?.claim;
-  const executionClaim = claim;
+  const executionClaim = claim ?? entry.executionFence?.claim;
   if (!executionClaim) return;
+
   const requestContext = new RequestContext();
   setExecutionClaim(requestContext, runId, executionClaim);
   const publisherId = executionClaim.executionId;
   const memoryInfo = owner.__getRunOwner(runId);
+
+  // Each execution has separate producer/lifecycle attachments, detached with the registry entry.
   let publishers = scope.get(publishersKey);
   if (!publishers) {
     publishers = new Map();
@@ -78,9 +84,11 @@ export function getExecutionStreamPublisher({
       }
     };
   }
+
   const key = `${publisherId}:${role}`;
   const existing = publishers.get(key);
   if (existing) return existing;
+
   const fence = entry.executionFence;
   const publisher = createAgentStreamPublisher({
     pubsub: runBus.pubsub,
