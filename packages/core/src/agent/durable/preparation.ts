@@ -33,6 +33,7 @@ import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
 import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
+import { resolveVersionContext } from '../helpers';
 import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
@@ -52,7 +53,6 @@ import type {
   ToolsetsInput,
   ToolsInput,
 } from '../types';
-import { resolveVersionContext } from '../version-context';
 import {
   applyClientToolModelOutput,
   fireClientToolOutputHooks,

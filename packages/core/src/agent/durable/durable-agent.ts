@@ -57,11 +57,10 @@ import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } fro
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import { beginGoalActivity, stopGoalActivity } from '../goal';
+import { drainAgentOutput, resolveRunId } from '../helpers';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { modelSpanAttributes } from '../model-span-attributes';
-import { drainAgentOutput } from '../output';
-import { resolveRunId } from '../run-id';
 import { whenRunStepsSettle } from '../run-lease-fence';
 import { SaveQueueManager } from '../save-queue';
 import type { AgentScopesSnapshot } from '../scopes';

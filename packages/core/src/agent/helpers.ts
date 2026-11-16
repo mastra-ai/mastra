@@ -17,3 +17,20 @@ export function resolveVersionContext(
   }
   return versions;
 }
+
+export function resolveRunId(runId: string | undefined, generateId?: () => string | undefined): string {
+  return runId ?? generateId?.() ?? globalThis.crypto.randomUUID();
+}
+
+export function successfulAgentOutput<T extends { error?: unknown }>(output: T): T {
+  if (output.error) {
+    throw output.error;
+  }
+  return output;
+}
+
+export async function drainAgentOutput<T extends { error?: unknown }>(output: {
+  getFullOutput(): Promise<T>;
+}): Promise<T> {
+  return successfulAgentOutput(await output.getFullOutput());
+}

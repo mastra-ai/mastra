@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { VersionOverrides } from '../mastra/types';
 import { MASTRA_VERSIONS_KEY, RequestContext } from '../request-context';
-import { resolveVersionContext } from './version-context';
+import { resolveVersionContext } from './helpers';
 
 describe('version context', () => {
   it('keeps caller selections above request and host defaults without changing the original request', () => {
