@@ -7,7 +7,7 @@ import type { Agent } from '../agent';
 import { AGENT_STREAM_TOPIC } from '../streams/constants';
 import { createAgentStreamPublisher } from '../streams/publisher';
 import type { AgentStreamPublisher } from '../streams/publisher';
-import { readAgentRunRecord } from '../streams/run-records';
+import { durableReplayOwnerKey, readAgentRunRecord } from '../streams/run-records';
 import {
   assertExecutionGenerationCurrent,
   assertExecutionNotSuperseded,
@@ -18,7 +18,6 @@ import {
   setExecutionClaim,
 } from './execution-fence';
 import type { DurableExecutionClaim } from './execution-fence';
-import { durableReplayOwnerKey } from './replay-owners';
 import { getRunRegistryEntry, setRunRegistryEntry } from './run-registry';
 import type { RunRegistryEntry } from './types';
 
