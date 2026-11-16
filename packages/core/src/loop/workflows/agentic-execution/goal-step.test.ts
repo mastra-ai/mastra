@@ -84,6 +84,7 @@ async function runGoalStep(
       getStore: (name: string) => {
         if (name === 'workflows') {
           return {
+            supportsRunJournal: () => false,
             getWorkflowRunById: vi.fn().mockResolvedValue(null),
             deleteWorkflowRunById: vi.fn().mockResolvedValue(undefined),
             persistWorkflowSnapshot: vi.fn().mockResolvedValue(undefined),
