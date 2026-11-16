@@ -390,6 +390,7 @@ describe('bundled Factory skill assets', () => {
     const assetNames = (await fs.readdir(assetRoot)).sort();
 
     expect(assetNames).toEqual([
+      'alert-triage',
       'configure-factory-rules',
       'factory-build',
       'factory-gitlab-rereview',
@@ -3885,6 +3886,7 @@ describe('FactorySkillSource layering', () => {
     const source = new FactorySkillSource(fallbackStub, [], undefined);
     const names = (await source.readdir(mount)).map(entry => entry.name).sort();
     expect(names).toEqual([
+      'alert-triage',
       'configure-factory-rules',
       'factory-build',
       'factory-gitlab-rereview',
@@ -3905,7 +3907,13 @@ describe('FactorySkillSource layering', () => {
     const reviewSkill = path.join(mount, 'factory-review', 'SKILL.md');
 
     const hiddenNames = (await source.readdir(mount)).map(entry => entry.name).sort();
-    expect(hiddenNames).toEqual(['configure-factory-rules', 'factory-build', 'factory-plan', 'factory-triage']);
+    expect(hiddenNames).toEqual([
+      'alert-triage',
+      'configure-factory-rules',
+      'factory-build',
+      'factory-plan',
+      'factory-triage',
+    ]);
     for (const name of REVIEW_ONLY_FACTORY_SKILLS) {
       expect(await source.exists(path.join(mount, name, 'SKILL.md'))).toBe(false);
       await expect(source.readdir(path.join(mount, name))).rejects.toThrow('ENOENT');

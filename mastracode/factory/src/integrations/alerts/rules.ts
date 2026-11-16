@@ -57,6 +57,8 @@ export interface PlatformAlertRulesIngress {
   userId: string;
   factoryProjectId: string;
   event: PlatformAlertEvent;
+  /** This project's floor for this event, when its binding sets one; else the rules' own floor. */
+  severityFloor?: AlertSeverity;
 }
 
 export interface AlertCardRef {
@@ -195,7 +197,7 @@ export class PlatformAlertRules {
       event,
       card: view,
       now: this.#now(),
-      severityFloor: this.options.severityFloor ?? DEFAULT_ALERT_SEVERITY_FLOOR,
+      severityFloor: input.severityFloor ?? this.options.severityFloor ?? DEFAULT_ALERT_SEVERITY_FLOOR,
       ...(resolvedEarly ? { resolvedEarly } : {}),
     });
 
@@ -248,7 +250,7 @@ export class PlatformAlertRules {
       alert: event,
       sourceKey: alertSourceKey(workKey, plan.kind === 'create' ? plan.state.generation : (latest?.generation ?? 1)),
       ...(plan.kind === 'create' && plan.state.previousCardId ? { previousCardId: plan.state.previousCardId } : {}),
-      severityFloor: this.options.severityFloor ?? DEFAULT_ALERT_SEVERITY_FLOOR,
+      severityFloor: input.severityFloor ?? this.options.severityFloor ?? DEFAULT_ALERT_SEVERITY_FLOOR,
     };
     const boardEvent: BoardEventFacts | undefined =
       plan.kind === 'create'

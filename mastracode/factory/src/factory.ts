@@ -971,6 +971,10 @@ export class MastraFactory {
         const { PlatformVantaIntegration } = await import('./integrations/platform/vanta/integration.js');
         integrations.push(new PlatformVantaIntegration());
       }
+      if (!integrations.some(integration => integration.id === 'mastra-alerts')) {
+        const { PlatformAlertsIntegration } = await import('./integrations/platform/alerts/integration.js');
+        integrations.push(new PlatformAlertsIntegration());
+      }
     }
     // Never let the key be a silent no-op: it only applies to the integration
     // the factory installs itself, so warn when it had nothing to apply to.
