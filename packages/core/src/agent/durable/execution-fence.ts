@@ -432,12 +432,13 @@ function leaseBackend(
     async observe(claim, details) {
       if (provider === NoopLeaseProvider) return;
       const owner = await provider.getLeaseOwner(key);
-      if (owner !== claim.executionId) {
-        throw new DurableExecutionFenceError(
-          owner === undefined ? EXECUTION_UNVERIFIED_ERROR_ID : EXECUTION_SUPERSEDED_ERROR_ID,
-          details,
-        );
-      }
+      if (owner === claim.executionId) return;
+      // This claim's own release marker means it released the run, as if the lease were already gone.
+      const released = owner === undefined || owner === releasedLeaseMarker(claim.executionId);
+      throw new DurableExecutionFenceError(
+        released ? EXECUTION_UNVERIFIED_ERROR_ID : EXECUTION_SUPERSEDED_ERROR_ID,
+        details,
+      );
     },
     // A released lease is gone, so a failed renewal can't tell a release from a takeover.
     renew: async claim =>

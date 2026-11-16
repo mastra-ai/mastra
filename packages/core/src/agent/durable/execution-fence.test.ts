@@ -323,6 +323,42 @@ describe('ExecutionFence heartbeat', () => {
     await expect(assertExecutionNotSuperseded(args)).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
   });
 
+  // A remote step's ownership check reads its own release marker as a released lease, not a takeover: the run has no
+  // live owner, so the step can't verify it owns the run, but nobody superseded it either. (#30206)
+  it('reports a remote step whose own release marker holds the lease as unverified, not superseded (#30206)', async () => {
+    const pubsub = new EventEmitterPubSub();
+    onTestFinished(() => pubsub.close());
+    const mastra = new Mastra({ pubsub, logger: false });
+    const requestContext = new RequestContext();
+    setExecutionClaim(requestContext, 'run-1', { executionId: 'remote-exec', agentId });
+    await pubsub.acquireLease(key('run-1'), releasedLeaseMarker('remote-exec'), EXECUTION_LEASE_TTL_MS);
+    const execute = vi.fn(async (_params: unknown) => 'output');
+    const step = withExecutionFence({ id: 'llm', execute });
+
+    await expect(
+      step.execute({ runId: 'nested-run', requestContext, mastra, getInitData: () => ({ runId: 'run-1', agentId }) }),
+    ).rejects.toMatchObject({ id: EXECUTION_UNVERIFIED_ERROR_ID });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  // Another execution's release marker means that execution claimed the run after this one, so a remote step's
+  // ownership check still reports a takeover. (#30206)
+  it("reports a remote step as superseded while another execution's release marker holds the lease (#30206)", async () => {
+    const pubsub = new EventEmitterPubSub();
+    onTestFinished(() => pubsub.close());
+    const mastra = new Mastra({ pubsub, logger: false });
+    const requestContext = new RequestContext();
+    setExecutionClaim(requestContext, 'run-1', { executionId: 'remote-exec', agentId });
+    await pubsub.acquireLease(key('run-1'), releasedLeaseMarker('next-exec'), EXECUTION_LEASE_TTL_MS);
+    const execute = vi.fn(async (_params: unknown) => 'output');
+    const step = withExecutionFence({ id: 'llm', execute });
+
+    await expect(
+      step.execute({ runId: 'nested-run', requestContext, mastra, getInitData: () => ({ runId: 'run-1', agentId }) }),
+    ).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   // The lease contract lets a backend implement `transferLease` as a release followed by an acquire. Another owner
   // can take the freed key between the two and give it back, and the acquire then succeeds: a successful transfer
   // proves nothing, so a late failed renewal must still count as a loss. (#30206)
