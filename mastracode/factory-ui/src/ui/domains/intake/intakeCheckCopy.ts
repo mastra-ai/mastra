@@ -4,6 +4,8 @@ type DryRunBoard = IntakeDryRunResponse['boards'][number];
 type DryRunRule = DryRunBoard['rules'][number];
 type TestRule = IntakeTestResponse['boards'][number]['rules'][number];
 type FailedCondition = NonNullable<TestRule['failed']>[number];
+type CardMove = IntakeTestResponse['moves'][number];
+type MoveRule = CardMove['rules'][number];
 
 function items(count: number): string {
   return count === 1 ? '1 item' : `${count} items`;
@@ -81,6 +83,59 @@ export function ruleVerdictLabel(rule: TestRule, ruleName: (boardKey: string, ro
         : 'matched, but an earlier rule took it';
     case 'phase_refuses':
       return `matched, but its phase ${rule.phase} can't hold this item`;
+    case 'disabled':
+      return 'off';
+    case 'no_match':
+      return rule.failed && rule.failed.length > 0 ? `no, ${rule.failed.map(failedConditionLabel).join('; ')}` : 'no';
+  }
+}
+
+function changes(name: string, change: { added: string[]; removed: string[] } | undefined): string | null {
+  if (!change) return null;
+  const parts = [...change.added.map(value => `+${value}`), ...change.removed.map(value => `−${value}`)];
+  return parts.length > 0 ? `${name} ${parts.join(' ')}` : null;
+}
+
+/** An event with what changed on it: `work_item.updated, labels +ship −bug`; `work_item.closed (completed)`. */
+export function eventLabel(event: CardMove['event']): string {
+  const head = event.reason ? `${event.type} (${event.reason})` : event.type;
+  return [
+    head,
+    changes('labels', event.labels),
+    changes('assignees', event.assignees),
+    event.pullRequestTrusted === false ? 'from an untrusted author' : null,
+  ]
+    .filter(part => part !== null)
+    .join(', ');
+}
+
+/** What an event would do to the card: `moves to Ship › inbox`; `stays where it is`. */
+export function moveVerdictLabel(move: CardMove, boardName: (key: string) => string): string {
+  switch (move.outcome) {
+    case 'moves':
+      return move.to ? `moves to ${boardName(move.to.boardKey)} › ${move.to.phase}` : 'moves';
+    case 'stays':
+      return 'stays where it is';
+    case 'rule_default':
+      return move.phase
+        ? `no rule takes it, so the integration moves it to ${move.phase}`
+        : "no rule takes it, and the integration doesn't move it";
+    case 'ignored':
+      return move.reason ? `ignored. ${move.reason}` : 'ignored';
+  }
+}
+
+/** What one card-move rule answered: `yes`, `no, …`, `matched, but Ship added took it first`. */
+export function moveRuleVerdictLabel(rule: MoveRule, ruleName: (routeId: string) => string): string {
+  switch (rule.outcome) {
+    case 'took':
+      return 'yes';
+    case 'lost':
+      return rule.to
+        ? `matched, but ${ruleName(rule.to.routeId)} took it first`
+        : 'matched, but an earlier rule took it';
+    case 'skipped':
+      return rule.reason ? `matched, but ${rule.reason}` : "matched, but its target can't take the card";
     case 'disabled':
       return 'off';
     case 'no_match':

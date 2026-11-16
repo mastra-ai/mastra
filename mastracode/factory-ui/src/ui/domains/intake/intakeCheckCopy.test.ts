@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   boardSummary,
   changedSummary,
+  eventLabel,
   failedConditionLabel,
   notRoutedSummary,
   ruleCounts,
@@ -71,6 +72,20 @@ describe('intake check copy', () => {
     );
     expect(failedConditionLabel({ field: 'item.pullRequest', operator: 'greater_than', value: 3, actual: 2 })).toBe(
       'item.pullRequest is 2, wanted greater_than 3',
+    );
+  });
+  it('names an event with what changed on it', () => {
+    expect(eventLabel({ type: 'work_item.opened' })).toBe('work_item.opened');
+    expect(eventLabel({ type: 'work_item.closed', reason: 'completed' })).toBe('work_item.closed (completed)');
+    expect(
+      eventLabel({
+        type: 'work_item.updated',
+        labels: { added: ['ship', 'p1'], removed: [] },
+        assignees: { added: [], removed: ['ada'] },
+      }),
+    ).toBe('work_item.updated, labels +ship +p1, assignees −ada');
+    expect(eventLabel({ type: 'pull_request.opened', pullRequestTrusted: false })).toBe(
+      'pull_request.opened, from an untrusted author',
     );
   });
 });

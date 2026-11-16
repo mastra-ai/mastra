@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 
 import type { IntakeTestBody, IntakeTestResponse } from '../../../api/types';
 import { useIntakeTest } from '../../../hooks/useIntakeDryRun';
-import { ruleVerdictLabel } from './intakeCheckCopy';
+import { eventLabel, moveRuleVerdictLabel, moveVerdictLabel, ruleVerdictLabel } from './intakeCheckCopy';
 
 export interface IntakeTesterPanelProps {
   factoryProjectId: string;
@@ -35,6 +35,36 @@ function Verdict({ result }: { result: IntakeTestResponse }) {
     <Txt as="p" variant="body-sm" tone="ink">
       Goes to {board?.name ?? result.placement.boardKey} › {result.placement.phase}
     </Txt>
+  );
+}
+
+function CardMoves({ moves, boardName }: { moves: IntakeTestResponse['moves']; boardName: (key: string) => string }) {
+  if (moves.length === 0) return null;
+  return (
+    <ul aria-label="Card moves" className="flex flex-col gap-2">
+      {moves.map((move, index) => {
+        const names = new Map(move.rules.map(rule => [rule.routeId, rule.name ?? 'Unnamed rule']));
+        const ruleName = (routeId: string) => names.get(routeId) ?? 'another rule';
+        return (
+          <li key={move.decisionId ?? `tried-${index}`} className="flex flex-col gap-1">
+            <Txt as="h4" variant="body-sm" tone="ink">
+              {`${eventLabel(move.event)}: ${moveVerdictLabel(move, boardName)}`}
+            </Txt>
+            {move.rules.length > 0 && (
+              <ul aria-label="What each card-move rule answered" className="flex flex-col gap-1">
+                {move.rules.map(rule => (
+                  <li key={rule.routeId}>
+                    <Txt as="span" variant="caption" tone={rule.outcome === 'took' ? 'ink' : 'muted'}>
+                      <code>{ruleName(rule.routeId)}</code>: {moveRuleVerdictLabel(rule, ruleName)}
+                    </Txt>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -104,6 +134,10 @@ export function IntakeTesterPanel({ factoryProjectId, itemId, draft }: IntakeTes
               )),
             )}
           </ul>
+          <CardMoves
+            moves={result.moves}
+            boardName={key => result.boards.find(board => board.boardKey === key)?.name ?? key}
+          />
         </div>
       )}
     </section>

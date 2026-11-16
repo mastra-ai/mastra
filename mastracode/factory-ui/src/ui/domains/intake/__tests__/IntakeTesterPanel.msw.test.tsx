@@ -55,6 +55,8 @@ const shipped: IntakeTestResponse = {
       ],
     },
   ],
+  current: null,
+  moves: [],
 };
 
 function serveTest(response: IntakeTestResponse | { status: number; error: string; message: string }) {
@@ -110,6 +112,94 @@ describe('IntakeTesterPanel', () => {
 
     expect(await screen.findByText("Not routed. No board's intake rules match it (checked SHIP).")).toBeTruthy();
     expect(bodies).toEqual([{ order: ['ship'], itemId: ITEM_ID }]);
+  });
+
+  it("replays a card's recent events through its board's card-move rules and says what each would do", async () => {
+    serveTest({
+      ...shipped,
+      item: { title: 'Crash on start', url: null, kind: 'card', id: ITEM_ID },
+      current: { boardKey: 'work', phase: 'intake', routeId: 'everything' },
+      moves: [
+        {
+          decisionId: 'd-2',
+          at: '2030-01-02T00:00:00.000Z',
+          event: { type: 'work_item.updated', labels: { added: ['ship'], removed: ['bug'] } },
+          outcome: 'moves',
+          to: { boardKey: 'ship', phase: 'inbox', routeId: 'ship-added' },
+          phase: null,
+          reason: null,
+          rules: [
+            { routeId: 'off', name: 'Paused', outcome: 'disabled' },
+            {
+              routeId: 'docs-added',
+              name: 'Docs added',
+              outcome: 'no_match',
+              failed: [{ field: 'event.labels.added', operator: 'contains', value: 'docs', actual: ['ship'] }],
+            },
+            { routeId: 'ship-added', name: 'Ship added', outcome: 'took' },
+            { routeId: 'any', name: null, outcome: 'lost', to: { boardKey: 'ship', routeId: 'ship-added' } },
+            {
+              routeId: 'platform',
+              name: 'To Platform',
+              outcome: 'skipped',
+              reason: 'board "platform" is not installed',
+            },
+          ],
+        },
+        {
+          decisionId: 'd-1',
+          at: '2030-01-01T00:00:00.000Z',
+          event: { type: 'work_item.reopened' },
+          outcome: 'ignored',
+          to: null,
+          phase: null,
+          reason: "The card isn't finished, so reopening it doesn't move it.",
+          rules: [],
+        },
+        {
+          decisionId: null,
+          at: null,
+          event: { type: 'pull_request.merged', pullRequestTrusted: true },
+          outcome: 'rule_default',
+          to: null,
+          phase: 'done',
+          reason: null,
+          rules: [],
+        },
+        {
+          decisionId: 'd-0',
+          at: '2029-12-31T00:00:00.000Z',
+          event: { type: 'work_item.closed', reason: 'canceled' },
+          outcome: 'stays',
+          to: null,
+          phase: null,
+          reason: null,
+          rules: [],
+        },
+      ],
+    });
+    renderWithProviders(<IntakeTesterPanel factoryProjectId="fp-1" itemId={ITEM_ID} />);
+
+    const moves = await screen.findByRole('list', { name: 'Card moves' });
+    const events = within(moves)
+      .getAllByRole('listitem')
+      .filter(item => item.parentElement === moves);
+    expect(events.map(item => within(item).getByRole('heading').textContent)).toEqual([
+      'work_item.updated, labels +ship −bug: moves to Ship › inbox',
+      "work_item.reopened: ignored. The card isn't finished, so reopening it doesn't move it.",
+      'pull_request.merged: no rule takes it, so the integration moves it to done',
+      'work_item.closed (canceled): stays where it is',
+    ]);
+    const answers = within(within(events[0]).getByRole('list', { name: 'What each card-move rule answered' }))
+      .getAllByRole('listitem')
+      .map(item => item.textContent);
+    expect(answers).toEqual([
+      'Paused: off',
+      'Docs added: no, event.labels.added is ship, wanted contains docs',
+      'Ship added: yes',
+      'Unnamed rule: matched, but Ship added took it first',
+      'To Platform: matched, but board "platform" is not installed',
+    ]);
   });
 
   it("shows the server's refusal for a repository the project hasn't linked", async () => {
