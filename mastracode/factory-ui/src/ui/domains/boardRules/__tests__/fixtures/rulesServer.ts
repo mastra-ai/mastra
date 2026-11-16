@@ -86,6 +86,8 @@ export function serveRules({
         })),
         origin: 'explicit',
         evaluator,
+        evaluatorSource: 'project',
+        projectEvaluator: evaluator,
         comparison: { compared: 0, differing: 0, notRouted: 0 },
         canEdit,
       } satisfies IntakeOrderResponse),

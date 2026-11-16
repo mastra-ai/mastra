@@ -155,7 +155,8 @@ export function newItemRules(rules: readonly IntakeRouteInfo[]): { count: number
   const reached = new Set<string>();
   let catchesAll = true;
   for (const event of ARRIVAL_LANES) {
-    const lane = laneRules(rules, event).filter(rule => rule.enabled);
+    // A rule joining a pull request to its issue's card files nothing new.
+    const lane = laneRules(rules, event).filter(rule => rule.enabled && !rule.target.joinClosedIssue);
     const catchAll = catchAllIndex(lane, event);
     if (catchAll === -1) catchesAll = false;
     for (const rule of catchAll === -1 ? lane : lane.slice(0, catchAll + 1)) reached.add(rule.id);
@@ -180,21 +181,29 @@ export function catchAllIndex(lane: readonly IntakeRouteInfo[], event: RuleEvent
 }
 
 /**
- * The rule above `index` in a lane that keeps it from ever being reached; -1 when none does. A rule testing only the
- * item's kind takes every new item, but not an issue's card moving when a pull request links to it, so it doesn't
- * shadow a rule testing that issue (`closedIssue.*`).
+ * The rule above `index` in a lane that keeps it from ever being reached; -1 when none does. Only a rule with no
+ * conditions hides everything below it: on an arrival lane the same rules also move the issue cards a pull request
+ * links to or was opened from, so a rule testing only the kind hides just the rules that need that kind too.
  */
 export function shadowedBy(lane: readonly IntakeRouteInfo[], event: RuleEvent, index: number): number {
   const catchAll = catchAllIndex(lane, event);
   const [taker, rule] = [lane[catchAll], lane[index]];
   if (!taker || !rule || index <= catchAll) return -1;
-  return taker.when === null || !testsLinkedIssue(rule) ? catchAll : -1;
+  if (taker.when === null) return catchAll;
+  const needs = kindsTakenWhole(taker);
+  return requiredKinds(rule).some(kind => needs.includes(kind)) ? catchAll : -1;
 }
 
-function testsLinkedIssue(rule: IntakeRouteInfo): boolean {
-  return (
-    rule.when?.operator === 'AND' &&
-    rule.when.conditions.some(condition => 'field' in condition && condition.field.startsWith('closedIssue.'))
+/** The kinds a rule's `when` requires outright (`source.kind equals …` among its AND conditions). */
+function requiredKinds(rule: IntakeRouteInfo): string[] {
+  if (rule.when?.operator !== 'AND') return [];
+  return rule.when.conditions.flatMap(condition =>
+    'field' in condition &&
+    condition.field === 'source.kind' &&
+    condition.operator === 'equals' &&
+    typeof condition.value === 'string'
+      ? [condition.value]
+      : [],
   );
 }
 

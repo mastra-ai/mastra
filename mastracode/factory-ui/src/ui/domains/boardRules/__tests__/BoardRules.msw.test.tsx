@@ -73,16 +73,16 @@ describe('Board rules', () => {
     expect(lane('Issue reopened').getByText('No rules: the card stays where it is')).toBeVisible();
   });
 
-  it('ends the pull request lane at a rule testing only the kind, except for rules moving a linked issue’s card', async () => {
+  it('ends the pull request lane at a rule testing only the kind for pull requests only, as cards still move below it', async () => {
     const PRS = 'Pull request opened';
-    const kind = (value: string) => ({ field: 'source.kind', operator: 'equals' as const, value });
+    const kind = { field: 'source.kind', operator: 'equals' as const, value: 'pull_request' };
     serveRules({
       rules: [
         rule({
           id: ruleId('prs'),
           name: 'Pull requests go to Review',
           on: ['pull_request.opened'],
-          when: { operator: 'AND', conditions: [kind('pull_request')] },
+          when: { operator: 'AND', conditions: [kind] },
         }),
         rule({
           id: ruleId('linked'),
@@ -91,10 +91,16 @@ describe('Board rules', () => {
           when: { operator: 'AND', conditions: [{ field: 'closedIssue.phase', operator: 'in', value: ['intake'] }] },
         }),
         rule({
-          id: ruleId('drafts'),
-          name: 'Drafts wait',
+          id: ruleId('trusted'),
+          name: 'Trusted authors go to Review',
           on: ['pull_request.opened'],
-          when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'draft' }] },
+          when: { operator: 'AND', conditions: [{ field: 'pullRequest.trusted', operator: 'equals', value: true }] },
+        }),
+        rule({
+          id: ruleId('drafts'),
+          name: 'Draft pull requests wait',
+          on: ['pull_request.opened'],
+          when: { operator: 'AND', conditions: [kind, { field: 'item.labels', operator: 'contains', value: 'draft' }] },
         }),
       ],
     });
@@ -102,11 +108,80 @@ describe('Board rules', () => {
 
     await screen.findByRole('region', { name: PRS });
     const row = (name: string) => within(lane(PRS).getByRole('listitem', { name }));
-    // An issue's card moving when a pull request links to it isn't a pull request, so rule 1 doesn't take it.
+    // On pull_request.opened these rules also move the issue cards a pull request links to or was opened from, and
+    // those cards are issues, so rule 1 only hides rules that need a pull request too.
     expect(
       row('Trusted pull requests take a waiting issue to Review').queryByText(/Never reached/),
     ).not.toBeInTheDocument();
-    expect(row('Drafts wait').getByText('Never reached: rule 1 above matches every item.')).toBeVisible();
+    expect(row('Trusted authors go to Review').queryByText(/Never reached/)).not.toBeInTheDocument();
+    expect(row('Draft pull requests wait').getByText('Never reached: rule 1 above matches every item.')).toBeVisible();
+  });
+
+  it('leaves a new card-move rule below a rule taking only pull requests, so it doesn’t start filing them', async () => {
+    const PRS = 'Pull request opened';
+    serveRules({
+      rules: [
+        rule({
+          id: ruleId('prs'),
+          name: 'Pull requests go to Review',
+          on: ['pull_request.opened'],
+          when: { operator: 'AND', conditions: [{ field: 'source.kind', operator: 'equals', value: 'pull_request' }] },
+        }),
+      ],
+    });
+    const user = userEvent.setup();
+    const { client } = renderRules();
+
+    await screen.findByRole('region', { name: PRS });
+    await user.click(lane(PRS).getByRole('button', { name: 'Add rule' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
+    await user.click(dialog.getByRole('radio', { name: /Every item/ }));
+    await user.click(dialog.getByRole('button', { name: 'Continue' }));
+    await user.click(dialog.getByRole('radio', { name: 'Planning' }));
+    const name = dialog.getByRole('textbox', { name: 'Name' });
+    await user.clear(name);
+    await user.type(name, 'Issues with a pull request go to Planning');
+    await user.click(dialog.getByRole('button', { name: 'Create rule' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitForMutationsIdle(client);
+    await waitFor(() =>
+      expect(ruleNames(PRS)).toEqual(['Pull requests go to Review', 'Issues with a pull request go to Planning']),
+    );
+  });
+
+  it('keeps the rule open now when an earlier rule’s save finishes after it was closed', async () => {
+    const pending: (() => void)[] = [];
+    serveRules({ rules: [bugs(), everythingElse()] });
+    const user = userEvent.setup();
+    const { client } = renderRules();
+    await screen.findByRole('region', { name: OPENED });
+    server.use(
+      http.patch(`${PROJECT_URL}/intake-routes/:id`, async () => {
+        await new Promise<void>(resolve => pending.push(resolve));
+        return HttpResponse.json({ error: 'revision_mismatch', message: 'Changed.' }, { status: 409 });
+      }),
+    );
+
+    await user.click(lane(OPENED).getByRole('button', { name: 'Edit conditions of Bugs go to Triage' }));
+    let dialog = within(await screen.findByRole('dialog'));
+    await user.click(dialog.getByRole('button', { name: /Review/ }));
+    await user.click(dialog.getByRole('button', { name: 'Save rule' }));
+    await waitFor(() => expect(pending).toHaveLength(1));
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    await user.click(lane(OPENED).getByRole('button', { name: 'Edit conditions of Everything else goes to Intake' }));
+    dialog = within(await screen.findByRole('dialog'));
+    await user.click(dialog.getByRole('button', { name: /Review/ }));
+    pending[0]?.();
+    await waitForMutationsIdle(client);
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // The first rule's conflict belongs to its own closed session: this one keeps its rule and shows no error.
+    const open = within(screen.getByRole('dialog'));
+    expect(open.getByRole('textbox', { name: 'Name' })).toHaveValue('Everything else goes to Intake');
+    expect(open.queryByText(/Someone else changed this rule first/)).not.toBeInTheDocument();
   });
 
   it('groups lanes into issues and pull requests, with the intake note on the two lanes new items arrive on', async () => {

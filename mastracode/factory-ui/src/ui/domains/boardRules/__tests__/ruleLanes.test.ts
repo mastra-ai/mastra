@@ -34,7 +34,7 @@ describe('ordinal', () => {
 });
 
 describe('newItemRules', () => {
-  const legacy = { ...rule({ id: 'legacy', name: 'Old intake' }), on: ['work_item.created'] };
+  const legacy = rule({ id: 'legacy', name: 'Old intake', on: ['work_item.created'] });
   const issues = rule({
     id: 'issues',
     name: 'Bugs',
@@ -73,6 +73,11 @@ describe('newItemRules', () => {
       'a rule testing another kind takes nothing whole',
       [allIssues, issueKindOnPrs, prs],
       { count: 3, catchesAll: true },
+    ],
+    [
+      'a rule joining a pull request to its issue’s card files nothing new',
+      [allIssues, { ...prs, target: { ...prs.target, joinClosedIssue: true } }],
+      { count: 1, catchesAll: false },
     ],
     ['card moves and rules that are off are not for new items', [closed, off], { count: 0, catchesAll: false }],
   ])('%s', (_case, rules, expected) => expect(newItemRules(rules)).toEqual(expected));

@@ -29,6 +29,8 @@ function order(fields: Partial<IntakeOrderResponse> = {}): IntakeOrderResponse {
     ],
     origin: 'explicit',
     evaluator: 'intake-order',
+    evaluatorSource: 'project',
+    projectEvaluator: 'intake-order',
     comparison: { compared: 0, differing: 0, notRouted: 0 },
     canEdit: true,
     ...fields,
@@ -84,7 +86,10 @@ describe('Intake order', () => {
         }),
         rule({ name: 'Everything else' }),
         rule({ name: 'Pull requests', on: ['pull_request.opened'] }),
-        rule({ name: 'Releases', target: { boardKey: 'release', phaseKey: null, joinClosedIssue: false } }),
+        rule({
+          name: 'Releases',
+          target: { boardKey: 'release', phaseKey: null, joinClosedIssue: false, moveToBoardKey: null },
+        }),
       ],
     });
     serveOrder(order());
@@ -408,6 +413,8 @@ describe('Not routed', () => {
           ],
           current: null,
           moves: [],
+          note: null,
+          evaluator: 'intake-order',
         } satisfies IntakeTestResponse);
       }),
     );

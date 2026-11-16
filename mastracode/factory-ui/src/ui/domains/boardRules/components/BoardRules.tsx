@@ -2,7 +2,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 
 import type { InstalledBoardInfo, IntakeRouteInfo } from '../../../../api/types';
@@ -13,7 +13,7 @@ import { useBoardRulesQuery, useIntakeRouteWrites } from '../../../../hooks/useI
 import type { RouteWrite } from '../../../../hooks/useIntakeRoutes';
 import { phaseOptions, reorderWithin } from '../ruleTargets';
 import { INTAKE_ORDER_ANCHOR, settingsSectionPath } from '../../settings/settingsSections';
-import { catchAllIndex, intakePosition, isOpenedLane, LANE_SECTIONS, laneRules } from '../ruleLanes';
+import { intakePosition, isOpenedLane, LANE_SECTIONS, laneRules, shadowedBy } from '../ruleLanes';
 import type { RuleEvent } from '../ruleLanes';
 import { RuleBuilderDialog } from './RuleBuilderDialog';
 import type { RuleDraft, RuleStep } from './RuleBuilderDialog';
@@ -61,6 +61,12 @@ function BoardLanes({
   const skipped = useSkippedRulesQuery(factoryId);
   const writes = useIntakeRouteWrites(factoryId);
   const [editing, setEditing] = useState<Editing>();
+  // The open rule, read after a save returns: a save finishing after its rule was closed must not touch the next one.
+  const session = useRef<Editing>(undefined);
+  const edit = (next?: Editing) => {
+    session.current = next;
+    setEditing(next);
+  };
   const [saveError, setSaveError] = useState<string>();
   const rules = query.data?.intakeRoutes ?? [];
   const canEdit = query.data?.canEdit ?? false;
@@ -79,11 +85,13 @@ function BoardLanes({
 
   const open = (next: Editing) => {
     setSaveError(undefined);
-    setEditing(next);
+    edit(next);
   };
 
   const save = async (draft: RuleDraft) => {
-    const rule = editing?.rule;
+    const started = session.current;
+    const rule = started?.rule;
+    const current = () => started !== undefined && session.current === started;
     setSaveError(undefined);
     try {
       if (rule) {
@@ -106,12 +114,13 @@ function BoardLanes({
           { kind: 'create', route: { ...draft, target: { boardKey: board.id, ...draft.target } } },
         ]);
         // The rule exists from here on: a failed move must not leave the dialog open to create it twice.
-        setEditing(undefined);
+        if (current()) edit(undefined);
         if (created) await keepAboveCatchAll(created, draft.on).catch(error => toast.error(failureMessage(error)));
         return;
       }
-      setEditing(undefined);
+      if (current()) edit(undefined);
     } catch (error) {
+      if (!current()) return;
       if (rule && isStale(error)) return reopenFresh(rule);
       setSaveError(failureMessage(error));
     }
@@ -119,18 +128,20 @@ function BoardLanes({
 
   // Someone changed the rule first: show their version rather than resend this one over it with a stale revision.
   const reopenFresh = async (stale: IntakeRouteInfo) => {
+    const started = session.current;
     const fresh = (await query.refetch()).data?.intakeRoutes.find(candidate => candidate.id === stale.id);
+    if (!started || session.current !== started) return;
     if (!fresh) {
-      setEditing(undefined);
+      edit(undefined);
       toast.error('Someone else deleted this rule first.');
       return;
     }
-    setEditing(current => current && { ...current, rule: fresh });
+    edit({ ...started, rule: fresh });
     setSaveError('Someone else changed this rule first. It now shows their version; make your change again.');
   };
 
-  // A new rule goes in at the end of its board's list; one under a rule taking everything would never be reached,
-  // so it moves up to just above the earliest such rule in any lane it listens on. The board has one order shared by
+  // A new rule goes in at the end of its board's list; one under a rule that hides it would never be reached, so it
+  // moves up to just above the earliest such rule in any lane it listens on. The board has one order shared by
   // every lane, so one slot keeps it above all of them.
   const keepAboveCatchAll = async (created: IntakeRouteInfo, on: readonly RuleEvent[]) => {
     if (created.target.boardKey !== board.id) return;
@@ -138,9 +149,16 @@ function BoardLanes({
     const ids = fresh.map(rule => rule.id);
     const at = ids.indexOf(created.id);
     const catchAlls = on.flatMap(event => {
-      const lane = laneRules(fresh, event).filter(rule => rule.id !== created.id);
-      const catchAll = lane[catchAllIndex(lane, event)];
-      return catchAll ? [ids.indexOf(catchAll.id)] : [];
+      const lane = laneRules(fresh, event);
+      const hider =
+        lane[
+          shadowedBy(
+            lane,
+            event,
+            lane.findIndex(rule => rule.id === created.id),
+          )
+        ];
+      return hider ? [ids.indexOf(hider.id)] : [];
     });
     const above = Math.min(...catchAlls);
     if (at < 0 || !(above < at)) return;
@@ -219,7 +237,7 @@ function BoardLanes({
           saving={writes.isPending}
           error={saveError}
           onSave={draft => void save(draft)}
-          onClose={() => setEditing(undefined)}
+          onClose={() => edit(undefined)}
         />
       )}
     </div>
