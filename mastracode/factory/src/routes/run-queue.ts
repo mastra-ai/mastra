@@ -57,7 +57,8 @@ function entry(
 
 /**
  * The project's run-bearing decisions, oldest first, split into those waiting for a slot and
- * those a server already holds one for. Each lane is claimed oldest first, interactive first.
+ * those a server already holds one for. Each lane is claimed oldest first, interactive first,
+ * so the waiting list puts every waiting reply before the automated runs it would pass.
  */
 export async function readRunQueue(input: {
   workItems: WorkItemsStorage;
@@ -72,8 +73,9 @@ export async function readRunQueue(input: {
   ).filter(decision => isRunBearingDecision(decision.decision));
   const claimed = open.filter(decision => holdsSlot(decision, now));
   const waiting = open.filter(decision => waitsForSlot(decision, now));
-  const listed = waiting.slice(0, LISTED_WAITING_RUNS);
-  const waitingLanes = waiting.map(laneOf);
+  const waitingReplies = waiting.filter(decision => laneOf(decision) === 'interactive');
+  const waitingAutomated = waiting.filter(decision => laneOf(decision) === 'automated');
+  const listed = [...waitingReplies, ...waitingAutomated].slice(0, LISTED_WAITING_RUNS);
   const positions = { automated: 0, interactive: 0 };
   const ids = [...claimed, ...listed].flatMap(decision => (decision.workItemId ? [decision.workItemId] : []));
   const cards = new Map((await workItems.listByIds({ orgId, factoryProjectId, ids })).map(card => [card.id, card]));
@@ -82,10 +84,7 @@ export async function readRunQueue(input: {
     running: claimed.length,
     claimed: claimed.map(decision => entry(decision, 'claimed', cards)),
     queuedCount: waiting.length,
-    queuedByLane: {
-      automated: waitingLanes.filter(lane => lane === 'automated').length,
-      interactive: waitingLanes.filter(lane => lane === 'interactive').length,
-    },
+    queuedByLane: { automated: waitingAutomated.length, interactive: waitingReplies.length },
     queued: listed.map(decision => {
       const queued = entry(decision, 'waiting', cards);
       positions[queued.lane] += 1;

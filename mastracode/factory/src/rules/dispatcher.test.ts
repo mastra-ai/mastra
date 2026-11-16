@@ -2088,6 +2088,39 @@ describe('FactoryDecisionDispatcher', () => {
       void dispatcher.stop();
     });
 
+    it('lists a waiting reply on the run queue even behind a full page of automated runs', async () => {
+      const { storage, dispatcher, readQueue } = await saturate({
+        maxInFlight: 1,
+        maxInteractiveInFlight: 0,
+        holders: 1,
+      });
+      // One more automated run than the queue lists, all older than the reply.
+      for (let index = 0; index <= 50; index += 1) {
+        await queueWake(
+          storage,
+          `github-issue:automated-${index}`,
+          { type: 'sendMessage', role: 'work', message: 'Automated.', idempotencyKey: `automated-${index}` },
+          { type: 'system', id: 'rules' },
+        );
+      }
+      await queueWake(
+        storage,
+        'github-issue:reply',
+        { type: 'sendMessage', role: 'work', message: 'Reply.', idempotencyKey: 'reply' },
+        person,
+      );
+
+      const queue = await readQueue();
+      expect(queue.queuedCount).toBe(52);
+      expect(queue.queuedByLane).toEqual({ automated: 51, interactive: 1 });
+      expect(queue.queued).toHaveLength(50);
+      expect(queue.queued[0]).toEqual(expect.objectContaining({ lane: 'interactive', position: 1 }));
+      expect(queue.queued.slice(1).map(run => [run.lane, run.position])).toEqual(
+        Array.from({ length: 49 }, (_, index) => ['automated', index + 1]),
+      );
+      void dispatcher.stop();
+    });
+
     it("lets a person's reply take a free automated slot once the reserve is full, ahead of automated runs", async () => {
       const { dispatcher, status, settle } = await saturate({
         maxInFlight: 1,

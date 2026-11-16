@@ -739,7 +739,7 @@ The board shows how many automated runs are waiting, and opens a list of them, o
 
 - `slots` — this server's automated `inUse` and `cap`, with the reply reserve's `interactive.inUse` and `interactive.cap`, or `null` when it runs no dispatcher. A reply that borrowed an automated slot counts in `inUse`. Other replicas keep their own.
 - `running` and `claimed` — the project's automated runs a server holds a slot for, on any replica. A manual start holding a slot counts in `slots.inUse` but not here, so `running` can be lower than `inUse`.
-- `queuedCount` and `queued` — every run waiting for a slot, and the oldest 50 with their `lane` (`interactive` for a person's reply, else `automated`), `position` within that lane, card, phase and the skill they will run. `queuedByLane` splits `queuedCount` by lane. A retry still backing off is not waiting yet.
+- `queuedCount` and `queued` — every run waiting for a slot, and up to 50 of them, waiting replies first, then automated runs, each oldest first, with their `lane` (`interactive` for a person's reply, else `automated`), `position` within that lane, card, phase and the skill they will run. `queuedByLane` splits `queuedCount` by lane. A retry still backing off is not waiting yet.
 
 ### The `factory-work-item` signal
 
