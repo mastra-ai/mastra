@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { x } from 'tinyexec';
 
-const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies'] as const;
+const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies'] as const;
 const NPM_VIEW_TIMEOUT_MS = 15_000;
 
 export function isMastraPackage(name: string): boolean {
@@ -35,7 +35,7 @@ export async function pinMastraPackages(projectPath: string, tag: string): Promi
   }
 
   const resolved = await Promise.all(
-    [...names].sort().map(async name => [name, await resolveDistTag(name, tag)] as const),
+    [...names].sort().map(async name => [name, await resolveDistTag(name, tag, projectPath)] as const),
   );
 
   const pinned: Record<string, string> = {};
@@ -49,7 +49,7 @@ export async function pinMastraPackages(projectPath: string, tag: string): Promi
     const deps = pkg[field] as Record<string, string> | undefined;
     if (!deps) continue;
     for (const name of Object.keys(deps)) {
-      if (pinned[name]) deps[name] = pinned[name];
+      if (Object.hasOwn(pinned, name)) deps[name] = pinned[name]!;
     }
   }
 
@@ -57,11 +57,13 @@ export async function pinMastraPackages(projectPath: string, tag: string): Promi
   return { pinned, unresolved };
 }
 
-async function resolveDistTag(name: string, tag: string): Promise<string | undefined> {
+async function resolveDistTag(name: string, tag: string, cwd: string): Promise<string | undefined> {
   try {
     const { stdout } = await x('npm', ['view', name, 'dist-tags', '--json'], {
       throwOnError: true,
       timeout: NPM_VIEW_TIMEOUT_MS,
+      // Read the project's npm config (e.g. a custom registry) like the install does.
+      nodeOptions: { cwd },
     });
     const tags = JSON.parse(stdout) as Record<string, unknown>;
     const version = tags[tag];

@@ -429,6 +429,28 @@ describe('create --tag', () => {
     expect(fs.readFileSync(path.join(workDir, 'my-factory', '.npmrc'), 'utf8')).toBe('legacy-peer-deps=true\n');
   });
 
+  it('pins optional dependencies, keeps unrelated entries, and looks tags up from the project', async () => {
+    fs.writeFileSync(
+      path.join(templateDir, 'package.json'),
+      JSON.stringify({
+        name: 'mastra-factory',
+        dependencies: { constructor: 'npm:zod@4.4.3' },
+        optionalDependencies: { '@mastra/core': 'latest' },
+      }),
+    );
+
+    await create({ projectName: 'my-factory', noPlatform: true, versionTag: 'alpha', analytics });
+
+    const pkg = readPkg();
+    expect(pkg.dependencies).toEqual({ constructor: 'npm:zod@4.4.3' });
+    expect(pkg.optionalDependencies).toEqual({ '@mastra/core': '1.6.0-alpha.3' });
+    expect(tinyexec.x).toHaveBeenCalledWith(
+      'npm',
+      ['view', '@mastra/core', 'dist-tags', '--json'],
+      expect.objectContaining({ nodeOptions: { cwd: path.join(workDir, 'my-factory') } }),
+    );
+  });
+
   it('pins any dist-tag, not just latest and alpha', async () => {
     vi.stubEnv('npm_config_user_agent', 'npm/11.0.0 node/v22.0.0');
     try {
