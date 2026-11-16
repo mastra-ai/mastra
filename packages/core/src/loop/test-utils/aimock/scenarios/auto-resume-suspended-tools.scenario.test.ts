@@ -28,6 +28,7 @@ describeForAllEngines(
   'AIMock loop scenario: autoResumeSuspendedTools',
   engine => {
     const getMock = useLoopScenarioAimock();
+    const itFailsOnEvented = engine === 'evented' ? it.fails : it;
 
     it('auto-resumes a suspended tool when the user sends a follow-up message on the same thread', async () => {
       let toolExecuted = false;
@@ -361,19 +362,31 @@ describeForAllEngines(
         return otherRuntime.sendMessage(shared.agent, FOLLOW_UP, { resourceId, threadId, runId }, shared.mastra.pubsub)
           .accepted;
       };
+      const waitForIdle = async () => {
+        const view = await shared.agent.subscribeToThread({ resourceId, threadId });
+        try {
+          await vi.waitFor(() => expect(view.activeRunId()).toBeNull(), { timeout: 7_000 });
+        } finally {
+          view.unsubscribe();
+        }
+      };
       /**
-       * Waits for the final answer to land, then checks the reply ran exactly one turn: the thread holds the
-       * reply once and the final answer once, the tool or workflow resumed once, and the model got three
+       * Waits for the final answer to land and the thread to go idle, then checks the reply ran exactly one
+       * turn: the thread holds the reply once and the final answer once, the tool or workflow resumed once, and the model got three
        * requests. Those are the first message's request and the reply turn's two (the re-call that resumes
        * the tool, then the final answer); only the reply turn's two carry the reply.
        */
       const expectReplyHandledOnce = async () => {
-        const deadline = Date.now() + 10_000;
+        // Both waits fit the test's 20 s timeout, so a reply that never runs fails on an assertion.
+        const deadline = Date.now() + 7_000;
         let { messages } = await memory.recall({ threadId, resourceId });
         while (!messages.some(m => textOf(m).includes('FINAL_REPLY')) && Date.now() < deadline) {
           await new Promise(resolve => setTimeout(resolve, 50));
           ({ messages } = await memory.recall({ threadId, resourceId }));
         }
+        // A second turn could start after the first answer lands, so count only once no run holds the thread.
+        await waitForIdle();
+        ({ messages } = await memory.recall({ threadId, resourceId }));
         // The reply is stored as the user-message signal that carried it.
         expect(messages.filter(m => textOf(m).includes(FOLLOW_UP))).toHaveLength(1);
         expect(
@@ -433,6 +446,25 @@ describeForAllEngines(
       const first = firstMessage();
       await vi.waitFor(() => expect(seen.entered).toBe(true));
       await sendFollowUp();
+      releaseTool();
+      expect((await first).chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
+
+      await expectReplyHandledOnce();
+    });
+
+    // Technical: the release that #30190 added starts any queued thread work once the run parks,
+    // not only user messages. A continuation (`sendToolApproval` with `messages`) queued while the
+    // tool still runs starts the next turn after the tool suspends, and is handled once. (#30190)
+    it('runs a continuation queued while the tool was still running once the tool suspends (#30190)', async () => {
+      let releaseTool!: () => void;
+      const { seen, shared, threadId, resourceId, firstMessage, expectReplyHandledOnce } = await createStudioThread({
+        suspendsIn: 'tool',
+        release: new Promise<void>(resolve => (releaseTool = resolve)),
+      });
+
+      const first = firstMessage();
+      await vi.waitFor(() => expect(seen.entered).toBe(true));
+      await shared.agent.sendToolApproval({ threadId, resourceId, approved: true, messages: FOLLOW_UP });
       releaseTool();
       expect((await first).chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
 
@@ -592,6 +624,132 @@ describeForAllEngines(
       ).toBe(true);
       expect(deletes).toBe(1);
     });
+
+    // Technical: the model calls a tool that needs approval and a plain tool that calls suspend()
+    // in one step. The approval wins: the follow-up waits on the parked run until the approval is
+    // answered. The approved run then parks on the plain tool's suspend(), and the follow-up starts
+    // the reply turn that auto-resumes it. (#30190)
+    // Evented asks for approval of the plain tool once the approved call has run, so the run parks
+    // on an approval again and the follow-up keeps waiting. Cause not yet investigated.
+    itFailsOnEvented(
+      'answers a follow-up once after approving a tool that paused beside a tool waiting for input, with auto-resume on (#30190)',
+      async () => {
+        let deletes = 0;
+        const seen = { resumes: 0, resumedWith: undefined as string | undefined };
+        const deleteFileTool = createTool({
+          id: 'delete-file',
+          description: 'Deletes a file',
+          inputSchema: z.object({ path: z.string() }),
+          requireApproval: true,
+          execute: async ({ path }) => {
+            deletes++;
+            return { deleted: true, path };
+          },
+        });
+        const findUserTool = createTool({
+          id: 'find-user',
+          description: 'Finds a user by name',
+          inputSchema: z.object({ query: z.string() }),
+          resumeSchema: z.object({ name: z.string() }),
+          execute: async (_inputData, context) => {
+            if (!context?.agent?.resumeData) {
+              return context?.agent?.suspend({ message: 'Which user should I find?' });
+            }
+            seen.resumes++;
+            seen.resumedWith = context.agent.resumeData.name;
+            return { name: seen.resumedWith };
+          },
+        });
+        const memory = new MockMemory();
+        const shared = await createSharedAgent(getMock(), {
+          tools: { deleteFileTool, findUserTool },
+          memory,
+          defaultOptions: { autoResumeSuspendedTools: true },
+          engine,
+        });
+        const threadId = globalThis.crypto.randomUUID();
+        const resourceId = globalThis.crypto.randomUUID();
+
+        const llm = getMock();
+        // Registered first: once the resumed tool answers, the model replies.
+        llm.on({ endpoint: 'chat', toolCallId: 'call-2', hasToolResult: true }, { content: 'FINAL_REPLY Dero Israel' });
+        // The follow-up turn re-calls the suspended tool with the answer read from the user's reply.
+        llm.onMessage(/The user is Dero Israel/, {
+          toolCalls: [
+            {
+              id: 'call-2',
+              name: 'find-user',
+              arguments: { query: 'user by name', suspendedToolCallId: 'call-1', resumeData: { name: 'Dero Israel' } },
+            },
+          ],
+        });
+        llm.on({ endpoint: 'chat', toolCallId: 'call-del-1', hasToolResult: true }, { content: 'DELETED_REPLY' });
+
+        const first = await runLoopScenario({
+          engine,
+          llm,
+          sharedAgent: shared,
+          prompt: 'Delete the config file and find the user named Dero Israel',
+          memory,
+          threadId,
+          resourceId,
+          fixtures: mock => {
+            mock.onMessage(/Delete the config file/, {
+              toolCalls: [
+                { id: 'call-del-1', name: 'delete-file', arguments: { path: '/etc/config.json' } },
+                { id: 'call-1', name: 'find-user', arguments: { query: 'user by name' } },
+              ],
+            });
+          },
+          collectChunks: true,
+        });
+        expect(first.chunks!.some(c => c.type === 'tool-call-approval')).toBe(true);
+        const runId = first.output.runId;
+
+        const view = await shared.agent.subscribeToThread({ resourceId, threadId });
+        onTestFinished(() => view.unsubscribe());
+        const requestsWithReply = () =>
+          llm.getRequests().filter(request => JSON.stringify(request.body?.messages).includes(FOLLOW_UP)).length;
+
+        await shared.agent.sendMessage(FOLLOW_UP, { resourceId, threadId }).accepted;
+        // Long enough for a turn the follow-up started to reach the model.
+        await new Promise(resolve => setTimeout(resolve, 500));
+        expect(requestsWithReply()).toBe(0);
+        expect(view.activeRunId()).toBe(runId);
+        expect(deletes).toBe(0);
+        expect(seen.resumes).toBe(0);
+
+        const approved = (await shared.agent.approveToolCall({ runId, toolCallId: 'call-del-1' })) as unknown as {
+          fullStream: AsyncIterable<ChunkType>;
+        };
+        const approvedChunks: ChunkType[] = [];
+        for await (const chunk of approved.fullStream) approvedChunks.push(chunk);
+        expect(deletes).toBe(1);
+        // An approval makes the step run its calls one at a time, so the plain tool only runs, and
+        // pauses for its input, once the approved call is done.
+        expect(
+          approvedChunks.some(chunk => chunk.type === 'tool-call-suspended' && chunk.payload.toolCallId === 'call-1'),
+        ).toBe(true);
+
+        const deadline = Date.now() + 5_000;
+        let { messages } = await memory.recall({ threadId, resourceId });
+        while (!messages.some(m => textOf(m).includes('FINAL_REPLY')) && Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, 50));
+          ({ messages } = await memory.recall({ threadId, resourceId }));
+        }
+        // Count only once no run holds the thread, so a second turn that started late is caught.
+        await vi.waitFor(() => expect(view.activeRunId()).toBeNull(), { timeout: 5_000 });
+        ({ messages } = await memory.recall({ threadId, resourceId }));
+        expect(messages.filter(m => textOf(m).includes(FOLLOW_UP))).toHaveLength(1);
+        expect(
+          messages.filter(m => m.role === 'assistant' && textOf(m).includes('FINAL_REPLY Dero Israel')),
+        ).toHaveLength(1);
+        expect(seen.resumedWith).toBe('Dero Israel');
+        expect(seen.resumes).toBe(1);
+        expect(requestsWithReply()).toBe(2);
+        expect(deletes).toBe(1);
+      },
+    );
 
     /** The issue's case: the same workflow run resumes once, and the step before the suspension is not rerun. */
     const expectWorkflowResumedOnce = (seen: Awaited<ReturnType<typeof createStudioThread>>['seen']) => {

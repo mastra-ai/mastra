@@ -5037,13 +5037,17 @@ export class AgentThreadStreamRuntime {
     pubsub?: PubSub,
     claim?: AgentThreadRunClaim & { generation?: number },
   ): boolean {
-    const { threadId, resourceId } = this.#getThreadTarget(streamOptions);
-    if (!threadId) return false;
-
     const state = this.#getState(pubsub);
     this.#sweepStaleSuspendedRecords(state, pubsub);
-    const key = this.#threadKey(resourceId, threadId);
     const existing = state.threadRunsById.get(output.runId);
+    const named = this.#getThreadTarget(streamOptions);
+    // A resume can name only its run, as Inngest's `approveToolCall({ runId, toolCallId })` does. It continues on the
+    // thread the run holds; otherwise the answered approval stays recorded and the run never gives up the thread
+    // to a follow-up queued behind it. (#30190)
+    const continuesOwnThread = !named.threadId && existing !== undefined;
+    const { threadId, resourceId } = continuesOwnThread ? existing : named;
+    if (!threadId) return false;
+    const key = this.#threadKey(resourceId, threadId);
     if (
       !existing?.continuation?.canContinue() ||
       existing.agent !== agent ||
@@ -5063,7 +5067,10 @@ export class AgentThreadStreamRuntime {
     if (resumedToolCallId) this.#clearSuspendedToolCall(state, output.runId, resumedToolCallId);
     else this.#clearSuspendedRun(state, output.runId);
     existing.lifecycle = 'running';
-    existing.streamOptions = streamOptions;
+    // Keep the run's memory options when the resume names no thread, so the turns it starts later keep them too.
+    existing.streamOptions = continuesOwnThread
+      ? { ...streamOptions, memory: existing.streamOptions.memory }
+      : streamOptions;
     existing.currentSegmentOutput = output;
     if (claim?.generation !== undefined) existing.generation = claim.generation;
     if (claim?.ownershipLost) existing.ownershipLost = claim.ownershipLost;
