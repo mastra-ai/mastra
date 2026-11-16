@@ -55,3 +55,18 @@ export type InferPublicSchema<T extends PublicSchema> = T extends { _output: inf
       : T extends PublicSchema<infer Output>
         ? Output
         : never;
+
+/**
+ * Infers the input (pre-transform) type of a public schema.
+ *
+ * Mirrors {@link InferPublicSchema} but reads the input side where a schema exposes one, so a
+ * transforming schema reports the shape it accepts rather than the shape it produces. Schemas that
+ * have no separate input (JSON Schema, AI SDK schemas) fall back to the output type.
+ */
+export type InferPublicSchemaInput<T extends PublicSchema> = T extends { _input: infer Input }
+  ? Input
+  : T extends { '~standard': { types?: infer Types } } // Standard Schema declares `types` as optional
+    ? NonNullable<Types> extends { input: infer I }
+      ? I
+      : InferPublicSchema<T>
+    : InferPublicSchema<T>;

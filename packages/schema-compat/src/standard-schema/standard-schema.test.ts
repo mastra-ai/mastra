@@ -395,6 +395,29 @@ describe('toStandardSchema', () => {
     });
   });
 
+  describe('with transformed schemas (input vs output types)', () => {
+    // `z4` is imported explicitly, so this exercises real Zod v4 under both vitest projects.
+    const transformingSchema = z4.object({
+      count: z4.string().transform(value => Number.parseInt(value, 10)),
+    });
+
+    it('should validate the pre-transform input and return the post-transform output', async () => {
+      const result = toStandardSchema(transformingSchema);
+      const validation = await result['~standard'].validate({ count: '42' });
+      expect(validation.issues).toBeUndefined();
+      if (!validation.issues) {
+        expect(validation.value).toEqual({ count: 42 });
+      }
+    });
+
+    it('should reject data that does not match the pre-transform input', async () => {
+      const result = toStandardSchema(transformingSchema);
+      const validation = await result['~standard'].validate({ count: 42 });
+      expect(validation.issues).toBeDefined();
+      expect(validation.issues!.length).toBeGreaterThan(0);
+    });
+  });
+
   describe('with ArkType', () => {
     it('should return ArkType schema as-is (already StandardSchemaWithJSON)', () => {
       const result = toStandardSchema(arkTypeObjectSchema);
