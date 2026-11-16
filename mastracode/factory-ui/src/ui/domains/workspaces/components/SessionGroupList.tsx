@@ -1,9 +1,8 @@
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import type { ReactNode } from 'react';
-import { Fragment, startTransition, useRef, useState } from 'react';
-import { flushSync } from 'react-dom';
+import { Fragment, useEffect, useRef } from 'react';
 
-import { collapsedRowsKeepingActive } from '../services/sessionGroups';
+import { SESSION_GROUP_INCREMENT, SESSION_GROUP_WINDOW } from '../services/sessionGroups';
 import type { SessionGroup, SessionGroupIcon } from '../services/sessionGroups';
 import type { SessionListRow } from '../services/sessionRows';
 import { IconCircleDashed } from '@mastra/playground-ui/icons/central/IconCircleDashed';
@@ -11,8 +10,6 @@ import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanVi
 import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
 import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 import { IconBubbleWide } from '@mastra/playground-ui/icons/central/IconBubbleWide';
-
-const GROUP_ROW_INCREMENT = 20;
 
 type ToggleName = 'more' | 'less';
 
@@ -30,34 +27,37 @@ export function SessionGroupList({
   group,
   showHeader,
   renderRow,
+  onShowMore,
+  onShowLess,
 }: {
   group: SessionGroup;
   showHeader: boolean;
   renderRow: (row: SessionListRow) => ReactNode;
+  onShowMore: () => void;
+  onShowLess: () => void;
 }) {
-  const [additionalRowCount, setAdditionalRowCount] = useState(0);
-  const collapsedRows = collapsedRowsKeepingActive(group.rows);
-  const visibleRows = collapsedRowsKeepingActive(group.rows, additionalRowCount);
-  const remainingCount = group.rows.length - visibleRows.length;
   const sectionRef = useRef<HTMLElement>(null);
+  const focusOnAnswer = useRef<ToggleName | undefined>(undefined);
+  const openBelowFold = group.openIndex !== undefined && group.openIndex >= SESSION_GROUP_WINDOW;
+  const remainingCount = group.total - group.rows.length;
+  const collapsibleCount = group.rows.length - Math.min(group.total, SESSION_GROUP_WINDOW + Number(openBelowFold));
 
-  // The pressed toggle unmounts once its count reaches zero, so hand focus to the one that remains.
-  const focusToggle = (name: ToggleName) =>
+  // The pressed toggle unmounts once the answer leaves it nothing to count, so hand focus to the one that remains.
+  useEffect(() => {
+    const name = focusOnAnswer.current;
+    if (!name) return;
+    focusOnAnswer.current = undefined;
     sectionRef.current?.querySelector<HTMLButtonElement>(`[data-session-group-toggle="${name}"]`)?.focus();
+  }, [group.rows.length]);
 
   const showMore = () => {
-    const nextCount = additionalRowCount + GROUP_ROW_INCREMENT;
-    if (collapsedRowsKeepingActive(group.rows, nextCount).length < group.rows.length) {
-      startTransition(() => setAdditionalRowCount(nextCount));
-      return;
-    }
-    flushSync(() => setAdditionalRowCount(nextCount));
-    focusToggle('less');
+    if (remainingCount <= SESSION_GROUP_INCREMENT) focusOnAnswer.current = 'less';
+    onShowMore();
   };
 
   const showLess = () => {
-    flushSync(() => setAdditionalRowCount(0));
-    focusToggle('more');
+    focusOnAnswer.current = 'more';
+    onShowLess();
   };
 
   return (
@@ -68,20 +68,20 @@ export function SessionGroupList({
         </Sidebar.NavHeader>
       )}
       <Sidebar.NavList>
-        {visibleRows.map(row => (
+        {group.rows.map(row => (
           <Fragment key={row.session.sessionId}>{renderRow(row)}</Fragment>
         ))}
       </Sidebar.NavList>
       <div className="flex items-center gap-3">
         <Sidebar.NavShowMore
-          foldedCount={Math.min(remainingCount, GROUP_ROW_INCREMENT)}
+          foldedCount={Math.min(remainingCount, SESSION_GROUP_INCREMENT)}
           expanded={false}
           onExpandedChange={showMore}
           aria-expanded={undefined}
           data-session-group-toggle="more"
         />
         <Sidebar.NavShowMore
-          foldedCount={visibleRows.length - collapsedRows.length}
+          foldedCount={collapsibleCount}
           expanded
           onExpandedChange={showLess}
           aria-expanded={undefined}

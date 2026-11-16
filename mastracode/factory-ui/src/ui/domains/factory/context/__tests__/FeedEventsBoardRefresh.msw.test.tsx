@@ -10,8 +10,9 @@ import { pushableFeedStream } from '../../../../../../e2e/ui/feed-stream';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../../api/keys';
-import { useActiveRunResourceIds } from '../../../../../hooks/useActiveRunResources';
+import type { SessionActivity, SessionRowsRequest, SessionRowsResponse } from '../../../../../api/types';
 import { useFactoryDecisionStatus } from '../../../../../hooks/useFactoryDecisions';
+import { useSessionActivityQuery, useSessionRowsQuery } from '../../../../../hooks/useSessionRows';
 import {
   useBoardPhasesQuery,
   useSessionWorkItemsQuery,
@@ -21,13 +22,36 @@ import {
   workItemStartersQueryOptions,
 } from '../../../../../hooks/useWorkItems';
 import { createQueryClient } from '../../../../../query-client';
-import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
 import { FeedEventsProvider } from '../FeedEventsProvider';
 
 const PROJECT_ID = 'project-1';
 const BOARD_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`;
 const DECISIONS_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/decisions`;
-const RUNS_URL = '*/api/agent-controller/:controllerId/active-runs';
+const SESSION_ROWS_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/session-rows`;
+const SESSION_ACTIVITY_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/session-activity`;
+const SIDEBAR_VIEW: SessionRowsRequest = {
+  sort: 'activity',
+  groupBy: 'none',
+  owner: 'all',
+  children: false,
+  pin: [],
+  windows: {},
+};
+const NO_SESSION_ROWS: SessionRowsResponse = {
+  total: 0,
+  matching: 0,
+  groups: [],
+  boards: [],
+  owners: [],
+  settling: false,
+};
+const NO_SESSION_ACTIVITY: SessionActivity = {
+  runningSessionIds: [],
+  parkedSessionIds: [],
+  initializingSessionIds: [],
+  cards: { working: 0, waiting: 0 },
+  settling: false,
+};
 const PHASES_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/boards/:boardKey/phases`;
 const FEED_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/feed-events`;
 const WITHIN_A_SECOND_MS = 900;
@@ -68,7 +92,8 @@ function watchBoard() {
   return {
     cards: { isSuccess: cards.isSuccess, data: cards.data?.workItems },
     decisions: useFactoryDecisionStatus(PROJECT_ID, ['pending', 'leased']),
-    running: useActiveRunResourceIds(AGENT_CONTROLLER_ID),
+    sessionRows: useSessionRowsQuery(PROJECT_ID, SIDEBAR_VIEW).data,
+    sessionActivity: useSessionActivityQuery(PROJECT_ID).data,
     move: useTransitionWorkItemMutation(PROJECT_ID),
   };
 }
@@ -76,11 +101,17 @@ function watchBoard() {
 interface BoardRequests {
   cards: number;
   decisions: number;
-  runs: number;
+  sessionRows: number;
+  sessionActivity: number;
 }
 
 function moreRefreshes(requests: BoardRequests, count: number) {
-  return { cards: requests.cards + count, decisions: requests.decisions + count, runs: requests.runs + count };
+  return {
+    cards: requests.cards + count,
+    decisions: requests.decisions + count,
+    sessionRows: requests.sessionRows + count,
+    sessionActivity: requests.sessionActivity + count,
+  };
 }
 
 function oneMoreRefresh(requests: BoardRequests) {
@@ -113,7 +144,7 @@ function heldCardMove(board: { stage: string }) {
 }
 
 function boardEndpoints() {
-  const requests: BoardRequests = { cards: 0, decisions: 0, runs: 0 };
+  const requests: BoardRequests = { cards: 0, decisions: 0, sessionRows: 0, sessionActivity: 0 };
   const board = { title: 'Fix login', stage: 'intake', readMs: 0 };
   server.use(
     http.get(BOARD_URL, async () => {
@@ -126,9 +157,13 @@ function boardEndpoints() {
       requests.decisions += 1;
       return HttpResponse.json({ decisions: [] });
     }),
-    http.get(RUNS_URL, () => {
-      requests.runs += 1;
-      return HttpResponse.json({ runs: [] });
+    http.get(SESSION_ROWS_URL, () => {
+      requests.sessionRows += 1;
+      return HttpResponse.json(NO_SESSION_ROWS);
+    }),
+    http.get(SESSION_ACTIVITY_URL, () => {
+      requests.sessionActivity += 1;
+      return HttpResponse.json(NO_SESSION_ACTIVITY);
     }),
   );
   return { requests, board };
@@ -164,7 +199,7 @@ describe('FeedEventsProvider, on the board', () => {
     vi.useRealTimers();
   });
 
-  it('refreshes cards, decisions and runs within a second of a lone frame', async () => {
+  it('refreshes cards, decisions, session rows and session activity within a second of a lone frame', async () => {
     const stream = pushableFeedStream(PROJECT_ID);
     server.use(stream.handler);
     const { requests } = boardEndpoints();
@@ -286,8 +321,8 @@ describe('FeedEventsProvider, on the board', () => {
       stream.ping();
       await advance(rendered.client, SERVER_PING_EVERY_MS);
     }
-    // Runs have no timer of their own: they are read with the board, at most once a minute.
-    const safetyRereads = requests.runs - connected.runs;
+    // The session reads have no timer of their own while nothing settles: they are read with the board, at most once a minute.
+    const safetyRereads = requests.sessionActivity - connected.sessionActivity;
     expect(safetyRereads).toBeLessThanOrEqual(5);
     expect(requests).toEqual(moreRefreshes(connected, safetyRereads));
 
@@ -300,7 +335,8 @@ describe('FeedEventsProvider, on the board', () => {
     await waitFor(() => {
       expect(requests.cards).toBeGreaterThan(dropped.cards);
       expect(requests.decisions).toBeGreaterThan(dropped.decisions);
-      expect(requests.runs).toBeGreaterThan(dropped.runs);
+      expect(requests.sessionRows).toBeGreaterThan(dropped.sessionRows);
+      expect(requests.sessionActivity).toBeGreaterThan(dropped.sessionActivity);
     });
   });
 
@@ -357,7 +393,7 @@ describe('FeedEventsProvider, on the board', () => {
     settleMove();
     await waitFor(() => expect(rendered.result.current.move.isSuccess).toBe(true));
     await advance(rendered.client, WITHIN_A_SECOND_MS);
-    await waitFor(() => expect(requests.runs).toBeGreaterThan(moving.runs));
+    await waitFor(() => expect(requests.sessionActivity).toBeGreaterThan(moving.sessionActivity));
     expect(shownStages()).toEqual(['review']);
     await waitForMutationsIdle(rendered.client);
   });

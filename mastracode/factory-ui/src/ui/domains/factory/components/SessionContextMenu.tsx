@@ -3,8 +3,7 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Link } from 'react-router';
 
-import { useActiveRunResourceIds } from '../../../../hooks/useActiveRunResources';
-import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
+import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
 import type { WorkItemSessionRef } from '../services/workItems';
 import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
@@ -22,7 +21,7 @@ export function SessionContextMenu({
   sessions: readonly CardContextSession<WorkItemSessionRef>[];
   openSessionId: string;
 }) {
-  const running = useActiveRunResourceIds(AGENT_CONTROLLER_ID);
+  const running = new Set(useSessionActivityQuery(factoryId).data?.runningSessionIds);
 
   return (
     <DropdownMenu>

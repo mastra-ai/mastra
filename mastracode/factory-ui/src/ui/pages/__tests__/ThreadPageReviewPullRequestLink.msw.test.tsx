@@ -534,8 +534,10 @@ describe('ThreadPage pull request link placement', () => {
         };
         stubThreadRoute([card, followUp], []);
         server.use(
-          http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
-            HttpResponse.json({ sessions: live ? [workspaceSession, relatedSession] : [workspaceSession] }),
+          http.get(`${TEST_BASE_URL}/web/user-sessions/related-session`, () =>
+            live
+              ? HttpResponse.json({ session: relatedSession })
+              : HttpResponse.json({ error: 'Session not found' }, { status: 404 }),
           ),
         );
         renderThreadRoute();

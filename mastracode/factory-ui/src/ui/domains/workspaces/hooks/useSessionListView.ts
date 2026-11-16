@@ -83,6 +83,10 @@ const sessionListViewStore = createLocalStorageStore<SessionListView>({
   toJSON: changesFromDefault,
 });
 
+export function readSessionListView(): SessionListView {
+  return sessionListViewStore.read();
+}
+
 function changeGroupVisibility(key: string, visible: boolean): void {
   const view = sessionListViewStore.read();
   const hiddenGroups: GroupKeysByGroupBy = { ...view.hiddenGroups };

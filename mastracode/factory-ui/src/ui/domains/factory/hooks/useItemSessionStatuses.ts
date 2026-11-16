@@ -1,15 +1,12 @@
 import { sessionRowStatus } from '@mastra/factory/session/session-row-status';
 import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
 
-import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
-import { allSessionRows, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
-import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
+import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
 import type { WorkItem } from '../services/workItems';
 
 /**
- * Live status per board card, from the same inputs the sidebar rows read: the
- * shared controller poll, the workspace records and the board's parked sessions.
- * A parked rule speaks through the card's own status row, not through the wick.
+ * Live status per board card, from the sessions the server sees run or start and the board's
+ * parked sessions. A parked rule speaks through the card's own status row, not through the wick.
  */
 export function useItemSessionStatuses({
   factoryProjectId,
@@ -21,26 +18,18 @@ export function useItemSessionStatuses({
   /** The sessions parked on a plan or a question, read with `items` so a card and its marker agree. */
   parkedSessionIds: readonly string[];
 }): ReadonlyMap<string, SessionRowStatus> {
-  const boundSessionIds = items.flatMap(item => Object.values(item.sessions ?? {}).map(ref => ref.sessionId));
-  const runningBySessionId = useActiveRunResources({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceIds: boundSessionIds,
-  });
+  const activity = useSessionActivityQuery(factoryProjectId).data;
+  const runningSessionIds = new Set(activity?.runningSessionIds);
+  const initializingSessionIds = new Set(activity?.initializingSessionIds);
   const parkedSessionIds = new Set(parked);
-  const workspaces = useWorkspacesQuery(factoryProjectId);
-  const materializingSessionIds = new Set(
-    allSessionRows(workspaces.data)
-      .filter(session => !session.materializedAt)
-      .map(session => session.sessionId),
-  );
 
   const statuses = new Map<string, SessionRowStatus>();
   for (const item of items) {
     const refs = Object.values(item.sessions ?? {});
     if (refs.length === 0) continue;
     const status = sessionRowStatus({
-      running: refs.some(ref => runningBySessionId[ref.sessionId] === true),
-      initializing: refs.some(ref => materializingSessionIds.has(ref.sessionId)),
+      running: refs.some(ref => runningSessionIds.has(ref.sessionId)),
+      initializing: refs.some(ref => initializingSessionIds.has(ref.sessionId)),
       attention: refs.some(ref => parkedSessionIds.has(ref.sessionId)),
     });
     if (status !== undefined) statuses.set(item.id, status);

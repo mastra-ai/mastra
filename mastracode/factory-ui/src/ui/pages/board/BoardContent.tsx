@@ -11,11 +11,7 @@ import { useRecentAuditEvents } from '../../../hooks/useAuditEvents';
 import { useFactoryAuth } from '../../../hooks/useFactoryAuth';
 import { useGithubStatusQuery } from '../../../hooks/useGithubStatus';
 import { useRunQueue } from '../../../hooks/useFactoryDecisions';
-import {
-  useBoardPhasesQuery,
-  useSidebarWorkItemsQuery,
-  useWorkItemFilterOptionsQuery,
-} from '../../../hooks/useWorkItems';
+import { useBoardPhasesQuery, useWorkItemFilterOptionsQuery } from '../../../hooks/useWorkItems';
 import { shownBoardPhases } from '../../domains/factory/boardPhases';
 import type { ShownPhase } from '../../domains/factory/boardPhases';
 import { boardPhasesRequest, deeperPhaseWindow, isCardId } from '../../domains/factory/boardPhasesRequest';
@@ -118,9 +114,8 @@ export function BoardContent({
   const phasesRead = useBoardPhasesQuery(factoryProjectId, { ...view, windows }, keyedCardId(openCard.openKey));
   const snapshot = phasesRead.data;
   const cards = snapshot?.workItems ?? NO_CARDS;
-  const sessionCards = useSidebarWorkItemsQuery(factoryProjectId).data?.workItems ?? NO_CARDS;
 
-  const items = useBoardItems({ factoryProjectId, kind, currentUserId, items: [...cards, ...sessionCards] });
+  const items = useBoardItems({ factoryProjectId, kind, currentUserId, items: cards });
   const repositoryChoice = useRepositoryChoice(factory, definition);
   const dropWithRepository = (
     payload: DragPayload,

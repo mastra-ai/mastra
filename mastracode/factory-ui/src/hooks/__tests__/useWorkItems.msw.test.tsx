@@ -189,15 +189,11 @@ describe('useTransitionWorkItemMutation', () => {
 });
 
 describe('useDeleteWorkItemMutation', () => {
-  it('drops the deleted card and its session marker from the cards the sidebar reads', async () => {
+  it('drops the deleted card from the cards the search palette titles sessions with', async () => {
     let deleted = false;
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, () =>
-        HttpResponse.json(
-          deleted
-            ? { workItems: [], parkedSessionIds: [] }
-            : { workItems: [wireItem], parkedSessionIds: ['session-1'] },
-        ),
+        HttpResponse.json({ workItems: deleted ? [] : [wireItem], parkedSessionIds: [] }),
       ),
       http.delete(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, () => {
         deleted = true;
@@ -209,15 +205,14 @@ describe('useDeleteWorkItemMutation', () => {
       cards: useSidebarWorkItemsQuery(PROJECT_ID),
       remove: useDeleteWorkItemMutation(PROJECT_ID),
     }));
-    await waitFor(() => expect(result.current.cards.data?.parkedSessionIds).toEqual(['session-1']));
+    await waitFor(() => expect(result.current.cards.data?.workItems).toHaveLength(1));
 
     act(() => {
       result.current.remove.mutate(ITEM_ID);
     });
     await waitFor(() => expect(result.current.cards.data?.workItems).toEqual([]));
     await waitForMutationsIdle(client);
-
-    await waitFor(() => expect(result.current.cards.data?.parkedSessionIds).toEqual([]));
+    expect(result.current.cards.data?.workItems).toEqual([]);
   });
 });
 

@@ -5,58 +5,29 @@ import {
   EMPTY_SESSION_FILTERS,
   MY_SESSIONS,
   activeSessionFilterCount,
-  filterSessionRows,
   sessionOwnerFilterValue,
+  sessionOwnerOptions,
 } from '../sessionFilters';
-import type { SessionFiltersState } from '../sessionFilters';
-import { factoryRow, testSession, testWorkItem, userRow } from './fixtures/sessionRows';
-
-const now = new Date('2026-09-04T12:00:00.000Z').getTime();
-const recently = '2026-09-04T11:00:00.000Z';
-
-function filters(overrides: Partial<SessionFiltersState>): SessionFiltersState {
-  return { ...EMPTY_SESSION_FILTERS, ...overrides };
-}
 
 describe('session filters', () => {
-  it('filters mine and specific owners by stable user id', () => {
-    const rows = [userRow('session-1', { userId: 'user-1' }), userRow('session-2', { userId: 'user-2' })];
+  it('offers every owner by stable user id, and Mine only to a signed-in viewer', () => {
+    const owners = [{ userId: 'user-1', name: 'Ada' }];
 
-    expect(filterSessionRows(rows, filters({ owner: MY_SESSIONS }), 'user-2', now)).toEqual([rows[1]]);
-    expect(filterSessionRows(rows, filters({ owner: sessionOwnerFilterValue('user-1') }), 'user-2', now)).toEqual([
-      rows[0],
+    expect(sessionOwnerOptions(owners, 'user-2').map(option => option.value)).toEqual([
+      ALL_SESSION_OWNERS,
+      MY_SESSIONS,
+      sessionOwnerFilterValue('user-1'),
     ]);
-  });
-
-  it('combines status and updated filters with inclusive cutoff semantics', () => {
-    const recentWorking = userRow('session-1', { updatedAt: recently }, { running: true });
-    const oldWorking = userRow('session-2', { updatedAt: '2026-09-03T11:59:59.999Z' }, { running: true });
-    const recentIdle = userRow('session-3', { updatedAt: '2026-09-03T12:00:00.000Z' });
-
-    expect(
-      filterSessionRows(
-        [recentWorking, oldWorking, recentIdle],
-        filters({ status: 'working', updated: '24h' }),
-        'user-1',
-        now,
-      ),
-    ).toEqual([recentWorking]);
-    expect(filterSessionRows([recentIdle], filters({ updated: '24h' }), 'user-1', now)).toEqual([recentIdle]);
-  });
-
-  it('keeps only settled factory rows under Done and only rows awaiting a person under Waiting on you', () => {
-    const done = factoryRow(testSession('done'), { item: testWorkItem({ stages: ['done'] }) });
-    const waiting = factoryRow(testSession('waiting'), { attention: true });
-    const idleFactory = factoryRow(testSession('idle'));
-    const idleUser = userRow('user-idle');
-    const rows = [done, waiting, idleFactory, idleUser];
-
-    expect(filterSessionRows(rows, filters({ status: 'done' }), 'user-1', now)).toEqual([done]);
-    expect(filterSessionRows(rows, filters({ status: 'waiting' }), 'user-1', now)).toEqual([waiting]);
+    expect(sessionOwnerOptions(owners, undefined).map(option => option.value)).toEqual([
+      ALL_SESSION_OWNERS,
+      sessionOwnerFilterValue('user-1'),
+    ]);
   });
 
   it('counts each active control once', () => {
     expect(activeSessionFilterCount(EMPTY_SESSION_FILTERS)).toBe(0);
-    expect(activeSessionFilterCount(filters({ owner: MY_SESSIONS, status: 'working', updated: '7d' }))).toBe(3);
+    expect(
+      activeSessionFilterCount({ ...EMPTY_SESSION_FILTERS, owner: MY_SESSIONS, status: 'working', updated: '7d' }),
+    ).toBe(3);
   });
 });

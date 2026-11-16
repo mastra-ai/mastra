@@ -9,7 +9,7 @@ import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../services/
 
 const BOARD_STATUSES: FactoryDecisionStatus[] = ['pending', 'proposed', 'leased', 'retry', 'failed'];
 
-/** The decisions every board and the session list show on their cards. */
+/** The decisions every board shows on its cards. */
 export function boardDecisionsQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
   return factoryDecisionStatusQueryOptions(baseUrl, factoryProjectId, BOARD_STATUSES);
 }

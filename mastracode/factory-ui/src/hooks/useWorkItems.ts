@@ -69,7 +69,7 @@ export function stripCachedSessionRefs(queryClient: QueryClient, factoryProjectI
 const selectCards = (board: BoardSnapshot) => board.workItems;
 
 /** The cards holding a session, with the cards related to them, and the sessions parked on them. */
-export function sessionCardsQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
+function sessionCardsQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
   return queryOptions({
     queryKey: queryKeys.workItemsWithSessions(factoryProjectId),
     queryFn: factoryProjectId
@@ -292,7 +292,7 @@ export function useSessionWorkItemsQuery(factoryProjectId: string | undefined, s
   });
 }
 
-/** The cards the sidebar marks its sessions with: the ones holding a session, with the cards related to them. */
+/** The cards the search palette titles its session results with: the ones holding a session, with the cards related to them. */
 export function useSidebarWorkItemsQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery(sessionCardsQueryOptions(baseUrl, factoryProjectId));
@@ -364,12 +364,6 @@ function withoutCard(cached: BoardSnapshot | BoardPhasesSnapshot, id: string): B
     matchingTotal: cached.matchingTotal - 1,
     boardTotal: cached.boardTotal - 1,
   };
-}
-
-/** Whether a session is parked; `undefined` until the cards holding sessions have been read. */
-export function useSessionParked(factoryProjectId: string | undefined, sessionId: string): boolean | undefined {
-  const { data } = useSidebarWorkItemsQuery(factoryProjectId);
-  return data?.parkedSessionIds.includes(sessionId);
 }
 
 /**

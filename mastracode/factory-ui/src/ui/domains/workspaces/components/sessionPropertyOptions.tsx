@@ -9,7 +9,7 @@ import {
   sessionOwnerOptions,
 } from '../services/sessionFilters';
 import { SESSION_GROUP_BY_OPTIONS } from '../services/sessionGroups';
-import type { SessionListRow } from '../services/sessionRows';
+import type { SessionOwner } from '../services/sessionRows';
 import { SESSION_SORT_OPTIONS } from '../services/sessionSort';
 import { IconCalendarDays } from '@mastra/playground-ui/icons/central/IconCalendarDays';
 import { IconCircleDashed } from '@mastra/playground-ui/icons/central/IconCircleDashed';
@@ -69,8 +69,8 @@ const OWNER_ICONS: Partial<Record<string, LucideIcon>> = {
   [MY_SESSIONS]: IconUserAdded,
 };
 
-export function sessionOwnerMenuOptions(rows: readonly SessionListRow[], viewerUserId: string | undefined) {
-  return sessionOwnerOptions(rows, viewerUserId).map(option => {
+export function sessionOwnerMenuOptions(owners: readonly SessionOwner[], viewerUserId: string | undefined) {
+  return sessionOwnerOptions(owners, viewerUserId).map(option => {
     const Icon = OWNER_ICONS[option.value] ?? IconUser;
     return { ...option, icon: <Icon aria-hidden /> };
   });

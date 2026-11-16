@@ -2,7 +2,10 @@ import { createLocalStorageStore, useLocalStorageStore } from '@mastra/playgroun
 import { z } from 'zod';
 
 import {
+  ALL_SESSION_OWNERS,
   EMPTY_SESSION_FILTERS,
+  MY_SESSIONS,
+  SESSION_OWNER_PREFIX,
   SESSION_STATUS_OPTIONS,
   SESSION_UPDATED_OPTIONS,
   activeSessionFilterCount,
@@ -14,8 +17,17 @@ const optionValue = <T extends string>(options: readonly { value: T }[]) =>
 
 // Each filter falls back on its own, so one stale value doesn't clear the others.
 // An owner who left the factory still parses; the filter then lists nothing until it is reset.
+// Any other owner falls back: the server refuses it and the sidebar would list nothing.
 const sessionFiltersSchema: z.ZodType<SessionFiltersState> = z.object({
-  owner: z.string().catch(EMPTY_SESSION_FILTERS.owner),
+  owner: z
+    .union([
+      z.enum([ALL_SESSION_OWNERS, MY_SESSIONS]),
+      z
+        .string()
+        .regex(new RegExp(`^${SESSION_OWNER_PREFIX}.+$`))
+        .max(512),
+    ])
+    .catch(EMPTY_SESSION_FILTERS.owner),
   status: optionValue<SessionStatusFilter>(SESSION_STATUS_OPTIONS).catch(EMPTY_SESSION_FILTERS.status),
   updated: optionValue<SessionUpdatedFilter>(SESSION_UPDATED_OPTIONS).catch(EMPTY_SESSION_FILTERS.updated),
 });
@@ -34,6 +46,10 @@ const sessionFiltersStore = createLocalStorageStore<SessionFiltersState>({
   parse: stored => sessionFiltersSchema.parse(stored),
   toJSON: changesFromEmpty,
 });
+
+export function readSessionFilters(): SessionFiltersState {
+  return sessionFiltersStore.read();
+}
 
 export function useSessionFilters() {
   const filters = useLocalStorageStore(sessionFiltersStore);

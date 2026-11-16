@@ -10,11 +10,10 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
-import { queryKeys } from '../../../../../api/keys';
+import { invalidateSessionQueries } from '../../../../../hooks/useWorkspaces';
 import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import { SessionsSection } from '../SessionsSection';
@@ -137,14 +136,11 @@ describe('User sessions sidebar activity', () => {
     await waitForMutationsIdle(client);
     await screen.findByRole('status', { name: 'Initializing feature-d' });
 
-    // The run finishes and the server stamps materializedAt; the sessions
-    // list refetches on its own cadence.
+    // The run finishes and the server stamps materializedAt; the sidebar's
+    // rows refetch on their own cadence.
     settled = true;
     active.delete('sess-4');
-    await client.invalidateQueries({
-      queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL),
-    });
-    await client.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) });
+    await invalidateSessionQueries(client, factoryId);
     await waitForMutationsIdle(client);
 
     // The belt goes dark on an idle session, not back on (or stuck at) initializing.
