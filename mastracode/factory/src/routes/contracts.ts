@@ -7,6 +7,17 @@ import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem, STATUS_EVENTS } from '../
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
 import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
+import {
+  SESSION_ROW_ALL_OWNERS,
+  SESSION_ROW_GROUP_BYS,
+  SESSION_ROW_PINS_MAX,
+  SESSION_ROW_SORTS,
+  SESSION_ROW_STATUSES,
+  SESSION_ROW_UPDATED_WITHIN,
+  SESSION_ROW_WINDOW_MAX,
+  SESSION_ROW_WINDOWS_MAX,
+  sessionRowOwnerSchema,
+} from '../session/session-row-query.js';
 import { MAX_INTAKE_ROUTES } from '../storage/domains/boards/base.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 import { PULL_REQUEST_STATUSES } from '../work-items/change-requests.js';
@@ -739,13 +750,6 @@ export type BoardPhasesQuery = z.output<typeof boardPhasesQuerySchema>;
 export type BoardPhasesResponse = z.infer<typeof boardPhasesResponseSchema>;
 export type WorkItemFilterOptionsResponse = z.infer<typeof workItemFilterOptionsResponseSchema>;
 
-export const SESSION_ROW_STATUSES = ['waiting', 'working', 'initializing', 'idle', 'done'] as const;
-export const SESSION_ROW_SORTS = ['activity', 'updated', 'created'] as const;
-export const SESSION_ROW_GROUP_BYS = ['board', 'status', 'owner', 'none'] as const;
-export const SESSION_ROW_UPDATED_WITHIN = ['24h', '7d', '30d'] as const;
-/** How many rows a session group lists until the reader asks for more. */
-export const SESSION_ROW_WINDOW = 5;
-
 /** `<group key>:<count>`: how many rows of one group to list. Group keys hold colons, so the count follows the last. */
 const sessionRowWindowSchema = z
   .string()
@@ -760,7 +764,7 @@ const sessionRowWindowSchema = z
         .string()
         .regex(/^[1-9]\d{0,2}$/)
         .transform(Number)
-        .pipe(z.number().max(500)),
+        .pipe(z.number().max(SESSION_ROW_WINDOW_MAX)),
     ]),
   );
 
@@ -770,15 +774,7 @@ export const sessionRowsQuerySchema = z.object({
   sort: z.enum(SESSION_ROW_SORTS).default('activity'),
   groupBy: z.enum(SESSION_ROW_GROUP_BYS).default('none'),
   /** `all`, `mine`, or `owner:<user id>`. */
-  owner: z
-    .union([
-      z.enum(['all', 'mine']),
-      z
-        .string()
-        .regex(/^owner:.+$/)
-        .max(512),
-    ])
-    .default('all'),
+  owner: sessionRowOwnerSchema.default(SESSION_ROW_ALL_OWNERS),
   status: z.enum(SESSION_ROW_STATUSES).optional(),
   updated: z.enum(SESSION_ROW_UPDATED_WITHIN).optional(),
   /** `true` lists a card's other sessions under its row. */
@@ -786,7 +782,7 @@ export const sessionRowsQuerySchema = z.object({
   /** Repeatable. Sessions listed before every other one of their group. */
   pin: z
     .array(sessionIdQuerySchema)
-    .max(100)
+    .max(SESSION_ROW_PINS_MAX)
     .default([])
     .transform(ids => new Set(ids)),
   /** The session the reader has open: its group lists it however deep it lies. */
@@ -794,7 +790,7 @@ export const sessionRowsQuerySchema = z.object({
   /** Repeatable `<group key>:<count>`: lists that group's first `count` rows instead of `SESSION_ROW_WINDOW`. */
   window: z
     .array(sessionRowWindowSchema)
-    .max(64)
+    .max(SESSION_ROW_WINDOWS_MAX)
     .default([])
     .refine(windows => new Set(windows.map(([group]) => group)).size === windows.length, {
       message: 'Send one window per group',

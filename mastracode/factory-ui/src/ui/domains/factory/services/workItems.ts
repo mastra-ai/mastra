@@ -206,18 +206,33 @@ function externalSourceUrl(source: ExternalWorkItemSource | null): string | null
   return source.url ?? null;
 }
 
+export function cardLink({
+  externalSource,
+  workItemUrl,
+}: {
+  externalSource: ExternalWorkItemSource | null;
+  workItemUrl: string | null | undefined;
+}): { source: WorkItemSource; url: string | null } {
+  const source = sourceFromExternalSource(externalSource);
+  return {
+    source,
+    url:
+      source === 'slack-thread'
+        ? externalSourceUrl(externalSource)
+        : (workItemUrl ?? externalSourceUrl(externalSource)),
+  };
+}
+
 function fromWireWorkItem(item: WireWorkItem): WorkItem {
   const { factoryProjectId, externalSource, metadata, description, triageType, acceptedAt, ...rest } = item;
+  const { source, url } = cardLink({ externalSource, workItemUrl: item.workItem?.url });
   return {
     ...rest,
     githubProjectId: factoryProjectId,
-    source: sourceFromExternalSource(externalSource),
+    source,
     sourceKey: externalSource?.externalId ?? null,
     title: item.workItem?.title ?? item.title,
-    url:
-      sourceFromExternalSource(externalSource) === 'slack-thread'
-        ? externalSourceUrl(externalSource)
-        : (item.workItem?.url ?? externalSourceUrl(externalSource)),
+    url,
     metadata: metadata ?? {},
     description: description ?? null,
     triageType: triageType ?? null,

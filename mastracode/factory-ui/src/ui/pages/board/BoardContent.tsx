@@ -11,11 +11,7 @@ import { useRecentAuditEvents } from '../../../hooks/useAuditEvents';
 import { useFactoryAuth } from '../../../hooks/useFactoryAuth';
 import { useGithubStatusQuery } from '../../../hooks/useGithubStatus';
 import { useRunQueue } from '../../../hooks/useFactoryDecisions';
-import {
-  useBoardPhasesQuery,
-  useSidebarWorkItemsQuery,
-  useWorkItemFilterOptionsQuery,
-} from '../../../hooks/useWorkItems';
+import { useBoardPhasesQuery, useWorkItemFilterOptionsQuery } from '../../../hooks/useWorkItems';
 import { shownBoardPhases } from '../../domains/factory/boardPhases';
 import type { ShownPhase } from '../../domains/factory/boardPhases';
 import { boardPhasesRequest, deeperPhaseWindow, isCardId } from '../../domains/factory/boardPhasesRequest';
@@ -116,7 +112,6 @@ export function BoardContent({
   const phasesRead = useBoardPhasesQuery(factoryProjectId, { ...view, windows }, keyedCardId(openCard.openKey));
   const snapshot = phasesRead.data;
   const cards = snapshot?.workItems ?? NO_CARDS;
-  const sessionCards = useSidebarWorkItemsQuery(factoryProjectId).data?.workItems ?? NO_CARDS;
 
   const items = useBoardItems({
     factoryProjectId,
@@ -124,7 +119,7 @@ export function BoardContent({
     currentUserId,
     // A refused move snaps the card back; the toast says why where the person is looking.
     onFailure: message => toast.error(message),
-    items: [...cards, ...sessionCards],
+    items: cards,
   });
   const drop = (payload: DragPayload, stage: Parameters<typeof items.handleDrop>[1], cause = 'board_drag') => {
     if (payload.fromStage === stage) return;

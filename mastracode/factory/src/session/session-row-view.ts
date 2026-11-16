@@ -1,4 +1,3 @@
-import { SESSION_ROW_WINDOW } from '../routes/contracts.js';
 import type {
   SessionActivityResponse,
   SessionRow,
@@ -7,6 +6,13 @@ import type {
 } from '../routes/contracts.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import { SLACK_SESSION_BRANCH_PREFIX } from '../work-item-branch.js';
+import {
+  SESSION_ROW_ALL_OWNERS,
+  SESSION_ROW_MY_SESSIONS,
+  SESSION_ROW_WINDOW,
+  sessionRowGroupKeys,
+  sessionRowOwnerKey,
+} from './session-row-query.js';
 import { sessionRowStatus } from './session-row-status.js';
 import type { RowSession } from './session-rows.js';
 
@@ -15,7 +21,6 @@ export type SessionRowsView = Omit<SessionRowsQuery, 'pin' | 'children'>;
 type SessionRowFields = Omit<SessionRow, 'childRows'>;
 
 const UNMATERIALIZED_SETTLING_MS = 10 * 60_000;
-const OWNER_PREFIX = 'owner:';
 const HOUR_MS = 60 * 60 * 1_000;
 
 const ACTIVITY_RANK: Record<SessionRow['status'], number> = {
@@ -43,13 +48,13 @@ const UPDATED_WINDOW_HOURS: Record<NonNullable<SessionRowsView['updated']>, numb
 const GROUP_KEY_OF_ROW: Record<SessionRowsView['groupBy'], (row: SessionRow) => string> = {
   board: row =>
     row.session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX)
-      ? 'slack'
+      ? sessionRowGroupKeys.slack
       : row.board === undefined
-        ? 'user'
-        : `board:${row.board}`,
-  status: row => `status:${row.cardStatus ?? row.status}`,
-  owner: row => `owner:${row.session.userId}`,
-  none: () => 'all',
+        ? sessionRowGroupKeys.user
+        : sessionRowGroupKeys.board(row.board),
+  status: row => sessionRowGroupKeys.status(row.cardStatus ?? row.status),
+  owner: row => sessionRowGroupKeys.owner(row.session.userId),
+  none: () => sessionRowGroupKeys.all,
 };
 
 function compareSessionRows(sort: SessionRowsView['sort']) {
@@ -59,10 +64,9 @@ function compareSessionRows(sort: SessionRowsView['sort']) {
 }
 
 function matchesOwner(row: SessionRowFields, owner: string, viewerUserId: string): boolean {
-  if (owner === 'all') return true;
-  if (owner === 'mine') return Boolean(viewerUserId) && row.session.userId === viewerUserId;
-  if (!owner.startsWith(OWNER_PREFIX)) return false;
-  return row.session.userId === owner.slice(OWNER_PREFIX.length);
+  if (owner === SESSION_ROW_ALL_OWNERS) return true;
+  if (owner === SESSION_ROW_MY_SESSIONS) return Boolean(viewerUserId) && row.session.userId === viewerUserId;
+  return owner === sessionRowOwnerKey(row.session.userId);
 }
 
 // A card with revealed sessions matches when any of its sessions does, and lists only the ones that match.

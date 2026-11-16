@@ -1,7 +1,4 @@
-import { sessionRowStatus } from '@mastra/factory/session/session-row-status';
-
 import type { WorkItemActivity } from '../../../api/types';
-import type { WorkItem } from './services/workItems';
 
 export type ActivityPeriod = 'today' | 'week' | 'month';
 export type ActivityKind = 'cameIn' | 'ran' | 'shipped';
@@ -126,23 +123,4 @@ export function periodActivity({
     totals,
     ranComplete: from > runStarts.completeAfter,
   };
-}
-
-export function liveSessionCounts(
-  cards: readonly WorkItem[],
-  running: ReadonlySet<string>,
-  parked: ReadonlySet<string>,
-): { working: number; waiting: number } {
-  const counts = { working: 0, waiting: 0 };
-  for (const card of cards) {
-    const sessionIds = Object.values(card.sessions).map(ref => ref.sessionId);
-    const status = sessionRowStatus({
-      running: sessionIds.some(id => running.has(id)),
-      initializing: false,
-      attention: sessionIds.some(id => parked.has(id)),
-    });
-    if (status === 'working') counts.working += 1;
-    if (status === 'ready') counts.waiting += 1;
-  }
-  return counts;
 }

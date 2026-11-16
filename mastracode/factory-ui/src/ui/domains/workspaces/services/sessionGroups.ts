@@ -1,13 +1,16 @@
-import { SLACK_SESSION_BRANCH_PREFIX } from '@mastra/factory/work-item-branch';
+import {
+  SESSION_ROW_GROUP_BYS,
+  SESSION_ROW_STATUSES,
+  sessionRowGroupKeys,
+} from '@mastra/factory/session/session-row-query';
 import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
 
 import type { InstalledBoardInfo } from '../../../../api/types';
 import { orderedBoards } from '../../factory/boardCatalog';
-import { SESSION_ACTIVITY_STATUSES, SESSION_STATUS_LABELS, sessionOwners } from './sessionRows';
-import type { SessionActivityStatus, SessionListRow } from './sessionRows';
+import { SESSION_STATUS_LABELS } from './sessionRows';
+import type { SessionListRow, SessionOwner } from './sessionRows';
 
-export const SESSION_GROUP_BYS = ['board', 'status', 'owner', 'none'] as const;
-export type SessionGroupBy = (typeof SESSION_GROUP_BYS)[number];
+export type SessionGroupBy = (typeof SESSION_ROW_GROUP_BYS)[number];
 
 export const DEFAULT_SESSION_GROUP_BY: SessionGroupBy = 'none';
 
@@ -18,7 +21,7 @@ export const SESSION_GROUP_BY_LABELS: Record<SessionGroupBy, string> = {
   none: 'None',
 };
 
-export const SESSION_GROUP_BY_OPTIONS: readonly DropdownMenuRadioOption<SessionGroupBy>[] = SESSION_GROUP_BYS.map(
+export const SESSION_GROUP_BY_OPTIONS: readonly DropdownMenuRadioOption<SessionGroupBy>[] = SESSION_ROW_GROUP_BYS.map(
   value => ({ value, label: SESSION_GROUP_BY_LABELS[value] }),
 );
 
@@ -30,95 +33,68 @@ export interface SessionGroupHeading {
   icon: SessionGroupIcon;
 }
 
+export const SESSION_GROUP_INCREMENT = 20;
+
 export interface SessionGroup extends SessionGroupHeading {
-  rows: SessionListRow[];
+  total: number;
+  openIndex?: number;
+  rows: readonly SessionListRow[];
 }
 
-export const COLLAPSED_GROUP_ROW_COUNT = 5;
-
 export interface SessionGroupContext {
-  boards: readonly InstalledBoardInfo[] | undefined;
+  catalog: readonly InstalledBoardInfo[] | undefined;
+  boardIds: readonly string[];
+  owners: readonly SessionOwner[];
   viewerUserId: string | undefined;
 }
 
-const USER_GROUP: SessionGroupHeading = { key: 'user', label: 'User', icon: 'user' };
-const SLACK_GROUP: SessionGroupHeading = { key: 'slack', label: 'Slack', icon: 'slack' };
-const ALL_GROUP: SessionGroupHeading = { key: 'all', label: 'All', icon: 'all' };
+const USER_GROUP: SessionGroupHeading = { key: sessionRowGroupKeys.user, label: 'User', icon: 'user' };
+const SLACK_GROUP: SessionGroupHeading = { key: sessionRowGroupKeys.slack, label: 'Slack', icon: 'slack' };
+const ALL_GROUP: SessionGroupHeading = { key: sessionRowGroupKeys.all, label: 'All', icon: 'all' };
 
-function boardGroupKey(boardId: string): string {
-  return `board:${boardId}`;
-}
-
-function statusGroupKey(status: SessionActivityStatus): string {
-  return `status:${status}`;
-}
-
-function ownerGroupKey(userId: string): string {
-  return `owner:${userId}`;
-}
-
-const STATUS_GROUPS: readonly SessionGroupHeading[] = SESSION_ACTIVITY_STATUSES.map(status => ({
-  key: statusGroupKey(status),
+const STATUS_GROUPS: readonly SessionGroupHeading[] = SESSION_ROW_STATUSES.map(status => ({
+  key: sessionRowGroupKeys.status(status),
   label: SESSION_STATUS_LABELS[status],
   icon: 'status',
 }));
 
-const GROUP_KEY_OF_ROW: Record<SessionGroupBy, (row: SessionListRow) => string> = {
-  board: row =>
-    row.session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX)
-      ? SLACK_GROUP.key
-      : row.board === undefined
-        ? USER_GROUP.key
-        : boardGroupKey(row.board),
-  status: row => statusGroupKey(row.cardStatus ?? row.status),
-  owner: row => ownerGroupKey(row.session.userId),
-  none: () => ALL_GROUP.key,
-};
-
 function boardHeading(boardId: string, label: string): SessionGroupHeading {
-  return { key: boardGroupKey(boardId), label, icon: 'board' };
-}
-
-function uncatalogedBoardIds(rows: readonly SessionListRow[], catalogIds: ReadonlySet<string>): string[] {
-  const boardIds = new Set(
-    rows.flatMap(row => (row.board !== undefined && !catalogIds.has(row.board) ? [row.board] : [])),
-  );
-  return [...boardIds].toSorted((a, b) => a.localeCompare(b));
+  return { key: sessionRowGroupKeys.board(boardId), label, icon: 'board' };
 }
 
 function boardGroupHeadings(
-  rows: readonly SessionListRow[],
-  boards: readonly InstalledBoardInfo[] | undefined,
+  catalog: readonly InstalledBoardInfo[] | undefined,
+  boardIds: readonly string[],
 ): SessionGroupHeading[] {
-  const catalog = orderedBoards(boards ?? []);
-  const catalogIds = new Set(catalog.map(board => board.id));
-  const uncatalogedBoards = orderedBoards(uncatalogedBoardIds(rows, catalogIds).map(id => ({ id })));
+  const catalogBoards = orderedBoards(catalog ?? []);
+  const catalogIds = new Set(catalogBoards.map(board => board.id));
+  const uncatalogedBoards = orderedBoards(
+    boardIds
+      .filter(id => !catalogIds.has(id))
+      .toSorted((a, b) => a.localeCompare(b))
+      .map(id => ({ id })),
+  );
   return [
-    ...catalog.map(board => boardHeading(board.id, board.title)),
+    ...catalogBoards.map(board => boardHeading(board.id, board.title)),
     ...uncatalogedBoards.map(({ id }) => boardHeading(id, id.charAt(0).toUpperCase() + id.slice(1))),
     USER_GROUP,
     SLACK_GROUP,
   ];
 }
 
-function ownerGroupHeadings(rows: readonly SessionListRow[], viewerUserId: string | undefined): SessionGroupHeading[] {
-  return sessionOwners(rows)
-    .toSorted((a, b) => Number(b.userId === viewerUserId) - Number(a.userId === viewerUserId))
-    .map(({ userId, name }) => ({ key: ownerGroupKey(userId), label: name, icon: 'owner' }));
-}
-
 export function sessionGroupHeadings(
-  rows: readonly SessionListRow[],
   groupBy: SessionGroupBy,
   context: SessionGroupContext,
 ): readonly SessionGroupHeading[] {
   switch (groupBy) {
     case 'board':
-      return boardGroupHeadings(rows, context.boards);
+      return boardGroupHeadings(context.catalog, context.boardIds);
     case 'status':
       return STATUS_GROUPS;
     case 'owner':
-      return ownerGroupHeadings(rows, context.viewerUserId);
+      return context.owners
+        .toSorted((a, b) => Number(b.userId === context.viewerUserId) - Number(a.userId === context.viewerUserId))
+        .map(({ userId, name }) => ({ key: sessionRowGroupKeys.owner(userId), label: name, icon: 'owner' }));
     case 'none':
       return [ALL_GROUP];
   }
@@ -138,29 +114,4 @@ export function orderGroupHeadings(
 export function customGroupOrder(keys: readonly string[], defaultHeadings: readonly SessionGroupHeading[]): string[] {
   const isDefaultOrder = defaultHeadings.every((heading, index) => heading.key === keys[index]);
   return isDefaultOrder ? [] : [...keys];
-}
-
-export function groupSessionRows(
-  rows: readonly SessionListRow[],
-  groupBy: SessionGroupBy,
-  headings: readonly SessionGroupHeading[],
-  hiddenKeys: readonly string[],
-): SessionGroup[] {
-  const groupKeyOf = GROUP_KEY_OF_ROW[groupBy];
-  return headings.flatMap(heading => {
-    if (hiddenKeys.includes(heading.key)) return [];
-    const groupRows = rows.filter(row => groupKeyOf(row) === heading.key);
-    return groupRows.length > 0 ? [{ ...heading, rows: groupRows }] : [];
-  });
-}
-
-export function collapsedRowsKeepingActive(rows: readonly SessionListRow[], additionalRowCount = 0): SessionListRow[] {
-  const collapsed = rows.slice(0, COLLAPSED_GROUP_ROW_COUNT);
-  // A card whose open session is listed under it keeps the card in view.
-  const open = rows.find(row => row.active || row.childRows?.some(child => child.active));
-  const openOutsideFold = open !== undefined && !collapsed.includes(open);
-  const visible = rows.slice(0, collapsed.length + Number(openOutsideFold) + additionalRowCount);
-  // The open row already occupies a slot, including when a later batch reaches it.
-  if (open && !visible.includes(open)) visible[visible.length - 1] = open;
-  return visible;
 }

@@ -70,7 +70,7 @@ export function SessionListItem({
         factoryId,
         session: row.session,
         owner: row.owner,
-        item: row.item,
+        cardId: row.cardId,
         board: row.board,
         threadId: row.threadId,
         repository: row.repository,
