@@ -456,6 +456,27 @@ export interface LinkedRepositoriesChange {
   local: boolean;
 }
 
+/** An installation with the repositories linked to a project. */
+export interface SourceControlInstallationLinks {
+  installation: SourceControlInstallation;
+  linkedRepositories: SourceControlRepository[];
+}
+
+/** Moves installation rows onto one provider installation. */
+export interface SourceControlInstallationMove {
+  /** The provider installation the rows move to. */
+  externalId: string;
+  /** Installation row ids to move, in order; the first is re-pointed when the org has no row for `externalId`. */
+  installationIds: string[];
+  accountName?: string | null;
+  accountType?: string | null;
+}
+
+/** Why a move was refused: it would put two copies of something on one installation. */
+export type SourceControlInstallationMoveConflict =
+  | { kind: 'repository'; externalId: string; repositorySlug: string }
+  | { kind: 'project_connection'; externalId: string; factoryProjectId: string };
+
 export interface SourceControlStorageHandle {
   readonly integrationId: string;
   /**
@@ -1142,6 +1163,135 @@ export class SourceControlStorage extends FactoryStorageDomain {
       await ops.updateMany(PROJECT_REPOSITORIES, { id: projectRepositoryId }, projectRepositoryPatch(input));
     }
     return 'updated';
+  }
+
+  /**
+   * An org's installations for one integration, oldest first, each with the
+   * repositories linked to a project. Pass `lock` inside a transaction to hold
+   * every installation row until it ends, so two callers moving the same
+   * installations run one after the other. Rows are locked in id order.
+   */
+  async installationsWithLinkedRepositories(
+    ops: FactoryStorageOps,
+    args: { integrationId: string; orgId: string; lock?: boolean },
+  ): Promise<SourceControlInstallationLinks[]> {
+    const rows = await ops.findMany<InstallationDbRow>(INSTALLATIONS, {
+      integration_id: args.integrationId,
+      org_id: args.orgId,
+    });
+    const locked: InstallationDbRow[] = [];
+    for (const row of [...rows].sort((a, b) => a.id.localeCompare(b.id))) {
+      if (!args.lock) {
+        locked.push(row);
+        continue;
+      }
+      const current = await ops.updateAtomic<InstallationDbRow>(INSTALLATIONS, { id: row.id }, () => null);
+      if (current) locked.push(current);
+    }
+    const result: SourceControlInstallationLinks[] = [];
+    for (const row of locked.sort((a, b) => a.created_at.getTime() - b.created_at.getTime())) {
+      const repositories = await ops.findMany<RepositoryDbRow>(REPOSITORIES, { installation_id: row.id });
+      const linked =
+        repositories.length === 0
+          ? []
+          : await ops.findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
+              repository_id: { in: repositories.map(repository => repository.id) },
+            });
+      const linkedIds = new Set(linked.map(link => link.repository_id));
+      result.push({
+        installation: toInstallation(row),
+        linkedRepositories: repositories.filter(repository => linkedIds.has(repository.id)).map(toRepository),
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Moves an org's installations onto other provider installations through
+   * `ops`, normally a transaction. For each move, the first installation row
+   * (or the org's existing row for `externalId`) is re-pointed in place, so
+   * its repositories, project connections and links keep their ids; any other
+   * row's repositories and project connections move onto it and the emptied
+   * row is deleted. Nothing is written when a move would put two copies of a
+   * repository, or two connections of one project, on one installation: the
+   * conflicts come back instead. Linked-repository listeners are not run;
+   * the caller runs them once the transaction commits.
+   */
+  async moveInstallations(
+    ops: FactoryStorageOps,
+    args: { integrationId: string; orgId: string; moves: SourceControlInstallationMove[] },
+  ): Promise<{ conflicts: SourceControlInstallationMoveConflict[] }> {
+    const scope = { integration_id: args.integrationId, org_id: args.orgId };
+    const plans: Array<{
+      move: SourceControlInstallationMove;
+      target: InstallationDbRow;
+      merged: InstallationDbRow[];
+    }> = [];
+    const conflicts: SourceControlInstallationMoveConflict[] = [];
+    for (const move of args.moves) {
+      const rows: InstallationDbRow[] = [];
+      for (const id of move.installationIds) {
+        const row = await ops.findOne<InstallationDbRow>(INSTALLATIONS, { ...scope, id });
+        if (!row) throw new Error(`Source-control installation ${id} not found in organization ${args.orgId}`);
+        rows.push(row);
+      }
+      const existing = await ops.findOne<InstallationDbRow>(INSTALLATIONS, { ...scope, external_id: move.externalId });
+      const target = existing ?? rows[0];
+      if (!target) continue;
+      const merged = rows.filter(row => row.id !== target.id);
+      plans.push({ move, target, merged });
+
+      const repositories = new Map(
+        (await ops.findMany<RepositoryDbRow>(REPOSITORIES, { installation_id: target.id })).map(row => [
+          row.external_id,
+          row,
+        ]),
+      );
+      const projects = new Set(
+        (await ops.findMany<ConnectionDbRow>(CONNECTIONS, { installation_id: target.id })).map(
+          row => row.factory_project_id,
+        ),
+      );
+      for (const row of merged) {
+        for (const repository of await ops.findMany<RepositoryDbRow>(REPOSITORIES, { installation_id: row.id })) {
+          if (repositories.has(repository.external_id)) {
+            conflicts.push({ kind: 'repository', externalId: move.externalId, repositorySlug: repository.slug });
+          } else {
+            repositories.set(repository.external_id, repository);
+          }
+        }
+        for (const connection of await ops.findMany<ConnectionDbRow>(CONNECTIONS, { installation_id: row.id })) {
+          if (projects.has(connection.factory_project_id)) {
+            conflicts.push({
+              kind: 'project_connection',
+              externalId: move.externalId,
+              factoryProjectId: connection.factory_project_id,
+            });
+          } else {
+            projects.add(connection.factory_project_id);
+          }
+        }
+      }
+    }
+    if (conflicts.length > 0) return { conflicts };
+
+    for (const { move, target, merged } of plans) {
+      await ops.updateMany(
+        INSTALLATIONS,
+        { id: target.id },
+        {
+          external_id: move.externalId,
+          ...(move.accountName !== undefined ? { account_name: move.accountName } : {}),
+          ...(move.accountType !== undefined ? { account_type: move.accountType } : {}),
+        },
+      );
+      for (const row of merged) {
+        await ops.updateMany(REPOSITORIES, { installation_id: row.id }, { installation_id: target.id });
+        await ops.updateMany(CONNECTIONS, { installation_id: row.id }, { installation_id: target.id });
+        await ops.deleteMany(INSTALLATIONS, { id: row.id });
+      }
+    }
+    return { conflicts: [] };
   }
 
   async dangerouslyClearAll(): Promise<void> {

@@ -109,7 +109,8 @@ async function acceptLegacyGithubEvent(
       if (record.mode !== 'connect' || record.switchedAt === undefined || timestamp >= record.switchedAt) continue;
       const repointed = record.installations?.some(
         installation =>
-          installation.installationId === link.installationId && installation.legacyInstallationId === installationId,
+          installation.installationId === link.installationId &&
+          installation.legacyInstallationIds?.includes(installationId) === true,
       );
       if (repointed) return withGithubEventInstallation(event, link.installationId);
     }

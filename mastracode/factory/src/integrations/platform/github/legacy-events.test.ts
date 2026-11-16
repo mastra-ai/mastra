@@ -303,7 +303,7 @@ describe('legacy GitHub topic events', () => {
           installationId: 300,
           connectionId: 'conn-github',
           reviewsConnectionId: 'conn-reviews',
-          legacyInstallationId: 7,
+          legacyInstallationIds: [7],
         },
       ],
     };
