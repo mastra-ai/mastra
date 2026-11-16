@@ -637,6 +637,16 @@ describe('legacy ownership', () => {
     describe('managed collection deletes', () => {
       const docs = () => [{ title: 'a' }, { title: 'b' }, { title: 'c' }];
       const exists = (c: string) => db.listCollections({ name: c }).hasNext();
+      // Released after every test, so a failed assertion never leaves a call parked into the next test.
+      const pauses: ReturnType<typeof pause>[] = [];
+      const held = () => {
+        const p = pause();
+        pauses.push(p);
+        return p;
+      };
+      afterEach(() => {
+        for (const p of pauses.splice(0)) p.release.resolve();
+      });
 
       /** A managed collection with 3 documents and its registration seeded directly. */
       async function managed(owns: boolean | 'unknown' = true, extra: Document = {}) {
@@ -710,7 +720,7 @@ describe('legacy ownership', () => {
 
       it('T14i-M (stale finalization): a stale call leaves a recreated managed registration alone', async () => {
         const { coll, entry } = await managed();
-        const p1 = pause();
+        const p1 = held();
         (a as any).testHooks = { beforeDeleteFinalize: p1.hook };
         const call1 = a.deleteIndex({ indexName: coll });
         await reached(p1);
@@ -721,7 +731,7 @@ describe('legacy ownership', () => {
         expect(await reg(coll)).toBeNull();
         await seedCollection(db, coll, docs());
         await seedRegistry(db, entry);
-        const p3 = pause();
+        const p3 = held();
         (b as any).testHooks = { afterDeleteStep1: p3.hook };
         const call3 = b.deleteIndex({ indexName: coll });
         await reached(p3);
@@ -740,7 +750,7 @@ describe('legacy ownership', () => {
 
       it('T14i-M (stale physical drop): a stale call does not drop a recreated managed collection', async () => {
         const { coll, entry } = await managed();
-        const p1 = pause();
+        const p1 = held();
         (a as any).testHooks = { beforeDeleteDrop: p1.hook };
         const call1 = a.deleteIndex({ indexName: coll });
         await reached(p1);
@@ -764,6 +774,79 @@ describe('legacy ownership', () => {
         };
         await a.deleteIndex({ indexName: coll });
         expect(seen).toBe('t');
+        expect(await exists(coll)).toBe(false);
+        expect(await reg(coll)).toBeNull();
+      });
+
+      it('T14k-M: a resumed delete re-checks IN_USE, keeps its token, and finishes once the user is gone', async () => {
+        const { coll } = await managed(true, { deleting: true, deleteToken: 't' });
+        const byo = `${coll}_byo`;
+        await seedRegistry(db, {
+          _id: byo,
+          indexName: byo,
+          collectionName: coll,
+          searchIndexName: `${byo}_vec`,
+          isByo: true,
+          allowWrites: false,
+          ownsVectorIndex: false,
+        });
+        const err = await a.deleteIndex({ indexName: coll }).catch(e => e);
+        expect(err.id).toBe(errId('IN_USE'));
+        expect(err.category).toBe('USER');
+        expect(await db.collection(coll).countDocuments()).toBe(3);
+        expect(await reg(coll)).toMatchObject({ deleting: true, deleteToken: 't' });
+        await db.collection(REGISTRY).deleteOne({ _id: byo as any });
+        await a.deleteIndex({ indexName: coll });
+        expect(await exists(coll)).toBe(false);
+        expect(await reg(coll)).toBeNull();
+      });
+
+      for (const recreated of [
+        { label: 'BYO', fields: { isByo: true, allowWrites: false } },
+        { label: 'ownsCollection: false', fields: { isByo: false, allowWrites: true, ownsCollection: false } },
+      ]) {
+        it(`T14l-M: a stale T1 leaves X alone after it is recreated on the same collection (${recreated.label})`, async () => {
+          const { coll } = await managed();
+          const newX = {
+            _id: coll,
+            indexName: coll,
+            collectionName: coll,
+            searchIndexName: `${coll}_vec`,
+            ownsVectorIndex: false,
+            rev: 7,
+            ...recreated.fields,
+          };
+          (a as any).testHooks = {
+            // Between the pre-read and T1: another call finishes X, then the app recreates it.
+            insideDeleteTransaction: async (_: string, attempt: number) => {
+              if (attempt !== 1) return;
+              await db.collection(REGISTRY).deleteOne({ _id: coll as any });
+              await seedRegistry(db, newX);
+            },
+          };
+          await a.deleteIndex({ indexName: coll });
+          expect(await reg(coll)).toEqual(newX);
+          expect(await db.collection(coll).countDocuments()).toBe(3);
+        });
+      }
+
+      it('T14m-M: a T1 that finds X already deleting continues that token and drops once', async () => {
+        const { coll } = await managed();
+        const seen: (string | undefined)[] = [];
+        (a as any).testHooks = {
+          // Another call's T1 commits between this call's pre-read and its own T1.
+          insideDeleteTransaction: async (_: string, attempt: number) => {
+            if (attempt !== 1) return;
+            await db
+              .collection(REGISTRY)
+              .updateOne({ _id: coll as any }, { $set: { deleting: true, deleteToken: 't' }, $inc: { rev: 1 } });
+          },
+          beforeDeleteDrop: async () => {
+            seen.push((await reg(coll))?.deleteToken);
+          },
+        };
+        await a.deleteIndex({ indexName: coll });
+        expect(seen).toEqual(['t']);
         expect(await exists(coll)).toBe(false);
         expect(await reg(coll)).toBeNull();
       });

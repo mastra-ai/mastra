@@ -855,6 +855,15 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     const indexName = entry._id;
     const collectionName = entry.collectionName;
     const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
+    const othersFilter = { collectionName, _id: { $ne: indexName } };
+    const inUse = (others: RegistryDoc[]) =>
+      new MastraError({
+        id: createVectorErrorId('MONGODB', 'DELETE_INDEX', 'IN_USE'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName, collectionName, usedBy: others.map(o => o._id).join(', ') },
+        text: `Collection "${collectionName}" of index "${indexName}" is still used by ${others.map(o => `"${o._id}"`).join(', ')}. Nothing was dropped. Delete those indexes first, then retry deleteIndex({ indexName: "${indexName}" }).`,
+      });
     let deleteToken = entry.deleting ? entry.deleteToken : undefined;
     if (!deleteToken) {
       let attempt = 0;
@@ -865,17 +874,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         if (!own || own.collectionName !== collectionName || own.isByo || own.ownsCollection !== true)
           return 'gone' as const;
         if (own.deleting && own.deleteToken) return { deleteToken: own.deleteToken };
-        const others = await registry.find({ collectionName, _id: { $ne: indexName } }, { session }).toArray();
+        const others = await registry.find(othersFilter, { session }).toArray();
         await this.testHooks?.insideDeleteTransaction?.(indexName, attempt);
-        if (others.length) {
-          throw new MastraError({
-            id: createVectorErrorId('MONGODB', 'DELETE_INDEX', 'IN_USE'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            details: { indexName, collectionName, usedBy: others.map(o => o._id).join(', ') },
-            text: `Collection "${collectionName}" of index "${indexName}" is still used by ${others.map(o => `"${o._id}"`).join(', ')}. Nothing was dropped. Delete those indexes first.`,
-          });
-        }
+        if (others.length) throw inUse(others);
         const token = uuidv4();
         await registry.updateOne(
           { _id: indexName },
@@ -890,8 +891,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
     await this.testHooks?.afterDeleteStep1?.(indexName);
     await this.testHooks?.beforeDeleteDrop?.(indexName, collectionName);
+    // Re-check on every attempt: a resumed delete may run long after T1, once someone else has
+    // attached to the collection. The entry stays `deleting`, so a later retry can finish.
+    const others = await registry.find(othersFilter).toArray();
     // Another call finished this attempt, and the collection may have been recreated since: leave it.
     if (!(await registry.findOne({ _id: indexName, deleting: true, deleteToken }))) return;
+    if (others.length) throw inUse(others);
     try {
       await this.db.collection(collectionName).drop();
     } catch (err: any) {
