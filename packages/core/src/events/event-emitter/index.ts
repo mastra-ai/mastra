@@ -441,9 +441,6 @@ export class EventEmitterPubSub extends PubSub implements LeaseProvider {
     return Promise.resolve(true);
   }
 
-  /** `transferLease` checks the owner and swaps it in one synchronous step. */
-  readonly atomicTransfer = true;
-
   // Atomic owner-guarded handoff: only the current owner can transfer, and the
   // key is never empty during the swap (mirrors the Redis GET==from -> SET to
   // Lua). Lets a finishing run hand the lease to its drain run without a

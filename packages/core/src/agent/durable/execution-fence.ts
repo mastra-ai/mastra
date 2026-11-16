@@ -53,27 +53,8 @@ const STORAGE_RENEWAL_GRACE_MS = EXECUTION_LEASE_TTL_MS;
 const STORE_CLOCK_SKEW_MS = EXECUTION_LEASE_RENEW_INTERVAL_MS;
 const VERIFY_RETRY_DELAY_MS = 250;
 const TAKEOVER_ATTEMPTS = 3;
-/**
- * How long the marker owner a lease release hands the lease to may outlive a failed drop. The release drops it at
- * once; a claim that meets it retries until {@link EXECUTION_CLAIM_WAIT_MS}.
- */
-const RELEASED_LEASE_MARKER_TTL_MS = 1_000;
-const RELEASED_LEASE_MARKER_SUFFIX = ':released';
 const EXECUTION_CLAIM_WAIT_MS = 5_000;
 const CLAIM_POLL_INTERVAL_MS = 100;
-
-/**
- * The owner a lease release hands an execution's lease to before dropping it. While it holds the lease the run has no
- * live execution: the execution it names released it.
- */
-export function releasedLeaseMarker(executionId: string): string {
-  return `${executionId}${RELEASED_LEASE_MARKER_SUFFIX}`;
-}
-
-/** Whether `owner`, read from an execution lease, is a release marker rather than a live execution. */
-export function isReleasedLeaseMarker(owner: string): boolean {
-  return owner.endsWith(RELEASED_LEASE_MARKER_SUFFIX);
-}
 
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, Math.max(0, ms)));
 
@@ -391,12 +372,7 @@ interface OwnershipBackend {
   ): Promise<RunFence | undefined>;
 }
 
-function leaseBackend(
-  provider: LeaseProvider,
-  agentId: string,
-  runId: string,
-  logger?: IMastraLogger,
-): OwnershipBackend {
+function leaseBackend(provider: LeaseProvider, agentId: string, runId: string): OwnershipBackend {
   const key = executionLeaseKey(agentId, runId);
   return {
     expires: provider !== NoopLeaseProvider,
@@ -432,51 +408,27 @@ function leaseBackend(
     async observe(claim, details) {
       if (provider === NoopLeaseProvider) return;
       const owner = await provider.getLeaseOwner(key);
-      if (owner === claim.executionId) return;
-      // This claim's own release marker means it released the run, as if the lease were already gone.
-      const released = owner === undefined || owner === releasedLeaseMarker(claim.executionId);
-      throw new DurableExecutionFenceError(
-        released ? EXECUTION_UNVERIFIED_ERROR_ID : EXECUTION_SUPERSEDED_ERROR_ID,
-        details,
-      );
+      if (owner !== claim.executionId) {
+        throw new DurableExecutionFenceError(
+          owner === undefined ? EXECUTION_UNVERIFIED_ERROR_ID : EXECUTION_SUPERSEDED_ERROR_ID,
+          details,
+        );
+      }
     },
     // A released lease is gone, so a failed renewal can't tell a release from a takeover.
     renew: async claim =>
       (await provider.renewLease(key, claim.executionId, EXECUTION_LEASE_TTL_MS))
         ? { renewed: true }
         : { renewed: false, released: false },
-    // This claim's own release marker means it released the run, as if the lease were already gone. Another
-    // execution's marker means that execution claimed the run after this one, so it still supersedes it.
     async isSuperseded(claim) {
       const owner = await provider.getLeaseOwner(key);
-      return owner !== undefined && owner !== claim.executionId && owner !== releasedLeaseMarker(claim.executionId);
+      return owner !== undefined && owner !== claim.executionId;
     },
-    // `releaseLease` does not report whether it released anything. With `atomicTransfer`, `transferLease` checks the
-    // owner and hands the lease to a marker owner in one step, so it confirms nobody took the run over first; the
-    // marker is then dropped. Any other transfer may release and re-acquire, so its success confirms nothing.
-    // Once the transfer succeeds the confirmation stands: a marker that fails to drop expires after
-    // RELEASED_LEASE_MARKER_TTL_MS, so it only delays the next claim.
+    // `releaseLease` does not report whether it released anything, so a release never confirms the claim still held
+    // the run, and a late failed renewal still counts as a loss.
     async release(claim) {
-      if (provider.atomicTransfer !== true) {
-        await provider.releaseLease(key, claim.executionId);
-        return false;
-      }
-      const marker = releasedLeaseMarker(claim.executionId);
-      const held = await provider
-        .transferLease(key, claim.executionId, marker, RELEASED_LEASE_MARKER_TTL_MS)
-        .catch(() => false);
-      if (!held) {
-        await provider.releaseLease(key, claim.executionId);
-        return false;
-      }
-      try {
-        await provider.releaseLease(key, marker);
-      } catch (error) {
-        logger?.warn?.(
-          `[DurableAgent] run ${runId}: released the execution claim but could not drop its release marker, which expires in ${RELEASED_LEASE_MARKER_TTL_MS}ms: ${error}`,
-        );
-      }
-      return true;
+      await provider.releaseLease(key, claim.executionId);
+      return false;
     },
     // A lease has no generation to move past: releasing is all it can do.
     async abandon(claim, whileOwned) {
@@ -715,7 +667,7 @@ export class ExecutionFence implements RunFenceScope {
     const workflowsStore = (await supportsRunFencing(args.workflowsStore)) ? args.workflowsStore : undefined;
     const backend = workflowsStore
       ? storageBackend(workflowsStore, runId)
-      : leaseBackend(args.leaseProvider, agentId, runId, args.logger);
+      : leaseBackend(args.leaseProvider, agentId, runId);
     const executionId = crypto.randomUUID();
 
     let attempt: ClaimAttempt = { claimed: false };
@@ -1424,7 +1376,7 @@ async function resolveRemoteBackend(
     agentPubsub = undefined;
   }
   const pubsub = agentPubsub ?? mastra.pubsub;
-  return pubsub ? leaseBackend(resolveLeaseProvider(pubsub), agentId, runId, mastra.getLogger()) : undefined;
+  return pubsub ? leaseBackend(resolveLeaseProvider(pubsub), agentId, runId) : undefined;
 }
 
 /**

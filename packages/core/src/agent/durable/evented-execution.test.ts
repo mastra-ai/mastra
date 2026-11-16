@@ -21,7 +21,7 @@ import { WorkflowEventProcessor } from '../../workflows/evented/workflow-event-p
 import { Agent } from '../agent';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
-import { AGENT_STREAM_TOPIC, DurableStepIds } from './constants';
+import { DurableStepIds } from './constants';
 import { createEventedAgent } from './create-evented-agent';
 import {
   participateInDurableExecution,
@@ -43,8 +43,6 @@ import {
   isStorageFencedExecution,
   withExecutionFence,
   executionLeaseKey,
-  fencePubSub,
-  isReleasedLeaseMarker,
   MASTRA_DURABLE_EXECUTIONS_KEY,
 } from './execution-fence';
 
@@ -157,8 +155,7 @@ it('keeps a shared EventedAgent.stream() run owned by its worker when the API sh
 /**
  * An EventedAgent run on a real Unix socket transport whose first model call waits until `releaseModel()`, then asks
  * for approval of a `lookup` tool call. Resolves once the first model call started. With storage fencing the run is a
- * shared execution, and the worker renews the claim through a participant fence; on the lease alone the API's
- * coordinator fence is the only one.
+ * shared execution, and the worker renews the claim through a participant fence.
  */
 async function startSuspendingSharedRun(args: { pubsub: UnixSocketPubSub; storage: InMemoryStore }) {
   const entered = Promise.withResolvers<void>();
@@ -244,46 +241,12 @@ async function resumeToFinish(agent: Awaited<ReturnType<typeof startSuspendingSh
 /** A Unix socket transport in a fresh directory, removed after the test. */
 async function socketPubSub(prefix: string) {
   const directory = await mkdtemp(join(tmpdir(), prefix));
-  const socketPath = join(directory, 'pubsub.sock');
-  const pubsub = new UnixSocketPubSub(socketPath);
+  const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
   onTestFinished(async () => {
     await pubsub.close();
     await rm(directory, { recursive: true, force: true });
   });
-  return { pubsub, socketPath };
-}
-
-/** Storage without run fencing, so run ownership is the transport's execution lease. */
-function leaseOnlyStorage() {
-  const storage = new InMemoryStore();
-  vi.spyOn(storage.stores.workflows!, 'supportsRunFencing').mockReturnValue(false);
-  return storage;
-}
-
-/**
- * Hold every renewal of `runId`'s execution lease that the heartbeats send during one renewal interval. Returns
- * whether each held renewal succeeded once `deliver()` let it reach the transport.
- */
-async function holdLeaseRenewals(pubsub: UnixSocketPubSub, leaseKey: string) {
-  const renew = pubsub.renewLease.bind(pubsub);
-  const delivery = Promise.withResolvers<void>();
-  let holding = true;
-  const held: Array<Promise<boolean>> = [];
-  vi.spyOn(pubsub, 'renewLease').mockImplementation((key, owner, ttlMs) => {
-    if (!holding || key !== leaseKey) return renew(key, owner, ttlMs);
-    const result = delivery.promise.then(() => renew(key, owner, ttlMs));
-    held.push(result);
-    return result;
-  });
-  await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
-  holding = false;
-  expect(held.length).toBeGreaterThanOrEqual(1);
-  return {
-    async deliver() {
-      delivery.resolve();
-      return Promise.all(held);
-    },
-  };
+  return pubsub;
 }
 
 // A lease renewal sent just before the run suspends reaches storage after the worker released the claim. Nobody took
@@ -291,7 +254,7 @@ async function holdLeaseRenewals(pubsub: UnixSocketPubSub, leaseKey: string) {
 // to its finish. (#30206)
 it('resumes a shared EventedAgent run whose renewal reaches storage after the worker released the suspension (#30206)', async () => {
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-  const { pubsub } = await socketPubSub('mastra-late-renewal-');
+  const pubsub = await socketPubSub('mastra-late-renewal-');
   const storage = new InMemoryStore();
   const workflows = (await storage.getStore('workflows'))!;
 
@@ -339,95 +302,6 @@ it('resumes a shared EventedAgent run whose renewal reaches storage after the wo
   expect(chunks.map(chunk => chunk.type)).toContain('finish');
   expect(JSON.stringify(chunks)).toContain('resumed answer');
   expect(run.execute).toHaveBeenCalledTimes(1);
-}, 20_000);
-
-// The same late renewal with no storage fencing: the socket transport's execution lease owns the run, renewed by the
-// API's coordinator. Its release hands the lease to a marker owner and drops the marker; when that drop fails, the
-// release still confirmed that nobody took the run over, and the marker expires before resume() stops waiting for
-// the run. (#30206)
-it('resumes a shared EventedAgent run on the socket lease alone when its release marker fails to drop (#30206)', async () => {
-  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-  const { pubsub } = await socketPubSub('mastra-late-lease-renewal-');
-  const release = pubsub.releaseLease.bind(pubsub);
-  let markerDropsFailed = 0;
-  vi.spyOn(pubsub, 'releaseLease').mockImplementation(async (key, owner) => {
-    if (isReleasedLeaseMarker(owner)) {
-      markerDropsFailed++;
-      throw new Error('marker delete transport error');
-    }
-    return release(key, owner);
-  });
-  const run = await startSuspendingSharedRun({ pubsub, storage: leaseOnlyStorage() });
-  const { runId, coordinator, lost } = run;
-  expect(coordinator.generation).toBeUndefined();
-  expect(run.sharedExecution).toBe(false);
-  const leaseKey = executionLeaseKey(coordinator.agentId, runId);
-  const renewals = await holdLeaseRenewals(pubsub, leaseKey);
-
-  run.releaseModel();
-  await coordinator.whenSettled;
-  await vi.waitFor(() => expect(markerDropsFailed).toBeGreaterThan(0), { timeout: 5_000 });
-
-  expect(await renewals.deliver()).not.toContain(true);
-  await new Promise(resolve => setImmediate(resolve));
-  expect(lost).not.toHaveBeenCalled();
-  expect(coordinator.isLost()).toBe(false);
-
-  const chunks = await resumeToFinish(run.agent, runId);
-  expect(chunks.map(chunk => chunk.type)).toContain('finish');
-  expect(JSON.stringify(chunks)).toContain('resumed answer');
-  expect(run.execute).toHaveBeenCalledTimes(1);
-}, 20_000);
-
-// On the socket lease alone, a successor takes the run over the moment the settling worker starts giving up the
-// lease. The late renewal must then mark the old execution lost, and what it still publishes on the run's stream
-// topic must not reach the run's readers. (#30206)
-it('marks a shared EventedAgent run lost on the socket lease alone when a takeover lands just before its release (#30206)', async () => {
-  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-  const { pubsub, socketPath } = await socketPubSub('mastra-lease-takeover-');
-  const run = await startSuspendingSharedRun({ pubsub, storage: leaseOnlyStorage() });
-  const { runId, coordinator, lost } = run;
-  expect(coordinator.generation).toBeUndefined();
-  const leaseKey = executionLeaseKey(coordinator.agentId, runId);
-  const renewals = await holdLeaseRenewals(pubsub, leaseKey);
-
-  // Whichever call the release starts with, the successor's takeover reaches the transport first.
-  const transfer = pubsub.transferLease.bind(pubsub);
-  const release = pubsub.releaseLease.bind(pubsub);
-  let takenOver = false;
-  const takeOver = async (key: string, owner: string) => {
-    if (takenOver || key !== leaseKey || owner !== coordinator.executionId) return;
-    takenOver = true;
-    expect(await transfer(leaseKey, coordinator.executionId, 'successor', EXECUTION_LEASE_TTL_MS)).toBe(true);
-  };
-  vi.spyOn(pubsub, 'transferLease').mockImplementation(async (key, from, to, ttlMs) => {
-    await takeOver(key, from);
-    return transfer(key, from, to, ttlMs);
-  });
-  vi.spyOn(pubsub, 'releaseLease').mockImplementation(async (key, owner) => {
-    await takeOver(key, owner);
-    return release(key, owner);
-  });
-
-  run.releaseModel();
-  await vi.waitFor(() => expect(takenOver).toBe(true), { timeout: 5_000 });
-  await coordinator.whenSettled;
-  expect(await pubsub.getLeaseOwner(leaseKey)).toBe('successor');
-
-  expect(await renewals.deliver()).not.toContain(true);
-  await vi.waitFor(() => expect(coordinator.isLost()).toBe(true));
-  expect(lost).toHaveBeenCalledTimes(1);
-
-  // A reader in another process, connected to the same socket.
-  const reader = new UnixSocketPubSub(socketPath);
-  onTestFinished(() => reader.close());
-  const seen: string[] = [];
-  await reader.subscribe(AGENT_STREAM_TOPIC(runId), event => void seen.push(event.type));
-  const chunk = { runId, data: {}, createdAt: new Date() };
-  await fencePubSub(pubsub, coordinator).publish(AGENT_STREAM_TOPIC(runId), { ...chunk, type: 'stale' });
-  await pubsub.publish(AGENT_STREAM_TOPIC(runId), { ...chunk, type: 'successor' });
-  await vi.waitFor(() => expect(seen).toContain('successor'));
-  expect(seen).not.toContain('stale');
 }, 20_000);
 
 async function drainStream(stream: ReadableStream<any>) {

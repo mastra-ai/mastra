@@ -299,15 +299,6 @@ export interface LeaseProvider {
   transferLease(key: string, fromOwner: string, toOwner: string, ttlMs: number): Promise<boolean>;
 
   /**
-   * Optional. `true` promises that {@link transferLease} checks the current
-   * owner and swaps in `toOwner` in one step, so a `true` result proves
-   * `fromOwner` held the lease until the swap and no other owner held it in
-   * between. Leave it unset when `transferLease` is a release followed by an
-   * acquire: callers then never treat a successful transfer as that proof.
-   */
-  readonly atomicTransfer?: true;
-
-  /**
    * Optional. Returns `true` when `error`, thrown by one of the methods above,
    * proves the backend is refusing every client, not just this one (e.g. Redis
    * replaying its dataset after a restart answers `LOADING` to everybody). No

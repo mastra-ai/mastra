@@ -47,7 +47,6 @@ import {
   __resetExecutionFencesForTests,
   executionLeaseKey,
   getExecutionClaim,
-  isReleasedLeaseMarker,
   resolveLeaseProvider,
 } from '../execution-fence';
 import { runInRunFenceScope } from '../run-fence-scope';
@@ -1279,12 +1278,12 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       started.cleanup();
     });
 
-    // A lease renewal sent just before the run suspends can reach the store after the suspension released the claim.
-    // It then renews nothing and comes back false, though nobody took the run over. A lease release whose marker
-    // cleanup fails still confirmed the release, and the leftover marker expires before resume() stops waiting.
-    it.each(backend === 'lease' ? ['marker dropped', 'marker drop fails'] : ['marker dropped'])(
-      'a renewal that lands after the run suspends does not mark it lost, and resume() streams to its finish (#30206, %s)',
-      async markerDrop => {
+    // A renewal sent just before the run suspends can reach storage after the suspension released the claim. It then
+    // renews nothing and comes back false, though nobody took the run over. On the lease backend the release leaves
+    // no record, so that late renewal still counts as a loss, as before.
+    it.skipIf(backend !== 'storage')(
+      'a renewal that lands after the run suspends does not mark it lost, and resume() streams to its finish (#30206)',
+      async () => {
         vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
         const storage = createStorage(backend);
         const firstCall = gate();
@@ -1300,49 +1299,22 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         const durableAgent = buildAgent({ model, storage, tools: { lookup } });
 
         // Hold the heartbeat's renewal until the suspension has released the claim. Only the renewal sent by the
-        // heartbeat tick below, while the model call is pending, is held; ownership checks renew the same lease.
+        // heartbeat tick below, while the model call is pending, is held.
         const renewal = gate();
         let holdNextRenewal = false;
         let renewalSent = false;
         let renewedAfterRelease: boolean | undefined;
-        const hold = async <T>(renew: () => Promise<T>, renewed: (result: T) => boolean): Promise<T> => {
+        const workflows = storage.stores.workflows!;
+        const renew = workflows.renewRunOwnership.bind(workflows);
+        vi.spyOn(workflows, 'renewRunOwnership').mockImplementation(async args => {
+          if (!holdNextRenewal) return renew(args);
           holdNextRenewal = false;
           renewalSent = true;
           await renewal.opened;
-          const result = await renew();
-          renewedAfterRelease = renewed(result);
+          const result = await renew(args);
+          renewedAfterRelease = result.renewed;
           return result;
-        };
-        if (backend === 'storage') {
-          const workflows = storage.stores.workflows!;
-          const renew = workflows.renewRunOwnership.bind(workflows);
-          vi.spyOn(workflows, 'renewRunOwnership').mockImplementation(args =>
-            holdNextRenewal
-              ? hold(
-                  () => renew(args),
-                  result => result.renewed,
-                )
-              : renew(args),
-          );
-        } else {
-          const leases = resolveLeaseProvider(pubsub);
-          if (markerDrop === 'marker drop fails') {
-            const release = leases.releaseLease.bind(leases);
-            vi.spyOn(leases, 'releaseLease').mockImplementation(async (key, owner) => {
-              if (isReleasedLeaseMarker(owner)) throw new Error('marker delete transport error');
-              return release(key, owner);
-            });
-          }
-          const renew = leases.renewLease.bind(leases);
-          vi.spyOn(leases, 'renewLease').mockImplementation((key, ...rest) =>
-            holdNextRenewal && key === executionLeaseKey(durableAgent.id, runId)
-              ? hold(
-                  () => renew(key, ...rest),
-                  renewed => renewed,
-                )
-              : renew(key, ...rest),
-          );
-        }
+        });
 
         let suspended = false;
         const started = await durableAgent.stream('Look it up', {
