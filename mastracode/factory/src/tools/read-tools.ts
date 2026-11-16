@@ -182,6 +182,32 @@ function isHeld(boards: BoardRegistry, item: Card): boolean {
   return !item.stageHistory.some(entry => entry.stage !== triage && board.isWorking(entry.stage));
 }
 
+function boardNameKey(name: string): string {
+  return name.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function describeBoards(boards: BoardRegistry): string {
+  return [...boards.values()].map(board => `${board.id} ("${board.name}")`).join(', ');
+}
+
+/**
+ * A board id, or the name a board shows, to the id cards are stored under. An exact id wins, so a
+ * card on a board no longer installed is still found; a name matching several boards is refused.
+ */
+function resolveBoardId(boards: BoardRegistry, items: readonly Card[], ref: string): string {
+  if (boards.has(ref) || items.some(item => boardForWorkItem(item) === ref)) return ref;
+  const wanted = boardNameKey(ref);
+  const matches = [...boards.values()].filter(
+    board => board.id.toLowerCase() === wanted || boardNameKey(board.name) === wanted,
+  );
+  if (matches.length === 1) return matches[0]!.id;
+  if (matches.length > 1) {
+    const candidates = matches.map(board => `${board.id} ("${board.name}")`).join(', ');
+    throw new Error(`Board "${ref}" matches more than one board; use its id instead: ${candidates}.`);
+  }
+  throw new Error(`No board "${ref}" in this Factory. Its boards, by id and name: ${describeBoards(boards)}.`);
+}
+
 const listInputSchema = z
   .object({
     query: z
@@ -192,7 +218,13 @@ const listInputSchema = z
       .optional()
       .describe('Case-insensitive text in the title, or an exact card number like "#123".'),
     stage: z.string().min(1).max(64).optional().describe('Only items in this stage, e.g. "triage" or "review".'),
-    board: z.string().min(1).max(64).optional().describe('Only items on this board, e.g. "work" or "review".'),
+    board: z
+      .string()
+      .trim()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe('Only items on this board: its id, e.g. "work", or the name it shows, e.g. "Open source".'),
     role: z.string().min(1).max(64).optional().describe('Only items that have a session for this role.'),
     active: z.boolean().optional().describe('true: only items with an agent working now; false: only idle items.'),
     requestedBy: z.literal('me').optional().describe('"me": only items you filed.'),
@@ -210,16 +242,18 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
     factory_list_work_items: createTool({
       id: 'factory_list_work_items',
       description:
-        "List this Factory's work items, newest activity first, with counts per stage for the whole Factory. Filter by text or #number, stage, board, role, whether an agent is working on it, items you filed, or items this session follows. Check here for an existing item before filing a new one.",
+        "List this Factory's work items, newest activity first, with counts per stage for the whole Factory and its boards by id and shown name. Filter by text or #number, stage, board (id or shown name), role, whether an agent is working on it, items you filed, or items this session follows. Check here for an existing item before filing a new one.",
       inputSchema: listInputSchema,
       execute: async input => {
-        const [items, bindings, followed] = await Promise.all([
+        const [items, bindings, followed, boards] = await Promise.all([
           deps.workItems.listShared(project),
           deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId),
           input.subscribed === undefined
             ? undefined
             : deps.workItems.listSessionSubscriptions({ ...project, sessionId: scope.sessionId }),
+          toBoardSource(deps.boards).load(project),
         ]);
+        const board = input.board === undefined ? undefined : resolveBoardId(boards, items, input.board);
         const followedIds = new Set(followed?.map(subscription => subscription.workItemId));
         const byStage: Record<string, number> = {};
         for (const item of items) {
@@ -234,7 +268,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
               if (workItemNumber(item) !== Number(numberQuery)) return false;
             } else if (text && !item.title.toLowerCase().includes(text)) return false;
             if (input.stage && !item.stages.includes(input.stage)) return false;
-            if (input.board && boardForWorkItem(item) !== input.board) return false;
+            if (board !== undefined && boardForWorkItem(item) !== board) return false;
             if (input.role && !item.sessions[input.role]) return false;
             if (input.active !== undefined && (activeWorker(bindings, item.id) !== null) !== input.active) return false;
             if (input.requestedBy === 'me' && item.createdBy !== scope.userId) return false;
@@ -245,6 +279,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
         const limit = input.limit ?? DEFAULT_LIST;
         return {
           counts: { total: items.length, byStage },
+          boards: [...boards.values()].map(installed => ({ id: installed.id, name: installed.name })),
           items: matches.slice(0, limit).map(item => summarizeItem(item, bindings)),
           truncated: matches.length > limit,
         };
