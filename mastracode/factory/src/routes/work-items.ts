@@ -307,6 +307,9 @@ function catalogDetails(details: StoredBoardDetails | undefined) {
   };
 }
 
+/** The pull request a person picked closed before the pick was written. */
+class PullRequestClosedError extends Error {}
+
 export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
   #source: ProjectBoardSource | undefined;
 
@@ -956,9 +959,8 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               422,
             );
           }
-          if (!openPullRequestSource(source)) {
-            return c.json({ error: 'pull_request_not_open', message: 'That pull request is closed.' }, 422);
-          }
+          const closed = () => c.json({ error: 'pull_request_not_open', message: 'That pull request is closed.' }, 422);
+          if (!openPullRequestSource(source)) return closed();
           // The recorded head belongs to the pull request being replaced; the next push records this one's.
           const patch = {
             metadata: {
@@ -975,11 +977,19 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               userId: resolved.userId,
               patch,
               expectedRevision: body.data.expectedRevision,
+              // It may have closed since the read above without moving the card's revision.
+              check: current => {
+                const now = pullRequestSources(current).find(
+                  candidate => pullRequestSourceNumber(candidate) === body.data.pullRequest,
+                );
+                if (!now || !openPullRequestSource(now)) throw new PullRequestClosedError();
+              },
             });
             if (!updated) return c.json({ error: 'Work item not found' }, 404);
             await this.#auditWorkItemPatch({ context, item: updated.item, patch });
             return c.json({ workItem: toWireWorkItem(updated.item) });
           } catch (error) {
+            if (error instanceof PullRequestClosedError) return closed();
             if (error instanceof WorkItemUpdateConflictError) return c.json({ error: 'stale' }, 409);
             throw error;
           }

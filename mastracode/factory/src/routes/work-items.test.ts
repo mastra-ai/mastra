@@ -1023,6 +1023,31 @@ describe('PUT /web/factory/projects/:id/work-items/:workItemId/working-pull-requ
     );
   });
 
+  it('refuses a pick when the pull request closes while the pick is being made', async () => {
+    const item = await issueWithPullRequests();
+    const update = seed.workItems.update.bind(seed.workItems);
+    const closing = vi.spyOn(seed.workItems, 'update').mockImplementationOnce(async input => {
+      // The provider closes it after the endpoint read the card; closing touches the source, not the card's revision.
+      await seed.workItems.syncWorkItemSource({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        provider: 'github',
+        externalId: 'pull-request:github:7:pull-request:2',
+        patch: { state: 'closed' },
+      });
+      return update(input);
+    });
+
+    const res = await pick(item, 2);
+
+    closing.mockRestore();
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ error: 'pull_request_not_open' });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.metadata).not.toHaveProperty(
+      'openPullRequestNumber',
+    );
+  });
+
   it('refuses a pick made against an older revision of the card', async () => {
     const item = await issueWithPullRequests();
 

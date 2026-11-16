@@ -4078,6 +4078,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     patch,
     expectedRevision,
     expectedBoard,
+    check,
   }: {
     orgId: string;
     id: string;
@@ -4085,6 +4086,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     patch: UpdateWorkItemInput;
     expectedRevision?: number;
     expectedBoard?: string | null;
+    /**
+     * Runs on the card as locked for the write, sources included; throw to refuse it. Source syncs
+     * lock the card first, so what it reads can't change before the write lands.
+     */
+    check?: (item: Card) => void;
   }): Promise<{ item: Card; previous: WorkItemPriorState } | null> {
     const run = async (ops: FactoryStorageOps) => {
       let previous = emptyPrior();
@@ -4096,6 +4102,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         if (expectedRevision !== undefined && current.revision !== expectedRevision) {
           throw new WorkItemUpdateConflictError('revision');
         }
+        check?.(toWorkItem(current));
         if (patch.parentWorkItemId !== undefined) {
           await this.#copyLegacyParent(ops, orgId, patch.parentWorkItemId);
           validateParentRelation(
