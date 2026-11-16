@@ -191,6 +191,79 @@ describe('PromptCacheProcessor', () => {
       expect(result[3]!.providerOptions).toBeUndefined();
     });
 
+    // Anthropic rejects a request whose breakpoints go from a shorter TTL to a longer one.
+    describe('keeps TTLs in the order Anthropic requires (longer first)', () => {
+      const oneHour = { anthropic: { cacheControl: { type: 'ephemeral' as const, ttl: '1h' } } };
+      const runWith = (ttl: '5m' | '1h' | undefined, prompt: LanguageModelV2Prompt) =>
+        new PromptCacheProcessor({ ttl }).processLLMRequest({
+          prompt,
+          model: { provider: 'anthropic.messages' } as never,
+          apiProviderId: 'anthropic.messages',
+        } as never)?.prompt ?? prompt;
+
+      it('shortens its own mark to 5m after a caller mark with the default TTL', () => {
+        const prompt: LanguageModelV2Prompt = [
+          { role: 'system', content: 'a', providerOptions: mark },
+          { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+        ];
+
+        expect(runWith('1h', prompt)[1]!.providerOptions).toEqual({
+          anthropic: { cacheControl: { type: 'ephemeral', ttl: '5m' } },
+        });
+      });
+
+      it('leaves out a default-TTL mark before a caller 1h mark', () => {
+        const prompt: LanguageModelV2Prompt = [
+          { role: 'system', content: 'a' },
+          { role: 'user', content: [{ type: 'text', text: 'hi' }], providerOptions: oneHour },
+        ];
+
+        expect(runWith(undefined, prompt)).toBe(prompt);
+      });
+
+      it('reads caller TTLs on parts too', () => {
+        const prompt: LanguageModelV2Prompt = [
+          { role: 'system', content: 'a' },
+          { role: 'user', content: [{ type: 'text', text: 'x', providerOptions: oneHour }] },
+          { role: 'assistant', content: [{ type: 'text', text: 'y' }] },
+        ];
+
+        const result = runWith('5m', prompt);
+
+        // The assistant mark comes after the 1h part, so 5m is fine there; the system one would come before it.
+        expect(result[2]!.providerOptions).toEqual({
+          anthropic: { cacheControl: { type: 'ephemeral', ttl: '5m' } },
+        });
+        expect(result[0]!.providerOptions).toBeUndefined();
+      });
+
+      it('marks both with 1h when the caller set none', () => {
+        const prompt: LanguageModelV2Prompt = [
+          { role: 'system', content: 'a' },
+          { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+        ];
+
+        expect(runWith('1h', prompt).map(m => m.providerOptions)).toEqual([oneHour, oneHour]);
+      });
+    });
+
+    it("ignores another provider's marks, which that request never sends", () => {
+      const bedrock = { bedrock: { cachePoint: { type: 'default' as const } } };
+      const prompt: LanguageModelV2Prompt = [
+        { role: 'system', content: 'a', providerOptions: bedrock },
+        { role: 'system', content: 'b', providerOptions: bedrock },
+        { role: 'system', content: 'c', providerOptions: bedrock },
+        { role: 'user', content: [{ type: 'text', text: 'x', providerOptions: bedrock }] },
+        { role: 'system', content: 'd' },
+        { role: 'user', content: [{ type: 'text', text: 'y' }] },
+      ];
+
+      const result = run(prompt);
+
+      expect(result[4]!.providerOptions).toEqual(mark);
+      expect(result[5]!.providerOptions).toEqual(mark);
+    });
+
     it('adds nothing when the caller already used all four', () => {
       const prompt: LanguageModelV2Prompt = [
         { role: 'system', content: 'a', providerOptions: mark },
