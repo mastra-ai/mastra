@@ -377,7 +377,12 @@ interface OwnershipBackend {
   ): Promise<RunFence | undefined>;
 }
 
-function leaseBackend(provider: LeaseProvider, agentId: string, runId: string): OwnershipBackend {
+function leaseBackend(
+  provider: LeaseProvider,
+  agentId: string,
+  runId: string,
+  logger?: IMastraLogger,
+): OwnershipBackend {
   const key = executionLeaseKey(agentId, runId);
   return {
     expires: provider !== NoopLeaseProvider,
@@ -432,6 +437,8 @@ function leaseBackend(provider: LeaseProvider, agentId: string, runId: string): 
     // `releaseLease` does not report whether it released anything. With `atomicTransfer`, `transferLease` checks the
     // owner and hands the lease to a marker owner in one step, so it confirms nobody took the run over first; the
     // marker is then dropped. Any other transfer may release and re-acquire, so its success confirms nothing.
+    // Once the transfer succeeds the confirmation stands: a marker that fails to drop expires after
+    // RELEASED_LEASE_MARKER_TTL_MS, so it only delays the next claim.
     async release(claim) {
       if (provider.atomicTransfer !== true) {
         await provider.releaseLease(key, claim.executionId);
@@ -441,8 +448,18 @@ function leaseBackend(provider: LeaseProvider, agentId: string, runId: string): 
       const held = await provider
         .transferLease(key, claim.executionId, marker, RELEASED_LEASE_MARKER_TTL_MS)
         .catch(() => false);
-      await provider.releaseLease(key, held ? marker : claim.executionId);
-      return held;
+      if (!held) {
+        await provider.releaseLease(key, claim.executionId);
+        return false;
+      }
+      try {
+        await provider.releaseLease(key, marker);
+      } catch (error) {
+        logger?.warn?.(
+          `[DurableAgent] run ${runId}: released the execution claim but could not drop its release marker, which expires in ${RELEASED_LEASE_MARKER_TTL_MS}ms: ${error}`,
+        );
+      }
+      return true;
     },
     // A lease has no generation to move past: releasing is all it can do.
     async abandon(claim, whileOwned) {
@@ -678,7 +695,7 @@ export class ExecutionFence implements RunFenceScope {
     const workflowsStore = (await supportsRunFencing(args.workflowsStore)) ? args.workflowsStore : undefined;
     const backend = workflowsStore
       ? storageBackend(workflowsStore, runId)
-      : leaseBackend(args.leaseProvider, agentId, runId);
+      : leaseBackend(args.leaseProvider, agentId, runId, args.logger);
     const executionId = crypto.randomUUID();
 
     let attempt: ClaimAttempt = { claimed: false };
@@ -1378,7 +1395,7 @@ async function resolveRemoteBackend(
     agentPubsub = undefined;
   }
   const pubsub = agentPubsub ?? mastra.pubsub;
-  return pubsub ? leaseBackend(resolveLeaseProvider(pubsub), agentId, runId) : undefined;
+  return pubsub ? leaseBackend(resolveLeaseProvider(pubsub), agentId, runId, mastra.getLogger()) : undefined;
 }
 
 /**

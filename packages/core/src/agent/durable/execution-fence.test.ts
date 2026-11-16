@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { NoopLeaseProvider } from '../../events/pubsub';
 import type { LeaseProvider } from '../../events/pubsub';
+import { ConsoleLogger, LogLevel } from '../../logger';
 import { MastraTimeoutError } from '../../loop/timeout';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
@@ -248,6 +249,53 @@ describe('ExecutionFence heartbeat', () => {
 
     expect(renewed).toBe(false);
     expect(fence.isLost()).toBe(false);
+  });
+
+  // The atomic transfer to the release marker is the confirmation; dropping the marker afterwards is cleanup. A
+  // failed drop must not discard the confirmation, or a late failed renewal marks the settled run lost. The leftover
+  // marker expires on its own, so the next execution still claims the run. (#30206)
+  it('keeps its release confirmed when dropping the release marker fails (#30206)', async () => {
+    vi.useFakeTimers();
+    const pubsub = new EventEmitterPubSub();
+    onTestFinished(() => pubsub.close());
+    const logger = new ConsoleLogger({ level: LogLevel.ERROR });
+    const warn = vi.spyOn(logger, 'warn');
+    const fence = await ExecutionFence.claim({
+      leaseProvider: pubsub,
+      agentId,
+      runId: 'run-1',
+      mode: 'acquire',
+      logger,
+    });
+    const renew = pubsub.renewLease.bind(pubsub);
+    const delivery = Promise.withResolvers<void>();
+    let renewed: boolean | undefined;
+    vi.spyOn(pubsub, 'renewLease').mockImplementationOnce(async (...args) => {
+      await delivery.promise;
+      renewed = await renew(...args);
+      return renewed;
+    });
+    const release = pubsub.releaseLease.bind(pubsub);
+    vi.spyOn(pubsub, 'releaseLease').mockImplementation(async (leaseKey, owner) => {
+      if (owner.endsWith(':released')) throw new Error('marker delete transport error');
+      return release(leaseKey, owner);
+    });
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+
+    expect(await fence.settle(async () => {})).toBe('owned');
+    expect(await pubsub.getLeaseOwner(key('run-1'))).toBe(`${fence.executionId}:released`);
+    delivery.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(renewed).toBe(false);
+    expect(fence.isLost()).toBe(false);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('could not drop its release marker'));
+
+    const next = claim(pubsub, 'run-1');
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    const successor = await next;
+    expect(await pubsub.getLeaseOwner(key('run-1'))).toBe(successor.executionId);
+    await successor.settle(async () => {});
   });
 
   // The lease contract lets a backend implement `transferLease` as a release followed by an acquire. Another owner

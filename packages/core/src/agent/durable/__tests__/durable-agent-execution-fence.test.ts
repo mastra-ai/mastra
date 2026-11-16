@@ -1279,99 +1279,110 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
     });
 
     // A lease renewal sent just before the run suspends can reach the store after the suspension released the claim.
-    // It then renews nothing and comes back false, though nobody took the run over. (#30206)
-    it('a renewal that lands after the run suspends does not mark it lost, and resume() streams to its finish (#30206)', async () => {
-      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-      const storage = createStorage(backend);
-      const firstCall = gate();
-      const { model, prompts } = recordingModel([firstCall.opened], 'lookup');
-      const execute = vi.fn(async () => ({ found: true }));
-      const lookup = createTool({
-        id: 'lookup',
-        description: 'Look something up',
-        inputSchema: z.object({}),
-        requireApproval: true,
-        execute,
-      });
-      const durableAgent = buildAgent({ model, storage, tools: { lookup } });
+    // It then renews nothing and comes back false, though nobody took the run over. A lease release whose marker
+    // cleanup fails still confirmed the release, and the leftover marker expires before resume() stops waiting.
+    it.each(backend === 'lease' ? ['marker dropped', 'marker drop fails'] : ['marker dropped'])(
+      'a renewal that lands after the run suspends does not mark it lost, and resume() streams to its finish (#30206, %s)',
+      async markerDrop => {
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+        const storage = createStorage(backend);
+        const firstCall = gate();
+        const { model, prompts } = recordingModel([firstCall.opened], 'lookup');
+        const execute = vi.fn(async () => ({ found: true }));
+        const lookup = createTool({
+          id: 'lookup',
+          description: 'Look something up',
+          inputSchema: z.object({}),
+          requireApproval: true,
+          execute,
+        });
+        const durableAgent = buildAgent({ model, storage, tools: { lookup } });
 
-      // Hold the heartbeat's renewal until the suspension has released the claim. Only the renewal sent by the
-      // heartbeat tick below, while the model call is pending, is held; ownership checks renew the same lease.
-      const renewal = gate();
-      let holdNextRenewal = false;
-      let renewalSent = false;
-      let renewedAfterRelease: boolean | undefined;
-      const hold = async <T>(renew: () => Promise<T>, renewed: (result: T) => boolean): Promise<T> => {
-        holdNextRenewal = false;
-        renewalSent = true;
-        await renewal.opened;
-        const result = await renew();
-        renewedAfterRelease = renewed(result);
-        return result;
-      };
-      if (backend === 'storage') {
-        const workflows = storage.stores.workflows!;
-        const renew = workflows.renewRunOwnership.bind(workflows);
-        vi.spyOn(workflows, 'renewRunOwnership').mockImplementation(args =>
-          holdNextRenewal
-            ? hold(
-                () => renew(args),
-                result => result.renewed,
-              )
-            : renew(args),
-        );
-      } else {
-        const leases = resolveLeaseProvider(pubsub);
-        const renew = leases.renewLease.bind(leases);
-        vi.spyOn(leases, 'renewLease').mockImplementation((key, ...rest) =>
-          holdNextRenewal && key === executionLeaseKey(durableAgent.id, runId)
-            ? hold(
-                () => renew(key, ...rest),
-                renewed => renewed,
-              )
-            : renew(key, ...rest),
-        );
-      }
+        // Hold the heartbeat's renewal until the suspension has released the claim. Only the renewal sent by the
+        // heartbeat tick below, while the model call is pending, is held; ownership checks renew the same lease.
+        const renewal = gate();
+        let holdNextRenewal = false;
+        let renewalSent = false;
+        let renewedAfterRelease: boolean | undefined;
+        const hold = async <T>(renew: () => Promise<T>, renewed: (result: T) => boolean): Promise<T> => {
+          holdNextRenewal = false;
+          renewalSent = true;
+          await renewal.opened;
+          const result = await renew();
+          renewedAfterRelease = renewed(result);
+          return result;
+        };
+        if (backend === 'storage') {
+          const workflows = storage.stores.workflows!;
+          const renew = workflows.renewRunOwnership.bind(workflows);
+          vi.spyOn(workflows, 'renewRunOwnership').mockImplementation(args =>
+            holdNextRenewal
+              ? hold(
+                  () => renew(args),
+                  result => result.renewed,
+                )
+              : renew(args),
+          );
+        } else {
+          const leases = resolveLeaseProvider(pubsub);
+          if (markerDrop === 'marker drop fails') {
+            const release = leases.releaseLease.bind(leases);
+            vi.spyOn(leases, 'releaseLease').mockImplementation(async (key, owner) => {
+              if (owner.endsWith(':released')) throw new Error('marker delete transport error');
+              return release(key, owner);
+            });
+          }
+          const renew = leases.renewLease.bind(leases);
+          vi.spyOn(leases, 'renewLease').mockImplementation((key, ...rest) =>
+            holdNextRenewal && key === executionLeaseKey(durableAgent.id, runId)
+              ? hold(
+                  () => renew(key, ...rest),
+                  renewed => renewed,
+                )
+              : renew(key, ...rest),
+          );
+        }
 
-      let suspended = false;
-      const started = await durableAgent.stream('Look it up', {
-        requireToolApproval: true,
-        onSuspended: () => {
-          suspended = true;
-        },
-      });
-      const { runId } = started;
-      const suspendedFence = ExecutionFence.getLocalActive(runId)!;
-      const lost = vi.fn();
-      suspendedFence.onLost(lost);
+        let suspended = false;
+        const started = await durableAgent.stream('Look it up', {
+          requireToolApproval: true,
+          onSuspended: () => {
+            suspended = true;
+          },
+        });
+        const { runId } = started;
+        const suspendedFence = ExecutionFence.getLocalActive(runId)!;
+        const lost = vi.fn();
+        suspendedFence.onLost(lost);
 
-      await vi.waitFor(() => expect(prompts).toHaveLength(1));
-      holdNextRenewal = true;
-      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
-      expect(renewalSent).toBe(true);
-      firstCall.open();
-      await vi.waitFor(() => expect(suspended).toBe(true));
-      await suspendedFence.whenSettled;
+        await vi.waitFor(() => expect(prompts).toHaveLength(1));
+        holdNextRenewal = true;
+        await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+        expect(renewalSent).toBe(true);
+        firstCall.open();
+        await vi.waitFor(() => expect(suspended).toBe(true));
+        await suspendedFence.whenSettled;
 
-      renewal.open();
-      await vi.waitFor(() => expect(renewedAfterRelease).toBe(false));
-      await new Promise(resolve => setImmediate(resolve));
+        renewal.open();
+        await vi.waitFor(() => expect(renewedAfterRelease).toBe(false));
+        await new Promise(resolve => setImmediate(resolve));
 
-      const resumed = await durableAgent.resume(runId, { approved: true });
-      const chunks = await Promise.race([
-        drain(resumed.fullStream),
-        new Promise<'still open'>(resolve => setTimeout(() => resolve('still open'), 5_000)),
-      ]);
-      if (chunks === 'still open') throw new Error('the resumed stream was still open after 5s');
-      expect(chunks.map(chunk => chunk.type)).toContain('finish');
-      expect(JSON.stringify(chunks)).toContain('answer 2');
-      expect(execute).toHaveBeenCalledTimes(1);
-      expect(lost).not.toHaveBeenCalled();
-      expect(suspendedFence.isLost()).toBe(false);
+        const resumed = await durableAgent.resume(runId, { approved: true });
+        const chunks = await Promise.race([
+          drain(resumed.fullStream),
+          new Promise<'still open'>(resolve => setTimeout(() => resolve('still open'), 5_000)),
+        ]);
+        if (chunks === 'still open') throw new Error('the resumed stream was still open after 5s');
+        expect(chunks.map(chunk => chunk.type)).toContain('finish');
+        expect(JSON.stringify(chunks)).toContain('answer 2');
+        expect(execute).toHaveBeenCalledTimes(1);
+        expect(lost).not.toHaveBeenCalled();
+        expect(suspendedFence.isLost()).toBe(false);
 
-      resumed.cleanup();
-      started.cleanup();
-    });
+        resumed.cleanup();
+        started.cleanup();
+      },
+    );
 
     it('a resume() that fails to read the suspended run after claiming it releases the run, so a retry resumes it', async () => {
       const storage = createStorage(backend);
