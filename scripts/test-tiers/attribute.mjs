@@ -144,6 +144,32 @@ export function prForCommit(pulls, subject) {
   return m ? { number: Number(m[2]), title: m[1], author: null, bot: false } : null;
 }
 
+const isBot = user => !user?.login || user.type === 'Bot' || user.login.endsWith('[bot]');
+
+const COAUTHOR = /^co-authored-by:.*<(?:\d+\+)?([^@<>\s]+)@users\.noreply\.github\.com>\s*$/gim;
+
+/**
+ * Who answers for a PR a bot opened: the person who merged it, else every person whose latest
+ * review approved it, else the person credited on the most commits (as author or in a
+ * Co-authored-by trailer with a GitHub noreply address; ties go to all). None: `logins` is empty.
+ */
+export function standIns({ mergedBy, reviews, commits }) {
+  if (!isBot(mergedBy)) return { role: 'merged by', logins: [mergedBy.login] };
+  const latest = new Map();
+  for (const r of reviews) if (!isBot(r.user) && r.state !== 'COMMENTED') latest.set(r.user.login, r.state);
+  const approvers = [...latest].filter(([, state]) => state === 'APPROVED').map(([login]) => login);
+  if (approvers.length) return { role: 'approved by', logins: approvers };
+  const credits = new Map();
+  for (const c of commits) {
+    const people = new Set([...c.commit.message.matchAll(COAUTHOR)].map(m => m[1]));
+    if (!isBot(c.author)) people.add(c.author.login);
+    for (const login of people) if (!login.endsWith('[bot]')) credits.set(login, (credits.get(login) ?? 0) + 1);
+  }
+  const most = Math.max(0, ...credits.values());
+  const top = [...credits].filter(([, n]) => n === most).map(([login]) => login);
+  return most ? { role: 'co-authored by', logins: top } : { role: null, logins: [] };
+}
+
 export const escapeMrkdwn = text => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 const code = text => `\`${escapeMrkdwn(text)}\``;
@@ -159,13 +185,11 @@ export function alertMessages({ repo, runUrl, good, bad, reason, slackUsers, res
   for (const [sha, list] of culprits) {
     const pr = prs[sha];
     const files = list.map(r => code(r.file)).join(', ');
-    const by = !pr?.author
-      ? ''
-      : pr.bot
-        ? ` by ${escapeMrkdwn(pr.author)} (bot)`
-        : slackUsers[pr.author]
-          ? ` by <@${slackUsers[pr.author]}>`
-          : ` by @${escapeMrkdwn(pr.author)}`;
+    const tag = login => (slackUsers[login] ? `<@${slackUsers[login]}>` : `@${escapeMrkdwn(login)}`);
+    const stand = pr?.standIns?.logins.length
+      ? `, ${pr.standIns.role} ${pr.standIns.logins.map(tag).join(', ')}`
+      : ', no person found on the PR <!here>';
+    const by = !pr?.author ? '' : pr.bot ? ` by ${escapeMrkdwn(pr.author)} (bot)${stand}` : ` by ${tag(pr.author)}`;
     const merge = pr
       ? `<https://github.com/${repo}/pull/${pr.number}|#${pr.number}> "${escapeMrkdwn(pr.title)}"${by}`
       : `<https://github.com/${repo}/commit/${sha}|${sha.slice(0, 7)}>`;
@@ -325,7 +349,19 @@ async function runCommand({ escapes, out, workdir, slackUsers, deadlineMinutes }
   for (const r of results.filter(r => r.verdict === 'culprit')) {
     if (r.culprit in prs) continue;
     const subject = git('log', '-1', '--format=%s', r.culprit);
-    prs[r.culprit] = prForCommit(gh(`repos/${repo}/commits/${r.culprit}/pulls`), subject);
+    const pr = prForCommit(gh(`repos/${repo}/commits/${r.culprit}/pulls`), subject);
+    if (pr?.bot) {
+      try {
+        pr.standIns = standIns({
+          mergedBy: gh(`repos/${repo}/pulls/${pr.number}`).merged_by,
+          reviews: gh(`repos/${repo}/pulls/${pr.number}/reviews?per_page=100`),
+          commits: gh(`repos/${repo}/pulls/${pr.number}/commits?per_page=100`),
+        });
+      } catch (error) {
+        console.error(`could not look up who answers for #${pr.number}: ${error.message}`);
+      }
+    }
+    prs[r.culprit] = pr;
   }
   const messages = alertMessages({
     repo,

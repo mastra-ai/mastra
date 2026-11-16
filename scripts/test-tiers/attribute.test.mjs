@@ -9,6 +9,7 @@ import {
   goodRunFor,
   nextBisectStep,
   prForCommit,
+  standIns,
   verdictFor,
 } from './attribute.mjs';
 
@@ -275,4 +276,89 @@ test('without a range the unattributed message still names the files and the run
   assert.match(message, /`a\.test\.ts`/);
   assert.match(message, /no green versioning run in the last 72 hours/);
   assert.match(message, /<https:\/\/run\|Versioning run>/);
+});
+
+const human = login => ({ login, type: 'User' });
+const botUser = login => ({ login, type: 'Bot' });
+const commit = (author, message = 'x') => ({ author, commit: { message } });
+const noreply = (id, login) => `Co-authored-by: Someone <${id}+${login}@users.noreply.github.com>`;
+
+test('a bot-opened PR is pinned on whoever merged it when that was a person', () => {
+  assert.deepEqual(standIns({ mergedBy: human('abhiaiyer91'), reviews: [], commits: [] }), {
+    role: 'merged by',
+    logins: ['abhiaiyer91'],
+  });
+});
+
+test('then on every person whose latest review approved it', () => {
+  const reviews = [
+    { user: botUser('coderabbitai[bot]'), state: 'APPROVED' },
+    { user: human('ana'), state: 'APPROVED' },
+    { user: human('ben'), state: 'APPROVED' },
+    { user: human('ben'), state: 'DISMISSED' },
+    { user: human('cy'), state: 'CHANGES_REQUESTED' },
+    { user: human('cy'), state: 'APPROVED' },
+    { user: human('cy'), state: 'COMMENTED' },
+  ];
+  assert.deepEqual(standIns({ mergedBy: botUser('mergify[bot]'), reviews, commits: [] }), {
+    role: 'approved by',
+    logins: ['ana', 'cy'],
+  });
+});
+
+test('then on the person credited on the most commits (author or Co-authored-by trailer), ties to all', () => {
+  const commits = [
+    commit(botUser('mastra-platform[bot]'), `fix\n\n${noreply(1, 'dee')}\n${noreply(9, 'mastra-platform[bot]')}`),
+    commit(human('eve'), `more\n\n${noreply(1, 'dee')}`),
+    commit(botUser('mastra-platform[bot]'), 'Co-authored-by: Nobody <nobody@example.com>'),
+  ];
+  assert.deepEqual(standIns({ mergedBy: null, reviews: [], commits }), { role: 'co-authored by', logins: ['dee'] });
+  commits.push(commit(human('eve')));
+  assert.deepEqual(standIns({ mergedBy: null, reviews: [], commits }), {
+    role: 'co-authored by',
+    logins: ['dee', 'eve'],
+  });
+});
+
+test('with no person anywhere there is nobody to stand in', () => {
+  const commits = [commit(botUser('renovate[bot]'))];
+  assert.deepEqual(standIns({ mergedBy: botUser('renovate[bot]'), reviews: [], commits }), {
+    role: null,
+    logins: [],
+  });
+});
+
+test('a bot PR tags its stand-ins, or @here when there are none; a title cannot inject @here', () => {
+  const ctx = {
+    repo: 'mastra-ai/mastra',
+    runUrl: 'https://run',
+    good: 'g000000000',
+    bad: 'b000000000',
+    slackUsers: { abhiaiyer91: 'U9' },
+    jobs: [],
+  };
+  const results = [{ file: 'a.test.ts', verdict: 'culprit', culprit: 'c1111111111', parent: 'p' }];
+  const pr = { number: 30434, title: 'retries <!here>', author: 'mastra-platform[bot]', bot: true };
+  const [merged] = alertMessages({
+    ...ctx,
+    results,
+    prs: { c1111111111: { ...pr, standIns: { role: 'merged by', logins: ['abhiaiyer91'] } } },
+  });
+  assert.match(merged, /"retries &lt;!here&gt;" by mastra-platform\[bot\] \(bot\), merged by <@U9>\./);
+  assert.doesNotMatch(merged, /<!here>/);
+
+  const [approved] = alertMessages({
+    ...ctx,
+    results,
+    prs: { c1111111111: { ...pr, standIns: { role: 'approved by', logins: ['ana', 'abhiaiyer91'] } } },
+  });
+  assert.match(approved, /\(bot\), approved by @ana, <@U9>\./);
+
+  const [nobody] = alertMessages({
+    ...ctx,
+    results,
+    prs: { c1111111111: { ...pr, standIns: { role: null, logins: [] } } },
+  });
+  assert.match(nobody, /\(bot\), no person found on the PR <!here>\./);
+  assert.equal(nobody.match(/<!here>/g).length, 1);
 });
