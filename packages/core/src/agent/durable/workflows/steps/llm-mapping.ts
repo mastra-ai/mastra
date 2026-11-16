@@ -76,6 +76,14 @@ const durableLLMMappingOutputSchema = z.object({
 });
 
 /**
+ * Step reasons that mean the durable LLM step left no completed step behind: it bailed on a failure (the
+ * total deadline, a provider error, an exhausted model list), was aborted, or a step processor rejected
+ * its response. `streamedStepText` stays set for those, and the iterator keeps them out of the accumulated
+ * steps, so the mapping step must not record their list as the completed steps a total deadline saves.
+ */
+const INCOMPLETE_STEP_REASONS: ReadonlySet<string> = new Set(['error', 'abort', 'tripwire']);
+
+/**
  * Create a durable LLM mapping step.
  *
  * This step:
@@ -470,7 +478,13 @@ export function createDurableLLMMappingStep() {
       // A copy, since the serialized state shares parts with the live list the next step appends to.
       // JSON rather than structuredClone: message metadata can hold callbacks, which have no place in memory.
       // Only runs with a total deadline read it, so others skip the copy.
-      if (registryEntry?.timeoutTotalMs) {
+      // A step that did not complete publishes nothing. On engines that keep the workflow alive past the
+      // deadline (Inngest: the LLM step bails instead of tearing the run down) this mapping step still runs
+      // over a cut-off or rejected step, whose list ends in the text the deadline interrupted. That text is
+      // not part of a completed step: the deadline's save rebuilds the turn from the snapshot taken as the
+      // step started plus the text `streamedStepText` recorded, so publishing this list here would count the
+      // interrupted reply as a completed step and save its text twice.
+      if (registryEntry?.timeoutTotalMs && !INCOMPLETE_STEP_REASONS.has(llmOutput.stepResult.reason)) {
         registryEntry.completedStepsState = JSON.parse(JSON.stringify(serializedMessageList));
         registryEntry.settledToolResults = undefined;
       }

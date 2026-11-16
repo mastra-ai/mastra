@@ -105,7 +105,17 @@ export interface ScenarioEngineHost {
   getMastra(): any;
   /** Wrap a plain scenario `Agent` for this engine. */
   wrapAgent(agent: any): any;
+  /**
+   * Apply a scenario's `server` options to the host Mastra. The in-repo engines build their own
+   * Mastra from them, but a remote engine's worker resolves everything from the long-lived host
+   * Mastra, so scenario-level server config (an FGA provider, for one) must land there too. Called
+   * with `undefined` when a scenario passes no `server` options, to clear the previous scenario's.
+   */
+  applyServer?(server: ScenarioServerOptions): void;
 }
+
+/** The `server` options a scenario can pass, as the harness accepts them. */
+export type ScenarioServerOptions = RunLoopScenarioOptions['server'];
 
 /** All supported engine variants for parameterised test runs. */
 export const ALL_ENGINE_VARIANTS: readonly EngineVariant[] = ['normal', 'durable', 'evented', 'fs'] as const;

@@ -13,6 +13,7 @@ import {
   emitChunkEvent,
   emitErrorEvent,
   emitFinishEvent,
+  deadlineMessageListState,
   runDurableFinishSideEffects,
   modelConfigSchema,
   modelListEntrySchema,
@@ -615,6 +616,18 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           };
           const sideEffectsDeadlineError = resolveDeadlineError();
 
+          // A total deadline still reaches this mapping on Inngest: the LLM step bails instead of tearing the
+          // workflow down, so the save happens here rather than in the caller's deadline pass. A worker that
+          // holds the run's own entry knows what the deadline left -- the steps that completed plus the text
+          // it cut off -- and saves that the way the built-in engines' deadline pass does. A cold worker has
+          // only the state the run recorded, and saves the turn as recorded.
+          const deadlineState =
+            sideEffectsDeadlineError &&
+            tracingRegistry &&
+            (tracingRegistry.streamedStepText !== undefined || tracingRegistry.completedStepsState !== undefined)
+              ? deadlineMessageListState(tracingRegistry, initData.messageListState)
+              : undefined;
+
           // Extract final text from last step
           const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
           let finalText = lastStep?.text;
@@ -628,7 +641,8 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           const finishResult = await runDurableFinishSideEffects({
             runId: state.runId,
             initData,
-            messageListState: state.messageListState,
+            messageListState: deadlineState?.messageListState ?? state.messageListState,
+            deadline: sideEffectsDeadlineError ? { cutOffText: deadlineState?.cutOffText } : undefined,
             mastra,
             requestContext,
             tracingContext,

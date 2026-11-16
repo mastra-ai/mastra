@@ -231,6 +231,7 @@ export {
 // Workflow creation
 export {
   createDurableAgenticWorkflow,
+  deadlineMessageListState,
   runDurableFinishSideEffects,
   type DurableAgenticWorkflowOptions,
   type DurableFinishSideEffectsOptions,

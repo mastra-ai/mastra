@@ -38,6 +38,8 @@ import { hydrateMessageListState } from './shared/message-list-state';
 
 type GenerateThreadTitleArgs = Parameters<NonNullable<RunRegistryEntry['generateThreadTitle']>>[0];
 type AnyAgent = Agent<any, any, any, any>;
+/** A data part a processor wrote with `writer.custom()`. */
+type ProcessorDataPart = { type: string; data?: unknown; transient?: boolean; id?: string };
 
 export interface DurableFinishSideEffectsOptions {
   runId: string;
@@ -53,6 +55,14 @@ export interface DurableFinishSideEffectsOptions {
    * the run, so `initData.messageId` can name an earlier reply. Defaults to that id.
    */
   messageId?: string;
+  /**
+   * Set when a total deadline ended the run and it still reached this step: the Inngest engine's finish
+   * mapping runs after the deadline, where the built-in engines' never does. `messageListState` is then
+   * what `deadlineMessageListState` returned, and `cutOffText` is the text the deadline cut off. That text
+   * never reached the step processors, so this pass runs them over it, and the deadline's memory write
+   * checks decide whether the turn is saved at all.
+   */
+  deadline?: { cutOffText?: string };
 }
 
 export interface DurableFinishSideEffectsResult {
@@ -137,6 +147,7 @@ export async function runDurableFinishSideEffects({
   logger,
   outputResult,
   messageId = initData.messageId,
+  deadline,
 }: DurableFinishSideEffectsOptions): Promise<DurableFinishSideEffectsResult> {
   const effectiveLogger = logger ?? mastra?.getLogger?.() ?? noopLogger;
   const durableState = initData.state;
@@ -278,6 +289,31 @@ export async function runDurableFinishSideEffects({
   const assertOwned = () => assertExecutionOwned({ runId, agentId: initData.agentId, requestContext, mastra });
   await assertOwned();
 
+  // A total deadline that still reached this step (the Inngest engine's finish mapping) saves the turn the
+  // way the built-in engines' deadline pass does: the processors' own memory writes (MessageHistory) are
+  // that save, so write access to every thread the turn can land on is settled before any of them runs.
+  if (deadline) {
+    const memoryContext = effectiveRequestContext.get('MastraMemory') as
+      | { thread?: { id?: string }; resourceId?: string; memoryConfig?: { readOnly?: boolean } }
+      | undefined;
+    // A read-only run writes nothing to memory, at the deadline either.
+    const readOnly = durableState?.memoryConfig?.readOnly || memoryContext?.memoryConfig?.readOnly;
+    const denied = await deadlineMemoryWriteDenied({
+      entry: registryEntry,
+      durableState,
+      memoryContext,
+      requestContext: effectiveRequestContext,
+      initData,
+      mastra,
+      logger: effectiveLogger,
+      runId,
+    });
+    if (readOnly || denied) {
+      const outputText = resolveOutputText(messageList);
+      return { messageListState: messageList.serialize(), outputText, outputTextChanged: false };
+    }
+  }
+
   // A signal drained on the last allowed step rotates the id, then the loop stops before any
   // reply uses it. Attach data to the final reply instead of saving it as its own message.
   // Resolved before processors run so their own writes can't become the fallback.
@@ -285,6 +321,18 @@ export async function runDurableFinishSideEffects({
   const replyMessageId = responses.some(message => message.id === messageId)
     ? messageId
     : (resolveOutputMessageSkippingCompletionChecks(messageList)?.id ?? messageId);
+
+  // The text the deadline cut off streamed in a step that never finished, so it is in no message: it goes in
+  // as its own message, after the completed steps whose messages already ended. Resolved after the reply id
+  // above so untargeted processor data still lands on the reply, as the built-in deadline pass does.
+  const cutOffText = deadline?.cutOffText;
+  let inFlightMessageId: string | undefined;
+  if (cutOffText?.trim()) {
+    messageList.add({ role: 'assistant', content: [{ type: 'text', text: cutOffText }] }, 'response', {
+      merge: false,
+    });
+    inFlightMessageId = messageList.get.response.db().at(-1)!.id;
+  }
 
   // This step has no pubsub (remote engines call it too), so chunks are buffered for the
   // caller. Non-transient ones go into the MessageList now so the flush below saves them.
@@ -294,7 +342,15 @@ export async function runDurableFinishSideEffects({
       data: { type: string; data?: unknown; transient?: boolean },
       writerOptions?: { messageId?: string },
     ) => {
-      persistProcessorDataChunk(messageList, writerOptions?.messageId ?? replyMessageId, data);
+      // At a deadline the answer's message can carry a completion result, so the data lands on the
+      // message the turn actually keeps, as the built-in deadline pass does.
+      persistProcessorDataChunk(
+        messageList,
+        deadline
+          ? resolveProcessorWriterMessageId(messageList, replyMessageId, writerOptions?.messageId)
+          : (writerOptions?.messageId ?? replyMessageId),
+        data,
+      );
       outputResultChunks.push(data as ChunkType);
     },
   };
@@ -324,13 +380,33 @@ export async function runDurableFinishSideEffects({
         agent,
         processorStates: registryEntry.processorStates,
       });
+      // The text the deadline cut off never reached the step processors (redaction, refusal handling...).
+      // Run them over that message alone: the rest of the turn already went through them.
+      if (inFlightMessageId && cutOffText) {
+        await runCutOffStepProcessors({
+          runner,
+          messageList,
+          replyMessageId,
+          cutOffText,
+          inFlightMessageId,
+          logger: effectiveLogger,
+          runId,
+          requestContext: effectiveRequestContext,
+          tracingContext,
+        });
+      }
+      // At a deadline the caller's result describes the step that was cut off, not the turn being saved:
+      // the processors see the text the turn holds, as the built-in deadline pass gives them. Resolved
+      // here, after the cut-off step pass, so text a step processor dropped is not seen.
+      const processorResult =
+        deadline && outputResult ? { ...outputResult, text: resolveOutputText(messageList) } : outputResult;
       await runner.runOutputProcessors(
         messageList,
         createObservabilityContext(tracingContext),
         effectiveRequestContext,
         0,
         outputResultWriter,
-        outputResult,
+        processorResult,
       );
     } catch (error) {
       if (error instanceof TripWire) {
@@ -535,6 +611,142 @@ export function deadlineMessageListState(
 }
 
 /**
+ * Run the step processors over the text a total deadline cut off. That text streamed in a step that never
+ * finished, so no step processor has seen it: its message was added after the completed steps whose messages
+ * already went through them. The processors' result is written back over that message, and the message is
+ * dropped when they throw or trip, so text they rejected is never saved.
+ */
+async function runCutOffStepProcessors({
+  runner,
+  messageList,
+  replyMessageId,
+  cutOffText,
+  inFlightMessageId,
+  logger,
+  runId,
+  requestContext,
+  tracingContext,
+}: {
+  runner: ProcessorRunner;
+  messageList: MessageList;
+  replyMessageId: string;
+  cutOffText: string;
+  inFlightMessageId: string;
+  logger: IMastraLogger;
+  runId: string;
+  requestContext: RequestContext;
+  tracingContext?: TracingContext;
+}): Promise<void> {
+  // Data parts the step processors write for the cut-off text, whether they name that message or not, are
+  // held until it is written back: the write-back replaces it, and would drop parts merged into it before.
+  const heldDataChunks: { data: ProcessorDataPart; messageId?: string }[] = [];
+  const writer = {
+    custom: async (data: ProcessorDataPart, writerOptions?: { messageId?: string }) => {
+      // A part aimed at another message has no reason to wait for the write-back.
+      if (!writerOptions?.messageId || writerOptions.messageId === inFlightMessageId) {
+        heldDataChunks.push({ data, messageId: writerOptions?.messageId });
+      } else {
+        persistProcessorDataChunk(
+          messageList,
+          resolveProcessorWriterMessageId(messageList, replyMessageId, writerOptions?.messageId),
+          data,
+        );
+      }
+    },
+  };
+  try {
+    const stepList = messageList.clone();
+    stepList.removeByIds(
+      stepList.get.all
+        .db()
+        .map(message => message.id)
+        .filter(id => id !== inFlightMessageId),
+    );
+    await runner.runProcessOutputStep({
+      steps: [],
+      messages: stepList.get.all.db(),
+      messageList: stepList,
+      stepNumber: 0,
+      finishReason: 'error',
+      text: cutOffText,
+      ...createObservabilityContext(tracingContext),
+      requestContext,
+      writer,
+    });
+    messageList.removeByIds([inFlightMessageId]);
+    for (const message of stepList.get.all.db()) messageList.add(message, 'response', { merge: false });
+  } catch (stepError) {
+    // Fail closed: keep the completed steps rather than save unprocessed text. The result processors
+    // then read the text of the completed steps only.
+    messageList.removeByIds([inFlightMessageId]);
+    logger.warn('[DurableAgent] Output step processors failed on the text cut off at the total deadline', {
+      runId,
+      error: stepError,
+    });
+  }
+  for (const { data, messageId } of heldDataChunks) {
+    // A part aimed at the cut-off message lands on it if it survived the write-back,
+    // otherwise on the message an untargeted write would reach.
+    const target =
+      messageId && messageList.get.all.db().some(message => message.id === messageId)
+        ? messageId
+        : resolveProcessorWriterMessageId(messageList, replyMessageId);
+    persistProcessorDataChunk(messageList, target, data);
+  }
+}
+
+/**
+ * Whether the deadline's save must be skipped because the caller may not write to a thread the turn can land
+ * on: the output processors' own memory writes are that save. The run's cached grant covers only its own
+ * thread; a thread the request context points at (a tool can point memory elsewhere) is checked anew.
+ */
+async function deadlineMemoryWriteDenied({
+  entry,
+  durableState,
+  memoryContext,
+  requestContext,
+  initData,
+  mastra,
+  logger,
+  runId,
+}: {
+  entry: RunRegistryEntry | undefined;
+  durableState: DurableAgenticWorkflowInput['state'];
+  memoryContext: { thread?: { id?: string }; resourceId?: string } | undefined;
+  requestContext: RequestContext;
+  initData: Pick<DurableAgenticWorkflowInput, 'agentId' | 'options'>;
+  mastra?: Mastra;
+  logger: IMastraLogger;
+  runId: string;
+}): Promise<boolean> {
+  const resourceId = durableState?.resourceId ?? memoryContext?.resourceId;
+  if (!entry?.memory || !resourceId) return false;
+  const threadIds = new Set([durableState?.threadId, memoryContext?.thread?.id].filter(Boolean) as string[]);
+  try {
+    for (const threadId of threadIds) {
+      const checks = threadId === durableState?.threadId ? getDurableMemoryAuthorizationChecks(entry) : new Map();
+      await authorizeDurableMemory(checks, {
+        mastra,
+        user: requestContext.get('user'),
+        threadId,
+        resourceId,
+        agentId: initData.agentId,
+        requestContext,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
+        actor: initData.options?.actor,
+      });
+    }
+    return false;
+  } catch (authError) {
+    logger.warn('[DurableAgent] Memory write denied at the total deadline, the turn is not saved', {
+      runId,
+      error: authError,
+    });
+    return true;
+  }
+}
+
+/**
  * Give the output processors (and with them memory) their one pass when a total deadline ends a
  * durable run. The run never reaches its finish step, so this runs over what the deadline saves
  * (see `deadlineMessageListState`), as the default loop's deadline pass does.
@@ -577,33 +789,19 @@ export async function runDurableDeadlineOutputPass({
   // A read-only run writes nothing to memory, at the deadline either.
   if (durableState?.memoryConfig?.readOnly || memoryContext?.memoryConfig?.readOnly) return;
 
-  // The output processors save the turn (MessageHistory) to the thread the run or its request context
-  // names, so the caller needs write access to each first. A denial skips the whole save.
-  const resourceId = durableState?.resourceId ?? memoryContext?.resourceId;
-  if (entry.memory && resourceId) {
-    const threadIds = new Set([durableState?.threadId, memoryContext?.thread?.id].filter(Boolean) as string[]);
-    try {
-      for (const threadId of threadIds) {
-        // The run's cached grant covers only its own thread; a thread the request context points at is checked anew.
-        const checks = threadId === durableState?.threadId ? getDurableMemoryAuthorizationChecks(entry) : new Map();
-        await authorizeDurableMemory(checks, {
-          mastra,
-          user: requestContext.get('user'),
-          threadId,
-          resourceId,
-          agentId: initData.agentId,
-          requestContext,
-          permission: MastraFGAPermissions.MEMORY_WRITE,
-          actor: initData.options?.actor,
-        });
-      }
-    } catch (authError) {
-      logger.warn('[DurableAgent] Memory write denied at the total deadline, the turn is not saved', {
-        runId,
-        error: authError,
-      });
-      return;
-    }
+  if (
+    await deadlineMemoryWriteDenied({
+      entry,
+      durableState,
+      memoryContext,
+      requestContext,
+      initData,
+      mastra,
+      logger,
+      runId,
+    })
+  ) {
+    return;
   }
 
   const messageList = new MessageList({
@@ -638,71 +836,30 @@ export async function runDurableDeadlineOutputPass({
       agent: entry.agent,
       processorStates: entry.processorStates,
     });
-    // Data parts a step processor writes for the cut-off text, whether it names that message or not, are
-    // held until the message is written back: the write-back replaces it, and would drop parts merged into it.
-    let heldDataChunks:
-      | { data: { type: string; data?: unknown; transient?: boolean }; messageId?: string }[]
-      | undefined;
     const writer = {
       custom: async (
         data: { type: string; data?: unknown; transient?: boolean },
         writerOptions?: { messageId?: string },
       ) => {
-        if (heldDataChunks && (!writerOptions?.messageId || writerOptions.messageId === inFlightMessageId)) {
-          heldDataChunks.push({ data, messageId: writerOptions?.messageId });
-        } else {
-          persistProcessorDataChunk(
-            messageList,
-            resolveProcessorWriterMessageId(messageList, replyMessageId, writerOptions?.messageId),
-            data,
-          );
-        }
+        persistProcessorDataChunk(
+          messageList,
+          resolveProcessorWriterMessageId(messageList, replyMessageId, writerOptions?.messageId),
+          data,
+        );
       },
     };
-    if (inFlightMessageId) {
-      heldDataChunks = [];
-      // The cut-off text never reached the step processors (redaction, refusal handling...).
-      // Run them over that message alone: the rest of the turn already went through them.
-      try {
-        const stepList = messageList.clone();
-        stepList.removeByIds(
-          stepList.get.all
-            .db()
-            .map(message => message.id)
-            .filter(id => id !== inFlightMessageId),
-        );
-        await runner.runProcessOutputStep({
-          steps: [],
-          messages: stepList.get.all.db(),
-          messageList: stepList,
-          stepNumber: 0,
-          finishReason: 'error',
-          text: cutOffText,
-          ...createObservabilityContext(tracingContext),
-          requestContext,
-          writer,
-        });
-        messageList.removeByIds([inFlightMessageId]);
-        for (const message of stepList.get.all.db()) messageList.add(message, 'response', { merge: false });
-      } catch (stepError) {
-        // Fail closed: keep the completed steps rather than save unprocessed text. The result processors
-        // then read the text of the completed steps only.
-        messageList.removeByIds([inFlightMessageId]);
-        logger.warn('[DurableAgent] Output step processors failed on the text cut off at the total deadline', {
-          runId,
-          error: stepError,
-        });
-      }
-      for (const { data, messageId } of heldDataChunks) {
-        // A part aimed at the cut-off message lands on it if it survived the write-back,
-        // otherwise on the message an untargeted write would reach.
-        const target =
-          messageId && messageList.get.all.db().some(message => message.id === messageId)
-            ? messageId
-            : resolveProcessorWriterMessageId(messageList, replyMessageId);
-        persistProcessorDataChunk(messageList, target, data);
-      }
-      heldDataChunks = undefined;
+    if (inFlightMessageId && cutOffText) {
+      await runCutOffStepProcessors({
+        runner,
+        messageList,
+        replyMessageId,
+        cutOffText,
+        inFlightMessageId,
+        logger,
+        runId,
+        requestContext,
+        tracingContext,
+      });
     }
     try {
       await runner.runOutputProcessors(

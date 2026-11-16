@@ -25,6 +25,13 @@ setScenarioEngineHost({
   engine: 'inngest',
   getMastra: getSharedMastra,
   wrapAgent: (agent: Agent) => createInngestAgent({ agent, inngest: getSharedInngest() }),
+  // Every scenario runs against the one shared Mastra, so a scenario's own `server` config (an FGA
+  // provider, for one) is applied for its run and cleared after it, as each in-repo engine gets a
+  // Mastra of its own.
+  applyServer: server => {
+    const mastra = getSharedMastra();
+    mastra.setServer({ ...(mastra.getServer() ?? {}), fga: server?.fga });
+  },
 });
 
 const globalState = globalThis as { __inngestAimockReady?: Promise<void> };

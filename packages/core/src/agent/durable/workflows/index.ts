@@ -1,5 +1,6 @@
 export { createDurableAgenticWorkflow, type DurableAgenticWorkflowOptions } from './create-durable-agentic-workflow';
 export {
+  deadlineMessageListState,
   runDurableFinishSideEffects,
   type DurableFinishSideEffectsOptions,
   type DurableFinishSideEffectsResult,
