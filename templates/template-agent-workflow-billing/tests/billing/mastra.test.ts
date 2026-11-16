@@ -1267,6 +1267,66 @@ describe('billed Mastra runtime', () => {
     expect((await runtime.workflows.report.native.getWorkflowRunById(run.executionId))?.status).toBe('canceled');
   });
 
+  it('cancellation returns uncertain for noncooperative native steps without releasing from timeout or snapshots alone', async () => {
+    let gate = operationBarrier();
+    const { runtime, observer } = await fixture({
+      workflowAfterBoundary: async invoke => {
+        await gate.pause();
+        await invoke();
+      },
+    });
+    for (let round = 0; round < 20; round++) {
+      gate = operationBarrier();
+      const run = await runtime.billing
+        .workflow('report')
+        .createRun({ billing: runtime.billingContext, idempotencyKey: `noncooperative-${round}` });
+      await run.start({ billing: runtime.billingContext, idempotencyKey: 'start', inputData: { count: 0 } });
+      const pending = run.resume({
+        billing: runtime.billingContext,
+        idempotencyKey: 'resume',
+        step: 'approval',
+        resumeData: { approved: true },
+      });
+      await gate.entered;
+      const cancel = run.cancel({ billing: runtime.billingContext, idempotencyKey: 'cancel' });
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const outcome = await Promise.race([
+          cancel.then(value => ({ finished: true as const, value })),
+          new Promise<{ finished: false }>(resolve => {
+            timer = setTimeout(() => resolve({ finished: false }), 3000);
+          }),
+        ]);
+        expect(outcome.finished, `round ${round}`).toBe(true);
+        if (!outcome.finished) throw new Error('Cancellation did not return within its bound');
+        expect(outcome.value.billing).toMatchObject({ executionStatus: 'uncertain', billedUnits: null });
+        expect(
+          (
+            await observer.execute({
+              sql: 'SELECT active FROM billing_reservations WHERE execution_id = ?',
+              args: [run.executionId],
+            })
+          ).rows,
+        ).toEqual([{ active: 1n }]);
+      } finally {
+        clearTimeout(timer);
+        gate.release();
+        await Promise.allSettled([pending, cancel]);
+      }
+      const recovered = await run.cancel({ billing: runtime.billingContext, idempotencyKey: 'recheck' });
+      expect((await runtime.workflows.report.native.getWorkflowRunById(run.executionId))?.status).toBe('canceled');
+      expect(recovered.billing).toMatchObject({ billedUnits: null, settlementStatus: 'uncertain' });
+      expect(
+        (
+          await observer.execute({
+            sql: 'SELECT active FROM billing_reservations WHERE execution_id = ?',
+            args: [run.executionId],
+          })
+        ).rows,
+      ).toEqual([{ active: 1n }]);
+    }
+  }, 60000);
+
   it('local active cancellation propagates abort and releases only after termination', async () => {
     const { runtime, model, observer } = await fixture({ workflowPrompt: '[abort] stop active request' });
     const run = await runtime.billing

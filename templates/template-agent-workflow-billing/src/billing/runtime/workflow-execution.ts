@@ -535,7 +535,25 @@ export class WorkflowExecution<Agents extends AgentRegistry, Workflows extends W
           cancelAcknowledged = false;
         }
       }
-      const result = cancelAcknowledged ? await invocation?.finished.catch(() => undefined) : invocation?.result;
+      let result = invocation?.result;
+      if (cancelAcknowledged && invocation) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          const completed = await Promise.race([
+            invocation.finished.then(
+              value => ({ value }),
+              () => ({ value: undefined }),
+            ),
+            new Promise<null>(resolve => {
+              timer = setTimeout(() => resolve(null), 1000);
+            }),
+          ]);
+          if (completed === null) return { kind: 'uncertain' };
+          result = completed.value;
+        } finally {
+          clearTimeout(timer);
+        }
+      }
       if (!isNativeTerminal(snapshot?.status)) snapshot = await workflow.getWorkflowRunById(executionId);
       if (
         snapshot?.status === 'canceled' &&
