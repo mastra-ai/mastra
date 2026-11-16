@@ -10,6 +10,8 @@
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
+import { ensureLegacyCollections } from '../../legacy-collections.js';
+
 export class FactoryProjectNotFoundError extends Error {
   constructor() {
     super('Factory project not found for this organization.');
@@ -46,7 +48,10 @@ export const INTAKE_ORG_SETTINGS_SCHEMA: CollectionSchema = {
   uniqueIndexes: [{ name: 'intake_org_settings_org_unique', columns: ['org_id'] }],
 };
 
-/** Collection evolution is additive, so the per-member unique index cannot be narrowed: rows stay and are folded at boot. */
+/**
+ * Collection evolution is additive, so the per-member unique index cannot be narrowed: rows stay and
+ * are folded at boot. Registered only on a database an earlier release already created it in.
+ */
 export const LEGACY_INTAKE_USER_SETTINGS_SCHEMA: CollectionSchema = {
   name: 'intake_settings',
   columns: {
@@ -87,8 +92,9 @@ export function mergeIntakeSelections(configs: readonly IntakeConfig[]): IntakeC
  *
  * Frozen: its unique index allows one binding per source, and indexes cannot be
  * narrowed, so bindings moved to {@link INTAKE_SOURCE_SUBSCRIPTIONS_SCHEMA}. Rows
- * are copied once at boot and never written again; the collection stays
- * registered so an earlier build that is rolled back to still finds them.
+ * are copied once at boot and never written again. Registered, with
+ * {@link INTAKE_DATA_MIGRATIONS_SCHEMA}, only on a database an earlier release
+ * already created it in, so a build rolled back to still finds the rows there.
  */
 export const INTAKE_SOURCE_BINDINGS_SCHEMA: CollectionSchema = {
   name: 'intake_source_bindings',
@@ -140,7 +146,10 @@ export const INTAKE_SOURCE_SUBSCRIPTIONS_SCHEMA: CollectionSchema = {
   ],
 };
 
-/** One-time data migrations that have run, so none re-runs over rows users have changed since. */
+/**
+ * One-time data migrations that have run, so none re-runs over rows users have changed since. Its one
+ * migration copies {@link INTAKE_SOURCE_BINDINGS_SCHEMA}, so it exists only alongside that collection.
+ */
 export const INTAKE_DATA_MIGRATIONS_SCHEMA: CollectionSchema = {
   name: 'intake_data_migrations',
   columns: {
@@ -286,20 +295,24 @@ async function upsertBinding(
 }
 
 export class IntakeStorage extends FactoryStorageDomain {
+  /** The legacy collections this database has, so only those are read, migrated, or cleared. */
+  #legacy = { userSettings: false, bindings: false };
+
   constructor() {
     super('intake');
   }
 
   async init(): Promise<void> {
-    await this.ensureCollections([
-      INTAKE_ORG_SETTINGS_SCHEMA,
-      LEGACY_INTAKE_USER_SETTINGS_SCHEMA,
-      INTAKE_SOURCE_BINDINGS_SCHEMA,
-      INTAKE_SOURCE_SUBSCRIPTIONS_SCHEMA,
-      INTAKE_DATA_MIGRATIONS_SCHEMA,
-    ]);
-    await this.#foldLegacyUserSelections();
-    await this.#copyLegacyBindings();
+    await this.ensureCollections([INTAKE_ORG_SETTINGS_SCHEMA, INTAKE_SOURCE_SUBSCRIPTIONS_SCHEMA]);
+    this.#legacy = {
+      userSettings: await ensureLegacyCollections(this.storage, [LEGACY_INTAKE_USER_SETTINGS_SCHEMA]),
+      bindings: await ensureLegacyCollections(this.storage, [
+        INTAKE_SOURCE_BINDINGS_SCHEMA,
+        INTAKE_DATA_MIGRATIONS_SCHEMA,
+      ]),
+    };
+    if (this.#legacy.userSettings) await this.#foldLegacyUserSelections();
+    if (this.#legacy.bindings) await this.#copyLegacyBindings();
   }
 
   /**
@@ -361,10 +374,12 @@ export class IntakeStorage extends FactoryStorageDomain {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.ops.deleteMany('intake_org_settings', {});
-    await this.ops.deleteMany('intake_settings', {});
-    await this.ops.deleteMany('intake_source_bindings', {});
+    if (this.#legacy.userSettings) await this.ops.deleteMany('intake_settings', {});
+    if (this.#legacy.bindings) {
+      await this.ops.deleteMany('intake_source_bindings', {});
+      await this.ops.deleteMany('intake_data_migrations', {});
+    }
     await this.ops.deleteMany('intake_source_subscriptions', {});
-    await this.ops.deleteMany('intake_data_migrations', {});
   }
 
   get #db(): FactoryStorageOps {

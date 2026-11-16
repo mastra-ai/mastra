@@ -31,7 +31,11 @@ import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd, waitForSessionRunAudit
 import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { Cards } from '../storage/domains/work-items/cards.js';
-import { createFactoryStorageForTests, demoteCardsToLegacyForTests } from '../storage/test-utils.js';
+import {
+  createFactoryStorageForTests,
+  createLegacyCardTablesForTests,
+  demoteCardsToLegacyForTests,
+} from '../storage/test-utils.js';
 import type { FactoryRunEndReporter } from '../tools/reports.js';
 import { observeSessionRunReports } from '../tools/run-watch.js';
 import { retryFactoryDecision } from '../work-items/decision-actions.js';
@@ -6128,6 +6132,7 @@ describe('FactoryDecisionDispatcher', () => {
     delete legacy.work_item;
     delete legacy.work_item_sources;
     delete legacy.changed_at;
+    await createLegacyCardTablesForTests(seeded.storage);
     await seeded.storage.ops.insertOne('work_items', { ...legacy, claim_key: 'linear:issue:1' });
     const parent = await createItem(storage);
     const transitionService = new FactoryTransitionService({

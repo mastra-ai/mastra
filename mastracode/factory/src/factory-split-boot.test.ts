@@ -9,6 +9,7 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { MastraFactory } from './factory.js';
 import { createFactorySecretEncryption } from './secret-encryption.js';
+import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { Card } from './storage/domains/work-items/base.js';
 import { Cards } from './storage/domains/work-items/cards.js';
@@ -18,7 +19,7 @@ import {
   FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA,
   FACTORY_WORK_ITEMS_SCHEMA,
 } from './storage/domains/work-items/work-item-schema.js';
-import { createFactoryStorageForTests } from './storage/test-utils.js';
+import { createFactoryStorageForTests, createLegacyCardTablesForTests } from './storage/test-utils.js';
 import { splitBackfillRetry } from './work-items/split-backfill.js';
 import { migrateWorkItemSplit } from './work-items/split-migration.js';
 
@@ -92,7 +93,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Factory boot ov
     });
     const open = await database(backend);
     // What an older Factory left behind: cards in the legacy table only.
-    const seed = await createFactoryStorageForTests(open());
+    const legacyDatabase = open();
+    await createLegacyCardTablesForTests(legacyDatabase);
+    const seed = await createFactoryStorageForTests(legacyDatabase);
     const orgId = `org-${randomUUID()}`;
     const project = await seed.projects.create({ orgId, userId: USER, input: { name: 'Split boot' } });
     const scope = { orgId, userId: USER, factoryProjectId: project.id };
@@ -407,5 +410,84 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Factory boot ov
     const { workItems } = await boot();
 
     expect((await workItems.get({ orgId, id: card.id }))?.stages).toEqual(['intake']);
+  });
+});
+
+describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Factory boot over a new database on %s', backend => {
+  /** Tables an earlier release created only to carry its data forward. */
+  const LEGACY_TABLES = [
+    'work_items',
+    'factory_work_item_split_state',
+    'intake_settings',
+    'intake_source_bindings',
+    'intake_data_migrations',
+  ];
+
+  async function boot(open: () => FactoryStorage) {
+    const storage = open();
+    const factory = new MastraFactory({ storage, auth: null, mcp: false, secretEncryption });
+    onTestFinished(async () => {
+      await factory.shutdown();
+      await storage.close();
+    });
+    await factory.prepare();
+    return { storage, workItems: storage.getDomain<WorkItemsStorage>('work-items') };
+  }
+
+  async function missingLegacyTables(storage: FactoryStorage) {
+    const missing: string[] = [];
+    for (const table of LEGACY_TABLES) if (!(await storage.collectionExists!(table))) missing.push(table);
+    return missing;
+  }
+
+  it('files, edits, lists and deletes cards across restarts without creating the legacy tables', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+    vi.stubEnv('MASTRA_FACTORY_WORK_ITEM_SPLIT', '');
+    onTestFinished(() => {
+      vi.unstubAllEnvs();
+    });
+    const open = await database(backend);
+    const orgId = `org-${randomUUID()}`;
+    const first = await boot(open);
+    const project = await first.storage.getDomain<FactoryProjectsStorage>('projects').create({
+      orgId,
+      userId: USER,
+      input: { name: 'Fresh' },
+    });
+    const scope = { orgId, factoryProjectId: project.id };
+    const file = async (externalId: string) =>
+      (
+        await first.workItems.upsert({
+          ...scope,
+          userId: USER,
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId },
+            title: externalId,
+            stages: ['intake'],
+            sessions: {},
+            metadata: {},
+          },
+        })
+      ).item;
+    const kept = await file(`${orgId}-kept`);
+    const gone = await file(`${orgId}-gone`);
+    const { cursor } = await first.workItems.listSharedSince(scope);
+    // A card list refreshed by delta learns of the deletion from its tombstone.
+    await first.workItems.delete({ orgId, id: gone.id });
+    expect((await first.workItems.listSharedSince({ ...scope, since: cursor })).removed).toEqual([gone.id]);
+    await first.workItems.update({ orgId, userId: USER, id: kept.id, patch: { stages: ['planning'] } });
+    // A miss by id or source has no legacy table to fall back to.
+    expect(await first.workItems.get({ orgId, id: randomUUID() })).toBeNull();
+    expect(
+      await first.workItems.getBySource({ integrationId: 'github', type: 'issue', externalId: `${orgId}-none` }),
+    ).toBeNull();
+    expect(first.workItems.legacyBackfillPending).toBe(false);
+
+    const second = await boot(open);
+
+    expect((await second.workItems.list(scope)).map(card => [card.id, card.stages])).toEqual([[kept.id, ['planning']]]);
+    expect(second.workItems.legacyBackfillPending).toBe(false);
+    expect(await missingLegacyTables(second.storage)).toEqual(LEGACY_TABLES);
+    expect(await second.storage.collectionExists!('factory_board_item_tombstones')).toBe(true);
   });
 });

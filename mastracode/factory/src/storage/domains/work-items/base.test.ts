@@ -9,6 +9,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { createLegacyCardTablesForTests } from '../../test-utils.js';
 import {
   applyStageTransition,
   factoryDecisionAttentionIdentity,
@@ -1363,6 +1364,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       delete legacy.work_item;
       delete legacy.work_item_sources;
       delete legacy.changed_at;
+      await createLegacyCardTablesForTests(storage);
       await storage.ops.insertOne('work_items', { ...legacy, claim_key: 'jira:issue:X' });
 
       const b = await upsert('project-b');

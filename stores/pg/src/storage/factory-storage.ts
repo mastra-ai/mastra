@@ -561,6 +561,14 @@ export class PgFactoryStorage extends FactoryStorage {
     }
   }
 
+  async collectionExists(name: string): Promise<boolean> {
+    const { rows } = await this.#pool.query(
+      `SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = $1`,
+      [name],
+    );
+    return rows.length > 0;
+  }
+
   async close(): Promise<void> {
     if (this.#ownsPool) {
       await this.#pool.end();
