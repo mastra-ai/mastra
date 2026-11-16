@@ -324,7 +324,11 @@ export async function ingestLinkedRepositoryBacklog(args: {
   if (!args.ingestFactoryEvent) return;
   const project = await resolveProjectRepository(args);
   if (!project) return;
-  const connection = { type: 'app-installation' as const, installationId: Number(project.installation.externalId) };
+  const connection = {
+    type: 'app-installation' as const,
+    installationId: Number(project.installation.externalId),
+    orgId: project.installation.orgId,
+  };
   const sourceId = project.repository.slug;
 
   for (let page = 1; page <= LINKED_BACKLOG_MAX_PAGES; page += 1) {
@@ -697,6 +701,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             connection: {
               type: 'app-installation',
               installationId: Number(loaded.project.installation.externalId),
+              orgId: loaded.project.installation.orgId,
             },
             sourceId: loaded.project.repository.slug,
             issueId: String(number),
@@ -738,6 +743,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             connection: {
               type: 'app-installation',
               installationId: Number(loaded.project.installation.externalId),
+              orgId: loaded.project.installation.orgId,
             },
             sourceId: loaded.project.repository.slug,
             pullRequestId: String(number),
@@ -1073,6 +1079,7 @@ function buildProjectGitRoutes({
               connection: {
                 type: 'app-installation',
                 installationId: Number(project.installation.externalId),
+                orgId: project.installation.orgId,
               },
               sourceId: project.repository.slug,
               baseBranch: base,

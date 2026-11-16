@@ -58,7 +58,7 @@ export class PlatformGithubModes {
   readonly #cacheTtlMs: number;
   readonly #now: () => number;
   readonly #cache = new Map<string, { record: PlatformGithubModeRecord; at: number }>();
-  readonly #index = new Map<number, { orgId: string | undefined; at: number }>();
+  readonly #index = new Map<number, { orgIds: readonly string[]; at: number }>();
 
   constructor(storage: () => PlatformGithubModeStorage, options: { cacheTtlMs?: number; now?: () => number } = {}) {
     this.#storage = storage;
@@ -78,17 +78,20 @@ export class PlatformGithubModes {
     return (await this.get(orgId)).mode;
   }
 
-  /** The org that switched to this `factory-github` installation, if any. */
-  async orgForInstallation(installationId: number): Promise<string | undefined> {
+  /**
+   * The switched orgs that recorded this `factory-github` installation. Every
+   * tenant sees the project's app connections, so more than one org can switch
+   * to the same installation; callers that know their org pass it instead.
+   */
+  async orgsForInstallation(installationId: number): Promise<readonly string[]> {
     const cached = this.#index.get(installationId);
-    if (cached && this.#now() - cached.at < this.#cacheTtlMs) return cached.orgId;
-    const stored = await this.#storage().settings.get(INDEX_ORG_ID, indexUserId(installationId));
-    const orgId = typeof stored?.orgId === 'string' ? stored.orgId : undefined;
-    this.#index.set(installationId, { orgId, at: this.#now() });
-    return orgId;
+    if (cached && this.#now() - cached.at < this.#cacheTtlMs) return cached.orgIds;
+    const orgIds = claims(await this.#storage().settings.get(INDEX_ORG_ID, indexUserId(installationId)));
+    this.#index.set(installationId, { orgIds, at: this.#now() });
+    return orgIds;
   }
 
-  /** Records the org's switch to `connect`, and indexes its installations. */
+  /** Records the org's switch to `connect`, and adds it to its installations' claims. */
   async saveConnect(
     orgId: string,
     record: Required<Pick<PlatformGithubModeRecord, 'switchedAt' | 'installations'>> & { switchedBy?: string },
@@ -96,7 +99,11 @@ export class PlatformGithubModes {
     const next: PlatformGithubModeRecord = { version: 1, mode: 'connect', ...record };
     const storage = this.#storage();
     for (const installation of record.installations) {
-      await storage.settings.save(INDEX_ORG_ID, indexUserId(installation.installationId), { version: 1, orgId });
+      const key = indexUserId(installation.installationId);
+      const orgIds = claims(await storage.settings.get(INDEX_ORG_ID, key));
+      if (!orgIds.includes(orgId)) {
+        await storage.settings.save(INDEX_ORG_ID, key, { version: 2, orgIds: [...orgIds, orgId].sort() });
+      }
     }
     await storage.settings.save(orgId, MODE_USER_ID, { ...next });
     this.#cache.set(orgId, { record: next, at: this.#now() });
@@ -110,6 +117,11 @@ export class PlatformGithubModes {
     else this.#cache.clear();
     this.#index.clear();
   }
+}
+
+function claims(stored: Record<string, unknown> | null): readonly string[] {
+  if (Array.isArray(stored?.orgIds)) return stored.orgIds.filter((id): id is string => typeof id === 'string');
+  return typeof stored?.orgId === 'string' ? [stored.orgId] : [];
 }
 
 function normalize(stored: Record<string, unknown> | null): PlatformGithubModeRecord {
