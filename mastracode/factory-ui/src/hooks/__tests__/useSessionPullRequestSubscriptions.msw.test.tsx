@@ -89,6 +89,32 @@ describe('useSessionPullRequestSubscriptions', () => {
     expect(reads.count).toBe(before);
   });
 
+  it('reads a pull request again on the next board refresh when its first read failed', async () => {
+    const { stream } = countSubscriptionReads();
+    const failures = { count: 0 };
+    server.use(
+      http.get(
+        `${TEST_BASE_URL}/web/github/subscriptions`,
+        () => {
+          failures.count += 1;
+          return new HttpResponse(null, { status: 500 });
+        },
+        { once: true },
+      ),
+    );
+    const { result } = renderHookWithProviders(
+      () => useSessionPullRequestSubscriptions({ baseUrl: TEST_BASE_URL, targets: [target], enabled: true }),
+      { inner },
+    );
+    await waitFor(() => expect(stream.open).toBe(true));
+    await waitFor(() => expect(failures.count).toBe(1));
+
+    stream.push();
+    await act(() => vi.advanceTimersByTimeAsync(PAST_ONE_REFRESH_GAP_MS));
+
+    await waitFor(() => expect(result.current[target.sessionId]).toHaveLength(1));
+  });
+
   it('asks nothing while the feed is connected and silent, even with a pull request open', async () => {
     const { reads } = await renderQuietSidebarSession();
     const before = reads.count;

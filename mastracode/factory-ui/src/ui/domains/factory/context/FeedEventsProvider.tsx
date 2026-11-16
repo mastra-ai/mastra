@@ -64,13 +64,10 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
         return;
       }
       // Only an open subscription moves: a busy board must not re-read a settled or unfollowed pull request on every frame.
-      if (
-        boardKey === subscriptionsKey &&
-        !queryClient
-          .getQueryData<readonly PullRequestSubscription[]>(query.queryKey)
-          ?.some(subscription => subscription.status === 'open')
-      ) {
-        return;
+      // A read that failed holds nothing yet, so it is read again.
+      if (boardKey === subscriptionsKey) {
+        const subscriptions = queryClient.getQueryData<readonly PullRequestSubscription[]>(query.queryKey);
+        if (subscriptions && !subscriptions.some(subscription => subscription.status === 'open')) return;
       }
       const inFlight = reading.get(query.queryHash);
       if (inFlight) {

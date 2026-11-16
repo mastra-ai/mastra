@@ -9,6 +9,8 @@ import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/ren
 import { queryKeys } from '../../../../../api/keys';
 import { createQueryClient } from '../../../../../query-client';
 import type { WorkspaceFileIndex, WorkspaceTreeEntry } from '../../../../../api/types';
+import type { TimelineEntry } from '../../../chat/services/transcript';
+import { useRefreshWorkspaceFilesOnToolCalls } from '../../useRefreshWorkspaceFilesOnToolCalls';
 import { WorkspaceViewerPanel } from '../WorkspaceViewerPanel';
 
 const TREE_URL = `${TEST_BASE_URL}/web/workspace/tree`;
@@ -100,6 +102,36 @@ async function goToFile(user: UserEvent, query: string) {
 }
 
 const foundPaths = () => screen.getAllByRole('option').map(option => option.getAttribute('title'));
+
+const FINISHED_WRITE: TimelineEntry = {
+  kind: 'message',
+  id: 'message-write',
+  message: {
+    id: 'message-write',
+    role: 'assistant',
+    createdAt: new Date(0),
+    content: {
+      format: 2,
+      parts: [
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'write',
+            toolName: 'write_file',
+            args: { path: 'src/new.ts' },
+            result: 'ok',
+          },
+        },
+      ],
+    },
+  },
+};
+
+function ViewerBesideTranscript({ transcript }: { transcript: readonly TimelineEntry[] }) {
+  useRefreshWorkspaceFilesOnToolCalls(WORKSPACE, transcript);
+  return <WorkspaceViewerPanel workspacePath={WORKSPACE} />;
+}
 
 describe('Go to file', () => {
   it('moves through the matches with the arrow keys and opens the chosen one with Enter', async () => {
@@ -311,6 +343,22 @@ describe('Go to file', () => {
     await user.keyboard('agent');
     await screen.findByRole('listbox', { name: 'Files found' });
     expect(indexRequests).toHaveLength(1);
+  });
+
+  it('finds a file a tool just wrote the next time Go to file is used', async () => {
+    installHandlers();
+    const user = userEvent.setup();
+    const { rerender } = renderWithProviders(<ViewerBesideTranscript transcript={[]} />, createQueryClient());
+    await goToFile(user, 'new');
+    await screen.findByText(/No files match/);
+    await user.keyboard('{Escape}');
+
+    server.use(http.get(FILES_URL, () => HttpResponse.json(fileIndex([...PATHS, 'src/new.ts']))));
+    rerender(<ViewerBesideTranscript transcript={[FINISHED_WRITE]} />);
+    await user.click(screen.getByRole('combobox', { name: 'Go to file' }));
+    await user.keyboard('new');
+
+    await waitFor(() => expect(foundPaths()).toEqual(['src/new.ts']));
   });
 
   it('says it is still indexing, not that nothing matches, while Refresh reloads the index', async () => {
