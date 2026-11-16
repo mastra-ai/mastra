@@ -22,7 +22,9 @@ import { BackgroundTaskManager } from '../../../../background-tasks/manager';
 import type { PubSub } from '../../../../events/pubsub';
 import { UnixSocketPubSub } from '../../../../events/unix-socket-pubsub';
 import type { Mastra } from '../../../../mastra';
+import type { MemoryStorage } from '../../../../storage/domains/memory/base';
 import { WorkflowsInMemory } from '../../../../storage/domains/workflows/inmemory';
+import { RUN_FENCE_CONFLICT_ERROR_ID } from '../../../../storage/run-fencing';
 import { SCENARIO_MODEL_ID } from '../types';
 
 /**
@@ -1329,8 +1331,7 @@ describeForAllEngines(
 
     // Technical: a background task's result is written to memory through the same post-settlement
     // check as a late suspend. While the finished run is still cleaning up, that check now accepts
-    // the write when nobody has taken over, so the result reaches memory. The write itself carries
-    // no claim fence; that gap predates this fix. (#30182)
+    // the write when nobody has taken over, so the result reaches memory. (#30182)
     it.runIf(isDurableEngineVariant(engine))(
       "records a deferred tool's result that arrives while the finished run is still cleaning up (#30182)",
       async () => {
@@ -1355,6 +1356,132 @@ describeForAllEngines(
             ownerId: released?.ownerId,
             generation: released?.generation,
           });
+        } finally {
+          run.finishCleanup();
+        }
+      },
+      30_000,
+    );
+
+    // Holds the `nth` memory save (counting from 1) until `finishSave`. `saveStarted` resolves once
+    // it is held; `saveOutcome` resolves once it reached storage, to its error or `undefined`.
+    function holdMemorySave(memoryStore: MemoryStorage, nth: number) {
+      let signalSaveStarted!: () => void;
+      const saveStarted = new Promise<void>(resolve => (signalSaveStarted = resolve));
+      let finishSave!: () => void;
+      const saveGate = new Promise<void>(resolve => (finishSave = resolve));
+      let settleOutcome!: (error: unknown) => void;
+      const saveOutcome = new Promise<unknown>(resolve => (settleOutcome = resolve));
+      const saveMessages = memoryStore.saveMessages.bind(memoryStore);
+      let saves = 0;
+      const spy = vi.spyOn(memoryStore, 'saveMessages').mockImplementation(async args => {
+        if (++saves !== nth) return saveMessages(args);
+        signalSaveStarted();
+        await saveGate;
+        try {
+          const saved = await saveMessages(args);
+          settleOutcome(undefined);
+          return saved;
+        } catch (error) {
+          settleOutcome(error);
+          throw error;
+        }
+      });
+      onTestFinished(() => {
+        finishSave();
+        spy.mockRestore();
+      });
+      return { saveStarted, finishSave, saveOutcome, saveMessages };
+    }
+
+    // The finished run completes its cleanup. Then a successor claims the run and raises the
+    // memory fence, as recovery or a new turn does before it touches memory.
+    async function takeOverAfterCleanup(run: Awaited<ReturnType<typeof startResearchDuringCleanup>>) {
+      run.finishCleanup();
+      await run.cleanedUp;
+      const released = await run.workflows.getRunOwnership({ runId: run.runId });
+      const successor = await run.workflows.claimRunOwnership({
+        runId: run.runId,
+        ownerId: 'successor-execution',
+        leaseMs: 60_000,
+        expectedGeneration: released!.generation,
+      });
+      expect(successor.acquired).toBe(true);
+      expect(
+        await run.memoryStore.raiseRunFence({
+          runId: run.runId,
+          generation: successor.record!.generation,
+          ownerId: successor.record!.ownerId,
+        }),
+      ).toBe(true);
+      return successor.record!;
+    }
+
+    async function expectSuccessorUnchanged(
+      run: Awaited<ReturnType<typeof startResearchDuringCleanup>>,
+      successor: { generation: number },
+    ) {
+      const after = await run.workflows.getRunOwnership({ runId: run.runId });
+      expect({ ownerId: after?.ownerId, generation: after?.generation, live: after?.live }).toEqual({
+        ownerId: 'successor-execution',
+        generation: successor.generation,
+        live: true,
+      });
+    }
+
+    // Technical: after a late suspend saves its open request, the background-task manager saves
+    // the task's metadata again (`onExecution`). That save passed the post-settlement check but
+    // reached storage only after the finished run's cleanup and a successor's claim, which raised
+    // the memory fence and cleared the request. It carried no claim fence, so it restored the
+    // superseded execution's open request. It now carries the finished run's claim. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      "doesn't restore a deferred tool's open request when its task metadata reaches storage after another execution took over (#30182)",
+      async () => {
+        const run = await startResearchDuringCleanup('bg-suspend-slow-metadata-save-takeover-thread');
+        // The first save is the suspension's own; the second is the manager's metadata save.
+        const save = holdMemorySave(run.memoryStore, 2);
+        try {
+          run.release();
+          await save.saveStarted;
+          const successor = await takeOverAfterCleanup(run);
+          // The successor works on the thread: here it drops the open request.
+          const { messages } = await run.memoryStore.listMessages({ ...run.thread, perPage: false });
+          const cleared = structuredClone(messages);
+          for (const message of cleared) delete message.content.metadata?.suspendedTools;
+          await save.saveMessages({ messages: cleared });
+          expect((await storedToolCall(run.memory, run.thread)).suspended).toBeUndefined();
+
+          save.finishSave();
+          expect(await save.saveOutcome).toMatchObject({ id: RUN_FENCE_CONFLICT_ERROR_ID });
+          expect((await storedToolCall(run.memory, run.thread)).suspended).toBeUndefined();
+          await expectSuccessorUnchanged(run, successor);
+        } finally {
+          run.finishCleanup();
+        }
+      },
+      30_000,
+    );
+
+    // Technical: a background task's result reaches memory through the same post-settlement check
+    // as a late suspend. A result save that passed it but reached storage after a successor
+    // claimed the run and raised the memory fence went through, since it carried no claim fence,
+    // so a superseded execution wrote the tool's result. It now carries the finished run's
+    // claim. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      "doesn't record a deferred tool's result that reaches storage after another execution took over (#30182)",
+      async () => {
+        const run = await startResearchDuringCleanup('bg-result-slow-save-takeover-thread', { outcome: 'result' });
+        const save = holdMemorySave(run.memoryStore, 1);
+        try {
+          run.release();
+          await save.saveStarted;
+          const successor = await takeOverAfterCleanup(run);
+
+          save.finishSave();
+          expect(await save.saveOutcome).toMatchObject({ id: RUN_FENCE_CONFLICT_ERROR_ID });
+          // Memory keeps the dispatch placeholder, not the superseded execution's result.
+          expect((await storedToolCall(run.memory, run.thread)).invocation?.result?.summary).toBeUndefined();
+          await expectSuccessorUnchanged(run, successor);
         } finally {
           run.finishCleanup();
         }

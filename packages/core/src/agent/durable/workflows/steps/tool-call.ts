@@ -876,6 +876,13 @@ export function createDurableToolCallStep() {
       // claimed the run.
       const assertNotSuperseded = () =>
         assertExecutionNotSuperseded({ runId, agentId: initData.agentId, requestContext, mastra: mastra as Mastra });
+      // Those writes carry the run's claim, so storage rejects one that lands after a successor
+      // raised the memory fence, even though it passed the check above (#30182).
+      const claimFenceArgs = {
+        requestContext,
+        runId,
+        memoryStore: async () => memory?.storage.getStore('memory'),
+      };
 
       // Remote workers have no registry message list; persist updates through the recovered resume list.
       const doFlush = async (messagesToFlush = messageList ?? resumeMessageList, beforePersist = assertOwned) => {
@@ -1856,10 +1863,7 @@ export function createDurableToolCallStep() {
                       // The run may have settled and stopped fencing its writes. The suspension's
                       // memory save carries the run's claim, so storage rejects it once a successor
                       // raised the memory fence, even when it lands after the ownership check (#30182).
-                      await runFencedToClaim(
-                        { requestContext, runId, memoryStore: async () => memory?.storage.getStore('memory') },
-                        () => suspendToolCall(data, options, assertNotSuperseded),
-                      );
+                      await runFencedToClaim(claimFenceArgs, () => suspendToolCall(data, options, assertNotSuperseded));
                       return taskContext?.suspend?.(data, options);
                     },
                     outputWriter: async (chunk: any) => {
@@ -2028,10 +2032,14 @@ export function createDurableToolCallStep() {
                   flush,
                 });
               await applyTo(messageList, async () => {
-                if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
-                  await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig, {
-                    beforePersist: assertNotSuperseded,
-                  });
+                const threadId = state?.threadId;
+                if (saveQueueManager && threadId && !state?.memoryConfig?.readOnly) {
+                  // Like a late suspend, the result can land after the run settled: the write carries its claim.
+                  await runFencedToClaim(claimFenceArgs, () =>
+                    saveQueueManager.flushMessages(messageList, threadId, state.memoryConfig, {
+                      beforePersist: assertNotSuperseded,
+                    }),
+                  );
                 }
               });
               if (info.disposition !== 'awaited' && liveEntry) {
@@ -2082,11 +2090,14 @@ export function createDurableToolCallStep() {
             // A superseded execution skips the write. The hook runs outside this
             // step (the background-task manager calls it), so the error is not
             // rethrown: that would fail the task instead of stopping the step.
-            if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
+            const threadId = state?.threadId;
+            if (saveQueueManager && threadId && !state?.memoryConfig?.readOnly) {
               try {
-                await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig, {
-                  beforePersist: assertNotSuperseded,
-                });
+                await runFencedToClaim(claimFenceArgs, () =>
+                  saveQueueManager.flushMessages(messageList, threadId, state.memoryConfig, {
+                    beforePersist: assertNotSuperseded,
+                  }),
+                );
               } catch (error) {
                 if (!isExecutionFenceError(error)) throw error;
                 logger?.debug?.('[DurableAgent] Skipped background-task metadata flush: execution superseded', {
