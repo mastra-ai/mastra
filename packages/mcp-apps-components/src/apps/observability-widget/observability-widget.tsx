@@ -98,8 +98,15 @@ function Widget({
 }) {
   const { env } = opened;
   const [state, setState] = useState<WidgetState>({});
-  const configureButton = useConfigure(app, widget, opened.datePreset, opened.customRange, opened.filters);
-  const pinButton = usePin(app, widget, opened.datePreset, opened.customRange, opened.filters);
+  const configureButton = useConfigure(
+    app,
+    widget,
+    opened.datePreset,
+    opened.customRange,
+    opened.filters,
+    opened.projectId,
+  );
+  const pinButton = usePin(app, widget, opened.datePreset, opened.customRange, opened.filters, opened.projectId);
   const first = planWidget(prepared, env, state);
   const discovered = useToolResults(app, first.status === 'ready' ? first.discover : [], opened.projectId);
   // Planned again with the discover answers so far; both lists go out in the same render.
@@ -174,8 +181,9 @@ function OpenedDashboard({ app, opened }: { app: App; opened: ReadyOpened }) {
 /**
  * Draws the dashboard the opening tool returned (`ui/notifications/tool-result`), over the window its
  * `datePreset` names and under its `defaults.filters`, unless the host's view
- * (`OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY`) sets them. Every read goes through the server's app-only
- * `queryObservability` tool, so the server decides where the data comes from.
+ * (`OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY`) sets them, for the host's project, else its `projectId`. Every
+ * read goes through the server's app-only `queryObservability` tool, so the server decides where the
+ * data comes from.
  */
 export function ObservabilityWidget() {
   // A preset window ends when the dashboard opens, and again each time the host's view changes.

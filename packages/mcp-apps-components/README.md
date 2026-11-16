@@ -57,8 +57,8 @@ export const greetingServer = new MCPServer({
 
 `observabilityDashboardApp` draws a Studio dashboard (rows of KPIs, time series, tables and scores widgets) with the same components Studio uses. Each widget loads and fails on its own.
 
-1. The model calls the tool that opens the app. That tool must declare an `outputSchema` so its result reaches the app as structured content: `{ dashboard, datePreset? }`, where `dashboard` passes `dashboardDefinitionSchema` from `@mastra/core/storage/dashboards` and `datePreset` is one of `24h`, `3d`, `7d`, `14d` or `30d`. Without `datePreset`, the app uses the dashboard's `defaults.datePreset` when it is one of those, else `24h`. The window ends when the app opens. The dashboard's top-level `defaults.filters` chips filter every widget.
-2. The app reads its data through the app-only `queryObservability` tool (exported as `QUERY_OBSERVABILITY_TOOL`). It calls it once per read with `{ action, args, projectId? }`, where `action` is one of `OBSERVABILITY_READ_ACTIONS`, the `MastraClient` observability reads the app sends (`aggregateTraces`, `getMetricBreakdown`, `getScoreTimeSeries`, `listScores`, …), `args` are that method's arguments, with dates as ISO strings, and `projectId` is the project the host passed, if any (see [Drawing over the host page's selection](#drawing-over-the-host-pages-selection)). The tool returns `{ data }`, the method's result; if it throws, that widget shows as failed.
+1. The model calls the tool that opens the app. That tool must declare an `outputSchema` so its result reaches the app as structured content: `{ dashboard, datePreset?, projectId? }`, where `dashboard` passes `dashboardDefinitionSchema` from `@mastra/core/storage/dashboards` and `datePreset` is one of `24h`, `3d`, `7d`, `14d` or `30d`. Without `datePreset`, the app uses the dashboard's `defaults.datePreset` when it is one of those, else `24h`. The window ends when the app opens. The dashboard's top-level `defaults.filters` chips filter every widget. `projectId` is optional; see [Reading one project's data in any chat client](#reading-one-projects-data-in-any-chat-client).
+2. The app reads its data through the app-only `queryObservability` tool (exported as `QUERY_OBSERVABILITY_TOOL`). It calls it once per read with `{ action, args, projectId? }`, where `action` is one of `OBSERVABILITY_READ_ACTIONS`, the `MastraClient` observability reads the app sends (`aggregateTraces`, `getMetricBreakdown`, `getScoreTimeSeries`, `listScores`, …), `args` are that method's arguments, with dates as ISO strings, and `projectId` is the project the host passed, else the one the opening tool returned, if any (see [Drawing over the host page's selection](#drawing-over-the-host-pages-selection)). The tool returns `{ data }`, the method's result; if it throws, that widget shows as failed.
 
 Use `observabilityDashboardInputSchema` as the opening tool's input and `toObservabilityDashboard` as its `execute`:
 
@@ -168,7 +168,7 @@ const host = useMemo(
 <McpAppHostProvider value={host}>{chat}</McpAppHostProvider>;
 ```
 
-A pin carries the widget, the date preset it was drawn over (with its `customRange` when `custom`) and, when it had any, the filters it was drawn under (the host's, else the dashboard's `defaults.filters`). The button only shows when the host sends pinned ids and accepts structured model context. A click shows right away and holds until the host sends new ids.
+A pin carries the widget, the date preset it was drawn over (with its `customRange` when `custom`) and, when it had any, the filters it was drawn under (the host's, else the dashboard's `defaults.filters`) and the project it read (`projectId`). The button only shows when the host sends pinned ids and accepts structured model context. A click shows right away and holds until the host sends new ids.
 
 #### Drawing over the host page's selection
 
@@ -193,9 +193,33 @@ const host = useMemo(
 <McpAppHostProvider value={host}>{chat}</McpAppHostProvider>;
 ```
 
-`projectId` is sent with every `queryObservability` call, so your server can scope the reads to that project. It also sets the widgets' scope, as on the Metrics page: with a `projectId`, they show at project scope; without one, at org scope. Widgets, views and columns tagged for the other scope are hidden. The host's `datePreset` and `filters` replace the tool result's and the dashboard's defaults. The Metrics page's `datePreset`, `customRange` and `filterTokens` can be passed as they are. With `datePreset: 'custom'`, the widgets read over `customRange`, like the Metrics page: without `from`, the window starts 24 hours before now, and without `to`, it ends now. A value the app can't read (filters that fail the dashboard schema, an unknown preset, a range that ends before it starts) shows an error instead of the dashboard, so the widgets never draw data the host page didn't ask for. When any value changes, the app reads again; a preset window then ends at that moment. Each value is optional: leave one out to fall back to the dashboard's.
+`projectId` is sent with every `queryObservability` call, over any the opening tool returned, so your server can scope the reads to that project. It also sets the widgets' scope, as on the Metrics page: with a `projectId`, they show at project scope; without one, at org scope. Widgets, views and columns tagged for the other scope are hidden. The host's `datePreset` and `filters` replace the tool result's and the dashboard's defaults. The Metrics page's `datePreset`, `customRange` and `filterTokens` can be passed as they are. With `datePreset: 'custom'`, the widgets read over `customRange`, like the Metrics page: without `from`, the window starts 24 hours before now, and without `to`, it ends now. A value the app can't read (filters that fail the dashboard schema, an unknown preset, a range that ends before it starts) shows an error instead of the dashboard, so the widgets never draw data the host page didn't ask for. When any value changes, the app reads again; a preset window then ends at that moment. Each value is optional: leave one out to fall back to the dashboard's.
 
 To let the user pin widgets too, add `pins: { pinnedIds, onPin, onUnpin }`. `observabilityWidgetPins` is the same helper with only pins.
+
+#### Reading one project's data in any chat client
+
+Only a host that passes `observabilityWidgetHost` sets a project. In Claude or ChatGPT, nothing does, so every read covers all the projects your server can read. When the dashboard belongs to a project, return its id as `projectId` next to the dashboard:
+
+```typescript
+// Yours to write: the id of the project this dashboard is for, such as one the caller names,
+// once you've checked the caller can access it.
+declare function dashboardProjectId(context: unknown): Promise<string | undefined>;
+
+const showObservabilityDashboard = createTool({
+  id: 'showObservabilityDashboard',
+  description: 'Shows an observability dashboard of kpis, timeseries, table and scores widgets.',
+  inputSchema: observabilityDashboardInputSchema,
+  outputSchema: observabilityDashboardOutputSchema,
+  mcp: { _meta: { ui: { resourceUri: uri } } },
+  execute: async (input, context) => {
+    const projectId = await dashboardProjectId(context);
+    return { ...toObservabilityDashboard(input), ...(projectId ? { projectId } : {}) };
+  },
+});
+```
+
+The app sends that `projectId` with every `queryObservability` call and draws the widgets at project scope. A host that passes its own `projectId` still wins, so a page for one project never shows another's data. The id comes back from the app's iframe, so check access in `queryObservability` too.
 
 #### Configuring a widget
 

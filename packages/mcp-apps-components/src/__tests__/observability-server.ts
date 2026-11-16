@@ -175,12 +175,14 @@ export const agentRunsChart: DashboardWidget = {
  * The server a host writes around the observability widget: `showObservabilityDashboard` opens it
  * with a dashboard built by `toObservabilityDashboard`, and the app-only `queryObservability`
  * accepts only `OBSERVABILITY_READ_ACTIONS` and answers each from `answers` (keyed by action),
- * recording every call in `calls`.
+ * recording every call in `calls`. With `projectId`, the opening tool returns it next to the
+ * dashboard, as a server does once it has resolved the dashboard's project.
  */
 export function observabilityServer({
   appResources = {},
   answers = {},
-}: { appResources?: AppResources; answers?: Record<string, Answer> } = {}) {
+  projectId,
+}: { appResources?: AppResources; answers?: Record<string, Answer>; projectId?: string } = {}) {
   const calls: ObservabilityCall[] = [];
   const server = new MCPServer({
     id: 'observability',
@@ -195,7 +197,7 @@ export function observabilityServer({
         // Declaring an output schema is what makes MCPServer send the result as `structuredContent`.
         outputSchema: observabilityDashboardOutputSchema,
         mcp: { _meta: { ui: { resourceUri: OBSERVABILITY_WIDGET_URI } } },
-        execute: async input => toObservabilityDashboard(input),
+        execute: async input => ({ ...toObservabilityDashboard(input), ...(projectId ? { projectId } : {}) }),
       }),
       [QUERY_OBSERVABILITY_TOOL]: createTool({
         id: QUERY_OBSERVABILITY_TOOL,

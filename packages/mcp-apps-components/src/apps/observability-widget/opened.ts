@@ -23,10 +23,11 @@ const PRESET_HOURS: Record<ObservabilityDatePreset, number> = {
 const isPreset = (value: unknown): value is ObservabilityDatePreset =>
   (OBSERVABILITY_DATE_PRESETS as readonly unknown[]).includes(value);
 
-/** What the opening tool returns as `structuredContent`: a stored dashboard and, optionally, its window. */
+/** What the opening tool returns as `structuredContent`: a stored dashboard and, optionally, its window and project. */
 const openedSchema = z.object({
   dashboard: z.unknown(),
   datePreset: z.enum(OBSERVABILITY_DATE_PRESETS).optional(),
+  projectId: z.string().min(1).optional(),
 });
 
 export type Opened =
@@ -38,6 +39,7 @@ export type Opened =
       customRange: ObservabilityWidgetDateRange | undefined;
       /** The filters the widgets are drawn under: the host's, else the dashboard's `defaults.filters`. */
       filters: FilterNode[] | undefined;
+      /** The project every read is for: the host's, else the tool result's. */
       projectId: string | undefined;
       env: DashboardEnvironment;
     }
@@ -151,7 +153,8 @@ export function environment(
  * Reads the opening tool's result; a bad one becomes a message rather than a broken app. The window
  * is the host's `datePreset` (with its `customRange` when `custom`), else the result's, else the dashboard's `defaults.datePreset` when it
  * is one the widget shows, else `24h`. The host's `filters`, else the dashboard's top-level
- * `defaults.filters` chips, filter every widget.
+ * `defaults.filters` chips, filter every widget. The project is the host's, else the result's, so a
+ * client that sets no project (e.g. Claude) still reads the project the dashboard belongs to.
  */
 export function readOpened(
   structuredContent: unknown,
@@ -179,7 +182,7 @@ export function readOpened(
     datePreset,
     customRange,
     filters,
-    projectId: view.projectId,
+    projectId: view.projectId ?? opened.data.projectId,
     env: environment(datePreset, now, filter, customRange),
   };
 }
