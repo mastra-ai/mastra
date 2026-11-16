@@ -3699,9 +3699,8 @@ export class Workflow<
           outputOptions: { includeState: true, includeResumeLabels: true },
         });
       } else if (resumeNested && !resume && restartResume === null) {
-        // The interrupted resume didn't record what it targeted inside the nested run, so its data
-        // can't be handed to the right step there: leave the nested run suspended as stored, and
-        // this step suspends with it, to be resumed again.
+        // The interrupted resume didn't record its target inside the nested run: leave the nested
+        // run suspended as stored, and this step suspends with it, to be resumed again.
         const stored = await run.runStorage.loadFull();
         res = {
           status: 'suspended',
@@ -3712,7 +3711,6 @@ export class Workflow<
         // stored state; it hands nothing back now.
         if (!parentState) parkedState = toJsonState(stored?.value);
       } else if (resumeNested) {
-        // A restart that resumes the nested run resumes what the interrupted resume targeted.
         const target = resume ?? restartResume ?? undefined;
         res = await run.resumeNestedByParent({
           resumeData,

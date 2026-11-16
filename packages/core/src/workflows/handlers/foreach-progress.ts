@@ -35,7 +35,6 @@ export function getForeachProgress(stepResult: { metadata?: unknown } | undefine
  */
 export type ForeachResumeTarget = number | 'all' | 'none';
 
-/** The stored resume target on a foreach step's running result; undefined if none was recorded. */
 export function getForeachResumeTarget(
   stepResult: { metadata?: unknown } | undefined,
 ): ForeachResumeTarget | undefined {
@@ -60,14 +59,11 @@ export function takesStoredForeachResume(
 }
 
 /**
- * What the resume of a nested workflow step targeted inside the nested run (the step path below
- * the nested workflow, the resume label, the foreach item), stored under
- * `metadata.nestedResumeTarget` on the step's running result. A restart that has to resume the
- * nested run resumes only that.
+ * What a nested workflow step's resume targeted inside the nested run, stored under
+ * `metadata.nestedResumeTarget` on its running result. A restart that resumes the nested run resumes only that.
  */
 export type NestedResumeTarget = { steps: string[]; label?: string; forEachIndex?: number };
 
-/** The stored nested resume target on a nested workflow step's running result, if any. */
 export function getNestedResumeTarget(stepResult: { metadata?: unknown } | undefined): NestedResumeTarget | undefined {
   const metadata = stepResult?.metadata;
   if (!isPlainRecord(metadata)) return undefined;

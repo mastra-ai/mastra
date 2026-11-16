@@ -179,10 +179,8 @@ export async function executeStep(
     restartsResume = true;
   }
 
-  // What a resumed nested workflow's resume targeted inside the nested run, kept on its running
-  // record: a restart that finds the nested run still suspended, or only claimed, resumes it
-  // again, and without the target it would resume every suspended step there. A foreach item's
-  // record is the foreach's own, which stores the target for its items.
+  // Kept on the nested step's running record: without it, a restart that resumes the nested run
+  // again would resume every suspended step there. A foreach item's is on the foreach's record.
   let nestedResumeTarget: NestedResumeTarget | undefined;
   if (step.component === 'WORKFLOW') {
     if (resume?.steps[0] === step.id && executionContext.foreachIndex === undefined) {

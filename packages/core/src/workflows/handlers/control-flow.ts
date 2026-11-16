@@ -1156,8 +1156,6 @@ export async function executeForeach(
       : restartsRunning
         ? getForeachResumeTarget(stepResults[stepId])
         : 'none';
-  // What the resume targeted inside an item that is a nested workflow, for a restart that has to
-  // resume that item's nested run again.
   const nestedResumeTarget: NestedResumeTarget | undefined =
     resume?.steps[0] === stepId
       ? { steps: resume.steps.slice(1), ...(resume.label ? { label: resume.label } : {}) }
