@@ -174,7 +174,7 @@ function isVerdictToolPart(part: RunStepPart): part is Extract<RunStepPart, { to
  * A failed call reaches a step as a result whose output is an error, or as a `tool-error` part.
  * The step types a result's output as the tool's own value; here it is the stored model output.
  */
-function failed(part: RunStepPart): boolean {
+function isFailedToolCallPart(part: RunStepPart): boolean {
   if (part.type === 'tool-error') return true;
   if (part.type !== 'tool-result') return false;
   const output = (part.output as { type?: unknown } | null | undefined)?.type;
@@ -189,7 +189,7 @@ function failed(part: RunStepPart): boolean {
 function recordedVerdict(steps: RunStep[]): boolean {
   return steps.some(step => {
     const parts = step.content.filter(isVerdictToolPart);
-    return parts.length > 0 && !parts.some(failed);
+    return parts.length > 0 && !parts.some(isFailedToolCallPart);
   });
 }
 
