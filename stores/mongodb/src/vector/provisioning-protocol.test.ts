@@ -531,6 +531,8 @@ describe('provisioning protocol', () => {
     let checker: Checker;
     const colls: string[] = [];
     const entry = (name: string) => db.collection(REGISTRY).findOne({ _id: name as any });
+    const idOf = (e: Document | null, name: string) =>
+      e?.indexIds?.find((x: { name: string }) => x.name === name)?.id as string | undefined;
     const vectorDefinition = {
       fields: [
         { type: 'vector', path: 'embedding', numDimensions: 4, similarity: 'cosine' },
@@ -775,6 +777,107 @@ describe('provisioning protocol', () => {
       expect((await entry(coll))?.indexIds).toEqual([{ name: 'v.1', id: await listedId(db, coll, 'v.1') }]);
     });
 
+    describe('vector rename (§3.3)', () => {
+      it('P-VRENAME: a replaced vector index stays retired and is dropped by deleteIndex', async () => {
+        const coll = await byoColl('pvrename');
+        await createByo(a, coll, { searchIndexName: 'V0' });
+        const v0 = await listedId(db, coll, 'V0');
+        await createByo(a, coll, { searchIndexName: 'V1' });
+        const before = await entry(coll);
+        expect(before?.retiredVectorIndexNames).toEqual(['V0']);
+        expect(before?.ownsVectorIndex).toBe(true);
+        expect(before?.indexIds).toContainEqual({ name: 'V0', id: v0 });
+        await a.deleteIndex({ indexName: coll });
+        expect(await searchIndexNames(db, coll)).toEqual([]);
+      });
+
+      it('P-ABA-seq: renaming back reactivates the retired name, owned', async () => {
+        const coll = await byoColl('pabaseq');
+        await createByo(a, coll, { searchIndexName: 'A' });
+        await createByo(a, coll, { searchIndexName: 'B' });
+        await createByo(a, coll, { searchIndexName: 'A' });
+        const after = await entry(coll);
+        expect(after?.ownsVectorIndex).toBe(true);
+        expect(after?.searchIndexName).toBe('A');
+        expect(after?.retiredVectorIndexNames).toEqual(['B']);
+        await a.deleteIndex({ indexName: coll });
+        expect(await searchIndexNames(db, coll)).toEqual([]);
+      });
+
+      it('P-XROLE: a vector name that was a retired text index is refused, and the reverse', async () => {
+        const coll = await byoColl('pxrole');
+        await createByo(a, coll, { searchIndexName: 'V' });
+        await a.createSearchIndex({ indexName: coll, searchIndexName: 'T' });
+        await a.createSearchIndex({ indexName: coll, searchIndexName: 'T2' });
+        const before = await entry(coll);
+        expect(before?.retiredTextIndexNames).toEqual(['T']);
+        await expect(createByo(a, coll, { searchIndexName: 'T' })).rejects.toMatchObject({
+          id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'),
+          message: `searchIndexName "T" was a full-text search index of index "${coll}"; choose a different name.`,
+        });
+        expect(await entry(coll)).toEqual(before);
+
+        await createByo(a, coll, { searchIndexName: 'V2' });
+        const renamed = await entry(coll);
+        expect(renamed?.retiredVectorIndexNames).toEqual(['V']);
+        await expect(a.createSearchIndex({ indexName: coll, searchIndexName: 'V' })).rejects.toMatchObject({
+          id: createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'),
+          message: `searchIndexName "V" was a vector search index of index "${coll}"; choose a different name.`,
+        });
+        expect(await entry(coll)).toEqual(renamed);
+        await a.deleteIndex({ indexName: coll });
+        expect(await searchIndexNames(db, coll)).toEqual([]);
+      });
+
+      /** a's createIndex(params) parks right after its read while `between` runs, then completes. */
+      async function interleaveAfterRead(coll: string, name: string, between: () => Promise<unknown>) {
+        const p = pause();
+        hooks(a, { afterCreateIndexRead: p.hook });
+        try {
+          const call = createByo(a, coll, { searchIndexName: name }).catch(e => e);
+          await reached(p);
+          await between();
+          p.release.resolve();
+          expect(await call).toBeUndefined();
+        } finally {
+          p.release.resolve();
+          checker.restoreHooks();
+        }
+      }
+
+      it('P-VRENAME-race (i): a concurrent identical rename landing before P0 keeps its ownership', async () => {
+        const coll = await byoColl('pvrace1');
+        await createByo(a, coll, { searchIndexName: 'V0' });
+        await interleaveAfterRead(coll, 'V1', () => createByo(b, coll, { searchIndexName: 'V1' }));
+        const after = await entry(coll);
+        expect(after?.searchIndexName).toBe('V1');
+        expect(after?.ownsVectorIndex).toBe(true);
+        expect(after?.retiredVectorIndexNames).toEqual(['V0']);
+        await a.deleteIndex({ indexName: coll });
+        expect(await searchIndexNames(db, coll)).toEqual([]);
+      });
+
+      it('P-VRENAME-race (ii): a P0 retargeting from a concurrent owned name never owns its own target', async () => {
+        const coll = await byoColl('pvrace2');
+        await createRawSearchIndex(db, coll, 'A', vectorDefinition);
+        await waitFor(async () => (await listedId(db, coll, 'A')) !== undefined);
+        await createByo(a, coll, { searchIndexName: 'A' });
+        expect((await entry(coll))?.ownsVectorIndex).not.toBe(true);
+        await interleaveAfterRead(coll, 'A', () => createByo(b, coll, { searchIndexName: 'B' }));
+        const after = await entry(coll);
+        expect(after?.searchIndexName).toBe('A');
+        expect(after?.ownsVectorIndex).toBe(false);
+        expect(after?.retiredVectorIndexNames).toEqual(['B']);
+        const bId = idOf(after, 'B');
+        expect(bId).toBeDefined();
+        const { drops } = recordDrops(a);
+        await a.deleteIndex({ indexName: coll });
+        expect(drops).toEqual([{ collectionName: coll, name: 'B', id: bId }]);
+        expect(await searchIndexNames(db, coll)).toEqual(['A']);
+        clean.opts = { userIndexes: ['A'] };
+      });
+    });
+
     describe('I11 in delete', () => {
       const STALE = '000000000000000000000000';
       const textDefinition = { mappings: { dynamic: true } };
@@ -874,6 +977,24 @@ describe('provisioning protocol', () => {
         expect(drops).toEqual([{ collectionName: coll, name: 'N', id: r }]);
         expect(await entry(`${coll}_a`)).toBeNull();
         clean.opts = { userIndexes: ['N'] };
+      });
+
+      it('P-DEL-RESUME-VRETIRED: a resumed delete drops a retired vector name by its recorded id', async () => {
+        const coll = await byoColl('pdelrv');
+        await createRawSearchIndex(db, coll, 'R', vectorDefinition);
+        await waitFor(async () => (await listedId(db, coll, 'R')) !== undefined);
+        const r = await listedId(db, coll, 'R');
+        await seedUser(coll, 'a', {
+          retiredVectorIndexNames: ['R'],
+          indexIds: [{ name: 'R', id: r }],
+          deleting: true,
+          deleteToken: 'resumed',
+        });
+        const { drops } = recordDrops(a);
+        await a.deleteIndex({ indexName: `${coll}_a` });
+        expect(drops).toEqual([{ collectionName: coll, name: 'R', id: r }]);
+        expect(await entry(`${coll}_a`)).toBeNull();
+        expect(await searchIndexNames(db, coll)).toEqual([]);
       });
 
       it('P-BACKFILL-ids: refreshes record a legacy name its listed id once; an unrefreshed one is dropped by the id listed then', async () => {

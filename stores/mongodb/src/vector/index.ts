@@ -364,6 +364,8 @@ interface RegistryDoc extends IndexTarget {
   generation?: string;
   /** Text-index names this registration owned and has since replaced; dropped by deleteIndex. */
   retiredTextIndexNames?: string[];
+  /** Vector-index names this registration owned and has since replaced (§3.3); dropped by deleteIndex. */
+  retiredVectorIndexNames?: string[];
   /** Bumped by every registry mutation (I5), so concurrent writers and delete transactions conflict. */
   rev?: number;
   /** The proven Atlas id of each search index this registration created (I11b); an array, as names may contain `.`. */
@@ -424,6 +426,7 @@ function recordedDropSet(entry: RegistryDoc): string[] {
       ...(entry.ownsVectorIndex === true ? [entry.searchIndexName] : []),
       ...(entry.ownsTextIndex === true && entry.textSearchIndexName ? [entry.textSearchIndexName] : []),
       ...(entry.retiredTextIndexNames ?? []),
+      ...(entry.retiredVectorIndexNames ?? []),
     ]),
   ];
 }
@@ -849,18 +852,20 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * the entry someone else registered. Callers that only refresh part of an entry omit it.
    *
    * Every write backfills `generation`, bumps `rev` and sets the `claimToken` in `entry` (a fresh
-   * one if absent). Returns what it left, or null when nothing matched without upsert.
+   * one if absent). `expressions` are pipeline expressions set in the same stage, so they read the
+   * pre-write document. Returns what it left, or null when nothing matched without upsert.
    */
   private async writeRegistryEntry(
     indexName: string,
     entry: Partial<RegistryDoc>,
     claim?: Document,
     upsert = true,
+    expressions: Document = {},
   ): Promise<P0Result | null> {
     const { claimToken = uuidv4(), ...fields } = entry;
     return this.p0Write(
       { _id: indexName, ...claim },
-      mutation => [{ $set: { ...literals({ indexName, ...fields }), ...mutation } }],
+      mutation => [{ $set: { ...literals({ indexName, ...fields }), ...expressions, ...mutation } }],
       claimToken,
       upsert,
     );
@@ -1230,6 +1235,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
               ownsTextIndex:
                 own.ownsTextIndex === true && !!own.textSearchIndexName && drop.includes(own.textSearchIndexName),
               retiredTextIndexNames: (own.retiredTextIndexNames ?? []).filter(n => drop.includes(n)),
+              retiredVectorIndexNames: (own.retiredVectorIndexNames ?? []).filter(n => drop.includes(n)),
               indexIds: (own.indexIds ?? []).filter(e => drop.includes(e.name)),
               deleting: true,
               deleteToken,
@@ -1362,7 +1368,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
               ownsVectorIndex: own.ownsVectorIndex === true && own.searchIndexName !== name,
               ownsTextIndex: own.ownsTextIndex === true && own.textSearchIndexName !== name,
             },
-            $pull: { retiredTextIndexNames: name, indexIds: { name } },
+            $pull: { retiredTextIndexNames: name, retiredVectorIndexNames: name, indexIds: { name } },
             $inc: { rev: 1 },
           },
           { session },
@@ -1828,6 +1834,16 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           text: `searchIndexName "${targetSearchIndex}" collides with the full-text search index name for collection "${targetCollection}". Choose a different vector searchIndexName.`,
         });
       }
+      // A retired name keeps its role until deleteIndex drops it (§3.3).
+      if (existingEntry?.retiredTextIndexNames?.includes(targetSearchIndex)) {
+        throw new MastraError({
+          id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: `searchIndexName "${targetSearchIndex}" was a full-text search index of index "${indexName}"; choose a different name.`,
+        });
+      }
 
       // Persist the logical-index → target mapping BEFORE provisioning any search
       // index. The registry entry is the durable record that classifies this index
@@ -1894,8 +1910,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // A managed index adopts an existing collection when one already has its name; record
       // whether this call created it so deleteIndex never drops a collection it found.
       const ownsCollection = existingEntry ? existingEntry.ownsCollection : collectionCreated;
-      // Ownership belongs to the index name it was recorded for; a new name starts out not owned.
-      const sameVectorIndex = existingEntry?.searchIndexName === targetSearchIndex;
       // What P0 writes besides the protocol fields; a rollback restores exactly these (I4).
       const p0Fields: Partial<RegistryDoc> = {
         collectionName: targetCollection,
@@ -1910,7 +1924,34 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         ...(resolvedAutoEmbed ? {} : { metric }),
         autoEmbed: resolvedAutoEmbed,
         ...(existingEntry ? {} : { ownsCollection }),
-        ...(existingEntry && !sameVectorIndex ? { ownsVectorIndex: false } : {}),
+      };
+      // §3.3, decided from the STORED name in the same $set stage (every expression reads the
+      // pre-write document), never from this call's earlier read: a concurrent rename landing in
+      // between keeps its ownership, and its owned name is retired rather than lost.
+      const newName = { $literal: targetSearchIndex };
+      const retiredVector = { $ifNull: ['$retiredVectorIndexNames', []] };
+      const keepVector = {
+        $or: [{ $eq: ['$searchIndexName', newName] }, { $eq: [{ $type: '$searchIndexName' }, 'missing'] }],
+      };
+      const vectorRename: Document = {
+        ownsVectorIndex: { $cond: [keepVector, '$ownsVectorIndex', { $in: [newName, retiredVector] }] },
+        retiredVectorIndexNames: {
+          $cond: [
+            keepVector,
+            '$retiredVectorIndexNames',
+            {
+              $setDifference: [
+                {
+                  $setUnion: [
+                    retiredVector,
+                    { $cond: [{ $eq: ['$ownsVectorIndex', true] }, ['$searchIndexName'], []] },
+                  ],
+                },
+                [newName],
+              ],
+            },
+          ],
+        },
       };
       let pin: P0Pin;
       let p0Before: RegistryDoc | null;
@@ -1920,6 +1961,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           indexName,
           { ...p0Fields, claimToken },
           registryClaim,
+          true,
+          vectorRename,
         ))!);
       } catch (error: any) {
         if (error?.code !== 11000) throw error;
@@ -2054,7 +2097,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           const removed = await this.rollbackRegistryEntry(
             indexName,
             pin,
-            p0Before ? rollbackRestore(p0Before, { indexName, ...p0Fields }) : null,
+            p0Before
+              ? rollbackRestore(p0Before, {
+                  indexName,
+                  ...p0Fields,
+                  ownsVectorIndex: true,
+                  retiredVectorIndexNames: true,
+                })
+              : null,
           );
           if (
             removed &&
@@ -2223,6 +2273,16 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     }
     const previous = await this.readRegistryEntry(indexName);
     this.assertNotDeleting(previous, 'CREATE_SEARCH_INDEX');
+    // A retired name keeps its role until deleteIndex drops it (§3.3).
+    if (previous?.retiredVectorIndexNames?.includes(name)) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+        text: `searchIndexName "${name}" was a vector search index of index "${indexName}"; choose a different name.`,
+      });
+    }
     // Only a text index this registration created may be updated; a different name starts out not owned.
     // Judged on `previous`, the document the registry write below is conditioned on.
     const sameName = !!previous && name === previous.textSearchIndexName;
