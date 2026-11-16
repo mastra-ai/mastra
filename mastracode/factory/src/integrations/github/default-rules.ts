@@ -279,9 +279,7 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
   // A card carrying several pull requests waits for the one it has out, else for any still open.
   const recorded = context.item.metadata?.openPullRequestNumber;
   const openPullRequestNumber =
-    typeof recorded === 'number'
-      ? recorded
-      : newestOpenPullRequestNumber(context.item, context.pullRequest.number);
+    typeof recorded === 'number' ? recorded : newestOpenPullRequestNumber(context.item, context.pullRequest.number);
   if (typeof openPullRequestNumber === 'number' && openPullRequestNumber !== context.pullRequest.number) {
     const role = context.flow?.buildRole;
     if (!role) return;
@@ -334,7 +332,7 @@ function addressReviewFeedback(context: FactoryGithubRuleContext) {
     type: 'sendMessage',
     idempotencyKey: `${context.ingress.id}:address-review-feedback`,
     role,
-    prepareBinding: !context.boardClosure?.itemTerminal,
+    prepareBinding: context.phase?.kind !== 'terminal' && !context.boardClosure?.itemTerminal,
     priority: 'high',
     message:
       `Changes were requested on pull request #${context.pullRequest.number} (${context.review.url}). ` +
@@ -400,6 +398,7 @@ function addressPullRequestComment(context: FactoryGithubRuleContext) {
     role,
     ...(context.actor.type === 'github' &&
     context.actor.factoryAuthored &&
+    context.phase?.kind !== 'terminal' &&
     !context.boardClosure?.itemTerminal &&
     requestsChangesVerdict(context.issueComment.body)
       ? { prepareBinding: true }

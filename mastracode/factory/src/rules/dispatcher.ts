@@ -1713,6 +1713,14 @@ export class FactoryDecisionDispatcher {
         return;
       }
       case 'sendMessage': {
+        if (
+          decision.prepareBinding &&
+          decision.role !== undefined &&
+          ((await this.#roleSuperseded(record, decision.role)) ||
+            (await this.#decisionOvertaken(record, decision.role)))
+        ) {
+          throw new FactoryDecisionSuperseded();
+        }
         const binding = await this.#messageBinding(record, decision);
         // Nobody live on the card means nobody to tell, not a failure to retry.
         if (!binding) return;

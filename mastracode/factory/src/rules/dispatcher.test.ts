@@ -974,6 +974,40 @@ describe('FactoryDecisionDispatcher', () => {
     });
   });
 
+  it.each(['done', 'canceled'])(
+    'supersedes queued review feedback before preparing a Work binding after a card reaches %s',
+    async stage => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'sendMessage',
+        role: 'work',
+        message: 'Address requested PR changes.',
+        prepareBinding: true,
+        idempotencyKey: `review-feedback-${stage}`,
+      });
+      await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { stages: [stage] } });
+      const { controller, sendNotificationSignal } = createSession();
+      const prepareBinding = vi.fn(async () => {});
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        boards: autoStartingBoards(),
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        prepareBinding,
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect(prepareBinding).not.toHaveBeenCalled();
+      expect(sendNotificationSignal).not.toHaveBeenCalled();
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'superseded',
+        attempts: 1,
+      });
+    },
+  );
+
   it('delivers a seatless park notice to whichever session is live on the card', async () => {
     // Parking names no seat: the person parked the card, not a role. The
     // notice must land on the session actually running — here the plan seat.

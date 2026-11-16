@@ -666,10 +666,11 @@ describe('built-in board and integration handlers', () => {
     it.each(['done', 'canceled'])(
       'does not prepare a Work binding for a %s card when changes are requested',
       async stage => {
-        const decision = await defaultGithubRules.pullRequestReviewSubmitted?.(
-          bind(reviewContext(), ruleItem({ ...item, stages: [stage] })),
-        );
-        expect(decision).toMatchObject({ type: 'sendMessage', role: 'work', prepareBinding: false });
+        const terminal = bind(reviewContext(), ruleItem({ ...item, stages: [stage] }));
+        for (const context of [terminal, { ...terminal, boardClosure: undefined }]) {
+          const decision = await defaultGithubRules.pullRequestReviewSubmitted?.(context);
+          expect(decision).toMatchObject({ type: 'sendMessage', role: 'work', prepareBinding: false });
+        }
       },
     );
 
@@ -830,17 +831,18 @@ describe('built-in board and integration handlers', () => {
     it.each(['done', 'canceled'])(
       'does not prepare a Work binding for a %s card after a Factory verdict comment',
       async stage => {
-        const decision = await defaultGithubRules.pullRequestCommentCreated?.(
-          bind(
-            commentContext({
-              actor: { type: 'github', login: 'factory[bot]', trusted: true, factoryAuthored: true },
-              issueComment: { id: 556, body: '**Verdict: Request changes**', author: 'factory[bot]' },
-            }),
-            ruleItem({ ...item, stages: [stage] }),
-          ),
+        const terminal = bind(
+          commentContext({
+            actor: { type: 'github', login: 'factory[bot]', trusted: true, factoryAuthored: true },
+            issueComment: { id: 556, body: '**Verdict: Request changes**', author: 'factory[bot]' },
+          }),
+          ruleItem({ ...item, stages: [stage] }),
         );
-        expect(decision).toMatchObject({ type: 'sendMessage', role: 'work' });
-        expect(decision).not.toHaveProperty('prepareBinding');
+        for (const context of [terminal, { ...terminal, boardClosure: undefined }]) {
+          const decision = await defaultGithubRules.pullRequestCommentCreated?.(context);
+          expect(decision).toMatchObject({ type: 'sendMessage', role: 'work' });
+          expect(decision).not.toHaveProperty('prepareBinding');
+        }
       },
     );
 
