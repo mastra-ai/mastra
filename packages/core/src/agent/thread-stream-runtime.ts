@@ -755,6 +755,9 @@ type AgentThreadRuntimeState = {
   // Signal IDs this runtime queued locally before publishing them, mapped to the owner run they were
   // later forwarded to (if any). Replays of these are echoes, except one addressed to that forwarded owner.
   locallyQueuedSignalIdsByThread: Map<string, Map<string, string | undefined>>;
+  // Signal IDs this runtime took from its queues as a turn's input. A copy of one forwarded back from another
+  // process is never admitted again, so one message starts at most one turn here. (#30190)
+  startedSignalIdsByThread: Map<string, Set<string>>;
   pendingSignalListenersByRunId: Map<string, Set<PendingSignalListener>>;
   // Signals queued for a run that is starting but has not made its first model
   // request yet. The first LLM step drains these and folds them into that
@@ -1060,6 +1063,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     suspensionMetadataByRunId: new Map(),
     pendingSignalsByThread: new Map(),
     locallyQueuedSignalIdsByThread: new Map(),
+    startedSignalIdsByThread: new Map(),
     pendingSignalListenersByRunId: new Map(),
     preRunSignalsByThread: new Map(),
     lostRunsByThread: new Map(),
@@ -2239,7 +2243,10 @@ export class AgentThreadStreamRuntime {
       if (data?.type === 'signal-enqueued') {
         if (
           (data.sourceId === this.#id && this.#isLocalSignalEcho(state, key, data.signal.id, data.runId)) ||
-          subscription.admittedSignalIds.has(data.signal.id)
+          subscription.admittedSignalIds.has(data.signal.id) ||
+          // Another process can forward a message this runtime already ran, e.g. one sent here while that process
+          // was resuming the run: running it again would answer it twice.
+          state.startedSignalIdsByThread.get(key)?.has(data.signal.id)
         )
           return;
         // Keep predecessor routing through a handoff, but never promote observer copies into execution.
@@ -2452,6 +2459,7 @@ export class AgentThreadStreamRuntime {
     subscription.ownedRunIds.clear();
     subscription.admittedSignalIds.clear();
     state.locallyQueuedSignalIdsByThread.delete(key);
+    state.startedSignalIdsByThread.delete(key);
     if (subscription.observers) return;
     state.threadControlSubscriptions.delete(key);
     subscription.unsubscribe();
@@ -3641,6 +3649,24 @@ export class AgentThreadStreamRuntime {
     return true;
   }
 
+  /** Signals taken from this runtime's queues as a turn's input; `#forgetStartedSignals` undoes it on a requeue. */
+  #recordStartedSignals(state: AgentThreadRuntimeState, key: string, signals: readonly CreatedAgentSignal[]) {
+    if (signals.length === 0) return;
+    const ids = state.startedSignalIdsByThread.get(key) ?? new Set<string>();
+    for (const signal of signals) {
+      ids.delete(signal.id);
+      ids.add(signal.id);
+    }
+    // Bound memory like the local queue record: evict oldest first.
+    while (ids.size > MAX_LOCALLY_QUEUED_SIGNAL_IDS_PER_THREAD) ids.delete(ids.values().next().value!);
+    state.startedSignalIdsByThread.set(key, ids);
+  }
+
+  #forgetStartedSignals(state: AgentThreadRuntimeState, key: string, signals: readonly CreatedAgentSignal[]) {
+    const ids = state.startedSignalIdsByThread.get(key);
+    for (const signal of signals) ids?.delete(signal.id);
+  }
+
   #recordLocallyQueuedSignal(state: AgentThreadRuntimeState, key: string, signalId: string) {
     const ids = state.locallyQueuedSignalIdsByThread.get(key) ?? new Map<string, string | undefined>();
     ids.delete(signalId);
@@ -4750,6 +4776,7 @@ export class AgentThreadStreamRuntime {
     state.suspensionMetadataByRunId.clear();
     state.pendingSignalsByThread.clear();
     state.locallyQueuedSignalIdsByThread.clear();
+    state.startedSignalIdsByThread.clear();
     state.preRunSignalsByThread.clear();
     state.lostRunsByThread.clear();
     state.pendingIdleSignalsByThread.clear();
@@ -5835,6 +5862,7 @@ export class AgentThreadStreamRuntime {
         if (queue.length === 0) {
           state.pendingSignalsByThread.delete(key);
         }
+        this.#recordStartedSignals(state, key, [signal]);
 
         // Hand the lease from the finished run to this drained run before
         // streaming, so the lease key never goes empty during the handoff. If the
@@ -5876,6 +5904,8 @@ export class AgentThreadStreamRuntime {
           // Early follow-ups were already published as retained signal-enqueued
           // events, so only discard this runtime's local pre-run copies.
           state.preRunSignalsByThread.delete(key);
+          // The signal starts no turn here: it is forwarded to the owner or requeued.
+          this.#forgetStartedSignals(state, key, [signal]);
           if (owns.owner && !isRetakeLeaseOwner(owns.owner)) {
             const ownerRunId = threadLeaseRunId(owns.owner);
             // Forwarding is a handoff: the signal is no longer locally cancellable.
@@ -5958,6 +5988,7 @@ export class AgentThreadStreamRuntime {
         ...(state.pendingSignalsByThread.get(key) ?? []),
       ];
       if (restored.length > 0) state.pendingSignalsByThread.set(key, restored);
+      if (signal) this.#forgetStartedSignals(state, key, [signal]);
       this.#publish(pubsub, key, {
         type: 'run-failed',
         runId: failedRunId,
@@ -6409,6 +6440,7 @@ export class AgentThreadStreamRuntime {
     }
 
     signalsByThread.delete(key);
+    this.#recordStartedSignals(state, key, queue);
     return queue;
   }
 

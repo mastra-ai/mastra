@@ -763,6 +763,136 @@ describeForAllEngines(
       },
     );
 
+    // Technical: two tool calls of one step suspend side by side, and each persists the setting its segment ran with.
+    // A resume read the value from the step's own suspend payload, which mirrors only the first suspended call. Once
+    // the second call was resumed with an override and suspended again, a resume of the first call from another
+    // Mastra instance read the first call's original value, so the run lost the override. The resume now reads the
+    // value persisted with the run's most recent suspension. (#30190)
+    // Skipped on Inngest: its harness cannot build a second Mastra instance with the same agent id (see above).
+    const resumeSiblingsAcrossInstances = async ({
+      firstCallAutoResume,
+      override,
+      starts,
+      answerPausesAgain,
+    }: {
+      firstCallAutoResume: boolean | undefined;
+      override: boolean;
+      starts: boolean;
+      /** Whether answering the second question leads to a follow-up question that pauses that call again. */
+      answerPausesAgain: boolean;
+    }) => {
+      const ANSWER_FOLLOW_UP = 'Here is my answer to both';
+      const answered: string[] = [];
+      const askTool = createTool({
+        id: 'ask',
+        description: 'Asks the user a question',
+        inputSchema: z.object({ question: z.string() }),
+        resumeSchema: z.object({ answer: z.string() }),
+        execute: async ({ question }, context) => {
+          if (context?.agent?.resumeData) {
+            answered.push(question);
+            if (question === 'b' && !answerPausesAgain) return { answer: context.agent.resumeData.answer };
+          }
+          // An answer leads to a follow-up question, so the call pauses again.
+          return context?.agent?.suspend({ message: question });
+        },
+      });
+      const memory = new MockMemory();
+      const agentOptions = {
+        tools: { askTool },
+        memory,
+        defaultOptions: { autoResumeSuspendedTools: true },
+        engine,
+      } as const;
+      const shared = await createSharedAgent(getMock(), agentOptions);
+      const threadId = globalThis.crypto.randomUUID();
+      const resourceId = globalThis.crypto.randomUUID();
+
+      const llm = getMock();
+      // Registered first: a turn the follow-up started would answer it.
+      llm.onMessage(new RegExp(ANSWER_FOLLOW_UP), { content: 'FOLLOW_UP_TURN' });
+      llm.onMessage(/two questions/, {
+        toolCalls: [
+          { id: 'call-a', name: 'ask', arguments: { question: 'a' } },
+          { id: 'call-b', name: 'ask', arguments: { question: 'b' } },
+        ],
+      });
+      const first = await runLoopScenario({
+        engine,
+        llm,
+        sharedAgent: shared,
+        prompt: 'Ask me two questions',
+        memory,
+        threadId,
+        resourceId,
+        fixtures: () => {},
+        collectChunks: true,
+        ...(firstCallAutoResume !== undefined ? { autoResumeSuspendedTools: firstCallAutoResume } : {}),
+      });
+      expect(first.chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
+      const runId = first.output.runId;
+
+      // The second question is answered first, with the override.
+      const resumedB = await shared.agent.resumeStream(
+        { answer: 'b' },
+        { runId, toolCallId: 'call-b', autoResumeSuspendedTools: override },
+      );
+      const resumedBChunks: ChunkType[] = [];
+      for await (const chunk of resumedB.fullStream) resumedBChunks.push(chunk);
+      expect(answered).toEqual(['b']);
+      expect(
+        resumedBChunks.some(
+          c => c.type === 'tool-call-suspended' && (c.payload as { toolCallId?: string }).toolCallId === 'call-b',
+        ),
+      ).toBe(answerPausesAgain);
+
+      // The first question is answered from a fresh instance on the same storage, without the option.
+      await getRunRegistryEntry(runId, shared.mastra)?.workflowExecution;
+      const instance = await createSharedAgentInAnotherProcess(llm, shared, agentOptions);
+      const resumedA = await instance.agent.resumeStream({ answer: 'a' }, { runId, toolCallId: 'call-a' });
+      for await (const _chunk of resumedA.fullStream) {
+        // drain
+      }
+      expect(answered).toEqual(['b', 'a']);
+
+      const view = await instance.agent.subscribeToThread({ resourceId, threadId });
+      onTestFinished(() => view.unsubscribe());
+      const requestsWithFollowUp = () =>
+        llm.getRequests().filter(request => JSON.stringify(request.body.messages).includes(ANSWER_FOLLOW_UP)).length;
+
+      await instance.agent.sendMessage(ANSWER_FOLLOW_UP, { resourceId, threadId }).accepted;
+      if (starts) {
+        await vi.waitFor(() => expect(requestsWithFollowUp()).toBeGreaterThan(0), { timeout: 7_000 });
+        await vi.waitFor(() => expect(view.activeRunId()).toBeNull(), { timeout: 7_000 });
+        expect(requestsWithFollowUp()).toBe(1);
+        return;
+      }
+      // Long enough for a turn the follow-up started to reach the model.
+      await new Promise(resolve => setTimeout(resolve, 500));
+      expect(requestsWithFollowUp()).toBe(0);
+      expect(view.activeRunId()).toBe(runId);
+    };
+    (engine === 'inngest' ? it.skip : it).each([
+      { firstCallAutoResume: undefined, override: false, starts: false },
+      { firstCallAutoResume: false, override: true, starts: true },
+    ] as const)(
+      'with two questions pending, resuming one with autoResumeSuspendedTools $override keeps that setting after the other is resumed from another Mastra instance: a follow-up starts a turn: $starts (#30190)',
+      row => resumeSiblingsAcrossInstances({ ...row, answerPausesAgain: true }),
+    );
+    // Known limit: the setting is persisted only with a suspension. When the call resumed with the override finishes
+    // instead of pausing again, nothing records the override, and a resume from another instance reads the value the
+    // other call persisted when it paused. Keeping it needs run-level state in the snapshot. (#30190)
+    (engine === 'inngest' ? it.skip : it.fails)(
+      'with two questions pending, resuming one with autoResumeSuspendedTools false keeps that setting after it finishes and the other is resumed from another Mastra instance (#30190)',
+      () =>
+        resumeSiblingsAcrossInstances({
+          firstCallAutoResume: undefined,
+          override: false,
+          starts: false,
+          answerPausesAgain: false,
+        }),
+    );
+
     // Technical: with no call-level `autoResumeSuspendedTools`, the #30190 release awaits the agent's default
     // options before it starts the follow-up turn. An explicit resume with `autoResumeSuspendedTools: false` can
     // update the same record and park the run again during that await. The record is unchanged, so the release read

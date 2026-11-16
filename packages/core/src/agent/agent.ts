@@ -60,6 +60,7 @@ import {
   getScopeStreamSlot,
   untilIdleHandlesBackgroundTask,
 } from '../loop/shared/stream-until-idle-helpers';
+import { findLatestSuspendedAutoResume } from '../loop/suspended-run-auto-resume';
 import type { AgentLoopResumeClaim } from '../loop/types';
 import { withDefaultToolCallConcurrencyLimit } from '../loop/workflows/agentic-execution/tool-call-concurrency';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
@@ -8941,19 +8942,6 @@ export class Agent<
     return undefined;
   }
 
-  /**
-   * The `autoResumeSuspendedTools` a suspended run executed with, persisted beside its stream state. A resume in
-   * another process, or after a restart, has no other record of it. (#30190)
-   */
-  #getSnapshotAutoResumeSuspendedTools(existingSnapshot: WorkflowRunState | null | undefined): boolean | undefined {
-    for (const key in existingSnapshot?.context) {
-      const step = existingSnapshot?.context[key];
-      const persisted = step?.status === 'suspended' ? step.suspendPayload?.__autoResumeSuspendedTools : undefined;
-      if (typeof persisted === 'boolean') return persisted;
-    }
-    return undefined;
-  }
-
   /** The run-level `returnScorerData` a suspended run started with, persisted beside its stream state. */
   #getSnapshotReturnScorerData(existingSnapshot: WorkflowRunState | null | undefined): boolean | undefined {
     for (const key in existingSnapshot?.context) {
@@ -11568,8 +11556,7 @@ export class Agent<
       mergedStreamOptions.returnScorerData = loopStreamOptions.returnScorerData = persistedReturnScorerData;
     }
     // Same precedence. The resume's own value, or else the run's, is also what the thread runtime keeps for the run.
-    const runAutoResume =
-      streamOptions?.autoResumeSuspendedTools ?? this.#getSnapshotAutoResumeSuspendedTools(existingSnapshot);
+    const runAutoResume = streamOptions?.autoResumeSuspendedTools ?? findLatestSuspendedAutoResume(existingSnapshot);
     if (runAutoResume !== undefined) {
       mergedStreamOptions.autoResumeSuspendedTools = loopStreamOptions.autoResumeSuspendedTools = runAutoResume;
     }
@@ -11801,9 +11788,7 @@ export class Agent<
       mergedOptions.returnScorerData = loopOptions.returnScorerData = persistedReturnScorerData;
     }
     const persistedAutoResume =
-      options?.autoResumeSuspendedTools === undefined
-        ? this.#getSnapshotAutoResumeSuspendedTools(existingSnapshot)
-        : undefined;
+      options?.autoResumeSuspendedTools === undefined ? findLatestSuspendedAutoResume(existingSnapshot) : undefined;
     if (persistedAutoResume !== undefined) {
       mergedOptions.autoResumeSuspendedTools = loopOptions.autoResumeSuspendedTools = persistedAutoResume;
     }

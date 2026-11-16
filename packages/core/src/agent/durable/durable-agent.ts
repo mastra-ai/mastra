@@ -12,6 +12,7 @@ import {
   untilIdleHandlesBackgroundTask,
 } from '../../loop/shared/stream-until-idle-helpers';
 import { TOOL_ABORT_GRACE_MS, TOOL_SETTLE_MARGIN_MS } from '../../loop/shared/tool-abort-grace';
+import { findLatestSuspendedAutoResume } from '../../loop/suspended-run-auto-resume';
 import {
   createTimeoutAbortSignal,
   DEADLINE_SAVE_CLAIM_HOLD_MS,
@@ -265,19 +266,6 @@ interface RehydratedRecoveryState {
   recoverAgentSpan?: Span<SpanType.AGENT_RUN>;
   recoverModelSpan?: AIModelGenerationSpan;
   registryEntry: any;
-}
-
-/**
- * The `autoResumeSuspendedTools` a suspended run's latest segment executed with, which its tool-call step persists
- * with the suspension. Absent from snapshots written before it was persisted. (#30190)
- */
-function snapshotAutoResumeSuspendedTools(snapshot: WorkflowRunState | undefined): boolean | undefined {
-  for (const step of Object.values(snapshot?.context ?? {})) {
-    if (step?.status !== 'suspended') continue;
-    const persisted: unknown = step.suspendPayload?.__autoResumeSuspendedTools;
-    if (typeof persisted === 'boolean') return persisted;
-  }
-  return undefined;
 }
 
 /**
@@ -3830,8 +3818,8 @@ export class DurableAgent<
       // Absent (vs recorded []) marks a run suspended before the scopes upgrade; the resume
       // adopts the supplied scopes with the same trust posture as a fresh run.
       rehydratedScopes = persistedScopes;
-      // A resume can override the value the run started with, so the one persisted with its suspension comes first.
-      coldRunAutoResume = snapshotAutoResumeSuspendedTools(snapshot) ?? workflowInput.options?.autoResumeSuspendedTools;
+      // A resume can override the value the run started with, so the one persisted with its latest suspension comes first.
+      coldRunAutoResume = findLatestSuspendedAutoResume(snapshot) ?? workflowInput.options?.autoResumeSuspendedTools;
       const memory = threadId
         ? {
             ...options?.memory,

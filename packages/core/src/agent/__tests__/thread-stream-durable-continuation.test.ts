@@ -761,6 +761,90 @@ describe('a follow-up sent while another runtime executes the parked run', () =>
       }
     },
   );
+  // Technical: the follow-up reaches this process before it has read the other process's `run-registered`, so this
+  // process still sees the run parked here and starts the reply turn itself. The other process also took the
+  // broadcast follow-up and, once its run parked, forwarded it to this process's new turn. This process admitted that
+  // forward as new input, and after the reply turn ended it ran the same message as a second reply turn. (#30190)
+  it('runs a follow-up sent to the process that parked it once, when it arrives while the other process is still registering its resume (#30190)', async () => {
+    const h = setup();
+    const threadId = 'continuation-thread';
+    const resourceId = 'continuation-user';
+    const turnStreams: Array<ReturnType<typeof h.makeStream>> = [];
+    const turnInputs: string[] = [];
+    const turnRunIds: string[] = [];
+    const agentInProcess = (runtime: AgentThreadStreamRuntime) => {
+      const agent = {
+        id: 'continuation-agent',
+        getDefaultOptions: async () => ({ autoResumeSuspendedTools: true }),
+        stream: vi.fn(async (input: unknown, options: { runId: string }) => {
+          turnInputs.push(JSON.stringify(input));
+          turnRunIds.push(options.runId);
+          const turn = h.makeStream({ runId: options.runId });
+          turnStreams.push(turn);
+          await turn.ready;
+          await runtime.registerRun(agent, turn.output, options as any, h.pubsub);
+          return turn.output;
+        }),
+      } as unknown as Agent<any, any, any, any>;
+      return agent;
+    };
+    const otherRuntime = new AgentThreadStreamRuntime();
+    const agent = agentInProcess(h.runtime);
+    const otherAgent = agentInProcess(otherRuntime);
+    const first = h.makeStream();
+    const resumed = h.makeStream();
+    const finishTurns = async () => {
+      for (const runId of turnRunIds) {
+        await emitFinishEvent(h.pubsub, runId, {
+          output: { text: 'done', steps: [] },
+          stepResult: { reason: 'stop' },
+        } as any);
+      }
+      // Long enough for a second turn the follow-up started to begin.
+      await new Promise(resolve => setTimeout(resolve, 300));
+    };
+    try {
+      await first.ready;
+      await h.runtime.registerRun(agent, first.output, h.options, h.pubsub, { continuation: 'across-suspension' });
+      await vi.waitFor(() => expect(h.registrations()).toHaveLength(1));
+      await h.chunk('tool-call-suspended', { toolCallId: 'call-1', toolName: 'ask', suspendPayload: {} });
+      await vi.waitFor(() => expect(first.output.status).toBe('suspended'));
+      await vi.waitFor(() => expect(h.suspensions()).toHaveLength(1));
+
+      // Another process starts resuming the run; the follow-up is sent here before that registration lands.
+      await resumed.ready;
+      const registering = otherRuntime.registerRun(
+        otherAgent,
+        resumed.output,
+        { ...h.options, toolCallId: 'call-1' } as any,
+        h.pubsub,
+        { continuation: 'across-suspension' },
+      );
+      const sent = h.runtime.sendSignal(
+        agent,
+        { type: 'user-message', contents: 'my answer' },
+        { resourceId, threadId },
+        h.pubsub,
+      );
+      await registering;
+      expect((await sent.accepted).action).toBe('deliver');
+      // This process starts the reply turn: it had not yet seen the other process take the run.
+      await vi.waitFor(() => expect(turnInputs).toHaveLength(1));
+      expect(turnInputs[0]).toContain('my answer');
+      // The resumed run parks again in the other process.
+      await h.chunk('tool-call-suspended', { toolCallId: 'call-2', toolName: 'ask', suspendPayload: {} });
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      await finishTurns();
+      await finishTurns();
+      expect(turnInputs).toHaveLength(1);
+    } finally {
+      first.cleanup();
+      resumed.cleanup();
+      for (const turn of turnStreams) turn.cleanup();
+      await h.pubsub.close();
+    }
+  });
 });
 
 /**
