@@ -63,18 +63,23 @@ export function isNewerId(a: string, b: string): boolean {
   return HEX24.test(a) && HEX24.test(b) && a.toLowerCase() > b.toLowerCase();
 }
 
+/** Server codes after which the create may or may not have landed: timeouts, shutdown, step-down, unreachable host. */
+export const MAYBE_LANDED_CODES: readonly number[] = [
+  6, 7, 50, 89, 91, 189, 262, 9001, 10107, 11600, 11602, 13435, 13436,
+];
+
 export function p4OutcomeOf(error: unknown): P4Outcome {
-  return error instanceof MongoServerError && typeof error.code === 'number'
+  return error instanceof MongoServerError && typeof error.code === 'number' && !MAYBE_LANDED_CODES.includes(error.code)
     ? { kind: 'refused', error }
     : { kind: 'unknown', error };
 }
 
 /** The §3.1 P5 table plus the id-timestamp rule. */
 export function classify(p4: P4Outcome, row: SearchIndexRow | undefined, creatingAt: Date): Verdict {
-  const live = isLiveRow(row) ? row : undefined;
   if (p4.kind === 'refused') return { kind: 'not-created' };
-  if (p4.kind === 'unknown') return live ? { kind: 'uncertain', candidateId: live.id ?? '' } : { kind: 'pending' };
-  if (live && live.id !== p4.id) return { kind: 'foreign', byTimestamp: false };
+  // Rows of any status count as present at P5 (a dying row still holds the name).
+  if (p4.kind === 'unknown') return row?.id ? { kind: 'uncertain', candidateId: row.id } : { kind: 'pending' };
+  if (row && row.id !== p4.id) return { kind: 'foreign', byTimestamp: false };
   const ts = idTimestampMs(p4.id);
   if (ts !== undefined && ts < creatingAt.getTime() - ID_TIMESTAMP_MARGIN_MS)
     return { kind: 'foreign', byTimestamp: true };

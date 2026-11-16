@@ -1,6 +1,6 @@
 import { MongoNetworkError, MongoServerError } from 'mongodb';
 import { describe, expect, it } from 'vitest';
-import { classify, idTimestampMs, isNewerId, p4OutcomeOf } from './provisioning';
+import { classify, idTimestampMs, isLiveRow, isNewerId, p4OutcomeOf } from './provisioning';
 
 const at = new Date('2026-11-17T12:00:00Z');
 const idAt = (d: Date) =>
@@ -55,7 +55,41 @@ describe('classify', () => {
   });
 });
 
+describe('classify fix round 1', () => {
+  it('ok R + dying row with another id is foreign; same-id dying row stays proven', () => {
+    expect(classify({ kind: 'ok', id: R }, { name: 'n', id: X, status: 'DELETING' }, at)).toEqual({
+      kind: 'foreign',
+      byTimestamp: false,
+    });
+    expect(classify({ kind: 'ok', id: R }, { name: 'n', id: R, status: 'DOES_NOT_EXIST' }, at)).toEqual({
+      kind: 'proven',
+      id: R,
+    });
+  });
+  it('unknown + dying row is uncertain', () => {
+    expect(classify({ kind: 'unknown', error: e }, { name: 'n', id: X, status: 'DELETING' }, at)).toEqual({
+      kind: 'uncertain',
+      candidateId: X,
+    });
+  });
+  it('rows without an id never give an empty candidateId', () => {
+    expect(classify({ kind: 'unknown', error: e }, { name: 'n' }, at)).toEqual({ kind: 'pending' });
+    expect(classify({ kind: 'ok', id: R }, { name: 'n' }, at)).toEqual({ kind: 'foreign', byTimestamp: false });
+  });
+});
+
 describe('helpers', () => {
+  it('isLiveRow', () => {
+    expect(isLiveRow(undefined)).toBe(false);
+    for (const status of ['READY', 'PENDING', 'BUILDING', undefined])
+      expect(isLiveRow({ name: 'n', status })).toBe(true);
+    for (const status of ['DELETING', 'DOES_NOT_EXIST']) expect(isLiveRow({ name: 'n', status })).toBe(false);
+  });
+  it('p4OutcomeOf maps may-have-landed server codes to unknown', () => {
+    for (const code of [6, 7, 50, 89, 91, 189, 262, 9001, 10107, 11600, 11602, 13435, 13436])
+      expect(p4OutcomeOf(new MongoServerError({ code })).kind).toBe('unknown');
+    for (const code of [2, 68]) expect(p4OutcomeOf(new MongoServerError({ code })).kind).toBe('refused');
+  });
   it('isNewerId orders 24-hex ids', () => {
     const earlier = idAt(at);
     const later = idAt(new Date(at.getTime() + 5000));
