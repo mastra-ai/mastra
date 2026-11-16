@@ -71,7 +71,6 @@ import { withDefaultToolCallConcurrencyLimit } from '../loop/workflows/agentic-e
 import type { Mastra } from '../mastra';
 import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
 import type { VersionOverrides } from '../mastra/types';
-import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import { normalizeMessageHistoryConfig } from '../memory/message-history-config';
 import { getMemoryRunState } from '../memory/run-state';
@@ -246,7 +245,12 @@ import { publishAbortRequest, requestAcknowledgedAbort } from './streams/abort-t
 import { AgentStreamBus } from './streams/bus';
 import { agentStreamsConfig, areAgentStreamsEnabled } from './streams/config';
 import { AGENT_STREAM_TOPIC } from './streams/constants';
-import { drainInvocationOutput, resolveInvocationRunId, successfulInvocationOutput } from './streams/invocation';
+import {
+  drainInvocationOutput,
+  resolveInvocationRunId,
+  successfulInvocationOutput,
+  resolveInvocationVersions,
+} from './streams/invocation';
 import { createAgentStreamPublisher } from './streams/publisher';
 import type { AgentStreamPublisher } from './streams/publisher';
 import { readAgentRunRecord } from './streams/run-records';
@@ -9114,18 +9118,13 @@ export class Agent<
     const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
     const requestContext = options.requestContext || new RequestContext();
 
-    // Build version overrides by merging: Mastra defaults < requestContext < call-site
     const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
-    let mergedVersions = mergeVersionOverrides(this.#mastra?.getVersionOverrides(), requestVersions);
-
-    // Merge call-site version overrides on top (call-site wins over request + Mastra defaults)
-    if (options.versions) {
-      mergedVersions = mergeVersionOverrides(mergedVersions, options.versions);
-    }
-
-    if (mergedVersions) {
-      requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
-    }
+    const mergedVersions = resolveInvocationVersions(
+      requestContext,
+      requestVersions,
+      this.#mastra?.getVersionOverrides(),
+      options.versions,
+    );
 
     // A run that suspended while executing a stored version must resume on *that* version.
     // The exact id was persisted into the suspend payload, so prefer it over any status
