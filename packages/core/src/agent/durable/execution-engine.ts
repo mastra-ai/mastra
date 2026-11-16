@@ -6,6 +6,7 @@ import type { ObservabilityContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
 import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
+import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds, markErrorForStreamRejection } from './constants';
 import { ExecutionFence, fencePubSub, resolveLeaseProvider, supportsRunFencing } from './execution-fence';
 import type { UntrackedRunLiveness } from './execution-fence';
@@ -20,6 +21,9 @@ export type ExecutionCompletion = { result: Awaited<ReturnType<DurableRun['start
 export type ExecutionOutcome = { owner: 'agent'; status?: string; error?: Error } | { owner: 'workers'; error?: Error };
 
 const unfencedStoresWarned = new WeakSet<WorkflowsStorage | MemoryStorage>();
+
+// Bound hydrated snapshots independently of the caller's filtered result page (#21501).
+const ACTIVE_RUNS_STORAGE_BATCH_SIZE = 100;
 
 export interface DurableWorkflowOptions {
   maxSteps?: number;
@@ -46,6 +50,49 @@ export class DurableExecutionEngine {
   }
   get workflow(): DurableWorkflow | null {
     return this.#workflow;
+  }
+
+  async *listRunningSnapshots(
+    workflowsStore: WorkflowsStorage,
+    options: { resourceId?: string; fromDate?: Date; toDate?: Date },
+  ) {
+    for (let storagePage = 0; ; storagePage++) {
+      const { runs, total } = await workflowsStore.listWorkflowRuns({
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+        status: 'running',
+        ...options,
+        perPage: ACTIVE_RUNS_STORAGE_BATCH_SIZE,
+        page: storagePage,
+      });
+      for (const run of runs) {
+        let snapshot = run.snapshot;
+        if (typeof snapshot === 'string') {
+          try {
+            snapshot = JSON.parse(snapshot) as WorkflowRunState;
+          } catch {
+            continue;
+          }
+        }
+        if (snapshot?.status === 'running') yield { run, snapshot };
+      }
+      // Stop also when an adapter ignores pagination and returns everything.
+      if (runs.length !== ACTIVE_RUNS_STORAGE_BATCH_SIZE) break;
+      if ((storagePage + 1) * ACTIVE_RUNS_STORAGE_BATCH_SIZE >= total) break;
+    }
+  }
+
+  untrackedRunLiveness(runId: string, workflowInput: DurableAgenticWorkflowInput) {
+    const memoryInfo = (
+      workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
+    )?.memoryInfo;
+    const threadId = workflowInput.state?.threadId ?? memoryInfo?.threadId;
+    if (!threadId) return undefined;
+    const resourceId = workflowInput.state?.resourceId ?? memoryInfo?.resourceId;
+    return {
+      isLive: (threadPubSub: PubSub | undefined) =>
+        agentThreadStreamRuntime.isRunHoldingThreadLease(threadPubSub, runId, threadId, resourceId),
+      ttlMs: agentThreadStreamRuntime.threadLeaseTtlMs,
+    };
   }
 
   raceFenceLoss<T>(operation: Promise<T>, executionFence: ExecutionFence): Promise<T> {
