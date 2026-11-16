@@ -1,5 +1,5 @@
 import { Container } from '@earendil-works/pi-tui';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 
@@ -23,6 +23,10 @@ async function flushParser(): Promise<void> {
   await Promise.resolve();
   // Streamed args are applied by the render scheduler's coalesce timer, so the
   // wait must exceed it (`handlers/__tests__/tool.test.ts` does the same).
+  if (vi.isFakeTimers()) {
+    await vi.advanceTimersByTimeAsync(DEFAULT_RENDER_COALESCE_MS + 20);
+    return;
+  }
   await new Promise(resolve => setTimeout(resolve, DEFAULT_RENDER_COALESCE_MS + 20));
 }
 
@@ -341,6 +345,8 @@ describe('compact shell description streaming', () => {
   });
 
   it('only ever adds lines as compact shell calls stream in, run, and finish', async () => {
+    vi.useFakeTimers();
+    onTestFinished(() => vi.useRealTimers());
     const ctx = createToolHandlerContext();
     ctx.state.previewLines = 2;
     const buffers = new Map<string, { toolName: string; text: string }>();

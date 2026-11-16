@@ -61,9 +61,6 @@ async function seedFactory(parentVisibility: SourceControlSessionVisibility = 'o
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'owner',
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/sandbox/mastra',
   });
   await sourceControl.sessions.create({
     sessionId: 'parent-session',
@@ -1051,12 +1048,82 @@ describe('factory_start_session in work-item mode', () => {
     expect(request.requestContext).toBeUndefined();
   });
 
-  it("starts a work-item role in a hybrid Factory on the Factory's scope, like the Start route", async () => {
-    const env = await withItem();
-    await env.seed.projects.update({ orgId: 'org-1', id: env.scope.factoryProjectId, input: { modelScope: 'hybrid' } });
-    await env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' });
+  // The person asked for the run, but the card's session is the Factory's: it runs on the
+  // organization's keys, and the person follows it from the session they asked in.
+  it.each(['hybrid', 'factory'] as const)(
+    'starts a work-item role in a %s Factory as the Factory, followed by the session that asked',
+    async modelScope => {
+      const env = await withItem();
+      await env.seed.projects.update({ orgId: 'org-1', id: env.scope.factoryProjectId, input: { modelScope } });
+      const factory = `factory-project:${env.scope.factoryProjectId}`;
 
-    expect(env.prepare.mock.calls[0]![0]).toMatchObject({ modelScope: 'factory' });
+      const result = (await env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })) as Started;
+
+      expect(env.prepare.mock.calls[0]![0]).toMatchObject({
+        modelScope: 'factory',
+        userId: factory,
+        startedBy: { type: 'human', id: 'user-1' },
+      });
+      await expect(env.sessions.getBySessionId(result.sessionId)).resolves.toMatchObject({ userId: factory });
+      const session = env.created.find(entry => entry.options.id === result.sessionId)!.session;
+      expect(session.state.get()).toMatchObject({ factoryOwnerUserId: factory, factoryModelScope: 'factory' });
+      expect(session.sendSignal.mock.calls[0]![1].requestContext.get('user')).toEqual({
+        workosId: factory,
+        organizationId: 'org-1',
+      });
+      const after = (await env.seed.workItems.get({ orgId: 'org-1', id: env.item.id }))!;
+      expect(after.sessions.work).toMatchObject({ sessionId: result.sessionId, startedBy: factory });
+      expect(await env.subscriptions()).toEqual([
+        expect.objectContaining({ workItemId: env.item.id, userId: 'user-1', reason: 'started' }),
+      ]);
+    },
+  );
+
+  it('refuses to start a Factory-run role while the organization has no model key, and says what to add', async () => {
+    const env = await withItem('org', { tenantCredentials: true });
+    await env.seed.projects.update({ orgId: 'org-1', id: env.scope.factoryProjectId, input: { modelScope: 'hybrid' } });
+    // The caller's own key is not the Factory's to spend.
+    await env.seed.credentials.setCredential({ orgId: 'org-1', userId: 'user-1' }, 'openai', {
+      type: 'api_key',
+      key: 'sk-personal',
+    });
+    const before = await env.sessionRows();
+
+    await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).rejects.toThrow(
+      'Add an organization key or provider under Settings → Models',
+    );
+
+    expect(env.prepare).not.toHaveBeenCalled();
+    expect(await env.sessionRows()).toEqual(before);
+    expect(await env.subscriptions()).toEqual([]);
+
+    await env.seed.credentials.setCredential({ orgId: 'org-1' }, 'openai', { type: 'api_key', key: 'sk-org' });
+    await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).resolves.toMatchObject({
+      mode: 'work-item',
+    });
+  });
+
+  it('starts a Factory-run role for an organization that runs on its own provider and stores no key', async () => {
+    const env = await withItem('org', { tenantCredentials: true });
+    await env.seed.projects.update({ orgId: 'org-1', id: env.scope.factoryProjectId, input: { modelScope: 'hybrid' } });
+    await env.seed.customProviders.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: {
+        providerId: 'acme',
+        name: 'Acme',
+        url: 'https://llm.acme.dev/v1',
+        apiKey: 'sk-acme',
+        models: ['fast-1'],
+      },
+    });
+
+    await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).resolves.toMatchObject({
+      mode: 'work-item',
+    });
+    expect(env.prepare).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: `factory-project:${env.scope.factoryProjectId}` }),
+    );
   });
 
   it("bills the work-item session to the caller's credential tenant", async () => {
@@ -1200,7 +1267,7 @@ describe('factory_start_session in work-item mode', () => {
     expect(env.prepare).not.toHaveBeenCalled();
   });
 
-  it('refuses an item with several repositories, listing them and creating nothing', async () => {
+  it("starts an item that names no repository among several in the environment's first one", async () => {
     const env = await withItem();
     const second = await env.sourceControl.repositories.upsert({
       orgId: 'org-1',
@@ -1210,19 +1277,16 @@ describe('factory_start_session in work-item mode', () => {
       orgId: 'org-1',
       connectionId: env.connection.id,
       repositoryId: second.id,
-      createdByUserId: 'owner',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/docs',
     });
     const rowsBefore = await env.sessionRows();
 
-    await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).rejects.toThrow(
-      /several repositories \(.*mastra-ai\/mastra.*\); v1 can't choose one/,
+    await env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' });
+
+    const [created] = (await env.sessionRows()).filter(
+      row => !rowsBefore.some(before => before.sessionId === row.sessionId),
     );
-    await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).rejects.toThrow(/mastra-ai\/docs/);
-    expect(env.prepare).not.toHaveBeenCalled();
-    expect(await env.sessionRows()).toEqual(rowsBefore);
-    expect(await env.bindings()).toEqual([]);
+    expect(created).toMatchObject({ projectRepositoryId: env.projectRepository.id });
+    expect(env.prepare).toHaveBeenCalledWith(expect.objectContaining({ sessionId: created!.sessionId }));
   });
 
   it("refuses while the Factory runtime's coordinator isn't ready", async () => {

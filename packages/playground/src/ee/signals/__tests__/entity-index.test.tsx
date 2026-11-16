@@ -88,7 +88,7 @@ describe('Trace Intelligence index route', () => {
       renderIndex('/intelligence?search=support&sort=entity-desc&view=compact');
 
       expect(await screen.findByRole('link', { name: 'Open support-agent' })).not.toBeNull();
-      expect(screen.getByRole('searchbox', { name: 'Filter agents' }).getAttribute('value')).toBe('support');
+      expect(screen.getByRole('searchbox', { name: 'Search agents' }).getAttribute('value')).toBe('support');
       expect(screen.getByRole('combobox', { name: 'Sort agents' }).textContent).toContain('Agent: Z–A');
       expect(screen.getByRole('button', { name: 'Compact view' }).getAttribute('aria-pressed')).toBe('true');
     });
@@ -100,7 +100,7 @@ describe('Trace Intelligence index route', () => {
 
       renderIndex();
       await screen.findByText('support-agent');
-      fireEvent.change(screen.getByRole('searchbox', { name: 'Filter agents' }), { target: { value: 'support' } });
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Search agents' }), { target: { value: 'support' } });
       fireEvent.click(screen.getByRole('button', { name: 'Compact view' }));
       fireEvent.click(screen.getByRole('combobox', { name: 'Sort agents' }));
       const option = await screen.findByRole('option', { name: 'Agent: A–Z' });

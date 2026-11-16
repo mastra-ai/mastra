@@ -151,7 +151,6 @@ async function seedLegacyFactory() {
     session_id: USER_SESSION,
     resource_id: USER_SESSION,
     thread_id: USER_SESSION,
-    session_scope: '/workspace/legacy',
     status: 'active',
     data: {},
     created_at: now,
@@ -321,7 +320,7 @@ describe('migrateSessionResources', () => {
       ]),
     );
     expect(await ops.findMany('integration_subscriptions', {})).toEqual([
-      expect.objectContaining({ session_id: USER_SESSION, resource_id: 'user-1', session_scope: '/workspace/legacy' }),
+      expect.objectContaining({ session_id: USER_SESSION, resource_id: 'user-1' }),
     ]);
 
     // The Factory's resource now lists its runs and Slack sessions; the user's lists only theirs.

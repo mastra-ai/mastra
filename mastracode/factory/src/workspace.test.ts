@@ -282,7 +282,6 @@ function addProject(overrides: Record<string, unknown> = {}) {
     repoFullName: 'octocat/hello',
     repoId: 456,
     defaultBranch: 'main',
-    sandboxProvider: 'local',
     sandboxWorkdir: '/workspace/octocat/hello',
     setupCommand: null,
     teardownCommand: null,
@@ -2448,7 +2447,7 @@ describe('GitHub session workspace preparation', () => {
   // workspace — never a host-backed one, and never a provisioned sandbox.
   it('a chat-only session on a remote-sandbox deploy gets no workspace instead of an error', async () => {
     const workspace = createRemoteFactory();
-    addProject({ sandboxProvider: 'railway' });
+    addProject();
     // No session row: `sessions.getBySessionId` misses for the chat-only id.
 
     await expect(
@@ -2464,7 +2463,7 @@ describe('GitHub session workspace preparation', () => {
   // constructs its own sandbox through the callback.
   it('constructs a remote session sandbox keyed by the session id', async () => {
     const workspace = createRemoteFactory();
-    addProject({ sandboxProvider: 'railway' });
+    addProject();
     addSession({ id: 'session-a' });
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
@@ -2483,7 +2482,7 @@ describe('GitHub session workspace preparation', () => {
 
   it('attaches the session setup itself, so the callback never receives a hook to forward', async () => {
     const workspace = createRemoteFactory();
-    addProject({ sandboxProvider: 'railway' });
+    addProject();
     addSession({ id: 'session-a' });
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
@@ -2496,7 +2495,7 @@ describe('GitHub session workspace preparation', () => {
 
   it('attaches the setup hook once per instance, not once per open', async () => {
     const workspace = createRemoteFactory();
-    addProject({ sandboxProvider: 'railway' });
+    addProject();
     addSession({ id: 'session-a' });
 
     const context = createGithubRequestContext('project-1', 'session-a');
@@ -2511,7 +2510,7 @@ describe('GitHub session workspace preparation', () => {
 
   it('never threads a persisted sha into the sandbox callback', async () => {
     const workspace = createRemoteFactory();
-    addProject({ sandboxProvider: 'railway' });
+    addProject();
     addSession({ id: 'session-a' });
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
@@ -4523,7 +4522,7 @@ describe('factory environment sandbox context', () => {
 
       expect(lastGhToken()).toBe('repo-token-repository-1');
       expect(warn).toHaveBeenCalledExactlyOnceWith(
-        '[Mastra Factory] GH_TOKEN covers the session repository only',
+        '[Mastra Factory] Sandbox GitHub tokens do not cover every environment repository',
         expect.objectContaining({
           reason: 'provider failed to mint one token for this repository set (Error)',
         }),
@@ -4545,10 +4544,10 @@ describe('factory environment sandbox context', () => {
 
       expect(lastGhToken()).toBe('repo-token-repository-1');
       expect(warn).toHaveBeenCalledExactlyOnceWith(
-        '[Mastra Factory] GH_TOKEN covers the session repository only',
+        '[Mastra Factory] Sandbox GitHub tokens do not cover every environment repository',
         expect.objectContaining({
           sessionId: 'session-a',
-          repositories: ['octocat/hello', 'octocat/docs'],
+          uncovered: ['octocat/docs'],
           reason: 'provider mints per-repository tokens only',
         }),
       );
@@ -4557,6 +4556,139 @@ describe('factory environment sandbox context', () => {
         'GH_TOKEN covers octocat/hello only; use the source_control_* tools for other repositories.',
       );
       warn.mockRestore();
+    });
+
+    it('mints one sandbox token per ten environment repositories and points each checkout at its own', async () => {
+      const links = Array.from({ length: 12 }, (_, index) => ({
+        id: index === 0 ? 'project-1' : `link-${index + 1}`,
+        repositoryId: `repository-${index + 1}`,
+        slug: index === 0 ? 'octocat/hello' : `octocat/repo-${index + 1}`,
+        position: index + 1,
+        inEnvironment: true,
+      }));
+      const { resolver, github } = environmentFixture({ links });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+      const workspace = await resolver({ requestContext });
+      await workspace.sandbox.getInfo();
+
+      const first = links.slice(0, 10).map(link => link.repositoryId);
+      const second = links.slice(10).map(link => link.repositoryId);
+      expect(mocks.getRepositoriesAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryIds: first });
+      expect(mocks.getRepositoriesAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryIds: second });
+      const env = () => {
+        const calls = mocks.setEnv.mock.calls;
+        return (
+          calls[calls.length - 1]![0] as (env: Record<string, string | undefined>) => Record<string, string | undefined>
+        )({
+          GH_TOKEN_3: 'stale',
+        });
+      };
+      expect(env()).toEqual({
+        GH_TOKEN: `env-token-${first.join('+')}`,
+        GH_TOKEN_2: `env-token-${second.join('+')}`,
+      });
+      const tokenEnvNames = Object.fromEntries(
+        mocks.syncEnvironmentRepository.mock.calls.map((call: unknown[]) => {
+          const options = call[2] as { repoFullName: string; tokenEnvName?: string };
+          return [options.repoFullName, options.tokenEnvName];
+        }),
+      );
+      expect(tokenEnvNames['octocat/repo-2']).toBe('GH_TOKEN');
+      expect(tokenEnvNames['octocat/repo-10']).toBe('GH_TOKEN');
+      expect(tokenEnvNames['octocat/repo-11']).toBe('GH_TOKEN_2');
+      expect(tokenEnvNames['octocat/repo-12']).toBe('GH_TOKEN_2');
+      expect(peekSessionEnvironment('session-a')?.note).toBe(
+        [
+          `GH_TOKEN covers octocat/hello, ${links
+            .slice(1, 10)
+            .map(link => link.slug)
+            .join(', ')}.`,
+          'GH_TOKEN_2 covers octocat/repo-11, octocat/repo-12; run gh for these as \`GH_TOKEN=$GH_TOKEN_2 gh ...\`.',
+          'git in each checkout already authenticates with the token that covers it.',
+        ].join(' '),
+      );
+
+      // Refresh re-mints every group, not just the session repository's.
+      mocks.getRepositoriesAccess.mockClear();
+      const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
+      const refresh = createGithubSubscriptionTools(requestContext, integration).github_refresh_token!;
+      expect(await refresh.execute!({}, {} as never)).toEqual({ refreshed: true });
+      expect(mocks.getRepositoriesAccess).toHaveBeenCalledTimes(2);
+      expect(env().GH_TOKEN_2).toBe(`env-token-${second.join('+')}`);
+    });
+
+    it('installs every group token before setup runs and keeps them current across resolutions', async () => {
+      const links = Array.from({ length: 11 }, (_, index) => ({
+        id: index === 0 ? 'project-1' : `link-${index + 1}`,
+        repositoryId: `repository-${index + 1}`,
+        slug: index === 0 ? 'octocat/hello' : `octocat/repo-${index + 1}`,
+        position: index + 1,
+        inEnvironment: true,
+        ...(index === 10 ? { setupCommand: 'git fetch' } : {}),
+      }));
+      const { resolver, github } = environmentFixture({ links });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      // Snapshot each install as it happens: later mints must not change what an earlier call put in.
+      const installed: Record<string, string | undefined>[] = [];
+      mocks.setEnv.mockImplementation(
+        (update: (env: Record<string, string | undefined>) => Record<string, string | undefined>) => {
+          installed.push(update({}));
+        },
+      );
+      const originalAccess = mocks.getRepositoryAccess.getMockImplementation()!;
+      const originalWideAccess = mocks.getRepositoriesAccess.getMockImplementation()!;
+      onTestFinished(() => {
+        mocks.setEnv.mockReset();
+        mocks.getRepositoryAccess.mockImplementation(originalAccess);
+        mocks.getRepositoriesAccess.mockImplementation(originalWideAccess);
+      });
+      const applied = (index: number) => installed[index]!;
+
+      const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      await workspace.sandbox.getInfo();
+
+      // Setup commands may fetch through repository 11's helper, so GH_TOKEN_2 is there first.
+      expect(mocks.runSetupCommand).toHaveBeenCalled();
+      const firstSetup = Math.min(...mocks.runSetupCommand.mock.invocationCallOrder);
+      const installedBeforeSetup = mocks.setEnv.mock.calls.some(
+        (_, index) => mocks.setEnv.mock.invocationCallOrder[index]! < firstSetup && applied(index).GH_TOKEN_2,
+      );
+      expect(installedBeforeSetup).toBe(true);
+      // Recording the environment during setup must not lose the coverage note.
+      expect(peekSessionEnvironment('session-a')?.note).toContain('GH_TOKEN_2 covers octocat/repo-11');
+
+      // A later resolution reuses the first one's injector; its refresh must
+      // still install the group tokens it just minted.
+      const laterContext = createGithubRequestContext('project-1', 'session-a');
+      await resolver({ requestContext: laterContext });
+      mocks.getRepositoriesAccess.mockImplementation(async ({ repositoryIds }: { repositoryIds: string[] }) => ({
+        cloneUrl: 'https://github.com/octocat/hello.git',
+        authorization: { scheme: 'bearer' as const, token: `fresh-${repositoryIds.join('+')}` },
+      }));
+      mocks.getRepositoryAccess.mockImplementation(async ({ repositoryId }: { repositoryId: string }) => ({
+        cloneUrl: 'https://github.com/octocat/hello.git',
+        authorization: { scheme: 'bearer' as const, token: `fresh-${repositoryId}` },
+      }));
+      const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
+      const refresh = createGithubSubscriptionTools(laterContext, integration).github_refresh_token!;
+      expect(await refresh.execute!({}, {} as never)).toEqual({ refreshed: true });
+      expect(applied(mocks.setEnv.mock.calls.length - 1)).toEqual({
+        GH_TOKEN: `fresh-${links
+          .slice(0, 10)
+          .map(link => link.repositoryId)
+          .join('+')}`,
+        GH_TOKEN_2: 'fresh-repository-11',
+      });
+
+      // An org PAT replaces the group tokens, so the note naming them goes too.
+      mocks.githubPat = 'ghp_org_pat';
+      expect(await refresh.execute!({}, {} as never)).toEqual({ refreshed: true });
+      expect(applied(mocks.setEnv.mock.calls.length - 1)).toEqual({ GH_TOKEN: 'ghp_org_pat' });
+      expect(peekSessionEnvironment('session-a')?.note).toBeUndefined();
     });
 
     it('skips setup where the template marker matches and runs it where the marker is missing', async () => {
@@ -4727,13 +4859,12 @@ describe('factory environment sandbox context', () => {
         (call: [unknown]) => call[0],
       );
       expect(writes).toEqual([
-        { orgId: 'org-1', id: 'project-1', status: 'configured', error: null, builtAt: expect.any(Date) },
+        { orgId: 'org-1', id: 'project-1', status: 'configured', error: null },
         {
           orgId: 'org-1',
           id: 'link-2',
           status: 'failed',
           error: 'Setup command failed (exit 1): fatal: https://***@github.com/octocat/docs',
-          builtAt: expect.any(Date),
         },
       ]);
       warn.mockRestore();
@@ -4823,9 +4954,7 @@ describe('factory environment sandbox context', () => {
       const writes = (github.sourceControlStorage.projectRepositories as any).setBuildStatus.mock.calls.map(
         (call: [unknown]) => call[0],
       );
-      expect(writes).toEqual([
-        { orgId: 'org-1', id: 'project-1', status: 'configured', error: null, builtAt: expect.any(Date) },
-      ]);
+      expect(writes).toEqual([{ orgId: 'org-1', id: 'project-1', status: 'configured', error: null }]);
     });
   });
 });

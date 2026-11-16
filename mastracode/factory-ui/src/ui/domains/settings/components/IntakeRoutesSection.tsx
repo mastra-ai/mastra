@@ -29,7 +29,6 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useLocation } from 'react-router';
@@ -38,7 +37,13 @@ import { queryKeys } from '../../../../api/keys';
 import type { InstalledBoardInfo, IntakeRouteInfo, IntakeRouteListResponse } from '../../../../api/types';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { BoardRequestError } from '../../../../hooks/useBoardEditor';
-import { useIntakeRoutesQuery, useIntakeRouteWrites } from '../../../../hooks/useIntakeRoutes';
+import { useApiConfig } from '../../../../api/config';
+import {
+  applyReroute,
+  previewReroute,
+  useIntakeRoutesQuery,
+  useIntakeRouteWrites,
+} from '../../../../hooks/useIntakeRoutes';
 import { useSourceSuggestions } from '../../../../hooks/useSourceSuggestions';
 import type { RouteWrite } from '../../../../hooks/useIntakeRoutes';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
@@ -60,6 +65,11 @@ import {
 import { SettingsSubsection } from './SettingsSubsection';
 import type { SourceOption } from './sourceSuggestions';
 import { useRowDrag } from './useRowDrag';
+import { IconArrowDown } from '@mastra/playground-ui/icons/central/IconArrowDown';
+import { IconArrowUp } from '@mastra/playground-ui/icons/central/IconArrowUp';
+import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 const ROUTE_WHEN_SCHEMA = ruleGroupSchema(INTAKE_ROUTE_RULE_FIELDS);
 const STALE_CODES = new Set(['revision_mismatch', 'intake_route_set_mismatch', 'intake_route_not_found']);
@@ -191,8 +201,10 @@ function JoinIssueCard({ checked, onChange }: { checked: boolean; onChange: (joi
  */
 function useRouteSaves(factoryId: string) {
   const queryClient = useQueryClient();
+  const { baseUrl } = useApiConfig();
   const writes = useIntakeRouteWrites(factoryId);
   const queue = useRef<Promise<void>>(Promise.resolve());
+  const previews = useRef(0);
   const [failures, setFailures] = useState(0);
   const key = queryKeys.intakeRoutes(factoryId);
 
@@ -215,7 +227,47 @@ function useRouteSaves(factoryId: string) {
         },
       );
     queue.current = done.then(() => undefined);
+    void done.then(saved => {
+      if (saved) void warnOfReroute();
+    });
     return done;
+  };
+  /** The routes now file some untouched cards elsewhere: warn, and offer to move them. */
+  const warnOfReroute = async () => {
+    const asked = ++previews.current;
+    const preview = await previewReroute(baseUrl, factoryId).catch(() => undefined);
+    // A later save asked again; only its answer describes the routes as they are now.
+    if (asked !== previews.current || !preview) return;
+    if (preview.total === 0) {
+      toast.dismiss(`reroute-${factoryId}`);
+      return;
+    }
+    const where = preview.moves.map(move => `${move.count} from ${move.fromBoard} to ${move.toBoard}`).join(', ');
+    toast.warning(
+      `${preview.total} untouched card${preview.total === 1 ? '' : 's'} now match${preview.total === 1 ? 'es' : ''} another board (${where}).`,
+      {
+        id: `reroute-${factoryId}`,
+        duration: Infinity,
+        action: {
+          label: 'Move',
+          onClick: () =>
+            void applyReroute(baseUrl, factoryId).then(
+              ({ moved, skipped }) => {
+                const movedText = `Moved ${moved} card${moved === 1 ? '' : 's'} to the start of their new board.`;
+                if (skipped > 0) {
+                  toast.warning(
+                    `${movedText} ${skipped} card${skipped === 1 ? ' was' : 's were'} skipped because ${skipped === 1 ? 'it' : 'they'} changed in the meantime.`,
+                  );
+                } else {
+                  toast.success(movedText);
+                }
+                void queryClient.invalidateQueries();
+              },
+              (error: unknown) => toast.error(saveFailureMessage(error)),
+            ),
+        },
+      },
+    );
   };
   return { latest, show, save, failures };
 }
@@ -525,20 +577,20 @@ function RouteCard({
             <DropdownMenu.Trigger
               render={
                 <Button variant="ghost" size="icon-sm" aria-label={`${route.name} actions`}>
-                  <MoreHorizontal />
+                  <IconDotGrid1x3Horizontal />
                 </Button>
               }
             />
             <DropdownMenu.Content align="end">
               <DropdownMenu.Item disabled={!canMoveUp} onClick={() => onMove(-1)}>
-                <ArrowUp /> Move up
+                <IconArrowUp /> Move up
               </DropdownMenu.Item>
               <DropdownMenu.Item disabled={!canMoveDown} onClick={() => onMove(1)}>
-                <ArrowDown /> Move down
+                <IconArrowDown /> Move down
               </DropdownMenu.Item>
               <DropdownMenu.Separator />
               <DropdownMenu.Item variant="destructive" onClick={onRemove}>
-                <Trash2 /> Delete
+                <TrashIcon /> Delete
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu>
@@ -1033,7 +1085,7 @@ function RouteList({
           </div>
         ) : (
           <div className="pl-4">
-            <RuleAddButton icon={<Plus />} onClick={() => setAdding(true)}>
+            <RuleAddButton icon={<IconPlusMedium />} onClick={() => setAdding(true)}>
               {scope.kind === 'moves' ? 'Add card move' : 'Add route'}
             </RuleAddButton>
           </div>

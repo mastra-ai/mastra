@@ -13,6 +13,7 @@ import {
   openSourcePicker,
   closeSourcePicker,
   holdFirstPut,
+  baseConfig,
 } from './fixtures';
 
 describe('IntakeSection github', () => {
@@ -129,6 +130,36 @@ describe('IntakeSection github', () => {
       await userEvent.click(await screen.findByRole('button', { name: 'Add mastra' }));
 
       await waitFor(() => expect(saved).toEqual([{ github: { enabled: true, sourceIds: ['mastra'] } }]));
+    });
+  });
+
+  describe('given the server registers Dependabot intake', () => {
+    it('turns Dependabot alert sync on and opts a repository in', async () => {
+      seedGithubProject();
+      const saved = useIntakeHandlers({
+        config: { ...baseConfig(), dependabot: { enabled: false, sourceIds: null } },
+      });
+      renderIntakeSection();
+      const github = within(await screen.findByRole('region', { name: 'GitHub' }));
+      expect(github.queryByRole('button', { name: / to Dependabot repositories$/ })).not.toBeInTheDocument();
+
+      await userEvent.click(github.getByRole('switch', { name: 'Sync Dependabot alerts' }));
+      await waitFor(() => expect(saved).toEqual([{ dependabot: { enabled: true, sourceIds: null } }]));
+
+      await openSourcePicker('Dependabot repositories');
+      await userEvent.click(await screen.findByRole('button', { name: 'Add mastra' }));
+
+      await waitFor(() => expect(saved.at(-1)).toEqual({ dependabot: { enabled: true, sourceIds: ['mastra'] } }));
+      await closeSourcePicker();
+      expect(github.getByRole('switch', { name: 'Sync GitHub issues' })).toBeChecked();
+    });
+
+    it('hides Dependabot controls when the server does not register it', async () => {
+      seedGithubProject();
+      useIntakeHandlers();
+      renderIntakeSection();
+      await screen.findByRole('switch', { name: 'Sync GitHub issues' });
+      expect(screen.queryByRole('switch', { name: 'Sync Dependabot alerts' })).not.toBeInTheDocument();
     });
   });
 });

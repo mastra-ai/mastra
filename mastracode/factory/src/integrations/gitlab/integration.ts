@@ -36,7 +36,7 @@ import type { GitLabIssue, GitLabNote, GitLabProject } from './api.js';
 import { resolveGitLabRules } from './default-rules.js';
 import type { GitLabEventRules, GitLabRuleOverrides } from './default-rules.js';
 import { attachGitLabReconciler } from './reconciler.js';
-import { gitlabReconciliationEnabled, gitlabReconciliationInterval } from './reconciliation-config.js';
+import { gitlabReconciliationInterval } from './reconciliation-config.js';
 import { buildGitLabRoutes, ingestLinkedGitLabRepositoryBacklog } from './routes.js';
 import { attachGitLabRules } from './rules.js';
 import {
@@ -341,7 +341,6 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {
-    if (!gitlabReconciliationEnabled()) return [];
     const reconcile = attachGitLabReconciler(this, ctx);
     if (!reconcile) return [];
     const intervalMs = gitlabReconciliationInterval();
@@ -361,7 +360,6 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
       auth: ctx.auth,
       intake: ctx.storage?.intake,
       emitAudit: ctx.hooks?.emitAudit,
-      sandbox: ctx.sandbox,
       webhookSecret: this.webhookSecret,
       ingestFactoryEvent,
       ...(ctx.controller ? { controller: ctx.controller } : {}),

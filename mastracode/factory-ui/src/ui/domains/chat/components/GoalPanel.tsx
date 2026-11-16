@@ -1,6 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Target } from 'lucide-react';
-
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatRuntime } from '../context/useChatRuntime';
 import {
@@ -10,6 +8,7 @@ import {
 } from '../../../../hooks/useAgentControllerGoalMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconTarget } from '@mastra/playground-ui/icons/central/IconTarget';
 
 const goalBar = 'flex shrink-0 items-center gap-2.5 border-b border-border bg-badge-pink-subtle px-4 py-2';
 
@@ -33,7 +32,7 @@ export function GoalPanel() {
   return (
     <div className={goalBar}>
       <span className="text-badge-pink-indicator inline-flex">
-        <Target size={15} />
+        <IconTarget size={15} />
       </span>
       <Txt as="span" variant="column" className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
         {goal.objective}

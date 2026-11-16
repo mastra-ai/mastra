@@ -107,6 +107,9 @@ const READ = `${LIB}
 return owner(1, now())
 `;
 
+/** Single-key reads `getRunOwnerships` keeps in flight, bounding the client's pipeline. */
+const READ_BATCH_SIZE = 500;
+
 // ARGV: generation, ownerId
 const RAISE = `
 local r = redis.call('HMGET', KEYS[1], 'generation', 'ownerId')
@@ -213,6 +216,32 @@ export async function releaseRunOwnership(client: ValkeyClient, fence: RunFence)
 
 export async function getRunOwnership(client: ValkeyClient, runId: string): Promise<RunOwnershipRecord | null> {
   return (await evalOwner(client, READ, runId, [])).record;
+}
+
+/**
+ * The ownership records of `runIds`. Each run is its own single-key script call, so the reads stay
+ * valid on a clustered server where the keys live in different hash slots; the client multiplexes
+ * the {@link READ_BATCH_SIZE} calls it sends at once over its connection.
+ */
+export async function getRunOwnerships(
+  client: ValkeyClient,
+  runIds: string[],
+): Promise<Map<string, RunOwnershipRecord>> {
+  const records = new Map<string, RunOwnershipRecord>();
+  const ids = [...new Set(runIds)];
+
+  for (let start = 0; start < ids.length; start += READ_BATCH_SIZE) {
+    const chunk = ids.slice(start, start + READ_BATCH_SIZE);
+    const read = await Promise.all(chunk.map(runId => evalOwner(client, READ, runId, [])));
+    chunk.forEach((runId, i) => {
+      const record = read[i]!.record;
+      if (record) {
+        records.set(runId, record);
+      }
+    });
+  }
+
+  return records;
 }
 
 export async function raiseRunFence(client: ValkeyClient, fence: RunFence): Promise<boolean> {

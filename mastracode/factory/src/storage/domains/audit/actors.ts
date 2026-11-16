@@ -17,5 +17,11 @@ const AUTOMATION_ACTORS = new Set([
 
 export function isHumanActorId(actorId: string | undefined): actorId is string {
   if (!actorId) return false;
-  return !AUTOMATION_ACTORS.has(actorId) && !actorId.startsWith('agent:') && !actorId.startsWith('github:');
+  return (
+    !AUTOMATION_ACTORS.has(actorId) &&
+    !actorId.startsWith('agent:') &&
+    !actorId.startsWith('github:') &&
+    // A Factory running its own automatic work (`factoryPrincipalId`).
+    !actorId.startsWith('factory-project:')
+  );
 }

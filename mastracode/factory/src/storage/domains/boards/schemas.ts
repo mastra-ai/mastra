@@ -71,8 +71,6 @@ export const FACTORY_INTAKE_ROUTES_SCHEMA: CollectionSchema = {
     // The status events the route handles (`StatusEvent`s). Null on rows written before routes named
     // events: those place new cards, as `['work_item.created']`.
     on_events: { type: 'json', nullable: true },
-    // No longer read or written: a route moves a card into any phase. Kept so existing tables match.
-    allow_working_phase: { type: 'boolean', nullable: true },
     // True files a pull request on the card of the issue it closes instead of a new card. Null on rows written before it.
     join_closed_issue: { type: 'boolean', nullable: true },
     // Rises on every write to the route, including a move; the compare-and-set token for edits.

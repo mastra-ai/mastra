@@ -27,12 +27,13 @@ export function useItemDecisions(factoryProjectId: string | undefined) {
     }
     return { proposalByItem, effectByItem };
   }, [status.data]);
-  return { ...byItem, isPending: status.isPending };
+  // Refused or never answered, the decisions say nothing of what is queued on a card now.
+  return { ...byItem, isPending: status.isPending, isCurrent: status.isSuccess };
 }
 
 /** The board's decisions with the actions a person takes on them. */
 export function useBoardDecisions(factoryProjectId: string) {
-  const { proposalByItem, effectByItem } = useItemDecisions(factoryProjectId);
+  const { proposalByItem, effectByItem, isCurrent } = useItemDecisions(factoryProjectId);
   const approve = useFactoryDecisionAction(factoryProjectId, 'approve');
   const dismiss = useFactoryDecisionAction(factoryProjectId, 'dismiss');
   const retry = useFactoryDecisionAction(factoryProjectId, 'retry');
@@ -40,6 +41,7 @@ export function useBoardDecisions(factoryProjectId: string) {
   return {
     proposalByItem,
     effectByItem,
+    isCurrent,
     approvingId: approve.isPending ? approve.variables : undefined,
     approve: (decisionId: string) => approve.mutate(decisionId),
     dismiss: (decisionId: string) => dismiss.mutate(decisionId),

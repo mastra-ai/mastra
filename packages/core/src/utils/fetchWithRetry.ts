@@ -1,3 +1,5 @@
+import { waitDelay } from './retry-after';
+
 export interface FetchWithRetryOptions {
   shouldRetryResponse?: (response: Response) => boolean;
 }
@@ -59,17 +61,9 @@ export async function fetchWithRetry(
 
     const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
     signal?.throwIfAborted();
-    await new Promise<void>((resolve, reject) => {
-      const onAbort = () => {
-        clearTimeout(timer);
-        reject(signal!.reason);
-      };
-      const timer = setTimeout(() => {
-        signal?.removeEventListener('abort', onAbort);
-        resolve();
-      }, delay);
-      signal?.addEventListener('abort', onAbort, { once: true });
-    });
+    // waitDelay resolves early on abort; rethrow the signal's reason so an abort during backoff still rejects.
+    await waitDelay(delay, signal);
+    signal?.throwIfAborted();
   }
 
   throw lastError || new Error('Request failed after multiple retry attempts');

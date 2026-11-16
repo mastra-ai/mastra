@@ -230,7 +230,10 @@ export const FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA: CollectionSchema = {
   },
 };
 
-/** Deleted card ids prevent the boot migration resurrecting frozen legacy rows. */
+/**
+ * Deleted card ids: a card list refreshed by delta learns which cards went, and the split migration
+ * does not resurrect frozen legacy rows.
+ */
 export const FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA: CollectionSchema = {
   name: 'factory_board_item_tombstones',
   columns: {
@@ -247,7 +250,10 @@ export const FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA: CollectionSchema = {
   ],
 };
 
-/** The pre-split card table. Frozen: only the split migration reads it. */
+/**
+ * The pre-split card table. Frozen: only the split migration reads it, so it is registered only on a
+ * database an earlier release already created it in (or in split dry-run mode, which serves from it).
+ */
 export const WORK_ITEMS_SCHEMA: CollectionSchema = {
   name: 'work_items',
   columns: {
@@ -314,7 +320,10 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
   ],
 };
 
-/** Records the newest legacy row a finished split pass covered; later boots skip unchanged legacy tables. */
+/**
+ * Records the newest legacy row a finished split pass covered; later boots skip unchanged legacy tables.
+ * Exists only alongside {@link WORK_ITEMS_SCHEMA}.
+ */
 export const FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA: CollectionSchema = {
   name: 'factory_work_item_split_state',
   columns: {
