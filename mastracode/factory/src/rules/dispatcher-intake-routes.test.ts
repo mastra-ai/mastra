@@ -1583,6 +1583,34 @@ describe('intake routes moving existing cards when labels or assignees change', 
     expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['intake'] });
   });
 
+  it('replays, as dispatch does, only the change after a move that committed but never finished', async () => {
+    const { card, commitUpdate, dispatcher, workItems, putAt, boards, scope } = await shipRoute();
+
+    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:10:00Z');
+    const complete = vi
+      .spyOn(workItems, 'completeDeferredDecision')
+      .mockRejectedValueOnce(new Error('connection lost'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:10Z'));
+    complete.mockRestore();
+    await putAt(card.id, 'intake');
+    await commitUpdate(card.id, labels(['bug']), '2030-01-01T00:20:00Z');
+
+    const { IntakeCheck } = await import('../routes/intake-check.js');
+    const registry = (
+      await new ProjectBoardCache({ codeRegistry: createTriageWorkRegistry(), storage: boards, recheckMs: 0 }).describe(
+        scope,
+      )
+    ).registry;
+    const { moves } = await new IntakeCheck({ storage: boards, workItems }).test(scope, registry, { itemId: card.id });
+    expect(moves[0]).toMatchObject({
+      event: { type: 'work_item.updated', labels: { added: ['bug'], removed: [] } },
+      outcome: 'stays',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:30:00Z'));
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['intake'] });
+  });
+
   it('moves only from the phase a card.phase filter names', async () => {
     const { card, commitUpdate, dispatcher, workItems, putAt } = await shipRoute({ from: 'triage' });
 
@@ -2036,5 +2064,94 @@ describe('the tester replaying card moves', () => {
     }
     expect(predicted[0]!.replay.to).toMatchObject({ boardKey: 'docs', routeId: docsAdded.id });
     expect(outcomes).toEqual(new Set(['moves', 'stays', 'ignored', 'rule_default']));
+  });
+});
+
+describe('the tester replaying a burst of updates', () => {
+  it('folds pending updates the way the dispatcher does, so it predicts the one move dispatch makes', async () => {
+    const seeded = await setup();
+    await seeded.boards.create(seeded.scope, docsBoard, 'admin');
+    const labelAdded = (label: string) => ({
+      operator: 'AND' as const,
+      conditions: [{ field: 'event.labels.added', operator: 'contains' as const, value: label }],
+    });
+    // Bug added sits first: replayed one by one, the middle update would send the card to Triage.
+    await seeded.route({
+      name: 'Bug added',
+      on: ['work_item.updated'],
+      when: labelAdded('bug'),
+      target: { boardKey: 'work', phaseKey: 'triage' },
+    });
+    const docsAdded = await seeded.route({
+      name: 'Docs added',
+      on: ['work_item.updated'],
+      when: labelAdded('docs'),
+      target: { boardKey: 'work', moveToBoardKey: 'docs', phaseKey: null },
+    });
+    const card = (await seeded.deliver({ sourceKey: 'github-issue:1' }))!;
+    await seeded.commitUpdate(
+      card.id,
+      { type: 'work_item.updated', labels: { added: ['docs'], removed: [] } },
+      '2030-01-01T00:00:00.000Z',
+    );
+    await seeded.commitUpdate(
+      card.id,
+      { type: 'work_item.updated', labels: { added: ['bug'], removed: [] } },
+      '2030-01-01T00:00:01.000Z',
+    );
+    await seeded.commitUpdate(
+      card.id,
+      { type: 'work_item.updated', labels: { added: [], removed: ['bug'] } },
+      '2030-01-01T00:00:02.000Z',
+    );
+
+    const { IntakeCheck } = await import('../routes/intake-check.js');
+    const registry = (
+      await new ProjectBoardCache({
+        codeRegistry: createTriageWorkRegistry(),
+        storage: seeded.boards,
+        recheckMs: 0,
+      }).describe(seeded.scope)
+    ).registry;
+    const { moves } = await new IntakeCheck({ storage: seeded.boards, workItems: seeded.workItems }).test(
+      seeded.scope,
+      registry,
+      { itemId: card.id },
+    );
+    expect(moves).toHaveLength(1);
+    expect(moves[0]).toMatchObject({
+      event: { type: 'work_item.updated', labels: { added: ['docs'], removed: [] } },
+      outcome: 'moves',
+      to: { boardKey: 'docs', phase: 'inbox', routeId: docsAdded.id },
+    });
+
+    await seeded.retry(new Date('2030-01-02T00:00:00Z'));
+    const moved = (await seeded.workItems.get({ orgId: 'org-1', id: card.id }))!;
+    expect(placed(moved)).toEqual({ board: 'docs', stages: ['inbox'] });
+    expect(moved.stageHistory.at(-1)).toMatchObject({ by: `intake-route:${docsAdded.id}` });
+
+    // A burst that ends where it started moves nothing, on dispatch or in the tester.
+    const other = (await seeded.deliver({ sourceKey: 'github-issue:2' }))!;
+    await seeded.commitUpdate(
+      other.id,
+      { type: 'work_item.updated', labels: { added: ['bug'], removed: [] } },
+      '2030-01-03T00:00:00.000Z',
+    );
+    await seeded.commitUpdate(
+      other.id,
+      { type: 'work_item.updated', labels: { added: [], removed: ['bug'] } },
+      '2030-01-03T00:00:01.000Z',
+    );
+    const netted = await new IntakeCheck({ storage: seeded.boards, workItems: seeded.workItems }).test(
+      seeded.scope,
+      registry,
+      { itemId: other.id },
+    );
+    expect(netted.moves.map(move => move.outcome)).toEqual(['ignored']);
+    await seeded.retry(new Date('2030-01-04T00:00:00Z'));
+    expect(placed((await seeded.workItems.get({ orgId: 'org-1', id: other.id }))!)).toEqual({
+      board: 'work',
+      stages: ['intake'],
+    });
   });
 });

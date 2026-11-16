@@ -6,7 +6,7 @@
 
 import type { z } from 'zod';
 
-import { DEFAULT_ROUTE_EVENTS } from '../boards/board-events.js';
+import { DEFAULT_ROUTE_EVENTS, isUpdateEvent } from '../boards/board-events.js';
 import type { BoardEventFacts } from '../boards/board-events.js';
 import { cardRuleFacts } from '../boards/card-facts.js';
 import { dryRunIntake, intakeSample } from '../boards/intake-dry-run.js';
@@ -24,6 +24,7 @@ import type { BoardRegistry } from '../boards/registry.js';
 import { boardForWorkItem } from '../boards/semantics.js';
 import type { RuleFacts } from '../rules/rule-group.js';
 import type { FactoryCommitDecision } from '../rules/types.js';
+import { eventRouteIngress, FOLDABLE_UPDATE_STATUSES, foldUpdate, updateGroup } from '../rules/update-fold.js';
 import type {
   StoredBoardScope,
   StoredBoardsStorage,
@@ -61,7 +62,7 @@ export interface IntakeCheckDeps {
     StoredBoardsStorage,
     'listIntakeRoutes' | 'readIntakeOrder' | 'listRecentNotRouted' | 'countPlacedByRoute' | 'getIntakeDecision'
   >;
-  workItems: Pick<WorkItemsStorage, 'listShared' | 'get' | 'listDeferredDecisions'>;
+  workItems: Pick<WorkItemsStorage, 'listShared' | 'get' | 'listDeferredDecisions' | 'getTransitionResultByIngress'>;
   /** Providers that can read an item by URL; Linear, Jira and incident.io items are picked from recent ones. */
   lookups?: readonly IntakeItemLookup[];
   now?: () => Date;
@@ -188,21 +189,44 @@ export class IntakeCheck {
     card: Card,
     tried: BoardEventFacts | undefined,
   ) {
-    const stored = (
-      await this.deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, { workItemId: card.id })
-    ).flatMap((record): { record: typeof record; event: BoardEventFacts; fallback?: { stage: string } }[] => {
-      // Stored decisions are JSON; these two kinds are the ones that carry a status event.
-      const decision = record.decision as unknown as FactoryCommitDecision;
-      if (decision.type === 'routeEvent') return [{ record, event: decision.event }];
-      if (decision.type === 'transition' && decision.event) {
-        return [{ record, event: decision.event, fallback: { stage: decision.stage } }];
-      }
-      return [];
+    const records = await this.deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, {
+      workItemId: card.id,
     });
+    const moveCommitted = async (other: (typeof records)[number]) =>
+      Boolean(
+        await this.deps.workItems.getTransitionResultByIngress(
+          scope.orgId,
+          scope.factoryProjectId,
+          eventRouteIngress(other.idempotencyKey),
+        ),
+      );
+    const stored = (
+      await Promise.all(
+        records.map(
+          async (
+            record,
+          ): Promise<{ record: typeof record; event: BoardEventFacts | undefined; fallback?: { stage: string } }[]> => {
+            // Stored decisions are JSON; these two kinds are the ones that carry a status event.
+            const decision = record.decision as unknown as FactoryCommitDecision;
+            if (decision.type === 'transition' && decision.event) {
+              return [{ record, event: decision.event, fallback: { stage: decision.stage } }];
+            }
+            if (decision.type !== 'routeEvent') return [];
+            if (!isUpdateEvent(decision.event.type)) return [{ record, event: decision.event }];
+            // Updates replay as the dispatcher acts on them: folded into the newest of a burst.
+            if (record.status === 'superseded') return [];
+            const fold = await foldUpdate(updateGroup(records, decision), record.id, moveCommitted);
+            if (fold.superseded && FOLDABLE_UPDATE_STATUSES.has(record.status)) return [];
+            return [{ record, event: fold.event }];
+          },
+        ),
+      )
+    ).flat();
     const replays: {
       decisionId: string | null;
       at: string | null;
       event: BoardEventFacts;
+      netsOut?: boolean;
       fallback?: { stage: string };
     }[] = [
       ...(tried ? [{ decisionId: null, at: null, event: tried }] : []),
@@ -212,11 +236,23 @@ export class IntakeCheck {
         .map(({ record, event, fallback }) => ({
           decisionId: record.id,
           at: record.createdAt.toISOString(),
-          event,
+          event: event ?? (record.decision as unknown as { event: BoardEventFacts }).event,
+          ...(event === undefined && { netsOut: true }),
           ...(fallback && { fallback }),
         })),
     ];
-    return replays.map(({ fallback, ...replay }) => {
+    return replays.map(({ fallback, netsOut, ...replay }) => {
+      // The dispatcher drops an update burst whose labels and assignees end where they started.
+      if (netsOut) {
+        return {
+          ...replay,
+          outcome: 'ignored' as const,
+          to: null,
+          phase: null,
+          reason: 'Its labels and assignees end where they started, so it moves nothing.',
+          rules: [],
+        };
+      }
       const plan = planEventMove(
         { routes, event: replay.event, item: card, registry, ...(fallback && { fallback }) },
         { full: true },

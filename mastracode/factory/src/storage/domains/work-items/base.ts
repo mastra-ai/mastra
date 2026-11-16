@@ -1088,6 +1088,11 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
         name: 'factory_deferred_decisions_tenant_evaluation_idx',
         columns: ['org_id', 'factory_project_id', 'evaluation_id'],
       },
+      // One card's decisions: the update fold, overtaken status events and the intake tester.
+      {
+        name: 'factory_deferred_decisions_tenant_work_item_idx',
+        columns: ['org_id', 'factory_project_id', 'work_item_id', 'created_at'],
+      },
     ],
   },
   {

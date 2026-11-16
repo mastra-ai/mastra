@@ -41,30 +41,35 @@ function Verdict({ result }: { result: IntakeTestResponse }) {
 function CardMoves({ moves, boardName }: { moves: IntakeTestResponse['moves']; boardName: (key: string) => string }) {
   if (moves.length === 0) return null;
   return (
-    <ul aria-label="Card moves" className="flex flex-col gap-2">
-      {moves.map((move, index) => {
-        const names = new Map(move.rules.map(rule => [rule.routeId, rule.name ?? 'Unnamed rule']));
-        const ruleName = (routeId: string) => names.get(routeId) ?? 'another rule';
-        return (
-          <li key={move.decisionId ?? `tried-${index}`} className="flex flex-col gap-1">
-            <Txt as="h4" variant="body-sm" tone="ink">
-              {`${eventLabel(move.event)}: ${moveVerdictLabel(move, boardName)}`}
-            </Txt>
-            {move.rules.length > 0 && (
-              <ul aria-label="What each card-move rule answered" className="flex flex-col gap-1">
-                {move.rules.map(rule => (
-                  <li key={rule.routeId}>
-                    <Txt as="span" variant="caption" tone={rule.outcome === 'took' ? 'ink' : 'muted'}>
-                      <code>{ruleName(rule.routeId)}</code>: {moveRuleVerdictLabel(rule, ruleName)}
-                    </Txt>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+    <div className="flex flex-col gap-2">
+      <Txt as="p" variant="caption" tone="muted">
+        Replayed against the card's current phase and facts.
+      </Txt>
+      <ul aria-label="Card moves" className="flex flex-col gap-2">
+        {moves.map((move, index) => {
+          const names = new Map(move.rules.map(rule => [rule.routeId, rule.name ?? 'Unnamed rule']));
+          const ruleName = (routeId: string) => names.get(routeId) ?? 'another rule';
+          return (
+            <li key={move.decisionId ?? `tried-${index}`} className="flex flex-col gap-1">
+              <Txt as="h4" variant="body-sm" tone="ink">
+                {`${eventLabel(move.event)}: ${moveVerdictLabel(move, boardName)}`}
+              </Txt>
+              {move.rules.length > 0 && (
+                <ul aria-label="What each card-move rule answered" className="flex flex-col gap-1">
+                  {move.rules.map(rule => (
+                    <li key={rule.routeId}>
+                      <Txt as="span" variant="caption" tone={rule.outcome === 'took' ? 'ink' : 'muted'}>
+                        <code>{ruleName(rule.routeId)}</code>: {moveRuleVerdictLabel(rule, ruleName)}
+                      </Txt>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
