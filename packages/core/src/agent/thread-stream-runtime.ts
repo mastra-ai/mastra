@@ -512,6 +512,20 @@ function resumeMemoryOnOwnThread({
   };
 }
 
+/**
+ * The options a resume leaves on its run's record. Resume callers hand over the resume's own
+ * `autoResumeSuspendedTools`, not the agent default merged in, so `undefined` means the resume left it out. The run
+ * then keeps the value it started with: a run that turned auto-resume off keeps holding a queued message for an
+ * explicit resume after it parks again. (#30190)
+ */
+function keepRunAutoResume<OUTPUT>(
+  resume: AgentExecutionOptions<OUTPUT>,
+  run: Pick<AgentExecutionOptions<any>, 'autoResumeSuspendedTools'> | undefined,
+): AgentExecutionOptions<OUTPUT> {
+  if (resume.autoResumeSuspendedTools !== undefined || run?.autoResumeSuspendedTools === undefined) return resume;
+  return { ...resume, autoResumeSuspendedTools: run.autoResumeSuspendedTools };
+}
+
 type AgentThreadRunLifecycle = 'running' | 'suspending' | 'suspended' | 'completed' | 'failed' | 'aborted';
 
 type AgentThreadRunSuspension = {
@@ -4436,6 +4450,9 @@ export class AgentThreadStreamRuntime {
       // A resume registers a new record under the run id; that one holds the thread now.
       state.threadRunsById.get(record.runId) === record &&
       record.lifecycle === 'suspended' &&
+      // A resume that another process registered executes the run there; this record only looks parked. That
+      // process takes the follow-up from the `signal-enqueued` this one published.
+      !record.registeredElsewhere &&
       !this.#isApprovalSuspendedRun(state, record.runId) &&
       // Shutdown hands parked runs back as they are; it starts no new turns.
       !state.shutdownStreams.has(record.streamId) &&
@@ -5101,9 +5118,10 @@ export class AgentThreadStreamRuntime {
     existing.lifecycle = 'running';
     // A resume that names no thread keeps the run's thread and resource, and the memory settings it does not pass
     // itself, so the turns it starts later keep them too.
+    const resumeOptions = keepRunAutoResume(streamOptions, existing.streamOptions);
     existing.streamOptions = continuesOwnThread
       ? {
-          ...streamOptions,
+          ...resumeOptions,
           memory: resumeMemoryOnOwnThread({
             run: existing.streamOptions.memory,
             resume: streamOptions.memory,
@@ -5111,7 +5129,7 @@ export class AgentThreadStreamRuntime {
             resourceId,
           }),
         }
-      : streamOptions;
+      : resumeOptions;
     existing.currentSegmentOutput = output;
     if (claim?.generation !== undefined) existing.generation = claim.generation;
     if (claim?.ownershipLost) existing.ownershipLost = claim.ownershipLost;
@@ -5238,6 +5256,8 @@ export class AgentThreadStreamRuntime {
     } else {
       this.#clearSuspendedRun(state, output.runId);
     }
+    // A resume that registers a new record replaces the run's record under the same run id.
+    const runOptions = keepRunAutoResume(streamOptions, state.threadRunsById.get(output.runId)?.streamOptions);
 
     const record: AgentThreadRunRecord<OUTPUT> = {
       agent,
@@ -5252,7 +5272,7 @@ export class AgentThreadStreamRuntime {
       lifecycle: 'running',
       threadId,
       resourceId,
-      streamOptions: streamOptions as AgentThreadRunRecord<OUTPUT>['streamOptions'],
+      streamOptions: runOptions as AgentThreadRunRecord<OUTPUT>['streamOptions'],
       createSubscriberStream,
       suspensions: state.suspensionMetadataByRunId.get(output.runId),
       broadcastFinished,

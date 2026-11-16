@@ -4379,6 +4379,9 @@ export class DurableAgent<
     const resumeStreamOptions: AgentExecutionOptions<TOutput> = {
       ...resolvedOptions,
       runId,
+      // The resume's own value, not the default merged in: the thread runtime keeps the run's when this is left
+      // out (#30190).
+      autoResumeSuspendedTools: options?.autoResumeSuspendedTools,
     } as AgentExecutionOptions<TOutput>;
     const continued = agentThreadStreamRuntime.continueRun(
       this as unknown as Agent<any, any, any, any>,

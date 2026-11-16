@@ -527,6 +527,106 @@ describeForAllEngines(
       expect(seen.resumes).toBe(0);
     });
 
+    // Technical: a resume that omits `autoResumeSuspendedTools` is handed the agent's default, and
+    // the runtime stored the resume's options as the run's, so the run's own `false` became the
+    // default `true`. Once the resumed run parked on another suspend(), the follow-up started a
+    // turn as if the run had auto-resume on. (#30190)
+    // A resume that turns auto-resume on itself is the run's choice from then on: the follow-up starts the turn.
+    it.each([
+      { resumeAutoResume: undefined, outcome: 'keeps a follow-up queued' },
+      { resumeAutoResume: true, outcome: 'starts the follow-up turn' },
+    ] as const)(
+      '$outcome when a run that turned auto-resume off is resumed with autoResumeSuspendedTools $resumeAutoResume and pauses again (#30190)',
+      async ({ resumeAutoResume }) => {
+        const ANSWER_FOLLOW_UP = 'Here is my second answer';
+        const seen = { answers: [] as string[] };
+        const askTool = createTool({
+          id: 'ask',
+          description: 'Asks the user a question',
+          inputSchema: z.object({ question: z.string() }),
+          suspendSchema: z.object({ message: z.string() }),
+          resumeSchema: z.object({ answer: z.string() }),
+          execute: async ({ question }, context) => {
+            if (!context?.agent?.resumeData) return context?.agent?.suspend({ message: question });
+            seen.answers.push(context.agent.resumeData.answer);
+            return { answer: context.agent.resumeData.answer };
+          },
+        });
+        const memory = new MockMemory();
+        const shared = await createSharedAgent(getMock(), {
+          tools: { askTool },
+          memory,
+          defaultOptions: { autoResumeSuspendedTools: true },
+          engine,
+        });
+        const threadId = globalThis.crypto.randomUUID();
+        const resourceId = globalThis.crypto.randomUUID();
+
+        const llm = getMock();
+        // Registered first: a turn the follow-up started would answer it.
+        llm.onMessage(new RegExp(ANSWER_FOLLOW_UP), { content: 'FOLLOW_UP_TURN' });
+        // Once the first question is answered, the model asks a second one, which pauses the run again.
+        llm.on(
+          { endpoint: 'chat', toolCallId: 'call-q1', hasToolResult: true },
+          { toolCalls: [{ id: 'call-q2', name: 'ask', arguments: { question: 'second?' } }] },
+        );
+
+        const first = await runLoopScenario({
+          engine,
+          llm,
+          sharedAgent: shared,
+          prompt: 'Ask me two questions',
+          memory,
+          threadId,
+          resourceId,
+          fixtures: mock => {
+            mock.onMessage(/two questions/, {
+              toolCalls: [{ id: 'call-q1', name: 'ask', arguments: { question: 'first?' } }],
+            });
+          },
+          collectChunks: true,
+          autoResumeSuspendedTools: false,
+        });
+        expect(first.chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
+        const runId = first.output.runId;
+
+        // The explicit resume names the run and its answer, and passes `autoResumeSuspendedTools` only in the second case.
+        const resumed = await shared.agent.resumeStream(
+          { answer: 'first answer' },
+          {
+            runId,
+            toolCallId: 'call-q1',
+            ...(resumeAutoResume !== undefined ? { autoResumeSuspendedTools: resumeAutoResume } : {}),
+          },
+        );
+        const resumedChunks: ChunkType[] = [];
+        for await (const chunk of resumed.fullStream) resumedChunks.push(chunk);
+        expect(seen.answers).toEqual(['first answer']);
+        expect(
+          resumedChunks.some(
+            c => c.type === 'tool-call-suspended' && (c.payload as { toolCallId?: string }).toolCallId === 'call-q2',
+          ),
+        ).toBe(true);
+
+        const view = await shared.agent.subscribeToThread({ resourceId, threadId });
+        onTestFinished(() => view.unsubscribe());
+        const requestsWithFollowUp = () =>
+          llm.getRequests().filter(request => JSON.stringify(request.body.messages).includes(ANSWER_FOLLOW_UP)).length;
+
+        await shared.agent.sendMessage(ANSWER_FOLLOW_UP, { resourceId, threadId }).accepted;
+        if (resumeAutoResume) {
+          await vi.waitFor(() => expect(requestsWithFollowUp()).toBeGreaterThan(0), { timeout: 7_000 });
+          await vi.waitFor(() => expect(view.activeRunId()).toBeNull(), { timeout: 7_000 });
+          return;
+        }
+        // Long enough for a turn the follow-up started to reach the model. A new Inngest turn takes over a second.
+        await new Promise(resolve => setTimeout(resolve, engine === 'inngest' ? 3_000 : 500));
+        expect(requestsWithFollowUp()).toBe(0);
+        expect(view.activeRunId()).toBe(runId);
+        expect(seen.answers).toEqual(['first answer']);
+      },
+    );
+
     // Technical: the #30190 fix lets a follow-up start the next turn once an auto-resume run has
     // parked on suspend(). An approval suspension is excluded: consent arrives through the
     // approval APIs, so with auto-resume on the follow-up still waits on the parked run, and

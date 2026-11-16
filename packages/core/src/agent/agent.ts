@@ -11690,7 +11690,12 @@ export class Agent<
       await agentThreadStreamRuntime.registerRun(
         this as Agent<any, any, any, any>,
         result.result as unknown as MastraModelOutput<OUTPUT>,
-        preparedOptions as AgentExecutionOptions<OUTPUT>,
+        // The resume's own value, not the default merged in: the thread runtime keeps the run's when this is left
+        // out (#30190).
+        {
+          ...preparedOptions,
+          autoResumeSuspendedTools: streamOptions?.autoResumeSuspendedTools,
+        } as AgentExecutionOptions<OUTPUT>,
         threadStreamPubSub,
       );
 
