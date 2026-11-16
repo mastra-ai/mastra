@@ -323,6 +323,31 @@ const [scope] = await store.getScopesByAddress(['team:acme:support'])
 const page = await store.getPageByPath({ scopeId: scope.id, path: ['handbook', 'refunds'], read })
 ```
 
+#### `reembed()`
+
+```typescript oxfmt:false
+reembed(options?: { scope?: string; limit?: number; cursor?: string }): Promise<KnowledgeReembedResult>
+```
+
+Embeds pages and notes that already exist, without changing them. Use it for content written before you added `vector` and `embedder`, or after you switch embedders. Each call handles up to `limit` pages (default 50, at most 500) with their notes, and resolves to:
+
+- `embedded`: how many pages and notes this call embedded.
+- `failed`: pages and notes whose embed failed for a reason trying again can't fix, each with its `kind`, `id` and `error`. The rest of the batch carries on.
+- `overChunkCap`: pages longer than the [chunk limit](/reference/knowledge/limits), with how many chunks they'd need. They're embedded up to the limit.
+- `rateLimited`: `true` when the embedder kept rate limiting, so the call stopped early.
+- `nextCursor`: pass it as `cursor` to the next call. It's absent when everything has been handled.
+
+`scope` limits the run to one scope's pages and the notes on them, such as `org:acme`. Without it, the run covers every page, then the notes on scope pages. Embedding a page again overwrites its vectors, so you can stop a run and resume it from the last cursor, or rerun it. Throws without `vector` and `embedder`.
+
+```typescript
+let cursor: string | undefined
+do {
+  const result = await knowledge.reembed({ cursor })
+  for (const failure of result.failed) console.warn(failure)
+  cursor = result.nextCursor
+} while (cursor)
+```
+
 #### `reindexLinks()`
 
 ```typescript oxfmt:false

@@ -70,14 +70,19 @@ export class KnowledgeSemanticIndex {
     private readonly embedderOptions?: MastraEmbeddingOptions,
   ) {}
 
-  async indexPage(page: KnowledgePage): Promise<void> {
-    if (page.isScope || page.deletedAt) return this.removePage(page.id);
+  /** Returns how many chunks the body made before the {@link KNOWLEDGE_MAX_PAGE_CHUNKS} cap (0 when removed). */
+  async indexPage(page: KnowledgePage): Promise<number> {
+    if (page.isScope || page.deletedAt) {
+      await this.removePage(page.id);
+      return 0;
+    }
     const head = sliceByTokens([page.name, page.description].filter(Boolean).join('\n'), 0, MAX_HEAD_TOKENS);
     const room = Math.max(
       KNOWLEDGE_EMBED_CHUNK_TOKENS - estimateTokenCount(head) - 1,
       KNOWLEDGE_EMBED_CHUNK_TOKENS / 2,
     );
-    const chunks = page.body ? knowledgeBodyChunks(page.body, room).slice(0, KNOWLEDGE_MAX_PAGE_CHUNKS) : [''];
+    const allChunks = page.body ? knowledgeBodyChunks(page.body, room) : [''];
+    const chunks = allChunks.slice(0, KNOWLEDGE_MAX_PAGE_CHUNKS);
     const ids = pageChunkIds(page.id, 0, chunks.length);
     const pMap = (await import('p-map')).default;
     const parallel = 'supportsParallelCalls' in this.embedder ? await this.embedder.supportsParallelCalls : true;
@@ -95,6 +100,7 @@ export class KnowledgeSemanticIndex {
         pageChunkIds(page.id, chunks.length),
       ),
     );
+    return allChunks.length;
   }
 
   /** Drops every chunk of a page from the index. */

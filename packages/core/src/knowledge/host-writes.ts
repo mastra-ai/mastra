@@ -98,7 +98,7 @@ const UNEMBED_FAILED =
 
 async function embed(
   host: KnowledgeHostWriter,
-  work: (index: KnowledgeSemanticIndex) => Promise<void>,
+  work: (index: KnowledgeSemanticIndex) => Promise<unknown>,
   failure: string | (() => Promise<string>),
 ) {
   if (!host.semantic) return;
