@@ -51,12 +51,14 @@ Pass both or neither. [`embedderOptions`](/reference/knowledge/knowledge-class#c
 
 Pages and notes are embedded when they're written. Scope pages aren't embedded, but notes on them are. Long pages are embedded in parts, and search still returns each page once. See [Limits](/reference/knowledge/limits) for the sizes.
 
-Pages and notes written before you add `vector` and `embedder` stay keyword-only until they change. To embed them, run [`reembed()`](/reference/knowledge/knowledge-class#reembed) in batches until it returns no cursor. It doesn't change the pages:
+Pages and notes written before you add `vector` and `embedder` stay keyword-only until they change. To embed them, run [`reembed()`](/reference/knowledge/knowledge-class#reembed) in batches until it returns no cursor. It doesn't change the pages. If the embedder keeps rate limiting, a call stops early with `rateLimited: true`, so wait before going on:
 
 ```typescript
 let cursor: string | undefined
 do {
-  cursor = (await knowledge.reembed({ cursor })).nextCursor
+  const result = await knowledge.reembed({ cursor })
+  if (result.rateLimited) await new Promise(resolve => setTimeout(resolve, 60_000))
+  cursor = result.nextCursor
 } while (cursor)
 ```
 

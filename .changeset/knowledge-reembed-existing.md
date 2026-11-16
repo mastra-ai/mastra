@@ -7,6 +7,8 @@ Added `knowledge.reembed()` to embed Knowledge pages and notes that already exis
 ```ts
 let cursor: string | undefined;
 do {
-  cursor = (await knowledge.reembed({ scope: 'org:acme', cursor })).nextCursor;
+  const result = await knowledge.reembed({ scope: 'org:acme', cursor });
+  if (result.rateLimited) await new Promise(resolve => setTimeout(resolve, 60_000));
+  cursor = result.nextCursor;
 } while (cursor);
 ```

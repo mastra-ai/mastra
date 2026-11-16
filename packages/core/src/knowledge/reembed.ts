@@ -20,11 +20,11 @@ export interface KnowledgeReembedOptions {
 export interface KnowledgeReembedResult {
   /** What this call embedded. */
   embedded: { pages: number; notes: number };
-  /** Pages and notes whose embed failed for a reason trying again can't fix; the rest of the batch went on. */
+  /** Pages and notes whose embed still failed after Knowledge's own retries (other than rate limiting); the rest of the batch went on. A later run retries them. */
   failed: Array<{ kind: 'page' | 'note'; id: string; error: string }>;
   /** Pages longer than the chunk cap: embedded up to it, the rest is found by keyword search only. */
   overChunkCap: Array<{ pageId: string; chunks: number }>;
-  /** The embedder kept rate limiting, so the call stopped early; `nextCursor` retries from that page. */
+  /** The embedder kept rate limiting, so the call stopped early. Wait before passing `nextCursor`, which retries from that page. */
   rateLimited?: true;
   /** Pass it to the next call to go on. Absent when everything has been handled. */
   nextCursor?: string;
