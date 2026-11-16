@@ -274,9 +274,6 @@ minimumReleaseAgeExclude:
   - 'fast-uri@4.2.1'
   - 'compression@1.8.2'
   - 'undici@8.11.2'
-  - '@ai-sdk/provider-utils@5.0.52'
-  - '@ai-sdk/provider-utils@4.0.56'
-  - '@ai-sdk/provider-utils@3.0.40'
   - '@ai-sdk/provider@4.0.18'
   - '@ai-sdk/provider@3.0.17'
   - '@ai-sdk/provider@2.0.5'
@@ -508,12 +505,14 @@ overrides:
   '@modelcontextprotocol/node>@hono/node-server': 2.1.6
   '@bufbuild/protobuf@>=2.0.0 <2.13.0': 2.13.0
   '@opentelemetry/propagator-jaeger@<2.11.0': 2.12.0
-  '@ai-sdk/provider-utils@>=3.0.0 <3.0.40': 3.0.45
-  '@ai-sdk/provider-utils@>=4.0.0 <4.0.56': 4.0.56
-  # provider-utils 4.0.56 pins @ai-sdk/provider 3.0.18; keep ai v6/gateway on the
+  '@ai-sdk/provider-utils@>=3.0.0 <3.0.46': 3.0.46
+  '@ai-sdk/provider-utils@>=4.0.0 <4.0.66': 4.0.66
+  # provider-utils 4.0.66 pins @ai-sdk/provider 3.0.19; keep ai v6/gateway on the
   # same provider so @internal/ai-v6's bundled types don't get `_2`-suffixed.
-  '@ai-sdk/provider@>=3.0.0 <3.0.18': 3.0.18
-  '@ai-sdk/provider-utils@>=5.0.0 <5.0.52': 5.0.52
+  '@ai-sdk/provider@>=3.0.0 <3.0.19': 3.0.19
+  # provider-utils 5.0.81 pins @ai-sdk/provider 4.0.38; same reason as above for ai v7.
+  '@ai-sdk/provider@>=4.0.0 <4.0.38': 4.0.38
+  '@ai-sdk/provider-utils@>=5.0.0 <5.0.81': 5.0.81
   # Keep 3.x/4.x js-yaml consumers on patched lines when not forced to 5.x
   js-yaml@>=3.0.0 <3.15.2: 3.15.2
   js-yaml@>=4.0.0 <4.3.2: 4.3.2

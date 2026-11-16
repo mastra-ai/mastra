@@ -118,7 +118,14 @@ export function BoardContent({
   const cards = snapshot?.workItems ?? NO_CARDS;
   const sessionCards = useSidebarWorkItemsQuery(factoryProjectId).data?.workItems ?? NO_CARDS;
 
-  const items = useBoardItems({ factoryProjectId, kind, currentUserId, items: [...cards, ...sessionCards] });
+  const items = useBoardItems({
+    factoryProjectId,
+    kind,
+    currentUserId,
+    // A refused move snaps the card back; the toast says why where the person is looking.
+    onFailure: message => toast.error(message),
+    items: [...cards, ...sessionCards],
+  });
   const drop = (payload: DragPayload, stage: Parameters<typeof items.handleDrop>[1], cause = 'board_drag') => {
     if (payload.fromStage === stage) return;
     const toPhaseKind = definition.phases.find(phase => phase.id === stage)?.kind;
@@ -172,6 +179,8 @@ export function BoardContent({
     : [];
   const targetListed = targetStages.length > 0;
   const viewAnswered = phasesRead.data !== undefined && !phasesRead.isPlaceholderData;
+  // Only with every read that says who holds a card answered does the board refuse a move itself.
+  const ownerCurrent = viewAnswered && decisions.isCurrent && runQueue.isSuccess;
   const targetReady = !phasesRead.isPending && (!targetItemId || targetListed);
   const loadingStages = boardLoadingStages({
     board: definition,
@@ -290,6 +299,7 @@ export function BoardContent({
                 columnStage={stage.id}
                 relatedItems={relatedItemsFor(item)}
                 sessionStatus={sessionStatuses.get(item.id)}
+                ownerCurrent={ownerCurrent}
                 projectRepositoryId={cardProjectRepositoryId(
                   factory.repositories,
                   item,

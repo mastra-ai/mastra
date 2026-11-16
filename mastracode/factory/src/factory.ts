@@ -260,6 +260,13 @@ export interface MastraFactoryConfig {
   /** Disable persistence of rich scorer results. Default: true. */
   disableScoreStorage?: boolean;
   /**
+   * Commit co-author identity for Factory agent sessions — the `Co-Authored-By`
+   * trailer in the commit guidance every session receives. Unspecified fields
+   * use the SDK defaults, so overriding only `name` keeps the default email.
+   * Omitted → `{ name: 'mastra-platform[bot]' }`.
+   */
+  coAuthor?: MastraCodeConfig['coAuthor'];
+  /**
    * Vector store instance for recall search — `PgVector` (`@mastra/pg`) on
    * the same database as `storage`. Omitted → the SDK mount's default vector
    * store resolution applies.
@@ -1403,6 +1410,8 @@ export class MastraFactory {
           boards: boards,
           storage: workItemsStorage,
           audit: auditDomain,
+          // `this.#dispatcher` is created with the runtime below; before it, no run can be in flight.
+          runInFlight: async card => (await this.#dispatcher?.hasRunInFlightOnCard(card)) ?? false,
           ...(onTerminalStage ? { onTerminalStage } : {}),
           ...(stopLeftContextSandbox ? { onContextLeft: stopLeftContextSandbox } : {}),
           onTransitionCommitted: (() => {
@@ -1745,7 +1754,7 @@ export class MastraFactory {
       prepareAgentControllerMount({
         controllerId: CONTROLLER_ID,
         browser: this.#config.browser,
-        coAuthor: { name: 'mastra-platform[bot]' },
+        coAuthor: this.#config.coAuthor ?? { name: 'mastra-platform[bot]' },
         ...(this.#config.disableBuiltinTools?.length ? { disableBuiltinTools: this.#config.disableBuiltinTools } : {}),
         modes: false,
         // User sessions carry no `factoryProjectId` to select this per session.

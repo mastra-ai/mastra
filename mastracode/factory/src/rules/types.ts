@@ -658,7 +658,9 @@ export type FactoryRuleRejectionCode =
   | 'rule_error'
   | 'causal_depth_exceeded'
   | 'repeated_transition'
-  | 'approval_required';
+  | 'approval_required'
+  /** A person moved a card into a phase that may start a run while a run is in flight on it or queued for it. */
+  | 'card_busy';
 
 export interface FactoryRuleRejectDecision {
   type: 'reject';

@@ -76,6 +76,26 @@ export async function demoteCardsToLegacyForTests(storage: FactoryStorage, cardI
   await storage.getDomain<WorkItemsStorage>('work-items').init();
 }
 
+/**
+ * Finish every run queued so far, as a dispatcher would once they ran. A person cannot move a
+ * card into a phase that starts a run while one is queued for it.
+ */
+export async function finishQueuedRunsForTests(workItems: WorkItemsStorage, now = new Date()): Promise<void> {
+  const ownerId = `finish-${randomUUID()}`;
+  const claimed = await workItems.claimDeferredDecisions({
+    ownerId,
+    now,
+    leaseExpiresAt: new Date(now.getTime() + 60_000),
+    limit: 100,
+  });
+  for (const decision of claimed) {
+    await workItems.completeDeferredDecision(
+      { id: decision.id, orgId: decision.orgId, factoryProjectId: decision.factoryProjectId, ownerId },
+      now,
+    );
+  }
+}
+
 export function createProviderWorkItemForTests(input: {
   id: string;
   title: string;
