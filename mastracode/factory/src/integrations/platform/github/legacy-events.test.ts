@@ -200,7 +200,7 @@ describe('legacy GitHub topic events', () => {
   it('feeds default-branch pushes to Factory rules', async () => {
     const { route, ingestFactoryEvent } = setup();
     await route(topicEvent('push', { ...repositoryPayload('push'), ref: 'refs/heads/main' }));
-    expect(ingestFactoryEvent).toHaveBeenCalledWith(expect.objectContaining({ event: 'push' }));
+    expect(ingestFactoryEvent).toHaveBeenCalledWith(expect.objectContaining({ event: 'push' }), { orgIds: ['org-1'] });
   });
 
   it('fails the event when Factory ingestion fails, so the events worker replays it', async () => {
@@ -316,6 +316,7 @@ describe('legacy GitHub topic events', () => {
       await route(topicEvent('pull_request', repositoryPayload('opened'), { timestamp: 4_000 }));
       expect(ingestFactoryEvent).toHaveBeenCalledWith(
         expect.objectContaining({ payload: expect.objectContaining({ installation: { id: 300 } }) }),
+        { orgIds: ['org-1'] },
       );
       expect(dispatch).toHaveBeenCalledTimes(1);
     });
@@ -474,8 +475,8 @@ describe('legacy GitHub topic events', () => {
           ],
         },
       },
-      ingestFactoryEvent: async event => {
-        ingested.push((event.payload.installation as { id: number }).id);
+      ingestFactoryEvent: async (event, options) => {
+        ingested.push([(event.payload.installation as { id: number }).id, options?.orgIds]);
         return { status: 'committed' } as never;
       },
     });
@@ -493,7 +494,10 @@ describe('legacy GitHub topic events', () => {
       topicEvent('pull_request', repositoryPayload('opened', { pull_request: { number: 5 } }), { timestamp: 5_000 }),
     );
 
-    expect(ingested).toEqual([7, 900]);
+    expect(ingested).toEqual([
+      [7, ['org-legacy']],
+      [900, ['org-switched']],
+    ]);
     expect(woken).toEqual([
       { installationId: 7, subscriptions: ['sub-legacy'] },
       { installationId: 900, subscriptions: ['sub-switched'] },

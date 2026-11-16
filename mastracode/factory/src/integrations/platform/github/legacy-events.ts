@@ -123,7 +123,7 @@ async function acceptLegacyGithubEvent(
       if (moved) repointed.add(orgId);
     }
     if (repointed.size > 0) {
-      // Ingest keys a delivery by its installation too, so this copy is not taken for the one above.
+      // Each copy reaches only its own orgs' projects, whose ingress is keyed per org and project.
       deliveries.push({ event: withGithubEventInstallation(event, link.installationId), orgIds: [...repointed] });
     }
   }

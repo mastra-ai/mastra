@@ -982,9 +982,16 @@ export class GithubRules {
     return this.#ingestProject(opened.arrival, event, installationId, repositoryId, repositoryName, opened.login, project);
   }
 
-  async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
+  /**
+   * `orgIds`, when given, limits the event to those orgs' projects: the orgs
+   * whose GitHub app the event came through.
+   */
+  async ingest(
+    parsed: ParsedGithubWebhook,
+    options: { orgIds?: readonly string[] } = {},
+  ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     try {
-      const result = await this.#ingest(parsed);
+      const result = await this.#ingest(parsed, options.orgIds);
       recordIntakeEvent('github', result.status);
       return result;
     } catch (error) {
@@ -993,7 +1000,10 @@ export class GithubRules {
     }
   }
 
-  async #ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
+  async #ingest(
+    parsed: ParsedGithubWebhook,
+    orgIds: readonly string[] | undefined,
+  ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const event = eventName(parsed);
     const repository = object(parsed.payload.repository);
     const installationId = number(object(parsed.payload.installation)?.id);
@@ -1001,7 +1011,7 @@ export class GithubRules {
     const repositoryName = string(repository?.full_name);
     const login = string(object(parsed.payload.sender)?.login);
     if (parsed.event === 'push' && installationId && repositoryId) {
-      await this.#handOffPush(parsed, installationId, repositoryId);
+      await this.#handOffPush(parsed, installationId, repositoryId, orgIds);
       return { status: 'ignored' };
     }
     if (!installationId || !repositoryId || !repositoryName || !login) return { status: 'ignored' };
@@ -1026,10 +1036,7 @@ export class GithubRules {
         : undefined;
     if (!handle) return { status: 'ignored' };
 
-    const projects = await this.options.sourceControl.projectRepositories.listByExternalRepository({
-      installationExternalId: String(installationId),
-      repositoryExternalId: String(repositoryId),
-    });
+    const projects = await this.#projectsFor(installationId, repositoryId, orgIds);
     if (projects.length === 0) return { status: 'ignored' };
     const results = [];
     for (const project of projects) {
@@ -1041,20 +1048,34 @@ export class GithubRules {
     return results[0] ?? { status: 'ignored' };
   }
 
+  async #projectsFor(
+    installationId: number,
+    repositoryId: number,
+    orgIds: readonly string[] | undefined,
+  ): Promise<ExternalRepositoryProjectTarget[]> {
+    const projects = await this.options.sourceControl.projectRepositories.listByExternalRepository({
+      installationExternalId: String(installationId),
+      repositoryExternalId: String(repositoryId),
+    });
+    return orgIds ? projects.filter(project => orgIds.includes(project.orgId)) : projects;
+  }
+
   /**
    * A push is not a work-item event; it only reaches the environment build
    * hand-off, once per project the repository is linked to. The hook decides
    * whether the project builds on push.
    */
-  async #handOffPush(parsed: ParsedGithubWebhook, installationId: number, repositoryId: number): Promise<void> {
+  async #handOffPush(
+    parsed: ParsedGithubWebhook,
+    installationId: number,
+    repositoryId: number,
+    orgIds: readonly string[] | undefined,
+  ): Promise<void> {
     const onRepositoryPush = this.options.onRepositoryPush;
     const ref = string(parsed.payload.ref);
     const defaultBranch = string(object(parsed.payload.repository)?.default_branch);
     if (!onRepositoryPush || !ref || !defaultBranch) return;
-    const projects = await this.options.sourceControl.projectRepositories.listByExternalRepository({
-      installationExternalId: String(installationId),
-      repositoryExternalId: String(repositoryId),
-    });
+    const projects = await this.#projectsFor(installationId, repositoryId, orgIds);
     for (const project of projects) {
       onRepositoryPush({
         orgId: project.orgId,
