@@ -7858,7 +7858,6 @@ describe('automatic work in a Factory with no organization model key', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      sandboxProvider: 'local',
     });
     const { item } = await storage.upsert({
       orgId: 'org-1',

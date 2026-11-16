@@ -23,7 +23,6 @@ describe('GitLab listed merge requests through rules ingress', () => {
     });
     await sourceControl.projectRepositories.link({
       orgId: 'org-1', connectionId: connection.id, repositoryId: repository.id,
-      sandboxProvider: 'local', 
     });
     const sourceId = encodeSourceId({ host: 'gitlab.example.com', projectId: '101' });
     await seeded.intake.saveConfig({ orgId: 'org-1', config: { gitlab: { enabled: true, sourceIds: [sourceId] } } });

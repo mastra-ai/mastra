@@ -595,7 +595,6 @@ describe('ProjectRoutes', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      sandboxProvider: 'local',
       teardownCommand: 'pnpm local teardown',
     });
     await github.sessions.create({
@@ -655,7 +654,6 @@ describe('ProjectRoutes', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      sandboxProvider: 'local',
       teardownCommand: 'pnpm local teardown',
     });
     const session = await github.sessions.create({
@@ -751,7 +749,6 @@ describe('ProjectRoutes', () => {
           body: JSON.stringify({
             repositoryId,
             branch,
-            sandboxProvider: 'local',
             setupCommand: 'pnpm install',
             teardownCommand: 'pnpm local worktree teardown',
           }),
@@ -768,7 +765,6 @@ describe('ProjectRoutes', () => {
         body: JSON.stringify({
           repository: { externalId: 'repo-1', slug: 'acme/api' },
           branch: 'release',
-          sandboxProvider: 'local',
           setupCommand: 'pnpm install',
           teardownCommand: 'pnpm local worktree teardown',
         }),
@@ -872,7 +868,6 @@ describe('ProjectRoutes', () => {
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
               repositoryId: repository.id,
-              sandboxProvider: 'local',
             }),
           },
         )
@@ -944,7 +939,6 @@ describe('ProjectRoutes', () => {
         body: JSON.stringify({
           repositoryId: repository.id,
           branch: 'main',
-          sandboxProvider: 'local',
         }),
       },
     );
@@ -1000,7 +994,6 @@ describe('ProjectRoutes', () => {
         body: JSON.stringify({
           repositoryId: repository.id,
           branch: 'main',
-          sandboxProvider: 'local',
         }),
       },
     );
@@ -1071,7 +1064,6 @@ describe('ProjectRoutes', () => {
             connectionId: connection.id,
             repositoryId: repository.id,
             branch,
-            sandboxProvider: 'local',
           });
           links.push({ connection, repository, link });
         }
@@ -1120,7 +1112,6 @@ describe('ProjectRoutes', () => {
         orgId: 'org-2',
         connectionId: otherOrgConnection.id,
         repositoryId: otherOrgRepository.id,
-        sandboxProvider: 'local',
       });
 
       const response = await app.request('/web/factory/projects');
@@ -1286,7 +1277,6 @@ describe('ProjectRoutes', () => {
             connectionId: connection.id,
             repositoryId: repository.id,
             branch: 'main',
-            sandboxProvider: 'local',
             setupCommand: 'pnpm i',
           }),
         );
@@ -1326,7 +1316,6 @@ describe('ProjectRoutes', () => {
         }
         expect(await github.projectRepositories.get({ orgId: 'org-1', id: links[0]!.id })).toMatchObject({
           branch: 'main',
-          sandboxProvider: 'local',
         });
       },
     );
@@ -1402,7 +1391,7 @@ describe('ProjectRoutes', () => {
       ]);
       // Existing per-link fields are untouched by the environment route.
       const stored = await github.projectRepositories.get({ orgId: 'org-1', id: links[0]!.id });
-      expect(stored).toMatchObject({ branch: 'main', sandboxProvider: 'local' });
+      expect(stored).toMatchObject({ branch: 'main' });
 
       // Re-reading returns the same shape the PATCH returned.
       const reread = (await (await app.request(`/web/factory/projects/${project.id}/environment`)).json()) as unknown;
@@ -1691,7 +1680,6 @@ describe('ProjectRoutes', () => {
           orgId: 'org-1',
           connectionId: connection.id,
           repositoryId: repository.id,
-          sandboxProvider: 'platform',
         });
         let mastra: Mastra | undefined;
         const runner = new EnvironmentBuildRunner(
@@ -1918,7 +1906,6 @@ describe('ProjectRoutes', () => {
           orgId: 'org-1',
           connectionId: second.id,
           repositoryId: repository.id,
-          sandboxProvider: 'platform',
         });
         const built = await app.request(`/web/factory/projects/${project.id}/environment/build`, { method: 'POST' });
         expect(await built.json()).toMatchObject({ outcome: 'started' });

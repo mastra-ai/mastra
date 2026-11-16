@@ -93,7 +93,6 @@ async function seedProject(seed: FactoryStorageTestSeed, slugs: string[]) {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      sandboxProvider: 'platform',
     });
   }
   return { project, github };

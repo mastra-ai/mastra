@@ -91,7 +91,6 @@ export interface GithubRepo {
   installationId: number;
   /** Storage UUID of the installation row backing this repo. */
   installationStorageId: string;
-  sandboxProvider: string;
 }
 
 export type SourceControlRepository = GithubRepo | GitLabRepository;
@@ -510,7 +509,6 @@ export async function linkRepository(
       body: JSON.stringify({
         repository: { externalId: gitlab ? repo.externalId : String(repo.id), slug: repo.fullName },
         branch: repo.defaultBranch,
-        sandboxProvider: repo.sandboxProvider,
       }),
     },
   );

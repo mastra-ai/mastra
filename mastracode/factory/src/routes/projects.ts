@@ -38,7 +38,6 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const MAX_NAME_LENGTH = 200;
 const MAX_REPOSITORY_COMMAND_LENGTH = 2_000;
 const MAX_BRANCH_LENGTH = 255;
-const MAX_SANDBOX_PROVIDER_LENGTH = 100;
 const CONTROL_CHAR_RE = /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/;
 const applyDefaultModelRuns = new Map<string, Promise<void>>();
 
@@ -75,7 +74,6 @@ function parseRepositoryLinkInput(value: unknown): {
   repositoryId?: string;
   repository?: { externalId: string; slug: string };
   branch: string | null;
-  sandboxProvider: string;
   setupCommand: string | null;
   teardownCommand: string | null;
 } | null {
@@ -94,7 +92,6 @@ function parseRepositoryLinkInput(value: unknown): {
   }
   if (!repositoryId && !repository) return null;
   const branch = parseOptionalString(input.branch, { maxLength: MAX_BRANCH_LENGTH, nullable: true });
-  const sandboxProvider = parseOptionalString(input.sandboxProvider, { maxLength: MAX_SANDBOX_PROVIDER_LENGTH });
   const setupCommand = parseOptionalString(input.setupCommand, {
     maxLength: MAX_REPOSITORY_COMMAND_LENGTH,
     nullable: true,
@@ -103,13 +100,12 @@ function parseRepositoryLinkInput(value: unknown): {
     maxLength: MAX_REPOSITORY_COMMAND_LENGTH,
     nullable: true,
   });
-  if (branch === false || typeof sandboxProvider !== 'string' || setupCommand === false || teardownCommand === false)
+  if (branch === false || setupCommand === false || teardownCommand === false)
     return null;
   return {
     ...(repositoryId ? { repositoryId } : {}),
     ...(repository ? { repository } : {}),
     branch: branch ?? null,
-    sandboxProvider,
     setupCommand: setupCommand ?? null,
     teardownCommand: teardownCommand ?? null,
   };
@@ -120,7 +116,6 @@ function parseRepositoryUpdateInput(value: unknown): UpdateProjectRepositoryInpu
   const input = value as Record<string, unknown>;
   const patch: UpdateProjectRepositoryInput = {};
   const branch = parseOptionalString(input.branch, { maxLength: MAX_BRANCH_LENGTH, nullable: true });
-  const sandboxProvider = parseOptionalString(input.sandboxProvider, { maxLength: MAX_SANDBOX_PROVIDER_LENGTH });
   const setupCommand = parseOptionalString(input.setupCommand, {
     maxLength: MAX_REPOSITORY_COMMAND_LENGTH,
     nullable: true,
@@ -131,14 +126,11 @@ function parseRepositoryUpdateInput(value: unknown): UpdateProjectRepositoryInpu
   });
   if (
     branch === false ||
-    sandboxProvider === false ||
-    sandboxProvider === null ||
     setupCommand === false ||
     teardownCommand === false
   )
     return null;
   if (branch !== undefined) patch.branch = branch;
-  if (sandboxProvider !== undefined) patch.sandboxProvider = sandboxProvider;
   if (setupCommand !== undefined) patch.setupCommand = setupCommand;
   if (teardownCommand !== undefined) patch.teardownCommand = teardownCommand;
   return Object.keys(patch).length > 0 ? patch : null;

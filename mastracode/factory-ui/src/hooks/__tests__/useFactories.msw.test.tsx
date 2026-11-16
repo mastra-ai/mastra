@@ -28,7 +28,6 @@ const repo: GithubRepo = {
   private: false,
   installationId: 7,
   installationStorageId: 'inst-7',
-  sandboxProvider: 'local',
 };
 
 const gitlabRepo: GitLabRepository = {
@@ -40,7 +39,6 @@ const gitlabRepo: GitLabRepository = {
   owner: 'acme',
   defaultBranch: 'main',
   private: true,
-  sandboxProvider: 'local',
 };
 
 function stubRepositoryLink() {
@@ -89,7 +87,6 @@ describe('useLinkRepositoryMutation', () => {
             projectPath: 'acme/app',
             installationStorageId: 'gitlab-inst-1',
             defaultBranch: 'main',
-            sandboxProvider: 'local',
           },
         });
       }),
@@ -127,7 +124,6 @@ describe('useLinkRepositoryMutation', () => {
       {
         repository: { externalId: '10', slug: 'acme/app' },
         branch: 'main',
-        sandboxProvider: 'local',
       },
     ]);
     expect(saved).toEqual([{ gitlab: { enabled: true, sourceIds: ['gitlab-project:encoded'] } }]);

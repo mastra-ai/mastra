@@ -83,7 +83,6 @@ async function githubSetup(
     orgId: project.orgId,
     connectionId: connection.id,
     repositoryId: storedRepository.id,
-    sandboxProvider: 'local',
   });
   const workItem = (
     await seeded.workItems.upsert({

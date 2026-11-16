@@ -62,7 +62,6 @@ async function setup(permission: string | undefined, rules?: GithubRuleOverrides
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    sandboxProvider: 'local',
   });
   const github = {
     rules: resolveGithubRules(rules),
@@ -3885,7 +3884,6 @@ describe('GithubRules', () => {
       orgId: 'org-2',
       connectionId: connection.id,
       repositoryId: repository.id,
-      sandboxProvider: 'local',
     });
     const service = new GithubRules({
       github,
@@ -7000,7 +6998,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         orgId: 'org-1',
         connectionId: h.projectRepository.connectionId,
         repositoryId: other.id,
-        sandboxProvider: 'local',
       });
       await h.integrationStorage.subscriptions.create({
         orgId: 'org-1',

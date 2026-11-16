@@ -1333,7 +1333,6 @@ describe('PlatformGithubIntegration', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      sandboxProvider: 'local',
     });
     const context = {
       auth: fakeAuth(),

@@ -43,7 +43,6 @@ async function seedLinkedRepository(options?: { pinnedBranch?: string; integrati
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    sandboxProvider: 'local',
     ...(options?.pinnedBranch ? { branch: options.pinnedBranch } : {}),
   });
   return { seeded, sourceControl, project, repository, projectRepository };
@@ -215,7 +214,6 @@ describe('ensureFactorySourceSession', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: other.id,
-      sandboxProvider: 'local',
     });
     const first = await ensureFactorySourceSession({
       sourceControl,
@@ -339,7 +337,6 @@ describe('ensureFactorySourceSession', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: other.id,
-      sandboxProvider: 'local',
     });
 
     const result = await ensureFactorySourceSession({
@@ -368,7 +365,6 @@ describe('ensureFactorySourceSession', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: other.id,
-      sandboxProvider: 'local',
     });
     await sourceControl.projectRepositories.update({
       orgId: 'org-1',
@@ -717,7 +713,6 @@ describe('resolvePrimaryEnvironmentRepository', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: docs.id,
-      sandboxProvider: 'local',
     });
     // The FACT-334 shape: docs-expert first, mastra second.
     await sourceControl.projectRepositories.update({ orgId: 'org-1', id: docsLink.id, input: { position: 1 } });
@@ -823,7 +818,6 @@ describe('resolvePrimaryEnvironmentRepository', () => {
       orgId: 'org-1',
       connectionId: staleConnection.id,
       repositoryId: staleRepository.id,
-      sandboxProvider: 'local',
     });
     // The reinstall: the installation row goes away, the connection stays.
     await sourceControl.installations.delete({ orgId: 'org-1', id: staleInstallation.id });
@@ -852,7 +846,6 @@ describe('resolvePrimaryEnvironmentRepository', () => {
       orgId: 'org-1',
       connectionId: freshConnection.id,
       repositoryId: freshRepository.id,
-      sandboxProvider: 'local',
     });
     // The same slug linked twice: the dedupe keeps the oldest link in the
     // environment, so the reinstall has to put the fresh link back (the

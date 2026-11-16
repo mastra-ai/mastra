@@ -25,7 +25,6 @@ const githubRepo: GithubRepo = {
   private: false,
   installationId: 7,
   installationStorageId: 'inst-7',
-  sandboxProvider: 'local',
 };
 
 const gitlabProject: GitLabRepository = {
@@ -38,7 +37,6 @@ const gitlabProject: GitLabRepository = {
   defaultBranch: 'main',
   private: true,
   installationStorageId: 'inst-9',
-  sandboxProvider: 'local',
 };
 
 /** Stub both intake endpoints, so a write to either is recorded rather than reaching the network. */

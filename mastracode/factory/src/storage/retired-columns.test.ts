@@ -38,6 +38,7 @@ const RETIRED: Record<string, Record<string, CollectionColumnSpec>> = {
   },
   factory_project_repositories: {
     created_by_user_id: { type: 'text' },
+    sandbox_provider: { type: 'text' },
     sandbox_workdir: { type: 'text' },
     last_built_at: { type: 'timestamp', nullable: true },
   },
@@ -88,7 +89,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
 
       const seed = await createFactoryStorageForTests(storage);
 
-      // factory_project_repositories: created_by_user_id, sandbox_workdir
+      // factory_project_repositories: created_by_user_id, sandbox_provider, sandbox_workdir
       const project = await seed.projects.create({ orgId: SCOPE.orgId, userId: 'user-1', input: { name: 'Old' } });
       const github = seed.sourceControl.forIntegration('github');
       const installation = await github.installations.upsert({
@@ -111,7 +112,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         orgId: SCOPE.orgId,
         connectionId: connection.id,
         repositoryId: repository.id,
-        sandboxProvider: 'local',
       });
       await expect(
         github.projectRepositories.setBuildStatus({ orgId: SCOPE.orgId, id: link.id, status: 'configured' }),
@@ -186,10 +186,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       await storage.ensureCollections(legacy.filter(schema => schema.name === 'factory_project_repositories'));
       expect(await storage.ops.findOne('factory_project_repositories', { id: oldLink.id })).toMatchObject({
         created_by_user_id: 'user-0',
+        sandbox_provider: 'local',
         sandbox_workdir: '/workspace/old',
       });
       expect(await storage.ops.findOne('factory_project_repositories', { id: link.id })).toMatchObject({
         created_by_user_id: null,
+        sandbox_provider: null,
         sandbox_workdir: null,
       });
     });

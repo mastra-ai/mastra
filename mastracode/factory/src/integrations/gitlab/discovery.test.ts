@@ -50,7 +50,6 @@ async function linkedFactory(mergeRequests: () => Response, mode: 'direct' | 'pl
     orgId: project.orgId,
     connectionId: connection.id,
     repositoryId: repository.id,
-    sandboxProvider: 'local',
   });
   await seeded.intake.saveConfig({
     orgId: project.orgId,

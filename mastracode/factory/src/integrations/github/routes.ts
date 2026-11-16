@@ -712,7 +712,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         const repos = matches.map(({ inst, repo }) => ({
           ...repo,
           installationStorageId: inst.id,
-          sandboxProvider: sandbox ? 'custom' : 'none',
         }));
         return c.json({ repos });
       },

@@ -110,7 +110,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         orgId: 'org-1',
         connectionId: connection.id,
         repositoryId: repository.id,
-        sandboxProvider: 'local',
       });
       await sourceControl.sessions.create({
         sessionId: 'session-1',

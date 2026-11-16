@@ -84,7 +84,6 @@ function projectRepositoryRow(row: Record<string, any>) {
     connectionId,
     repositoryId,
     branch: row.defaultBranch ?? null,
-    sandboxProvider: 'railway',
     sandboxWorkdir: row.sandboxWorkdir,
     setupCommand: null,
     teardownCommand: null,

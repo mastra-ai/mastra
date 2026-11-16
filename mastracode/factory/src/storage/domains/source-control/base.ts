@@ -126,7 +126,6 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       connection_id: { type: 'text' },
       repository_id: { type: 'text' },
       branch: { type: 'text', nullable: true },
-      sandbox_provider: { type: 'text' },
       setup_command: { type: 'text', nullable: true },
       teardown_command: { type: 'text', nullable: true },
       position: { type: 'integer', default: 0 },
@@ -288,7 +287,6 @@ export interface ProjectRepository {
   connectionId: string;
   repositoryId: string;
   branch: string | null;
-  sandboxProvider: string;
   setupCommand: string | null;
   teardownCommand: string | null;
   /** 1-based order within the project's environment (display and setup order only). */
@@ -325,14 +323,12 @@ export interface LinkProjectRepositoryInput {
   connectionId: string;
   repositoryId: string;
   branch?: string | null;
-  sandboxProvider: string;
   setupCommand?: string | null;
   teardownCommand?: string | null;
 }
 
 export interface UpdateProjectRepositoryInput {
   branch?: string | null;
-  sandboxProvider?: string;
   setupCommand?: string | null;
   teardownCommand?: string | null;
   position?: number;
@@ -644,7 +640,6 @@ interface ProjectRepositoryDbRow extends Record<string, unknown> {
   connection_id: string;
   repository_id: string;
   branch: string | null;
-  sandbox_provider: string;
   setup_command: string | null;
   teardown_command: string | null;
   position: number | null;
@@ -730,7 +725,6 @@ function toProjectRepository(row: ProjectRepositoryDbRow): ProjectRepository {
     connectionId: row.connection_id,
     repositoryId: row.repository_id,
     branch: row.branch,
-    sandboxProvider: row.sandbox_provider,
     setupCommand: row.setup_command,
     teardownCommand: row.teardown_command,
     position: row.position ?? 0,
@@ -809,7 +803,6 @@ function toSession(row: SessionDbRow): SourceControlSession {
 function projectRepositoryPatch(input: UpdateProjectRepositoryInput): Record<string, unknown> {
   const patch: Record<string, unknown> = { updated_at: new Date() };
   if (input.branch !== undefined) patch.branch = input.branch;
-  if (input.sandboxProvider !== undefined) patch.sandbox_provider = input.sandboxProvider;
   if (input.setupCommand !== undefined) patch.setup_command = input.setupCommand;
   if (input.teardownCommand !== undefined) patch.teardown_command = input.teardownCommand;
   if (input.position !== undefined) patch.position = input.position;
@@ -1542,7 +1535,6 @@ export class SourceControlStorage extends FactoryStorageDomain {
               connection_id: input.connectionId,
               repository_id: input.repositoryId,
               branch: input.branch ?? null,
-              sandbox_provider: input.sandboxProvider,
               setup_command: input.setupCommand ?? null,
               teardown_command: input.teardownCommand ?? null,
               position,

@@ -77,7 +77,6 @@ async function fixture(integrationId = 'gitlab') {
     repositoryId,
     createdByUserId: 'user-1',
     branch: null,
-    sandboxProvider: 'custom',
     sandboxWorkdir: '/workspace/repo',
     setupCommand: null,
     teardownCommand: null,

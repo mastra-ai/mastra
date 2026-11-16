@@ -52,7 +52,6 @@ async function seedFactoryWithRepository(options?: {
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    sandboxProvider: 'local',
   });
   const github = { id: 'github', sourceControlStorage: sourceControl } as unknown as GithubIntegration;
   return { seeded, sourceControl, project, projectRepository, installation, github };
@@ -200,7 +199,6 @@ describe('prepareFactoryRuleBinding', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: otherRepository.id,
-      sandboxProvider: 'local',
     });
     const prepare = vi.fn(async () => ({}) as never);
     const input = bindingInput(project.id);
@@ -756,7 +754,6 @@ describe('prepareFactoryRuleBinding', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: otherRepository.id,
-      sandboxProvider: 'local',
     });
     const planSession = await sourceControl.sessions.create({
       sessionId: 'sess-plan',
@@ -799,7 +796,6 @@ describe('prepareFactoryRuleBinding', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: doomedRepository.id,
-      sandboxProvider: 'local',
     });
     const orphaned = await sourceControl.sessions.create({
       sessionId: 'sess-orphaned',
@@ -863,7 +859,6 @@ describe('prepareFactoryRuleBinding', () => {
       orgId: 'org-1',
       connectionId: otherConnection.id,
       repositoryId: otherRepository.id,
-      sandboxProvider: 'local',
     });
     const foreign = await sourceControl.sessions.create({
       sessionId: 'sess-foreign',
@@ -990,7 +985,6 @@ describe('prepareFactoryRuleBinding', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: second.id,
-      sandboxProvider: 'local',
     });
     const createSession = vi.spyOn(sourceControl.sessions, 'create');
     const prepare = vi.fn<FactoryStartCoordinator['prepare']>();
@@ -1024,7 +1018,6 @@ describe('prepareFactoryRuleBinding', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: second.id,
-      sandboxProvider: 'local',
     });
     const existing = await sourceControl.sessions.create({
       sessionId: 'sess-hydra',
