@@ -1,5 +1,6 @@
-import { ArrowLeftIcon, ArrowRightIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
+import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
+import { IconArrowRight } from '@/ds/icons/central/IconArrowRight';
 
 export type DataListPaginationProps = {
   currentPage?: number;
@@ -19,12 +20,12 @@ export function DataListPagination({ currentPage, hasMore, onNextPage, onPrevPag
       {showNavigation && (
         <div className="flex gap-4">
           {typeof currentPage === 'number' && currentPage > 0 && (
-            <Button type="button" size="sm" onClick={onPrevPage} icon={<ArrowLeftIcon />}>
+            <Button type="button" size="sm" onClick={onPrevPage} icon={<IconArrowLeft />}>
               Previous
             </Button>
           )}
           {hasMore && (
-            <Button type="button" size="sm" onClick={onNextPage} icon={<ArrowRightIcon />}>
+            <Button type="button" size="sm" onClick={onNextPage} icon={<IconArrowRight />}>
               Next
             </Button>
           )}

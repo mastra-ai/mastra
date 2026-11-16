@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  inferredParentWorkItemId,
+  relatedCardName,
   relatedWorkItemIndex,
   relationshipLabel,
   relationshipPath,
-  workItemReferenceLabel,
+  workItemReference,
 } from './relationships';
 import type { WorkItem } from './workItems';
 
@@ -57,7 +57,6 @@ describe('Factory work item relationships', () => {
 
     expect(relatedWorkItemIndex([review, issue])(review)).toEqual([issue]);
     expect(relatedWorkItemIndex([review, issue])(issue)).toEqual([review]);
-    expect(inferredParentWorkItemId(review.metadata, [review, issue])).toBe(issue.id);
   });
 
   it('links a GitLab MR back to its issue session and names it as a Review item', () => {
@@ -75,9 +74,8 @@ describe('Factory work item relationships', () => {
     });
     expect(relatedWorkItemIndex([review, issue])(review)).toEqual([issue]);
     expect(relatedWorkItemIndex([review, issue])(issue)).toEqual([review]);
-    expect(inferredParentWorkItemId(review.metadata, [review, issue])).toBe(issue.id);
     expect(relationshipLabel(review)).toBe('Review: MR !5');
-    expect(workItemReferenceLabel(review)).toBe('MR !5');
+    expect(workItemReference(review)).toBe('MR !5');
   });
 
   it('given a review with an explicit parent, when another work item shares its branch, then branch inference does not add a second parent', () => {
@@ -125,7 +123,6 @@ describe('Factory work item relationships', () => {
     });
 
     expect(relatedWorkItemIndex([review, issue])(review)).toEqual([]);
-    expect(inferredParentWorkItemId(review.metadata, [review, issue])).toBeUndefined();
   });
 
   it('uses source-specific relationship references', () => {
@@ -147,20 +144,72 @@ describe('Factory work item relationships', () => {
 
     expect(relationshipLabel(review)).toBe('Review: PR #202');
     expect(relationshipLabel(issue)).toBe('Work item: Issue #24');
-    expect(workItemReferenceLabel(review)).toBe('PR #202');
-    expect(workItemReferenceLabel(issue)).toBe('Issue #24');
+    expect(workItemReference(review)).toBe('PR #202');
+    expect(workItemReference(issue)).toBe('Issue #24');
     expect(relationshipLabel(linear)).toBe('Work item: ENG-24');
-    expect(workItemReferenceLabel(linear)).toBe('ENG-24');
+    expect(workItemReference(linear)).toBe('ENG-24');
   });
 
   it.each([
-    { source: 'jira-issue', identifier: 'ENG-42' },
-    { source: 'gitlab-issue', identifier: 'acme/app#7' },
-    { source: 'incidentio-follow-up', identifier: 'INC-42' },
-  ] as const)('names a $source card by its key', ({ source, identifier }) => {
+    { source: 'jira-issue', identifier: 'ENG-42', label: 'Work item: ENG-42' },
+    { source: 'gitlab-issue', identifier: 'acme/app#7', label: 'Work item: Issue acme/app#7' },
+    { source: 'incidentio-follow-up', identifier: 'INC-42', label: 'Work item: INC-42' },
+  ] as const)('names a $source card by its key', ({ source, identifier, label }) => {
     const item = workItem({ id: `${source}-1`, source, metadata: { identifier } });
 
-    expect(relationshipLabel(item)).toBe(`Work item: ${identifier}`);
+    expect(relationshipLabel(item)).toBe(label);
+  });
+
+  it.each([
+    { source: 'github-issue', key: 'acme/app#42', inside: 'Issue #42', outside: 'Issue acme/app#42' },
+    { source: 'github-pr', key: 'acme/app#42', inside: 'PR #42', outside: 'PR acme/app#42' },
+    { source: 'gitlab-issue', key: 'group/sub/app#7', inside: 'Issue #7', outside: 'Issue group/sub/app#7' },
+    { source: 'gitlab-pr', key: 'group/sub/app!7', inside: 'MR !7', outside: 'MR group/sub/app!7' },
+  ] as const)(
+    'drops the repository from a $source reference only inside that repository',
+    ({ source, key, inside, outside }) => {
+      const item = workItem({
+        id: `${source}-keyed`,
+        source,
+        workItem: {
+          provider: 'github',
+          key,
+          url: null,
+          title: key,
+          state: 'open',
+          labels: [],
+          author: null,
+          metadata: {},
+        },
+      });
+      const repository = key.split(/[#!]/)[0];
+
+      expect(workItemReference(item, repository.toUpperCase())).toBe(inside);
+      expect(workItemReference(item, 'acme/other')).toBe(outside);
+      expect(workItemReference(item)).toBe(outside);
+    },
+  );
+
+  it('keeps keys that name no repository, and gives a card without an identifier no reference', () => {
+    expect(
+      workItemReference(
+        workItem({ id: 'linear', source: 'linear-issue', metadata: { identifier: 'ENG-1' } }),
+        'acme/app',
+      ),
+    ).toBe('ENG-1');
+    expect(workItemReference(workItem({ id: 'card', source: 'manual', metadata: { cardNumber: 5 } }), 'acme/app')).toBe(
+      '#5',
+    );
+    expect(workItemReference(workItem({ id: 'pr', source: 'github-pr' }))).toBeUndefined();
+    expect(workItemReference(workItem({ id: 'slack', source: 'slack-thread' }))).toBeUndefined();
+  });
+
+  it('names a related card by its reference and title, and by its title alone without an identifier', () => {
+    const issue = workItem({ id: 'issue-4', source: 'github-issue', title: 'Fix login', metadata: { number: 4 } });
+    const manual = workItem({ id: 'manual', source: 'manual', title: 'Fix login' });
+
+    expect(relatedCardName(issue)).toBe('Work item: Issue #4: Fix login');
+    expect(relatedCardName(manual)).toBe('Work item: Fix login');
   });
 
   it.each([

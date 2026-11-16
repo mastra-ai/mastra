@@ -1,30 +1,35 @@
-import { useMatch, useParams } from 'react-router';
+import { useParams } from 'react-router';
 
-import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
+import { useRouteSessionId } from '../../../../hooks/useRouteSessionId';
+import { workspacePanelKey } from '../context/WorkspacePanelContext';
 import { useWorkspacePanel } from '../context/useWorkspacePanel';
-import { WorkspaceOverviewSkeleton } from './WorkspaceOverviewSkeleton';
+import type { WorkspacePanelSize } from '../layout';
 import { WorkspaceViewerPanel } from './WorkspaceViewerPanel';
 
-export function WorkspaceFilesContent() {
-  const { open, workspacePath, threadId, setSize, readsChanges } = useWorkspacePanel();
-  const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
-  // User sessions route as user/threads/:threadId, where the thread segment is the session id.
-  const userThreadMatch = useMatch('/factories/:factoryId/user/threads/:threadId');
-  const viewedSessionId = sessionId ?? userThreadMatch?.params.threadId;
-  const session = useUserSessionQuery(viewedSessionId);
+export function WorkspaceFilesContent({
+  visible,
+  onSizeChange,
+}: {
+  visible: boolean;
+  onSizeChange: (size: WorkspacePanelSize) => void;
+}) {
+  const panel = useWorkspacePanel();
+  const { workspacePath, threadId, readsChanges, page } = panel;
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const sessionId = useRouteSessionId();
   if (!workspacePath || !threadId) return null;
-  if (session.isPending) return <WorkspaceOverviewSkeleton />;
 
   return (
     <div className="flex min-h-0 w-full min-w-0 grow flex-col overflow-hidden" data-testid="workspace-viewer-panel">
       <WorkspaceViewerPanel
-        key={`${workspacePath}|${threadId}`}
+        key={workspacePanelKey(panel)}
         workspacePath={workspacePath}
-        onSizeChange={setSize}
-        visible={open}
+        onSizeChange={onSizeChange}
+        visible={visible}
         readsChanges={readsChanges}
         factoryProjectId={factoryId}
-        sessionId={viewedSessionId}
+        sessionId={sessionId}
+        page={page}
       />
     </div>
   );

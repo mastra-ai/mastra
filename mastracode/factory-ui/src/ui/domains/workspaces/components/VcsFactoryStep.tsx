@@ -3,8 +3,8 @@ import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 import { useQueryClient } from '@tanstack/react-query';
-import { RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 
 import { queryKeys } from '../../../../api/keys';
@@ -180,7 +180,10 @@ export function VcsFactoryStep({
               disabled={refreshRepos.isPending}
               onClick={refreshGithub}
             >
-              <RefreshCw className={cn('size-3.5', refreshRepos.isPending && 'animate-spin')} aria-hidden="true" />
+              <IconArrowRotateClockwise
+                className={cn('size-icon-sm', refreshRepos.isPending && 'animate-spin')}
+                aria-hidden="true"
+              />
               Refresh
             </Button>
           </>

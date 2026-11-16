@@ -314,6 +314,7 @@ Without this call, the following features never run:
 - [Scheduled workflows](/docs/workflows/scheduled-workflows): Schedule rows aren't created and cron triggers don't fire.
 - [Agent schedules](/docs/harness/schedules) created with `mastra.schedules`
 - Event listeners you've registered on the Mastra instance
+- The [recovery loop](/docs/workflows/overview#recovery-loop): Default-engine workflow runs whose instance stops after this server booted aren't restarted.
 
 Call `startWorkers()` once, after the server starts listening:
 

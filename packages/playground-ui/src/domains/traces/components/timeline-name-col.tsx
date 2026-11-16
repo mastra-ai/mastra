@@ -1,4 +1,3 @@
-import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
 import type { UISpan, UISpanStyle } from '../types';
@@ -8,6 +7,8 @@ import { SpanTypeBadge } from './span-type-badge';
 import { Badge } from '@/ds/components/Badge';
 import { SegmentedName } from '@/ds/components/SegmentedName';
 import { Txt } from '@/ds/components/Txt';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 import { focusRing, focusRingInset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -153,7 +154,7 @@ export function TimelineNameCol({
               focusRing,
             )}
           >
-            {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+            {isExpanded ? <IconChevronDownMedium /> : <IconChevronRightMedium />}
           </button>
         )}
       </div>

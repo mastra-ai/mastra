@@ -83,6 +83,7 @@ import { settleOrAbort } from '../../github/settle-or-abort.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
 import { parseAuthorizedBotsEnv } from '../../github/webhook.js';
 import {
+  logPlatformBootInfo,
   logPlatformInfo,
   logPlatformWarn,
   PlatformApiClient,
@@ -742,7 +743,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   initialize({ storage }: { storage: IntegrationStorageHandle }): void {
     this.#integrationStorage = storage as unknown as GithubSubscriptionStorage;
-    logPlatformInfo('Platform GitHub integration initialized', {
+    logPlatformBootInfo('Platform GitHub integration initialized', {
       endpointHost: this.#endpointHost,
       pollingEnabled: this.#pollingEnabled,
       pollingIntervalMs: this.#pollingIntervalMs,
@@ -766,11 +767,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         stateSigner: ctx.stateSigner,
         baseUrl: ctx.baseUrl,
         controller: ctx.controller,
-        memorySettings: ctx.storage.memorySettings,
         projects: ctx.storage.projects,
         emitAudit: ctx.hooks?.emitAudit,
         ingestFactoryEvent,
-        ...(ctx.workItems ? { workItems: ctx.workItems } : {}),
       }).filter(
         route =>
           route.path !== '/web/github/status' &&
@@ -916,6 +915,14 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     } catch {
       return { connected: false, githubUsername: null };
     }
+  }
+
+  async hasActiveConnections(): Promise<boolean> {
+    const result = await this.#client.request<{ installations: PlatformGithubInstallation[] }>(
+      'GET',
+      `${API_PREFIX}/github-app/installations`,
+    );
+    return result.installations.some(installation => installation.usable && !installation.suspendedAt);
   }
 
   async #syncInstallations(

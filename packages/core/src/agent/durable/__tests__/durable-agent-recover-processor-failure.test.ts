@@ -13,7 +13,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { z } from 'zod';
 import type { WorkflowRunState } from '../../../workflows/types';
 import { DurableStepIds } from '../constants';
-import { storeRunsInV2 } from './storage-version';
 
 type SnapshotRow = { workflowName: string; runId: string; resourceId?: string; snapshot: WorkflowRunState };
 type Checkpoint = { rows: SnapshotRow[]; requestsSoFar: number };
@@ -95,7 +94,7 @@ async function startProcess(broken: Broken) {
     memory: () => (state.down && broken === 'memory' ? resolverDown() : memory),
   });
   // Checkpoints are captured and restored through v1's snapshot writes.
-  const durableAgent = storeRunsInV2(createDurableAgent({ agent }), false);
+  const durableAgent = createDurableAgent({ agent, storageVersion: 1 });
   const mastra = new Mastra({
     agents: { recoverProcessorsAgent: durableAgent },
     storage,

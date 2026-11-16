@@ -61,6 +61,8 @@ export function useOnboardingModelSetup({
     modelScope: scope,
     model: company.choice,
     personal: personal.choice,
+    // The Work step's switch decides the intake write Create makes, so it rides with the draft.
+    codeHostSync: draft.codeHostSync,
   };
   const readiness = onboardingCreateReadiness(effective);
   return {

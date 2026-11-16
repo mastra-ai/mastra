@@ -2,11 +2,12 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { releaseBoard } from '../../../e2e/ui/board-catalog';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
+import { recordProviderListRequests } from '../../../e2e/ui/provider-list-requests';
 import { renderWithProviders, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { BoardCatalogResponse, IntakeRouteListResponse } from '../../api/types';
 import { createAppRoutes } from '../router';
@@ -41,7 +42,7 @@ function renderBoard(
   linear: { sourceIds: string[]; bindings: unknown[] } | null = null,
   intakeRoutes: IntakeRoute[] | (() => Response) = [intakeRouteTo('release')],
 ) {
-  const intakeRequest = vi.fn(() => HttpResponse.json({ issues: [], pullRequests: [] }));
+  const providerLists = recordProviderListRequests();
   server.use(
     http.get('*/api/agent-controller/code/sessions/:id/permissions', () => HttpResponse.json({ permissions: [] })),
     http.get('*/web/intake/bindings', () => HttpResponse.json({ bindings: linear?.bindings ?? [] })),
@@ -54,7 +55,7 @@ function renderBoard(
           {
             id: 'fp-1',
             name: 'Factory',
-            repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
+            repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main' })],
           },
         ],
       }),
@@ -78,15 +79,13 @@ function renderBoard(
       HttpResponse.json({ enabled: Boolean(linear), connected: Boolean(linear), workspace: null }),
     ),
     http.get('*/web/factory/projects/:factoryId/sessions', () => HttpResponse.json({ sessions: [] })),
-    http.get('*/web/github/projects/:id/issues', intakeRequest),
-    http.get('*/web/github/projects/:id/prs', intakeRequest),
     http.get('*/web/factory/projects/:id/work-items', () =>
       HttpResponse.json({ workItems, runningSessionIds: [], parkedSessionIds: [] }),
     ),
   );
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/fp-1/${board}`] });
   const { client } = renderWithProviders(<RouterProvider router={router} />);
-  return { intakeRequest, client, router };
+  return { providerLists, client, router };
 }
 
 describe('custom-only board routing', () => {
@@ -210,7 +209,7 @@ describe('custom-only board routing', () => {
   });
 
   it('renders declaration-ordered custom groups without built-in intake or automation', async () => {
-    const { intakeRequest, client } = renderBoard();
+    const { providerLists, client } = renderBoard();
     const columns = await screen.findByLabelText('Board stages');
     expect(
       within(columns)
@@ -223,7 +222,7 @@ describe('custom-only board routing', () => {
     expect(screen.queryByText('Auto-approve plans')).toBeNull();
     // Columns render before every query settles, so only judge the feeds once idle.
     await waitForMutationsIdle(client);
-    expect(intakeRequest).not.toHaveBeenCalled();
+    expect(providerLists).toEqual([]);
   });
 
   it('labels each custom phase kind on a Kanban view', async () => {

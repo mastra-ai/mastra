@@ -835,6 +835,7 @@ MASTRACODE_DISABLE_CAFFEINATE=1 mastracode
 | `MASTRACODE_PROFILE_CAPTURE_INTERVAL_MS` | Override the allocation-profile capture interval |
 | `MASTRACODE_PROFILE_ALLOCATION_INTERVAL_BYTES` | Override the V8 allocation-sampling interval |
 | `MASTRACODE_DISPATCH_MAX_IN_FLIGHT` | Maximum concurrent automated Factory runs per replica (default `10`); runs past it wait in the board's run queue. Invalid or unset values use the default |
+| `MASTRACODE_DISPATCH_MAX_INTERACTIVE_IN_FLIGHT` | Run slots per replica kept for a person's reply on a card's GitHub pull request or issue, on top of `MASTRACODE_DISPATCH_MAX_IN_FLIGHT` (default `2`). Replies are claimed ahead of automated runs and may borrow a free automated slot. `0` keeps no reserve. Invalid or unset values use the default |
 | `KIMI_API_KEY` | Kimi For Coding API key |
 | `PARALLEL_API_KEY` | Enable Parallel-powered web search and extract tools (selectable as the default web provider in `/settings`) |
 | `TAVILY_API_KEY` | Enable Tavily-powered web search and extract tools |

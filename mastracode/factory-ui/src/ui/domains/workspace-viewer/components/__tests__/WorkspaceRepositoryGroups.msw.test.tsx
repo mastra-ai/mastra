@@ -32,8 +32,9 @@ async function openFileTree(changes: WorkspaceChanges) {
     <WorkspaceChangesPanel
       workspacePath={WORKSPACE}
       visible
+      scope="branch"
+      onScopeChange={() => {}}
       repositoryProviders={{ 'mastra-ai/mastra': 'github', 'mastra-ai/platform': 'gitlab' }}
-      onBack={() => {}}
     />,
   );
   await user.click(await screen.findByRole('button', { name: /^Jump to file/ }));
@@ -103,7 +104,13 @@ describe('workspace repository groups', () => {
       ),
     );
     renderWithProviders(
-      <WorkspaceChangesPanel workspacePath={WORKSPACE} visible repositoryProviders={{}} onBack={() => {}} />,
+      <WorkspaceChangesPanel
+        workspacePath={WORKSPACE}
+        visible
+        scope="branch"
+        onScopeChange={() => {}}
+        repositoryProviders={{}}
+      />,
     );
 
     expect(await screen.findByText("Couldn't read changes in mastra-ai/platform")).toBeInTheDocument();

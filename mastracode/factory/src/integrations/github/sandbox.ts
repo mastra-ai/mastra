@@ -16,11 +16,12 @@
  */
 
 import type { RepositoryAccess } from '../../capabilities/version-control.js';
+import { recordSandboxCommand } from '../../metrics/sandbox.js';
 import { isValidGitRef } from '../../sandbox/git-ref.js';
 import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
 import { appliedSandboxEnv, maskSandboxEnvValues } from '../../sandbox/sandbox-env.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
-import { timedPhase } from '../../timing.js';
+import { bootDiagnosticsEnabled, timedPhase } from '../../timing.js';
 
 type MaterializationStore = Pick<SourceControlStorageHandle['sessions'], 'markMaterialized'>;
 
@@ -114,16 +115,22 @@ async function execute(
         timeoutMs: Math.max(deadlineMs - Date.now(), 1),
       });
       if (options.phase) {
-        process.stderr.write(
-          `[factory:timing] ${options.phase} attempt=${attempt + 1} exit=${result.exitCode} ${Math.round(performance.now() - started)}ms\n`,
-        );
+        const elapsed = performance.now() - started;
+        if (bootDiagnosticsEnabled) {
+          process.stderr.write(
+            `[factory:timing] ${options.phase} attempt=${attempt + 1} exit=${result.exitCode} ${Math.round(elapsed)}ms\n`,
+          );
+        }
+        recordSandboxCommand(options.phase, elapsed, result.exitCode === 0 ? 'ok' : 'exit');
       }
       return result;
     } catch (error) {
       if (options.phase) {
+        const elapsed = performance.now() - started;
         process.stderr.write(
-          `[factory:timing] ${options.phase} attempt=${attempt + 1} threw after ${Math.round(performance.now() - started)}ms: ${error instanceof Error ? error.message : String(error)}\n`,
+          `[factory:timing] ${options.phase} attempt=${attempt + 1} threw after ${Math.round(elapsed)}ms: ${error instanceof Error ? error.message : String(error)}\n`,
         );
+        recordSandboxCommand(options.phase, elapsed, 'threw');
       }
       if (attempt >= SH_RETRIES || !isTransientTransportError(error)) throw error;
       const delayMs = SH_RETRY_DELAY_MS * (attempt + 1);
@@ -421,8 +428,9 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
     // destination with a non-retryable fatal. Nothing here is recoverable,
     // the probe above already ruled out a checkout of this repo, so
     // clear its contents before cloning, exactly as the retry path does. Keep
-    // the workdir itself because LocalSandbox runs commands with this
-    // directory as the child process cwd.
+    // the workdir itself because Factory's own commands use it as their cwd
+    // (`gh pr create`, and the `cd` each lifecycle command starts with), so it
+    // has to exist as a directory.
     const authEnv = gitAuthenticationEnvironment(
       cleanCloneUrl,
       token,
@@ -439,7 +447,7 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         beforeRetry: async () => {
           // A clone that died partway leaves the destination non-empty, which
           // git refuses to clone into. Clear its contents so the retry starts
-          // clean without removing LocalSandbox's process cwd.
+          // clean, leaving a directory Factory's commands still use as cwd.
           await clearWorkdir(sandbox, workdir);
         },
       },

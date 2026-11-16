@@ -13,7 +13,9 @@ import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { SettingsItem, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
-import { Plus, RefreshCw, RotateCcw, X } from 'lucide-react';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { useRef, useState } from 'react';
 
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
@@ -27,6 +29,7 @@ import { gitLabProjectRepository } from '../../factory/services/gitlab';
 import { IntegrationItemIcon } from '../../settings/components/IntegrationItem';
 import type { FactoryProject, GithubStatus, SourceControlRepository } from '../services/github';
 import { isGitLabRepository } from '../services/github';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 export function AddRepositoryPicker({
   factory,
@@ -113,7 +116,7 @@ export function AddRepositoryPicker({
               disabled={refreshRepos.isPending}
               onClick={() => refreshRepos.mutate()}
             >
-              <RefreshCw className={refreshRepos.isPending ? 'motion-safe:animate-spin' : undefined} />
+              <IconArrowRotateClockwise className={refreshRepos.isPending ? 'motion-safe:animate-spin' : undefined} />
             </Button>
           )}
         </div>
@@ -152,7 +155,7 @@ export function AddRepositoryPicker({
               >
                 <Button
                   size="sm"
-                  icon={<Plus />}
+                  icon={<IconPlusMedium />}
                   aria-label={`Add ${repo.fullName}`}
                   disabled={Boolean(addingRepository)}
                   onClick={() => onAddRepository(repo)}
@@ -181,7 +184,7 @@ export function AddRepositoryPicker({
         <DrawerClose
           disabled={Boolean(addingRepository)}
           render={
-            <Button size="sm" icon={<X />}>
+            <Button size="sm" icon={<IconCrossMedium />}>
               Cancel
             </Button>
           }
@@ -204,7 +207,13 @@ function StatusUnavailableNotice({
     <Notice
       variant="warning"
       action={
-        <Button size="sm" variant="ghost" icon={<RotateCcw />} disabled={retrying} onClick={onRetry}>
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={<IconArrowRotateCounterClockwise />}
+          disabled={retrying}
+          onClick={onRetry}
+        >
           Retry {provider}
         </Button>
       }

@@ -1290,8 +1290,8 @@ describe('PlatformGithubIntegration', () => {
         '/auth/github/connect',
         '/web/github/subscriptions',
         '/web/github/repos',
-        '/web/github/projects/:id/issues',
-        '/web/github/projects/:id/prs',
+        '/web/github/projects/:id/issues/:number',
+        '/web/github/projects/:id/prs/:number',
         '/web/github/projects/:id/pr',
       ]),
     );
@@ -1384,7 +1384,7 @@ describe('PlatformGithubIntegration', () => {
     expect(() => new PlatformGithubIntegration({ rules: { unknown: null } })).toThrow();
   });
 
-  it('imports a linked repository backlog through GitHub rules while its list routes stay reads', async () => {
+  it('imports a linked repository backlog through GitHub rules', async () => {
     const seed = await createPlatformStorageForTests();
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);
@@ -1425,9 +1425,6 @@ describe('PlatformGithubIntegration', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/tmp/app',
     });
     const context = {
       auth: fakeAuth(),
@@ -1449,18 +1446,8 @@ describe('PlatformGithubIntegration', () => {
     } as unknown as IntegrationContext;
     integration.initialize?.({ storage: context.storage.generic });
     integration.versionControl.initialize({ storage: sourceControl });
-    const app = new Hono();
-    app.use('*', async (c, next) => {
-      c.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
-      await next();
-    });
-    mountApiRoutes(app as never, integration.routes(context));
-
-    const issues = await app.request(`/web/github/projects/${projectRepository.id}/issues`);
-    const pullRequests = await app.request(`/web/github/projects/${projectRepository.id}/prs`);
-
-    expect(issues.status).toBe(200);
-    expect(pullRequests.status).toBe(200);
+    // Route assembly attaches the GitHub rules the backlog import files through.
+    integration.routes(context);
     expect(onIssue).not.toHaveBeenCalled();
     expect(onPullRequest).not.toHaveBeenCalled();
 
