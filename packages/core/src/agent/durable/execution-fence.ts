@@ -565,10 +565,16 @@ export const DURABLE_PARTICIPANT_FENCES = createRunScopeKey<Map<string, Executio
 const fencesByExecutionId = new Map<string, ExecutionFence>();
 const activeFenceByRunId = new Map<string, ExecutionFence>();
 /**
- * Fences whose heartbeat is running or has a renewal in flight, by execution. A coordinator and its participants in
- * one process share an execution, so a release by any of them reaches the others' late renewals.
+ * Fences whose heartbeat is running or has a renewal in flight, by claim. A coordinator and its participants in one
+ * process share a claim, so a release by any of them reaches the others' late renewals. The key names the run and the
+ * generation as well as the execution, so a release only ever reaches fences of the claim it released.
  */
-const renewingFencesByExecutionId = new Map<string, Set<ExecutionFence>>();
+const renewingFencesByClaim = new Map<string, Set<ExecutionFence>>();
+
+/** Identifies one claim on one run. Storage raises the generation on every claim; a lease claim has a fresh id. */
+function claimKey(runId: string, claim: DurableExecutionClaim): string {
+  return [runId, claim.executionId, claim.generation ?? ''].join('\u0000');
+}
 
 /**
  * One execution's claim on a durable run. Inside {@link ExecutionFence.run},
@@ -742,14 +748,14 @@ export class ExecutionFence implements RunFenceScope {
     const backend = await resolveRemoteBackend(mastra, claim.agentId, runId, claim);
     if (!backend) return;
     const released = backend.release(claim);
-    if (reason === 'settled') ExecutionFence.#noteOwnRelease(claim.executionId, released);
+    if (reason === 'settled') ExecutionFence.#noteOwnRelease(claimKey(runId, claim), released);
     await released;
   }
 
-  /** Tell the fences of `executionId` that are still renewing that the execution is releasing its claim. */
-  static #noteOwnRelease(executionId: string, released: Promise<boolean>): void {
+  /** Tell the fences of the claim at `key` that are still renewing that the execution is releasing that claim. */
+  static #noteOwnRelease(key: string, released: Promise<boolean>): void {
     const confirmed = released.catch(() => false);
-    for (const fence of renewingFencesByExecutionId.get(executionId) ?? []) {
+    for (const fence of renewingFencesByClaim.get(key) ?? []) {
       fence.#ownRelease ??= confirmed;
       void confirmed.then(owned => {
         // The claim is gone: later renewals could only fail.
@@ -999,9 +1005,10 @@ export class ExecutionFence implements RunFenceScope {
   /** Forget this fence once its heartbeat can no longer report on the claim. */
   #stopTrackingIfQuiet(): void {
     if (this.#heartbeat || this.#renewalInFlight) return;
-    const fences = renewingFencesByExecutionId.get(this.executionId);
+    const key = claimKey(this.runId, this.claim);
+    const fences = renewingFencesByClaim.get(key);
     fences?.delete(this);
-    if (fences?.size === 0) renewingFencesByExecutionId.delete(this.executionId);
+    if (fences?.size === 0) renewingFencesByClaim.delete(key);
   }
 
   /** Cancel only this worker's invocations, keeping the shared claim valid for survivors. */
@@ -1119,7 +1126,7 @@ export class ExecutionFence implements RunFenceScope {
   async #release(): Promise<void> {
     const released = this.#backend.release(this.claim);
     this.#ownRelease ??= released.catch(() => false);
-    ExecutionFence.#noteOwnRelease(this.executionId, released);
+    ExecutionFence.#noteOwnRelease(claimKey(this.runId, this.claim), released);
     try {
       await released;
     } catch (error) {
@@ -1222,8 +1229,9 @@ export class ExecutionFence implements RunFenceScope {
    * a release nothing settles, such as an abandoned terminal, is then a loss.
    */
   #startHeartbeat(): void {
-    let fences = renewingFencesByExecutionId.get(this.executionId);
-    if (!fences) renewingFencesByExecutionId.set(this.executionId, (fences = new Set()));
+    const key = claimKey(this.runId, this.claim);
+    let fences = renewingFencesByClaim.get(key);
+    if (!fences) renewingFencesByClaim.set(key, (fences = new Set()));
     fences.add(this);
     this.#heartbeat = setInterval(() => {
       if (this.#settlement || this.#lossError) return;
@@ -1339,7 +1347,7 @@ export function __resetExecutionFencesForTests(): void {
   for (const fence of fencesByExecutionId.values()) fence.stopHeartbeat();
   fencesByExecutionId.clear();
   activeFenceByRunId.clear();
-  renewingFencesByExecutionId.clear();
+  renewingFencesByClaim.clear();
 }
 
 /**
