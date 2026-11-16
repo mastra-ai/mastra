@@ -336,9 +336,9 @@ describe('create template selection', () => {
   });
 });
 
-describe('create --alpha / --latest', () => {
+describe('create --tag', () => {
   const distTags: Record<string, Record<string, string>> = {
-    mastra: { latest: '1.5.0', alpha: '1.6.0-alpha.2' },
+    mastra: { latest: '1.5.0', alpha: '1.6.0-alpha.2', beta: '1.6.0-beta.1' },
     '@mastra/core': { latest: '1.5.1', alpha: '1.6.0-alpha.3' },
     '@mastra/factory': { latest: '0.4.3', alpha: '0.4.4-alpha.3' },
     // No alpha release published for this package.
@@ -418,7 +418,7 @@ describe('create --alpha / --latest', () => {
     expect(clack.log.warn).not.toHaveBeenCalled();
   });
 
-  it('lets npm install alpha releases whose peer ranges exclude newer prereleases', async () => {
+  it('lets npm install prereleases whose peer ranges exclude newer prereleases', async () => {
     vi.stubEnv('npm_config_user_agent', 'npm/11.0.0 node/v22.0.0');
     try {
       await create({ projectName: 'my-factory', noPlatform: true, versionTag: 'alpha', analytics });
@@ -426,6 +426,21 @@ describe('create --alpha / --latest', () => {
       vi.unstubAllEnvs();
     }
 
+    expect(fs.readFileSync(path.join(workDir, 'my-factory', '.npmrc'), 'utf8')).toBe('legacy-peer-deps=true\n');
+  });
+
+  it('pins any dist-tag, not just latest and alpha', async () => {
+    vi.stubEnv('npm_config_user_agent', 'npm/11.0.0 node/v22.0.0');
+    try {
+      await create({ projectName: 'my-factory', noPlatform: true, versionTag: 'beta', analytics });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+
+    const pkg = readPkg();
+    expect(pkg.devDependencies.mastra).toBe('1.6.0-beta.1');
+    expect(pkg.dependencies['@mastra/core']).toBe('latest');
+    expect(clack.log.warn).toHaveBeenCalledWith(expect.stringContaining('No "beta" release found for @mastra/core'));
     expect(fs.readFileSync(path.join(workDir, 'my-factory', '.npmrc'), 'utf8')).toBe('legacy-peer-deps=true\n');
   });
 

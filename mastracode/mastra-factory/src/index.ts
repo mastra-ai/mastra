@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Command, Option } from 'commander';
+import { Command } from 'commander';
 
 import { PosthogAnalytics, setAnalytics } from 'mastra/dist/analytics/index.js';
 
@@ -27,8 +27,7 @@ type CreateArgs = {
   platform?: boolean;
   org?: string;
   region?: string;
-  latest?: boolean;
-  alpha?: boolean;
+  tag?: string;
 };
 
 program
@@ -42,13 +41,16 @@ program
   .option('--no-platform', 'Skip Mastra platform provisioning and scaffold the self-hosted template')
   .option('--org <org>', 'Mastra organization id or name — skips the interactive org picker')
   .option('--region <region>', 'Platform project region (eu or us); defaults to us')
-  .addOption(new Option('--latest', 'Pin the Mastra packages to the latest stable release').conflicts('alpha'))
-  .option('--alpha', 'Pin the Mastra packages to the latest alpha (prerelease) release')
+  .option(
+    '--tag <dist-tag>',
+    'Pin the Mastra packages to the versions published under this npm dist-tag (e.g. latest, alpha)',
+  )
   .version(pkg.version, '-v, --version')
   .action(async (projectNameArg: string | undefined, args: CreateArgs) => {
     const region = args.region ? String(args.region) : undefined;
     const validRegion = region === 'eu' || region === 'us' ? region : undefined;
-    const versionTag = args.alpha ? 'alpha' : args.latest ? 'latest' : undefined;
+    const versionTag = args.tag?.trim() || undefined;
+    const knownVersionTag = versionTag === 'latest' || versionTag === 'alpha' ? versionTag : undefined;
     // Values that must never reach analytics if a failure message echoes them.
     // (redactError also covers derived variants, e.g. degit's prefix-stripped repo.)
     const sensitiveValues = [
@@ -57,6 +59,7 @@ program
       // Valid regions are already reported in args; only an invalid (arbitrary)
       // value is sensitive.
       validRegion ? undefined : region,
+      knownVersionTag ? undefined : versionTag,
       projectNameArg,
     ];
 
@@ -71,7 +74,7 @@ program
           no_platform: args.platform === false,
           has_org: Boolean(args.org),
           region: validRegion ?? (region ? 'invalid' : undefined),
-          version_tag: versionTag,
+          version_tag: knownVersionTag ?? (versionTag ? 'custom' : undefined),
         },
         execution: async () => {
           try {

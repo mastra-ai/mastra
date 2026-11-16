@@ -57,10 +57,10 @@ Platform projects are created in the US region by default. To create the project
 npx create-factory@latest my-mastra-factory --region eu
 ```
 
-The templates install the stable releases of the Mastra packages. To try prerelease versions, pass `--alpha` to pin every `mastra` and `@mastra/*` dependency to its latest alpha release (or `--latest` to pin them to the current stable versions):
+The templates install the stable releases of the Mastra packages. To try another release channel, pass `--tag <dist-tag>` to pin every `mastra` and `@mastra/*` dependency to the version published under that npm dist-tag (for example `alpha`, or `latest` to pin the current stable versions):
 
 ```bash
-npx create-factory@latest my-mastra-factory --alpha
+npx create-factory@latest my-mastra-factory --tag alpha
 ```
 
 ## Documentation

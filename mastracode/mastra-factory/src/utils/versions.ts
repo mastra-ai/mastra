@@ -2,9 +2,6 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { x } from 'tinyexec';
 
-/** npm dist-tags the CLI can pin the template's Mastra packages to. */
-export type VersionTag = 'latest' | 'alpha';
-
 const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies'] as const;
 const NPM_VIEW_TIMEOUT_MS = 15_000;
 
@@ -25,7 +22,7 @@ export interface PinResult {
  * install uses that release channel. Templates declare these as `latest`, so
  * without this an install always takes the stable channel.
  */
-export async function pinMastraPackages(projectPath: string, tag: VersionTag): Promise<PinResult> {
+export async function pinMastraPackages(projectPath: string, tag: string): Promise<PinResult> {
   const pkgPath = path.join(projectPath, 'package.json');
   const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf8')) as Record<string, unknown>;
 
@@ -60,7 +57,7 @@ export async function pinMastraPackages(projectPath: string, tag: VersionTag): P
   return { pinned, unresolved };
 }
 
-async function resolveDistTag(name: string, tag: VersionTag): Promise<string | undefined> {
+async function resolveDistTag(name: string, tag: string): Promise<string | undefined> {
   try {
     const { stdout } = await x('npm', ['view', name, 'dist-tags', '--json'], {
       throwOnError: true,

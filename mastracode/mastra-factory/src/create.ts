@@ -23,7 +23,6 @@ import {
 } from './platform.js';
 import { canScaffoldInto, cloneTemplate, renameProject } from './utils/clone.js';
 import { detectPackageManager, getInstallArgs } from './utils/pm.js';
-import type { VersionTag } from './utils/versions.js';
 import { pinMastraPackages } from './utils/versions.js';
 
 export const PLATFORM_TEMPLATE_REPO = 'https://github.com/mastra-ai/template-factory';
@@ -55,7 +54,7 @@ export interface CreateArgs {
    * this npm dist-tag points at (e.g. `alpha` for prereleases). Omitted → the
    * template's own version specs are installed as-is.
    */
-  versionTag?: VersionTag;
+  versionTag?: string;
   analytics: PosthogAnalytics;
 }
 
@@ -161,9 +160,10 @@ export async function create(args: CreateArgs): Promise<void> {
     }
     // Mastra peer ranges like `>=1.83.0-0` don't match a newer prerelease
     // (`1.84.0-alpha.3`) under semver's prerelease rules, so npm refuses to
-    // install alpha releases together. Persist the override so later
+    // install prereleases together. Persist the override so later
     // `npm install`s in the project keep working too.
-    if (tag === 'alpha' && packageManager === 'npm') {
+    const hasPrerelease = Object.values(pinned).some(version => version.includes('-'));
+    if (hasPrerelease && packageManager === 'npm') {
       const npmrcPath = path.join(projectPath, '.npmrc');
       const existing = fs.existsSync(npmrcPath) ? fs.readFileSync(npmrcPath, 'utf8') : '';
       const prefix = existing && !existing.endsWith('\n') ? '\n' : '';
