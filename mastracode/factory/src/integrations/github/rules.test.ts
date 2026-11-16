@@ -10,6 +10,7 @@ import {
 import { ProjectBoardCache, toBoardSource } from '../../boards/project-boards.js';
 import { reviewBoard } from '../../boards/review.js';
 import { autoStartingBoards, createTestBoard, createTriageWorkRegistry, selfReviewWorkBoard } from '../../boards/test-utils.js';
+import { DEFAULT_INTAKE_ROUTES, LINKED_PULL_REQUEST_ROUTE, PULL_REQUEST_INTAKE_ROUTE } from '../../boards/work-routes.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
@@ -7364,6 +7365,33 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
       expect(cards[0]!.metadata.untrustedPullRequests).toEqual([expect.stringContaining('17')]);
       expect(cards[0]!.metadata.openPullRequestNumber).toBeUndefined();
+      expect((await h.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
+    });
+
+    it("leaves issue 42's card where it is for an outsider's linked pull request on a project set up before pull requests linked", async () => {
+      const h = await harness('read');
+      const scope = { orgId: 'org-1', factoryProjectId: h.project.id };
+      const where = { org_id: scope.orgId, factory_project_id: scope.factoryProjectId };
+      await h.boards.listIntakeRoutes(scope);
+      // What such a project holds: "Pull requests go to Review" as it was given, testing nothing,
+      // and no linked pull request rule yet.
+      await h.storage.ops.updateMany('factory_intake_route_locks', where, {
+        seeded_defaults: DEFAULT_INTAKE_ROUTES.map(({ key }) => key).filter(key => key !== 'linked-pull-request'),
+      });
+      await h.storage.ops.deleteMany('factory_intake_routes', { ...where, name: LINKED_PULL_REQUEST_ROUTE.name });
+      await h.storage.ops.updateMany(
+        'factory_intake_routes',
+        { ...where, name: PULL_REQUEST_INTAKE_ROUTE.name },
+        { when_condition: null },
+      );
+      const issue = await h.issueCard(42, 'intake');
+
+      await h.ingest(openedPullRequest(17, 'Fixes #42'));
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(1);
+      expect(cards[0]).toMatchObject({ id: issue.id, stages: ['intake'] });
+      expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
       expect((await h.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
     });
 

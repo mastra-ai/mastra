@@ -378,6 +378,57 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     );
   });
 
+  it("gives the linked pull request rule the join route's slot on a board at the route limit", async () => {
+    const { storage, boards, scope } = await setup({ seeded: true });
+    const where = { org_id: scope.orgId, factory_project_id: scope.factoryProjectId };
+    const onWork = (await boards.listIntakeRoutes(scope)).filter(route => route.target.boardKey === 'work').length;
+    await storage.ops.updateMany('factory_intake_route_locks', where, {
+      seeded_defaults: DEFAULT_INTAKE_ROUTES.map(({ key }) => key).filter(key => key !== 'linked-pull-request'),
+    });
+    await storage.ops.deleteMany('factory_intake_routes', { ...where, name: LINKED_PULL_REQUEST_ROUTE.name });
+    const row = (name: string, position: number, join: boolean) => ({
+      id: randomUUID(),
+      ...where,
+      name,
+      enabled: true,
+      position,
+      when_condition: join
+        ? {
+            operator: 'AND',
+            conditions: [
+              { field: 'source.kind', operator: 'equals', value: 'pull_request' },
+              { field: 'author.trusted', operator: 'equals', value: true },
+              { field: 'pullRequest.closesIssue', operator: 'equals', value: true },
+              { field: 'closedIssue.phase', operator: 'in', value: ['intake'] },
+              { field: 'closedIssue.hasPullRequest', operator: 'equals', value: false },
+            ],
+          }
+        : { operator: 'AND', conditions: [{ field: 'item.title', operator: 'equals', value: name }] },
+      board_key: 'work',
+      phase_key: 'pr-review',
+      join_closed_issue: join,
+      on_events: [join ? 'pull_request.opened' : 'work_item.updated'],
+      revision: 1,
+      created_by: 'factory',
+      created_at: new Date(),
+      updated_by: 'factory',
+      updated_at: new Date(),
+    });
+    // Work at the limit: its routes without the linked rule, the join route, and the admin's own.
+    await storage.ops.insertOne(
+      'factory_intake_routes',
+      row('Pull requests that close a waiting issue join its card', 100, true),
+    );
+    for (let at = onWork; at < MAX_INTAKE_ROUTES_PER_BOARD; at++) {
+      await storage.ops.insertOne('factory_intake_routes', row(`Mine ${at}`, 200 + at, false));
+    }
+
+    const routes = await boards.listIntakeRoutes(scope);
+    expect(routes.filter(route => route.target.boardKey === 'work')).toHaveLength(MAX_INTAKE_ROUTES_PER_BOARD + 1);
+    expect(routes.find(route => route.name === LINKED_PULL_REQUEST_ROUTE.name)).toMatchObject({ enabled: true });
+    expect(routes.find(route => route.target.joinClosedIssue)).toMatchObject({ enabled: false });
+  });
+
   it('adds each route added since once: the pull request route at the end, the closing-issue route first', async () => {
     const project = await setup({ seeded: true });
     const { boards, scope } = project;

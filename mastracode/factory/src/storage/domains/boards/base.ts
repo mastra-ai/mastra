@@ -11,6 +11,7 @@ import { deriveIntakeOrder, kindsTakenWhole, reconcileIntakeOrder } from '../../
 import {
   DEFAULT_INTAKE_ROUTES,
   LINKED_PULL_REQUEST_ROUTE_KEY,
+  PULL_REQUEST_INTAKE_ROUTE,
   RETIRED_JOIN_ROUTE,
 } from '../../../boards/work-routes.js';
 import { currentRuleGroup } from '../../../rules/rule-group.js';
@@ -1180,6 +1181,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       const missing = missingDefaults(current);
       if (missing.length === 0) return;
       const rows = await readIntakeRoutes(ops, scope);
+      const retired = new Set<string>();
       // Pull requests link to the card of the issue they close on their own now: a route that
       // joined them is switched off, and kept so its history stays readable.
       // One an admin had changed is named in the decision log: the linked rule doesn't do all it did.
@@ -1187,6 +1189,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
         for (const row of rows) {
           if (!row.join_closed_issue || !row.enabled) continue;
           await updateIntakeRouteRow(ops, row, { enabled: false, updated_by: DEFAULT_INTAKE_ROUTE_ACTOR });
+          retired.add(row.id);
           if (isShippedJoinRoute(row)) continue;
           await ops.upsertOne(INTAKE_DECISIONS, ['org_id', 'factory_project_id', 'idempotency_key'], {
             ...scopeWhere(scope),
@@ -1206,16 +1209,32 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
             resolved_by: null,
           });
         }
+        // Linked pull requests reach an issue's card as `pull_request.opened`: the "Pull requests go
+        // to Review" route projects were given tested nothing, so it would send that card to Review
+        // ahead of the linked rule. It now takes only pull requests' own cards, as it always meant to.
+        for (const row of rows) {
+          if (!isShippedPullRequestRoute(row)) continue;
+          await updateIntakeRouteRow(ops, row, {
+            when_condition: PULL_REQUEST_INTAKE_ROUTE.when,
+            updated_by: DEFAULT_INTAKE_ROUTE_ACTOR,
+          });
+        }
       }
       let position = rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
       const first: string[] = [];
       const perBoard = new Map<string, number>();
       // Only a project no default was added to yet is new.
       const newProject = seededDefaults(current).length === 0;
-      for (const { route, first: leads, newProjectsOnly } of missing) {
+      for (const { key, route, first: leads, newProjectsOnly } of missing) {
         if (newProjectsOnly && !newProject) continue;
-        // A board at the limit keeps its own routes; the default counts as added all the same.
-        const count = perBoard.get(route.target.boardKey) ?? boardRouteCount(rows, route.target.boardKey);
+        // A board at the limit keeps its own routes; the default counts as added all the same. The
+        // linked rule takes the slot of a join route it switched off.
+        const count =
+          perBoard.get(route.target.boardKey) ??
+          boardRouteCount(
+            key === LINKED_PULL_REQUEST_ROUTE_KEY ? rows.filter(row => !retired.has(row.id)) : rows,
+            route.target.boardKey,
+          );
         if (count >= MAX_INTAKE_ROUTES_PER_BOARD) continue;
         perBoard.set(route.target.boardKey, count + 1);
         const id = randomUUID();
@@ -1519,7 +1538,6 @@ function boardRouteCount(rows: readonly IntakeRouteRow[], boardKey: string): num
   return rows.filter(row => row.board_key === boardKey).length;
 }
 
-/** Whether `row` files every new issue, or pull request, that reaches it, as the seeded "Everything else" route does. */
 /** Whether a stored join route is still the one projects were given, which the linked rule replaces. */
 function isShippedJoinRoute(row: IntakeRouteRow): boolean {
   return (
@@ -1529,6 +1547,19 @@ function isShippedJoinRoute(row: IntakeRouteRow): boolean {
   );
 }
 
+/** Whether a stored route is still the "Pull requests go to Review" route projects were given, testing nothing. */
+function isShippedPullRequestRoute(row: IntakeRouteRow): boolean {
+  return (
+    row.when_condition === null &&
+    !row.join_closed_issue &&
+    !row.move_to_board_key &&
+    row.board_key === PULL_REQUEST_INTAKE_ROUTE.target.boardKey &&
+    row.phase_key === PULL_REQUEST_INTAKE_ROUTE.target.phaseKey &&
+    sameKeys(routeEvents(row), PULL_REQUEST_INTAKE_ROUTE.on ?? [])
+  );
+}
+
+/** Whether `row` files every new issue, or pull request, that reaches it, as the seeded "Everything else" route does. */
 function catchesEveryNewCard(row: IntakeRouteRow, kind: ArrivalKind): boolean {
   return (
     row.enabled &&
