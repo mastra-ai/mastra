@@ -641,10 +641,12 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
       it('rejects a list cursor it cannot decode with KnowledgeInvalidCursorError', async () => {
         const acme = await scope('org:acme', ORG);
         const invalid = { name: 'KnowledgeInvalidCursorError' };
-        const cursor = 'not-a-cursor';
-        await expect(store.listChildPages({ parentId: acme.id, read: 'all', cursor })).rejects.toMatchObject(invalid);
-        await expect(store.listPages({ read: 'all', cursor })).rejects.toMatchObject(invalid);
-        await expect(store.listPageActivity({ read: 'all', cursor })).rejects.toMatchObject(invalid);
+        // `0x10` is a number to `Number()`, but no store issues it.
+        for (const cursor of ['not-a-cursor', '0x10']) {
+          await expect(store.listChildPages({ parentId: acme.id, read: 'all', cursor })).rejects.toMatchObject(invalid);
+          await expect(store.listPages({ read: 'all', cursor })).rejects.toMatchObject(invalid);
+          await expect(store.listPageActivity({ read: 'all', cursor })).rejects.toMatchObject(invalid);
+        }
       });
 
       it('creates pages in their home scope, ordered by position, with name order for listPages', async () => {

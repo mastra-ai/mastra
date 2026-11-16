@@ -10,6 +10,7 @@ import type {
   KnowledgeReadScope,
 } from '../storage';
 import {
+  KnowledgeInvalidCursorError,
   KnowledgeUnsupportedCapabilityError,
   knowledgeScopeReadable,
   MAX_KNOWLEDGE_PAGE_LIST_LIMIT,
@@ -112,6 +113,8 @@ export async function listKnowledgeTreeChildren(
   input: { parentId: string | null; read: KnowledgeReadScope; cursor?: string; limit?: number },
 ): Promise<KnowledgeTreeChildren> {
   const { parentId, read, cursor, limit } = input;
+  // The root level is never paged, so no cursor can continue it.
+  if (parentId === null && cursor !== undefined) throw new KnowledgeInvalidCursorError(cursor);
   if (parentId !== null && !(await store.getPage({ id: parentId, read }))) {
     return { pages: [], truncated: false };
   }

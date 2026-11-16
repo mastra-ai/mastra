@@ -347,6 +347,8 @@ describe('Knowledge read routes', () => {
     const badRequest = { status: 400, message: 'Invalid Knowledge cursor: this store cannot decode it' };
     await expect(call(GET_KNOWLEDGE_TREE_ROUTE, { ...args, parentId: acme.id })).rejects.toMatchObject(badRequest);
     await expect(call(GET_KNOWLEDGE_ACTIVITY_ROUTE, args)).rejects.toMatchObject(badRequest);
+    // The root level is never paged, so a cursor there is also a bad request, not an empty page.
+    await expect(call(GET_KNOWLEDGE_TREE_ROUTE, args)).rejects.toMatchObject(badRequest);
   });
 
   it('filters instances and gates reads by FGA when configured', async () => {

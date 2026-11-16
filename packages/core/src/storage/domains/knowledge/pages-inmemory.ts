@@ -50,8 +50,9 @@ function pageSize(limit: number | undefined): number {
 }
 
 function paginate<T>(items: T[], cursor: string | undefined, limit: number | undefined) {
+  // The store issues plain decimal offsets; reject anything else (`0x10`, `1e3`, ` 5`) rather than coerce it.
+  if (cursor !== undefined && !/^(0|[1-9]\d*)$/.test(cursor)) throw new KnowledgeInvalidCursorError(cursor);
   const start = cursor === undefined ? 0 : Number(cursor);
-  if (!Number.isInteger(start) || start < 0) throw new KnowledgeInvalidCursorError(String(cursor));
   const size = pageSize(limit);
   const slice = items.slice(start, start + size);
   return { items: slice, nextCursor: start + size < items.length ? String(start + size) : undefined };
