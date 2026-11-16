@@ -22,6 +22,7 @@ import { BackgroundTaskManager } from '../../../../background-tasks/manager';
 import type { PubSub } from '../../../../events/pubsub';
 import { UnixSocketPubSub } from '../../../../events/unix-socket-pubsub';
 import type { Mastra } from '../../../../mastra';
+import { WorkflowsInMemory } from '../../../../storage/domains/workflows/inmemory';
 import { SCENARIO_MODEL_ID } from '../types';
 
 /**
@@ -876,12 +877,16 @@ describeForAllEngines(
     );
 
     // Starts the deferred research tool, lets the run finish and release its claim, and holds
-    // one cleanup step after the release open, as slow storage would, until `finishCleanup`:
-    // retiring the run's memory fence, or releasing the thread's lease (evented, with a shared
-    // `pubsub`). `cleanedUp` resolves once the held step has finished.
+    // one cleanup step open, as slow storage would, until `finishCleanup`: retiring the run's
+    // memory fence, releasing the thread's lease (evented, with a shared `pubsub`), or the claim
+    // release itself, which storage has applied but not yet returned to the run. `cleanedUp`
+    // resolves once the held step has finished.
     async function startResearchDuringCleanup(
       threadId: string,
-      { hold = 'memory-fence', pubsub }: { hold?: 'memory-fence' | 'thread-lease'; pubsub?: PubSub } = {},
+      {
+        hold = 'memory-fence',
+        pubsub,
+      }: { hold?: 'memory-fence' | 'thread-lease' | 'claim-release'; pubsub?: PubSub } = {},
     ) {
       let release!: () => void;
       const gate = new Promise<void>(resolve => (release = resolve));
@@ -904,6 +909,16 @@ describeForAllEngines(
       if (hold === 'memory-fence') {
         const retireRunFence = memoryStore.retireRunFence.bind(memoryStore);
         vi.spyOn(memoryStore, 'retireRunFence').mockImplementation(fence => holdOpen(() => retireRunFence(fence)));
+      } else if (hold === 'claim-release') {
+        // The scenario builds its own store, so the hold goes on the in-memory workflows domain.
+        const releaseRunOwnership = WorkflowsInMemory.prototype.releaseRunOwnership;
+        const spy = vi
+          .spyOn(WorkflowsInMemory.prototype, 'releaseRunOwnership')
+          .mockImplementation(async function (this: WorkflowsInMemory, fence) {
+            const released = await releaseRunOwnership.call(this, fence);
+            return holdOpen(async () => released);
+          });
+        onTestFinished(() => spy.mockRestore());
       } else {
         const releaseLease = agentThreadStreamRuntime.releaseDurableThreadLease.bind(agentThreadStreamRuntime);
         const spy = vi
@@ -1097,6 +1112,110 @@ describeForAllEngines(
       30_000,
     );
 
+    // Resolves once the next ownership read after this call has returned, which is the late
+    // suspend's check when nothing else reads the record meanwhile.
+    function nextOwnershipRead() {
+      let signalRead!: () => void;
+      const read = new Promise<void>(resolve => (signalRead = resolve));
+      const getRunOwnership = WorkflowsInMemory.prototype.getRunOwnership;
+      const spy = vi
+        .spyOn(WorkflowsInMemory.prototype, 'getRunOwnership')
+        .mockImplementation(async function (this: WorkflowsInMemory, args) {
+          try {
+            return await getRunOwnership.call(this, args);
+          } finally {
+            signalRead();
+          }
+        });
+      onTestFinished(() => spy.mockRestore());
+      return read;
+    }
+
+    // Technical: settlement releases the claim, and only once storage's release call returns
+    // does the run count as released. The late suspend checked ownership in between: storage
+    // already showed the claim released, so the strict check failed and marked the execution
+    // lost though nobody had taken over, and the task failed before it suspended. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      'parks a deferred tool that asks for input while the finished run is still releasing its claim (#30182)',
+      async () => {
+        const run = await startResearchDuringCleanup('bg-suspend-during-claim-release-thread', {
+          hold: 'claim-release',
+        });
+        const released = await run.workflows.getRunOwnership({ runId: run.runId });
+        expect(released?.live).toBe(false);
+        const checked = nextOwnershipRead();
+        run.release();
+        try {
+          // The suspend read the released claim while the release was still in flight.
+          await checked;
+          run.finishCleanup();
+          const parked = await run.settledTask();
+          expect({ status: parked.status, error: parked.error?.message }).toEqual({
+            status: 'suspended',
+            error: undefined,
+          });
+          expect(parked.suspendPayload).toEqual({ awaiting: 'analyst-approval', topic: 'near' });
+          const open = await waitFor(
+            () => storedToolCall(run.memory, run.thread),
+            s => s.suspended?.taskId !== undefined,
+          );
+          expect(open.suspended).toMatchObject({ taskId: parked.id });
+          const after = await run.workflows.getRunOwnership({ runId: run.runId });
+          expect({ ownerId: after?.ownerId, generation: after?.generation, live: after?.live }).toEqual({
+            ownerId: released?.ownerId,
+            generation: released?.generation,
+            live: false,
+          });
+        } finally {
+          run.finishCleanup();
+        }
+      },
+      30_000,
+    );
+
+    // Technical: waiting out an in-flight release must not let a superseded execution through:
+    // a successor that claimed the run during the release still makes the late suspend fail
+    // without writing. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      "doesn't park a deferred tool that asks for input after another execution took over a run still releasing its claim (#30182)",
+      async () => {
+        const run = await startResearchDuringCleanup('bg-suspend-claim-release-takeover-thread', {
+          hold: 'claim-release',
+        });
+        const released = await run.workflows.getRunOwnership({ runId: run.runId });
+        const successor = await run.workflows.claimRunOwnership({
+          runId: run.runId,
+          ownerId: 'successor-execution',
+          leaseMs: 60_000,
+          expectedGeneration: released!.generation,
+        });
+        expect(successor.acquired).toBe(true);
+        const checked = nextOwnershipRead();
+        run.release();
+        try {
+          await checked;
+          run.finishCleanup();
+          const settled = await run.settledTask();
+          expect({ status: settled.status, error: settled.error?.message }).toEqual({
+            status: 'failed',
+            // DURABLE_AGENT_EXECUTION_SUPERSEDED
+            error: expect.stringContaining(`Durable run ${run.runId} lost its execution lease`),
+          });
+          expect(settled.suspendPayload).toBeUndefined();
+          expect((await storedToolCall(run.memory, run.thread)).suspended).toBeUndefined();
+          const after = await run.workflows.getRunOwnership({ runId: run.runId });
+          expect({ ownerId: after?.ownerId, generation: after?.generation, live: after?.live }).toEqual({
+            ownerId: 'successor-execution',
+            generation: successor.record.generation,
+            live: true,
+          });
+        } finally {
+          run.finishCleanup();
+        }
+      },
+      30_000,
+    );
+
     // Technical: on a shared transport, an evented run's worker releases the run's claim, then
     // the thread's lease, and only then stops its participant fence. Until the lease release
     // returns, that fence stays registered, and the late suspend's check asked it to prove it
@@ -1114,6 +1233,51 @@ describeForAllEngines(
         const released = await run.workflows.getRunOwnership({ runId: run.runId });
         run.release();
         try {
+          const parked = await run.settledTask();
+          expect({ status: parked.status, error: parked.error?.message }).toEqual({
+            status: 'suspended',
+            error: undefined,
+          });
+          expect(parked.suspendPayload).toEqual({ awaiting: 'analyst-approval', topic: 'near' });
+          const open = await waitFor(
+            () => storedToolCall(run.memory, run.thread),
+            s => s.suspended?.taskId !== undefined,
+          );
+          expect(open.suspended).toMatchObject({ taskId: parked.id });
+          const after = await run.workflows.getRunOwnership({ runId: run.runId });
+          expect({ ownerId: after?.ownerId, generation: after?.generation, live: after?.live }).toEqual({
+            ownerId: released?.ownerId,
+            generation: released?.generation,
+            live: false,
+          });
+        } finally {
+          run.finishCleanup();
+          await run.cleanedUp;
+          await pubsub.close();
+          await rm(directory, { recursive: true, force: true });
+        }
+      },
+      30_000,
+    );
+
+    // Technical: the same in-flight release as above, on the worker's participant fence: an
+    // evented worker on a shared transport releases the run's claim itself, and a late suspend
+    // that read the released claim before that release returned marked the execution lost. (#30182)
+    it.runIf(engine === 'evented')(
+      'parks a deferred tool that asks for input while a shared evented run is still releasing its claim (#30182)',
+      async () => {
+        const directory = await mkdtemp(join(tmpdir(), 'mastra-30182-'));
+        const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+        const run = await startResearchDuringCleanup('bg-suspend-during-shared-claim-release-thread', {
+          hold: 'claim-release',
+          pubsub,
+        });
+        const released = await run.workflows.getRunOwnership({ runId: run.runId });
+        const checked = nextOwnershipRead();
+        run.release();
+        try {
+          await checked;
+          run.finishCleanup();
           const parked = await run.settledTask();
           expect({ status: parked.status, error: parked.error?.message }).toEqual({
             status: 'suspended',

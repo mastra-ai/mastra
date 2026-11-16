@@ -1194,9 +1194,30 @@ describe('storage-backed ExecutionFence', () => {
   });
 });
 
+/**
+ * Make the next call of `method` on `target` apply (unless `fail`), then wait for `finish()` before
+ * returning or, with `fail`, throwing: a release storage has applied but not yet confirmed.
+ */
+function holdNextCall<T extends object, K extends keyof T & string>(target: T, method: K, fail: boolean) {
+  const original = (target[method] as (...args: unknown[]) => Promise<unknown>).bind(target);
+  let signalApplied!: () => void;
+  const applied = new Promise<void>(resolve => (signalApplied = resolve));
+  let finish!: () => void;
+  const finished = new Promise<void>(resolve => (finish = resolve));
+  vi.spyOn(target, method as never).mockImplementationOnce((async (...args: unknown[]) => {
+    const result = fail ? undefined : await original(...args);
+    signalApplied();
+    await finished;
+    if (fail) throw new Error('backend down');
+    return result;
+  }) as never);
+  return { applied, finish };
+}
+
 // A background task can write after its run settled: `verifyNotSuperseded` is the check for those
 // writes. Before settlement releases the claim it is `verify`; after, it only refuses once another
-// execution claimed the run (#30182).
+// execution claimed the run. While the release is in flight, a check that fails waits for the
+// release before deciding (#30182).
 describe.each([
   {
     backend: 'storage',
@@ -1225,6 +1246,7 @@ describe.each([
           })),
         failNextRelease: () =>
           vi.spyOn(workflowsStore, 'releaseRunOwnership').mockRejectedValueOnce(new Error('store down')),
+        holdNextRelease: ({ fail = false } = {}) => holdNextCall(workflowsStore, 'releaseRunOwnership', fail),
       };
     },
   },
@@ -1240,6 +1262,7 @@ describe.each([
         takeOver: async () =>
           void (await pubsub.transferLease(key('run-1'), fence.executionId, 'successor', EXECUTION_LEASE_TTL_MS)),
         failNextRelease: () => vi.spyOn(pubsub, 'releaseLease').mockRejectedValueOnce(new Error('redis down')),
+        holdNextRelease: ({ fail = false } = {}) => holdNextCall(pubsub, 'releaseLease', fail),
       };
     },
   },
@@ -1279,6 +1302,48 @@ describe.each([
     // The unreleased claim lapses with nobody taking the run: verify's rule, not the post-release one.
     await dropClaim();
     await expect(fence.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+  });
+
+  it('while settlement is releasing the claim, waits for the release and passes while no other execution claimed the run', async () => {
+    const { fence, holdNextRelease } = await setup();
+    const release = holdNextRelease();
+    const settled = fence.settle(async () => {});
+    await release.applied;
+
+    // The backend already shows the claim released; the strict check alone would mark the execution lost.
+    const check = fence.verifyNotSuperseded();
+    release.finish();
+    await expect(check).resolves.toBeUndefined();
+    expect(fence.isLost()).toBe(false);
+    expect(await settled).toBe('owned');
+  });
+
+  it('while settlement is releasing the claim, refuses once another execution claimed the run', async () => {
+    const { fence, holdNextRelease, claimSuccessor } = await setup();
+    const release = holdNextRelease();
+    const settled = fence.settle(async () => {});
+    await release.applied;
+    await claimSuccessor();
+
+    const check = fence.verifyNotSuperseded();
+    release.finish();
+    await expect(check).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+    await settled;
+  });
+
+  it('stays strict when the release in flight fails', async () => {
+    const { fence, dropClaim, holdNextRelease } = await setup();
+    // The claim lapsed with nobody taking the run; settlement still tries to release it.
+    await dropClaim();
+    const release = holdNextRelease({ fail: true });
+    const settled = fence.settle(async () => {});
+    await release.applied;
+
+    const check = fence.verifyNotSuperseded();
+    release.finish();
+    await expect(check).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+    expect(fence.isLost()).toBe(true);
+    await settled;
   });
 
   it('refuses after settling as superseded', async () => {

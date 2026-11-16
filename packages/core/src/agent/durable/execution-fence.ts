@@ -572,6 +572,8 @@ export class ExecutionFence implements RunFenceScope {
   #settledAs?: ExecutionSettlement;
   /** Settlement released the claim; cleanup after the release may still be running. */
   #released = false;
+  /** Set once settlement starts releasing the claim. Resolves to whether the release succeeded. */
+  #releasing?: Promise<boolean>;
   #resolveSettled!: () => void;
   /** Resolves once {@link settle} has finished and the claim is released or left to its new holder. */
   readonly whenSettled: Promise<void>;
@@ -693,11 +695,12 @@ export class ExecutionFence implements RunFenceScope {
     if (!claim.agentId) return;
     const backend = await resolveRemoteBackend(mastra, claim.agentId, runId, claim);
     if (!backend) return;
-    await backend.release(claim);
     // This worker's participant fence stays registered until its cleanup stops it. Late writes
     // checked against it meanwhile get the post-release rule of {@link verifyNotSuperseded}.
     const participant = mastra.__getRunScope(runId)?.get(DURABLE_PARTICIPANT_FENCES)?.get(claim.executionId);
-    if (participant) participant.#released = true;
+    const release = backend.release(claim);
+    if (participant) void participant.#trackRelease(release);
+    await release;
   }
 
   /** Join an existing claim without acquiring ownership or advancing its generation. */
@@ -919,26 +922,43 @@ export class ExecutionFence implements RunFenceScope {
    * never recovers.
    */
   async verify(): Promise<void> {
-    if (this.#lossError) throw this.#lossError;
+    await this.#verify(false);
+  }
+
+  /**
+   * {@link verify}. With `yieldToRelease`, a check that fails once settlement
+   * has started releasing the claim returns `false` instead of marking the
+   * execution lost: the check may have read that release, not a successor.
+   */
+  async #verify(yieldToRelease: boolean): Promise<boolean> {
+    if (this.#lossError) {
+      if (yieldToRelease && this.#releasing) return false;
+      throw this.#lossError;
+    }
     const startedAt = Date.now();
     try {
       await this.#backend.verify(this.claim, this.#details());
     } catch (error) {
+      if (yieldToRelease && this.#releasing) return false;
       this.#markLost(error as DurableExecutionFenceError);
       if ((error as DurableExecutionFenceError).id === EXECUTION_SUPERSEDED_ERROR_ID) await this.#noteTakeover();
       throw error;
     }
     // A lease backend renews on verify; a storage read leaves expiry to the heartbeat.
     if (this.generation === undefined) this.#leaseExpiresAt = startedAt + EXECUTION_LEASE_TTL_MS;
+    return true;
   }
 
   /**
    * {@link verify} for writes that may land after settlement. Once settlement
    * released the claim, the write is accepted until another execution claims
-   * the run, as it is after this fence is unregistered.
+   * the run, as it is after this fence is unregistered. A check that fails
+   * while the release is in flight waits for it, then applies the same rule.
    */
   async verifyNotSuperseded(): Promise<void> {
-    if (!this.#released) return this.verify();
+    if (!this.#released && (await this.#verify(true))) return;
+    // Settlement released the claim, or is releasing it. A release that failed left the claim held: stay strict.
+    if (!(await this.#releasing)) return this.verify();
     const details = this.#details();
     if (this.#takenOver || (await retryOnce(() => this.#backend.isSuperseded(this.claim), details))) {
       throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, details);
@@ -1063,15 +1083,32 @@ export class ExecutionFence implements RunFenceScope {
   }
 
   async #release(): Promise<void> {
+    const release = this.#backend.release(this.claim);
+    void this.#trackRelease(release);
     try {
-      await this.#backend.release(this.claim);
-      this.#released = true;
+      await release;
     } catch (error) {
       this.#logger?.warn?.(`[DurableAgent] run ${this.runId}: failed to release the execution claim: ${error}`);
     }
     if (this.generation !== undefined) {
       await this.#retireMemoryFence({ runId: this.runId, generation: this.generation, ownerId: this.executionId });
     }
+  }
+
+  /**
+   * Record a release of this claim for {@link verifyNotSuperseded}. A failed
+   * release keeps the outcome of an earlier one.
+   */
+  #trackRelease(release: Promise<void>): Promise<boolean> {
+    const previous = this.#releasing;
+    this.#releasing = release.then(
+      () => {
+        this.#released = true;
+        return true;
+      },
+      async () => (await previous) ?? false,
+    );
+    return this.#releasing;
   }
 
   /** Mark a settled fence retired in memory so `memory.runFences` retention can prune it. */
