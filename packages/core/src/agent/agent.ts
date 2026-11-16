@@ -995,6 +995,8 @@ export class Agent<
   readonly #durable?: AgentDurableOption;
   /** Resumable stream layer, built on first use once streams are enabled. */
   #streamBus?: AgentStreamBus;
+  /** Forks share the fallback transport without making it override Mastra registration. */
+  #defaultStreamPubsub?: PubSub;
   /** Published runs executing in this process, with the owner the abort route checks. */
   #publishedRuns = new Map<string, { publisher: AgentStreamPublisher; resourceId?: string; threadId?: string }>();
   #legacyHandler?: AgentLegacyHandler;
@@ -1775,39 +1777,38 @@ export class Agent<
    *
    * @internal
    */
-  __getStreamBus(): AgentStreamBus | undefined {
-    return this.#ownStreamBus();
-  }
-
-  /**
-   * Whether runs this class executes publish through the plain Agent stream
-   * publisher. DurableAgent returns false: it publishes on its own bus, so the
-   * plain bus (and its abort requests and run records) must not exist for it.
-   * @internal
-   */
-  protected __ownsPlainStreamPublisher(): boolean {
-    return true;
-  }
-
-  // Not overridable: DurableAgent exposes its own bus through __getStreamBus,
-  // but runs it executes never go through this class's publisher.
-  #ownStreamBus(): AgentStreamBus | undefined {
-    if (!this.__ownsPlainStreamPublisher()) return undefined;
-    if (!areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
+  __getStreamBus(force = false): AgentStreamBus | undefined {
+    if (!force && !areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
     if (!this.#streamBus) {
       const config = agentStreamsConfig(this.#durable);
       this.#streamBus = new AgentStreamBus(
         { ...config, pubsub: config.pubsub ?? this.#pubsub },
         {
           getMastra: () => this.#mastra,
-          // Plain agent runs execute and publish in this process.
-          usesSharedRunLog: () => false,
+          usesSharedRunLog: () => this.__usesSharedRunLog(),
           warn: message => this.logger.warn(`[Agent:${this.id}] ${message}`),
         },
+        (this.#defaultStreamPubsub ??= new EventEmitterPubSub()),
       );
       if (this.#mastra) this.#streamBus.registerMastra(this.#mastra.pubsub);
     }
     return this.#streamBus;
+  }
+
+  /** Whether run frames are published by workers on Mastra's shared log. @internal */
+  protected __usesSharedRunLog(): boolean {
+    return false;
+  }
+
+  /** Whether this class executes through the plain Agent publisher. @internal */
+  protected __ownsPlainStreamPublisher(): boolean {
+    return true;
+  }
+
+  // Sharing transport does not opt durable execution into plain run records or abort checks.
+  #ownStreamBus(): AgentStreamBus | undefined {
+    if (!this.__ownsPlainStreamPublisher() || !areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
+    return this.__getStreamBus();
   }
 
   /**
@@ -4526,6 +4527,7 @@ export class Agent<
     }
 
     fork.#inheritedPubSub = this.#inheritedPubSub;
+    fork.#defaultStreamPubsub = this.#defaultStreamPubsub ??= new EventEmitterPubSub();
     fork.source = this.source;
     fork._agentNetworkAppend = this._agentNetworkAppend;
     // A version fork runs inside this agent's `untilIdle` wrapper, so it must see that wrapper
@@ -10705,9 +10707,7 @@ export class Agent<
       mastra.__unregisterInternalWorkflow(AGENTIC_LOOP_WORKFLOW_ID, runId);
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       await Promise.all(
-        [...workflowNames].map(workflowName =>
-          workflowsStore?.deleteWorkflowRunById({ runId, workflowName, storageVersion: 1 }),
-        ),
+        [...workflowNames].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName })),
       );
       return true;
     } catch (error) {

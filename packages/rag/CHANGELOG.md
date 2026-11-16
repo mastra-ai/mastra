@@ -1,5 +1,14 @@
 # @mastra/rag
 
+## 2.8.1-alpha.0
+
+### Patch Changes
+
+- JSON chunking now keeps every character of a long string value when a field name or JSON escaping pushes split pieces over `maxSize`, instead of silently dropping them. Values are split at code-point boundaries, so emoji are never cut in half. A chunk can still exceed `maxSize` when a field path leaves no room for a single character (#30405). ([#30407](https://github.com/mastra-ai/mastra/pull/30407))
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b)]:
+  - @mastra/core@1.84.0-alpha.3
+
 ## 2.8.0
 
 ### Minor Changes

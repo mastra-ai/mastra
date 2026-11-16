@@ -8,6 +8,7 @@ import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { FACTORY_GITLAB_EVENTS } from '../../rules/types.js';
 import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
+import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../storage/test-utils.js';
 import { resolveGitLabRules } from './default-rules.js';
 import type { GitLabRuleOverrides } from './default-rules.js';
@@ -157,9 +158,6 @@ async function setup(
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/workspace',
     });
   }
 
@@ -2216,6 +2214,30 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       [card] = await h.cards();
       expect(card!.workItem.sources.map(source => source.state)).toEqual(['opened', 'open']);
       expect(card!.workItem.sources).toHaveLength(2);
+    });
+
+    it('opens a merge request on its own card again when it is reopened after the sweep settled it closed', async () => {
+      const h = await harness();
+      await h.ingest(mergeRequest(17, 'No linked issue'));
+      await h.ingest(mergeRequest(17, 'No linked issue', { deliveryId: 'd-close-17', action: 'close' }));
+      for (const card of await h.cards()) {
+        await h.seeded.workItems.syncCard({
+          orgId: 'org-1',
+          id: card.id,
+          userId: 'factory-rule-dispatcher',
+          patch: { metadata: { state: 'closed', merged: false, [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'closed' } },
+        });
+      }
+      const mergeRequests = async () =>
+        (await h.cards()).map(card => ({
+          states: card.workItem.sources.map(source => source.state),
+          settled: { ...card.workItem.metadata, ...card.metadata }[FACTORY_PULL_REQUEST_RECONCILIATION_KEY] ?? 'no',
+        }));
+      expect(await mergeRequests()).toEqual([{ states: ['closed'], settled: 'closed' }]);
+
+      await h.ingest(mergeRequest(17, 'No linked issue', { deliveryId: 'd-reopen-17', action: 'reopen' }));
+
+      expect(await mergeRequests()).toEqual([{ states: ['open'], settled: 'no' }]);
     });
   },
 );

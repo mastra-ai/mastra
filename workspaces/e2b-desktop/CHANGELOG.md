@@ -1,5 +1,13 @@
 # @mastra/e2b-desktop
 
+## 0.1.14-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`a48d697`](https://github.com/mastra-ai/mastra/commit/a48d697b359a8f175d1416ed84a7bd7bcc5e861a), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b)]:
+  - @mastra/core@1.84.0-alpha.3
+  - @mastra/e2b@0.18.0-alpha.0
+
 ## 0.1.13
 
 ### Patch Changes

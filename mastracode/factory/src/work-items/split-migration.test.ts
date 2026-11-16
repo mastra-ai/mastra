@@ -17,7 +17,11 @@ import type {
   WorkItemDbRecord,
   WorkItemSourceDbRecord,
 } from '../storage/domains/work-items/work-item-schema.js';
-import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../storage/test-utils.js';
+import {
+  createFactoryStorageForTests,
+  createIsolatedFactoryPostgresForTests,
+  createLegacyCardTablesForTests,
+} from '../storage/test-utils.js';
 import {
   copyLegacyRows,
   migrateWorkItemSplit,
@@ -289,6 +293,8 @@ async function createStorage(backend: string): Promise<{ storage: FactoryStorage
     backend === 'postgres'
       ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
       : new LibSQLFactoryStorage({ id: 'split-test', url: ':memory:' });
+  // A database an older Factory wrote cards to.
+  await createLegacyCardTablesForTests(storage);
   const { workItems } = await createFactoryStorageForTests(storage);
   // The Postgres database is shared between runs; start every test from empty tables.
   await storage.ops.deleteMany(FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA.name, {});

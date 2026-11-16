@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ArrowRight } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
@@ -8,6 +7,7 @@ import { sessionDefaultsAnchor, settingsSectionPath } from '../../settings/setti
 import { useChatModelScope } from '../context/useChatModelScope';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import type { ThreadOwner } from '../services/reply-credential';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 
 function teammatePayingForSession(
   modelScope: 'factory' | 'user' | undefined,
@@ -40,7 +40,7 @@ export function ProviderReconnectAction() {
           state={{ from: location }}
         />
       }
-      iconEnd={<ArrowRight aria-hidden="true" />}
+      iconEnd={<IconArrowRight aria-hidden="true" />}
     >
       Review credentials
     </Button>

@@ -11,8 +11,8 @@ import {
   itemSessionSpec,
   metadataLabelColors,
   persistedSourceKeys,
-  workItemMeta,
 } from './boardItems';
+import { workItemMeta } from './services/relationships';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 
 function workItem(overrides: Partial<WorkItem> = {}): WorkItem {
@@ -52,18 +52,18 @@ describe('workItemMeta', () => {
     const item = workItem({
       metadata: { githubPullRequestNumber: 22765, author: 'LekoArts', sourceCreatedAt: '2026-08-30T12:00:00.000Z' },
     });
-    expect(workItemMeta(item)).toEqual(['#22765', 'LekoArts', '3d']);
+    expect(workItemMeta(item)).toEqual(['PR #22765', 'LekoArts', '3d']);
   });
 
   it('falls back to the factory import time when the source date is unknown', () => {
-    expect(workItemMeta(workItem())).toEqual(['#22765', 'LekoArts', 'just now']);
+    expect(workItemMeta(workItem())).toEqual(['PR #22765', 'LekoArts', 'just now']);
   });
 
   it('falls back to the factory import time when the source date is not a valid timestamp', () => {
     const item = workItem({
       metadata: { githubPullRequestNumber: 22765, author: 'LekoArts', sourceCreatedAt: 'not-a-date' },
     });
-    expect(workItemMeta(item)).toEqual(['#22765', 'LekoArts', 'just now']);
+    expect(workItemMeta(item)).toEqual(['PR #22765', 'LekoArts', 'just now']);
   });
 
   it('shows the Jira assignee instead of the reporter', () => {
@@ -87,7 +87,7 @@ describe('workItemMeta', () => {
   it('names a GitLab merge request by its IID and links to GitLab', () => {
     expect(
       workItemMeta(workItem({ source: 'gitlab-pr', metadata: { gitlabMergeRequestIid: 5, author: 'Rhys' } })),
-    ).toEqual(['!5', 'Rhys', 'just now']);
+    ).toEqual(['MR !5', 'Rhys', 'just now']);
     expect(externalLinkLabel('gitlab-pr')).toBe('Open in GitLab');
   });
 

@@ -1,4 +1,3 @@
-import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
 import { Badge } from '@mastra/playground-ui/components/Badge';
@@ -15,6 +14,8 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 
 import type { FactoryEnvironmentBuild } from '../../../workspaces/services/environment';
 import { BUILD_STATUS, formatBuildTime } from './BuildStatusBlock';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
+import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
 
 /** The provider's build history, newest first; a row opens to its error and logs. */
 export function BuildHistoryBlock({
@@ -68,9 +69,9 @@ function BuildHistoryRows({
               onClick={() => setOpen(expanded ? undefined : build.buildId)}
             >
               {expanded ? (
-                <ChevronDown className="size-3.5 shrink-0" aria-hidden />
+                <IconChevronDownMedium className="size-3.5 shrink-0" aria-hidden />
               ) : (
-                <ChevronRight className="size-3.5 shrink-0" aria-hidden />
+                <IconChevronRightMedium className="size-3.5 shrink-0" aria-hidden />
               )}
               <Badge size="sm" variant={status.variant}>
                 {status.label}

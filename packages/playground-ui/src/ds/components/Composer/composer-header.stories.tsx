@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { UserRound } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '../Button';
@@ -7,6 +6,7 @@ import { Checkbox } from '../Checkbox';
 import { Spinner } from '../Spinner';
 import { Composer, ComposerActions, ComposerBox, ComposerInput, ComposerRing } from './composer';
 import { ComposerHeader, ComposerHeaderActions, ComposerHeaderContent, ComposerHeaderRow } from './composer-header';
+import { IconUser } from '@/ds/icons/central/IconUser';
 
 const meta: Meta<typeof ComposerHeader> = {
   title: 'AI/Composer Header',
@@ -71,7 +71,7 @@ function OwnershipRow() {
 
   return (
     <ComposerHeaderRow>
-      <UserRound aria-hidden="true" />
+      <IconUser aria-hidden="true" />
       <ComposerHeaderContent>
         {owned ? 'You own this session.' : "You're viewing Sam's session. Take ownership to change its model."}
       </ComposerHeaderContent>

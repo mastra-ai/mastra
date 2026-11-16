@@ -1,4 +1,3 @@
-import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { ModelPickerPanel } from './model-picker-panel';
@@ -8,6 +7,9 @@ import { Button } from '@/ds/components/Button';
 import { DIALOG_DRAWER_BREAKPOINT_PX } from '@/ds/components/Dialog/dialog-shell';
 import { Drawer, DrawerContent, DrawerTitle, DrawerTrigger } from '@/ds/components/Drawer';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
+import { focusRing } from '@/ds/primitives/transitions';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { cn } from '@/utils/cn';
 import { formatModelName } from '@/utils/model';
@@ -36,6 +38,8 @@ export interface ModelPickerProps {
   /** Open filtered to the selected model's provider instead of "All". Suits large catalogs. */
   openOnSelectedProvider?: boolean;
   busy?: boolean;
+  /** Shows the trigger as it always looks, but disabled, with this explaining why in its tooltip. */
+  unavailableReason?: string;
   side?: 'top' | 'bottom';
   align?: 'start' | 'end';
   triggerClassName?: string;
@@ -62,6 +66,7 @@ export function ModelPicker({
   reset,
   openOnSelectedProvider = false,
   busy,
+  unavailableReason,
   side = 'top',
   align = 'end',
   triggerClassName,
@@ -95,9 +100,44 @@ export function ModelPicker({
           </span>
         </>
       )}
-      <ChevronDown aria-hidden className="shrink-0" size={12} />
+      <IconChevronDownMedium aria-hidden className="shrink-0" size={12} />
     </>
   );
+
+  if (unavailableReason) {
+    const name = ariaLabel ?? (value?.model ? `Model: ${formatModelName(value.model)}` : 'Model');
+    return (
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span
+              role="button"
+              tabIndex={0}
+              aria-disabled="true"
+              aria-label={`${name}. ${unavailableReason}`}
+              className={cn('inline-flex max-w-full min-w-0 cursor-not-allowed rounded-full', focusRing)}
+            />
+          }
+        >
+          {/* Inert so the wrapper takes the pointer: a disabled button swallows the hover the tooltip needs. */}
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled
+            aria-hidden
+            tabIndex={-1}
+            className={cn(triggerClass, 'pointer-events-none')}
+          >
+            {triggerContent}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side={side} className="max-w-64">
+          {unavailableReason}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
   const panel = (
     <ModelPickerPanel
       providers={providers}

@@ -5,3 +5,7 @@
 html:has([data-slot='app-shell']) {
   overscroll-behavior-y: none;
 }
+
+[data-sidebar-reveal][data-sidebar-mobile-present='true'] [data-slot='app-shell'] {
+  overflow-x: clip;
+}

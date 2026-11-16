@@ -8,7 +8,12 @@ import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
 import { hydrateFactorySession, resolveFactorySessionModel } from '../session/factory-session.js';
-import { resolveWorkItemRepository } from '../session/work-item-repository.js';
+import {
+  isRunRepositoryInstruction,
+  repositoryChosenByRun,
+  resolveRunRepository,
+  runRepositoryInstruction,
+} from '../session/work-item-repository.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
@@ -29,6 +34,7 @@ export interface FactoryStartRequest {
    */
   startedBy?: FactoryRuleActor;
   sessionId: string;
+  expectedBindingId?: string;
   threadTitle: string;
   kickoffKey: string;
   /** Where the arrival path lands the card; a session opened on an existing card names none. */
@@ -74,9 +80,8 @@ async function runMemoryResource(
 
 export class WorkItemRepositoryError extends Error {
   constructor(
-    readonly code: 'repository_mismatch' | 'repository_ambiguous' | 'repository_unlinked',
+    readonly code: 'repository_mismatch' | 'repository_unlinked',
     message: string,
-    readonly candidates: string[] = [],
   ) {
     super(message);
     this.name = 'WorkItemRepositoryError';
@@ -125,6 +130,17 @@ async function resolveSourceSession(
     throw new Error('Factory session does not belong to this project');
   }
   return { ...session, projectRepositoryId };
+}
+
+async function sessionRepositorySlug(
+  storage: SourceControlStorageHandle,
+  orgId: string,
+  projectRepositoryId: string,
+): Promise<string> {
+  const link = await storage.projectRepositories.get({ orgId, id: projectRepositoryId });
+  const repository = link && (await storage.repositories.get({ orgId, id: link.repositoryId }));
+  if (!repository) throw new Error('Factory session repository not found');
+  return repository.slug;
 }
 
 async function configureThread(session: FactorySession, request: FactoryStartRequest): Promise<string> {
@@ -195,55 +211,36 @@ export class FactoryStartCoordinator {
       ? await storage.get({ orgId: request.orgId, id: request.workItem.id })
       : null;
     const intakeConfig = await this.#intake?.getConfig({ orgId: request.orgId, integrationIds: ['linear'] });
-    let repository = await resolveWorkItemRepository({
+    const runItem = storedItem ?? {
+      metadata: request.workItem.input.metadata ?? null,
+      workItem: { metadata: request.workItem.input.metadata ?? null },
+    };
+    // A card that names no repository runs in the session's own repository,
+    // and its agent determines from the card which repository to work in.
+    const repository = await resolveRunRepository({
       sourceControl,
       orgId: request.orgId,
       factoryProjectId: request.factoryProjectId,
-      item: storedItem ?? {
-        metadata: request.workItem.input.metadata ?? null,
-        workItem: { metadata: request.workItem.input.metadata ?? null },
-      },
+      item: runItem,
       linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
+      boundProjectRepositoryId: sourceSession.projectRepositoryId,
     });
-    if (repository.status === 'ambiguous') {
-      // A retry of this role's existing session keeps its already-chosen
-      // repository; a newly minted session must not choose for the card.
-      if (storedItem?.sessions[request.workItem.role]?.sessionId !== sourceSession.sessionId) {
-        throw new WorkItemRepositoryError(
-          'repository_ambiguous',
-          `Choose a repository for this work item: ${repository.candidates.join(', ')}.`,
-          repository.candidates,
-        );
-      }
-      const link = await sourceControl.projectRepositories.get({
-        orgId: request.orgId,
-        id: sourceSession.projectRepositoryId,
-      });
-      const linked = link && (await sourceControl.repositories.get({ orgId: request.orgId, id: link.repositoryId }));
-      const currentLinks = link
-        ? await sourceControl.projectRepositories.list({ orgId: request.orgId, connectionId: link.connectionId })
-        : [];
-      if (
-        !linked ||
-        !repository.candidates.includes(linked.slug) ||
-        !currentLinks.some(candidate => candidate.id === sourceSession.projectRepositoryId)
-      ) {
-        throw new WorkItemRepositoryError(
-          'repository_unlinked',
-          'The existing session repository is not linked to this Factory.',
-        );
-      }
-      repository = { status: 'resolved', slug: linked.slug, projectRepositoryId: sourceSession.projectRepositoryId };
-    }
     if (repository.status === 'unlinked') {
       throw new WorkItemRepositoryError('repository_unlinked', repository.hint);
     }
-    if (repository.projectRepositoryId !== sourceSession.projectRepositoryId) {
+    if (
+      repository.projectRepositoryId !== sourceSession.projectRepositoryId &&
+      !repositoryChosenByRun(runItem, repository.slug)
+    ) {
       throw new WorkItemRepositoryError(
         'repository_mismatch',
         `This run session is bound to a different repository than ${repository.slug}.`,
       );
     }
+    const ownSlug =
+      repository.projectRepositoryId === sourceSession.projectRepositoryId
+        ? repository.slug
+        : await sessionRepositorySlug(sourceControl, request.orgId, sourceSession.projectRepositoryId);
     const requestContext = request.requestContext ?? new RequestContext();
     // Preserve an authenticated caller when present. Autonomous starts still
     // need a principal so deployed credential resolution can authenticate the
@@ -313,7 +310,7 @@ export class FactoryStartCoordinator {
     // caller created without them — so autonomous runs never depend on a
     // browser connecting to populate the state. `untrustedCheckout` is a
     // boolean so it rides only on state (tags are string-valued).
-    const targetRepositoryInstruction = `Target repository: ${repository.slug}. Before editing files or creating a pull request, verify this session's checkout matches the target repository.`;
+    const targetRepositoryInstruction = runRepositoryInstruction(repository, ownSlug);
     const existingPluginInstructions = session.state.get()?.pluginInstructions ?? [];
     await session.state.set({
       ...sessionTags,
@@ -324,7 +321,7 @@ export class FactoryStartCoordinator {
       factoryModelScope: sessionModel.modelScope,
       factoryOwnerUserId: sourceSession.userId,
       pluginInstructions: [
-        ...existingPluginInstructions.filter(instruction => instruction !== targetRepositoryInstruction),
+        ...existingPluginInstructions.filter(instruction => !isRunRepositoryInstruction(instruction)),
         targetRepositoryInstruction,
       ],
       ...(untrustedCheckout ? { untrustedCheckout: true, ...(baseRef ? { baseRef } : {}) } : {}),
@@ -353,6 +350,7 @@ export class FactoryStartCoordinator {
       factoryProjectId: request.factoryProjectId,
       workItem: { id: request.workItem.id, input: request.workItem.input },
       role: request.workItem.role,
+      expectedBindingId: request.expectedBindingId,
       session: { sessionId: sourceSession.sessionId, branch: sourceSession.branch, threadId },
       resourceId: memoryResourceId,
       kickoffKey: request.kickoffKey,
@@ -380,7 +378,7 @@ export class FactoryStartCoordinator {
         cause: 'run_start',
       });
       if (transition.status === 'rejected') {
-        await storage.markPendingStart(prepared.binding.id, 'failed', transition.reason);
+        await storage.markPendingStart(prepared.binding.id, 'failed');
         throw new FactoryStartTransitionError(transition);
       }
       revision = transition.revision;

@@ -59,6 +59,7 @@ export function factoryRow(
     boards: builtinBoardCatalog.boards,
     threadId: undefined,
     pullRequest: undefined,
+    repositorySlug: undefined,
     factoryId: 'fp-1',
     routeSessionId: undefined,
     running: false,
