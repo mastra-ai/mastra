@@ -1,6 +1,10 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
-import { createTriageWorkRegistry } from '../boards/test-utils.js';
+import { defineBoard } from '../boards/define-board.js';
+import { boardRegistryOf } from '../boards/registry.js';
+import { boardDefinitionOf, compileStoredBoard } from '../boards/stored-board.js';
+import { createTriageWorkRegistry, triageWorkBoard } from '../boards/test-utils.js';
+import { workBoard } from '../boards/work.js';
 
 import { LiveSessions } from '../session/live-sessions.js';
 import type { LiveSession } from '../session/live-sessions.js';
@@ -120,6 +124,7 @@ function setup({
   audit = [],
   subscriptions = [],
   sessions,
+  boards,
 }: {
   items?: Card[];
   bindings?: FactoryRunBindingRecord[];
@@ -127,6 +132,7 @@ function setup({
   audit?: AuditEventRow[];
   subscriptions?: WorkItemSubscription[];
   sessions?: FactoryReadToolDependencies['sessions'];
+  boards?: FactoryReadToolDependencies['boards'];
 }) {
   const deps: FactoryReadToolDependencies = {
     workItems: {
@@ -155,7 +161,7 @@ function setup({
       ),
     },
     audit: { list: vi.fn(async () => ({ events: audit })) },
-    boards: createTriageWorkRegistry(),
+    boards: boards ?? createTriageWorkRegistry(),
     ...(sessions ? { sessions } : {}),
   };
   const tools = createFactoryReadTools(scope, deps) as Record<
@@ -220,6 +226,75 @@ describe('factory_list_work_items', () => {
     expect(await ids({ active: true })).toEqual(['b']);
     expect(await ids({ active: false })).toEqual(['c', 'a']);
     expect(await ids({ requestedBy: 'me' })).toEqual(['b']);
+  });
+
+  describe('a board renamed in the project', () => {
+    // Work stored under its `work` key but renamed, as the sidebar shows it.
+    const openSource = compileStoredBoard({ ...boardDefinitionOf(triageWorkBoard), name: 'Open source' }, workBoard);
+    const release = defineBoard({
+      id: 'release',
+      name: 'Release',
+      initialPhase: 'review',
+      phases: { review: { name: 'Review', kind: 'resting' } },
+    });
+
+    it('lists the boards by id and the name they show', async () => {
+      const { run } = setup({ items: rows, boards: boardRegistryOf([openSource, release]) });
+      const result = await run<{ boards: unknown }>('factory_list_work_items', {});
+      expect(result.boards).toEqual([
+        { id: 'work', name: 'Open source' },
+        { id: 'release', name: 'Release' },
+      ]);
+    });
+
+    it('filters by the shown name, ignoring case and spacing, as it does by id', async () => {
+      const { run } = setup({ items: rows, boards: boardRegistryOf([openSource, release]) });
+      const ids = async (board: string) =>
+        (await run<ListResult>('factory_list_work_items', { board })).items.map(r => r.id);
+      expect(await ids('Open source')).toEqual(['b', 'a']);
+      expect(await ids('  open   SOURCE ')).toEqual(['b', 'a']);
+      expect(await ids('work')).toEqual(['b', 'a']);
+      expect(await ids('release')).toEqual(['c']);
+    });
+
+    it('refuses a name two boards show, naming both ids', async () => {
+      const twin = defineBoard({
+        id: 'oss',
+        name: 'open source',
+        initialPhase: 'review',
+        phases: { review: { name: 'Review', kind: 'resting' } },
+      });
+      const { run } = setup({ items: rows, boards: boardRegistryOf([openSource, twin]) });
+      await expect(run('factory_list_work_items', { board: 'Open source' })).rejects.toThrow(
+        'Board "Open source" matches more than one board; use its id instead: work ("Open source"), oss ("open source").',
+      );
+    });
+
+    it("matches a name only against names, not another board's id", async () => {
+      const delivery = defineBoard({
+        id: 'release',
+        name: 'Delivery',
+        initialPhase: 'review',
+        phases: { review: { name: 'Review', kind: 'resting' } },
+      });
+      const { run } = setup({ items: rows, boards: boardRegistryOf([openSource, delivery]) });
+      await expect(run('factory_list_work_items', { board: 'Release' })).rejects.toThrow('No board "Release"');
+      const named = await run<ListResult>('factory_list_work_items', { board: 'delivery' });
+      expect(named.items.map(r => r.id)).toEqual(['c']);
+    });
+
+    it('refuses a board nothing is called, naming the boards there are', async () => {
+      const { run } = setup({ items: rows, boards: boardRegistryOf([openSource, release]) });
+      await expect(run('factory_list_work_items', { board: 'Closed source' })).rejects.toThrow(
+        'No board "Closed source" in this Factory. Its boards, by id and name: work ("Open source"), release ("Release").',
+      );
+    });
+
+    it('still finds cards on a board no longer installed by its id', async () => {
+      const { run } = setup({ items: rows, boards: boardRegistryOf([openSource]) });
+      const result = await run<ListResult>('factory_list_work_items', { board: 'release' });
+      expect(result.items.map(r => r.id)).toEqual(['c']);
+    });
   });
 
   it('numbers a card filed by hand and finds it by that #number', async () => {
