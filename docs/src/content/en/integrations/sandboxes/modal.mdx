@@ -233,7 +233,7 @@ const sandbox = new ModalSandbox({
 })
 ```
 
-`clone({ idleTimeoutMinutes })` sets `idleTimeoutMs` on the clone. If the inherited `timeoutMs` is shorter than the idle window, the clone's `timeoutMs` is raised to match.
+`clone({ idleTimeoutMinutes })` sets `idleTimeoutMs` on the clone. The clone's hard lifetime is the larger of the template's `timeoutMs` and the idle window, and it ends the clone even while a command runs. To let a busy clone run past the idle window, give the template a `timeoutMs` longer than that window.
 
 ## Volumes and persistent files
 
