@@ -21,6 +21,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { InMemoryServerCache } from '../../../cache/inmemory';
+import type { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
 import { Mastra } from '../../../mastra';
@@ -29,6 +30,7 @@ import { RequestContext } from '../../../request-context';
 import { InMemoryStore, RUN_FENCE_CONFLICT_ERROR_ID, resolveRunFence } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { SaveQueueManager } from '../../save-queue';
 import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
@@ -50,6 +52,7 @@ import {
 import { runInRunFenceScope } from '../run-fence-scope';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitErrorEvent } from '../stream-adapter';
+import { storeRunsInV2 } from './storage-version';
 
 const THREAD = 'fence-thread';
 const RESOURCE = 'fence-resource';
@@ -382,6 +385,56 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       return JSON.stringify(messages.filter(message => message.role === 'assistant').map(message => message.content));
     }
 
+    it.each(['default', 'evented'] as const)(
+      '%s: losing ownership at the initial input barrier neither writes the request nor calls the model (COR-1472)',
+      async engine => {
+        const storage = createStorage(backend);
+        const memory = new MockMemory({ storage });
+        const model = gatedModel('This execution must never reach the model.');
+        const agent = new Agent({
+          id: 'barrier-fence-agent',
+          name: 'Barrier Fence Agent',
+          instructions: 'Answer the request.',
+          model: model.model as LanguageModelV2,
+          memory,
+        });
+        const durableAgent =
+          engine === 'evented' ? createEventedAgent({ agent, pubsub }) : createDurableAgent({ agent, pubsub });
+        new Mastra({ agents: { agent: durableAgent }, storage, pubsub, logger: false });
+        const runId = `initial-barrier-${backend}-${engine}`;
+        let fence: ExecutionFence | undefined;
+        const flushMessages = SaveQueueManager.prototype.flushMessages;
+        // Move ownership immediately before the real queued guard runs; keep the queue and storage real.
+        vi.spyOn(SaveQueueManager.prototype, 'flushMessages').mockImplementationOnce(async function (...args) {
+          fence = ExecutionFence.getLocalActive(runId)!;
+          await foreignOwnership(backend, storage, pubsub).takeOver(fence, 'barrier-recoverer');
+          return flushMessages.apply(this, args);
+        });
+
+        const result = await durableAgent.stream('Do not lose or execute this superseded request.', {
+          runId,
+          memory: { thread: THREAD, resource: RESOURCE },
+        });
+        const stream = collect(result.fullStream);
+        try {
+          await vi.waitFor(() => expect(fence).toBeDefined());
+          await fence!.whenSettled;
+          expect(fence!.isLost()).toBe(true);
+          expect(model.calls()).toBe(0);
+          const store = (await storage.getStore('memory'))!;
+          expect((await store.listMessages({ threadId: THREAD, perPage: false })).messages).toEqual([]);
+          expect(await foreignOwnership(backend, storage, pubsub).isHeldBy(agent.id, runId, 'barrier-recoverer')).toBe(
+            true,
+          );
+        } finally {
+          model.release();
+          await stream.stop();
+          result.cleanup();
+          await foreignOwnership(backend, storage, pubsub).free(agent.id, runId, 'barrier-recoverer');
+        }
+      },
+    );
+
     it('a superseded execution does not overwrite the recovered answer, delete snapshots, or publish a terminal event', async () => {
       const storage = createStorage(backend);
       const memory = new MockMemory({ storage });
@@ -393,7 +446,8 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         model: model.model as LanguageModelV2,
         memory,
       });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      // The recoverer's checkpoint below is a v1 snapshot, which only replaces a run stored in v1.
+      const durableAgent = storeRunsInV2(createDurableAgent({ agent: baseAgent, pubsub }), false);
       new Mastra({ agents: { 'fence-agent': durableAgent as any }, logger: false, storage, pubsub });
 
       const result = await durableAgent.stream('What is the answer?', {
@@ -609,9 +663,12 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         // The original caller keeps reading: it follows the run across the takeover.
         const startedStream = collect(started.fullStream);
         const events: Array<{ type: string; generation?: number }> = [];
-        await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
+        // A frame reaches the transport only after it is in the run log, so a reader
+        // that attaches after stream() started reads the log (which is what replay
+        // from an offset does) instead of racing the live publish of frame 0.
+        await (agentA.pubsub as unknown as CachingPubSub).subscribeWithReplay(AGENT_STREAM_TOPIC(runId), event => {
           events.push({
-            type: event.type === 'chunk' ? `chunk:${event.data?.type}` : event.type,
+            type: event.type === 'chunk' ? `chunk:${(event.data as any)?.type}` : event.type,
             generation: event.generation,
           });
         });
@@ -620,8 +677,30 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
 
         const originalGeneration = ExecutionFence.getLocalActive(runId)!.generation!;
         expect(originalGeneration).toEqual(expect.any(Number));
+        // The real LLM execution boundary precedes any model or processor output.
+        const history = await (agentA.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0);
+        const abandonedStartAt = history.findLast(event => event.type === AgentStreamEventTypes.ITERATION_START)?.index;
+        expect(abandonedStartAt).toEqual(expect.any(Number));
+        // Processor output can be published after iteration-start but before step-start.
+        await agentA.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+          type: 'chunk',
+          runId,
+          data: { type: 'data-question', payload: { id: 'pre-step', state: 'waiting' } },
+          stepIndex: 0,
+          generation: originalGeneration,
+          producedAt: Date.now(),
+        });
+        // Simulate a model step published before its result was checkpointed.
+        await agentA.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+          type: AgentStreamEventTypes.STEP_START,
+          runId,
+          data: { type: 'step-start', payload: { messageId: 'same-message' } },
+          stepIndex: 0,
+          generation: originalGeneration,
+          producedAt: Date.now(),
+        });
         // The original execution's events so far carry its claim.
-        expect(events.length).toBeGreaterThan(0);
+        await vi.waitFor(() => expect(events.length).toBeGreaterThan(0));
         expect(events.every(event => event.generation === originalGeneration)).toBe(true);
 
         // ---- This process forgets it drives the run, as a restarted process would, and takes it over.
@@ -658,6 +737,17 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         // The claim is announced before the recovered execution publishes, and everything it publishes carries it.
         const claimedAt = events.findIndex(event => event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED);
         expect(events[claimedAt]?.generation).toBe(recoveredGeneration);
+        const replay = await (agentA.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0);
+        expect((replay[claimedAt]?.data as { supersededFrom?: number }).supersededFrom).toBe(abandonedStartAt);
+        const replayed: Array<{ type: string; generation?: number }> = [];
+        const unsubscribe = await agentB.__subscribeToRunStream(runId, {}, event => replayed.push(event));
+        expect(
+          replayed.filter(
+            event => event.type === AgentStreamEventTypes.STEP_START && event.generation === originalGeneration,
+          ),
+        ).toHaveLength(0);
+        expect(replayed.some(event => (event as any).data?.type === 'data-question')).toBe(false);
+        await unsubscribe();
         const afterClaim = events.slice(claimedAt + 1);
         expect(afterClaim.some(event => event.type === 'finish' && event.generation === recoveredGeneration)).toBe(
           true,
@@ -680,6 +770,167 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         ]);
 
         await startedStream.stop();
+        started.cleanup();
+        recovered.cleanup();
+      },
+    );
+
+    it.skipIf(backend === 'lease').each([undefined, 1])(
+      'preserves checkpointed text and tool output after later-iteration recovery (observe offset %s)',
+      async offset => {
+        const storage = createStorage(backend);
+        const cache = new InMemoryServerCache();
+        const memory = new MockMemory({ storage });
+        const interrupted = gate();
+        const toolExecutions: string[] = [];
+        const tools = {
+          lookup: createTool({
+            id: 'lookup',
+            description: 'Look up the confirmed result.',
+            inputSchema: z.object({}),
+            outputSchema: z.object({ result: z.string() }),
+            execute: async () => {
+              toolExecutions.push('confirmed result');
+              return { result: 'confirmed result' };
+            },
+          }),
+        };
+        let calls = 0;
+        const model = new MockLanguageModelV2({
+          doStream: async () => {
+            const iteration = calls++;
+            return {
+              stream: new ReadableStream({
+                async start(controller) {
+                  controller.enqueue({ type: 'stream-start', warnings: [] });
+                  controller.enqueue({ type: 'text-start', id: `text-${iteration}` });
+                  controller.enqueue({
+                    type: 'text-delta',
+                    id: `text-${iteration}`,
+                    delta: iteration === 0 ? 'committed text' : 'abandoned text',
+                  });
+                  if (iteration !== 0) await interrupted.opened;
+                  controller.enqueue({ type: 'text-end', id: `text-${iteration}` });
+                  if (iteration === 0) {
+                    controller.enqueue({
+                      type: 'tool-call',
+                      toolCallType: 'function',
+                      toolCallId: 'committed-call',
+                      toolName: 'lookup',
+                      input: '{}',
+                      providerExecuted: false,
+                    });
+                  }
+                  controller.enqueue({
+                    type: 'finish',
+                    finishReason: iteration === 0 ? 'tool-calls' : 'stop',
+                    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                  });
+                  controller.close();
+                },
+              }),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            };
+          },
+        });
+        const agentA = buildAgent({ model, storage, memory, cache, tools });
+        const started = await agentA.stream('Look it up and explain the result.', {
+          memory: { thread: THREAD, resource: RESOURCE },
+        });
+        const originalStream = collect(started.fullStream);
+        const recovering = gatedModel('replacement answer');
+        try {
+          // Iteration 0 has checkpointed its text/tool result before iteration 1 streams an unfinished answer (#28421).
+          await vi.waitFor(() =>
+            expect(originalStream.chunks.some(chunk => chunk.payload?.text === 'abandoned text')).toBe(true),
+          );
+          expect(calls).toBe(2);
+          expect(toolExecutions).toEqual(['confirmed result']);
+          const { runId } = started;
+          globalRunRegistry.clear();
+          __resetExecutionFencesForTests();
+          const agentB = buildAgent({ model: recovering.model, storage, memory, cache, tools });
+          const recovered = await agentB.recover(runId, { force: true });
+          const recoveryDone = drain(recovered.fullStream);
+          await recovering.entered;
+          // Offset 1 skips the initial iteration boundary, but must retain the committed text and tool exchange.
+          const observation = await agentB.observe(runId, { offset });
+          const replayDone = drain(observation.fullStream);
+          recovering.release();
+          try {
+            await recoveryDone;
+            const chunks = await replayDone;
+            expect(chunks.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.payload.text)).toEqual([
+              'committed text',
+              'replacement answer',
+            ]);
+            expect(chunks.filter(chunk => chunk.type === 'tool-call').map(chunk => chunk.payload)).toEqual([
+              expect.objectContaining({ toolCallId: 'committed-call', toolName: 'lookup', args: {} }),
+            ]);
+            expect(chunks.filter(chunk => chunk.type === 'tool-result').map(chunk => chunk.payload)).toEqual([
+              expect.objectContaining({
+                toolCallId: 'committed-call',
+                toolName: 'lookup',
+                result: { result: 'confirmed result' },
+              }),
+            ]);
+            expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(1);
+            expect(toolExecutions).toEqual(['confirmed result']);
+          } finally {
+            observation.cleanup();
+            recovered.cleanup();
+          }
+        } finally {
+          interrupted.open();
+          recovering.release();
+          await originalStream.stop();
+          started.cleanup();
+        }
+      },
+    );
+
+    it.skipIf(backend === 'lease')(
+      'uses the highest generation when a stale step start arrives after its successor',
+      async () => {
+        const storage = createStorage(backend);
+        const memory = new MockMemory({ storage });
+        const cache = new InMemoryServerCache();
+        const original = gatedModel('original answer');
+        const agentA = buildAgent({ model: original.model, storage, memory, cache });
+        const started = await agentA.stream('What is the answer?', { memory: { thread: THREAD, resource: RESOURCE } });
+        const { runId } = started;
+        const originalStream = collect(started.fullStream);
+        await original.entered;
+        await waitForCheckpoint(storage, runId);
+        const originalGeneration = ExecutionFence.getLocalActive(runId)!.generation!;
+
+        // A prior takeover already started this iteration; its predecessor publishes a late start.
+        // The next recovery must select the highest generation, not the last appended start.
+        const successorStart = (await (agentA.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0)).length;
+        for (const generation of [originalGeneration + 1, originalGeneration]) {
+          await agentA.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+            type: AgentStreamEventTypes.ITERATION_START,
+            runId,
+            data: {},
+            stepIndex: 0,
+            generation,
+            producedAt: Date.now(),
+          });
+        }
+
+        globalRunRegistry.clear();
+        __resetExecutionFencesForTests();
+        const recovering = gatedModel('recovered answer');
+        const agentB = buildAgent({ model: recovering.model, storage, memory, cache });
+        const recovered = await agentB.recover(runId, { force: true });
+        const claims = await (agentB.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0);
+        const claim = claims.findLast(event => event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED);
+        expect((claim?.data as { supersededFrom?: number })?.supersededFrom).toBe(successorStart);
+        original.release();
+        recovering.release();
+        await drain(recovered.fullStream);
+        await originalStream.stop();
         started.cleanup();
         recovered.cleanup();
       },
@@ -751,15 +1002,10 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       const next = gatedModel('recovered answer');
       next.release();
       const agentB = buildAgent({ model: next.model, storage, memory });
-      if (backend === 'lease') {
-        // A pubsub lease leaves no record of the released run, so its thread
-        // lease marks it live until that lapses once the process exits.
-        const refusal = await agentB.recover(runId).catch(error => error);
-        const refusedBy = Date.now();
-        expect(refusal).toMatchObject({ id: RUN_ACTIVE_ERROR_ID, details: { runId, liveBy: 'thread-lease' } });
-        expect(refusal.details.retryAt).toBeLessThanOrEqual(refusedBy + agentThreadStreamRuntime.threadLeaseTtlMs);
-        vi.spyOn(agentThreadStreamRuntime, 'isRunHoldingThreadLease').mockResolvedValue(false);
-      }
+      // Shutdown released the run's thread lease too, so it no longer marks the run live.
+      expect(await agentThreadStreamRuntime.isRunHoldingThreadLease(durableAgent.pubsub, runId, THREAD, RESOURCE)).toBe(
+        false,
+      );
       const recovered = await agentB.recover(runId);
       const chunks = await drain(recovered.fullStream);
       expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
@@ -811,6 +1057,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       const remove = vi.spyOn(durableAgent, 'deleteRunSnapshots');
       vi.useFakeTimers();
       try {
+        const recoveryStartedAt = Date.now();
         const recovery = mastra.recoverAllDurableAgents();
         await vi.waitFor(() => expect(next.calls()).toBe(1));
         const fence = ExecutionFence.getLocalActive(runId)!;
@@ -820,11 +1067,14 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
 
         await vi.advanceTimersByTimeAsync(30_000);
         expect(await recovery).toEqual({ agents: 1, recovered: 0, succeeded: 0, failed: 0, skipped: 1 });
-        expect(await recover.mock.results[0]!.value).toEqual({
-          recovered: [{ runId, status: 'skipped', reason: 'recovery-timeout' }],
+        const batch = await recover.mock.results[0]!.value;
+        expect(batch).toEqual({
+          recovered: [{ runId, status: 'skipped', reason: 'recovery-timeout', retryAt: expect.any(Number) }],
           succeeded: 0,
           failed: 0,
         });
+        expect(batch.recovered[0]!.retryAt).toBeGreaterThanOrEqual(recoveryStartedAt + 60_000);
+        expect(batch.recovered[0]!.retryAt).toBeLessThanOrEqual(Date.now() + 30_000);
         expect(ExecutionFence.getLocalActive(runId)).toBe(fence);
         expect(await foreign.owner(fence.agentId, runId)).toBe(fence.executionId);
         expect(signal.aborted).toBe(false);
@@ -925,6 +1175,31 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       expect(ExecutionFence.getLocalActive(runId)).toBeUndefined();
       expect(await foreign.owner(durableAgent.id, runId)).toBeUndefined();
       next.release();
+    });
+
+    describe.each(['default', 'evented'] as const)('%s custom run IDs', engine => {
+      it.each(['stream', 'generate'] as const)(
+        '%s accepts custom run IDs containing the former lease delimiter',
+        async method => {
+          const storage = createStorage(backend);
+          const model = gatedModel('Custom run completed.');
+          model.release();
+          const agent = new Agent({
+            id: 'custom-run-id-agent',
+            name: 'Custom run ID agent',
+            instructions: 'Answer the request.',
+            model: model.model as LanguageModelV2,
+          });
+          const durableAgent =
+            engine === 'evented' ? createEventedAgent({ agent, pubsub }) : createDurableAgent({ agent, pubsub });
+          new Mastra({ agents: { agent: durableAgent }, storage, pubsub, logger: false });
+
+          const result = await durableAgent[method]('hello', { runId: 'custom\u0000retake\u000042' });
+          expect(await ('output' in result ? result.output.text : result.text)).toBe('Custom run completed.');
+          expect(model.calls()).toBe(1);
+          if ('cleanup' in result) result.cleanup();
+        },
+      );
     });
 
     it('stream({ runId }) rejects with CONFLICT while another execution holds the run', async () => {
@@ -1783,7 +2058,14 @@ describe.each(['durable', 'evented'] as const)('%s agent: the storage fence cove
     const workflows = storage.stores.workflows!;
     let segment = 0;
     const writes: Array<{ segment: number; workflowName: string; runId: string; fence: unknown }> = [];
-    for (const method of ['persistWorkflowSnapshot', 'updateWorkflowResults', 'updateWorkflowState'] as const) {
+    for (const method of [
+      'persistWorkflowSnapshot',
+      'updateWorkflowResults',
+      'updateWorkflowState',
+      'appendWorkflowRunEntries',
+      'writeWorkflowRunCheckpoint',
+      'updateWorkflowRunHeader',
+    ] as const) {
       const write = workflows[method].bind(workflows) as (args: any) => Promise<any>;
       vi.spyOn(workflows, method).mockImplementation(async (args: any) => {
         writes.push({

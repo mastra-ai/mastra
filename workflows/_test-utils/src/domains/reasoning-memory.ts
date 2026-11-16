@@ -8,7 +8,7 @@
 
 import { describe, it, expect } from 'vitest';
 import type { DurableAgentTestContext } from '../types';
-import { createTextStreamModel, createReasoningStreamModel } from '../mock-models';
+import { createReasoningStreamModel } from '../mock-models';
 
 export function createReasoningMemoryTests(context: DurableAgentTestContext) {
   const { createAgent } = context;

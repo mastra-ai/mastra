@@ -5,9 +5,8 @@ import {
   isBufferedChunkCoveredByCursor,
   maxObservationCursor,
   planReflectionGenerationText,
-  type UpdateActiveObservationsResult,
-  type UpdateBufferedObservationsResult,
 } from '@internal/core/memory';
+import type { UpdateActiveObservationsResult, UpdateBufferedObservationsResult } from '@internal/core/memory';
 
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
@@ -343,8 +342,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // covers resourceId-only filters. Unfiltered (no resourceId) listing is a rare admin path
       // left to an in-memory sort rather than carrying standalone single-field sort indexes.
       { collection: TABLE_THREADS, keys: { id: 1 }, options: { unique: true } },
-      { collection: TABLE_THREADS, keys: { resourceId: 1, createdAt: -1 } },
-      { collection: TABLE_THREADS, keys: { resourceId: 1, updatedAt: -1 } },
+      { collection: TABLE_THREADS, keys: { resourceId: 1, createdAt: -1, id: -1 } },
+      { collection: TABLE_THREADS, keys: { resourceId: 1, updatedAt: -1, id: -1 } },
       // Messages: point lookups (id) + per-thread retrieval (listMessages) and per-resource
       // retrieval (listMessagesByResourceId), both sorted by createdAt. The compound prefixes
       // cover thread_id-only and resourceId-only filters.
@@ -1358,7 +1357,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       let cursor = collection
         .find(query)
-        .sort({ [field]: sortOrder })
+        .sort({ [field]: sortOrder, id: sortOrder })
         .skip(offset);
       if (perPageInput !== false) {
         cursor = cursor.limit(perPage);
@@ -2516,12 +2515,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
               bestOverBoundary = boundary;
               bestOverTokens = cumulativeMessageTokens;
             }
-          } else {
+          } else if (cumulativeMessageTokens > bestUnderTokens) {
             // Under — track the closest (highest) under boundary
-            if (cumulativeMessageTokens > bestUnderTokens) {
-              bestUnderBoundary = boundary;
-              bestUnderTokens = cumulativeMessageTokens;
-            }
+
+            bestUnderBoundary = boundary;
+            bestUnderTokens = cumulativeMessageTokens;
           }
         }
 
@@ -2926,9 +2924,12 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       await this.#completeRollover(collection, doc, doc.pendingSuccessor);
     }
 
+    // A head fenced for rollover still counts here: between the fence and the successor insert,
+    // the key would otherwise show a single live document and be skipped, leaving an older legacy
+    // document live beside the successor once it lands.
     const keys = await collection
       .aggregate<{ _id: string }>([
-        { $match: { supersededBy: null } },
+        { $match: { $or: [{ supersededBy: null }, { pendingSuccessor: { $exists: true } }] } },
         { $group: { _id: '$lookupKey', live: { $sum: 1 } } },
         { $match: { live: { $gt: 1 } } },
       ])

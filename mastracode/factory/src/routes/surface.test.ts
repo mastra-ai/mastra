@@ -1,19 +1,28 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createBoardRegistry } from '../boards/index.js';
-import { createTestBoard } from '../boards/test-utils.js';
+import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
+import { createTestBoard, selfReviewWorkBoard, createTriageWorkRegistry } from '../boards/test-utils.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
-import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { createFactoryStorageForTests, createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { prepareFactoryRuleBinding } from './surface.js';
 
-async function seedFactoryWithRepository(options?: { defaultModelId?: string; modelScope?: 'factory' | 'user' }) {
+async function seedFactoryWithRepository(options?: {
+  defaultModelId?: string;
+  modelScope?: 'factory' | 'user' | 'hybrid';
+  /** Who set the Factory up; the repository is always connected by `user-1`. */
+  createdBy?: string;
+}) {
   const seeded = await createFactoryStorageForTests();
   const sourceControl = seeded.sourceControl.forIntegration('github');
-  const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
+  const project = await seeded.projects.create({
+    orgId: 'org-1',
+    userId: options?.createdBy ?? 'user-1',
+    input: { name: 'Mastra' },
+  });
   if (options?.defaultModelId || options?.modelScope) {
     await seeded.projects.update({
       orgId: 'org-1',
@@ -54,7 +63,7 @@ async function seedFactoryWithRepository(options?: { defaultModelId?: string; mo
 function bindingInput(
   factoryProjectId: string,
   stages = ['triage'],
-  { role = 'triage', board }: { role?: string; board?: string } = {},
+  { role = 'triage', board, pullRequest = false }: { role?: string; board?: string; pullRequest?: boolean } = {},
 ): FactoryBindingPreparationInput {
   return {
     record: { id: 'decision-1', orgId: 'org-1', factoryProjectId },
@@ -64,14 +73,23 @@ function bindingInput(
       board: board ?? null,
       stages,
       sessions: [],
-      externalSource: { integrationId: 'github', type: board === 'review' ? 'pull-request' : 'issue' },
-      metadata: { githubIssueNumber: 49, repository: 'mastra-ai/mastra' },
+      externalSource: { integrationId: 'github', type: pullRequest ? 'pull-request' : 'issue' },
+      metadata: { repository: 'mastra-ai/mastra' },
+      workItem: createProviderWorkItemForTests({
+        id: 'item-1',
+        title: 'Broken login',
+        source: { integrationId: 'github', type: pullRequest ? 'pull-request' : 'issue', externalId: '49' },
+        metadata: { githubIssueNumber: 49 },
+      }),
     },
     role,
   } as unknown as FactoryBindingPreparationInput;
 }
 
-const boards = createBoardRegistry();
+// Work as projects stored before new projects' Work dropped Triage: these tests start its Triage lane.
+const boards = createTriageWorkRegistry();
+/** Work as a project stored it while Work still had its `review` self-review phase. */
+const olderWork = new Map([['work', selfReviewWorkBoard]]);
 
 describe('prepareFactoryRuleBinding', () => {
   it("starts the run on the factory's default model", async () => {
@@ -162,9 +180,10 @@ describe('prepareFactoryRuleBinding', () => {
     );
 
     const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
-    expect(userId).toBe('user-1');
+    // Nobody started this run, so the session is the Factory's own.
+    expect(userId).toBe(`factory-project:${project.id}`);
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
-      expect.objectContaining({ branch: 'factory/issue-49', baseBranch: 'main', userId: 'user-1' }),
+      expect.objectContaining({ branch: 'factory/issue-49-item1', baseBranch: 'main', userId }),
     );
   });
 
@@ -223,25 +242,268 @@ describe('prepareFactoryRuleBinding', () => {
     );
   });
 
-  it("keeps a run an agent pre-approved on the repo connector, never on the agent's id", async () => {
-    const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
-    const prepare = vi.fn(async () => ({}) as never);
-    const input = bindingInput(project.id);
-    (input.record as { approvedBy?: string | null }).approvedBy = 'agent:binding-1';
+  describe('who owns a new phase session', () => {
+    type Seed = Awaited<ReturnType<typeof seedFactoryWithRepository>>;
 
-    await prepareFactoryRuleBinding(
-      github,
-      { prepare } as unknown as FactoryStartCoordinator,
-      seeded.projects,
-      boards,
-      input,
-    );
+    function start(seed: Seed, approvedBy: string | undefined) {
+      const prepare = vi.fn(async () => ({}) as never);
+      const input = bindingInput(seed.project.id);
+      if (approvedBy) (input.record as { approvedBy?: string | null }).approvedBy = approvedBy;
+      const started = prepareFactoryRuleBinding(
+        seed.github,
+        { prepare } as unknown as FactoryStartCoordinator,
+        seed.seeded.projects,
+        boards,
+        input,
+        undefined,
+        {
+          workItems: seed.seeded.workItems,
+          modelCredentials: seed.seeded.credentials,
+          customProviders: seed.seeded.customProviders,
+        },
+      );
+      return { prepare, started };
+    }
 
-    const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
-    expect(userId).toBe('user-1');
-    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
-      expect.objectContaining({ userId: 'user-1' }),
-    );
+    async function ownerOfPreparedSession(seed: Seed, approvedBy: string | undefined) {
+      const { prepare, started } = start(seed, approvedBy);
+      await started;
+      const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
+      const row = await seed.sourceControl.sessions.getBySessionId(sessionId);
+      expect(row?.userId).toBe(userId);
+      return userId;
+    }
+
+    async function sessionOf(seed: Seed, userId: string) {
+      return seed.sourceControl.sessions.create({
+        sessionId: crypto.randomUUID(),
+        projectRepositoryId: seed.projectRepository.id,
+        factoryProjectId: seed.project.id,
+        orgId: 'org-1',
+        userId,
+        branch: `sessions/${userId}`,
+        baseBranch: 'main',
+        visibility: 'org',
+      });
+    }
+
+    function addOrganizationKey(seed: Seed) {
+      return seed.seeded.credentials.setCredential({ orgId: 'org-1' }, 'openai', { type: 'api_key', key: 'sk-org' });
+    }
+
+    /** A phase run of a card `requester-1` asked for, whose agent then moves the card on. */
+    async function phaseRunOf(seed: Seed) {
+      const triage = await sessionOf(seed, 'requester-1');
+      const { binding } = await seed.seeded.workItems.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'requester-1',
+        factoryProjectId: seed.project.id,
+        workItem: {
+          input: {
+            board: 'work',
+            externalSource: { integrationId: 'github', type: 'issue', externalId: '49' },
+            title: 'Broken login',
+            stages: ['triage'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'triage',
+        session: { sessionId: triage.sessionId, branch: triage.branch, threadId: triage.sessionId },
+        resourceId: triage.sessionId,
+        kickoffKey: 'kickoff-1',
+        kickoffMessage: null,
+      });
+      return binding;
+    }
+
+    // Whoever moves the card, its phases run on the Factory's model and the organization's keys.
+    describe.each(['factory', 'hybrid'] as const)('in a Factory on %s credentials', modelScope => {
+      async function seedWithKey() {
+        const seed = await seedFactoryWithRepository({
+          createdBy: 'factory-creator',
+          modelScope,
+          defaultModelId: 'openai/gpt-5.5',
+        });
+        await addOrganizationKey(seed);
+        return { seed, factory: `factory-project:${seed.project.id}` };
+      }
+
+      it('runs the phase as the Factory, on its model, when a person moves or approves the card', async () => {
+        const { seed, factory } = await seedWithKey();
+        const { prepare, started } = start(seed, 'approver-1');
+
+        await started;
+
+        expect(prepare).toHaveBeenCalledWith(
+          expect.objectContaining({
+            userId: factory,
+            // The person stays the one who started it.
+            startedBy: { type: 'human', id: 'approver-1' },
+            modelScope: 'factory',
+            defaultModelId: 'openai/gpt-5.5',
+          }),
+        );
+        const { sessionId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string };
+        expect(await seed.sourceControl.sessions.getBySessionId(sessionId)).toMatchObject({ userId: factory });
+      });
+
+      it("runs the phase as the Factory when a person's own session moves the card", async () => {
+        const { seed, factory } = await seedWithKey();
+        const chat = await sessionOf(seed, 'requester-1');
+        const { prepare, started } = start(seed, `agent:session:${chat.sessionId}`);
+
+        await started;
+
+        expect(prepare).toHaveBeenCalledWith(
+          expect.objectContaining({
+            userId: factory,
+            // An agent's move is an agent's, never a person's.
+            startedBy: { type: 'agent', bindingId: `session:${chat.sessionId}`, role: 'session' },
+          }),
+        );
+      });
+
+      it('runs the next phase as the Factory when the agent of an earlier phase moves the card', async () => {
+        const { seed, factory } = await seedWithKey();
+        const binding = await phaseRunOf(seed);
+        const { prepare, started } = start(seed, `agent:${binding.id}`);
+
+        await started;
+
+        expect(prepare).toHaveBeenCalledWith(
+          expect.objectContaining({
+            userId: factory,
+            startedBy: { type: 'agent', bindingId: binding.id, role: 'triage' },
+          }),
+        );
+      });
+
+      // A card a webhook filed, or one an automatic phase picked up.
+      it('runs the phase as the Factory when nobody is behind the move', async () => {
+        const { seed, factory } = await seedWithKey();
+
+        await expect(ownerOfPreparedSession(seed, undefined)).resolves.toBe(factory);
+      });
+
+      it('starts the phase as the Factory when the organization runs on its own provider and stores no key', async () => {
+        const seed = await seedFactoryWithRepository({ modelScope });
+        await seed.seeded.customProviders.upsert({
+          orgId: 'org-1',
+          userId: 'factory-creator',
+          input: {
+            providerId: 'acme',
+            name: 'Acme',
+            url: 'https://llm.acme.dev/v1',
+            apiKey: 'sk-acme',
+            models: ['fast-1'],
+          },
+        });
+
+        await expect(ownerOfPreparedSession(seed, 'approver-1')).resolves.toBe(`factory-project:${seed.project.id}`);
+      });
+
+      it("does not count another organization's provider as this one's", async () => {
+        const seed = await seedFactoryWithRepository({ modelScope });
+        await seed.seeded.customProviders.upsert({
+          orgId: 'org-elsewhere',
+          userId: 'someone-elsewhere',
+          input: {
+            providerId: 'acme',
+            name: 'Acme',
+            url: 'https://llm.acme.dev/v1',
+            apiKey: 'sk-acme',
+            models: ['fast-1'],
+          },
+        });
+        const { prepare, started } = start(seed, 'approver-1');
+
+        await expect(started).rejects.toMatchObject({ code: 'factory_org_key_missing' });
+        expect(prepare).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ['a person moved the card', 'approver-1'],
+        ['nobody is behind the move', undefined],
+      ])(
+        'says to add an organization key instead of starting a run that cannot reach a model, when %s',
+        async (_who, approvedBy) => {
+          const seed = await seedFactoryWithRepository({ createdBy: 'factory-creator', modelScope });
+          // Personal keys, the mover's included, are not the Factory's to spend.
+          for (const userId of ['factory-creator', 'approver-1']) {
+            await seed.seeded.credentials.setCredential({ orgId: 'org-1', userId }, 'openai', {
+              type: 'api_key',
+              key: 'sk-personal',
+            });
+          }
+          const createSession = vi.spyOn(seed.sourceControl.sessions, 'create');
+          const { prepare, started } = start(seed, approvedBy);
+
+          const error = await started.catch((caught: unknown) => caught);
+
+          expect(error).toBeInstanceOf(FactoryDispatchError);
+          expect(error).toMatchObject({
+            code: 'factory_org_key_missing',
+            message: expect.stringContaining('Add an organization key'),
+          });
+          expect(prepare).not.toHaveBeenCalled();
+          expect(createSession).not.toHaveBeenCalled();
+        },
+      );
+    });
+
+    // A Factory on personal credentials has no keys of its own, so a person has to own the run.
+    describe('in a Factory on personal credentials', () => {
+      const seedPersonal = (createdBy = 'factory-creator') =>
+        seedFactoryWithRepository({ createdBy, modelScope: 'user' });
+
+      it('runs the phase for the person who moved or approved the card', async () => {
+        const seed = await seedPersonal();
+        const { prepare, started } = start(seed, 'approver-1');
+
+        await started;
+
+        expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ userId: 'approver-1', modelScope: 'user' }));
+      });
+
+      it("runs the phase for the person whose own session's agent moved the card", async () => {
+        const seed = await seedPersonal();
+        const chat = await sessionOf(seed, 'requester-1');
+
+        await expect(ownerOfPreparedSession(seed, `agent:session:${chat.sessionId}`)).resolves.toBe('requester-1');
+      });
+
+      // The triage agent of a card a teammate asked for moves it on to Planning.
+      it("runs the next phase for the person whose phase session's agent moved the card", async () => {
+        const seed = await seedPersonal();
+        const binding = await phaseRunOf(seed);
+
+        const { prepare, started } = start(seed, `agent:${binding.id}`);
+
+        await started;
+
+        expect(prepare).toHaveBeenCalledWith(
+          expect.objectContaining({
+            userId: 'requester-1',
+            startedBy: { type: 'agent', bindingId: binding.id, role: 'triage' },
+          }),
+        );
+      });
+
+      it('runs the phase for whoever set the Factory up when nobody is behind the move', async () => {
+        const seed = await seedPersonal();
+
+        await expect(ownerOfPreparedSession(seed, undefined)).resolves.toBe('factory-creator');
+        const second = await seedPersonal();
+        await expect(ownerOfPreparedSession(second, 'agent:binding-that-is-gone')).resolves.toBe('factory-creator');
+      });
+
+      it('falls back to whoever connected the repository only when the Factory names no person', async () => {
+        const seed = await seedPersonal('system');
+
+        await expect(ownerOfPreparedSession(seed, undefined)).resolves.toBe('user-1');
+      });
+    });
   });
 
   it('reuses the role session the work item already holds instead of minting a replacement', async () => {
@@ -283,8 +545,125 @@ describe('prepareFactoryRuleBinding', () => {
     ).resolves.toHaveLength(1);
   });
 
+  describe('on an issue card that carries pull requests', () => {
+    function withPullRequests(
+      input: FactoryBindingPreparationInput,
+      numbers: number[],
+      openPullRequestNumber?: number,
+    ) {
+      const [issue] = input.item.workItem.sources;
+      input.item.workItem.sources = [
+        issue!,
+        ...numbers.map((number, index) => ({
+          ...issue!,
+          id: `source-pr-${number}`,
+          sourceType: 'pull-request',
+          externalId: `pull-request:github:456:pull-request:${number}`,
+          state: 'open',
+          metadata: { githubPullRequestNumber: number, state: 'open' },
+          createdAt: new Date(index + 1),
+        })),
+      ];
+      if (openPullRequestNumber !== undefined) input.item.metadata = { ...input.item.metadata, openPullRequestNumber };
+      return input;
+    }
+
+    async function seatedBuilder() {
+      const setup = await seedFactoryWithRepository();
+      const builder = await setup.sourceControl.sessions.create({
+        sessionId: 'sess-builder',
+        projectRepositoryId: setup.projectRepository.id,
+        orgId: 'org-1',
+        userId: 'user-1',
+        branch: 'factory/issue-49-item1',
+        baseBranch: 'main',
+        visibility: 'org',
+      });
+      return { ...setup, builder };
+    }
+
+    async function prepared(
+      setup: Awaited<ReturnType<typeof seatedBuilder>>,
+      input: FactoryBindingPreparationInput,
+      registry: typeof boards = boards,
+    ) {
+      const prepare = vi.fn(async () => ({}) as never);
+      await prepareFactoryRuleBinding(
+        setup.github,
+        { prepare } as unknown as FactoryStartCoordinator,
+        setup.seeded.projects,
+        registry,
+        input,
+      );
+      const { sessionId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string };
+      return (await setup.sourceControl.sessions.getBySessionId(sessionId))!;
+    }
+
+    const seat = (sessionId: string, branch: string) => ({
+      sessionId,
+      branch,
+      threadId: `thread-${sessionId}`,
+      startedBy: 'user-1',
+    });
+
+    it("reviews the pull request on its own branch, never in the builder's session", async () => {
+      const setup = await seatedBuilder();
+      const input = withPullRequests(
+        bindingInput(setup.project.id, ['pr-review'], { role: 'review', board: 'work' }),
+        [34],
+      );
+      (input.item as { sessions: unknown }).sessions = {
+        work: seat(setup.builder.sessionId, setup.builder.branch),
+        // Self-review reviewed the builder's branch in this seat before the pull request arrived.
+        review: seat(setup.builder.sessionId, setup.builder.branch),
+      };
+
+      const session = await prepared(setup, input);
+
+      expect(session.sessionId).not.toBe(setup.builder.sessionId);
+      expect(session.branch).toBe('factory/pr-34-item1');
+    });
+
+    it("keeps self-review on the builder's branch in an older project's Work", async () => {
+      const setup = await seatedBuilder();
+      const input = withPullRequests(
+        bindingInput(setup.project.id, ['review'], { role: 'review', board: 'work' }),
+        [34],
+      );
+
+      const session = await prepared(setup, input, olderWork);
+
+      expect(session.branch).toBe('factory/issue-49-item1');
+    });
+
+    it('moves the reviewer to the next pull request when a second one is the open one', async () => {
+      const setup = await seatedBuilder();
+      const first = await setup.sourceControl.sessions.create({
+        sessionId: 'sess-review-34',
+        projectRepositoryId: setup.projectRepository.id,
+        orgId: 'org-1',
+        userId: 'user-1',
+        branch: 'factory/pr-34-item1',
+        baseBranch: 'main',
+        visibility: 'org',
+      });
+      const input = withPullRequests(
+        bindingInput(setup.project.id, ['pr-review'], { role: 'review', board: 'work' }),
+        [34, 35],
+        35,
+      );
+      (input.item as { sessions: unknown }).sessions = { review: seat(first.sessionId, first.branch) };
+
+      const session = await prepared(setup, input);
+
+      expect(session.sessionId).not.toBe(first.sessionId);
+      expect(session.branch).toBe('factory/pr-35-item1');
+    });
+  });
+
   async function planOwnedSession(branch = 'factory/issue-49') {
-    const setup = await seedFactoryWithRepository();
+    // On personal credentials, where a fresh session belongs to whoever approved the move.
+    const setup = await seedFactoryWithRepository({ modelScope: 'user' });
     const planSession = await setup.sourceControl.sessions.create({
       sessionId: 'sess-plan',
       projectRepositoryId: setup.projectRepository.id,
@@ -338,7 +717,8 @@ describe('prepareFactoryRuleBinding', () => {
       github,
       { prepare } as unknown as FactoryStartCoordinator,
       seeded.projects,
-      boards,
+      // An older project's Work self-review phase, the review seat right after Building.
+      olderWork,
       withPlanSession(bindingInput(project.id, ['review'], { role: 'review' })),
     );
 
@@ -364,7 +744,9 @@ describe('prepareFactoryRuleBinding', () => {
   });
 
   it("does not inherit an earlier session on another of the card's repositories", async () => {
-    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
+    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository({
+      modelScope: 'user',
+    });
     const installation = await sourceControl.installations.upsert({
       orgId: 'org-1',
       connectedByUserId: 'user-1',
@@ -407,7 +789,9 @@ describe('prepareFactoryRuleBinding', () => {
   });
 
   it('mints a fresh session when the held ref no longer resolves to the project', async () => {
-    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
+    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository({
+      modelScope: 'user',
+    });
     const installation = await sourceControl.installations.upsert({
       orgId: 'org-1',
       connectedByUserId: 'user-1',
@@ -464,7 +848,9 @@ describe('prepareFactoryRuleBinding', () => {
   });
 
   it('mints a fresh session when the held ref lives in another factory project', async () => {
-    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
+    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository({
+      modelScope: 'user',
+    });
     const otherProject = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Other' } });
     const installation = await sourceControl.installations.upsert({
       orgId: 'org-1',
@@ -526,8 +912,8 @@ describe('prepareFactoryRuleBinding', () => {
     );
   });
 
-  it("attributes an approved decision's run to the approver, not the repo connector", async () => {
-    const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
+  it("attributes an approved decision's run to the approver, not the repo connector, on personal credentials", async () => {
+    const { seeded, sourceControl, project, github } = await seedFactoryWithRepository({ modelScope: 'user' });
     const prepare = vi.fn(async () => ({}) as never);
 
     const input = bindingInput(project.id);
@@ -547,8 +933,8 @@ describe('prepareFactoryRuleBinding', () => {
     );
   });
 
-  it("opens a card_action run under the clicker's id", async () => {
-    const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
+  it("opens a card_action run under the clicker's id on personal credentials", async () => {
+    const { seeded, sourceControl, project, github } = await seedFactoryWithRepository({ modelScope: 'user' });
     const { item } = await seeded.workItems.upsert({
       orgId: 'org-1',
       userId: 'user-1',
@@ -564,6 +950,7 @@ describe('prepareFactoryRuleBinding', () => {
     const transitions = new FactoryTransitionService({
       storage: seeded.workItems,
       configVersion: 'factory-config-v1',
+      boards,
     });
     await transitions.transition({
       orgId: 'org-1',
@@ -677,7 +1064,7 @@ describe('prepareFactoryRuleBinding', () => {
     ).resolves.toHaveLength(0);
   });
 
-  it("names the card's repository when it is linked but turned out of the environment", async () => {
+  it("names the card's repository when it is linked but not pre-cloned", async () => {
     const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
     await sourceControl.projectRepositories.update({
       orgId: 'org-1',
@@ -697,7 +1084,7 @@ describe('prepareFactoryRuleBinding', () => {
     expect(error).toBeInstanceOf(FactoryDispatchError);
     expect(error).toMatchObject({ code: 'source_repository_missing' });
     expect(error.message).toBe(
-      "Repository mastra-ai/mastra is linked but not in this Factory's environment. Turn it on under Settings → Environment, then retry.",
+      'Repository mastra-ai/mastra is linked but not pre-cloned for this Factory. Turn on Pre-clone under Settings → Repositories, then retry.',
     );
     expect(prepare).not.toHaveBeenCalled();
   });
@@ -728,16 +1115,16 @@ describe('prepareFactoryRuleBinding', () => {
     const { seeded, project, github } = await seedFactoryWithRepository();
     const prepare = vi.fn(async () => ({}) as never);
 
-    // A rule-started review on a Review-board card still sitting in Intake enters
-    // Reviewing, exactly like a manual click on the same action would.
+    // A rule-started review on a pull request's card still sitting in Intake enters
+    // PR review, exactly like a manual click on the same action would.
     await prepareFactoryRuleBinding(
       github,
       { prepare } as unknown as FactoryStartCoordinator,
       seeded.projects,
       boards,
-      bindingInput(project.id, ['intake'], { role: 'review', board: 'review' }),
+      bindingInput(project.id, ['intake'], { role: 'review', board: 'work', pullRequest: true }),
     );
-    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ destinationStage: 'review' }));
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ destinationStage: 'pr-review' }));
 
     // Each Work seat leaves Intake for the lane the board assigns it.
     for (const [role, lane] of [
@@ -800,6 +1187,37 @@ describe('prepareFactoryRuleBinding', () => {
       bindingInput(project.id, ['shipping'], { role: 'release', board: 'release' }),
     );
     expect(prepare).toHaveBeenLastCalledWith(expect.objectContaining({ destinationStage: 'shipping' }));
+  });
+
+  it('gives a board installed as work in place of the built-in one only the lanes it declares', async () => {
+    const { seeded, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn(async () => ({}) as never);
+    const replacement = boardRegistryOf([
+      defineBoard({
+        id: 'work',
+        name: 'Work',
+        initialPhase: 'intake',
+        phases: {
+          intake: { kind: 'resting', name: 'Intake', nextPhases: ['fixing', 'done'] },
+          fixing: { kind: 'working', name: 'Fixing', runner: { context: 'work' }, nextPhases: ['done'] },
+          done: { kind: 'terminal', name: 'Done' },
+        },
+      }),
+    ]);
+    const start = (role: string) =>
+      prepareFactoryRuleBinding(
+        github,
+        { prepare } as unknown as FactoryStartCoordinator,
+        seeded.projects,
+        replacement,
+        bindingInput(project.id, ['intake'], { role }),
+      );
+
+    // No `execute` phase here, so the built-in Work lane does not apply.
+    await start('work');
+    expect(prepare).toHaveBeenLastCalledWith(expect.objectContaining({ destinationStage: 'fixing' }));
+    // Nor is there a Planning phase for the old `plan` role.
+    expect(await start('plan').catch(failure => failure)).toMatchObject({ code: 'unsupported_provider_item' });
   });
 
   it('rejects runs with no lane before creating a source-control session', async () => {

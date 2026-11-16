@@ -53,6 +53,7 @@ function getMessageIndexKey(messageId: string): string {
 }
 
 export class StoreMemoryUpstash extends MemoryStorage {
+  override readonly listThreadsPaginatesInMemory = true;
   override readonly supportsPartialThreadUpdate = true;
   private client: Redis;
   #db: UpstashDB;
@@ -1423,9 +1424,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
       if (direction === 'ASC') {
         return aValue - bValue;
-      } else {
-        return bValue - aValue;
       }
+      return bValue - aValue;
     });
   }
 

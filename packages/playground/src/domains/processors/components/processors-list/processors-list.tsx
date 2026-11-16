@@ -1,11 +1,13 @@
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import type { DataListSort } from '@mastra/playground-ui/components/DataList';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconFileArrowRightIn } from '@mastra/playground-ui/icons/central/IconFileArrowRightIn';
+import { IconFileArrowRightOut } from '@mastra/playground-ui/icons/central/IconFileArrowRightOut';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { sortBy } from '@mastra/playground-ui/sort/sort-by';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
 import type { ProcessorInfo, ProcessorPhase } from '@mastra/react/hooks/processors';
-import { CheckIcon, FileInput, FileOutput } from 'lucide-react';
 import { useMemo } from 'react';
 
 const phaseKeys: ProcessorPhase[] = ['input', 'inputStep', 'outputStep', 'outputStream', 'outputResult'];
@@ -62,45 +64,45 @@ export function ProcessorsList({ processors, isLoading, search = '', sort, onSor
           <DataList.TopCell>Name</DataList.TopCell>
         )}
         <DataList.TopCell>Description</DataList.TopCell>
-        <DataList.TopCellSmart long="Input" short="Input" tooltip="Contains Input phase" className="text-center" />
+        <DataList.TopCellSmart long="Input" short="Input" tooltip="Contains input phase" className="text-center" />
         <DataList.TopCellSmart
           long="Input Step"
           short={
             <>
-              <FileInput /> Step
+              <IconFileArrowRightIn /> Step
             </>
           }
-          tooltip="Contains Input Step phase"
+          tooltip="Contains input step phase"
           className="text-center"
         />
         <DataList.TopCellSmart
           long="Output Step"
           short={
             <>
-              <FileOutput /> Step
+              <IconFileArrowRightOut /> Step
             </>
           }
-          tooltip="Contains Output Step phase"
+          tooltip="Contains output step phase"
           className="text-center"
         />
         <DataList.TopCellSmart
           long="Output Stream"
           short={
             <>
-              <FileOutput /> Stream
+              <IconFileArrowRightOut /> Stream
             </>
           }
-          tooltip="Contains Output Stream phase"
+          tooltip="Contains output stream phase"
           className="text-center"
         />
         <DataList.TopCellSmart
           long="Output Result"
           short={
             <>
-              <FileOutput /> Result
+              <IconFileArrowRightOut /> Result
             </>
           }
-          tooltip="Contains Output Result phase"
+          tooltip="Contains output result phase"
           className="text-center"
         />
         {onSortChange ? (
@@ -130,7 +132,7 @@ export function ProcessorsList({ processors, isLoading, search = '', sort, onSor
             <DataList.DescriptionCell>{description}</DataList.DescriptionCell>
             {phaseKeys.map(key => (
               <DataList.TextCell key={key} className="text-center">
-                {phaseSet.has(key) && <CheckIcon className="mx-auto size-4" />}
+                {phaseSet.has(key) && <IconCheckmark2Medium className="mx-auto size-4" />}
               </DataList.TextCell>
             ))}
             <DataList.TextCell className="text-center">{agentsCount || ''}</DataList.TextCell>

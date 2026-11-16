@@ -1,10 +1,16 @@
+import type { Mastra } from '@mastra/core/mastra';
 import type { ServerRoute } from '@mastra/server/server-adapter';
-import { normalizeQueryParams } from '@mastra/server/server-adapter';
+import {
+  createMCPOAuthMetadataRoutes,
+  isMCPOAuthDiscoveryEnabled,
+  normalizeQueryParams,
+} from '@mastra/server/server-adapter';
 import {
   All,
   Controller,
   Inject,
   NotFoundException,
+  PayloadTooLargeException,
   Req,
   Res,
   UseGuards,
@@ -13,7 +19,7 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
-import { MASTRA_OPTIONS } from '../constants';
+import { MASTRA, MASTRA_OPTIONS } from '../constants';
 import { MastraExceptionFilter } from '../filters/mastra-exception.filter';
 import { MastraRouteGuard } from '../guards/mastra-route.guard';
 import { RequestTrackingInterceptor } from '../interceptors/request-tracking.interceptor';
@@ -22,6 +28,7 @@ import { TracingInterceptor } from '../interceptors/tracing.interceptor';
 import type { MastraModuleOptions } from '../mastra.module';
 import { AuthService } from '../services/auth.service';
 import { CustomRouteService } from '../services/custom-route.service';
+import type { CustomRouteAuthenticate } from '../services/custom-route.service';
 import { RequestContextService } from '../services/request-context.service';
 import { RouteHandlerService } from '../services/route-handler.service';
 import { parseMultipartFormData } from '../utils/parse-multipart';
@@ -41,6 +48,7 @@ import { toWebRequest } from '../utils/to-web-request';
 @UseGuards(MastraRouteGuard)
 export class MastraController {
   constructor(
+    @Inject(MASTRA) private readonly mastra: Mastra,
     @Inject(MASTRA_OPTIONS) private readonly options: MastraModuleOptions,
     @Inject(RouteHandlerService) private readonly routeHandler: RouteHandlerService,
     @Inject(RequestContextService) private readonly requestContext: RequestContextService,
@@ -60,18 +68,58 @@ export class MastraController {
 
     if (!routePath || !this.routeHandler.matchRoute(method, routePath)) {
       const requestContext = this.requestContext.requestContext;
-      const authenticate = async (requiresAuth: boolean) => {
-        if (!this.authService.isEnabled()) return;
-        const user = await this.authService.authenticate(req, {
-          requestContext,
-          response: res,
+      const authenticate: CustomRouteAuthenticate = async (customRoute, requiresAuth, pathParams) => {
+        if (this.authService.isEnabled()) {
+          const user = await this.authService.authenticate(req, {
+            requestContext,
+            response: res,
+            requiresAuth,
+            customRoute: true,
+          });
+          if (user !== undefined) this.requestContext.setUser(user);
+        }
+
+        // Same RBAC/FGA rules the other adapters apply to custom routes.
+        const serverRoute = {
+          method: customRoute.method,
+          path: customRoute.path,
+          responseType: 'json',
+          handler: async () => {},
           requiresAuth,
-          customRoute: true,
-        });
-        if (user !== undefined) this.requestContext.setUser(user);
+          requiresPermission: customRoute.requiresPermission,
+          fga: customRoute.fga,
+        } as ServerRoute;
+        if (requiresAuth) {
+          await this.routeHandler.enforceRoutePermission(serverRoute, requestContext);
+        }
+        if (customRoute.fga) {
+          // Path params last: the custom handler reads them from the URL, so query/body
+          // values must not be able to change which resource FGA checks.
+          await this.routeHandler.enforceRouteFGA(serverRoute, requestContext, {
+            ...(typeof req.body === 'object' && req.body !== null ? req.body : {}),
+            ...(req.query as Record<string, unknown>),
+            ...pathParams,
+          });
+        }
       };
       if (await this.customRoutes.handle(req, res, requestContext, authenticate)) {
         return undefined;
+      }
+    }
+
+    // OAuth discovery for the built-in MCP endpoint lives at the server root, outside the prefix.
+    // Checked after custom routes so a user's own route at the same path wins, as on the other adapters.
+    if (method === 'GET' && !(routePath && this.routeHandler.matchRoute(method, routePath))) {
+      const metadataRoute = this.findMCPOAuthMetadataRoute(path);
+      if (metadataRoute) {
+        return this.routeHandler.executeHandler(metadataRoute, {
+          pathParams: {},
+          queryParams: {},
+          body: undefined,
+          requestContext: this.requestContext.requestContext,
+          abortSignal: this.requestContext.abortSignal,
+          request: toWebRequest(req),
+        });
       }
     }
 
@@ -103,6 +151,11 @@ export class MastraController {
       abortSignal: this.requestContext.abortSignal,
       request: toWebRequest(req),
     });
+  }
+
+  private findMCPOAuthMetadataRoute(path: string): ServerRoute | undefined {
+    if (!isMCPOAuthDiscoveryEnabled(this.mastra)) return undefined;
+    return createMCPOAuthMetadataRoutes(this.mastra, this.options.prefix ?? '/api').find(route => route.path === path);
   }
 
   /**
@@ -155,6 +208,25 @@ export class MastraController {
         maxFileSize,
         allowedMimeTypes,
       });
+    }
+
+    // JsonBodyMiddleware only applies the global limit, so enforce the route's own
+    // (usually smaller) limit here. Prefer the raw byte count recorded during parsing so
+    // chunked whitespace padding cannot shrink past the check after JSON.stringify.
+    if (route.maxBodySize !== undefined) {
+      const rawBodySize = (req as Request & { mastraRawBodySize?: number }).mastraRawBodySize;
+      const contentLength = parseInt(req.headers['content-length'] ?? '', 10);
+      const size =
+        rawBodySize !== undefined
+          ? rawBodySize
+          : Number.isNaN(contentLength)
+            ? req.body === undefined
+              ? 0
+              : Buffer.byteLength(JSON.stringify(req.body), 'utf8')
+            : contentLength;
+      if (size > route.maxBodySize) {
+        throw new PayloadTooLargeException('Request body too large');
+      }
     }
 
     // JSON body is already parsed by JsonBodyMiddleware

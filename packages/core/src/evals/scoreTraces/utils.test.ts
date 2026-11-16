@@ -116,7 +116,7 @@ class TransformerTestBuilder {
     input?: any;
     output?: any;
     startedAt?: string;
-    spanType?: 'tool_call' | 'mcp_tool_call';
+    spanType?: 'tool_call' | 'mcp_tool_call' | 'provider_tool_call';
   }) {
     const span = {
       traceId: this.traceId,
@@ -447,6 +447,49 @@ describe('Transformer Functions', () => {
       const toolInvocations = transformTraceToScorerInputAndOutput(trace).output[0]?.content.toolInvocations;
 
       expect(toolInvocations?.map(t => t.toolName)).toEqual(['mcpSearch']);
+    });
+
+    it('should include tool calls executed by the model provider', () => {
+      // Provider tools (e.g. Anthropic web search) are recorded as provider_tool_call spans
+      // under the model step that delivered their result.
+      const trace = new TransformerTestBuilder()
+        .addAgentSpan({ spanId: 'agent-1' })
+        .addLLMSpan({ spanId: 'llm-1', parentSpanId: 'agent-1' })
+        .addModelStepSpan({ spanId: 'step-1', parentSpanId: 'llm-1' })
+        .addToolSpan({
+          spanId: 'provider-1',
+          parentSpanId: 'step-1',
+          toolId: 'web_search',
+          spanType: 'provider_tool_call',
+          startedAt: '2025-01-01T00:01:31Z',
+        })
+        .addToolSpan({
+          spanId: 'tool-1',
+          parentSpanId: 'step-1',
+          toolId: 'calculator',
+          startedAt: '2025-01-01T00:01:32Z',
+        })
+        .buildTrace();
+
+      const toolInvocations = transformTraceToScorerInputAndOutput(trace).output[0]?.content.toolInvocations;
+
+      expect(toolInvocations?.map(t => t.toolName)).toEqual(['web_search', 'calculator']);
+    });
+
+    it('should keep the stored order of parallel tool calls that start in the same millisecond', () => {
+      const startedAt = '2025-01-01T00:01:31.000Z';
+      const trace = new TransformerTestBuilder()
+        .addAgentSpan({ spanId: 'agent-1' })
+        .addLLMSpan({ spanId: 'llm-1', parentSpanId: 'agent-1' })
+        .addModelStepSpan({ spanId: 'step-1', parentSpanId: 'llm-1' })
+        .addToolSpan({ spanId: 'tool-1', parentSpanId: 'step-1', toolId: 'first', startedAt })
+        .addToolSpan({ spanId: 'tool-2', parentSpanId: 'step-1', toolId: 'second', startedAt })
+        .addToolSpan({ spanId: 'tool-3', parentSpanId: 'step-1', toolId: 'third', startedAt })
+        .buildTrace();
+
+      const toolInvocations = transformTraceToScorerInputAndOutput(trace).output[0]?.content.toolInvocations;
+
+      expect(toolInvocations?.map(t => t.toolName)).toEqual(['first', 'second', 'third']);
     });
 
     it('should not credit tool calls made inside sub-agents or inside other tools', () => {

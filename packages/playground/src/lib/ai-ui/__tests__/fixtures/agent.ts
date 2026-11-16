@@ -1,4 +1,9 @@
-import type { GetAgentResponse, GetMemoryStatusResponse, McpServerListResponse } from '@mastra/client-js';
+import type {
+  ChannelPlatformInfo,
+  GetAgentResponse,
+  GetMemoryStatusResponse,
+  McpServerListResponse,
+} from '@mastra/client-js';
 
 /** Minimal v2 agent the Thread tree reads for model attribution and memory gating. */
 export const v2Agent: GetAgentResponse = {
@@ -27,3 +32,5 @@ export const memoryEnabled: GetMemoryStatusResponse = {
 };
 
 export const emptyMcpServers: McpServerListResponse = { servers: [], next: null, total_count: 0 };
+
+export const emptyChannelPlatforms: ChannelPlatformInfo[] = [];

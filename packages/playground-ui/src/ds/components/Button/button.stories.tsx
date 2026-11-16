@@ -1,14 +1,25 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowUpRight, Plus, Settings, Trash } from 'lucide-react';
 import { Fragment } from 'react';
 import { Input } from '../Input';
 import { TooltipProvider } from '../Tooltip';
 import { Txt } from '../Txt';
 import type { ButtonVariant } from './Button';
 import { Button } from './Button';
+import { IconArrowUpRight } from '@/ds/icons/central/IconArrowUpRight';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
-const ALL_VARIANTS: ButtonVariant[] = ['default', 'primary', 'destructive', 'destructive-ghost', 'ghost', 'link'];
+const ALL_VARIANTS: ButtonVariant[] = [
+  'default',
+  'primary',
+  'destructive',
+  'destructive-ghost',
+  'ghost',
+  'subtle',
+  'link',
+];
 
 const meta: Meta<typeof Button> = {
   title: 'Elements/Button',
@@ -84,19 +95,28 @@ export const Disabled: Story = {
 
 export const WithIcon: Story = {
   args: {
-    icon: <Plus />,
+    icon: <IconPlusMedium />,
     children: 'Add Item',
   },
 };
 
 export const WithIconSizes: Story = {
   render: () => (
-    <div className="flex items-center gap-4">
-      {(['sm', 'md', 'lg'] as const).map(size => (
-        <Button key={size} size={size} icon={<Plus />}>
-          Add Item
-        </Button>
-      ))}
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-4">
+        {(['sm', 'md', 'lg'] as const).map(size => (
+          <Button key={size} size={size} icon={<IconPlusMedium />}>
+            Add item
+          </Button>
+        ))}
+      </div>
+      <div className="flex items-center gap-4">
+        {(['sm', 'md', 'lg'] as const).map(size => (
+          <Button key={size} size={size} iconEnd={<IconArrowUpRight />}>
+            Open portal
+          </Button>
+        ))}
+      </div>
     </div>
   ),
 };
@@ -108,13 +128,23 @@ export const WithTooltip: Story = {
   },
 };
 
-export const IconAutoDetect: Story = {
+// A button with only an icon takes the icon size of the same rung: same height as the
+// labelled button beside it, but square, so it renders as a circle instead of a pill.
+export const IconBesideText: Story = {
   render: () => (
-    <div className="flex items-center gap-4">
+    <div className="flex flex-col gap-4">
       {(['sm', 'md', 'lg'] as const).map(size => (
-        <Button key={size} size={size}>
-          <Settings />
-        </Button>
+        <div key={size} className="flex items-center gap-2">
+          <Button size={size} icon={<IconPlusMedium />}>
+            Add item
+          </Button>
+          <Button size={`icon-${size}`} tooltip="Settings">
+            <IconSettingsGear1 />
+          </Button>
+          <Button size={`icon-${size}`} variant="ghost" tooltip="Delete">
+            <TrashIcon />
+          </Button>
+        </div>
       ))}
     </div>
   ),
@@ -122,7 +152,7 @@ export const IconAutoDetect: Story = {
 
 export const IconButtonDefault: Story = {
   args: {
-    children: <Settings />,
+    children: <IconSettingsGear1 />,
     tooltip: 'Settings',
     size: 'icon-md',
     variant: 'default',
@@ -134,7 +164,7 @@ export const IconButtonVariants: Story = {
     <div className="flex flex-wrap items-center gap-2">
       {ALL_VARIANTS.filter(variant => variant !== 'link').map(variant => (
         <Button key={variant} size="icon-md" variant={variant} tooltip={variant}>
-          <Settings />
+          <IconSettingsGear1 />
         </Button>
       ))}
     </div>
@@ -145,13 +175,13 @@ export const IconButtonSizes: Story = {
   render: () => (
     <div className="flex items-center gap-2">
       <Button size="icon-sm" tooltip="Small">
-        <Settings />
+        <IconSettingsGear1 />
       </Button>
       <Button size="icon-md" tooltip="Medium">
-        <Settings />
+        <IconSettingsGear1 />
       </Button>
       <Button size="icon-lg" tooltip="Large">
-        <Settings />
+        <IconSettingsGear1 />
       </Button>
     </div>
   ),
@@ -159,7 +189,7 @@ export const IconButtonSizes: Story = {
 
 export const IconButtonDisabled: Story = {
   args: {
-    children: <Settings />,
+    children: <IconSettingsGear1 />,
     tooltip: 'Settings (disabled)',
     size: 'icon-md',
     disabled: true,
@@ -190,7 +220,7 @@ export const VariantSizeMatrix: Story = {
             lg
           </Button>
           <Button variant={variant} size="lg" render={variant === 'link' ? <a href="#" /> : undefined}>
-            <Trash />
+            <TrashIcon />
             with icon
           </Button>
         </Fragment>
@@ -242,7 +272,7 @@ export const Link: Story = {
         <Button
           variant="link"
           render={<a href="https://mastra.ai" target="_blank" rel="noopener noreferrer" />}
-          iconEnd={<ArrowUpRight />}
+          iconEnd={<IconArrowUpRight />}
         >
           Open billing portal
         </Button>
@@ -263,7 +293,7 @@ export const WithIconEnd: Story = {
   render: () => (
     <div className="flex items-center gap-4">
       {(['default', 'ghost', 'primary'] as const).map(variant => (
-        <Button key={variant} variant={variant} iconEnd={<ArrowUpRight />}>
+        <Button key={variant} variant={variant} iconEnd={<IconArrowUpRight />}>
           Open portal
         </Button>
       ))}

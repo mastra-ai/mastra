@@ -1107,9 +1107,8 @@ export const mastra = new Mastra({
 
     if (mode === 'template') {
       return AgentBuilderDefaults.filterToolsForTemplateBuilder(allTools);
-    } else {
-      return AgentBuilderDefaults.filterToolsForCodeEditor(allTools);
     }
+    return AgentBuilderDefaults.filterToolsForCodeEditor(allTools);
   }
 
   /**
@@ -1154,6 +1153,7 @@ export const mastra = new Mastra({
     try {
       console.info('Installing packages:', JSON.stringify(packages, null, 2));
 
+      // oxlint-disable-next-line typescript/no-unnecessary-template-expression -- Package names cross a JavaScript API boundary; preserve runtime string coercion.
       const packageStrings = packages.map(p => `${p.name}`);
 
       await spawnSWPM(projectPath || '', 'add', packageStrings);
@@ -1188,6 +1188,7 @@ export const mastra = new Mastra({
       let packageNames: string[] = [];
 
       if (packages && packages.length > 0) {
+        // oxlint-disable-next-line typescript/no-unnecessary-template-expression -- Package names cross a JavaScript API boundary; preserve runtime string coercion.
         packageNames = packages.map(p => `${p.name}`);
       }
       await spawnSWPM(projectPath || '', 'upgrade', packageNames);
@@ -1439,14 +1440,13 @@ export const mastra = new Mastra({
           url: `http://localhost:${port}`,
           message: 'Mastra server is running and healthy',
         };
-      } else {
-        return {
-          success: false,
-          status: 'unknown' as const,
-          port,
-          message: `Server responding but not healthy (status: ${response.status})`,
-        };
       }
+      return {
+        success: false,
+        status: 'unknown' as const,
+        port,
+        message: `Server responding but not healthy (status: ${response.status})`,
+      };
     } catch {
       // Check if process exists on port
       try {
@@ -1554,9 +1554,7 @@ export const mastra = new Mastra({
           const hasErrors = fileResults.errors.some(e => e.type === type && e.severity === 'error');
           if (hasErrors) {
             if (!validationsFailed.includes(type)) validationsFailed.push(type);
-          } else {
-            if (!validationsPassed.includes(type)) validationsPassed.push(type);
-          }
+          } else if (!validationsPassed.includes(type)) validationsPassed.push(type);
         }
       } catch (error) {
         errors.push({
@@ -2263,13 +2261,11 @@ export const mastra = new Mastra({
                 content = content.replace(regex, newString);
                 editsApplied += matches.length;
               }
+            } else if (content.includes(oldString)) {
+              content = content.replace(oldString, newString);
+              editsApplied++;
             } else {
-              if (content.includes(oldString)) {
-                content = content.replace(oldString, newString);
-                editsApplied++;
-              } else {
-                errors.push(`String not found: "${oldString.substring(0, 50)}${oldString.length > 50 ? '...' : ''}"`);
-              }
+              errors.push(`String not found: "${oldString.substring(0, 50)}${oldString.length > 50 ? '...' : ''}"`);
             }
           }
 
@@ -2825,7 +2821,7 @@ export const mastra = new Mastra({
           if (includeMetadata) {
             item.size = stats.size;
             item.lastModified = stats.mtime.toISOString();
-            item.permissions = `0${(stats.mode & parseInt('777', 8)).toString(8)}`;
+            item.permissions = `0${(stats.mode & 0o777).toString(8)}`;
           }
 
           items.push(item);

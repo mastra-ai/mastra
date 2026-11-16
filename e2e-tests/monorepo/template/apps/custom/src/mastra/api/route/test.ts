@@ -1,5 +1,6 @@
 import { registerApiRoute } from '@mastra/core/server';
 import { IgetYouAnything } from '@custom-lodash/index';
+import { testMessage } from '@/api/route/test.response';
 
 export const testRoute = registerApiRoute('/test', {
   method: 'GET',
@@ -8,6 +9,6 @@ export const testRoute = registerApiRoute('/test', {
       a: 'b',
     };
 
-    return c.json({ message: 'Hello, world!', a: IgetYouAnything(obj, 'a') });
+    return c.json({ message: testMessage, a: IgetYouAnything(obj, 'a') });
   },
 });

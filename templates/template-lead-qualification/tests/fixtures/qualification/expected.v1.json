@@ -1,0 +1,838 @@
+{
+  "version": 1,
+  "datasetId": "qualification-curated-v1",
+  "provenance": "Synthetic company profiles and controlled source passages. Expected labels hand-declared from inbound-saas-v5; review candidate frozen before execution. Not sampled production data or measured model accuracy.",
+  "policyVersion": "inbound-saas-v5",
+  "cases": [
+    {
+      "id": "qualified",
+      "identity": {
+        "status": "resolved",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "accepted",
+          "value": "b2b_saas"
+        },
+        "employeeCount": {
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          }
+        },
+        "headquartersCountry": {
+          "disposition": "accepted",
+          "value": "US"
+        },
+        "buyingIntent": {
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ]
+        }
+      },
+      "classification": "qualified",
+      "score": 100,
+      "disqualifiers": []
+    },
+    {
+      "id": "minimum",
+      "identity": {
+        "status": "resolved",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "accepted",
+          "value": "b2b_saas"
+        },
+        "employeeCount": {
+          "disposition": "accepted",
+          "value": {
+            "min": 20,
+            "max": 20
+          }
+        },
+        "headquartersCountry": {
+          "disposition": "accepted",
+          "value": "US"
+        },
+        "buyingIntent": {
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ]
+        }
+      },
+      "classification": "qualified",
+      "score": 100,
+      "disqualifiers": []
+    },
+    {
+      "id": "maximum",
+      "identity": {
+        "status": "resolved",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "accepted",
+          "value": "b2b_saas"
+        },
+        "employeeCount": {
+          "disposition": "accepted",
+          "value": {
+            "min": 500,
+            "max": 500
+          }
+        },
+        "headquartersCountry": {
+          "disposition": "accepted",
+          "value": "US"
+        },
+        "buyingIntent": {
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ]
+        }
+      },
+      "classification": "qualified",
+      "score": 100,
+      "disqualifiers": []
+    },
+    {
+      "id": "brazil",
+      "identity": {
+        "status": "resolved",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "accepted",
+          "value": "b2b_saas"
+        },
+        "employeeCount": {
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          }
+        },
+        "headquartersCountry": {
+          "disposition": "accepted",
+          "value": "BR"
+        },
+        "buyingIntent": {
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ]
+        }
+      },
+      "classification": "qualified",
+      "score": 100,
+      "disqualifiers": []
+    },
+    {
+      "id": "germany",
+      "identity": {
+        "status": "resolved",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "accepted",
+          "value": "b2b_saas"
+        },
+        "employeeCount": {
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          }
+        },
+        "headquartersCountry": {
+          "disposition": "accepted",
+          "value": "DE"
+        },
+        "buyingIntent": {
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ]
+        }
+      },
+      "classification": "qualified",
+      "score": 100,
+      "disqualifiers": []
+    },
+    {
+      "id": "britain",
+      "identity": {
+        "status": "resolved",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "accepted",
+          "value": "b2b_saas"
+        },
+        "employeeCount": {
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          }
+        },
+        "headquartersCountry": {
+          "disposition": "accepted",
+          "value": "GB"
+        },
+        "buyingIntent": {
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ]
+        }
+      },
+      "classification": "qualified",
+      "score": 100,
+      "disqualifiers": []
+    },
+    {
+      "id": "below-minimum",
+      "identity": {
+        "status": "resolved",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "accepted",
+          "value": "b2b_saas"
+        },
+        "employeeCount": {
+          "disposition": "accepted",
+          "value": {
+            "min": 19,
+            "max": 19
+          }
+        },
+        "headquartersCountry": {
+          "disposition": "accepted",
+          "value": "US"
+        },
+        "buyingIntent": {
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ]
+        }
+      },
+      "classification": "disqualified",
+      "score": 75,
+      "disqualifiers": ["employeeCount"]
+    },
+    {
+      "id": "above-maximum",
+      "identity": {
+        "status": "resolved",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "accepted",
+          "value": "b2b_saas"
+        },
+        "employeeCount": {
+          "disposition": "accepted",
+          "value": {
+            "min": 501,
+            "max": 501
+          }
+        },
+        "headquartersCountry": {
+          "disposition": "accepted",
+          "value": "US"
+        },
+        "buyingIntent": {
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ]
+        }
+      },
+      "classification": "disqualified",
+      "score": 75,
+      "disqualifiers": ["employeeCount"]
+    },
+    {
+      "id": "outside-region",
+      "identity": {
+        "status": "resolved",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "accepted",
+          "value": "b2b_saas"
+        },
+        "employeeCount": {
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          }
+        },
+        "headquartersCountry": {
+          "disposition": "accepted",
+          "value": "JP"
+        },
+        "buyingIntent": {
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ]
+        }
+      },
+      "classification": "disqualified",
+      "score": 85,
+      "disqualifiers": ["headquartersCountry"]
+    },
+    {
+      "id": "other-business",
+      "identity": {
+        "status": "resolved",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "accepted",
+          "value": "other"
+        },
+        "employeeCount": {
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          }
+        },
+        "headquartersCountry": {
+          "disposition": "accepted",
+          "value": "US"
+        },
+        "buyingIntent": {
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ]
+        }
+      },
+      "classification": "disqualified",
+      "score": 70,
+      "disqualifiers": ["businessModel"]
+    },
+    {
+      "id": "nurture",
+      "identity": {
+        "status": "resolved",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "accepted",
+          "value": "b2b_saas"
+        },
+        "employeeCount": {
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          }
+        },
+        "headquartersCountry": {
+          "disposition": "accepted",
+          "value": "US"
+        },
+        "buyingIntent": {
+          "disposition": "accepted",
+          "value": []
+        }
+      },
+      "classification": "nurture",
+      "score": 70,
+      "disqualifiers": []
+    },
+    {
+      "id": "old-intent",
+      "identity": {
+        "status": "resolved",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "accepted",
+          "value": "b2b_saas"
+        },
+        "employeeCount": {
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          }
+        },
+        "headquartersCountry": {
+          "disposition": "accepted",
+          "value": "US"
+        },
+        "buyingIntent": {
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2025-01-01T12:00:00Z"
+            }
+          ]
+        }
+      },
+      "classification": "nurture",
+      "score": 70,
+      "disqualifiers": []
+    },
+    {
+      "id": "missing-workforce",
+      "identity": {
+        "status": "resolved",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "accepted",
+          "value": "b2b_saas"
+        },
+        "employeeCount": {
+          "disposition": "missing",
+          "value": null
+        },
+        "headquartersCountry": {
+          "disposition": "accepted",
+          "value": "US"
+        },
+        "buyingIntent": {
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ]
+        }
+      },
+      "classification": "needs_review",
+      "score": 75,
+      "disqualifiers": []
+    },
+    {
+      "id": "crossing-boundary",
+      "identity": {
+        "status": "resolved",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "accepted",
+          "value": "b2b_saas"
+        },
+        "employeeCount": {
+          "disposition": "accepted",
+          "value": {
+            "min": 19,
+            "max": 20
+          }
+        },
+        "headquartersCountry": {
+          "disposition": "accepted",
+          "value": "US"
+        },
+        "buyingIntent": {
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ]
+        }
+      },
+      "classification": "needs_review",
+      "score": 75,
+      "disqualifiers": []
+    },
+    {
+      "id": "conflicting-workforce",
+      "identity": {
+        "status": "resolved",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "accepted",
+          "value": "b2b_saas"
+        },
+        "employeeCount": {
+          "disposition": "conflicting",
+          "value": null
+        },
+        "headquartersCountry": {
+          "disposition": "accepted",
+          "value": "US"
+        },
+        "buyingIntent": {
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ]
+        }
+      },
+      "classification": "needs_review",
+      "score": 75,
+      "disqualifiers": []
+    },
+    {
+      "id": "unsupported-workforce",
+      "identity": {
+        "status": "resolved",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "accepted",
+          "value": "b2b_saas"
+        },
+        "employeeCount": {
+          "disposition": "unsupported",
+          "value": null
+        },
+        "headquartersCountry": {
+          "disposition": "accepted",
+          "value": "US"
+        },
+        "buyingIntent": {
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ]
+        }
+      },
+      "classification": "needs_review",
+      "score": 75,
+      "disqualifiers": []
+    },
+    {
+      "id": "ambiguous-company",
+      "identity": {
+        "status": "ambiguous",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "accepted",
+          "value": "b2b_saas"
+        },
+        "employeeCount": {
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          }
+        },
+        "headquartersCountry": {
+          "disposition": "accepted",
+          "value": "US"
+        },
+        "buyingIntent": {
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ]
+        }
+      },
+      "classification": "needs_review",
+      "score": 0,
+      "disqualifiers": []
+    },
+    {
+      "id": "email-candidate",
+      "identity": {
+        "status": "ambiguous",
+        "domain": null
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "missing",
+          "value": null
+        },
+        "employeeCount": {
+          "disposition": "missing",
+          "value": null
+        },
+        "headquartersCountry": {
+          "disposition": "missing",
+          "value": null
+        },
+        "buyingIntent": {
+          "disposition": "missing",
+          "value": null
+        }
+      },
+      "classification": "needs_review",
+      "score": 0,
+      "disqualifiers": []
+    },
+    {
+      "id": "unresolved-crm",
+      "identity": {
+        "status": "unresolved",
+        "domain": null
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "missing",
+          "value": null
+        },
+        "employeeCount": {
+          "disposition": "missing",
+          "value": null
+        },
+        "headquartersCountry": {
+          "disposition": "missing",
+          "value": null
+        },
+        "buyingIntent": {
+          "disposition": "missing",
+          "value": null
+        }
+      },
+      "classification": "needs_review",
+      "score": 0,
+      "disqualifiers": []
+    },
+    {
+      "id": "lower-only",
+      "identity": {
+        "status": "resolved",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "accepted",
+          "value": "b2b_saas"
+        },
+        "employeeCount": {
+          "disposition": "accepted",
+          "value": {
+            "min": 150,
+            "max": null
+          }
+        },
+        "headquartersCountry": {
+          "disposition": "accepted",
+          "value": "US"
+        },
+        "buyingIntent": {
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ]
+        }
+      },
+      "classification": "needs_review",
+      "score": 75,
+      "disqualifiers": []
+    },
+    {
+      "id": "inferred-workforce",
+      "identity": {
+        "status": "resolved",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "accepted",
+          "value": "b2b_saas"
+        },
+        "employeeCount": {
+          "disposition": "accepted",
+          "value": {
+            "min": 150,
+            "max": 300
+          }
+        },
+        "headquartersCountry": {
+          "disposition": "accepted",
+          "value": "US"
+        },
+        "buyingIntent": {
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ]
+        }
+      },
+      "classification": "qualified",
+      "score": 100,
+      "disqualifiers": []
+    },
+    {
+      "id": "missing-business",
+      "identity": {
+        "status": "resolved",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "missing",
+          "value": null
+        },
+        "employeeCount": {
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          }
+        },
+        "headquartersCountry": {
+          "disposition": "accepted",
+          "value": "US"
+        },
+        "buyingIntent": {
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ]
+        }
+      },
+      "classification": "needs_review",
+      "score": 70,
+      "disqualifiers": []
+    },
+    {
+      "id": "missing-headquarters",
+      "identity": {
+        "status": "resolved",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "accepted",
+          "value": "b2b_saas"
+        },
+        "employeeCount": {
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          }
+        },
+        "headquartersCountry": {
+          "disposition": "missing",
+          "value": null
+        },
+        "buyingIntent": {
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ]
+        }
+      },
+      "classification": "needs_review",
+      "score": 85,
+      "disqualifiers": []
+    },
+    {
+      "id": "missing-intent",
+      "identity": {
+        "status": "resolved",
+        "domain": "example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "disposition": "accepted",
+          "value": "b2b_saas"
+        },
+        "employeeCount": {
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          }
+        },
+        "headquartersCountry": {
+          "disposition": "accepted",
+          "value": "US"
+        },
+        "buyingIntent": {
+          "disposition": "missing",
+          "value": null
+        }
+      },
+      "classification": "needs_review",
+      "score": 70,
+      "disqualifiers": []
+    }
+  ],
+  "profilesDigest": "82cece538638f9efcd95a6efe9dc218febb0d0015e5276711ea1ec7fe2e78ea2"
+}

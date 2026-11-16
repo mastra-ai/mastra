@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
-import { renderRouteTypesFileContent, type RouteDefinition } from '../../../../scripts/generate-route-types';
+import { renderRouteTypesFileContent } from '../../../../scripts/generate-route-types';
+import type { RouteDefinition } from '../../../../scripts/generate-route-types';
 
 function renderFixtureRoutes(routes: readonly RouteDefinition[]): string {
   return renderRouteTypesFileContent(routes);

@@ -69,6 +69,30 @@ describe('StoreMemoryLance error propagation (no empty-on-error)', () => {
   });
 });
 
+describe('StoreMemoryLance id lookups', () => {
+  const memory = new StoreMemoryLance({ client: testClient });
+
+  beforeEach(async () => {
+    await memory.init();
+    await memory.dangerouslyClearAll();
+  });
+
+  it('treats quotes in an id as part of the value, not SQL', async () => {
+    const now = new Date();
+    await memory.saveThread({
+      thread: { id: 'thread-a', resourceId: 'resource-a', title: 'A', metadata: {}, createdAt: now, updatedAt: now },
+    });
+
+    await expect(memory.getThreadById({ threadId: "nope' OR id != '" })).resolves.toBeNull();
+
+    const quotedId = "it's-a-thread";
+    await memory.saveThread({
+      thread: { id: quotedId, resourceId: 'resource-a', title: 'Quoted', metadata: {}, createdAt: now, updatedAt: now },
+    });
+    await expect(memory.getThreadById({ threadId: quotedId })).resolves.toMatchObject({ id: quotedId });
+  });
+});
+
 describe('StoreMemoryLance write integrity', () => {
   const memory = new StoreMemoryLance({ client: testClient });
 

@@ -305,10 +305,9 @@ export function hydrateProcessorGraph(
     if (mode === 'input') {
       const filtered = processors.filter(p => p.processInput || p.processInputStep);
       return filtered.length > 0 ? (filtered as InputProcessorOrWorkflow[]) : undefined;
-    } else {
-      const filtered = processors.filter(p => p.processOutputStream || p.processOutputResult || p.processOutputStep);
-      return filtered.length > 0 ? (filtered as OutputProcessorOrWorkflow[]) : undefined;
     }
+    const filtered = processors.filter(p => p.processOutputStream || p.processOutputResult || p.processOutputStep);
+    return filtered.length > 0 ? (filtered as OutputProcessorOrWorkflow[]) : undefined;
   }
 
   // Complex graph: build a workflow

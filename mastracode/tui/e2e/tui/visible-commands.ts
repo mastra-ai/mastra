@@ -24,7 +24,7 @@ export const visibleCommandsScenario: McE2eScenario = {
     await runtime.waitForScreenText(/\/rename\s+Alias for \/name/i, terminal);
     await runtime.waitForScreenText(/\/api-keys/i, terminal);
     await runtime.waitForScreenText(/Ctrl\+Z|Suspend process/i, terminal);
-    await runtime.waitForScreenTextAbsent(/\/knowledge\s+Browse scoped Subconscious knowledge/i, terminal);
+    await runtime.waitForScreenTextAbsent(/\/knowledge\s+Browse scoped knowledge/i, terminal);
     runtime.printScreen('after /help', terminal);
 
     terminal.submit('/knowledge');

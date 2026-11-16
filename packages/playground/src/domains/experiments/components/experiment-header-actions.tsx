@@ -1,7 +1,9 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { MoreVertical, Pencil, Trash2 } from 'lucide-react';
+import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 import { useState } from 'react';
 import { RenameExperimentDialog } from '@/domains/experiments/components/rename-experiment-dialog';
 import { RerunExperimentButton } from '@/domains/experiments/components/rerun-experiment-button';
@@ -27,18 +29,18 @@ export function ExperimentHeaderActions({ experiment, onDeleteClick }: Experimen
         <DropdownMenu>
           <DropdownMenu.Trigger asChild>
             <Button variant="ghost" size="icon-sm" aria-label="Experiment actions menu">
-              <MoreVertical />
+              <IconDotGrid1x3Vertical />
             </Button>
           </DropdownMenu.Trigger>
           <DropdownMenu.Content align="end" className="w-48">
             {canRename && (
               <DropdownMenu.Item onSelect={() => setRenameOpen(true)}>
-                <Pencil /> Rename Experiment
+                <IconPencil /> Rename experiment
               </DropdownMenu.Item>
             )}
             {onDeleteClick && (
               <DropdownMenu.Item onSelect={onDeleteClick} variant="destructive">
-                <Trash2 /> Delete Experiment
+                <TrashIcon /> Delete experiment
               </DropdownMenu.Item>
             )}
           </DropdownMenu.Content>

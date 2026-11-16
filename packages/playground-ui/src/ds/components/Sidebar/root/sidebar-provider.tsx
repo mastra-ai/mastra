@@ -1,11 +1,8 @@
 import React from 'react';
 import type { CSSProperties } from 'react';
-import {
-  SidebarContext,
-  MobileDrawerContext,
-  type MobileDrawerContextValue,
-  type SidebarState,
-} from './sidebar-context';
+import { SidebarContext, MobileDrawerContext } from './sidebar-context';
+import type { MobileDrawerContextValue, SidebarState } from './sidebar-context';
+import { SIDEBAR_WIDTHS } from './sidebar-widths';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 const SIDEBAR_STATE_KEY = 'sidebar:state';
@@ -27,15 +24,15 @@ export type SidebarProviderProps = {
   children: React.ReactNode;
   /** Initial state before localStorage hydrates. Defaults to `'default'`. */
   defaultState?: SidebarState;
-  /** Default expanded width in px. Defaults to `240`. */
+  /** Default expanded width in px. Defaults to `232`. */
   defaultWidth?: number;
-  /** Minimum draggable width in px. Defaults to `200`. */
+  /** Minimum draggable width in px. Defaults to `192`. Raise it for a view that needs more room. */
   minWidth?: number;
-  /** Maximum draggable width in px. Defaults to `480`. */
+  /** Maximum draggable width in px. Defaults to `340`. */
   maxWidth?: number;
   /** Drag below this value snaps the sidebar closed. Defaults to `minWidth` (snap to collapsed when dragged below the expanded minimum). Pass `0` to disable snap. */
   collapseBelow?: number;
-  /** Width in px when collapsed. Defaults to `64`. Set to `0` for fully hidden. */
+  /** Width in px when collapsed. Defaults to `60`. Set to `0` for fully hidden. */
   collapsedWidth?: number;
   /** Disable the global ⌘B / Ctrl+B toggle shortcut. Defaults to `true` so browser shortcuts are preserved. */
   disableKeyboardShortcut?: boolean;
@@ -56,11 +53,11 @@ const useIsoLayoutEffect = typeof window !== 'undefined' ? React.useLayoutEffect
 export function SidebarProvider({
   children,
   defaultState = 'default',
-  defaultWidth = 240,
-  minWidth = 200,
-  maxWidth = 480,
+  defaultWidth = SIDEBAR_WIDTHS.default,
+  minWidth = SIDEBAR_WIDTHS.min,
+  maxWidth = SIDEBAR_WIDTHS.max,
   collapseBelow,
-  collapsedWidth = 64,
+  collapsedWidth = SIDEBAR_WIDTHS.collapsed,
   disableKeyboardShortcut = true,
   storageKey,
   mobileBreakpoint = 1024,
@@ -70,28 +67,28 @@ export function SidebarProvider({
   const safeMin = Math.max(0, Math.min(minWidth, maxWidth));
   const safeMax = Math.max(safeMin, maxWidth);
   const safeCollapsed = Math.max(0, Math.min(collapsedWidth, safeMax));
-  const safeDefault = clamp(defaultWidth, safeMin, safeMax);
   const safeCollapseBelow = collapseBelow ?? safeMin;
 
   const stateStorageKey = storageKey ? `${storageKey}:${SIDEBAR_STATE_KEY}` : SIDEBAR_STATE_KEY;
   const widthStorageKey = storageKey ? `${storageKey}:${SIDEBAR_WIDTH_KEY}` : SIDEBAR_WIDTH_KEY;
 
-  // Read storage during render so the first paint already has the stored width.
+  // Read storage during render so the first paint already has the stored width. The width is kept as stored and only
+  // clamped where it shows: a view that opens with raised bounds must not replace the width the user chose.
   const readInitial = (): InitialSidebarState => {
-    if (typeof window === 'undefined') return { state: defaultState, width: safeDefault };
+    if (typeof window === 'undefined') return { state: defaultState, width: defaultWidth };
     try {
       let nextState: SidebarState = defaultState;
-      let nextWidth = safeDefault;
+      let nextWidth = defaultWidth;
       const storedState = window.localStorage.getItem(stateStorageKey);
       if (storedState === 'collapsed' || storedState === 'default') nextState = storedState;
       const storedWidth = window.localStorage.getItem(widthStorageKey);
       if (storedWidth !== null) {
         const parsed = Number(storedWidth);
-        if (Number.isFinite(parsed)) nextWidth = clamp(parsed, safeMin, safeMax);
+        if (Number.isFinite(parsed)) nextWidth = parsed;
       }
       return { state: nextState, width: nextWidth };
     } catch {
-      return { state: defaultState, width: safeDefault };
+      return { state: defaultState, width: defaultWidth };
     }
   };
   const initialRef = React.useRef<InitialSidebarState | null>(null);
@@ -110,6 +107,7 @@ export function SidebarProvider({
   stateRef.current = state;
 
   const scopeRef = React.useRef<HTMLDivElement | null>(null);
+  const panelRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -133,14 +131,17 @@ export function SidebarProvider({
     }
   }, [isMobile, openMobile, setOpenMobile]);
 
+  // The live width goes on the panel, not the scope: a variable changed on the scope restyles the whole app.
   const writeCssVar = React.useCallback((px: number) => {
-    const el = scopeRef.current;
-    if (el) el.style.setProperty(SIDEBAR_WIDTH_VAR, `${px}px`);
+    panelRef.current?.style.setProperty(SIDEBAR_WIDTH_VAR, `${px}px`);
   }, []);
 
+  // Bounds can change at runtime (a view that needs more room raises `minWidth`). Show the stored
+  // width within the current bounds without overwriting it, so the sidebar returns to the user's
+  // width once the bounds relax.
   useIsoLayoutEffect(() => {
-    writeCssVar(state === 'collapsed' ? safeCollapsed : widthRef.current);
-  }, [state, safeCollapsed, writeCssVar]);
+    writeCssVar(state === 'collapsed' ? safeCollapsed : clamp(widthRef.current, safeMin, safeMax));
+  }, [state, safeCollapsed, safeMin, safeMax, writeCssVar]);
 
   const persistState = React.useCallback(
     (next: SidebarState) => {
@@ -220,12 +221,13 @@ export function SidebarProvider({
   }, [disableKeyboardShortcut, toggleSidebar]);
 
   const effectiveState: SidebarState = isMobile ? 'default' : state;
+  const visibleWidth = clamp(width, safeMin, safeMax);
 
   const contextValue = React.useMemo(
     () => ({
       state: effectiveState,
       desktopState: state,
-      width,
+      width: visibleWidth,
       minWidth: safeMin,
       maxWidth: safeMax,
       collapseBelow: safeCollapseBelow,
@@ -237,12 +239,14 @@ export function SidebarProvider({
       expand,
       commit,
       setGestureActive,
+      scopeRef,
+      panelRef,
       LinkComponent,
     }),
     [
       effectiveState,
       state,
-      width,
+      visibleWidth,
       safeMin,
       safeMax,
       safeCollapseBelow,
@@ -264,7 +268,7 @@ export function SidebarProvider({
   );
 
   const scopeStyle: SidebarScopeStyle = {
-    [SIDEBAR_WIDTH_VAR]: `${initial.state === 'collapsed' ? safeCollapsed : initial.width}px`,
+    [SIDEBAR_WIDTH_VAR]: `${initial.state === 'collapsed' ? safeCollapsed : clamp(initial.width, safeMin, safeMax)}px`,
     '--sidebar-width-mobile': `${mobileWidth}px`,
     display: 'contents',
   };
@@ -275,6 +279,7 @@ export function SidebarProvider({
       data-sidebar-scope
       data-sidebar-state={state}
       data-sidebar-mobile={isMobile ? 'true' : 'false'}
+      data-sidebar-mobile-open={openMobile ? 'true' : 'false'}
       data-sidebar-mobile-present={mobileDrawerPresent ? 'true' : 'false'}
       style={scopeStyle}
       suppressHydrationWarning

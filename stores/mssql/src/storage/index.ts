@@ -262,12 +262,8 @@ export class MSSQLStore extends MastraCompositeStore {
   }
 
   private async _performInitializationAndStore(): Promise<boolean> {
-    try {
-      await this.pool.connect();
-      return true;
-    } catch (err) {
-      throw err;
-    }
+    await this.pool.connect();
+    return true;
   }
 
   /**

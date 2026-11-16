@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Icon, type IconSize } from './Icon';
+import * as centralIconModules from './central';
+import { Icon } from './Icon';
+import type { IconSize } from './Icon';
 import {
   AgentIcon,
   AgentCoinIcon,
@@ -7,18 +9,31 @@ import {
   AiIcon,
   ApiIcon,
   BranchIcon,
+  ByteDanceIcon,
+  CohereBrandIcon,
+  FireworksIcon,
+  LongCatIcon,
+  MorphIcon,
+  NousResearchIcon,
+  NovaIcon,
+  PerplexityIcon,
+  StepFunIcon,
+  UpstageIcon,
   CheckIcon,
+  ClaudeIcon,
   ChevronIcon,
   CommitIcon,
   CrossIcon,
   DbIcon,
   DebugIcon,
+  DeepSeekIcon,
   DeploymentIcon,
   DividerIcon,
   DocsIcon,
   EnvIcon,
   FiltersIcon,
   FolderIcon,
+  GeminiIcon,
   GithubCoinIcon,
   GithubIcon,
   GoogleIcon,
@@ -29,20 +44,45 @@ import {
   LogsIcon,
   McpCoinIcon,
   McpServerIcon,
+  MetaIcon,
+  MicrosoftIcon,
   MemoryIcon,
+  MinimaxIcon,
+  MistralIcon,
+  MoonshotIcon,
+  NvidiaIcon,
   OpenAIIcon,
+  OpenRouterIcon,
   PromptIcon,
+  QwenIcon,
   RepoIcon,
+  SakanaIcon,
   SettingsIcon,
   SlashIcon,
+  TencentIcon,
   ToolCoinIcon,
   ToolsIcon,
   TraceIcon,
   TsIcon,
+  TypesafeIcon,
   VariablesIcon,
   WorkflowCoinIcon,
   WorkflowIcon,
+  XaiIcon,
+  ZaiIcon,
 } from './index';
+import { Button } from '@/ds/components/Button';
+import { IconBell2 } from '@/ds/icons/central/IconBell2';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
+import { IconPencil } from '@/ds/icons/central/IconPencil';
+import { IconPlay } from '@/ds/icons/central/IconPlay';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import { Sizes } from '@/ds/tokens/sizes';
 
 const meta: Meta<typeof Icon> = {
@@ -55,6 +95,23 @@ const meta: Meta<typeof Icon> = {
 
 export default meta;
 type Story = StoryObj<typeof Icon>;
+
+const centralIcons = Object.entries(centralIconModules);
+
+export const CentralIcons: Story = {
+  render: () => (
+    <div className="grid w-200 grid-cols-4 gap-4">
+      {centralIcons.map(([name, CentralIcon]) => (
+        <div key={name} className="flex min-w-0 flex-col items-center gap-2 rounded-lg bg-card p-3">
+          <Icon size="lg" className="text-foreground">
+            <CentralIcon />
+          </Icon>
+          <span className="max-w-full truncate text-caption text-muted-foreground">{name.replace(/^Icon/, '')}</span>
+        </div>
+      ))}
+    </div>
+  ),
+};
 
 const icons = [
   { name: 'AgentIcon', component: AgentIcon },
@@ -103,7 +160,7 @@ const icons = [
 const IconGrid = ({ size = 'md' }: { size?: IconSize }) => (
   <div className="grid grid-cols-6 gap-4">
     {icons.map(({ name, component: IconComponent }) => (
-      <div key={name} className="state-layer flex flex-col items-center gap-2 rounded-lg bg-card p-3">
+      <div key={name} className="flex flex-col items-center gap-2 rounded-lg bg-card state-layer p-3">
         <Icon size={size} className="text-foreground">
           <IconComponent />
         </Icon>
@@ -242,32 +299,118 @@ export const ToolIcons: Story = {
   ),
 };
 
+const brandIcons = [
+  { name: 'Github', component: GithubIcon },
+  { name: 'GithubCoin', component: GithubCoinIcon },
+  { name: 'Google', component: GoogleIcon },
+  { name: 'OpenAI', component: OpenAIIcon },
+  { name: 'Claude', component: ClaudeIcon },
+  { name: 'Gemini', component: GeminiIcon },
+  { name: 'DeepSeek', component: DeepSeekIcon },
+  { name: 'OpenRouter', component: OpenRouterIcon },
+  { name: 'Qwen', component: QwenIcon },
+  { name: 'Mistral', component: MistralIcon },
+  { name: 'Z.ai', component: ZaiIcon },
+  { name: 'NVIDIA', component: NvidiaIcon },
+  { name: 'MiniMax', component: MinimaxIcon },
+  { name: 'Meta', component: MetaIcon },
+  { name: 'Moonshot', component: MoonshotIcon },
+  { name: 'xAI', component: XaiIcon },
+  { name: 'Typesafe', component: TypesafeIcon },
+  { name: 'Tencent', component: TencentIcon },
+  { name: 'ByteDance', component: ByteDanceIcon },
+  { name: 'Sakana', component: SakanaIcon },
+  { name: 'Microsoft', component: MicrosoftIcon },
+  { name: 'Cohere', component: CohereBrandIcon },
+  { name: 'Fireworks', component: FireworksIcon },
+  { name: 'LongCat', component: LongCatIcon },
+  { name: 'Morph', component: MorphIcon },
+  { name: 'Nova', component: NovaIcon },
+  { name: 'Nous Research', component: NousResearchIcon },
+  { name: 'Perplexity', component: PerplexityIcon },
+  { name: 'StepFun', component: StepFunIcon },
+  { name: 'Upstage', component: UpstageIcon },
+];
+
 export const BrandIcons: Story = {
   render: () => (
-    <div className="flex gap-4">
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
-        <Icon size="lg" className="text-foreground">
-          <GithubIcon />
-        </Icon>
-        <span className="text-caption text-muted-foreground">Github</span>
+    <div className="grid w-200 grid-cols-6 gap-4">
+      {brandIcons.map(({ name, component: BrandIcon }) => (
+        <div key={name} className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
+          <Icon size="lg" className="text-foreground">
+            <BrandIcon />
+          </Icon>
+          <span className="text-caption text-muted-foreground">{name}</span>
+        </div>
+      ))}
+    </div>
+  ),
+};
+
+const strokeGlyphs = [
+  IconPlusMedium,
+  IconMagnifyingGlass,
+  IconSettingsGear1,
+  IconChevronBottom,
+  IconPencil,
+  IconSquareBehindSquare1,
+  IconCrossMedium,
+  IconCheckmark2Medium,
+  IconFolder1,
+  IconBell2,
+];
+
+// Every lucide icon draws its line from `--icon-stroke-width`, however it is sized.
+// Use this story for before/after shots of a stroke change.
+export const Stroke: Story = {
+  render: () => (
+    <div className="flex flex-col gap-6">
+      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
+        <div key={size} className="flex items-center gap-6">
+          <span className="w-16 text-caption text-muted-foreground">
+            {size} · {Sizes[`icon-${size}`]}
+          </span>
+          {['text-foreground', 'text-muted-foreground'].map(tone => (
+            <div key={tone} className={`flex items-center gap-3 ${tone}`}>
+              {strokeGlyphs.map(Glyph => (
+                <Icon key={Glyph.displayName} size={size}>
+                  <Glyph />
+                </Icon>
+              ))}
+            </div>
+          ))}
+          <div className="flex items-center gap-3 text-foreground">
+            {centralIcons.map(([name, CentralIcon]) => (
+              <Icon key={name} size={size}>
+                <CentralIcon />
+              </Icon>
+            ))}
+          </div>
+        </div>
+      ))}
+      <div className="flex items-center gap-3">
+        <Button size="sm" icon={<IconPlusMedium />}>
+          Add header
+        </Button>
+        <Button size="md" icon={<IconPlusMedium />}>
+          Add header
+        </Button>
+        <Button size="lg" icon={<IconPlay />}>
+          Run
+        </Button>
+        <Button size="icon-md" tooltip="Copy">
+          <IconSquareBehindSquare1 />
+        </Button>
       </div>
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
-        <Icon size="lg" className="text-foreground">
-          <GithubCoinIcon />
-        </Icon>
-        <span className="text-caption text-muted-foreground">GithubCoin</span>
-      </div>
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
-        <Icon size="lg" className="text-foreground">
-          <GoogleIcon />
-        </Icon>
-        <span className="text-caption text-muted-foreground">Google</span>
-      </div>
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
-        <Icon size="lg" className="text-foreground">
-          <OpenAIIcon />
-        </Icon>
-        <span className="text-caption text-muted-foreground">OpenAI</span>
+      <div className="flex items-center gap-3 text-muted-foreground">
+        <span className="w-16 text-caption">Unwrapped</span>
+        <IconMagnifyingGlass className="size-3" />
+        <IconMagnifyingGlass className="size-3.5" />
+        <IconMagnifyingGlass className="size-4" />
+        <IconMagnifyingGlass className="size-5" />
+        <span className="flex items-center [&>svg]:size-3.5">
+          <IconFolder1 />
+        </span>
       </div>
     </div>
   ),

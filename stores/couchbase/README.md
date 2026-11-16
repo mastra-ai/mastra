@@ -27,7 +27,7 @@ const vectorStore = new CouchbaseVector({
 
 ## Documentation
 
-- [@mastra/couchbase documentation](https://mastra.ai/reference/vectors/couchbase)
+- [@mastra/couchbase documentation](https://mastra.ai/integrations/vectors/couchbase)
 
 ## Changelog
 

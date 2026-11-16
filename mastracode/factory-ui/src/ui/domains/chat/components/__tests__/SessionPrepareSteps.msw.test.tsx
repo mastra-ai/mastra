@@ -7,7 +7,8 @@ import { ChatThreadMessagesContext } from '../../context/ChatThreadMessagesConte
 import { SessionPrepareSteps } from '../SessionPrepareSteps';
 
 const BASE_SESSION: ChatSessionContextApi = {
-  resourceId: 'session-1',
+  sessionId: 'session-1',
+  resourceId: 'user-1',
   sessionEnabled: false,
   resourceReady: true,
   sandboxReady: false,

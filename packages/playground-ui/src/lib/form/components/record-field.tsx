@@ -1,9 +1,10 @@
 import type { AutoFormFieldProps } from '@autoform/react';
 import { v4 as uuid } from '@lukeed/uuid';
-import { Plus, TrashIcon } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/ds/components/Button';
 import { Input } from '@/ds/components/Input';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 
 interface KeyValuePair {
   id: string;
@@ -29,15 +30,12 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field })
 
   const updateForm = React.useCallback(
     (newPairs: KeyValuePair[]) => {
-      const newValue = newPairs.reduce(
-        (acc, pair) => {
-          if (pair.key) {
-            acc[pair.key] = pair.value;
-          }
-          return acc;
-        },
-        {} as Record<string, string>,
-      );
+      const newValue = newPairs.reduce<Record<string, string>>((acc, pair) => {
+        if (pair.key) {
+          acc[pair.key] = pair.value;
+        }
+        return acc;
+      }, {});
 
       onChange?.({
         target: { value: newValue, name: inputProps.name },
@@ -102,7 +100,14 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field })
           </Button>
         </div>
       ))}
-      <Button type="button" variant="ghost" size="sm" className="justify-self-start" onClick={addPair} icon={<Plus />}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="justify-self-start"
+        onClick={addPair}
+        icon={<IconPlusMedium />}
+      >
         Add pair
       </Button>
     </div>

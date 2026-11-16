@@ -2,6 +2,8 @@ import { tools } from '@mastra/connect';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 
+const agentModel = process.env.AGENT_MODEL?.trim() || 'mastra/openai/gpt-5.4';
+
 /**
  * Live tool resolver over your Mastra platform project's integration
  * connections: every integration attached to the project (Linear, Notion, …)
@@ -30,7 +32,7 @@ Every tool is named \`<integration>_<action>\` — for example \`linear_list_iss
 - **Prefer targeted queries.** Use search and filter parameters instead of listing everything and scanning.
 - **Cross-integration requests are your specialty.** "Turn this Notion doc into Linear issues", "summarize what changed this week across my tools" — chain reads from one integration into writes to another.
 - **Report what you did.** After a write, include identifiers and URLs returned by the tool so the user can jump straight to the result.`,
-  model: 'mastra/openai/gpt-5.4',
+  model: agentModel,
   defaultOptions: {
     maxSteps: 100,
   },

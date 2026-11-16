@@ -481,9 +481,12 @@ describe('MastraMCPClient allowedHosts policy', () => {
     await client.connect();
     await client.tools();
     expect(fetchSpy.mock.calls.length).toBeGreaterThan(0);
-    // No forced redirect mode leaks into the default path.
+    // No Mastra policy redirect handling leaks into the default path. Since
+    // @modelcontextprotocol/client 2.3.0 (GHSA-6prh-2h8m-c8cw) the SDK itself
+    // dispatches with `redirect: 'manual'` and only follows same-origin
+    // redirects, so 'manual' is the only mode the default path may carry.
     for (const [, init] of fetchSpy.mock.calls) {
-      expect(init?.redirect).toBeUndefined();
+      expect([undefined, 'manual']).toContain(init?.redirect);
     }
   }, 15000);
 
@@ -570,13 +573,14 @@ describe('MastraMCPClient allowedHosts policy', () => {
       server: { url: server.baseUrl, allowedHosts: [server.host], fetch: userFetch },
     });
 
-    // The policy error surfaces directly …
-    await expect(client.connect()).rejects.toThrow(/allowedHosts/);
+    // Since @modelcontextprotocol/client 2.3.0 (GHSA-6prh-2h8m-c8cw) the SDK
+    // calls the custom fetch with `redirect: 'manual'` and refuses cross-origin
+    // redirects itself, so the hop is rejected before it is sent: either the
+    // SDK's same-origin redirect error or the post-hoc allowedHosts check
+    // surfaces, and the disallowed host is never reached.
+    await expect(client.connect()).rejects.toThrow(/allowedHosts|Redirect to .* not followed/);
     expect(userFetch.mock.calls.length).toBeGreaterThan(0);
-    // … and post-hoc semantics: the outbound hop DID reach the disallowed host
-    // (documented limitation of the custom-fetch path) — exactly once, because
-    // a policy violation must not trigger a second connect attempt.
-    expect(decoy.requests.length).toBe(1);
+    expect(decoy.requests.length).toBe(0);
   }, 15000);
 
 });

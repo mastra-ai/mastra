@@ -1,7 +1,10 @@
 import { version } from '@mastra/core/package.json';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
+import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import {
   useTemplateRepo,
   useTemplateRepoEnvVars,
@@ -11,7 +14,6 @@ import {
   useGetTemplateInstallRun,
   useObserveStreamTemplateInstall,
 } from '@mastra/react/hooks/templates';
-import { BrainIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -24,7 +26,7 @@ import { TemplateSuccess } from '@/domains/templates/template-success';
 import { cn } from '@/lib/utils';
 
 export default function Template() {
-  const { templateSlug } = useParams()! as { templateSlug: string };
+  const { templateSlug } = useParams() as { templateSlug: string };
   const crumbs = [
     { id: 'templates', label: 'Templates', to: '/templates' },
     { id: 'template', label: decodeRouteParam(templateSlug) },
@@ -204,13 +206,13 @@ export default function Template() {
       key: 'providers',
       label: 'Providers',
       value: template?.supportedProviders?.length ? template.supportedProviders.join(', ') : 'n/a',
-      icon: <BrainIcon />,
+      icon: <IconBrain />,
     },
     {
       key: 'tags',
       label: 'Tags',
       value: template?.tags?.length ? template.tags.join(', ') : 'n/a',
-      icon: <TagIcon />,
+      icon: <IconTag />,
     },
   ];
 
@@ -256,12 +258,12 @@ export default function Template() {
   };
 
   const handleInstallTemplate = async () => {
-    const errors = Object.entries(variables).reduce((acc, [key, value]) => {
+    const errors = Object.entries(variables).reduce<string[]>((acc, [key, value]) => {
       if (value === '') {
         acc.push(key);
       }
       return acc;
-    }, [] as string[]);
+    }, []);
 
     if (errors.length > 0) {
       setErrors(errors);

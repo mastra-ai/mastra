@@ -7,7 +7,7 @@ description: "Browse CoralBricks model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/coralbricks.svg" alt="CoralBricks logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />CoralBricks
 
-Access 4 CoralBricks models through Mastra's model router. Authentication is handled automatically using the `CORAL_API_KEY` environment variable.
+Access 1 CoralBricks model through Mastra's model router. Authentication is handled automatically using the `CORAL_API_KEY` environment variable.
 
 Learn more in the [CoralBricks documentation](https://www.coralbricks.ai/docs).
 
@@ -53,45 +53,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 131072,
-    "inputCost": 0.01,
+    "maxOutput": 393216,
+    "inputCost": 0.25,
     "outputCost": 1.2
-  },
-  {
-    "model": "coralbricks/deepseek-v4.1-flash-fast-fp4",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 131072,
-    "inputCost": 0.01,
-    "outputCost": 1.2
-  },
-  {
-    "model": "coralbricks/glm-5.3-fast",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 131072,
-    "inputCost": 1.12,
-    "outputCost": 4.4
-  },
-  {
-    "model": "coralbricks/glm-5.3-fp4",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 131072,
-    "inputCost": 1.12,
-    "outputCost": 4.4
   }
 ]}
 />
@@ -103,6 +67,8 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -120,13 +86,15 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "coralbricks/glm-5.3-fp4"
+      ? "coralbricks/deepseek-v4.1-flash-fast"
       : "coralbricks/deepseek-v4.1-flash-fast";
   }
 });

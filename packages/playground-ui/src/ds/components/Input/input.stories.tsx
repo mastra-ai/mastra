@@ -36,7 +36,7 @@ type Story = StoryObj<typeof Input>;
 
 export const Default: Story = {
   args: {
-    placeholder: 'Enter text...',
+    placeholder: 'Enter text',
     variant: 'default',
   },
 };
@@ -138,6 +138,29 @@ export const Number: Story = {
   },
 };
 
+export const Time: Story = {
+  render: () => (
+    <div className="grid w-80 grid-cols-[auto_1fr] items-center gap-x-4 gap-y-3">
+      <Txt variant="caption" tone="muted">
+        Empty
+      </Txt>
+      <Input type="time" aria-label="Empty time" />
+      <Txt variant="caption" tone="muted">
+        Filled
+      </Txt>
+      <Input type="time" aria-label="Filled time" defaultValue="12:00" />
+      <Txt variant="caption" tone="muted">
+        Small, w-24
+      </Txt>
+      <Input type="time" size="sm" aria-label="Narrow time" defaultValue="00:00" className="w-24" />
+      <Txt variant="caption" tone="muted">
+        Disabled
+      </Txt>
+      <Input type="time" aria-label="Disabled time" defaultValue="12:00" disabled />
+    </div>
+  ),
+};
+
 export const SizesWithButton: Story = {
   render: () => (
     <div className="grid grid-cols-[200px_auto] items-center gap-3">
@@ -174,25 +197,25 @@ export const OnDifferentSurfaces: Story = {
         <Txt variant="caption" tone="muted" className="mb-2">
           Sidebar
         </Txt>
-        <Input aria-label="Search agents on the sidebar" placeholder="Search agents..." />
+        <Input aria-label="Search agents on the sidebar" placeholder="Search agents" />
       </div>
       <div className="rounded-lg border border-border bg-background p-4">
         <Txt variant="caption" tone="muted" className="mb-2">
           Main canvas
         </Txt>
-        <Input aria-label="Search agents on the main canvas" placeholder="Search agents..." />
+        <Input aria-label="Search agents on the main canvas" placeholder="Search agents" />
       </div>
       <div className={`${raisedSurfaceStyle} rounded-lg p-4`}>
         <Txt variant="caption" tone="muted" className="mb-2">
           Card
         </Txt>
-        <Input aria-label="Search agents on a card" placeholder="Search agents..." />
+        <Input aria-label="Search agents on a card" placeholder="Search agents" />
       </div>
       <div className="rounded-lg border border-border bg-popover p-4">
         <Txt variant="caption" tone="muted" className="mb-2">
           Popover
         </Txt>
-        <Input aria-label="Search agents in a popover" placeholder="Search agents..." />
+        <Input aria-label="Search agents in a popover" placeholder="Search agents" />
       </div>
     </div>
   ),

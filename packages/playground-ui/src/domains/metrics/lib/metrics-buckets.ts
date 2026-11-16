@@ -36,18 +36,22 @@ export function bucketPlan(start: Date, end: Date): BucketPlan {
 /** Hours per bucket of the API's own interval: the latency chart keeps these. */
 export const intervalHours = (interval: ApiInterval) => (interval === '1h' ? 1 : 24);
 
-/** The start of the local bucket holding `ms`: whole local hours, step-aligned from midnight. */
+/**
+ * The start of the bucket holding `ms`. Sub-day buckets are whole local hours, step-aligned from
+ * local midnight. Daily buckets are UTC days, because the API's `1d` buckets start at UTC
+ * midnight and can't be re-cut into local days.
+ */
 export function bucketStart(ms: number, stepHours: number) {
+  if (stepHours >= 24) return Math.floor(ms / DAY) * DAY;
   const d = new Date(ms);
-  if (stepHours >= 24) return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const hour = Math.floor(d.getHours() / stepHours) * stepHours;
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), hour).getTime();
 }
 
-/** The next bucket's start, stepping in local time so a DST change doesn't drift the grid. */
+/** The next bucket's start. Sub-day buckets step in local time so a DST change doesn't drift the grid. */
 export function nextBucket(ms: number, stepHours: number) {
+  if (stepHours >= 24) return bucketStart(ms, stepHours) + DAY;
   const d = new Date(ms);
-  if (stepHours >= 24) return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
   return bucketStart(
     new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours() + stepHours).getTime(),
     stepHours,

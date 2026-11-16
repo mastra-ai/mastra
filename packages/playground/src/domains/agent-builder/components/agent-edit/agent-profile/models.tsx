@@ -1,9 +1,11 @@
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ProviderLogo, cleanProviderId } from '@mastra/playground-ui/domains/llm';
+import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
+import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { LockIcon, TriangleAlertIcon } from 'lucide-react';
+import { compareModelReleaseDates } from '@mastra/playground-ui/utils/model';
 import { useMemo, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
@@ -143,7 +145,7 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
             size="md"
             className="max-w-[30ch] shrink-0"
             data-testid="model-card-picker-search"
-            placeholder="Search models or providers..."
+            placeholder="Search models or providers"
             value={search}
             onValueChange={setSearch}
           />
@@ -245,7 +247,7 @@ const StaleWarning = ({ provider, modelId }: StaleWarningProps) => {
       data-testid="model-detail-stale-warning"
       role="alert"
     >
-      <TriangleAlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
+      <IconExclamationTriangle className="mt-0.5 h-4 w-4 shrink-0" />
       <Txt variant="meta">
         <Txt as="span" variant="meta">
           {provider}/{modelId}
@@ -266,7 +268,7 @@ const LockedModelChip = ({ provider, modelId }: LockedModelChipProps) => (
     className={cn(raisedSurfaceStyle, 'flex items-center gap-2 rounded-md px-3 py-2')}
     data-testid="model-detail-locked-chip"
   >
-    <LockIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+    <IconLock className="h-4 w-4 shrink-0 text-muted-foreground" />
     <Txt variant="column" tone="ink" className="truncate">
       {provider && modelId ? `${provider}/${modelId}` : 'Locked by admin'}
     </Txt>
@@ -306,7 +308,9 @@ function groupModelsByProvider(
   }
 
   for (const group of groupsById.values()) {
-    group.models.sort((a, b) => a.model.localeCompare(b.model));
+    group.models.sort(
+      (a, b) => compareModelReleaseDates(a.releaseDate, b.releaseDate) || a.model.localeCompare(b.model),
+    );
   }
 
   return Array.from(groupsById.values()).sort((a, b) => {

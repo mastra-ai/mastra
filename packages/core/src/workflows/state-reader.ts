@@ -61,12 +61,12 @@ export function getWorkflowResumeLabel(state: WorkflowState, label: string) {
 }
 
 export function getWorkflowResumeLabels(state: WorkflowState): Record<string, WorkflowResumeLabel> {
-  return Object.entries(state.resumeLabels ?? {}).reduce(
+  return Object.entries(state.resumeLabels ?? {}).reduce<Record<string, WorkflowResumeLabel>>(
     (labels, [label, value]) => {
       labels[label] = { ...value };
       return labels;
     },
-    {} as Record<string, WorkflowResumeLabel>,
+    {},
   );
 }
 
@@ -76,14 +76,14 @@ export function getWorkflowSuspendedSteps(state: WorkflowState): WorkflowSuspend
     const firstStepResult = getFirstStepResult(step);
     const nestedPath = getNestedSuspendPath(step);
     const path = nestedPath.length > 0 ? (nestedPath[0] === stepId ? nestedPath : [stepId, ...nestedPath]) : [stepId];
-    const resumeLabels = Object.entries(state.resumeLabels ?? {}).reduce(
+    const resumeLabels = Object.entries(state.resumeLabels ?? {}).reduce<Record<string, WorkflowResumeLabel>>(
       (labels, [label, value]) => {
         if (value.stepId === stepId) {
           labels[label] = { ...value };
         }
         return labels;
       },
-      {} as Record<string, WorkflowResumeLabel>,
+      {},
     );
 
     return {

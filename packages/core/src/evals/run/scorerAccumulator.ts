@@ -153,8 +153,7 @@ export class ScoreAccumulator {
   private getAverageScore(scoreArray: number[]): number {
     if (scoreArray.length > 0) {
       return scoreArray.reduce((a, b) => a + b, 0) / scoreArray.length;
-    } else {
-      return 0;
     }
+    return 0;
   }
 }

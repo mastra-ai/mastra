@@ -17,51 +17,38 @@ export interface CardMorph {
   mounted: boolean;
   openDetails: () => void;
   closeDetails: () => void;
+  toggleDetails: () => void;
 }
 
-/**
- * The size the panel grows out of, read off the live card rather than stored at open time.
- * A list row spans the page, so the panel starts from a reading width instead: stretched to the row,
- * its few lines sat at opposite edges of a mostly empty box.
- */
+/** The size the panel grows out of, read off the live card rather than stored at open time. */
 export function cardMorphStyle(card: HTMLElement | null): CardMorphStyle {
   const rect = card?.getBoundingClientRect();
   if (!rect) return {};
-  return { '--board-card-w': `min(${rect.width}px, 36rem)`, '--board-card-h': `${rect.height}px` };
+  return { '--board-card-w': `${rect.width}px`, '--board-card-h': `${rect.height}px` };
 }
 
-/**
- * `openFor` is the deep link the card is the target of: a link decides the panel
- * is open, a click or a dismissal overrides it until the next link arrives.
- * The popover root mounts on the first open and stays, so the collapse still has something to run on.
- */
-export function useCardMorph({ openFor }: { openFor?: string } = {}): CardMorph {
+/** The popover root mounts on the first open and stays, so the collapse still has something to run on. */
+export function useCardMorph(): CardMorph {
   const cardRef = useRef<HTMLElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const setCardElement = (element: HTMLElement | null) => {
     cardRef.current = element;
   };
-  const [choice, setChoice] = useState<{ openFor?: string; open: boolean }>();
-  const setRowDetailsOpen = useBoardRowDetails();
-  const [closedBefore, setClosedBefore] = useState(false);
+  const { open, setOpen } = useBoardRowDetails();
+  const [openedBefore, setOpenedBefore] = useState(open);
+  if (open && !openedBefore) setOpenedBefore(true);
 
-  const chosen = choice?.openFor === openFor ? choice : undefined;
-  const open = chosen?.open ?? openFor !== undefined;
+  const openDetails = () => setOpen(true);
+  const closeDetails = () => setOpen(false);
 
   return {
     cardRef,
     setCardElement,
     panelRef,
     open,
-    mounted: open || closedBefore,
-    openDetails: () => {
-      setChoice({ openFor, open: true });
-      setRowDetailsOpen(true);
-    },
-    closeDetails: () => {
-      setClosedBefore(true);
-      setChoice({ openFor, open: false });
-      setRowDetailsOpen(false);
-    },
+    mounted: openedBefore,
+    openDetails,
+    closeDetails,
+    toggleDetails: open ? closeDetails : openDetails,
   };
 }

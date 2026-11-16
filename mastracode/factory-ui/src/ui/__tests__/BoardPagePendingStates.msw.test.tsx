@@ -5,15 +5,14 @@ import { delay, http, HttpResponse } from 'msw';
 import { createMemoryRouter, matchRoutes, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { GithubIssue } from '../domains/factory/services/factory';
-import type { IncidentioIssue } from '../domains/factory/services/incidentio';
-import type { JiraIssue } from '../domains/factory/services/jira';
-import type { LinearIssue } from '../domains/factory/services/linear';
 import { useStartFactoryRun } from '../../hooks/useStartFactoryRun';
 import { createAppRoutes } from '../router';
 import { saveKanbanView } from './boardLayoutQueries';
+import { providerFactsCard } from './fixtures/providerFactsCard';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
@@ -26,6 +25,7 @@ const workItem = {
   orgId: 'org-1',
   createdBy: 'user-1',
   githubProjectId: FACTORY_ID,
+  factoryProjectId: FACTORY_ID,
   source: 'github-issue',
   sourceKey: 'github-issue:1',
   parentWorkItemId: null,
@@ -81,7 +81,7 @@ const manualWorkItem = {
   updatedAt: '2026-07-28T00:00:00.000Z',
 };
 
-const jiraIssue: JiraIssue = {
+const jiraIssue = {
   id: 'jira-issue-acme-eng-42',
   identifier: 'ENG-42',
   title: 'Fix Jira intake sync',
@@ -99,7 +99,7 @@ const jiraIssue: JiraIssue = {
   sourceId: '10001',
 };
 
-const incidentioIssue: IncidentioIssue = {
+const incidentioIssue = {
   id: 'incidentio:follow-up:01J0FOLLOWUP42',
   identifier: 'FU-42',
   title: 'Add retry to incident pager',
@@ -151,22 +151,12 @@ function stubBoardEndpoints() {
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
           },
         ],
       }),
@@ -243,7 +233,7 @@ function renderWorkBoard() {
   };
 }
 
-function stubJiraCandidate() {
+function stubJiraSource() {
   server.use(
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({
@@ -269,11 +259,10 @@ function stubJiraCandidate() {
         reason: 'ready',
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/jira/issues`, () => HttpResponse.json({ issues: [jiraIssue], nextCursor: null })),
   );
 }
 
-function stubIncidentioCandidate() {
+function stubIncidentioSource() {
   server.use(
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({
@@ -299,108 +288,16 @@ function stubIncidentioCandidate() {
     http.get(`${TEST_BASE_URL}/web/incidentio/status`, () =>
       HttpResponse.json({ enabled: true, configured: true, reason: 'ready' }),
     ),
-    http.get(`${TEST_BASE_URL}/web/incidentio/issues`, () =>
-      HttpResponse.json({ issues: [incidentioIssue], nextCursor: null }),
-    ),
   );
 }
 
+async function expectTooltipParts(parts: string[]) {
+  const tooltip = await screen.findByRole('tooltip');
+  for (const part of parts) expect(within(tooltip).getByText(part)).toBeVisible();
+  expect(tooltip.querySelectorAll('[data-slot="metadata-item"]')).toHaveLength(parts.length);
+}
+
 describe('Board card pending states', () => {
-  it('shows GitHub and Linear candidates alongside persisted and manual issues in Work intake', async () => {
-    const githubIssue: GithubIssue = {
-      number: 42,
-      title: 'Investigate GitHub intake failure',
-      url: 'https://github.com/acme/app/issues/42',
-      author: 'octocat',
-      labels: ['status: auto-triaged'],
-      comments: 0,
-      createdAt: '2026-08-01T00:00:00Z',
-      updatedAt: '2026-08-01T00:00:00Z',
-    };
-    const linearIssue: LinearIssue = {
-      id: 'linear-issue-1',
-      identifier: 'ENG-42',
-      title: 'Fix Linear intake sync',
-      url: 'https://linear.app/acme/issue/ENG-42',
-      state: 'Todo',
-      stateType: 'unstarted',
-      priorityLabel: 'High',
-      assignee: 'ada',
-      team: 'ENG',
-      sourceId: 'linear-project-1',
-      labels: ['bug'],
-      createdAt: '2026-08-01T00:00:00Z',
-      updatedAt: '2026-08-01T00:00:00Z',
-    };
-
-    const githubWorkItem = {
-      ...manualWorkItem,
-      id: 'github-intake-item',
-      externalSource: {
-        integrationId: 'github',
-        type: 'issue',
-        externalId: 'github-issue:99',
-        url: 'https://github.com/acme/app/issues/99',
-      },
-      title: 'Persisted GitHub intake item',
-    };
-    const linearWorkItem = {
-      ...manualWorkItem,
-      id: 'linear-intake-item',
-      externalSource: {
-        integrationId: 'linear',
-        type: 'issue',
-        externalId: 'linear-issue:ENG-99',
-        url: 'https://linear.app/acme/issue/ENG-99',
-      },
-      title: 'Persisted Linear intake item',
-    };
-
-    stubBoardEndpoints();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-        HttpResponse.json({ workItems: [githubWorkItem, linearWorkItem, manualWorkItem] }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
-        HttpResponse.json({
-          config: {
-            github: { enabled: true, sourceIds: ['acme/app'] },
-            linear: { enabled: true, sourceIds: ['linear-project-1'] },
-          },
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
-        HttpResponse.json({
-          bindings: [
-            { integrationId: 'linear', sourceId: 'linear-project-1', factoryProjectId: FACTORY_ID, board: 'work' },
-          ],
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-        HttpResponse.json({ enabled: true, connected: true, workspace: { name: 'Acme', urlKey: 'acme' } }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) =>
-        HttpResponse.json({
-          issues: new URL(request.url).searchParams.has('label') ? [githubIssue] : [],
-          nextPage: null,
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/linear/issues`, () =>
-        HttpResponse.json({ issues: [linearIssue], nextCursor: null }),
-      ),
-    );
-
-    const { client } = renderWorkBoard();
-
-    await waitForMutationsIdle(client);
-    expect(await screen.findByText('Fix Linear intake sync')).toBeVisible();
-    expect(screen.getByText('Investigate GitHub intake failure')).toBeVisible();
-    expect(screen.getByText('Persisted GitHub intake item')).toBeVisible();
-    expect(screen.getByText('Persisted Linear intake item')).toBeVisible();
-    expect(screen.getByText('Plan onboarding')).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Linear' })).not.toBeInTheDocument();
-  });
-
   it('shows "Moving to …" on the card while a menu move is in flight, then clears it', async () => {
     const { transitionGate } = stubBoardEndpoints();
     const user = userEvent.setup();
@@ -493,7 +390,7 @@ describe('Board card pending states', () => {
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
 
     const relatedLink = within(card).getByRole('link', {
-      name: 'Open in GitHub: Review: PR #21565 — Review login fix, Open pull request',
+      name: 'Open in GitHub: Review: PR #21565: Review login fix, Open pull request',
     });
     expect(relatedLink).toHaveTextContent('PR #21565');
     expect(relatedLink).not.toHaveTextContent('Review:');
@@ -502,14 +399,12 @@ describe('Board card pending states', () => {
     expect(relatedLink).not.toHaveAttribute('title');
 
     await user.hover(relatedLink);
-    expect(await screen.findByText('Review: PR #21565 · Review login fix · Open pull request')).toBeVisible();
+    await expectTooltipParts(['Review: PR #21565', 'Review login fix', 'Open pull request']);
 
     await user.unhover(relatedLink);
     await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
     relatedLink.focus();
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(
-      'Review: PR #21565 · Review login fix · Open pull request',
-    );
+    await expectTooltipParts(['Review: PR #21565', 'Review login fix', 'Open pull request']);
   });
 
   it('names an internal related item without repeating its title', async () => {
@@ -551,7 +446,7 @@ describe('Board card pending states', () => {
     renderWorkBoard();
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
     const relatedLink = await within(card).findByRole('link', {
-      name: 'Open live session for Review: PR #21565 — Review login fix, Open pull request',
+      name: 'Open live session for Review: PR #21565: Review login fix, Open pull request',
     });
     expect(relatedLink).toHaveAttribute(
       'href',
@@ -561,9 +456,7 @@ describe('Board card pending states', () => {
     expect(relatedLink.querySelector('[data-live-session-indicator]')).toBeInTheDocument();
 
     await user.hover(relatedLink);
-    expect(
-      await screen.findByText('Review: PR #21565 · Review login fix · Open pull request · Live session'),
-    ).toBeVisible();
+    await expectTooltipParts(['Review: PR #21565', 'Review login fix', 'Open pull request', 'Live session']);
   });
 
   it('marks only the cards whose bound session still exists as live', async () => {
@@ -577,8 +470,10 @@ describe('Board card pending states', () => {
     );
     renderWorkBoard();
 
-    const started = (await screen.findByText('Fix login bug')).closest<HTMLElement>('[data-testid="work-item-card"]');
-    const unstarted = (await screen.findByText('Unstarted work')).closest<HTMLElement>(
+    // The sessions sidebar also names the card, so look in the card's column.
+    const triage = within(await screen.findByTestId('board-column-triage'));
+    const started = (await triage.findByText('Fix login bug')).closest<HTMLElement>('[data-testid="work-item-card"]');
+    const unstarted = (await triage.findByText('Unstarted work')).closest<HTMLElement>(
       '[data-testid="work-item-card"]',
     );
     if (!started || !unstarted) throw new Error('Expected both work item cards');
@@ -588,16 +483,60 @@ describe('Board card pending states', () => {
     expect(within(unstarted).queryByRole('link', { name: 'Open session' })).toBeNull();
   });
 
+  it('starts a normalized Linear card session on its provider branch rather than an item-id fallback', async () => {
+    stubBoardEndpoints();
+    const item = {
+      ...providerFactsCard,
+      id: ITEM_ID,
+      title: 'ENG-42: Repair source facts',
+      stages: ['done'],
+      sessions: {},
+      externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42' },
+      metadata: { repository: 'acme/app', authorTrusted: true },
+      workItem: {
+        ...providerFactsCard.workItem,
+        provider: 'linear',
+        key: 'ENG-42',
+        title: 'ENG-42: Repair source facts',
+        metadata: {},
+      },
+    };
+    const requests: unknown[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [item] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
+        HttpResponse.json({ sessions: [] }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, async ({ request }) => {
+        requests.push(await request.json());
+        return HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'factory/linear-eng-42' } });
+      }),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, () =>
+        HttpResponse.json({
+          prepared: { workItemId: ITEM_ID, threadId: THREAD_ID, sessionId: SESSION_ID, kickoffStatus: 'sent' },
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { client } = renderWorkBoard();
+    await user.click(await screen.findByRole('button', { name: `Details for ${item.title}` }));
+    const dialog = await screen.findByRole('dialog', { name: item.title });
+    await user.click(within(dialog).getByRole('button', { name: 'Start session' }));
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0]).toMatchObject({ branch: 'factory/linear-eng-42' });
+    await waitForMutationsIdle(client);
+  });
+
   it('acknowledges a session start from the card details while it is still resolving the session', async () => {
     stubBoardEndpoints();
     const refreshGate = deferred();
-    let workItemRequests = 0;
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async () => {
-        workItemRequests += 1;
-        // The start refetches before it can decide to open or create; hold that
-        // refetch open so the pre-mutation window is observable.
-        if (workItemRequests > 1) await refreshGate.promise;
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
+        // The start reads the clicked card before it can decide to open or create; hold that
+        // read open so the pre-mutation window is observable.
+        if (new URL(request.url).searchParams.has('workItemId')) await refreshGate.promise;
         return HttpResponse.json({ workItems: [{ ...workItem, sessions: {} }] });
       }),
       http.patch(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, async ({ request }) => {
@@ -647,15 +586,15 @@ describe('Board card pending states', () => {
           ],
         }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({
-          connections: [
+          projects: [
             {
-              id: 'conn-1',
-              installationId: 'inst-1',
+              id: FACTORY_ID,
+              name: 'Acme Factory',
               repositories: [
-                { id: REPO_ID, branch: 'main', repository: { slug: 'acme/app', defaultBranch: 'main' } },
-                { id: 'repo-2', branch: 'main', repository: { slug: 'acme/other', defaultBranch: 'main' } },
+                listedRepository(REPO_ID, 'acme/app', { branch: 'main' }),
+                listedRepository('repo-2', 'acme/other', { branch: 'main' }),
               ],
             },
           ],
@@ -735,12 +674,10 @@ describe('Board card pending states', () => {
   it('starts one session when the details run control is re-triggered before it resolves', async () => {
     stubBoardEndpoints();
     const refreshGate = deferred();
-    let workItemRequests = 0;
     const runStarts: string[] = [];
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async () => {
-        workItemRequests += 1;
-        if (workItemRequests > 1) await refreshGate.promise;
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
+        if (new URL(request.url).searchParams.has('workItemId')) await refreshGate.promise;
         return HttpResponse.json({ workItems: [{ ...workItem, sessions: {} }] });
       }),
       http.patch(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, async ({ request }) => {
@@ -839,7 +776,6 @@ describe('Board card pending states', () => {
       http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
         HttpResponse.json({ enabled: true, connected: true, workspace: { name: 'Acme', urlKey: 'acme' } }),
       ),
-      http.get(`${TEST_BASE_URL}/web/linear/issues`, () => HttpResponse.json({ issues: [], nextCursor: null })),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
         HttpResponse.json({
           workItems: [
@@ -890,110 +826,6 @@ describe('Board card pending states', () => {
     expect(linearLink).toHaveAttribute('target', '_blank');
   });
 
-  it('offers Linear-equivalent actions on Jira intake candidates', async () => {
-    stubBoardEndpoints();
-    stubJiraCandidate();
-    const user = userEvent.setup();
-    renderWorkBoard();
-
-    await user.click(await screen.findByRole('button', { name: 'Actions for Fix Jira intake sync' }));
-
-    expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
-    expect(screen.queryByRole('menuitem', { name: 'Add to board' })).not.toBeInTheDocument();
-    const jiraLink = screen.getByRole('menuitem', { name: 'Open in Jira' });
-    expect(jiraLink).toHaveAttribute('href', jiraIssue.url);
-    expect(jiraLink).toHaveAttribute('target', '_blank');
-  });
-
-  it.each([
-    ['Investigate', 'triage'],
-    ['Build', 'execute'],
-  ] as const)('%s files the Jira intake candidate and starts its run', async (action, stage) => {
-    const createRequests: unknown[] = [];
-    const transitionRequests: unknown[] = [];
-    stubBoardEndpoints();
-    stubJiraCandidate();
-    server.use(
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
-        createRequests.push(await request.json());
-        return HttpResponse.json({
-          workItem: {
-            ...manualWorkItem,
-            id: 'jira-item',
-            factoryProjectId: FACTORY_ID,
-            title: jiraIssue.title,
-            externalSource: {
-              integrationId: 'jira',
-              type: 'issue',
-              externalId: jiraIssue.id,
-              url: jiraIssue.url,
-            },
-            metadata: {
-              identifier: jiraIssue.identifier,
-              issueRef: jiraIssue.id,
-              state: jiraIssue.state,
-              stateType: jiraIssue.stateType,
-              priority: jiraIssue.priorityLabel,
-              project: jiraIssue.project,
-              site: jiraIssue.site,
-              assignee: jiraIssue.assignee,
-              assignees: [jiraIssue.assignee],
-              creator: jiraIssue.author,
-              author: jiraIssue.author,
-              labels: jiraIssue.labels,
-              createdAt: jiraIssue.createdAt,
-              updatedAt: jiraIssue.updatedAt,
-            },
-          },
-        });
-      }),
-      http.post(
-        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/jira-item/transition`,
-        async ({ request }) => {
-          transitionRequests.push(await request.json());
-          return HttpResponse.json({
-            result: {
-              status: 'accepted',
-              transitionId: 'jira-transition-1',
-              itemId: 'jira-item',
-              revision: 2,
-              stage,
-              decisions: [],
-            },
-          });
-        },
-      ),
-    );
-    const user = userEvent.setup();
-    const { client } = renderWorkBoard();
-
-    expect(await screen.findByText('ENG-42')).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Actions for Fix Jira intake sync' }));
-    await user.click(await screen.findByRole('menuitem', { name: action }));
-
-    await waitFor(() => expect(createRequests).toHaveLength(1));
-    await waitFor(() => expect(transitionRequests).toHaveLength(1));
-    await waitForMutationsIdle(client);
-    expect(createRequests[0]).toMatchObject({
-      board: 'work',
-      externalSource: {
-        integrationId: 'jira',
-        type: 'issue',
-        externalId: jiraIssue.id,
-        url: jiraIssue.url,
-      },
-      title: jiraIssue.title,
-      stages: ['intake'],
-      metadata: {
-        identifier: jiraIssue.identifier,
-        assignee: jiraIssue.assignee,
-        labels: jiraIssue.labels,
-      },
-    });
-    expect(transitionRequests[0]).toMatchObject({ stage, cause: 'card_action' });
-  });
-
   it('keeps an auto-materialized Jira card visible with the full work-item menu', async () => {
     // Auto-ingestion files the issue server-side; the board must show the filed
     // card (not drop both the candidate and the card) with Linear-equivalent actions.
@@ -1020,7 +852,7 @@ describe('Board card pending states', () => {
       },
     };
     stubBoardEndpoints();
-    stubJiraCandidate();
+    stubJiraSource();
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
         HttpResponse.json({ workItems: [materializedJiraItem] }),
@@ -1033,117 +865,14 @@ describe('Board card pending states', () => {
     // Exactly one card: the filed work item; the live candidate is deduped, not the card.
     const actions = await screen.findAllByRole('button', { name: 'Actions for Fix Jira intake sync' });
     expect(actions).toHaveLength(1);
-    await user.click(actions[0]!);
+    await user.click(actions[0]);
 
     // The filed Jira card carries the same menu a filed Linear card does.
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Plan' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Open in Jira' })).toHaveAttribute('href', jiraIssue.url);
     expect(screen.getByRole('menuitem', { name: 'Move to Planning' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeVisible();
-  });
-
-  it('offers Linear-equivalent actions on incident.io intake candidates', async () => {
-    stubBoardEndpoints();
-    stubIncidentioCandidate();
-    const user = userEvent.setup();
-    renderWorkBoard();
-
-    await user.click(await screen.findByRole('button', { name: 'Actions for Add retry to incident pager' }));
-
-    expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
-    expect(screen.queryByRole('menuitem', { name: 'Add to board' })).not.toBeInTheDocument();
-    const incidentioLink = screen.getByRole('menuitem', { name: 'Open in incident.io' });
-    expect(incidentioLink).toHaveAttribute('href', incidentioIssue.url);
-    expect(incidentioLink).toHaveAttribute('target', '_blank');
-  });
-
-  it.each([
-    ['Investigate', 'triage'],
-    ['Build', 'execute'],
-  ] as const)('%s files the incident.io intake candidate and starts its run', async (action, stage) => {
-    const createRequests: unknown[] = [];
-    const transitionRequests: unknown[] = [];
-    stubBoardEndpoints();
-    stubIncidentioCandidate();
-    server.use(
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
-        createRequests.push(await request.json());
-        return HttpResponse.json({
-          workItem: {
-            ...manualWorkItem,
-            id: 'incidentio-item',
-            factoryProjectId: FACTORY_ID,
-            title: incidentioIssue.title,
-            externalSource: {
-              integrationId: 'incidentio',
-              type: 'issue',
-              externalId: incidentioIssue.id,
-              url: incidentioIssue.url,
-            },
-            metadata: {
-              identifier: incidentioIssue.identifier,
-              issueRef: incidentioIssue.id,
-              state: incidentioIssue.state,
-              stateType: incidentioIssue.stateType,
-              priority: incidentioIssue.priorityLabel,
-              incident: incidentioIssue.incident,
-              assignee: incidentioIssue.assignee,
-              assignees: [incidentioIssue.assignee],
-              creator: incidentioIssue.author,
-              author: incidentioIssue.author,
-              labels: incidentioIssue.labels,
-              createdAt: incidentioIssue.createdAt,
-              updatedAt: incidentioIssue.updatedAt,
-            },
-          },
-        });
-      }),
-      http.post(
-        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/incidentio-item/transition`,
-        async ({ request }) => {
-          transitionRequests.push(await request.json());
-          return HttpResponse.json({
-            result: {
-              status: 'accepted',
-              transitionId: 'incidentio-transition-1',
-              itemId: 'incidentio-item',
-              revision: 2,
-              stage,
-              decisions: [],
-            },
-          });
-        },
-      ),
-    );
-    const user = userEvent.setup();
-    const { client } = renderWorkBoard();
-
-    expect(await screen.findByText('FU-42')).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Actions for Add retry to incident pager' }));
-    await user.click(await screen.findByRole('menuitem', { name: action }));
-
-    await waitFor(() => expect(createRequests).toHaveLength(1));
-    await waitFor(() => expect(transitionRequests).toHaveLength(1));
-    await waitForMutationsIdle(client);
-    expect(createRequests[0]).toMatchObject({
-      board: 'work',
-      externalSource: {
-        integrationId: 'incidentio',
-        type: 'issue',
-        externalId: incidentioIssue.id,
-        url: incidentioIssue.url,
-      },
-      title: incidentioIssue.title,
-      stages: ['intake'],
-      metadata: {
-        identifier: incidentioIssue.identifier,
-        assignee: incidentioIssue.assignee,
-        labels: incidentioIssue.labels,
-      },
-    });
-    expect(transitionRequests[0]).toMatchObject({ stage, cause: 'card_action' });
   });
 
   it('keeps an auto-materialized incident.io card visible with the full work-item menu', async () => {
@@ -1172,7 +901,7 @@ describe('Board card pending states', () => {
       },
     };
     stubBoardEndpoints();
-    stubIncidentioCandidate();
+    stubIncidentioSource();
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
         HttpResponse.json({ workItems: [materializedIncidentioItem] }),
@@ -1185,46 +914,14 @@ describe('Board card pending states', () => {
     // Exactly one card: the filed work item; the live candidate is deduped, not the card.
     const actions = await screen.findAllByRole('button', { name: 'Actions for Add retry to incident pager' });
     expect(actions).toHaveLength(1);
-    await user.click(actions[0]!);
+    await user.click(actions[0]);
 
     // The filed incident.io card carries the same menu a filed Linear card does.
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Plan' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Open in incident.io' })).toHaveAttribute('href', incidentioIssue.url);
     expect(screen.getByRole('menuitem', { name: 'Move to Planning' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeVisible();
-  });
-
-  it('offers "Open in GitHub" on unfiled Intake candidates', async () => {
-    stubBoardEndpoints();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) =>
-        HttpResponse.json({
-          issues: new URL(request.url).searchParams.has('label')
-            ? []
-            : [
-                {
-                  number: 43,
-                  title: 'Unfiled GitHub intake issue',
-                  url: 'https://github.com/acme/app/issues/43',
-                  author: 'octocat',
-                  labels: [],
-                  comments: 0,
-                  createdAt: '2026-07-28T00:00:00.000Z',
-                  updatedAt: '2026-07-28T00:00:00.000Z',
-                },
-              ],
-          nextPage: null,
-        }),
-      ),
-    );
-    const user = userEvent.setup();
-    renderWorkBoard();
-
-    await user.click(await screen.findByRole('button', { name: 'Actions for Unfiled GitHub intake issue' }));
-    const githubLink = await screen.findByRole('menuitem', { name: 'Open in GitHub' });
-    expect(githubLink).toHaveAttribute('href', 'https://github.com/acme/app/issues/43');
-    expect(githubLink).toHaveAttribute('target', '_blank');
   });
 
   it('identifies Slack-created work items as Slack instead of Manual', async () => {
@@ -1264,10 +961,11 @@ describe('Board card pending states', () => {
     const { transitionRequests } = stubBoardEndpoints();
     renderWorkBoard();
 
-    const titleText = await screen.findByText('Fix login bug');
+    // The sessions sidebar also names the card, so look in the card's column.
+    const currentColumn = await screen.findByTestId('board-column-triage');
+    const titleText = await within(currentColumn).findByText('Fix login bug');
     const card = titleText.closest<HTMLElement>('[data-testid="work-item-card"]');
     if (!card) throw new Error('Expected the title inside its work item card');
-    const currentColumn = screen.getByTestId('board-column-triage');
     const dataTransfer = createDataTransfer();
 
     fireEvent.dragStart(titleText, { dataTransfer });
@@ -1343,7 +1041,7 @@ describe('Board card pending states', () => {
     expect(within(card).getByText('Starting an automated run…')).toBeVisible();
     expect(transitionRequests).toEqual([]);
 
-    dropInto('review');
+    dropInto('intake');
     await waitFor(() => expect(transitionRequests).toEqual([ITEM_ID]));
     transitionGate.resolve();
     await waitForMutationsIdle(client);
@@ -1353,15 +1051,15 @@ describe('Board card pending states', () => {
     const { transitionGate, transitionRequests } = stubBoardEndpoints();
     const configGate = deferred();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({
-          connections: [
+          projects: [
             {
-              id: 'conn-1',
-              installationId: 'inst-1',
+              id: FACTORY_ID,
+              name: 'Acme Factory',
               repositories: [
-                { id: REPO_ID, branch: 'main', repository: { slug: 'acme/app', defaultBranch: 'main' } },
-                { id: 'repo-2', branch: 'main', repository: { slug: 'acme/other', defaultBranch: 'main' } },
+                listedRepository(REPO_ID, 'acme/app', { branch: 'main' }),
+                listedRepository('repo-2', 'acme/other', { branch: 'main' }),
               ],
             },
           ],
@@ -1469,7 +1167,8 @@ describe('Board card pending states', () => {
     const composer = await within(planningColumn).findByRole('form', { name: 'New work item in Planning' });
     expect(planningColumn).toHaveAccessibleName('Planning');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(within(composer).getByText('Manual · new')).toBeInTheDocument();
+    expect(within(composer).getByText('Manual')).toBeInTheDocument();
+    expect(within(composer).getByText('new')).toBeInTheDocument();
     expect(within(composer).getByRole('textbox', { name: 'Work item title' })).toHaveFocus();
 
     await user.keyboard('{Escape}');

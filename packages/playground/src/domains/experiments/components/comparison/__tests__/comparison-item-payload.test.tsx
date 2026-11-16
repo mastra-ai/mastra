@@ -21,7 +21,7 @@ describe('ComparisonItemPayload', () => {
   });
 
   it('renders a string payload as markdown', () => {
-    render(<ComparisonItemPayload label="Input" value={'Answer with **one word** only'} />);
+    render(<ComparisonItemPayload label="Input" value="Answer with **one word** only" />);
 
     const region = screen.getByRole('region', { name: 'Input' });
     expect(within(region).getByText('one word').tagName).toBe('STRONG');
@@ -31,7 +31,8 @@ describe('ComparisonItemPayload', () => {
     render(<ComparisonItemPayload label="Ground truth" value={{ answer: 'Paris' }} />);
 
     const region = screen.getByRole('region', { name: 'Ground truth' });
-    expect(region.querySelector('pre')?.textContent).toBe('{\n  "answer": "Paris"\n}');
+    const lines = Array.from(region.querySelectorAll('.cm-line'), line => line.textContent);
+    expect(lines.join('\n')).toBe('{\n  "answer": "Paris"\n}');
   });
 
   it('renders nothing when there is no payload', () => {

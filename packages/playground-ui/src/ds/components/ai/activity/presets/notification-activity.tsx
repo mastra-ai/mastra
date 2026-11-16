@@ -1,10 +1,11 @@
-import { Bell, ExternalLink } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { ActivityItem } from '../activity';
 import { messagePreview, messagePreviewShowsAll } from './message-preview';
 import { Badge } from '@/ds/components/Badge';
 import type { BadgeVariant } from '@/ds/components/Badge';
 import { Txt } from '@/ds/components/Txt';
+import { IconBell2 } from '@/ds/icons/central/IconBell2';
+import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 
 export interface NotificationActivityProps {
   label: string;
@@ -16,6 +17,10 @@ export interface NotificationActivityProps {
   pending?: string;
   link?: { href: string; label: string };
   defaultOpen?: boolean;
+  /** Badges rendered after the priority, status and pending badges. */
+  extraBadges?: ReactNode;
+  /** A label shown above the message once opened, e.g. to flag it as untrusted. */
+  messageLabel?: string;
 }
 
 const priorityBadgeVariants: Partial<Record<string, BadgeVariant>> = {
@@ -34,16 +39,17 @@ export function NotificationActivity({
   pending,
   link,
   defaultOpen,
+  extraBadges,
+  messageLabel,
 }: NotificationActivityProps) {
-  const lineHoldsMessage = messagePreviewShowsAll(message);
-  const hasBadges = Boolean(priority || status || pending);
+  const lineHoldsMessage = messagePreviewShowsAll(message) && !messageLabel;
+  const hasBadges = Boolean(priority || status || pending || extraBadges);
 
   return (
     <ActivityItem
       label={label}
       detail={messagePreview(message)}
-      detailFont="sans"
-      icon={icon ?? <Bell className="text-warning-foreground" aria-hidden />}
+      icon={icon ?? <IconBell2 className="text-warning-foreground" aria-hidden />}
       badges={
         hasBadges && (
           <>
@@ -54,6 +60,7 @@ export function NotificationActivity({
             )}
             {status && <Badge size="xs">{status}</Badge>}
             {pending && <Badge size="xs">{pending} pending</Badge>}
+            {extraBadges}
           </>
         )
       }
@@ -63,6 +70,11 @@ export function NotificationActivity({
     >
       {(!lineHoldsMessage || link) && (
         <div className="flex flex-col gap-2">
+          {messageLabel && (
+            <Txt variant="caption" tone="muted">
+              {messageLabel}
+            </Txt>
+          )}
           {message && (
             <Txt variant="caption" className="break-words whitespace-pre-wrap">
               {message}
@@ -91,7 +103,7 @@ function NotificationLink({
       className="flex w-fit items-center gap-1 text-meta text-muted-foreground hover:text-foreground"
     >
       {link.label}
-      <ExternalLink size={12} aria-hidden />
+      <IconSquareArrowTopRight size={12} aria-hidden />
     </a>
   );
 }

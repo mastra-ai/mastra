@@ -29,6 +29,7 @@ import {
   FileExistsError,
   FileNotFoundError,
   FilesystemError,
+  getMimeType,
   IsDirectoryError,
   MastraFilesystem,
   NotDirectoryError,
@@ -307,6 +308,8 @@ export class ModalFilesystem extends MastraFilesystem {
       size: type === 'directory' ? 0 : Number(size),
       createdAt: birthSeconds > 0 ? new Date(birthSeconds * 1000) : modifiedAt,
       modifiedAt,
+      // read_file picks media, binary or text from mimeType.
+      ...(type === 'file' && { mimeType: getMimeType(resolved) }),
     };
   }
 

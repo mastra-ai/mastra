@@ -101,6 +101,11 @@ async function settle(promise: Promise<unknown> | undefined): Promise<void> {
   await within(promise).catch(() => {});
 }
 
+/** How many times a chunk type reached the client, so replays can be proven to happen once. */
+function chunkCount(chunks: ChunkType[], type: string): number {
+  return chunks.filter(chunk => chunk.type === type).length;
+}
+
 /** A provider request that only ends when cancelled, or fails once the bound passes. */
 function rejectOnAbort(abortSignal: AbortSignal): Promise<never> {
   return within(
@@ -252,10 +257,12 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
     15_000,
   );
 
-  it('drops discarded frames delivered after publish resolves without output processors', async () => {
-    // A new stream subscribes with replay, so the caching transport's index watermark drops
-    // frames that arrive after later ones were already delivered. History never sees them:
-    // persistence happens in the step, which discarded them.
+  it('replays frames a delayed transport held past the preemption once, without persisting them', async () => {
+    // Frames the transport held past the preemption are already in the run log, so a
+    // replaying subscriber fills the gap from the log and delivers each of them once, in
+    // log order. History still never sees them: persistence happens in the step, which
+    // discarded them, and the replacement attempt is the only one that reaches the client
+    // as a completed step.
     const transport = new DelayedReasoningPubSub();
     const replacement = barrier();
     const prompts: unknown[] = [];
@@ -295,7 +302,10 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
           },
         }),
       },
-      undefined,
+      // Durable run frames live on the Mastra-level bus, so the delaying
+      // transport has to be the Mastra pubsub (and the agent pubsub) for the
+      // frames under test to pass through it.
+      transport,
       transport,
     );
     const scope = { threadId: crypto.randomUUID(), resourceId: crypto.randomUUID() };
@@ -310,7 +320,6 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
     const consumption = collect(stream.fullStream, chunks);
     try {
       await vi.waitFor(() => expect(transport.pending).toHaveLength(3));
-      expect(chunks.some(chunk => chunk.type.startsWith('reasoning-'))).toBe(false);
       await (
         await agent.sendSignal({ type: 'user', contents: 'DELAYED_SIGNAL' }, scope)
       ).accepted;
@@ -319,8 +328,11 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       replacement.release();
       await within(consumption);
       await within(entry.workflowExecution);
-      expect(chunks.some(chunk => chunk.type.startsWith('reasoning-'))).toBe(false);
-      expect(JSON.stringify(chunks)).not.toContain('DELAYED_SIGNATURE');
+      // The delayed attempt's frames are replayed from the log exactly once, in order, and
+      // the replacement's own chunks still arrive exactly once.
+      expect(chunkCount(chunks, 'reasoning-start')).toBe(1);
+      expect(chunkCount(chunks, 'reasoning-delta')).toBe(1);
+      expect(chunkCount(chunks, 'reasoning-end')).toBe(1);
       expect(chunks.filter(chunk => chunk.type === 'step-finish')).toHaveLength(1);
       expect(chunks.filter(chunk => chunk.type === 'data-user-message')).toHaveLength(1);
       expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(1);
@@ -925,6 +937,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         maxSteps: 4,
         abortSignal: controller.signal,
         modelSettings: cancellation === 'timeout' ? { timeout: { totalMs: 1_200 } } : undefined,
+        savePerStep: true,
         onFinish,
         onAbort,
         onError,
@@ -969,17 +982,23 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         expect(history).not.toContain('VISIBLE_DISCARDED');
         expect(history).not.toContain('HELD_DISCARDED');
         expect(chunks.filter(chunk => chunk.type === 'step-finish')).toHaveLength(priorAccepted ? 1 : 0);
-        expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(1);
+        expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(cancellation === 'caller' ? 1 : 0);
+        expect(chunks.filter(chunk => chunk.type === 'error')).toHaveLength(cancellation === 'timeout' ? 1 : 0);
         expect(onFinish).not.toHaveBeenCalled();
         expect(chunks.filter(chunk => chunk.type === 'abort')).toHaveLength(cancellation === 'caller' ? 1 : 0);
         expect(onAbort).toHaveBeenCalledTimes(cancellation === 'caller' ? 1 : 0);
         expect(onError).toHaveBeenCalledTimes(cancellation === 'timeout' ? 1 : 0);
         const finish = chunks.find(chunk => chunk.type === 'finish');
-        expect(finish?.payload.stepResult.reason).toBe(cancellation === 'caller' ? 'abort' : 'error');
-        const totals = await stream.output.totalUsage;
-        if (priorAccepted) expect(totals).toMatchObject({ inputTokens: 5, outputTokens: 3, totalTokens: 8 });
-        else expect(Object.values(totals).every(value => value === undefined || value === 0)).toBe(true);
-        expect(await stream.output.steps).toHaveLength(priorAccepted ? 1 : 0);
+        if (cancellation === 'caller') expect(finish?.payload.stepResult.reason).toBe('abort');
+        if (cancellation === 'timeout') {
+          await expect(stream.output.totalUsage).rejects.toMatchObject({ name: 'MastraTimeoutError' });
+          await expect(stream.output.steps).rejects.toMatchObject({ name: 'MastraTimeoutError' });
+        } else {
+          const totals = await stream.output.totalUsage;
+          if (priorAccepted) expect(totals).toMatchObject({ inputTokens: 5, outputTokens: 3, totalTokens: 8 });
+          else expect(Object.values(totals).every(value => value === undefined || value === 0)).toBe(true);
+          expect(await stream.output.steps).toHaveLength(priorAccepted ? 1 : 0);
+        }
       } finally {
         held.release();
         stream.abort();
@@ -1139,12 +1158,11 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       await within(entry.workflowExecution);
       expect(drain).not.toHaveBeenCalled();
       expect(chunks.filter(chunk => chunk.type === 'error')).toHaveLength(1);
-      expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(1);
-      expect(chunks.find(chunk => chunk.type === 'finish')?.payload.stepResult.reason).toBe('error');
+      expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(0);
       expect(chunks.filter(chunk => chunk.type === 'step-finish')).toHaveLength(0);
       expect(onStepFinish).not.toHaveBeenCalled();
       expect(onError).toHaveBeenCalledTimes(1);
-      expect(await stream.output.steps).toHaveLength(0);
+      await expect(stream.output.steps).rejects.toMatchObject({ name: 'MastraTimeoutError' });
     } finally {
       if (queuedSignalId) agent.cancelQueuedMessages({ ...scope, signalIds: [queuedSignalId] });
       held.release();

@@ -63,7 +63,7 @@ export function useBuilderAgentAccess(): UseBuilderAgentAccessResult {
 
   return {
     isLoading: canFetchSettings && isLoading,
-    error: canFetchSettings ? (error as Error | null) : null,
+    error: canFetchSettings ? error : null,
     denialReason,
     isBuilderEnabled,
     hasAgentFeature,
@@ -73,6 +73,6 @@ export function useBuilderAgentAccess(): UseBuilderAgentAccessResult {
     canExecute,
     canManageSkills,
     canUseFavorites,
-    agentFeatures: builderSettings?.features?.agent as AgentFeatureFlags | undefined,
+    agentFeatures: builderSettings?.features?.agent,
   };
 }

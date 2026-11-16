@@ -1,0 +1,376 @@
+/**
+ * One Jira project feeding several factories, split by label (FACT-440), end
+ * to end on both Jira paths: real bindings storage, the real routes, sweep and
+ * integration code, and real card filing, with only Jira itself faked at the
+ * HTTP edge (it evaluates the JQL each factory sends).
+ */
+import { Hono } from 'hono';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { createBoardRegistry } from '../../boards/index.js';
+import { ProjectRoutes } from '../../routes/projects.js';
+import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
+import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
+import { FactoryTransitionService } from '../../rules/transition-service.js';
+import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import type { FactoryStorageTestSeed } from '../../storage/test-utils.js';
+import type { IntegrationContext } from '../base.js';
+import { encodeIssueReference, encodeSourceId, PlatformJiraIntegration } from '../platform/jira/integration.js';
+import { JiraIntegration } from './integration.js';
+import { attachJiraIssueReconciler } from './issue-reconciler.js';
+import { jiraIssuePayload, matchesJql } from './test-utils.js';
+import type { FakeJiraIssue } from './test-utils.js';
+
+const OPS = { projectId: '10000', projectKey: 'OPS' };
+const issues: FakeJiraIssue[] = [
+  { key: 'OPS-1', labels: [], ...OPS },
+  { key: 'OPS-2', labels: ['bug'], ...OPS },
+  { key: 'OPS-3', labels: ['payments'], ...OPS },
+  { key: 'OPS-4', labels: ['ios', 'bug'], ...OPS },
+  { key: 'OPS-5', labels: ['payments', 'mobile'], ...OPS },
+];
+/** Where each issue lands with Platform taking all issues, Payments `payments`, Mobile `mobile`+`ios`. */
+const expectedFactory: Record<string, 'platform' | 'payments' | 'mobile'> = {
+  'OPS-1': 'platform',
+  'OPS-2': 'platform',
+  'OPS-3': 'payments',
+  'OPS-4': 'mobile',
+  // Carries labels of two label bindings; the older binding (Payments) wins.
+  'OPS-5': 'payments',
+};
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+}
+
+/** Jira's REST API as both integrations reach it, filtering `issues` by the JQL each search sends. */
+function fakeJira(target: string, init?: RequestInit): Response | null {
+  if ((init?.method ?? 'GET') === 'POST' && target.includes('/rest/api/3/search/jql')) {
+    const { jql } = JSON.parse(String(init?.body)) as { jql: string };
+    const page = issues.filter(issue => matchesJql(jql, issue));
+    return json({ issues: page.map(issue => jiraIssuePayload(issue, String(20_000 + issues.indexOf(issue)))) });
+  }
+  const comments = target.match(/\/rest\/api\/3\/issue\/([^/?]+)\/comment/);
+  if (comments) return json({ comments: [], total: 0, startAt: 0, maxResults: 50 });
+  const single = target.match(/\/rest\/api\/3\/issue\/([^/?]+)/);
+  if (single) {
+    const index = issues.findIndex(issue => issue.key === decodeURIComponent(single[1]!));
+    return index >= 0 ? json(jiraIssuePayload(issues[index]!, String(20_000 + index))) : json({}, 404);
+  }
+  return null;
+}
+
+interface JiraPath {
+  name: string;
+  sourceId: string;
+  /** The `issueRef` the board passes to the single-issue route. */
+  issueRef(key: string): string;
+  integration(): JiraIntegration | PlatformJiraIntegration;
+}
+
+const paths: JiraPath[] = [
+  {
+    name: 'direct Jira',
+    sourceId: OPS.projectId,
+    issueRef: key => key,
+    integration() {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: URL | string, init?: RequestInit) => {
+          const response = fakeJira(String(input), init);
+          if (!response) throw new Error(`Unexpected request: ${String(input)}`);
+          return response;
+        }),
+      );
+      return new JiraIntegration({
+        baseUrl: 'https://acme.atlassian.net',
+        email: 'ops@acme.test',
+        apiToken: 't',
+      });
+    },
+  },
+  {
+    name: 'Platform Jira',
+    sourceId: encodeSourceId('a1b_acme', OPS.projectId),
+    issueRef: key => encodeIssueReference({ connectionId: 'a1b_acme', issueId: key, projectId: OPS.projectId }),
+    integration() {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: URL | string, init?: RequestInit) => {
+          const target = String(input);
+          if (target.endsWith('/v2/connections?providerKey=jira')) {
+            return json({
+              connections: [
+                { id: 'a1b_acme', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' },
+              ],
+            });
+          }
+          if (/\/v2\/connections\/a1b_acme\/context$/.test(target)) {
+            return json({
+              connection_config: { cloudId: 'a436116f-02ce-4520-8fbb-7301462a1674' },
+              metadata: null,
+            });
+          }
+          const response = fakeJira(target, init);
+          if (!response) throw new Error(`Unexpected request: ${target}`);
+          return response;
+        }),
+      );
+      return new PlatformJiraIntegration({
+        clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      });
+    },
+  },
+];
+
+const nextMinute = () => vi.setSystemTime(Date.now() + 60_000);
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
+
+describe.each(paths)('Jira project shared by label — $name', path => {
+  let seed: FactoryStorageTestSeed;
+  let app: Hono;
+  /** The 5-minute reconcile sweep, the only thing that files a card for a Jira issue. */
+  let sweep: () => Promise<unknown>;
+  let factories: Record<'platform' | 'payments' | 'mobile', string>;
+
+  beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-01-05T09:00:00.000Z'));
+    seed = await createFactoryStorageForTests();
+    const jira = path.integration();
+    const context = {
+      auth: fakeRouteAuth(),
+      factoryStorage: seed.storage,
+      storage: { projects: seed.projects, intake: seed.intake },
+      runtime: { configVersion: 'factory-config-v1', workItems: seed.workItems, boards: createBoardRegistry() },
+    } as unknown as IntegrationContext;
+    const reconcile = attachJiraIssueReconciler(jira, context);
+    sweep = async () => expect(await reconcile?.()).toMatchObject({ failed: 0 });
+    app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, { workosId: 'u1', organizationId: 'org1' } as never);
+      await next();
+    });
+    mountApiRoutes(app, [
+      ...jira.routes(context),
+      ...new ProjectRoutes({
+        auth: fakeRouteAuth(),
+        projects: seed.projects,
+        sourceControl: seed.sourceControl,
+        intake: seed.intake,
+        workItems: seed.workItems,
+      }).routes(),
+    ]);
+
+    const create = async (name: string) =>
+      (await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name } })).id;
+    factories = {
+      platform: await create('platform'),
+      payments: await create('payments'),
+      mobile: await create('mobile'),
+    };
+    await seed.intake.saveConfig({ orgId: 'org1', config: { jira: { enabled: true, sourceIds: [path.sourceId] } } });
+    const bind = (factoryProjectId: string, labels: string[] | null) =>
+      seed.intake.setSharedBinding({
+        orgId: 'org1',
+        integrationId: 'jira',
+        sourceId: path.sourceId,
+        factoryProjectId,
+        labels,
+      });
+    // Created a minute apart, so the oldest-wins rule has an unambiguous order.
+    await bind(factories.platform, null);
+    nextMinute();
+    await bind(factories.payments, ['payments']);
+    nextMinute();
+    await bind(factories.mobile, ['mobile', 'ios']);
+  });
+
+  const poll = async (factoryProjectId: string) => {
+    const response = await app.request(`/web/jira/issues?factoryProjectId=${factoryProjectId}`);
+    expect(response.status).toBe(200);
+    return ((await response.json()) as { issues: Array<{ identifier: string }> }).issues.map(issue => issue.identifier);
+  };
+  const filed = async (factoryProjectId: string) =>
+    (await seed.workItems.listDeferredDecisions('org1', factoryProjectId))
+      .map(entry => (entry.decision as { metadata?: { identifier?: string } }).metadata?.identifier)
+      .sort();
+  const takeOverWithGrowth = async () => {
+    const growth = (await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'growth' } })).id;
+    await seed.intake.setSharedBinding({
+      orgId: 'org1',
+      integrationId: 'jira',
+      sourceId: path.sourceId,
+      factoryProjectId: growth,
+      labels: null,
+    });
+    return growth;
+  };
+  const projectExists = async ({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }) =>
+    (await seed.projects.get({ orgId, id: factoryProjectId })) !== null;
+  const fileProposedCards = async (factoryProjectExists = projectExists) => {
+    const boards = createBoardRegistry();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: {} as never,
+      storage: seed.workItems,
+      boards,
+      transitionService: new FactoryTransitionService({
+        storage: seed.workItems,
+        boards,
+        configVersion: 'factory-config-v1',
+      }),
+      factoryProjectExists,
+      ownerId: 'label-routing-test',
+    });
+    // A sweep proposes cards for every factory at once, more than one dispatcher pass files.
+    for (let pass = 0; pass < 2; pass += 1) await dispatcher.runOnce(new Date(Date.now() + 1_000));
+  };
+
+  const names = ['platform', 'payments', 'mobile'] as const;
+  const slice = (name: string) =>
+    Object.keys(expectedFactory)
+      .filter(key => expectedFactory[key] === name)
+      .sort();
+
+  it('files every issue in exactly one factory on a sweep, never while a board reads its list', async () => {
+    for (const name of names) {
+      expect((await poll(factories[name])).sort()).toEqual(slice(name));
+      expect(await filed(factories[name])).toEqual([]);
+    }
+
+    await sweep();
+    await sweep();
+    for (const name of names) expect(await filed(factories[name])).toEqual(slice(name));
+  });
+
+  it('writes nothing when a sweep sees only issues that already have their card', async () => {
+    await sweep();
+    await fileProposedCards();
+    await sweep();
+    const stored = async () =>
+      Promise.all(
+        names.map(async name => [
+          await seed.workItems.list({ orgId: 'org1', factoryProjectId: factories[name] }),
+          await seed.workItems.listDeferredDecisions('org1', factories[name]),
+        ]),
+      );
+    const before = await stored();
+    expect(before.flatMap(([cards]) => cards)).toHaveLength(issues.length);
+
+    nextMinute();
+    await sweep();
+    expect(await stored()).toEqual(before);
+  });
+
+  it('leaves labels with the all-issues factory until a label factory binds them, then both hold a card', async () => {
+    const triage = (await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'triage' } })).id;
+    const bindTriage = () =>
+      seed.intake.setSharedBinding({
+        orgId: 'org1',
+        integrationId: 'jira',
+        sourceId: path.sourceId,
+        factoryProjectId: triage,
+        labels: ['bug'],
+      });
+    const open = (factoryProjectId: string, key: string) =>
+      app.request(
+        `/web/jira/issues/${key}?factoryProjectId=${factoryProjectId}&issueRef=${encodeURIComponent(path.issueRef(key))}`,
+      );
+
+    expect(await poll(factories.platform)).toContain('OPS-2');
+    await sweep();
+    expect(await filed(triage)).toEqual([]);
+    await fileProposedCards();
+    expect((await open(factories.platform, 'OPS-2')).status).toBe(200);
+
+    nextMinute();
+    await bindTriage();
+    expect(await poll(factories.platform)).not.toContain('OPS-2');
+    expect((await open(factories.platform, 'OPS-2')).status).toBe(200);
+    expect(await poll(triage)).toEqual(['OPS-2']);
+    await sweep();
+    expect(await filed(triage)).toEqual(['OPS-2']);
+    await fileProposedCards();
+    for (const factoryProjectId of [factories.platform, triage]) {
+      const cards = await seed.workItems.list({ orgId: 'org1', factoryProjectId });
+      expect(cards.filter(card => card.title.startsWith('OPS-2'))).toHaveLength(1);
+    }
+  });
+
+  it("hands a deleted factory's filed issues to the factory that takes over its Jira project", async () => {
+    await sweep();
+    await fileProposedCards();
+    expect((await app.request(`/web/factory/projects/${factories.platform}`, { method: 'DELETE' })).status).toBe(204);
+    const growth = await takeOverWithGrowth();
+
+    expect(await poll(growth)).toEqual(['OPS-1', 'OPS-2']);
+    await sweep();
+    expect(await filed(growth)).toEqual(['OPS-1', 'OPS-2']);
+    await fileProposedCards();
+
+    const cards = await seed.workItems.list({ orgId: 'org1', factoryProjectId: growth });
+    expect(cards.map(card => card.title).sort()).toEqual([
+      expect.stringMatching(/^OPS-1\b/),
+      expect.stringMatching(/^OPS-2\b/),
+    ]);
+  });
+
+  it('files issues in the factory that takes over a Jira project when the deleted factory proposed them but never filed them', async () => {
+    await sweep();
+    expect(await filed(factories.platform)).toEqual(['OPS-1', 'OPS-2']);
+    expect((await app.request(`/web/factory/projects/${factories.platform}`, { method: 'DELETE' })).status).toBe(204);
+    const growth = await takeOverWithGrowth();
+
+    await sweep();
+    await fileProposedCards();
+
+    expect(await seed.workItems.list({ orgId: 'org1', factoryProjectId: factories.platform })).toEqual([]);
+    const cards = await seed.workItems.list({ orgId: 'org1', factoryProjectId: growth });
+    expect(cards.map(card => card.title).sort()).toEqual([
+      expect.stringMatching(/^OPS-1\b/),
+      expect.stringMatching(/^OPS-2\b/),
+    ]);
+  });
+
+  it('files issues in the factory that takes over a Jira project when the deleted factory files them mid-takeover', async () => {
+    await sweep();
+    let takeover: Promise<string> | undefined;
+    await fileProposedCards(async tenant => {
+      if (tenant.factoryProjectId !== factories.platform || takeover) return projectExists(tenant);
+      takeover = (async () => {
+        expect(
+          (await app.request(`/web/factory/projects/${factories.platform}`, { method: 'DELETE' })).status,
+        ).toBe(204);
+        const growth = await takeOverWithGrowth();
+        await sweep();
+        return growth;
+      })();
+      await takeover;
+      return true;
+    });
+    await fileProposedCards();
+
+    const cards = await seed.workItems.list({ orgId: 'org1', factoryProjectId: await takeover! });
+    expect(cards.map(card => card.title).sort()).toEqual([
+      expect.stringMatching(/^OPS-1\b/),
+      expect.stringMatching(/^OPS-2\b/),
+    ]);
+  });
+
+  it("does not open an issue from another factory's slice by its identifier", async () => {
+    const open = (factory: 'platform' | 'payments' | 'mobile', key: string) =>
+      app.request(
+        `/web/jira/issues/${key}?factoryProjectId=${factories[factory]}&issueRef=${encodeURIComponent(path.issueRef(key))}`,
+      );
+
+    expect((await open('payments', 'OPS-3')).status).toBe(200);
+    expect((await open('platform', 'OPS-3')).status).toBe(404);
+    expect((await open('mobile', 'OPS-5')).status).toBe(404);
+    expect((await open('platform', 'OPS-1')).status).toBe(200);
+    expect((await open('payments', 'OPS-1')).status).toBe(404);
+  });
+});

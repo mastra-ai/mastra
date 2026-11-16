@@ -35,7 +35,10 @@ function canResetWithPendingMarker(val: unknown): boolean {
     return true;
   }
 
-  return isSuspendedStepResult(val);
+  return (
+    isSuspendedStepResult(val) ||
+    (typeof val === 'object' && '__mastra_foreach_queued__' in val && val.__mastra_foreach_queued__ === true)
+  );
 }
 
 export function createEmptyWorkflowSnapshot(runId: string): WorkflowRunState {
@@ -108,6 +111,18 @@ export function mergeWorkflowStepResult({
     };
   } else {
     snapshot.context[stepId] = result;
+  }
+
+  // Concurrent child starts and completions carry partial/stale foreach metadata.
+  // Preserve the durable identity of every sibling, not just the last writer's child.
+  if (existingResult?.metadata?.foreachNestedRunIds || result.metadata?.foreachNestedRunIds) {
+    snapshot.context[stepId]!.metadata = {
+      ...snapshot.context[stepId]!.metadata,
+      foreachNestedRunIds: {
+        ...existingResult?.metadata?.foreachNestedRunIds,
+        ...snapshot.context[stepId]!.metadata?.foreachNestedRunIds,
+      },
+    };
   }
 
   if (state !== undefined) {

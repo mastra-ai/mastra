@@ -1,10 +1,8 @@
 import type { InitExporterOptions, TracingEvent } from '@mastra/core/observability';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
-import {
-  DeepEvalExporter as DeepEvalCoreExporter,
-  type DeepEvalExporterConfig as DeepEvalCoreConfig,
-} from 'deepeval/integrations/mastra';
+import { DeepEvalExporter as DeepEvalCoreExporter } from 'deepeval/integrations/mastra';
+import type { DeepEvalExporterConfig as DeepEvalCoreConfig } from 'deepeval/integrations/mastra';
 
 export interface DeepEvalExporterConfig extends BaseExporterConfig, DeepEvalCoreConfig {}
 

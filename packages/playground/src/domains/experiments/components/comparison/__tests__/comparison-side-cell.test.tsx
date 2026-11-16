@@ -1,5 +1,6 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { agentNoFinalTextResult, agentToolCallsResult } from '../../__tests__/fixtures/experiment-results';
 import type { ComparisonColumn } from '../build-comparison-rows';
 import { ComparisonSideCell } from '../comparison-side-cell';
 import { TestLinkProvider } from '@/test/link-provider';
@@ -24,12 +25,13 @@ const makeColumn = (overrides: Partial<ComparisonColumn>): ComparisonColumn => (
 const renderCell = (column: ComparisonColumn, { showUsage = false }: { showUsage?: boolean } = {}) =>
   render(
     <TestLinkProvider>
-      <ComparisonSideCell column={column} showUsage={showUsage} />
+      <ComparisonSideCell column={column} showUsage={showUsage} onShowTrace={() => {}} />
     </TestLinkProvider>,
   );
 
 const outputRegion = () => screen.getByRole('region', { name: 'Output' });
 const metricsRegion = () => screen.getByRole('region', { name: 'Metrics' });
+const toolCallsRegion = () => screen.getByRole('region', { name: /^Tool calls/ });
 const metricTerms = () =>
   within(metricsRegion())
     .getAllByRole('term')
@@ -64,11 +66,44 @@ describe('ComparisonSideCell', () => {
     });
   });
 
+  describe('when the agent called tools', () => {
+    const toolCallsColumn = () =>
+      makeColumn({ targetType: agentToolCallsResult.targetType, output: agentToolCallsResult.output });
+
+    it('lists each tool the agent called', () => {
+      renderCell(toolCallsColumn());
+
+      expect(within(toolCallsRegion()).getByText('SearchDocs')).toBeTruthy();
+    });
+
+    it('shows the result paired with its call', () => {
+      renderCell(toolCallsColumn());
+
+      fireEvent.click(within(toolCallsRegion()).getByRole('button', { name: /SearchDocs/ }));
+
+      expect(within(toolCallsRegion()).getByText('Result')).toBeTruthy();
+      expect(toolCallsRegion().textContent).toContain('"hits": 3');
+    });
+  });
+
+  describe('when the agent called tools but produced no final text', () => {
+    const noTextColumn = () =>
+      makeColumn({ targetType: agentNoFinalTextResult.targetType, output: agentNoFinalTextResult.output });
+
+    it('explains the missing text instead of dumping the raw output', () => {
+      renderCell(noTextColumn());
+
+      expect(within(outputRegion()).getByText('No final text response after 2 tool calls')).toBeTruthy();
+      expect(outputRegion().querySelector('pre')).toBeNull();
+    });
+  });
+
   describe('when the experiment targets a workflow', () => {
     it('renders the raw output as JSON', () => {
       renderCell(makeColumn({ targetType: 'workflow', output: { text: 'not an agent response' } }));
 
-      expect(outputRegion().querySelector('pre')?.textContent).toContain('"text": "not an agent response"');
+      const lines = Array.from(outputRegion().querySelectorAll('.cm-line'), line => line.textContent);
+      expect(lines).toContain('  "text": "not an agent response"');
     });
   });
 
@@ -77,7 +112,7 @@ describe('ComparisonSideCell', () => {
       renderCell(makeColumn(pricedTiming), { showUsage: true });
 
       expect(metricTerms()).toEqual(['Cost', 'Duration', 'Tokens']);
-      expect(within(metricsRegion()).getByText('$0.0015')).toBeTruthy();
+      expect(within(metricsRegion()).getByText('$0.002')).toBeTruthy();
     });
 
     it('shows the input and output tokens together', () => {
@@ -88,19 +123,36 @@ describe('ComparisonSideCell', () => {
   });
 
   describe('when a contender uses more tokens than the baseline', () => {
-    it('shows the extra tokens as a regression', () => {
-      renderCell(makeColumn({ ...pricedTiming, role: 'contender', tokenDelta: 1200 }), { showUsage: true });
+    it('shows the extra tokens as a percentage regression', () => {
+      renderCell(makeColumn({ ...pricedTiming, role: 'contender', tokenDelta: 50 }), { showUsage: true });
 
-      const delta = within(metricsRegion()).getByText(/^\+1,200$/);
+      const delta = within(metricsRegion()).getByText(/^\+50\.0%$/);
       expect(delta.className).toContain('text-destructive-foreground');
     });
   });
 
   describe('when a contender costs more than the baseline', () => {
-    it('shows the extra cost as a regression', () => {
+    it('shows the extra cost as a percentage regression', () => {
+      renderCell(makeColumn({ ...pricedTiming, role: 'contender', costDelta: 0.0005 }), { showUsage: true });
+
+      const delta = within(metricsRegion()).getByText(/^\+50\.0%$/);
+      expect(delta.className).toContain('text-destructive-foreground');
+    });
+
+    it('shows the absolute extra cost on focus', async () => {
+      renderCell(makeColumn({ ...pricedTiming, role: 'contender', costDelta: 0.0005 }), { showUsage: true });
+
+      fireEvent.focus(within(metricsRegion()).getByText(/^\+50\.0%$/));
+
+      expect((await screen.findByRole('tooltip')).textContent).toBe('+$0.001');
+    });
+  });
+
+  describe('when the baseline cost is zero', () => {
+    it('shows the absolute extra cost', () => {
       renderCell(makeColumn({ ...pricedTiming, role: 'contender', costDelta: 0.0015 }), { showUsage: true });
 
-      const delta = within(metricsRegion()).getByText(/^\+\$0\.0015$/);
+      const delta = within(metricsRegion()).getByText(/^\+\$0\.002$/);
       expect(delta.className).toContain('text-destructive-foreground');
     });
   });
@@ -160,7 +212,7 @@ describe('ComparisonSideCell', () => {
   });
 
   describe('when a contender averages a higher score than the baseline', () => {
-    it('shows the gain as an improvement', () => {
+    it('shows the gain as a percentage improvement', () => {
       renderCell(
         makeColumn({
           role: 'contender',
@@ -169,8 +221,35 @@ describe('ComparisonSideCell', () => {
         }),
       );
 
-      const delta = within(metricsRegion()).getByText(/^\+0\.20$/);
+      const delta = within(metricsRegion()).getByText(/^\+28\.6%$/);
       expect(delta.className).toContain('text-success-indicator');
+    });
+  });
+
+  describe('when the run recorded no trace', () => {
+    it('shows no View trace button', () => {
+      renderCell(makeColumn({ ...pricedTiming, traceId: undefined }));
+
+      expect(screen.queryByRole('button', { name: 'View trace' })).toBeNull();
+    });
+  });
+
+  describe('when every metric of the cell is hidden in the metrics picker', () => {
+    beforeEach(() => {
+      localStorage.setItem('mastra:experiments-compare:hidden-metrics', JSON.stringify(['duration', 'cost', 'tokens']));
+    });
+    afterEach(() => localStorage.clear());
+
+    it('drops the Metrics section', () => {
+      renderCell(makeColumn({ ...pricedTiming, traceId: 'trace-1' }), { showUsage: true });
+
+      expect(screen.queryByRole('region', { name: 'Metrics' })).toBeNull();
+    });
+
+    it('keeps the View trace button', () => {
+      renderCell(makeColumn({ ...pricedTiming, traceId: 'trace-1' }), { showUsage: true });
+
+      expect(screen.getByRole('button', { name: 'View trace' })).toBeDefined();
     });
   });
 

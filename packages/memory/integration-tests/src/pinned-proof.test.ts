@@ -10,13 +10,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
-import { RequestContext } from '@mastra/core/request-context';
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
-import { Memory, Subconscious } from '@mastra/memory';
+import { Memory } from '@mastra/memory';
 import type { EmbeddingModel } from 'ai';
-import { afterAll, describe, expect, it } from 'vitest';
 
-import { createPinnedTools } from '../../src/processors/observational-memory/subconscious/pinned';
+import { afterAll, describe, expect, it } from 'vitest';
 
 const embedder: EmbeddingModel<string> = {
   specificationVersion: 'v1',
@@ -78,11 +77,13 @@ describe('Pinned knowledge live proof', () => {
       embedder,
       options: {
         lastMessages: 20,
-        observationalMemory: {
-          model,
-          experimental_subconscious: new Subconscious({ pins: true }),
-        },
       },
+    });
+    const knowledge = new Knowledge({
+      id: 'proof',
+      storage,
+      scopes: knowledgeMemoryScopes(),
+      pinnedContext: { maxPins: 20, maxTokens: 500 },
     });
 
     const agent = new Agent({
@@ -91,21 +92,30 @@ describe('Pinned knowledge live proof', () => {
       instructions: 'Help the user.',
       model,
       memory,
+      knowledge,
     });
 
     const threadId = randomUUID();
     const resourceId = 'proof-user';
-    const requestContext = new RequestContext();
-    requestContext.set('organizationId', 'acme');
-    const turnOptions = { memory: { thread: threadId, resource: resourceId }, requestContext } as any;
+    const turnOptions = { memory: { thread: threadId, resource: resourceId } };
 
-    const scope = [`org:acme`, `resource:${resourceId}`, `thread:${threadId}`];
-    const tools = createPinnedTools({ storage } as any, {
-      scope,
-      sourceThreadId: threadId,
-      defaultScope: 'resource',
-      maxPins: 20,
-      maxCharacters: 2_000,
+    // The curator writes through the store; the agent's run holds resource:proof-user via Memory.
+    const store = await knowledge.getStorage();
+    const curator = { author: 'curator' };
+    const audience = [`resource:${resourceId}`];
+    const { scope } = await store.materializeScope({
+      address: `resource:${resourceId}`,
+      declaration: 'resource:$resourceId',
+      name: `resource:${resourceId}`,
+      parentId: null,
+      provenance: curator,
+    });
+    const page = await store.createPage({
+      parentId: scope.id,
+      key: 'language',
+      name: 'Answer language',
+      body: 'Always answer in French.',
+      provenance: curator,
     });
 
     // Turn 1: no pins yet — no pinned-knowledge tag in the prompt.
@@ -114,7 +124,7 @@ describe('Pinned knowledge live proof', () => {
     console.info('[proof] turn 1: no pins, no pinned-knowledge tag — OK');
 
     // Curator pins a standing instruction.
-    const pin = await tools.knowledge_pin!.execute!({ text: 'Always answer in French.' } as any, {} as any);
+    await store.addPinAudience({ pageId: page.id, audience, createdBy: curator.author });
 
     // Turn 2: snapshot appears.
     await agent.generate('What is the capital of France?', turnOptions);
@@ -129,11 +139,13 @@ describe('Pinned knowledge live proof', () => {
     expect(after).toBeLessThanOrEqual(before + 1); // snapshot persists, no pile-up of new snapshots
     console.info(`[proof] turn 3: unchanged set, tag occurrences ${before} -> ${after} — OK`);
 
-    // Curator edits the pin.
-    const edited = await tools.knowledge_edit_pin!.execute!(
-      { recordId: pin.id, text: 'Always answer in French. Politely.' } as any,
-      {} as any,
-    );
+    // Curator edits the pinned page.
+    await store.updatePage({
+      id: page.id,
+      expectedVersion: page.version,
+      body: 'Always answer in French. Politely.',
+      provenance: curator,
+    });
 
     // Turn 4: the change arrives (delta while the snapshot is visible).
     await agent.generate('Thanks.', turnOptions);
@@ -141,7 +153,7 @@ describe('Pinned knowledge live proof', () => {
     console.info('[proof] turn 4: edit delivered — OK');
 
     // Curator unpins.
-    await tools.knowledge_unpin!.execute!({ recordId: edited.id } as any, {} as any);
+    await store.removePinAudience({ pageId: page.id, audience, removedBy: curator.author });
 
     // Turn 5: lane clears — the latest state carries no pin body.
     await agent.generate('One more thing.', turnOptions);

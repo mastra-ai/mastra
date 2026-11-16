@@ -101,16 +101,22 @@ describe('Malformed JSON Body Handling', () => {
       expect(errorResult.error || errorResult.message || errorResult.issues).toBeDefined();
     });
 
-    it('should handle empty string body gracefully', async () => {
-      const emptyBodyResponse = await app.fetch(
-        new Request('http://localhost/api/workflows/test-workflow/start-async', {
+    // Clients that always send a JSON content type must still reach routes that take no body (#29667).
+    it.each([
+      ['an empty', ''],
+      ['a whitespace-only', '  \n'],
+    ])('accepts a JSON content type with %s body', async (kind, body) => {
+      const runId = `empty-body-${kind.replace(/\W/g, '-')}`;
+      const response = await app.fetch(
+        new Request(`http://localhost/api/workflows/test-workflow/create-run?runId=${runId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: '',
+          body,
         }),
       );
 
-      expect(emptyBodyResponse.status).toBeLessThan(500);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ runId });
     });
 
     it('should handle truncated JSON gracefully', async () => {

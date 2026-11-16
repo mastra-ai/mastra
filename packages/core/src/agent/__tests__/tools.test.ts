@@ -1060,24 +1060,23 @@ function toolsTest(version: 'v1' | 'v2' | 'v3') {
                   },
                 ]),
               };
-            } else {
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                warnings: [],
-                stream: convertArrayToReadableStream([
-                  { type: 'stream-start', warnings: [] },
-                  { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
-                  { type: 'text-start', id: 'text-1' },
-                  { type: 'text-delta', id: 'text-1', delta: 'The tool returned success.' },
-                  { type: 'text-end', id: 'text-1' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                  },
-                ]),
-              };
             }
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'The tool returned success.' },
+                { type: 'text-end', id: 'text-1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+            };
           },
         });
       } else {
@@ -1110,25 +1109,24 @@ function toolsTest(version: 'v1' | 'v2' | 'v3') {
                   },
                 ]),
               };
-            } else {
-              return {
-                stream: convertArrayToReadableStreamV3([
-                  { type: 'stream-start', warnings: [] },
-                  { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
-                  { type: 'text-start', id: 'text-1' },
-                  { type: 'text-delta', id: 'text-1', delta: 'The tool returned success.' },
-                  { type: 'text-end', id: 'text-1' },
-                  {
-                    type: 'finish',
-                    finishReason: { unified: 'stop', raw: 'stop' },
-                    usage: {
-                      inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
-                      outputTokens: { total: 20, text: 20, reasoning: undefined },
-                    },
-                  },
-                ]),
-              };
             }
+            return {
+              stream: convertArrayToReadableStreamV3([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'The tool returned success.' },
+                { type: 'text-end', id: 'text-1' },
+                {
+                  type: 'finish',
+                  finishReason: { unified: 'stop', raw: 'stop' },
+                  usage: {
+                    inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                    outputTokens: { total: 20, text: 20, reasoning: undefined },
+                  },
+                },
+              ]),
+            };
           },
         });
       }

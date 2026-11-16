@@ -9,7 +9,7 @@ import { groupConsecutive } from '@/ds/components/ai/tool-call';
 import type { ConsecutiveGroups } from '@/ds/components/ai/tool-call';
 
 /** Cards that only draw: nothing in them waits on the reader. */
-const FOLDABLE_KINDS = new Set<ToolCardKind>(['plain', 'background', 'file_tree', 'sandbox', 'code_mode']);
+const FOLDABLE_KINDS = new Set<ToolCardKind>(['plain', 'background', 'file_tree', 'sandbox', 'code_mode', 'knowledge']);
 
 export function foldsIntoGroup(part: ToolPart, context: ToolCardContext): boolean {
   const fields = readToolPart(part);

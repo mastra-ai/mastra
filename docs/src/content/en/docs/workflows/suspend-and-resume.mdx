@@ -28,7 +28,10 @@ flowchart LR
   class snapshot pending
 ```
 
-```typescript {9-11,16-18} title="src/mastra/workflows/test-workflow.ts"
+```typescript {12-14,19-21} title="src/mastra/workflows/test-workflow.ts"
+import { createWorkflow, createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
+
 const step1 = createStep({
   id: 'step-1',
   inputSchema: z.object({
@@ -143,7 +146,10 @@ setTimeout(async () => {
 
 When a step is suspended, you may want to access the data that was provided to `suspend()` when the step is later resumed. Use the `suspendData` parameter in your step's execute function to access this data.
 
-```typescript {22-25,29-30} title="src/mastra/workflows/user-approval.ts"
+```typescript {25-28,32-33} title="src/mastra/workflows/user-approval.ts"
+import { createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
+
 const approvalStep = createStep({
   id: 'user-approval',
   inputSchema: z.object({
@@ -209,7 +215,7 @@ if (result.status === 'suspended') {
 
 ### Example output
 
-The `suspended` array contains the IDs of any suspended workflows and steps from the run. These can be passed to the `step` parameter when calling `resume()` to target and resume the suspended execution path.
+The `suspended` array contains one path for each suspended step in the run. Each path is an array of step IDs that leads from the top-level workflow to the suspended step, passing through any nested workflows. Pass a path to the `step` parameter of `resume()` to target and resume that execution path. With the default engine, a nested workflow contributes only one path at a time, even if several of its parallel steps suspended. After resuming, check the returned `suspended` array for remaining paths. Treat each path as opaque and pass it back unchanged: depending on the engine, it can include repeated IDs or numeric `.foreach()` indexes. A path to a suspended `.foreach()` step targets every suspended iteration, so pass [`forEachIndex`](/reference/workflows/run-methods/resume) to resume one iteration at a time. For a step suspended inside a nested workflow, `result.suspended[0]` is:
 
 ```typescript
 ['nested-workflow', 'step-1']

@@ -44,7 +44,7 @@ function makeRecord(overrides: Partial<OMHistoryRecord> & Pick<OMHistoryRecord, 
 }
 
 function makeMarker(overrides: Partial<ExtractedOmMarker> & Pick<ExtractedOmMarker, 'type' | 'timestamp'>) {
-  return overrides as ExtractedOmMarker;
+  return overrides;
 }
 
 describe('getObservationTimestamp', () => {
@@ -377,17 +377,13 @@ describe('toCombinedRowData', () => {
   });
 
   it('skips an area point that is not on the timeline at all', () => {
-    const combined = toCombinedRowData(
-      [{ tokens: 999 } as Record<string, number>, { t: 0.5, tokens: 400 }],
-      'tokens',
-      [],
-    );
+    const combined = toCombinedRowData([{ tokens: 999 }, { t: 0.5, tokens: 400 }], 'tokens', []);
 
     expect(combined).toEqual([{ t: 0.5, tokens: 400 }]);
   });
 
   it('reads a missing value on an area point as zero', () => {
-    const combined = toCombinedRowData([{ t: 0.5 } as Record<string, number>], 'tokens', []);
+    const combined = toCombinedRowData([{ t: 0.5 }], 'tokens', []);
 
     expect(combined).toEqual([{ t: 0.5, tokens: 0 }]);
   });

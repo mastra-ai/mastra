@@ -63,7 +63,6 @@ function buildApp(
     authEnabled?: boolean;
     withIncidentio?: boolean;
     withIntake?: boolean;
-    ingestFactoryIssues?: (input: unknown) => Promise<unknown>;
   } = {},
 ) {
   const app = new Hono();
@@ -77,7 +76,6 @@ function buildApp(
       incidentio: (options.withIncidentio ?? true) ? incidentio : undefined,
       auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
       intake: (options.withIntake ?? true) ? seed.intake : undefined,
-      ...(options.ingestFactoryIssues ? { ingestFactoryIssues: options.ingestFactoryIssues as never } : {}),
     }),
   );
   return app;
@@ -85,6 +83,17 @@ function buildApp(
 
 const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
 const projectA = '11111111-1111-4111-8111-111111111111';
+const createProject = async (id: string) => {
+  const now = new Date();
+  await seed.storage.ops.insertOne('factory_projects', {
+    id,
+    org_id: 'org1',
+    created_by: 'u1',
+    name: id,
+    created_at: now,
+    updated_at: now,
+  });
+};
 
 beforeEach(async () => {
   seed = await createFactoryStorageForTests();
@@ -167,11 +176,11 @@ describe('status route', () => {
 
 describe('issues route', () => {
   beforeEach(async () => {
-    await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-a' } });
+    await createProject(projectA);
   });
 
   const bind = (sourceId: string, factoryProjectId: string, board = 'work') =>
-    seed.intake.setBinding({ orgId: 'org1', integrationId: 'incidentio', sourceId, factoryProjectId, board });
+    seed.intake.setBinding({ orgId: 'org1', integrationId: 'incidentio', sourceId, factoryProjectId });
 
   it('rejects unauthenticated users', async () => {
     expect((await buildApp(null).request('/web/incidentio/issues')).status).toBe(401);
@@ -227,43 +236,6 @@ describe('issues route', () => {
     const res = await buildApp(org1()).request('/web/incidentio/issues?after=%00bad%20cursor');
     expect(res.status).toBe(400);
   });
-
-  it('ingests a board-scoped listing through the Factory rules', async () => {
-    await bind(INCIDENTIO_FOLLOW_UPS_SOURCE_ID, projectA);
-    const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
-
-    const res = await buildApp(org1(), { ingestFactoryIssues }).request(
-      `/web/incidentio/issues?factoryProjectId=${projectA}`,
-    );
-
-    expect(res.status).toBe(200);
-    expect(ingestFactoryIssues).toHaveBeenCalledWith({
-      orgId: 'org1',
-      userId: 'u1',
-      factoryProjectId: projectA,
-      issues: [
-        expect.objectContaining({
-          id: 'incidentio:follow-up:01HFOLLOWUP',
-          identifier: 'INC-42',
-          stateType: 'unstarted',
-          assignee: 'Grace Hopper',
-          author: 'Ada Lovelace',
-          sourceId: INCIDENTIO_FOLLOW_UPS_SOURCE_ID,
-        }),
-      ],
-      intakeBoards: { [INCIDENTIO_FOLLOW_UPS_SOURCE_ID]: 'work' },
-    });
-  });
-
-  it('does not ingest an unscoped listing', async () => {
-    await bind(INCIDENTIO_FOLLOW_UPS_SOURCE_ID, projectA);
-    const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
-
-    const res = await buildApp(org1(), { ingestFactoryIssues }).request('/web/incidentio/issues');
-
-    expect(res.status).toBe(200);
-    expect(ingestFactoryIssues).not.toHaveBeenCalled();
-  });
 });
 
 describe('issue detail route', () => {
@@ -289,7 +261,7 @@ describe('issue detail route', () => {
   };
 
   beforeEach(async () => {
-    await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-a' } });
+    await createProject(projectA);
   });
 
   it('returns the description for a follow-up from a source routed to the Factory', async () => {
@@ -298,7 +270,6 @@ describe('issue detail route', () => {
       integrationId: 'incidentio',
       sourceId: INCIDENTIO_FOLLOW_UPS_SOURCE_ID,
       factoryProjectId: projectA,
-      board: 'work',
     });
     vi.spyOn(incidentio.intake, 'getIssue').mockResolvedValue(followUpDetail);
 

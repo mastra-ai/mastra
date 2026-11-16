@@ -20,6 +20,8 @@ export interface ScenarioContext {
   baseUrl: string;
   /** The workspace root dir, when the scenario requested `server.workspace`. */
   workspaceRoot?: string;
+  /** Simulate a server restart: live sessions are dropped, stored threads survive. */
+  restartServer: () => Promise<void>;
 }
 
 export interface WebScenario {
@@ -49,6 +51,7 @@ export async function runScenario(scenario: WebScenario): Promise<void> {
       fetch: server.fetch,
       baseUrl: server.baseUrl,
       workspaceRoot: server.workspaceRoot,
+      restartServer: server.restart,
     });
     if (aimock.requestCount() === 0) {
       throw new Error(`${scenario.name} expected at least one AIMock request but saw none`);

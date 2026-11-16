@@ -4,8 +4,9 @@ import { getErrorFromUnknown } from '@mastra/core/error';
 import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
+import * as coreObservability from '@mastra/core/observability';
 import { SpanType, EntityType } from '@mastra/core/observability';
-import type { WorkflowRuns } from '@mastra/core/storage';
+import type { RunFence, WorkflowRuns } from '@mastra/core/storage';
 import { Workflow, getEntryWorkflow, isSingleStepEntry } from '@mastra/core/workflows';
 import type {
   Step,
@@ -19,12 +20,14 @@ import type {
 } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
+import { RESUME_CLAIM_RUN_LEASE_MS } from './durable-event-payload';
 import { InngestExecutionEngine } from './execution-engine';
 import {
   compactNestedWorkflowResult,
   NESTED_WORKFLOW_OUTPUT_MODE,
   resolveNestedWorkflowOutputMode,
 } from './nested-workflow-output';
+import { workflowTermination } from './observability-compat';
 import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
 import type {
@@ -131,6 +134,10 @@ class WorkflowEventPolicyPubSub extends PubSub {
     return this.pubsub.supportsOffsets;
   }
 
+  override __replaysTopic(topic: string): boolean {
+    return this.pubsub.__replaysTopic(topic);
+  }
+
   getHistory(topic: string, offset?: number): Promise<Event[]> {
     return this.pubsub.getHistory(topic, offset);
   }
@@ -177,6 +184,8 @@ export class InngestWorkflow<
    */
   #pubsubFactory?: (defaultPubsub: PubSub) => PubSub;
   #emitWorkflowEvents = true;
+  /** Functions a host (e.g. the durable agent loop) serves alongside this workflow's own. */
+  #hostFunctions: ReturnType<Inngest['createFunction']>[] = [];
 
   constructor(
     params: InngestWorkflowConfig<
@@ -274,6 +283,10 @@ export class InngestWorkflow<
     }
     this.__setEmitWorkflowEvents(this.#emitWorkflowEvents);
     return committed;
+  }
+
+  __addHostFunctions(functions: ReturnType<Inngest['createFunction']>[]) {
+    this.#hostFunctions.push(...functions);
   }
 
   __setEmitWorkflowEvents(enabled: boolean) {
@@ -465,7 +478,7 @@ export class InngestWorkflow<
        * @param context - The Inngest event, durable step tools, and current attempt.
        * @returns The workflow result and run identifier returned to Inngest.
        */
-      async ({ event, step, attempt }) => {
+      async ({ event, step, attempt, runId: inngestRunId }) => {
         let {
           inputData,
           initialState,
@@ -498,6 +511,19 @@ export class InngestWorkflow<
             `Workflow "${this.id}" was triggered without a runId, so run "${runId}" cannot be cancelled by id. ` +
               `Send \`data.runId\` on the trigger event (or start the run with createRun()) to make it cancellable.`,
           );
+        }
+
+        // An InngestAgent resume runs under a claim on the run, held for the whole segment once it starts.
+        // A claim a later resume took over before this event ran leaves nothing to run. Checked once, in
+        // a step, because the segment releases the claim before its last invocation replays.
+        const resumeClaim: RunFence | undefined = resume?.claim;
+        if (resumeClaim) {
+          const held = await step.run(`workflow.${this.id}.resume-claim`, async () => {
+            const store = await this.#mastra?.getStorage()?.getStore('workflows');
+            const lease = await store?.renewRunOwnership({ ...resumeClaim, leaseMs: RESUME_CLAIM_RUN_LEASE_MS });
+            return lease?.renewed ?? true;
+          });
+          if (!held) return { result: undefined, runId };
         }
 
         if (resume && (initialState === undefined || resume.stepResults === undefined)) {
@@ -541,6 +567,7 @@ export class InngestWorkflow<
 
           const span = observability.startSpan({
             type: SpanType.WORKFLOW_RUN,
+            outcome: null,
             name: `workflow run: '${this.id}'`,
             entityType: EntityType.WORKFLOW_RUN,
             entityId: this.id,
@@ -555,10 +582,17 @@ export class InngestWorkflow<
             requestContext,
           });
 
-          return span?.exportSpan();
+          return span?.snapshot?.() ?? span?.exportSpan();
         });
 
-        const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options, parentStream);
+        const engine = new InngestExecutionEngine(
+          this.#mastra,
+          step,
+          attempt,
+          this.options,
+          parentStream,
+          inngestRunId,
+        );
 
         let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
         try {
@@ -635,11 +669,16 @@ export class InngestWorkflow<
            */
           const finalizeWorkflow = async () => {
             // For durable agent workflows, emit error event on failure so the
-            // client's stream can receive the error and close properly.
-            if (result.status === 'failed' && inputData?.__workflowKind === 'durable-agent' && inputData?.runId) {
+            // client's stream can receive the error and close properly. A resume
+            // event carries the resume payload as `inputData`, so read the agent
+            // input from the restored step results instead.
+            const durableAgentInput = [inputData, resume?.stepResults?.input].find(
+              input => input?.__workflowKind === 'durable-agent' && input.runId,
+            );
+            if (result.status === 'failed' && durableAgentInput) {
               const { error, delivery } = durableAgentWorkflowError(result.error);
               try {
-                await emitErrorEvent(pubsub, inputData.runId, error, undefined, delivery);
+                await emitErrorEvent(pubsub, durableAgentInput.runId, error, undefined, delivery);
               } catch (e) {
                 this.logger.debug?.('Failed to emit error event:', e);
               }
@@ -671,12 +710,19 @@ export class InngestWorkflow<
                 const workflowSpan = observability.rebuildSpan(workflowSpanData);
 
                 if (result.status === 'failed') {
+                  const failure = getErrorFromUnknown(result.error, { fallbackMessage: 'Workflow execution failed' });
+                  const origin = coreObservability.getSpanErrorOrigin?.(result.error);
+                  if (origin) coreObservability.setSpanErrorOrigin?.(failure, origin);
                   workflowSpan.error({
-                    error: getErrorFromUnknown(result.error, { fallbackMessage: 'Workflow execution failed' }),
+                    ...workflowTermination(result),
+                    error: failure,
                     attributes: { status: 'failed' },
                   });
+                  const recordedOrigin = coreObservability.getSpanErrorOrigin?.(failure);
+                  if (recordedOrigin) coreObservability.setSpanErrorOrigin?.(result.error, recordedOrigin);
                 } else {
                   workflowSpan.end({
+                    ...workflowTermination(result),
                     output: result.status === 'success' ? result.result : undefined,
                     attributes: { status: result.status },
                   });
@@ -711,6 +757,8 @@ export class InngestWorkflow<
                   status: result.status,
                   value: result.state ?? initialState ?? {},
                   context: toSnapshotContext(result.steps),
+                  // InngestAgent resumes only claim a suspension written here, which they tell apart
+                  // from the engine's earlier writes by this empty path.
                   activePaths: [],
                   activeStepsPath: {},
                   serializedStepGraph: this.serializedStepGraph,
@@ -740,6 +788,11 @@ export class InngestWorkflow<
               }
             }
 
+            // The run is parked or finished again, so the next resume may claim it.
+            if (resumeClaim) {
+              await (await mastra?.getStorage()?.getStore('workflows'))?.releaseRunOwnership(resumeClaim);
+            }
+
             // Publish workflow-finish event for realtime subscribers (best-effort)
             try {
               await pubsub.publish(`workflow.events.v2.${runId}`, {
@@ -761,7 +814,10 @@ export class InngestWorkflow<
             // Throw after span ended for failed workflows
             if (result.status === 'failed') {
               throw new NonRetriableError(`Workflow failed`, {
-                cause: shouldCompactNestedWorkflowOutput ? { ...returnedResult, runId } : result,
+                cause: {
+                  ...(shouldCompactNestedWorkflowOutput ? { ...returnedResult, runId } : result),
+                  __mastraSpanErrorOrigin: coreObservability.getSpanErrorOrigin?.(result.error),
+                },
               });
             }
 
@@ -812,6 +868,7 @@ export class InngestWorkflow<
       this.getFunction(),
       ...(this.cronConfig?.cron ? [this.createCronFunction()] : []),
       ...this.getNestedFunctions(this.executionGraph.steps),
+      ...this.#hostFunctions,
     ];
   }
 }

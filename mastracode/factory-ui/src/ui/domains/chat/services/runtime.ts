@@ -1,6 +1,7 @@
 import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { TokenUsage } from '@mastra/core/agent-controller';
+import { replaceEqualDeep } from '@tanstack/react-query';
 
 import type { OMBudgets } from './om';
 
@@ -19,6 +20,7 @@ export interface ChatRuntimeState {
   bufferingMessages: boolean;
   bufferingObservations: boolean;
   goal?: GoalSnapshot;
+  runsStarted: number;
   tokensPerSec: number;
   /** Assistant message the decode window measures; a different message starts a new window. */
   _decodeMessageId?: string;
@@ -29,6 +31,7 @@ export interface ChatRuntimeState {
 
 export const initialChatRuntime: ChatRuntimeState = {
   followUpCount: 0,
+  runsStarted: 0,
   omPhase: 'idle',
   bufferingMessages: false,
   bufferingObservations: false,
@@ -107,6 +110,7 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
     case 'agent_start':
       return {
         ...state,
+        runsStarted: state.runsStarted + 1,
         tokensPerSec: 0,
         _decodeMessageId: undefined,
         _decodeStartedAt: 0,
@@ -179,14 +183,16 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
         _decodeHasReasoning: false,
       };
     }
-    case 'display_state_changed':
-      return {
+    case 'display_state_changed': {
+      // Snapshots arrive many times a second and mostly repeat what is shown; the same state lets React skip the chat.
+      return replaceEqualDeep(state, {
         ...state,
         omProgress: event.displayState.omProgress ?? state.omProgress,
         usage: event.displayState.tokenUsage ?? state.usage,
         bufferingMessages: event.displayState.bufferingMessages ?? false,
         bufferingObservations: event.displayState.bufferingObservations ?? false,
-      };
+      });
+    }
     case 'goal_evaluation':
       return { ...state, goal: event.payload };
     case 'follow_up_queued':

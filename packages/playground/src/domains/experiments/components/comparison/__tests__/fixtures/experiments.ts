@@ -38,3 +38,9 @@ export const blankNameExperiment: DatasetExperiment = {
   name: '',
   description: undefined,
 };
+
+/** Caller-run experiments carry no dataset, so the dataset-scoped rename route can't reach them. */
+export const datasetlessExperiment: DatasetExperiment = {
+  ...namedExperiment,
+  datasetId: null,
+};

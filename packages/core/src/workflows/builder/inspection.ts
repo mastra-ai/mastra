@@ -1,6 +1,7 @@
 import type { JsonSchema } from '../dynamic/json-schema-to-zod';
 import { inferGraphSchemas } from '../dynamic/validate/schema-flow';
-import { schemaCompatibility, type SchemaCompatibility } from '../dynamic/validate/schema-utils';
+import { schemaCompatibility } from '../dynamic/validate/schema-utils';
+import type { SchemaCompatibility } from '../dynamic/validate/schema-utils';
 import type { WorkflowRegistryIndex, WorkflowValidationIssue } from '../dynamic/validate/types';
 import type { WorkflowBuilderDefinition } from './index';
 

@@ -16,6 +16,7 @@ import type {
   UpdateSpanArgs,
   BatchDeleteTracesArgs,
   BatchUpdateSpansArgs,
+  BatchUpdateUnendedSpansResponse,
   BatchCreateSpansArgs,
   CreateSpanArgs,
   GetSpanArgs,
@@ -833,33 +834,59 @@ export class ObservabilityPG extends ObservabilityStorage {
     }
   }
 
+  #toSpanUpdates(records: BatchUpdateSpansArgs['records']) {
+    return records.map(record => {
+      const data: Record<string, any> = { ...record.updates };
+      if (data.endedAt instanceof Date) {
+        const endedAt = data.endedAt.toISOString();
+        data.endedAt = endedAt;
+        data.endedAtZ = endedAt;
+      }
+      if (data.startedAt instanceof Date) {
+        const startedAt = data.startedAt.toISOString();
+        data.startedAt = startedAt;
+        data.startedAtZ = startedAt;
+      }
+
+      return {
+        keys: { spanId: record.spanId, traceId: record.traceId },
+        data,
+      };
+    });
+  }
+
   async batchUpdateSpans(args: BatchUpdateSpansArgs): Promise<void> {
     try {
       return this.#db.batchUpdate({
         tableName: TABLE_SPANS,
-        updates: args.records.map(record => {
-          const data: Record<string, any> = { ...record.updates };
-          if (data.endedAt instanceof Date) {
-            const endedAt = data.endedAt.toISOString();
-            data.endedAt = endedAt;
-            data.endedAtZ = endedAt;
-          }
-          if (data.startedAt instanceof Date) {
-            const startedAt = data.startedAt.toISOString();
-            data.startedAt = startedAt;
-            data.startedAtZ = startedAt;
-          }
-
-          return {
-            keys: { spanId: record.spanId, traceId: record.traceId },
-            data,
-          };
-        }),
+        updates: this.#toSpanUpdates(args.records),
       });
     } catch (error) {
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'BATCH_UPDATE_SPANS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+        },
+        error,
+      );
+    }
+  }
+
+  async batchUpdateUnendedSpans(args: BatchUpdateSpansArgs): Promise<BatchUpdateUnendedSpansResponse> {
+    try {
+      const applied = await this.#db.batchUpdateWhereNull({
+        tableName: TABLE_SPANS,
+        updates: this.#toSpanUpdates(args.records),
+        nullColumns: ['endedAt'],
+      });
+      return {
+        updated: args.records.filter((_, index) => applied[index]).map(({ traceId, spanId }) => ({ traceId, spanId })),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'BATCH_UPDATE_UNENDED_SPANS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },

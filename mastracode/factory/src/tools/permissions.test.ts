@@ -17,7 +17,7 @@ function factoryRow(sessionId: string): SourceControlSession {
 function fakeSession(rules: PermissionRules = { categories: {}, tools: {} }) {
   let state = { permissionRules: rules };
   return {
-    identity: { getResourceId: () => 'session-1' },
+    identity: { getId: () => 'session-1' },
     permissions: {
       getRules: () => structuredClone(state.permissionRules),
       setForTool: async ({ toolName, policy }: { toolName: string; policy: 'allow' | 'ask' | 'deny' }) => {

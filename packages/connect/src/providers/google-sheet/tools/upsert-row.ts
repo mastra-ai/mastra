@@ -100,31 +100,30 @@ export function upsertRowTool(proxy: PlatformProxy) {
           updatedRange: updateResponse.data.updatedRange,
           updatedRows: updateResponse.data.updatedRows,
         };
-      } else {
-        // Append new row
-        // https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/append
-        const appendResponse = await platformProxy.post({
-          endpoint: `/v4/spreadsheets/${spreadsheetId}/values/${range}:append`,
-          params: {
-            valueInputOption: 'USER_ENTERED',
-            insertDataOption: 'INSERT_ROWS',
-          },
-          data: {
-            range: range,
-            majorDimension: 'ROWS',
-            values: [values],
-          },
-          retries: 3,
-        });
-
-        return {
-          success: true,
-          operation: 'appended',
-          spreadsheetId: appendResponse.data.spreadsheetId,
-          updatedRange: appendResponse.data.updates?.updatedRange || '',
-          updatedRows: appendResponse.data.updates?.updatedRows || 1,
-        };
       }
+      // Append new row
+      // https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/append
+      const appendResponse = await platformProxy.post({
+        endpoint: `/v4/spreadsheets/${spreadsheetId}/values/${range}:append`,
+        params: {
+          valueInputOption: 'USER_ENTERED',
+          insertDataOption: 'INSERT_ROWS',
+        },
+        data: {
+          range: range,
+          majorDimension: 'ROWS',
+          values: [values],
+        },
+        retries: 3,
+      });
+
+      return {
+        success: true,
+        operation: 'appended',
+        spreadsheetId: appendResponse.data.spreadsheetId,
+        updatedRange: appendResponse.data.updates?.updatedRange || '',
+        updatedRows: appendResponse.data.updates?.updatedRows || 1,
+      };
     },
   });
 }

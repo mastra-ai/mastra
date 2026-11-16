@@ -171,7 +171,10 @@ const step1 = createStep({
 
 For workflows that require input at multiple stages, the suspend pattern remains the same. Each step defines a `resumeSchema`, and `suspendSchema` typically with a reason that can be used to provide user feedback.
 
-```typescript {11-16,21-25} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
+```typescript {14-19,24-28} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { z } from 'zod';
+
 const step1 = createStep({...});
 
 const step2 = createStep({

@@ -74,49 +74,43 @@ export abstract class SchemaCompatLayer {
   getUnsupportedZodTypes(value: ZodType): readonly string[] {
     if ('_zod' in value) {
       return this.v4Layer.getUnsupportedZodTypes();
-    } else {
-      return this.v3Layer.getUnsupportedZodTypes();
     }
+    return this.v3Layer.getUnsupportedZodTypes();
   }
 
   isOptional(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodOptional<any> | zV4.ZodOptional<any> {
     if ('_zod' in v) {
       return this.v4Layer.isOptional(v as any);
-    } else {
-      return this.v3Layer.isOptional(v as any);
     }
+    return this.v3Layer.isOptional(v as any);
   }
 
   isObj(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodObject<any, any, any, any, any> | zV4.ZodObject<any, any> {
     if ('_zod' in v) {
       return this.v4Layer.isObj(v as any);
-    } else {
-      return this.v3Layer.isObj(v as any);
     }
+    return this.v3Layer.isObj(v as any);
   }
 
   isNull(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodNull | zV4.ZodNull {
     if ('_zod' in v) {
       return this.v4Layer.isNull(v as any);
-    } else {
-      return this.v3Layer.isNull(v as any);
     }
+    return this.v3Layer.isNull(v as any);
   }
 
   isNullable(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodNullable<any> | zV4.ZodNullable<any> {
     if ('_zod' in v) {
       return this.v4Layer.isNullable(v as any);
-    } else {
-      return this.v3Layer.isNullable(v as any);
     }
+    return this.v3Layer.isNullable(v as any);
   }
 
   isArr(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodArray<any, any> | zV4.ZodArray<any> {
     if ('_zod' in v) {
       return this.v4Layer.isArr(v as any);
-    } else {
-      return this.v3Layer.isArr(v as any);
     }
+    return this.v3Layer.isArr(v as any);
   }
 
   isUnion(
@@ -124,49 +118,43 @@ export abstract class SchemaCompatLayer {
   ): v is zV3.ZodUnion<[zV3.ZodType, ...zV3.ZodType[]]> | zV4.ZodUnion<[zV4.ZodType, ...zV4.ZodType[]]> {
     if ('_zod' in v) {
       return this.v4Layer.isUnion(v as any);
-    } else {
-      return this.v3Layer.isUnion(v as any);
     }
+    return this.v3Layer.isUnion(v as any);
   }
 
   isString(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodString | zV4.ZodString {
     if ('_zod' in v) {
       return this.v4Layer.isString(v as any);
-    } else {
-      return this.v3Layer.isString(v as any);
     }
+    return this.v3Layer.isString(v as any);
   }
 
   isNumber(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodNumber | zV4.ZodNumber {
     if ('_zod' in v) {
       return this.v4Layer.isNumber(v as any);
-    } else {
-      return this.v3Layer.isNumber(v as any);
     }
+    return this.v3Layer.isNumber(v as any);
   }
 
   isDate(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodDate | zV4.ZodDate {
     if ('_zod' in v) {
       return this.v4Layer.isDate(v as any);
-    } else {
-      return this.v3Layer.isDate(v as any);
     }
+    return this.v3Layer.isDate(v as any);
   }
 
   isDefault(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodDefault<any> | zV4.ZodDefault<any> {
     if ('_zod' in v) {
       return this.v4Layer.isDefault(v as any);
-    } else {
-      return this.v3Layer.isDefault(v as any);
     }
+    return this.v3Layer.isDefault(v as any);
   }
 
   isIntersection(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodIntersection<any, any> | zV4.ZodIntersection<any, any> {
     if ('_zod' in v) {
       return this.v4Layer.isIntersection(v as any);
-    } else {
-      return this.v3Layer.isIntersection(v as any);
     }
+    return this.v3Layer.isIntersection(v as any);
   }
 
   abstract shouldApply(): boolean;
@@ -179,9 +167,8 @@ export abstract class SchemaCompatLayer {
   ): zV3.ZodObject<any, any, any, any, any> | zV4.ZodObject<any, any> {
     if ('_zod' in value) {
       return this.v4Layer.defaultZodObjectHandler(value, options);
-    } else {
-      return this.v3Layer.defaultZodObjectHandler(value, options);
     }
+    return this.v3Layer.defaultZodObjectHandler(value, options);
   }
 
   public mergeParameterDescription(
@@ -200,12 +187,11 @@ export abstract class SchemaCompatLayer {
         value as any,
         (throwOnTypes ?? v4.UNSUPPORTED_ZOD_TYPES) as typeof v4.UNSUPPORTED_ZOD_TYPES,
       );
-    } else {
-      return this.v3Layer.defaultUnsupportedZodTypeHandler(
-        value as any,
-        (throwOnTypes ?? v3.UNSUPPORTED_ZOD_TYPES) as typeof v3.UNSUPPORTED_ZOD_TYPES,
-      );
     }
+    return this.v3Layer.defaultUnsupportedZodTypeHandler(
+      value as any,
+      (throwOnTypes ?? v3.UNSUPPORTED_ZOD_TYPES) as typeof v3.UNSUPPORTED_ZOD_TYPES,
+    );
   }
 
   public defaultZodArrayHandler(
@@ -214,17 +200,15 @@ export abstract class SchemaCompatLayer {
   ): zV3.ZodArray<any, any> | zV4.ZodArray<any> {
     if ('_zod' in value) {
       return this.v4Layer.defaultZodArrayHandler(value, handleChecks);
-    } else {
-      return this.v3Layer.defaultZodArrayHandler(value, handleChecks);
     }
+    return this.v3Layer.defaultZodArrayHandler(value, handleChecks);
   }
 
   public defaultZodUnionHandler(value: ZodUnion): zV3.ZodType | zV4.ZodType {
     if ('_zod' in value) {
       return this.v4Layer.defaultZodUnionHandler(value as any);
-    } else {
-      return this.v3Layer.defaultZodUnionHandler(value as any);
     }
+    return this.v3Layer.defaultZodUnionHandler(value as any);
   }
 
   public defaultZodStringHandler(
@@ -233,9 +217,8 @@ export abstract class SchemaCompatLayer {
   ): zV3.ZodString | zV4.ZodString {
     if ('_zod' in value) {
       return this.v4Layer.defaultZodStringHandler(value);
-    } else {
-      return this.v3Layer.defaultZodStringHandler(value, handleChecks);
     }
+    return this.v3Layer.defaultZodStringHandler(value, handleChecks);
   }
 
   public defaultZodNumberHandler(
@@ -244,17 +227,15 @@ export abstract class SchemaCompatLayer {
   ): zV3.ZodNumber | zV4.ZodNumber {
     if ('_zod' in value) {
       return this.v4Layer.defaultZodNumberHandler(value);
-    } else {
-      return this.v3Layer.defaultZodNumberHandler(value, handleChecks);
     }
+    return this.v3Layer.defaultZodNumberHandler(value, handleChecks);
   }
 
   public defaultZodDateHandler(value: zV3.ZodDate | zV4.ZodDate): zV3.ZodString | zV4.ZodString {
     if ('_zod' in value) {
       return this.v4Layer.defaultZodDateHandler(value);
-    } else {
-      return this.v3Layer.defaultZodDateHandler(value);
     }
+    return this.v3Layer.defaultZodDateHandler(value);
   }
 
   public defaultZodOptionalHandler(
@@ -290,12 +271,10 @@ export abstract class SchemaCompatLayer {
           return value;
         }
         return this.processZodType(innerType).optional();
-      } else {
-        return this.processZodType(value._def.innerType).optional();
       }
-    } else {
-      return value;
+      return this.processZodType(value._def.innerType).optional();
     }
+    return value;
   }
 
   public defaultZodNullableHandler(
@@ -307,12 +286,11 @@ export abstract class SchemaCompatLayer {
         value,
         (handleTypes ?? v4.SUPPORTED_ZOD_TYPES) as typeof v4.SUPPORTED_ZOD_TYPES,
       );
-    } else {
-      return this.v3Layer.defaultZodNullableHandler(
-        value as any,
-        (handleTypes ?? v3.SUPPORTED_ZOD_TYPES) as typeof v3.SUPPORTED_ZOD_TYPES,
-      );
     }
+    return this.v3Layer.defaultZodNullableHandler(
+      value as any,
+      (handleTypes ?? v3.SUPPORTED_ZOD_TYPES) as typeof v3.SUPPORTED_ZOD_TYPES,
+    );
   }
 
   public defaultZodIntersectionHandler(
@@ -320,9 +298,8 @@ export abstract class SchemaCompatLayer {
   ): zV3.ZodType | zV4.ZodType {
     if ('_zod' in value) {
       return this.v4Layer.defaultZodIntersectionHandler(value as any);
-    } else {
-      return this.v3Layer.defaultZodIntersectionHandler(value as any);
     }
+    return this.v3Layer.defaultZodIntersectionHandler(value as any);
   }
 
   /**

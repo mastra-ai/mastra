@@ -1,4 +1,6 @@
+import type { CommandsApi } from '@internal/workspace';
 import { CommandExitError, Sandbox, TimeoutError } from 'e2b';
+import type { EntryInfo } from 'e2b';
 
 import type { DirectExecOptions, DirectExecResult, ExecLease } from './direct-exec.js';
 
@@ -67,3 +69,37 @@ export const execViaE2BLease: E2BExecRunner = async (lease, options) => {
     };
   }
 };
+
+/**
+ * The subset of E2B's `sandbox.files` API that {@link PlatformSandboxFilesystem}
+ * uses. Tests substitute a fake through `PlatformSandboxOptions.e2bFilesFactory`.
+ */
+export interface E2BFiles {
+  read(path: string, opts: { format: 'bytes' }): Promise<Uint8Array>;
+  write(path: string, data: string | ArrayBuffer): Promise<unknown>;
+  list(path: string, opts?: { depth?: number }): Promise<EntryInfo[]>;
+  makeDir(path: string): Promise<boolean>;
+  rename(oldPath: string, newPath: string): Promise<unknown>;
+  remove(path: string): Promise<void>;
+  getInfo(path: string): Promise<EntryInfo>;
+}
+
+export type E2BFilesFactory = (lease: E2BExecLease) => E2BFiles;
+
+export type E2BCommandsFactory = (lease: E2BExecLease) => CommandsApi;
+
+/** The VM's envd API, authenticated by the exec lease. */
+const sandboxForLease = (lease: E2BExecLease) =>
+  new Sandbox({
+    sandboxId: lease.sandboxId,
+    envdVersion: E2B_ENVD_VERSION,
+    envdAccessToken: lease.jwt,
+    sandboxUrl: lease.wsEndpoint,
+    validateApiKey: false,
+  });
+
+/** Opens E2B's files API directly against the VM, authenticated by the exec lease. */
+export const e2bFilesForLease: E2BFilesFactory = lease => sandboxForLease(lease).files;
+
+/** Opens E2B's commands API directly against the VM, authenticated by the exec lease. */
+export const commandsForLease: E2BCommandsFactory = lease => sandboxForLease(lease).commands;

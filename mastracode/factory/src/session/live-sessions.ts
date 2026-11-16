@@ -1,4 +1,8 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
+import type { PubSub } from '@mastra/core/events';
+
+import { touchFeed } from '../feed-events.js';
+import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 
 /** The slice of a live session this registry needs: its id, its run, its parked tools, and who it works for. */
 export interface LiveSession {
@@ -9,9 +13,14 @@ export interface LiveSession {
   subscribe(listener: (event: AgentControllerEvent) => void): () => void;
 }
 
-interface SessionNotifier {
+export interface SessionNotifier {
   onSessionCreated(listener: (session: LiveSession) => void): () => void;
   onSessionDeleted(listener: (session: LiveSession) => void): () => void;
+}
+
+/** Where a session's Factory is written down for good: its live state can lose it, its row cannot. */
+export interface SessionRows {
+  getBySessionId(sessionId: string): Promise<Pick<SourceControlSession, 'orgId' | 'factoryProjectId'> | null>;
 }
 
 /** The tool a session has waited on longest, and since when (epoch ms). */
@@ -28,10 +37,21 @@ interface TrackedSession {
 }
 
 /**
+ * Events after which the controller may list different runs for a session, beyond the parking ones.
+ * Leaving a thread drops the run the session started on it, and no `agent_end` reaches a session that has left.
+ */
+const RUN_MAY_HAVE_CHANGED = new Set<AgentControllerEvent['type']>([
+  'agent_start',
+  'thread_changed',
+  'thread_created',
+  'thread_deleted',
+]);
+
+/**
  * The sessions this process has materialized, by session id.
  *
  * Membership comes from the controller's notifications rather than
- * `getSessionByResource`, which hands back the pending creation — awaiting it
+ * `getSession`, which hands back the pending creation — awaiting it
  * from a request blocks for as long as the session takes to materialize its
  * sandbox, minutes on a cold clone. Notifications only fire once a session
  * exists, so a read never waits.
@@ -42,7 +62,7 @@ interface TrackedSession {
  */
 export class LiveSessions {
   readonly #byId = new Map<string, TrackedSession>();
-  readonly #parkedListeners = new Set<(session: LiveSession) => void>();
+  readonly #runListeners = new Set<(session: LiveSession) => void>();
   /** A park stamp doubles as the receipt key, so two suspensions in one millisecond must not share one. */
   #lastParkStamp = 0;
 
@@ -50,10 +70,10 @@ export class LiveSessions {
     controller.onSessionCreated(session => this.#track(session));
     controller.onSessionDeleted(session => {
       const id = session.identity.getId();
-      const wasParked = this.parked(id) !== undefined;
       this.#byId.get(id)?.unsubscribe();
       this.#byId.delete(id);
-      if (wasParked) for (const listener of this.#parkedListeners) listener(session);
+      // The controller resets the run before it reports the deletion, so the session can no longer say a board showed it.
+      for (const listener of this.#runListeners) listener(session);
     });
   }
 
@@ -68,8 +88,8 @@ export class LiveSessions {
       if (event.type === 'tool_suspended') suspendedAt.set(event.toolCallId, this.#nextParkStamp());
       else if (event.type === 'tool_suspension_cancelled') suspendedAt.delete(event.toolCallId);
       else if (event.type === 'agent_end' && event.reason !== 'suspended') suspendedAt.clear();
-      else return;
-      for (const listener of this.#parkedListeners) listener(session);
+      else if (!RUN_MAY_HAVE_CHANGED.has(event.type)) return;
+      for (const listener of this.#runListeners) listener(session);
     });
     this.#byId.set(session.identity.getId(), { session, seenAt: Date.now(), suspendedAt, unsubscribe });
   }
@@ -102,9 +122,33 @@ export class LiveSessions {
     return parked;
   }
 
-  /** Fires when a session parks, is answered, or finishes a turn: whoever shows parked runs re-reads. */
-  onParkedChanged(listener: (session: LiveSession) => void): () => void {
-    this.#parkedListeners.add(listener);
-    return () => this.#parkedListeners.delete(listener);
+  /** Fires when a session starts a run, parks, is answered, finishes a turn, or leaves its thread: whoever shows runs re-reads. */
+  onRunChanged(listener: (session: LiveSession) => void): () => void {
+    this.#runListeners.add(listener);
+    return () => this.#runListeners.delete(listener);
   }
+}
+
+/** A run starting, parking, being answered or ending changes what boards show, so the registry bumps the project's feed. */
+export function liveSessionsTouchingTheFeed(
+  controller: SessionNotifier,
+  eventBus: PubSub,
+  rows: SessionRows,
+): LiveSessions {
+  const liveSessions = new LiveSessions(controller);
+  liveSessions.onRunChanged(session => {
+    const { factoryOrgId, factoryProjectId } = session.state.get();
+    if (factoryOrgId && factoryProjectId) {
+      touchFeed(eventBus, { orgId: factoryOrgId, factoryProjectId });
+      return;
+    }
+    // Only a Factory run carries its project in state, and a recovered one can come back without it: its row names it.
+    rows
+      .getBySessionId(session.identity.getId())
+      .then(row => {
+        if (row?.factoryProjectId) touchFeed(eventBus, { orgId: row.orgId, factoryProjectId: row.factoryProjectId });
+      })
+      .catch(error => console.warn('[factory] Unable to find the board of a session run.', error));
+  });
+  return liveSessions;
 }

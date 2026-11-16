@@ -20,8 +20,24 @@ import { createRoute } from '@mastra/server/server-adapter'
 ## Signature
 
 ```typescript
-function createRoute<TPath, TQuery, TBody, TResponse, TResponseType>(
-  config: RouteConfig<TPath, TQuery, TBody, TResponse, TResponseType>,
+function createRoute<
+  TPathSchema extends z.ZodTypeAny | undefined = undefined,
+  TQuerySchema extends z.ZodTypeAny | undefined = undefined,
+  TBodySchema extends z.ZodTypeAny | undefined = undefined,
+  TResponseSchema extends z.ZodTypeAny | undefined = undefined,
+  TResponseType extends ResponseType = 'json',
+  TMethod extends string = string,
+  TPath extends string = string,
+>(
+  config: RouteConfig<
+    TPathSchema,
+    TQuerySchema,
+    TBodySchema,
+    TResponseSchema,
+    TResponseType,
+    TMethod,
+    TPath
+  >,
 ): ServerRoute
 ```
 
@@ -135,10 +151,10 @@ handler: async params => {
   params.filter // From queryParamSchema
   params.name // From bodySchema
 
-  // Runtime context (always available)
+  // Runtime context
   params.mastra // Mastra instance
   params.requestContext // Request-scoped context
-  params.tools // Available tools
+  params.registeredTools // Tools registered with the adapter
   params.abortSignal // Request cancellation signal
   params.taskStore // A2A task storage
 }

@@ -50,7 +50,7 @@ const results = await vectorStore.query({
 
 ## Documentation
 
-- [@mastra/vectorize documentation](https://mastra.ai/reference/vectors/vectorize)
+- [@mastra/vectorize documentation](https://mastra.ai/integrations/vectors/vectorize)
 
 ## Changelog
 

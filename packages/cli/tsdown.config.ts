@@ -1,7 +1,6 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generateTypes } from '@internal/types-builder';
-import { execa } from 'execa';
 import { copy } from 'fs-extra';
 import { defineConfig } from 'tsdown';
 
@@ -22,14 +21,7 @@ export default defineConfig({
   sourcemap: true,
   onSuccess: async () => {
     const studioPath = dirname(fileURLToPath(import.meta.resolve('@internal/playground/package.json')));
-    const factoryUIPath = join(dirname(fileURLToPath(import.meta.url)), '../../mastracode/factory-ui');
-
-    // Factory UI is a root workspace package. Build its independent SPA and
-    // copy the resulting artifact into the CLI distribution.
-    await execa('pnpm', ['run', 'build'], {
-      cwd: factoryUIPath,
-      stdio: 'inherit',
-    });
+    const factoryUIPath = dirname(fileURLToPath(import.meta.resolve('@internal/factory-ui/package.json')));
     await copy(join('src', 'public', 'starter-files'), join('dist', 'starter-files'));
     await copy(join('src', 'public', 'templates'), join('dist', 'templates'));
     await copy(join(studioPath, 'dist'), join('dist', 'studio'));

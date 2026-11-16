@@ -43,10 +43,17 @@ export async function startElysiaServer(app: Elysia): Promise<{
         }
       }
 
+      // Mirror real runtimes (Bun, @hono/node-server): abort the Request when the client goes away.
+      const abortController = new AbortController();
+      res.on('close', () => {
+        if (!res.writableFinished) abortController.abort();
+      });
+
       const request = new Request(url, {
         method: req.method,
         headers,
         body,
+        signal: abortController.signal,
         ...(body ? { duplex: 'half' } : {}),
       } as RequestInit);
 

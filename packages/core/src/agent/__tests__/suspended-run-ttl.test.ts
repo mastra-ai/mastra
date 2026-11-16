@@ -23,8 +23,9 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { Event } from '../../events/types';
 import type { MastraModelOutput } from '../../stream/base/output';
-import type { Agent } from '../agent';
-import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
+import { Agent } from '../agent';
+import { AgentThreadStreamRuntime, agentThreadStreamRuntime } from '../thread-stream-runtime';
+import { createTextStreamModel, readNextRunWithParts, withTimeout } from './signals-test-utils';
 
 const { SUSPENDED_RUN_TTL_MS, LEASE_RENEW_INTERVAL_MS } = vi.hoisted(() => {
   const ttlMs = 60_000;
@@ -50,7 +51,7 @@ const threadTopic = (resourceId: string, threadId: string) =>
   `agent.thread-stream.${encodeURIComponent(threadKey(resourceId, threadId))}`;
 
 const RESOURCE_ID = 'resource-1';
-const fakeAgent = { id: 'ttl-test-agent' } as unknown as Agent<any, any, any, any>;
+const fakeAgent = { id: 'ttl-test-agent', abortRunStream: () => true } as unknown as Agent<any, any, any, any>;
 
 /**
  * Minimal stand-in for the run output `registerRun` consumes: a run id, a live
@@ -90,6 +91,11 @@ function createFakeRun(runId: string) {
     },
     emitFinishPart() {
       streamController.enqueue({ type: 'finish', finishReason: 'stop' });
+    },
+    /** Park the way a durable run does: suspended, with its stream left open. */
+    parkWithStreamOpen() {
+      status = 'suspended';
+      finish();
     },
     settle(finalStatus: 'suspended' | 'success') {
       status = finalStatus;
@@ -380,6 +386,53 @@ describe('suspended run in-memory TTL', () => {
       run.settle('success');
     });
 
+    it('reports a finished background task once the swept lease clears, instead of dropping it', async () => {
+      // The finish report is the one sender that can't ask again: nothing retries it later.
+      // While the swept run still holds the lease, both the wake and the queued fallback come
+      // back blocked; the report has to wait for the lease to clear and then wake the thread.
+      runtime = agentThreadStreamRuntime;
+      runtime.resetForTests();
+      try {
+        const watcher = await watchThread(pubsub, 'thread-1');
+        await registerSuspendedRun('run-1', 'thread-1', watcher);
+        await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+        const agent = new Agent({
+          id: 'ttl-report-agent',
+          name: 'TTL Report Agent',
+          instructions: 'Test',
+          model: createTextStreamModel('the task finished'),
+          pubsub,
+        });
+        const subscription = await agent.subscribeToThread({ resourceId: RESOURCE_ID, threadId: 'thread-1' });
+        const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+        const acquireLease = vi.spyOn(pubsub, 'acquireLease');
+        try {
+          const report = agent.__notifyBackgroundTaskFinished({
+            resourceId: RESOURCE_ID,
+            threadId: 'thread-1',
+            taskId: 'task-1',
+            toolCallId: 'call-1',
+            toolName: 'research',
+            status: 'completed',
+          });
+          // The wake and at least one queued attempt lost the lease to the swept run.
+          await vi.waitFor(() => expect(acquireLease.mock.calls.length).toBeGreaterThanOrEqual(2));
+          // Stand-in for the abandoned lease expiring on its own.
+          await pubsub.releaseLease(threadKey(RESOURCE_ID, 'thread-1'), 'run-1');
+          await report;
+
+          const woken = await withTimeout(nextRun, 'Timed out waiting for the background-task report run');
+          expect(woken.value.text).toBe('the task finished');
+          const notice = woken.value.parts.find((part: any) => part.type === 'data-signal');
+          expect(notice?.data).toMatchObject({ attributes: { taskId: 'task-1', status: 'completed' } });
+        } finally {
+          subscription.unsubscribe();
+        }
+      } finally {
+        runtime.resetForTests();
+      }
+    });
+
     it('reports blocked when the swept run’s registration is redelivered to a thread subscriber', async () => {
       const watcher = await watchThread(pubsub, 'thread-1');
       await registerSuspendedRun('run-1', 'thread-1', watcher);
@@ -492,6 +545,236 @@ describe('suspended run in-memory TTL', () => {
       } finally {
         subscription.unsubscribe();
       }
+    });
+
+    it('keeps a subscriber reading another instance’s resume of the run the sweep drops', async () => {
+      const watcher = await watchThread(pubsub, 'thread-1');
+      await registerSuspendedRun('run-1', 'thread-1', watcher);
+      const { agent } = createWakeableAgent('run-2');
+      const registration = watcher.find('run-registered', 'run-1')!;
+
+      const subscription = await runtime.subscribeToThread(
+        agent,
+        { resourceId: RESOURCE_ID, threadId: 'thread-1' },
+        pubsub,
+      );
+      const texts: string[] = [];
+      let finished = false;
+      const reading = (async () => {
+        for await (const part of subscription.stream as AsyncIterable<any>) {
+          if (part?.runId !== 'run-1') continue;
+          if (part.type === 'text-delta') texts.push(part.payload.text);
+          if (part.type === 'finish') {
+            finished = true;
+            return;
+          }
+        }
+      })();
+      const publishResumedPart = (part: unknown) =>
+        pubsub.publish(threadTopic(RESOURCE_ID, 'thread-1'), {
+          type: 'stream-part',
+          runId: 'run-1',
+          data: { type: 'stream-part', runId: 'run-1', streamId: 'run-1-resumed', part, sourceId: 'other-instance' },
+        });
+      try {
+        // Another instance resumed run-1 while this instance still holds its parked record.
+        await pubsub.acquireLease(threadKey(RESOURCE_ID, 'thread-1'), 'run-1', 15_000);
+        await pubsub.publish(threadTopic(RESOURCE_ID, 'thread-1'), {
+          type: registration.type,
+          runId: registration.runId,
+          data: { ...registration.data, sourceId: 'other-instance', streamId: 'run-1-resumed' },
+        });
+        await publishResumedPart({ type: 'text-delta', payload: { text: 'before-sweep' } });
+        await vi.waitFor(() => expect(texts).toEqual(['before-sweep']));
+
+        await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+        await publishResumedPart({ type: 'text-delta', payload: { text: 'after-sweep' } });
+        await publishResumedPart({ type: 'finish', finishReason: 'stop' });
+
+        await vi.waitFor(() => expect(finished).toBe(true));
+        expect(texts).toEqual(['before-sweep', 'after-sweep']);
+      } finally {
+        subscription.unsubscribe();
+        await reading;
+      }
+    });
+
+    it('moves a subscriber that queued the dropped run before reading it on to the next run', async () => {
+      const watcher = await watchThread(pubsub, 'thread-1');
+      const run1 = createFakeRun('run-1');
+      await runtime.registerRun(
+        fakeAgent,
+        run1.output,
+        { memory: { thread: 'thread-1', resource: RESOURCE_ID } },
+        pubsub,
+        { continuation: 'across-suspension' },
+      );
+      run1.emitSuspendPart();
+      await watcher.waitFor('stream-part', 'run-1');
+      run1.parkWithStreamOpen();
+      await watcher.waitFor('run-suspended', 'run-1');
+      const { agent } = createWakeableAgent('run-2');
+
+      // The subscriber queues the parked run but does not start reading until after the sweep.
+      const subscription = await runtime.subscribeToThread(
+        agent,
+        { resourceId: RESOURCE_ID, threadId: 'thread-1' },
+        pubsub,
+      );
+      let finished = false;
+      try {
+        await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+        await pubsub.releaseLease(threadKey(RESOURCE_ID, 'thread-1'), 'run-1');
+        const reading = (async () => {
+          for await (const part of subscription.stream as AsyncIterable<any>) {
+            if (part?.runId === 'run-2' && part.type === 'finish') {
+              finished = true;
+              return;
+            }
+          }
+        })();
+        const run2 = createFakeRun('run-2');
+        await runtime.registerRun(
+          fakeAgent,
+          run2.output,
+          { memory: { thread: 'thread-1', resource: RESOURCE_ID } },
+          pubsub,
+        );
+        run2.emitFinishPart();
+        run2.settle('success');
+
+        await vi.waitFor(() => expect(finished).toBe(true));
+        subscription.unsubscribe();
+        await reading;
+      } finally {
+        subscription.unsubscribe();
+      }
+    });
+
+    describe('a subscriber that queued the parked run before reading it', () => {
+      /** Park run-1 with its stream open and subscribe to its thread without reading. */
+      async function parkAndSubscribeLazily(watcher: ThreadWatcher) {
+        const run1 = createFakeRun('run-1');
+        await runtime.registerRun(
+          fakeAgent,
+          run1.output,
+          { memory: { thread: 'thread-1', resource: RESOURCE_ID } },
+          pubsub,
+          { continuation: 'across-suspension' },
+        );
+        run1.emitSuspendPart();
+        await watcher.waitFor('stream-part', 'run-1');
+        run1.parkWithStreamOpen();
+        await watcher.waitFor('run-suspended', 'run-1');
+        const { agent } = createWakeableAgent('run-2');
+        return runtime.subscribeToThread(agent, { resourceId: RESOURCE_ID, threadId: 'thread-1' }, pubsub);
+      }
+
+      /** Start reading the subscription; `finished()` turns true at run-2's finish. */
+      const startReading = (subscription: Awaited<ReturnType<typeof parkAndSubscribeLazily>>) => {
+        let finished = false;
+        const reading = (async () => {
+          for await (const part of subscription.stream as AsyncIterable<any>) {
+            if (part?.runId === 'run-2' && part.type === 'finish') {
+              finished = true;
+              return;
+            }
+          }
+        })();
+        return {
+          reading,
+          finished: () => finished,
+        };
+      };
+
+      it('ends it with an abort once it is aborted while parked', async () => {
+        const watcher = await watchThread(pubsub, 'thread-1');
+        const subscription = await parkAndSubscribeLazily(watcher);
+        try {
+          expect(runtime.abortRun('run-1', pubsub)).toBe(true);
+          await watcher.waitFor('run-aborted', 'run-1');
+          const run2 = createFakeRun('run-2');
+          await runtime.registerRun(
+            fakeAgent,
+            run2.output,
+            { memory: { thread: 'thread-1', resource: RESOURCE_ID } },
+            pubsub,
+          );
+          const seen: string[] = [];
+          let finished = false;
+          const reading = (async () => {
+            for await (const part of subscription.stream as AsyncIterable<any>) {
+              if (part?.type === 'abort' || part?.type === 'finish') seen.push(`${part.type}:${part.runId}`);
+              if (part?.runId === 'run-2' && part.type === 'finish') {
+                finished = true;
+                return;
+              }
+            }
+          })();
+          run2.emitFinishPart();
+          run2.settle('success');
+
+          await vi.waitFor(() => expect(finished).toBe(true));
+          expect(seen).toEqual(['abort:run-1', 'finish:run-2']);
+          subscription.unsubscribe();
+          await reading;
+        } finally {
+          subscription.unsubscribe();
+        }
+      });
+
+      it('skips it once a later local run takes the thread over', async () => {
+        const watcher = await watchThread(pubsub, 'thread-1');
+        const subscription = await parkAndSubscribeLazily(watcher);
+        try {
+          const run2 = createFakeRun('run-2');
+          await runtime.registerRun(
+            fakeAgent,
+            run2.output,
+            { memory: { thread: 'thread-1', resource: RESOURCE_ID } },
+            pubsub,
+          );
+          const { reading, finished } = startReading(subscription);
+          run2.emitFinishPart();
+          run2.settle('success');
+
+          await vi.waitFor(() => expect(finished()).toBe(true));
+          subscription.unsubscribe();
+          await reading;
+        } finally {
+          subscription.unsubscribe();
+        }
+      });
+
+      it('skips it once another runtime runs the thread to an end', async () => {
+        const watcher = await watchThread(pubsub, 'thread-1');
+        const subscription = await parkAndSubscribeLazily(watcher);
+        const otherRuntime = new AgentThreadStreamRuntime();
+        try {
+          const run2 = createFakeRun('run-2');
+          await otherRuntime.registerRun(
+            fakeAgent,
+            run2.output,
+            { memory: { thread: 'thread-1', resource: RESOURCE_ID } },
+            pubsub,
+          );
+          run2.emitFinishPart();
+          run2.settle('success');
+          await watcher.waitFor('run-completed', 'run-2');
+          await vi.waitFor(() =>
+            expect(runtime.getActiveThreadRunId({ threadId: 'thread-1', resourceId: RESOURCE_ID }, pubsub)).not.toBe(
+              'run-1',
+            ),
+          );
+          const { reading, finished } = startReading(subscription);
+
+          await vi.waitFor(() => expect(finished()).toBe(true));
+          subscription.unsubscribe();
+          await reading;
+        } finally {
+          subscription.unsubscribe();
+        }
+      });
     });
 
     it('still forwards to a lease owner the sweep did not evict', async () => {
@@ -624,6 +907,40 @@ describe('suspended run in-memory TTL', () => {
         expect(stream).not.toHaveBeenCalled();
       } finally {
         subscription.unsubscribe();
+      }
+    });
+  });
+
+  describe('a run whose lease renewal is refused', () => {
+    // The abort runs in a detached renewal callback, so a throw there is an unhandled rejection that
+    // fails the whole test process, not just the run.
+    it.each([
+      ['has no abortRunStream', {}],
+      [
+        'throws from abortRunStream',
+        {
+          abortRunStream: () => {
+            throw new Error('abort failed');
+          },
+        },
+      ],
+    ])('stays quiet when the agent %s', async (_name, abilities) => {
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        renewLease.mockResolvedValue(false);
+        const agent = { id: 'lease-lost-agent', ...abilities } as unknown as Agent<any, any, any, any>;
+        const run = createFakeRun('run-1');
+        await runtime.registerRun(agent, run.output, { memory: { thread: 'thread-1', resource: RESOURCE_ID } }, pubsub);
+
+        await vi.waitFor(() => expect(renewLease).toHaveBeenCalled());
+        await new Promise(resolve => setTimeout(resolve, LEASE_RENEW_INTERVAL_MS * 5));
+
+        expect(unhandled).toEqual([]);
+        run.settle('success');
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
       }
     });
   });

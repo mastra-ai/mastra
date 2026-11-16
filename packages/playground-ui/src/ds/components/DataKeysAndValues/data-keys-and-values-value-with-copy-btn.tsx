@@ -1,6 +1,7 @@
-import { CheckIcon, CopyIcon } from 'lucide-react';
 import { dataKeysAndValuesValueStyles } from './shared';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { cn } from '@/lib/utils';
 
@@ -30,14 +31,14 @@ export function DataKeysAndValuesValueWithCopyBtn({
             onClick={handleCopy}
             type="button"
             className={cn(
-              'flex items-center gap-2 text-left whitespace-nowrap',
+              'flex max-w-full items-center gap-2 text-left whitespace-nowrap',
               '[&:hover>svg]:opacity-100 [&>svg]:size-3 [&>svg]:shrink-0 [&>svg]:opacity-70',
               { '[&>svg]:size-4 [&>svg]:text-success-indicator': isCopied },
             )}
             aria-label={isCopied ? 'Copied!' : copyTooltip}
           >
-            <span>{children}</span>
-            {isCopied ? <CheckIcon /> : <CopyIcon />}
+            <span className="min-w-0 truncate">{children}</span>
+            {isCopied ? <IconCheckmark2Medium /> : <IconSquareBehindSquare1 />}
           </button>
         </TooltipTrigger>
         <TooltipContent>{isCopied ? 'Copied!' : copyTooltip}</TooltipContent>

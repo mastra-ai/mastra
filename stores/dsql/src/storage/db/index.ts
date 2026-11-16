@@ -546,7 +546,6 @@ export class DsqlDB extends MastraBase {
     // Timestamps (createdAt, updatedAt, createdAtZ, updatedAtZ) are managed:
     // - DEFAULT NOW() on column definition for createdAt/createdAtZ
     // - Application-level setting in update operations for updatedAt/updatedAtZ
-    return;
   }
 
   /**

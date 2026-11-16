@@ -3,32 +3,31 @@ title: "Browser"
 description: "Give Mastra agents browser automation through native SDK providers, CLI tools, CDP connections, or cloud services such as Browserbase and Firecrawl."
 packages:
   - "@mastra/core"
-  - "@mastra/agent-browser"
-  - "@mastra/stagehand"
-  - "@mastra/browser-firecrawl"
-  - "@mastra/browser-viewer"
 ---
 
 # Browser
 
-Browser support enables agents to move through websites, interact with page elements, fill forms, and extract data. Mastra provides browser capabilities through SDK providers that wrap browser automation libraries and a CLI provider for agents that drive browsers through command-line tools.
+Browser support lets agents navigate websites, interact with page elements, fill out forms, and extract data. Mastra offers two kinds of browser providers:
 
-Mastra supports three SDK providers and one CLI provider:
+- **SDK providers** wrap a browser automation library and give the agent browser tools directly.
+- **CLI providers** launch a browser that the agent controls through command-line tools.
 
-- [**AgentBrowser**](/integrations/browsers/agent-browser): A Playwright-based provider with accessibility-first element targeting. Best for general web automation and scraping.
-- [**Stagehand**](/integrations/browsers/stagehand): A Browserbase provider with AI-powered element detection. Best for complex interactions that benefit from natural language selectors.
-- [**FirecrawlBrowser**](/integrations/browsers/firecrawl): A Firecrawl Browser Sandbox provider that runs AgentBrowser tools against hosted browser sessions. Best for running automation on hosted browser sessions without managing local browser infrastructure.
-- [**BrowserViewer**](/integrations/browsers/browser-viewer): A CLI provider that launches Chrome and injects CDP URLs into CLI tools like agent-browser, browser-use, and browse. Best for workspace agents that drive browsers through shell commands.
+Mastra includes three SDK providers and one CLI provider:
 
-## When to use browser
+- [**AgentBrowser**](/integrations/browsers/agent-browser): An SDK provider built on Playwright that finds page elements through accessibility information. Use it for general web automation and scraping.
+- [**Stagehand**](/integrations/browsers/stagehand): An SDK provider built on the Stagehand library from Browserbase. It uses AI to find page elements. Use it for complex interactions where describing an element in natural language works better than a fixed selector.
+- [**FirecrawlBrowser**](/integrations/browsers/firecrawl): An SDK provider that runs AgentBrowser tools in hosted Firecrawl Browser Sandbox sessions. Use it to avoid running browsers on your own infrastructure.
+- [**BrowserViewer**](/integrations/browsers/browser-viewer): A CLI provider that launches Chrome and passes its Chrome DevTools Protocol (CDP) URL to CLI tools such as agent-browser, browser-use, and browse. Use it for workspace agents that control browsers through shell commands.
 
-Use browser when your agent needs to:
+## When to use a browser
+
+Give your agent a browser when it needs to:
 
 - Navigate websites and interact with page elements
-- Fill out forms and submit data
+- Fill out and submit forms
 - Extract structured data from web pages
-- Automate multi-step web workflows
-- Take actions that require a real browser (JavaScript rendering, authentication flows)
+- Automate web tasks that take several steps
+- Work with pages that only function in a real browser, such as pages that render content with JavaScript or require a login
 
 ## How it works
 
@@ -100,6 +99,18 @@ const browser = new StagehandBrowser({
   env: 'BROWSERBASE',
   apiKey: process.env.BROWSERBASE_API_KEY,
   projectId: process.env.BROWSERBASE_PROJECT_ID,
+})
+```
+
+### Browser Use Cloud (AgentBrowser CDP)
+
+Connect AgentBrowser to a [Browser Use Cloud browser](https://github.com/browser-use/browser-use/blob/main/skills/cloud/references/browser-api.md) using your Browser Use API key:
+
+```typescript
+import { AgentBrowser } from '@mastra/agent-browser'
+
+const browser = new AgentBrowser({
+  cdpUrl: `wss://connect.browser-use.com?apiKey=${process.env.BROWSER_USE_API_KEY}`,
 })
 ```
 

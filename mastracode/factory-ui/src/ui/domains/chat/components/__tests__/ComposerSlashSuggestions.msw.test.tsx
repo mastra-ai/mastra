@@ -33,6 +33,15 @@ function renderComposer() {
   );
 }
 
+/**
+ * Matches a suggestion option by its command label. The option's accessible
+ * name concatenates the label and description spans with no separator under
+ * jsdom (inline spans), so a name regex can't tell `/goal` from `/goal-clear`.
+ */
+function commandOption(name: string) {
+  return (_accessibleName: string, element: Element | null) => element?.firstElementChild?.textContent === `/${name}`;
+}
+
 async function findReadyInput(): Promise<HTMLTextAreaElement> {
   const input = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
   await waitFor(() => expect(input).toBeEnabled());
@@ -62,7 +71,7 @@ describe('Composer slash-command suggestions', () => {
       await user.type(input, '/');
 
       for (const name of COMMAND_NAMES) {
-        expect(await screen.findByRole('option', { name: new RegExp(`^/${name}\\s`) })).toBeInTheDocument();
+        expect(await screen.findByRole('option', { name: commandOption(name) })).toBeInTheDocument();
       }
     });
   });
@@ -75,12 +84,12 @@ describe('Composer slash-command suggestions', () => {
       const input = await findReadyInput();
       await user.type(input, '/goa');
 
-      expect(await screen.findByRole('option', { name: /^\/goal\s/ })).toBeInTheDocument();
-      expect(screen.queryByRole('option', { name: /^\/help\s/ })).not.toBeInTheDocument();
+      expect(await screen.findByRole('option', { name: commandOption('goal') })).toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: commandOption('help') })).not.toBeInTheDocument();
 
       await user.keyboard('{Tab}');
       expect(input).toHaveValue('/goal ');
-      expect(screen.queryByRole('option', { name: /^\/goal\s/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: commandOption('goal') })).not.toBeInTheDocument();
     });
 
     it('opens command options as a second step and returns with Escape', async () => {

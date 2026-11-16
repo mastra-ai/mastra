@@ -29,6 +29,16 @@ import {
   toReactiveSignalData,
 } from '@mastra/playground-ui/domains/chat/messages/signal-data';
 import { ProviderLogo } from '@mastra/playground-ui/domains/llm';
+import { IconAlignmentLeft } from '@mastra/playground-ui/icons/central/IconAlignmentLeft';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
+import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
+import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
+import { IconGlobe } from '@mastra/playground-ui/icons/central/IconGlobe';
+import { IconLoadingCircle } from '@mastra/playground-ui/icons/central/IconLoadingCircle';
+import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
+import { IconZap } from '@mastra/playground-ui/icons/central/IconZap';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
@@ -36,19 +46,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import type { MastraDBMessageMetadata, RequireApprovalEntry } from '@mastra/react';
 import { MessageFactory } from '@mastra/react/ui';
 import type { MessageRenderers, MessageStatusRenderers, DynamicToolPart, ToolInvocationPart } from '@mastra/react/ui';
-import {
-  AlertTriangle,
-  AlignLeft,
-  Check,
-  FileText,
-  Globe,
-  Loader2,
-  RefreshCw,
-  Wrench,
-  Zap,
-  GlobeLockIcon,
-  Building,
-} from 'lucide-react';
+import { GlobeLockIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext } from 'react-hook-form';
@@ -103,7 +101,9 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
           data-testid="agent-builder-chat-tool-approve"
           aria-label={`Approve ${toolName}`}
         >
-          <Icon>{pending === 'approve' ? <Loader2 className="animate-spin" /> : <Check />}</Icon>
+          <Icon>
+            {pending === 'approve' ? <IconLoadingCircle className="animate-spin" /> : <IconCheckmark2Medium />}
+          </Icon>
           Approve
         </Button>
         <Button
@@ -115,7 +115,7 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
         >
           {pending === 'decline' && (
             <Icon>
-              <Loader2 className="animate-spin" />
+              <IconLoadingCircle className="animate-spin" />
             </Icon>
           )}
           Decline
@@ -147,7 +147,7 @@ const toReactiveSignalMessage = (message: MastraDBMessage): MastraDBMessage | nu
       ...message.content,
       parts: [{ type: 'data-signal', data }],
     },
-  } as MastraDBMessage;
+  };
 };
 
 const getRequireApprovalMetadata = (message: MastraDBMessage): RequireApprovalMetadata | undefined => {
@@ -222,7 +222,7 @@ export const MessageRow = ({ message }: MessageRowProps) => {
   const dbMessage = toDisplayMessage(message);
   if (dbMessage === null) return null;
 
-  const metadata = message.content.metadata as MessageMetadata | undefined;
+  const metadata = message.content.metadata;
 
   const renderers: MessageRenderers = {
     Text: part => <Txtmessage txt={part.text ?? ''} role={displayRole} metadata={metadata} />,
@@ -301,7 +301,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
       data-testid="agent-builder-chat-error"
     >
       <div className="flex items-start gap-2.5">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-foreground" aria-hidden />
+        <IconExclamationTriangle className="mt-0.5 size-4 shrink-0 text-warning-foreground" aria-hidden />
         <div className="flex min-w-0 flex-col gap-1">
           <Txt as="p" variant="subheading" tone="ink">
             Something went wrong while building the agent.
@@ -326,7 +326,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
                 variant="default"
                 onClick={onRetry}
                 data-testid="agent-builder-chat-error-retry"
-                icon={<RefreshCw aria-hidden />}
+                icon={<IconArrowRotateClockwise aria-hidden />}
               >
                 Try again
               </Button>
@@ -358,7 +358,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
               variant="default"
               onClick={onRetry}
               data-testid="agent-builder-chat-error-retry"
-              icon={<RefreshCw aria-hidden />}
+              icon={<IconArrowRotateClockwise aria-hidden />}
             >
               Try again
             </Button>
@@ -445,7 +445,7 @@ const MessageSetAgentName = () => {
 
   if (!name) return null;
 
-  return <SkillToolLine icon={<AlignLeft />} label="Setting the agent name:" value={name} />;
+  return <SkillToolLine icon={<IconAlignmentLeft />} label="Setting the agent name:" value={name} />;
 };
 
 const MessageSetAgentDescription = () => {
@@ -454,7 +454,7 @@ const MessageSetAgentDescription = () => {
 
   if (!description) return null;
 
-  return <SkillToolLine icon={<AlignLeft />} label="Setting the agent description:" value={description} />;
+  return <SkillToolLine icon={<IconAlignmentLeft />} label="Setting the agent description:" value={description} />;
 };
 
 const MessageSetAgentInstructions = () => {
@@ -463,7 +463,7 @@ const MessageSetAgentInstructions = () => {
 
   if (!instructions) return null;
 
-  return <SkillToolLine icon={<FileText />} label="Setting the agent instructions:" value={instructions} />;
+  return <SkillToolLine icon={<IconFileText />} label="Setting the agent instructions:" value={instructions} />;
 };
 
 const MessageSetAgentTools = () => {
@@ -486,7 +486,7 @@ const MessageSetAgentTools = () => {
   const enabled = availableAgentTools.filter(t => t.isChecked);
   const value = enabled.length === 0 ? 'none' : enabled.map(t => t.name).join(', ');
 
-  return <SkillToolLine icon={<Wrench />} label="Enabling tools:" value={value} />;
+  return <SkillToolLine icon={<IconMaintenance />} label="Enabling tools:" value={value} />;
 };
 
 const MessageSetAgentSkills = () => {
@@ -496,7 +496,7 @@ const MessageSetAgentSkills = () => {
   const enabled = skillsField ? availableSkills.filter(s => skillsField[s.id] === true) : [];
   const value = enabled.length === 0 ? 'none' : enabled.map(s => s.name).join(', ');
 
-  return <SkillToolLine icon={<Zap />} label="Enabling skills:" value={value} />;
+  return <SkillToolLine icon={<IconZap />} label="Enabling skills:" value={value} />;
 };
 
 const MessageSetAgentModel = () => {
@@ -520,7 +520,7 @@ const MessageSetAgentBrowserEnabled = () => {
 
   return (
     <SkillToolLine
-      icon={browserEnabled ? <Globe /> : <GlobeLockIcon />}
+      icon={browserEnabled ? <IconGlobe /> : <GlobeLockIcon />}
       label="Browser access"
       value={browserEnabled ? 'enabled' : 'disabled'}
     />
@@ -533,7 +533,7 @@ const MessageSetAgentWorkspaceId = () => {
 
   if (!workspaceId) return null;
 
-  return <SkillToolLine icon={<Building />} label="Setting workspace to" value={workspaceId} />;
+  return <SkillToolLine icon={<IconBuildings />} label="Setting workspace to" value={workspaceId} />;
 };
 
 interface SkillToolProps {
@@ -541,5 +541,5 @@ interface SkillToolProps {
 }
 
 const SkillTool = ({ name }: SkillToolProps) => (
-  <SkillToolLine icon={<Zap />} label="Using super-powers:" value={name} />
+  <SkillToolLine icon={<IconZap />} label="Using super-powers:" value={name} />
 );

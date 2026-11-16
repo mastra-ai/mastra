@@ -3,9 +3,11 @@ import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowOutOfBox } from '@mastra/playground-ui/icons/central/IconArrowOutOfBox';
+import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { ExternalLinkIcon, FileJson, Upload } from 'lucide-react';
 import { z } from 'zod';
 
 export type DatasetItemsSortKey = 'createdAt';
@@ -259,12 +261,12 @@ function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: 
               New item
             </CreateButton>
             {onImportClick && (
-              <Button onClick={onImportClick} icon={<Upload />}>
+              <Button onClick={onImportClick} icon={<IconArrowOutOfBox />}>
                 Import CSV
               </Button>
             )}
             {onImportJsonClick && (
-              <Button onClick={onImportJsonClick} icon={<FileJson />}>
+              <Button onClick={onImportJsonClick} icon={<IconFileText />}>
                 Import JSON
               </Button>
             )}
@@ -273,9 +275,9 @@ function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: 
             variant="ghost"
             render={<a href="https://mastra.ai/docs/evals/datasets" target="_blank" rel="noopener noreferrer" />}
 
-            icon={<ExternalLinkIcon />}
+            icon={<IconSquareArrowTopRight />}
           >
-            Datasets Documentation
+            Datasets documentation
           </Button>
         </div>
       }

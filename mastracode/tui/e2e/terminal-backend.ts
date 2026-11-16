@@ -91,8 +91,38 @@ class EmulatedTerminal implements Terminal {
 
   async drainInput(_maxMs?: number, _idleMs?: number): Promise<void> {}
 
+  /** Text written to the clipboard through OSC 52, oldest first. */
+  readonly clipboardWrites: string[] = [];
+
   write(data: string): void {
     this.writeToXterm(data);
+    for (const match of data.matchAll(/\x1b\]52;c;([^\x07]*)\x07/g)) {
+      this.clipboardWrites.push(Buffer.from(match[1]!, 'base64').toString('utf8'));
+    }
+    if (data.includes('\x1b[6n')) {
+      // Headless xterm runs with stdin disabled, so answer cursor position
+      // requests ourselves once the preceding output has been applied.
+      this.outputQueue = this.outputQueue
+        .then(() => {
+          const buffer = this.xterm.buffer.active;
+          this.inputHandler?.(`\x1b[${buffer.cursorY + 1};${buffer.cursorX + 1}R`);
+        })
+        .catch(() => undefined);
+    }
+  }
+
+  mouseTracking(): string {
+    return this.xterm.modes.mouseTrackingMode;
+  }
+
+  /** 1-based screen position of the first visible occurrence of `text`. */
+  findOnScreen(text: string): { row: number; col: number } | undefined {
+    const rows = this.serialize().view.split('\n');
+    for (let index = 0; index < rows.length; index += 1) {
+      const col = rows[index]!.indexOf(text);
+      if (col >= 0) return { row: index + 1, col: col + 1 };
+    }
+    return undefined;
   }
 
   get columns(): number {
@@ -217,6 +247,39 @@ function createScenarioTerminal(terminal: EmulatedTerminal): McE2eTerminal {
     keyCtrlC() {
       terminal.sendInput('\x03');
     },
+    clickText(text: string) {
+      const position = terminal.findOnScreen(text);
+      if (!position) throw new Error(`clickText: "${text}" not on screen\n\n${terminal.serialize().view}`);
+      terminal.sendInput(`\x1b[<0;${position.col};${position.row}M`);
+      terminal.sendInput(`\x1b[<0;${position.col};${position.row}m`);
+      return terminal.flushInput();
+    },
+    dragText(text: string, fromOffset: number, toOffset: number) {
+      const position = terminal.findOnScreen(text);
+      if (!position) throw new Error(`dragText: "${text}" not on screen\n\n${terminal.serialize().view}`);
+      const { row, col } = position;
+      terminal.sendInput(`\x1b[<0;${col + fromOffset};${row}M`);
+      terminal.sendInput(`\x1b[<32;${col + toOffset};${row}M`);
+      terminal.sendInput(`\x1b[<0;${col + toOffset};${row}m`);
+      return terminal.flushInput();
+    },
+    clipboardWrites() {
+      return [...terminal.clipboardWrites];
+    },
+    hoverText(text: string) {
+      const position = terminal.findOnScreen(text);
+      if (!position) throw new Error(`hoverText: "${text}" not on screen\n\n${terminal.serialize().view}`);
+      terminal.sendInput(`\x1b[<35;${position.col};${position.row}M`);
+    },
+    wheel(direction: 'up' | 'down', count = 1) {
+      const button = direction === 'up' ? 64 : 65;
+      const row = Math.ceil(terminal.rows / 2);
+      const col = Math.ceil(terminal.columns / 2);
+      for (let index = 0; index < count; index += 1) terminal.sendInput(`\x1b[<${button};${col};${row}M`);
+    },
+    mouseTracking() {
+      return terminal.mouseTracking();
+    },
     resize(columns: number, rows: number) {
       terminal.resize(columns, rows);
     },
@@ -339,7 +402,7 @@ async function startMastraCodeApp(
   options?: McE2eStartMastraCodeAppOptions,
 ): Promise<McE2eInProcessApp> {
   const [
-    { createMastraCode },
+    { createMastraCode, resolveSubagentsSetting },
     { MastraTUI },
     { createBrowserFromSettings, loadSettings, resolveStagehandModel, toActiveBrowserSettings },
   ] = await Promise.all([
@@ -367,6 +430,7 @@ async function startMastraCodeApp(
     disableHooks: isTruthyEnv('MASTRACODE_DISABLE_HOOKS'),
     ...(isTruthyEnv('MASTRACODE_ENABLE_CROSS_AGENT_SIGNALS') ? { crossAgentSignals: true } : {}),
     ...(isTruthyEnv('MASTRACODE_DISABLE_MEMORY') ? { memory: false } : {}),
+    subagents: resolveSubagentsSetting(settings.preferences.subagentsEnabled),
     cwd: runConfig.cwd,
     ...(process.env.HOME ? { homeDir: process.env.HOME } : {}),
     ...(options?.config ?? {}),

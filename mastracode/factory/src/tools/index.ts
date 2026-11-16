@@ -1,6 +1,8 @@
 import type { IntegrationTools } from '../integrations/base.js';
 import { createFactoryApprovalTools } from './approval-tools.js';
 import type { FactoryApprovalToolDependencies } from './approval-tools.js';
+import { createAuditEventsTool } from './audit-events-tool.js';
+import type { FactoryAuditToolDependencies } from './audit-events-tool.js';
 import { createFactoryMessagingTools } from './messaging-tools.js';
 import type { FactoryMessagingToolDependencies } from './messaging-tools.js';
 import { createFactoryReadTools } from './read-tools.js';
@@ -17,6 +19,7 @@ export type { FactoryToolScope } from './scope.js';
 
 /** Storage and services the Factory tools act through. */
 export type FactoryToolDependencies = FactoryReadToolDependencies &
+  FactoryAuditToolDependencies &
   FactoryWorkItemToolDependencies &
   FactoryMessagingToolDependencies &
   FactorySessionToolDependencies &
@@ -32,19 +35,20 @@ export interface CreateFactoryToolsOptions {
  * closure and never read the request context, so a non-session transport
  * (an MCP server) can mount the same set with a scope it resolved itself.
  *
- * Worker and side sessions only answer messages. User sessions get everything; turns
- * nobody signed in started (notification wakes, webhooks, dispatcher notices)
- * get the read tools and messaging limited to sessions they follow: text from
- * other people reaches those turns, and the management tools act as the
- * session owner.
+ * Worker and side sessions only answer messages. User sessions get every tool
+ * on every turn. Turns nobody signed in started (notification wakes, webhooks,
+ * dispatcher notices) carry text other people wrote, so each tool limits what
+ * it does on them itself: approvals, proposals and muting
+ * side sessions need a person, moves run as an agent, model switches reach
+ * only this session and its side sessions, and starts are side sessions only.
  */
 export function createFactoryTools({ scope, deps }: CreateFactoryToolsOptions): IntegrationTools {
   const messagingTools = createFactoryMessagingTools(scope, deps);
   if (scope.kind !== 'user') return messagingTools;
-  const readTools = { ...createFactoryReadTools(scope, deps), ...messagingTools };
-  if (!scope.interactive) return readTools;
   return {
-    ...readTools,
+    ...createFactoryReadTools(scope, deps),
+    factory_list_audit_events: createAuditEventsTool(scope, deps),
+    ...messagingTools,
     ...createFactoryWorkItemTools(scope, deps),
     ...createFactorySessionTools(scope, deps),
     ...createFactoryApprovalTools(scope, deps),

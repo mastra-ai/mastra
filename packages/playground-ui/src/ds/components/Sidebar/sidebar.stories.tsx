@@ -1,22 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import {
-  AlertTriangle,
-  Bell,
-  Box,
-  Database,
-  FlaskConical,
-  Home,
-  Key,
-  LayoutGrid,
-  ListTodo,
-  Plug,
-  Search,
-  Settings,
-  Users,
-  Waypoints,
-  Workflow,
-  Wrench,
-} from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Sidebar, useSidebar } from '.';
 import { Avatar } from '@/ds/components/Avatar';
@@ -34,6 +16,22 @@ import { Input } from '@/ds/components/Input';
 import { LogoWithoutText } from '@/ds/components/Logo';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { LogsIcon, MetricsIcon, TraceIcon } from '@/ds/icons';
+import { IconAgents } from '@/ds/icons/central/IconAgents';
+import { IconBell2 } from '@/ds/icons/central/IconBell2';
+import { IconBox } from '@/ds/icons/central/IconBox';
+import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
+import { IconHome } from '@/ds/icons/central/IconHome';
+import { IconKey2 } from '@/ds/icons/central/IconKey2';
+import { IconLab } from '@/ds/icons/central/IconLab';
+import { IconLayoutGrid1 } from '@/ds/icons/central/IconLayoutGrid1';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
+import { IconMaintenance } from '@/ds/icons/central/IconMaintenance';
+import { IconPlugin1 } from '@/ds/icons/central/IconPlugin1';
+import { IconServer1 } from '@/ds/icons/central/IconServer1';
+import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconTodos } from '@/ds/icons/central/IconTodos';
+import { IconUserDuo } from '@/ds/icons/central/IconUserDuo';
+import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { focusRing } from '@/ds/primitives/transitions';
 import { KeyboardShortcutsProvider } from '@/lib/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@/lib/keyboard/use-keydown';
@@ -92,7 +90,7 @@ function SidebarSearchDialog() {
       <DialogTrigger
         render={
           <Sidebar.SearchTrigger aria-label="Search" shortcut="⌘ K">
-            <Search />
+            <IconMagnifyingGlass />
           </Sidebar.SearchTrigger>
         }
       />
@@ -130,9 +128,7 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
                 title={
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate">Mastra</span>
-                    <span className="inline-flex h-5 items-center rounded bg-muted px-1.5 text-meta text-muted-foreground">
-                      Beta
-                    </span>
+                    <Sidebar.Badge>Beta</Sidebar.Badge>
                   </span>
                 }
               />
@@ -144,9 +140,7 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
             <a href="/projects" aria-label="Project list" className={cn('flex min-w-0 flex-1 rounded-md', focusRing)}>
               <Sidebar.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra Platform" />
             </a>
-            <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-meta text-muted-foreground">
-              Staging
-            </span>
+            <Sidebar.Badge>Staging</Sidebar.Badge>
             <Sidebar.Trigger />
           </Sidebar.Header>
         )}
@@ -158,7 +152,7 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
                 sections={[
                   {
                     key: 'overview',
-                    links: [{ name: 'Overview', url: '/', icon: <Home /> }],
+                    links: [{ name: 'Overview', url: '/', icon: <IconHome /> }],
                   },
                   {
                     key: 'observability',
@@ -166,7 +160,7 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
                     links: [
                       { name: 'Metrics', url: '/metrics', icon: <MetricsIcon /> },
                       { name: 'Traces', url: '/traces', icon: <TraceIcon />, isActive: true },
-                      { name: 'Intelligence', url: '/intelligence', icon: <LayoutGrid /> },
+                      { name: 'Intelligence', url: '/intelligence', icon: <IconLayoutGrid1 /> },
                       { name: 'Logs', url: '/logs', icon: <LogsIcon /> },
                     ],
                   },
@@ -174,31 +168,31 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
                     key: 'infrastructure',
                     title: 'Infrastructure',
                     links: [
-                      { name: 'Deploys', url: '/deploys', icon: <Box /> },
-                      { name: 'Gateway', url: '/gateway', icon: <Workflow />, opensView: true },
-                      { name: 'Databases', url: '/databases', icon: <Database /> },
+                      { name: 'Deploys', url: '/deploys', icon: <IconBox /> },
+                      { name: 'Gateway', url: '/gateway', icon: <WorkflowIcon />, opensView: true },
+                      { name: 'Databases', url: '/databases', icon: <IconServer1 /> },
                     ],
                     moreLinks: [
-                      { name: 'Tools', url: '/tools', icon: <Wrench /> },
-                      { name: 'Workspaces', url: '/workspaces', icon: <LayoutGrid /> },
+                      { name: 'Tools', url: '/tools', icon: <IconMaintenance /> },
+                      { name: 'Workspaces', url: '/workspaces', icon: <IconLayoutGrid1 /> },
                     ],
                   },
                   {
                     key: 'evals',
                     title: 'Evals',
-                    links: [{ name: 'Experiments', url: '/experiments', icon: <FlaskConical /> }],
+                    links: [{ name: 'Experiments', url: '/experiments', icon: <IconLab /> }],
                   },
                   {
                     key: 'agent-learning',
                     title: 'Agent Learning',
-                    links: [{ name: 'Issues', url: '/issues', icon: <ListTodo /> }],
+                    links: [{ name: 'Issues', url: '/issues', icon: <IconTodos /> }],
                   },
                   {
                     key: 'project-settings',
                     separator: true,
                     links: [
-                      { name: 'Environments', url: '/environments', icon: <Waypoints />, opensView: true },
-                      { name: 'Settings', url: '/settings', icon: <Settings />, opensView: true },
+                      { name: 'Environments', url: '/environments', icon: <IconAgents />, opensView: true },
+                      { name: 'Settings', url: '/settings', icon: <IconSettingsGear1 />, opensView: true },
                     ],
                   },
                 ]}
@@ -207,25 +201,25 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
 
             <Sidebar.NavStack.View value="gateway" title="Gateway" returnFocusRef={menuTriggerRef}>
               <Sidebar.NavList>
-                <Sidebar.NavLink link={{ name: 'API keys', url: '/gateway/api-keys', icon: <Key /> }} isActive />
+                <Sidebar.NavLink link={{ name: 'API keys', url: '/gateway/api-keys', icon: <IconKey2 /> }} isActive />
                 <Sidebar.NavLink link={{ name: 'Usage', url: '/gateway/usage', icon: <MetricsIcon /> }} />
-                <Sidebar.NavLink link={{ name: 'Threads', url: '/gateway/threads', icon: <Workflow /> }} />
+                <Sidebar.NavLink link={{ name: 'Threads', url: '/gateway/threads', icon: <WorkflowIcon /> }} />
                 <Sidebar.NavLink link={{ name: 'Logs', url: '/gateway/logs', icon: <LogsIcon /> }} />
-                <Sidebar.NavLink link={{ name: 'Settings', url: '/gateway/settings', icon: <Settings /> }} />
+                <Sidebar.NavLink link={{ name: 'Settings', url: '/gateway/settings', icon: <IconSettingsGear1 /> }} />
               </Sidebar.NavList>
             </Sidebar.NavStack.View>
 
             <Sidebar.NavStack.View value="environments" title="Environments" returnFocusRef={menuTriggerRef}>
               <Sidebar.NavList>
-                <Sidebar.NavLink link={{ name: 'Environments', url: '/environments', icon: <Waypoints /> }} isActive />
-                <Sidebar.NavLink link={{ name: 'Environment variables', url: '/variables', icon: <Key /> }} />
+                <Sidebar.NavLink link={{ name: 'Environments', url: '/environments', icon: <IconAgents /> }} isActive />
+                <Sidebar.NavLink link={{ name: 'Environment variables', url: '/variables', icon: <IconKey2 /> }} />
               </Sidebar.NavList>
             </Sidebar.NavStack.View>
 
             <Sidebar.NavStack.View value="settings" title="Settings" returnFocusRef={menuTriggerRef}>
               <Sidebar.NavList>
-                <Sidebar.NavLink link={{ name: 'General', url: '/settings', icon: <Settings /> }} isActive />
-                <Sidebar.NavLink link={{ name: 'Connect', url: '/settings/connect', icon: <Plug /> }} />
+                <Sidebar.NavLink link={{ name: 'General', url: '/settings', icon: <IconSettingsGear1 /> }} isActive />
+                <Sidebar.NavLink link={{ name: 'Connect', url: '/settings/connect', icon: <IconPlugin1 /> }} />
               </Sidebar.NavList>
             </Sidebar.NavStack.View>
           </Sidebar.NavStack>
@@ -237,7 +231,7 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
             value="$4"
             status="Credits are low"
             tone="warning"
-            icon={<AlertTriangle className="size-3 shrink-0 text-warning-foreground" aria-hidden />}
+            icon={<IconExclamationTriangle className="size-3 shrink-0 text-warning-foreground" aria-hidden />}
             href="/organization/billing"
             linkLabel="Credit balance"
           />
@@ -264,25 +258,25 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
               <div className="px-2 py-1 text-meta text-muted-foreground">justin@mastra.ai</div>
               <DropdownMenu.Separator />
               <DropdownMenu.Item onSelect={() => openView('gateway')}>
-                <Workflow />
+                <WorkflowIcon />
                 Gateway
               </DropdownMenu.Item>
               <DropdownMenu.Item onSelect={() => openView('environments')}>
-                <Waypoints />
+                <IconAgents />
                 Environments
               </DropdownMenu.Item>
               <DropdownMenu.Item onSelect={() => openView('settings')}>
-                <Settings />
+                <IconSettingsGear1 />
                 Settings
               </DropdownMenu.Item>
               <DropdownMenu.Separator />
               <div className="px-2 py-1 text-meta text-muted-foreground">Mastra</div>
               <DropdownMenu.Item>
-                <Users />
+                <IconUserDuo />
                 Organization settings
               </DropdownMenu.Item>
               <DropdownMenu.Item>
-                <Bell />
+                <IconBell2 />
                 Notifications
               </DropdownMenu.Item>
             </DropdownMenu.Content>
@@ -372,7 +366,7 @@ function ShowMoreStory() {
     <div className="flex h-screen">
       <Sidebar>
         <Sidebar.Nav>
-          <Sidebar.NavHeader icon={<ListTodo />}>Recent threads</Sidebar.NavHeader>
+          <Sidebar.NavHeader icon={<IconTodos />}>Recent threads</Sidebar.NavHeader>
           <Sidebar.NavList>
             {visibleThreads.map(name => (
               <Sidebar.NavLink key={name} link={{ name, url: '#' }} />

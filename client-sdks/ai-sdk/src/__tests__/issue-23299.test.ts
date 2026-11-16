@@ -62,6 +62,13 @@ describe('reasoning-filtered replay (#23299)', () => {
           expect(
             replay.find(message => message.role === 'assistant')?.parts.some(part => part.type === 'reasoning'),
           ).toBe(sendReasoning === true);
+          // Newer @ai-sdk/openai also skips orphan text item references, so check Mastra's own stripping directly.
+          const textPart = replay
+            .find(message => message.role === 'assistant')
+            ?.parts.find(part => part.type === 'text') as
+            | { providerMetadata?: { openai?: { itemId?: string } } }
+            | undefined;
+          expect(textPart?.providerMetadata?.openai?.itemId).toBe(sendReasoning ? 'msg_test' : undefined);
           const requests: { input: unknown[] }[] = [];
           const openai = createOpenAI({
             apiKey: 'test-key',
@@ -109,11 +116,18 @@ describe('reasoning-filtered replay (#23299)', () => {
               ]),
             );
           } else {
-            expect(requests[0]!.input).toEqual(
-              expect.arrayContaining([
-                expect.objectContaining({ role: 'assistant', content: [{ type: 'output_text', text: 'Hello' }] }),
-              ]),
-            );
+            // @ai-sdk/openai serializes inline assistant text as either a string or output_text parts.
+            const assistantText = (requests[0]!.input as { role?: string; content?: unknown }[])
+              .filter(item => item.role === 'assistant')
+              .map(item =>
+                typeof item.content === 'string'
+                  ? item.content
+                  : (item.content as { type: string; text: string }[])
+                      .filter(part => part.type === 'output_text')
+                      .map(part => part.text)
+                      .join(''),
+              );
+            expect(assistantText).toEqual(['Hello']);
             expect(JSON.stringify(requests[0]!.input)).not.toContain('msg_test');
             expect(JSON.stringify(requests[0]!.input)).not.toContain('rs_test');
           }

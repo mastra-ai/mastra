@@ -2,7 +2,6 @@
 title: "Reference: Context precision scorer | Evals"
 description: "The createContextPrecisionScorer() function creates a scorer that evaluates how relevant and well-positioned retrieved context pieces are for generating expected outputs."
 packages:
-  - "@mastra/core"
   - "@mastra/evals"
 ---
 
@@ -70,7 +69,9 @@ Use when optimizing context selection for:
 ]}
 />
 
-Either `context` or `contextExtractor` must be provided. If both are provided, `contextExtractor` takes precedence.
+Either `context` or `contextExtractor` must be provided. `contextExtractor` is only called when the run input and output have agent shapes: the input has `inputMessages`, `rememberedMessages` and `systemMessages` arrays plus a `taggedSystemMessages` object, and the output is an array of messages. For any other input/output shape the scorer uses `context`. When neither is provided, the scorer throws.
+
+If you pass `context`, the array must be non-empty. The constructor throws `Context array cannot be empty if provided` even when `contextExtractor` is also configured. When only `contextExtractor` is configured and the run isn't agent-shaped, there's no context to score against and evaluation throws `No context available for evaluation`.
 
 ## `.run()` returns
 
@@ -102,7 +103,7 @@ Context Precision uses **Mean Average Precision** to evaluate both relevance and
 
 ### Scoring Formula
 
-```
+```text
 MAP = (Σ Precision@k) / R
 
 Where:

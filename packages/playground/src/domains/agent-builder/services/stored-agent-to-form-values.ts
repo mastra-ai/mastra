@@ -12,7 +12,7 @@ function flattenAgentSkills(skills: StoredAgent['skills'] | undefined): Record<s
     }
     return merged;
   }
-  return skills as Record<string, unknown>;
+  return skills;
 }
 
 /**

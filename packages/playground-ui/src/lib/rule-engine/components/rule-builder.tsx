@@ -1,4 +1,3 @@
-import { Plus, X, Component } from 'lucide-react';
 import * as React from 'react';
 
 import type { Rule, RuleGroup, RuleGroupDepth1 } from '../types';
@@ -9,6 +8,9 @@ import type { RuleBuilderProps, RuleGroupViewProps } from './types';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
+import { IconComponents } from '@/ds/icons/central/IconComponents';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
@@ -28,6 +30,7 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
   const handleConditionChange = (index: number, condition: Rule | RuleGroup) => {
     onChange({
       ...group,
+      // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- Built core declarations distinguish the recursive group's depth from its children.
       conditions: group.conditions.map((c, i) => (i === index ? (condition as Rule | RuleGroupDepth1) : c)),
     });
   };
@@ -65,7 +68,7 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
           </Txt>
           {onRemove && (
             <Button type="button" onClick={onRemove} tooltip="Remove group" size="icon-sm" variant="ghost">
-              <X />
+              <IconCrossMedium />
             </Button>
           )}
         </div>
@@ -113,11 +116,11 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
       ))}
 
       <div className="flex gap-1 p-2">
-        <Button type="button" onClick={handleAddRule} variant="ghost" size="sm" icon={<Plus />}>
+        <Button type="button" onClick={handleAddRule} variant="ghost" size="sm" icon={<IconPlusMedium />}>
           Add rule
         </Button>
         {depth < maxDepth - 1 && (
-          <Button type="button" onClick={handleAddGroup} variant="ghost" size="sm" icon={<Component />}>
+          <Button type="button" onClick={handleAddGroup} variant="ghost" size="sm" icon={<IconComponents />}>
             Add group
           </Button>
         )}
@@ -162,7 +165,7 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
         )}
       >
         <Icon>
-          <Plus />
+          <IconPlusMedium />
         </Icon>
         <Txt as="span" variant="caption" className="block">
           Add conditional rule

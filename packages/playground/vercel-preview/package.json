@@ -17,12 +17,12 @@
     "@mastra/editor": "link:../../../packages/editor",
     "@mastra/memory": "link:../../../packages/memory",
     "hono": "^4.13.11",
-    "zod": "^4.6.4"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/node": "22.19.15",
+    "@types/node": "22.20.5",
     "mastra": "link:../../../packages/cli",
-    "turbo": "^2.9.12",
+    "turbo": "^2.11.9",
     "typescript": "^6.0.3"
   },
   "license": "Apache-2.0",

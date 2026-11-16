@@ -8,7 +8,7 @@ import type { FormSubmitRowProps } from './components/form-submit-row';
 import { ROOT_FIELD_KEY } from './field-context';
 import { isEmptyZodObject } from './is-empty-zod-object';
 import { CustomZodProvider } from './zod-provider';
-import { getShape } from './zod-provider/compat';
+import { asObjectProperty, getShape } from './zod-provider/compat';
 import type { ButtonProps } from '@/ds/components/Button';
 
 interface DynamicFormProps {
@@ -35,7 +35,7 @@ function getFormInput(values: Record<string, unknown>, isWrapped: boolean) {
 function normalizeSchema(schema: z.ZodType, isWrapped: boolean) {
   if (isEmptyZodObject(schema)) return z.object({});
   if (!isWrapped) return schema;
-  return z.object({ [ROOT_FIELD_KEY]: schema.description ? schema : schema.describe('Input') });
+  return z.object({ [ROOT_FIELD_KEY]: asObjectProperty(schema.description ? schema : schema.describe('Input')) });
 }
 
 const SubmitRowContext = createContext<FormSubmitRowProps | null>(null);
@@ -145,7 +145,7 @@ export function DynamicForm({
         defaultValues={normalizedDefaultValues}
         formProps={{ className, noValidate: true }}
         uiComponents={uiComponents}
-        withSubmit={true}
+        withSubmit
         readOnly={readOnly}
       >
         {children}

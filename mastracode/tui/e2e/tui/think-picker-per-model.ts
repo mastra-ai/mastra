@@ -13,14 +13,31 @@ async function closeThinkPicker(terminal: McE2eTerminal, runtime: McE2eScenarioR
   await runtime.waitForScreenTextAbsent(/Session override/i, terminal, 8_000);
 }
 
+async function switchModel(
+  terminal: McE2eTerminal,
+  runtime: McE2eScenarioRuntime,
+  provider: string,
+  model: string,
+): Promise<void> {
+  const escapedModel = model.replaceAll('.', '\\.');
+  terminal.submit('/model');
+  await runtime.waitForScreenText(/Type to search/i, terminal, 8_000);
+  terminal.write(`${provider}/${model}`);
+  await runtime.waitForScreenText(new RegExp(`${provider}/${escapedModel}`, 'i'), terminal, 8_000);
+  terminal.write('\r');
+  await runtime.waitForScreenText(new RegExp(`\\bbuild · (?:${provider}/)?${escapedModel} · `), terminal, 8_000);
+}
+
 export const thinkPickerPerModelScenario = {
   name: 'think-picker-per-model',
   description: 'Offers only the thinking levels the selected model runs in /think, and updates them on a model switch.',
-  testName: 'hides Max on Claude Haiku 4.5 and offers only Off on GPT-4o',
+  testName:
+    'hides Max on Claude Haiku 4.5, offers only Off on GPT-4o and Very High only on the Grok models that list it',
   env: () => ({
     MASTRACODE_MODEL_ID: 'anthropic/claude-haiku-4-5',
     ANTHROPIC_API_KEY: 'mc-e2e-anthropic-key',
     OPENAI_API_KEY: 'mc-e2e-openai-key',
+    XAI_API_KEY: 'mc-e2e-xai-key',
   }),
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
@@ -38,17 +55,32 @@ export const thinkPickerPerModelScenario = {
     assert.doesNotMatch(haikuPicker, /Unbounded reasoning/);
     await closeThinkPicker(terminal, runtime);
 
-    terminal.submit('/model');
-    await runtime.waitForScreenText(/Type to search/i, terminal, 8_000);
-    terminal.write('openai/gpt-4o');
-    await runtime.waitForScreenText(/openai\/gpt-4o/i, terminal, 8_000);
-    terminal.write('\r');
-    await runtime.waitForScreenText(/\bbuild · (?:openai\/)?gpt-4o · /, terminal, 8_000);
+    await switchModel(terminal, runtime, 'openai', 'gpt-4o');
 
     const gpt4oPicker = await openThinkPicker(terminal, runtime);
     runtime.printScreen('/think on GPT-4o', terminal);
     assert.match(gpt4oPicker, /none\s+Reasoning disabled/);
     assert.doesNotMatch(gpt4oPicker, /Light reasoning|Balanced reasoning|Deep reasoning/);
+    await closeThinkPicker(terminal, runtime);
+
+    await switchModel(terminal, runtime, 'xai', 'grok-4.6');
+    const grok46Picker = await openThinkPicker(terminal, runtime);
+    runtime.printScreen('/think on Grok 4.6', terminal);
+    assert.match(grok46Picker, /Very High\s+Maximum reasoning depth/);
+    await closeThinkPicker(terminal, runtime);
+
+    await switchModel(terminal, runtime, 'xai', 'grok-4.5');
+    const grok45Picker = await openThinkPicker(terminal, runtime);
+    runtime.printScreen('/think on Grok 4.5', terminal);
+    assert.match(grok45Picker, /Very High\s+Maximum reasoning depth/);
+    await closeThinkPicker(terminal, runtime);
+
+    await switchModel(terminal, runtime, 'xai', 'grok-4.20-0309-reasoning');
+    const grok420Picker = await openThinkPicker(terminal, runtime);
+    runtime.printScreen('/think on Grok 4.20 without reasoning controls', terminal);
+    // Only OpenAI models show the provider value ("none"); other providers label it "Off".
+    assert.match(grok420Picker, /Off\s+Reasoning disabled/);
+    assert.doesNotMatch(grok420Picker, /Light reasoning|Balanced reasoning|Deep reasoning|Very High/);
     await closeThinkPicker(terminal, runtime);
 
     terminal.keyCtrlC();

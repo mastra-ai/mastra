@@ -1,7 +1,7 @@
 /**
  * The tenant organization a session's knowledge is scoped to.
  *
- * Subconscious knowledge curation scopes every node and record on
+ * Knowledge writes scope every node and record on
  * `factoryOrgId`. A session that reaches the curation seam without one used to
  * fall back to the session owner id — for factory sessions the agent
  * controller's own id — so the knowledge landed under an org rung no reader

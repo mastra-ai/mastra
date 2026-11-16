@@ -27,10 +27,12 @@ function mockMastra(fga?: unknown) {
   };
 }
 
-const provider = (denyIds: string[] = []) => ({
+// Grants only the listed `type:id` resources: a call also checked against any other resource,
+// such as the standalone tool id, is denied (#28787).
+const provider = (allowed: string[] = []) => ({
   check: vi.fn(),
   require: vi.fn(async (user: { id: string }, params: { resource: { type: string; id: string } }) => {
-    if (denyIds.includes(params.resource.id)) {
+    if (!allowed.includes(`${params.resource.type}:${params.resource.id}`)) {
       throw new FGADeniedError(user, params.resource, MastraFGAPermissions.TOOLS_EXECUTE);
     }
   }),
@@ -80,7 +82,7 @@ function makeServer(config: Partial<MCPServerConfig> = {}) {
 describe('MCP Server FGA checks', () => {
   it('enforces FGA in executeTool and fails closed without a user', async () => {
     const { server, execute, resourceId } = makeServer();
-    const fga = provider([resourceId('test-tool')]);
+    const fga = provider();
     server.__registerMastra(mockMastra(fga) as any);
 
     const requestContext = userContext('user-1');
@@ -113,7 +115,7 @@ describe('MCP Server FGA checks', () => {
 
   it('filters getToolListInfo by FGA access and returns nothing without a user', async () => {
     const { server, resourceId } = makeServer();
-    const fga = provider([resourceId('native')]);
+    const fga = provider([`tool:${resourceId('test-tool')}`]);
     server.__registerMastra(mockMastra(fga) as any);
 
     const listed = await server.getToolListInfo(userContext('user-1'));
@@ -139,7 +141,7 @@ describe('MCP Server FGA checks', () => {
 
   it('maps transport auth to the user before filtering tools/list and enforcing tools/call', async () => {
     const { server, execute, resourceId } = makeServer({ mapAuthInfoToUser });
-    const fga = provider([resourceId('native')]);
+    const fga = provider([`tool:${resourceId('test-tool')}`]);
     server.__registerMastra(mockMastra(fga) as any);
     const served = await serveHTTP(server, { auth: authInfo });
     try {
@@ -193,7 +195,7 @@ describe('MCP Server FGA checks', () => {
         permissionMapping: { [MastraFGAPermissions.TOOLS_EXECUTE]: 'read' },
       },
     });
-    const fga = provider();
+    const fga = provider(['mcp-user:user-1']);
     server.__registerMastra(mockMastra(fga) as any);
     const requestContext = userContext('user-1');
 
@@ -211,6 +213,23 @@ describe('MCP Server FGA checks', () => {
     expect(fga.require).toHaveBeenCalledWith(
       { id: 'user-1' },
       expect.objectContaining({ resource: { type: 'mcp-user', id: 'user-1' }, permission: 'read' }),
+    );
+  });
+
+  // `tools()` hands these tools to agents (the editor's stored agents do), outside the server's own check.
+  it('checks the server tool resource when its tools run outside the server', async () => {
+    const { server, execute, resourceId } = makeServer();
+    const fga = provider([`tool:${resourceId('native')}`]);
+    server.__registerMastra(mockMastra(fga) as any);
+    const requestContext = userContext('user-1');
+    const tools = server.tools();
+
+    await expect(
+      tools['test-tool']!.execute!({ input: 'hello' }, { toolCallId: 'call-1', messages: [], requestContext }),
+    ).rejects.toMatchObject({ name: 'FGADeniedError' });
+    expect(execute).not.toHaveBeenCalled();
+    await expect(tools.native!.execute!({}, { toolCallId: 'call-2', messages: [], requestContext })).resolves.toBe(
+      'native ran',
     );
   });
 });

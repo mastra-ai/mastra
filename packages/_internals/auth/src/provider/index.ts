@@ -8,6 +8,7 @@ import type {
   ISSOProvider,
   ISessionProvider,
   IUserProvider,
+  MastraUser,
   Session,
   SSOCallbackResult,
   SSOLoginConfig,
@@ -15,6 +16,57 @@ import type {
 } from '..';
 import type { AuthorizeUserFn, MastraAuthConfig, MastraAuthRequest } from '../types';
 import { getRequestHeader } from '../types';
+
+function pickString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value;
+  }
+  return undefined;
+}
+
+/**
+ * Normalize an arbitrary provider-specific user object to the stable
+ * {@link MastraUser} shape surfaced to `DynamicArgument` callbacks.
+ *
+ * Picks `id` from `id`/`sub`/`userId` (numeric ids are stringified),
+ * `avatarUrl` from `avatarUrl`/`picture`, and passes `name`/`email`/`role`
+ * through when they are non-empty strings.
+ *
+ * @throws when no id can be derived — override `toMastraUser()` on the auth
+ * provider for user shapes this default cannot handle.
+ */
+export function normalizeMastraUser(user: unknown): MastraUser {
+  if (typeof user === 'string' && user.trim()) {
+    return { id: user };
+  }
+
+  if (user === null || typeof user !== 'object') {
+    throw new Error(
+      `Unable to normalize authenticated user of type "${typeof user}" to a MastraUser. Override toMastraUser() on your auth provider to supply a normalized user.`,
+    );
+  }
+
+  const record = user as Record<string, unknown>;
+  const rawId = [record.id, record.sub, record.userId].find(
+    value => (typeof value === 'string' && value.trim()) || typeof value === 'number',
+  );
+  if (rawId === undefined) {
+    throw new Error(
+      'Unable to derive a user id (looked at `id`, `sub`, and `userId`) while normalizing the authenticated user. Override toMastraUser() on your auth provider to supply a normalized user.',
+    );
+  }
+
+  const normalized: MastraUser = { id: typeof rawId === 'number' ? String(rawId) : (rawId as string) };
+  const name = pickString(record.name);
+  const email = pickString(record.email);
+  const avatarUrl = pickString(record.avatarUrl, record.picture);
+  const role = pickString(record.role);
+  if (name) normalized.name = name;
+  if (email) normalized.email = email;
+  if (avatarUrl) normalized.avatarUrl = avatarUrl;
+  if (role) normalized.role = role;
+  return normalized;
+}
 
 export interface MastraAuthProviderOptions<TUser = unknown> {
   name?: string;
@@ -67,6 +119,11 @@ export interface IMastraAuthProvider<TUser = unknown> {
    */
   mapUserToResourceId?(user: TUser): string | undefined | null;
   /**
+   * Normalize the authenticated provider-specific user to the stable
+   * `MastraUser` shape surfaced to `DynamicArgument` callbacks.
+   */
+  toMastraUser?(user: TUser): MastraUser;
+  /**
    * Return response headers (typically `Set-Cookie` for a rotated session)
    * that the provider accumulated while handling this request and clear them
    * from the provider's per-request state. The server middleware appends them
@@ -74,6 +131,39 @@ export interface IMastraAuthProvider<TUser = unknown> {
    * reach the browser.
    */
   consumePendingResponseHeaders?(request: MastraAuthRequest): Record<string, string> | undefined;
+  /**
+   * OAuth 2.0 Protected Resource Metadata (RFC 9728) hints, used by the built-in MCP server's
+   * `/.well-known/oauth-protected-resource` endpoint when `server.mcp.oauth` does not set them.
+   */
+  getOAuthMetadata?(): MastraAuthOAuthMetadata | undefined;
+  /**
+   * Whether the token that authenticated `user` was issued for `audience` (its `aud` claim includes it).
+   * `user` is the value returned by `authenticateToken`. Called by the built-in MCP server when
+   * `server.mcp.oauth.resource` is set.
+   */
+  verifyAudience?(user: TUser, audience: string): boolean | Promise<boolean>;
+}
+
+/** Authorization server hints for MCP clients (RFC 9728). */
+export interface MastraAuthOAuthMetadata {
+  /** Issuer URLs of the authorization servers that issue tokens accepted by this provider. */
+  authorizationServers?: string[];
+  /** OAuth scopes the provider understands. */
+  scopesSupported?: string[];
+}
+
+/** Whether a JWT `aud` claim (string or array) includes `audience`. */
+export function jwtAudienceIncludes(aud: unknown, audience: string): boolean {
+  return Array.isArray(aud) ? aud.includes(audience) : aud === audience;
+}
+
+/**
+ * JWT claims as the authenticated user. OIDC tokens name the user in `sub`, while RBAC and FGA look the user up
+ * by `id`, so `id` is filled from `sub` when the token has no `id` claim of its own.
+ */
+export function withSubjectAsId<T extends object>(claims: T): T {
+  const { sub, id } = claims as { sub?: unknown; id?: unknown };
+  return id == null && typeof sub === 'string' && sub ? { ...claims, id: sub } : claims;
 }
 
 export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase implements IMastraAuthProvider<TUser> {
@@ -90,7 +180,9 @@ export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase imp
 
     this.protected = options?.protected;
     this.public = options?.public;
-    this.mapUserToResourceId = options?.mapUserToResourceId;
+    if (options?.mapUserToResourceId) {
+      this.mapUserToResourceId = options.mapUserToResourceId;
+    }
   }
 
   /**
@@ -108,6 +200,19 @@ export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase imp
    * @returns The authorization result
    */
   abstract authorizeUser(user: TUser, request: MastraAuthRequest): Promise<boolean> | boolean;
+
+  /**
+   * Normalize the authenticated provider-specific user to the stable
+   * {@link MastraUser} shape surfaced to `DynamicArgument` callbacks as the
+   * optional `user` argument.
+   *
+   * The default implementation handles common user shapes (see
+   * {@link normalizeMastraUser}); override it when your provider's user type
+   * needs custom mapping.
+   */
+  toMastraUser(user: TUser): MastraUser {
+    return normalizeMastraUser(user);
+  }
 
   protected registerOptions(opts?: MastraAuthProviderOptions<TUser>) {
     if (opts?.authorizeUser) {
@@ -257,15 +362,34 @@ export class CompositeAuth
 
   private takeAuthenticatedProvider(user: unknown): IMastraAuthProvider | undefined {
     if (isObjectLike(user)) {
-      const provider = this.authenticatedProviderByObject.get(user);
-      this.authenticatedProviderByObject.delete(user);
-      return provider;
+      // Kept (WeakMap) so later per-request hooks such as verifyAudience still find the provider.
+      return this.authenticatedProviderByObject.get(user);
     }
 
     const primitiveUser = user as PrimitiveAuthUser;
     const provider = this.authenticatedProviderByPrimitive.get(primitiveUser);
     this.authenticatedProviderByPrimitive.delete(primitiveUser);
     return provider;
+  }
+
+  private peekAuthenticatedProvider(user: unknown): IMastraAuthProvider | undefined {
+    if (isObjectLike(user)) {
+      return this.authenticatedProviderByObject.get(user);
+    }
+    return this.authenticatedProviderByPrimitive.get(user as PrimitiveAuthUser);
+  }
+
+  /**
+   * Delegate normalization to the provider that authenticated this user.
+   * Falls back to the default normalization when the winning provider is
+   * unknown or predates `toMastraUser`.
+   */
+  override toMastraUser(user: unknown): MastraUser {
+    const provider = this.peekAuthenticatedProvider(user);
+    if (provider && typeof provider.toMastraUser === 'function') {
+      return provider.toMastraUser(user);
+    }
+    return normalizeMastraUser(user);
   }
 
   private mapAuthenticatedUserToResourceId(user: unknown): string | undefined | null {
@@ -337,6 +461,47 @@ export class CompositeAuth
       }
     }
     return merged;
+  }
+
+  /** The wrapped provider that authenticated `user`, or undefined when it can't be determined. */
+  getAuthenticatedProvider(user: unknown): IMastraAuthProvider | undefined {
+    return isObjectLike(user)
+      ? this.authenticatedProviderByObject.get(user)
+      : this.authenticatedProviderByPrimitive.get(user as PrimitiveAuthUser);
+  }
+
+  /** The wrapped providers, in the order they are tried. */
+  getProviders(): readonly IMastraAuthProvider[] {
+    return this.providers;
+  }
+
+  /** Union of the wrapped providers' OAuth metadata. */
+  getOAuthMetadata(): MastraAuthOAuthMetadata | undefined {
+    const authorizationServers = new Set<string>();
+    const scopesSupported = new Set<string>();
+    for (const provider of this.providers) {
+      const metadata = provider.getOAuthMetadata?.();
+      metadata?.authorizationServers?.forEach(server => authorizationServers.add(server));
+      metadata?.scopesSupported?.forEach(scope => scopesSupported.add(scope));
+    }
+    if (!authorizationServers.size && !scopesSupported.size) return undefined;
+    return {
+      ...(authorizationServers.size && { authorizationServers: [...authorizationServers] }),
+      ...(scopesSupported.size && { scopesSupported: [...scopesSupported] }),
+    };
+  }
+
+  /**
+   * Delegates to the provider that authenticated `user`. Returns true (audience not enforced) when that
+   * provider has no `verifyAudience`. When the authenticating provider can't be determined (for example the
+   * user object was replaced after authentication), returns false if any wrapped provider could check the
+   * audience, so the check fails closed.
+   */
+  async verifyAudience(user: unknown, audience: string): Promise<boolean> {
+    const provider = this.getAuthenticatedProvider(user);
+    if (!provider) return !this.providers.some(p => typeof p.verifyAudience === 'function');
+    if (typeof provider.verifyAudience !== 'function') return true;
+    return provider.verifyAudience(user, audience);
   }
 
   async authorizeUser(user: unknown, request: MastraAuthRequest): Promise<boolean> {

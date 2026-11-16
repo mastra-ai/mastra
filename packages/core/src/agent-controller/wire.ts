@@ -1,3 +1,4 @@
+import type { MastraErrorPart } from '../agent/message-list';
 import type { AgentControllerDisplayState, AgentControllerEvent } from './types';
 
 /** `Error` is structurally `{ name, message, stack? }`; the `stack` key tells an instance from a flattened {@link WireError}. */
@@ -16,11 +17,8 @@ export type Jsonify<T> = T extends { toJSON(): infer R }
           ? { [K in keyof T]: Jsonify<T[K]> }
           : T;
 
-/** An `Error` as the server flattens it; JSON would drop a real `Error` to `{}`. */
-export interface WireError {
-  name: string;
-  message: string;
-}
+/** An `Error` as the server flattens it, with the provider details a saved error part keeps; JSON would drop a real `Error` to `{}`. */
+export type WireError = MastraErrorPart['error'];
 
 /** `Object.fromEntries` stringifies keys, so the record is keyed by string whatever the Map was. */
 type MapToRecord<T> = T extends Map<unknown, infer V> ? Record<string, V> : T;

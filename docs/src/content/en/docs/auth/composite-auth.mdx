@@ -190,12 +190,14 @@ export const mastra = new Mastra({
 
 ## Error handling
 
-CompositeAuth silently catches errors from individual providers and moves to the next one. This prevents one failing provider from blocking authentication:
+During authentication, CompositeAuth silently catches errors thrown by a provider's `authenticateToken()` method and moves to the next provider. This prevents one failing provider from blocking authentication:
 
 ```typescript
-// If clerkAuth throws an error, apiKeyAuth still gets tried
+// If clerkAuth throws while authenticating the token, apiKeyAuth still gets tried
 new CompositeAuth([clerkAuth, apiKeyAuth])
 ```
+
+Authorization doesn't catch errors. CompositeAuth calls each provider's `authorizeUser()` method in order and grants access as soon as one returns `true`. If a provider's `authorizeUser()` throws, CompositeAuth stops checking the remaining providers and the request fails with a `500` error. To deny access or let the next provider decide, return `false` from `authorizeUser()` instead of throwing.
 
 To debug authentication issues, add logging to your custom providers or check individual provider configurations.
 

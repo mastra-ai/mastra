@@ -20,7 +20,7 @@ function barHeight(share: number) {
 
 function pointTitle(snapshot: ThemeSnapshot | undefined, label: string, traceCount: number, share: number) {
   const cutoff = snapshot?.cutoffAt ? formatSnapshotCutoff(snapshot.cutoffAt) : undefined;
-  return `${label}${cutoff ? ` · ${cutoff}` : ''} · ${traceCount} traces (${Math.round(share * 100)}%)`;
+  return `${label}: ${traceCount} traces (${Math.round(share * 100)}%)${cutoff ? ` at ${cutoff}` : ''}`;
 }
 
 function lifelineArea(segment: ThemeLifelinePoint[], positions: number[]) {

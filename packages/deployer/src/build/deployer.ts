@@ -1,5 +1,5 @@
-import type { IMastraLogger } from '@mastra/core/logger';
-import type { Config } from '@mastra/core/mastra';
+import type { IMastraLogger } from '@internal/core/logger';
+import type { IDeployer } from '@internal/deployer';
 import { extractMastraOption, extractMastraOptionBundler } from './shared/extract-mastra-option';
 
 export function getDeployerBundler(
@@ -15,7 +15,7 @@ export async function getDeployer(
   entryFile: string,
   outputDir: string,
   logger?: IMastraLogger,
-): Promise<Config['deployer'] | null> {
+): Promise<IDeployer | undefined | null> {
   const result = await extractMastraOption('deployer', entryFile, outputDir, logger);
   if (!result) {
     return null;

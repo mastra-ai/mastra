@@ -5,6 +5,7 @@ import { FilterBarChip } from './filter-bar-chip';
 import { FilterBarClear } from './filter-bar-clear';
 import { FILTER_BAR_SCOPE_ATTR, FilterBarProvider, useFilterBarContext } from './filter-bar-context';
 import { FilterBarInput } from './filter-bar-input';
+import { FilterBarTimeRange } from './filter-bar-time-range';
 import { isFilterBarGroup } from './types';
 import type { FilterBarExpression, FilterBarField, FilterBarItem, FilterBarOperator } from './types';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
@@ -68,7 +69,7 @@ function FilterBarSurface({
         // No chrome of its own: chips and the typeahead input sit directly on the parent surface.
         // Layout: chips, input, then Clear right beside the input — all in one wrapping row so
         // Clear never drifts to the far edge of a wide container.
-        'flex w-full flex-wrap items-center gap-1',
+        'flex w-full flex-wrap items-center gap-1.5',
         className,
       )}
     >
@@ -168,3 +169,4 @@ FilterBar.Chips = FilterBarChips;
 FilterBar.Chip = FilterBarChip;
 FilterBar.AdvancedChip = FilterBarAdvancedChip;
 FilterBar.Input = FilterBarInput;
+FilterBar.TimeRange = FilterBarTimeRange;

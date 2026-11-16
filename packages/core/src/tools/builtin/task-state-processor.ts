@@ -43,8 +43,8 @@ function isThreadStateStore(value: unknown): value is ResolvedThreadStateStore {
 //    (deltas are meaningless without their base), so the agent never loses its
 //    tasks.
 //
-// The task list itself lives in the thread-scoped `tasks` storage domain (the
-// TaskStore); this processor projects it onto the model context. State signals
+// The task list itself lives in the thread-scoped `threadState` storage domain;
+// this processor projects it onto the model context. State signals
 // require a memory-backed thread; the runtime enforces this. The task tools
 // no-op when the run is not memory backed, so the processor only ever sees task
 // state on memory-backed runs.

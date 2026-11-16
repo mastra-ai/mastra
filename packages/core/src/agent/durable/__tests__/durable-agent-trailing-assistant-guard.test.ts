@@ -98,8 +98,9 @@ describe('DurableAgent trailing assistant guard', () => {
 
     const roles = (prompt: LanguageModelV2Prompt) => prompt.filter(m => m.role !== 'system').map(m => m.role);
     expect(roles(prompts[0]!)).toEqual(['user', 'assistant', 'user']);
-    // The context turn added in step 1 is still present after the durable round trip.
-    expect(roles(prompts[1]!)).toEqual(['user', 'assistant', 'user', 'assistant', 'tool']);
+    // The synthetic turn is dropped once step 1's prompt is built, so the tool step
+    // lands in the prefilled assistant message instead of a new one (#27520).
+    expect(roles(prompts[1]!)).toEqual(['user', 'assistant', 'tool']);
 
     const { messages } = await memory.recall({ threadId: 'thread-guard', resourceId: 'resource-guard' });
     expect(JSON.stringify(messages)).not.toContain('Continue.');

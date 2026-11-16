@@ -5,8 +5,7 @@ import { queryKeys } from '../api/keys';
 import type { CustomProviderInfo, CustomProvidersResponse, OkResponse, SaveCustomProviderBody } from '../api/types';
 
 /**
- * User-defined OpenAI-compatible providers (mirrors the TUI `/custom-providers`
- * command). Backed by global settings on the server. The API key is write-only;
+ * Organization-scoped OpenAI-compatible providers. The API key is write-only;
  * the server only ever reports `hasApiKey`.
  */
 export function useCustomProvidersQuery() {
@@ -25,8 +24,13 @@ export function useSaveCustomProvider() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: SaveCustomProviderBody) =>
-      client.post<{ ok: true; provider?: CustomProviderInfo }>('/web/config/custom-providers', body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.customProviders() }),
+      client.post<{ ok: true; provider: CustomProviderInfo }>('/web/config/custom-providers', body),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.customProviders() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.providers() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.availableModels() }),
+      ]),
   });
 }
 
@@ -40,6 +44,11 @@ export function useRemoveCustomProvider() {
   return useMutation({
     mutationFn: ({ id }: RemoveCustomProviderArgs) =>
       client.del<OkResponse>(`/web/config/custom-providers/${encodeURIComponent(id)}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.customProviders() }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.customProviders() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.providers() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.availableModels() }),
+      ]),
   });
 }

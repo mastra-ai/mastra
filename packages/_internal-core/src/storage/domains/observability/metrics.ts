@@ -270,7 +270,8 @@ export const distinctColumnSchema = z
 
 // --- getMetricAggregate ---
 
-const requireDistinctColumnRefinement = {
+/** Shared by the metric args schemas and dashboard metric queries, which rebuild those objects. */
+export const requireDistinctColumnRefinement = {
   check: (data: { aggregation: AggregationType; distinctColumn?: string | undefined }) =>
     data.aggregation !== 'count_distinct' || data.distinctColumn !== undefined,
   options: {

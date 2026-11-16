@@ -129,6 +129,8 @@ export const startServerTool = createTool({
 
 [`LocalSandbox`](/reference/workspace/local-sandbox) executes commands on the same machine as your Mastra application. By default, commands run directly on the host with the permissions of the application process.
 
+`workingDirectory` only sets where commands run. Mastra doesn't copy your project into it. To give an agent its own checkout, run `git clone` or `git worktree add` into a directory outside the source repository.
+
 ```typescript
 const sandbox = new LocalSandbox({
   workingDirectory: './workspace',
@@ -195,8 +197,13 @@ import { Workspace } from '@mastra/core/workspace'
 import { DaytonaSandbox } from '@mastra/daytona'
 import { S3Filesystem } from '@mastra/s3'
 
-const getThreadId = (requestContext: RequestContext) =>
-  requestContext.get(MASTRA_THREAD_ID_KEY) as string
+const getThreadId = (requestContext: RequestContext) => {
+  const threadId = requestContext.get(MASTRA_THREAD_ID_KEY)
+  if (typeof threadId !== 'string' || !threadId) {
+    throw new Error('MASTRA_THREAD_ID_KEY is not set on the request context')
+  }
+  return threadId
+}
 
 const createThreadFilesystem = (threadId: string) =>
   new S3Filesystem({
@@ -222,6 +229,22 @@ const workspace = new Workspace({
 })
 ```
 
+Resolvers receive only the request context, so the thread ID has to be on it. `agent.stream()` and `agent.generate()` don't copy `memory.thread` to `MASTRA_THREAD_ID_KEY`, so set the key yourself from a trusted thread ID, either in [server middleware](/docs/server/request-context#reserved-keys) or when you call the agent:
+
+```typescript
+import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context'
+
+const requestContext = new RequestContext()
+requestContext.set(MASTRA_THREAD_ID_KEY, threadId)
+
+await agent.stream(message, {
+  memory: { thread: threadId, resource: userId },
+  requestContext,
+})
+```
+
+`getThreadId()` throws when the key is missing, so a request without a thread fails instead of sharing a `threads/undefined` prefix and sandbox with every other such request.
+
 The first request in a thread runs the resolver and starts the sandbox. Later requests with the same thread ID reuse the cached sandbox. A different thread ID creates a different sandbox and storage prefix.
 
 The example mounts the filesystem inside the resolver because static `mounts` can't be combined with a sandbox resolver. Generated tools resolve the filesystem and sandbox from the request context automatically.
@@ -231,6 +254,12 @@ The example mounts the filesystem inside the resolver because static `mounts` ca
 Your application owns sandboxes returned by a resolver. Destroy them and call `workspace.clearSandboxCache(cacheKey)` when the user, thread, or session ends. `workspace.destroy()` doesn't destroy resolver-returned sandboxes.
 
 :::
+
+### Agent workspace functions
+
+An agent's `workspace` option also accepts a function that returns a `Workspace`. Mastra calls this function whenever it needs the agent's workspace, not only when the agent runs. This includes registering the agent at startup and reading agent metadata, such as `GET /api/agents` and `GET /api/agents/:agentId`, which Studio calls when it lists agents. These calls aren't cached.
+
+Keep the function cheap. Don't start a sandbox or other paid infrastructure inside it. Return a workspace that uses `filesystem` and `sandbox` resolvers instead. Mastra calls the filesystem resolver when it builds the workspace instructions for a run, when a tool needs the provider, and when the agent's workspace skills are read, including on the agent metadata routes. It calls the sandbox resolver only when a tool needs the provider, unless you set `instructions.dynamicSandbox` to `'resolve'`.
 
 ### Tool availability
 
@@ -260,6 +289,8 @@ const workspace = new Workspace({
 ```
 
 These callbacks fire for all background processes started by the agent through `execute_command`.
+
+Each callback receives the process `pid` and, when available, the `toolCallId`, `agentId`, `threadId`, `resourceId`, and `runId` of the call that started it, so you can route an exit notice back to the right conversation. `onExit` also gets `killedByAbort`, which is `true` when the abort signal fired (the run's signal by default) and stopped the process, and `false` when it exited on its own or was stopped with `kill_process`.
 
 By default, background processes inherit the agent's abort signal and stop when the agent disconnects. Set `abortSignal` to a custom signal, or use `null` or `false` when the process should continue after the request ends.
 

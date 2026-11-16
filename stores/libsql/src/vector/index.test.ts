@@ -268,6 +268,43 @@ describe('LibSQLVector - Store Specific', () => {
       expect(results.length).toBe(0);
     });
   });
+
+  // https://github.com/mastra-ai/mastra/issues/27880
+  describe('brute-force scan query vector binding', () => {
+    it('binds the query vector as a parameter instead of inlining it into the SQL', async () => {
+      const queryVector = createVector(0);
+      queryVector[1] = 0.123456789;
+      const vectorStr = `[${queryVector.join(',')}]`;
+      const executeSpy = vi.spyOn((libSQLVectorDB as any).turso, 'execute');
+
+      try {
+        const unfiltered = await libSQLVectorDB.query({ indexName: testIndexName, queryVector, topK: 2 });
+        const filtered = await libSQLVectorDB.query({
+          indexName: testIndexName,
+          queryVector,
+          topK: 10,
+          filter: { name: { $in: ['vec1', 'vec3'] } },
+          minScore: -1,
+        });
+
+        expect(unfiltered.map(r => r.metadata.name)).toEqual(['vec1', expect.any(String)]);
+        expect(unfiltered[0]!.score).toBeGreaterThan(0.99);
+        expect(filtered.map(r => r.metadata.name)).toEqual(['vec1', 'vec3']);
+
+        const scanCalls = executeSpy.mock.calls
+          .map(([arg]) => arg as { sql: string; args: unknown[] })
+          .filter(arg => typeof arg === 'object' && arg.sql.includes('vector_distance_cos'));
+        expect(scanCalls).toHaveLength(2);
+        for (const call of scanCalls) {
+          expect(call.sql).not.toContain(vectorStr);
+          expect(call.sql).toContain('vector_distance_cos(embedding, vector32(?))');
+          expect(call.args[0]).toBe(vectorStr);
+        }
+      } finally {
+        executeSpy.mockRestore();
+      }
+    });
+  });
 });
 
 describe('LibSQLVector local-file concurrency', () => {
@@ -371,6 +408,97 @@ describe('LibSQLVector local-file concurrency', () => {
     releaseInitialization();
     await expect(operation).resolves.toEqual([]);
     expect(executeSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('LibSQLVector truncation', () => {
+  const indexName = 'truncate_vectors';
+  let tmpDir: string;
+  let vector: LibSQLVector;
+
+  beforeEach(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'libsql-vector-truncate-'));
+    vector = new LibSQLVector({ id: 'truncate-local-file', url: `file:${path.join(tmpDir, 'vectors.db')}` });
+    await vector.createIndex({ indexName, dimension: 3 });
+  });
+
+  afterEach(async () => {
+    await vector.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('can reinsert and retrieve vectors after truncating an indexed table', async () => {
+    await vector.upsert({
+      indexName,
+      ids: ['first', 'second', 'third'],
+      vectors: [
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+      ],
+    });
+    await vector.truncateIndex({ indexName });
+
+    await expect(vector.upsert({ indexName, ids: ['replacement'], vectors: [[1, 1, 0]] })).resolves.toEqual([
+      'replacement',
+    ]);
+    await expect(vector.query({ indexName, queryVector: [1, 1, 0], topK: 10 })).resolves.toMatchObject([
+      { id: 'replacement' },
+    ]);
+  });
+
+  it('supports empty and repeated truncate cycles', async () => {
+    await expect(vector.truncateIndex({ indexName })).resolves.toBeUndefined();
+
+    for (const id of ['first-cycle', 'second-cycle']) {
+      await vector.upsert({ indexName, ids: [id], vectors: [[1, 0, 0]] });
+      await vector.truncateIndex({ indexName });
+      await expect(vector.query({ indexName, queryVector: [1, 0, 0], topK: 10 })).resolves.toEqual([]);
+    }
+
+    await expect(vector.upsert({ indexName, ids: ['final'], vectors: [[0, 1, 0]] })).resolves.toEqual(['final']);
+  });
+
+  it('keeps partial deletion behavior intact', async () => {
+    await vector.upsert({
+      indexName,
+      ids: ['keep', 'remove-by-id', 'remove-by-filter'],
+      vectors: [
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+      ],
+      metadata: [{ group: 'keep' }, { group: 'remove' }, { group: 'remove' }],
+    });
+
+    await vector.deleteVector({ indexName, id: 'remove-by-id' });
+    await vector.deleteVectors({ indexName, filter: { group: { $eq: 'remove' } } });
+
+    await expect(vector.query({ indexName, queryVector: [1, 0, 0], topK: 10 })).resolves.toMatchObject([
+      { id: 'keep' },
+    ]);
+    await expect(vector.upsert({ indexName, ids: ['replacement'], vectors: [[0, 1, 1]] })).resolves.toEqual([
+      'replacement',
+    ]);
+  });
+
+  it('can reinsert and retrieve vectors after truncating an in-memory indexed table', async () => {
+    const memoryVector = new LibSQLVector({ id: 'truncate-memory', url: ':memory:' });
+    try {
+      await memoryVector.createIndex({ indexName: 'memory_vectors', dimension: 3 });
+      await memoryVector.upsert({ indexName: 'memory_vectors', ids: ['first'], vectors: [[1, 0, 0]] });
+
+      await memoryVector.truncateIndex({ indexName: 'memory_vectors' });
+
+      await expect(
+        memoryVector.upsert({ indexName: 'memory_vectors', ids: ['replacement'], vectors: [[1, 1, 0]] }),
+      ).resolves.toEqual(['replacement']);
+      await expect(
+        memoryVector.query({ indexName: 'memory_vectors', queryVector: [1, 1, 0], topK: 10 }),
+      ).resolves.toMatchObject([{ id: 'replacement' }]);
+    } finally {
+      await memoryVector.close();
+    }
   });
 });
 

@@ -15,7 +15,7 @@ Sends Tracing data to Langfuse for observability.
 ## Constructor
 
 ```typescript oxfmt:false
-new LangfuseExporter(config: LangfuseExporterConfig)
+new LangfuseExporter(config?: LangfuseExporterConfig)
 ```
 
 ## `LangfuseExporterConfig`
@@ -31,6 +31,7 @@ interface LangfuseExporterConfig extends BaseExporterConfig {
   flushInterval?: number
   environment?: string
   release?: string
+  resourceAttributes?: DetectedResourceAttributes
 }
 ```
 
@@ -40,67 +41,74 @@ Extends `BaseExporterConfig`, which includes:
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
 
 <PropertiesTable
-  props={[
+  content={[
   {
     name: 'publicKey',
     type: 'string',
     description: 'Langfuse API key. Falls back to LANGFUSE_PUBLIC_KEY env var.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'secretKey',
     type: 'string',
     description: 'Langfuse secret key. Falls back to LANGFUSE_SECRET_KEY env var.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'baseUrl',
     type: 'string',
     description: 'Langfuse host URL. Falls back to LANGFUSE_BASE_URL env var. Default: https://cloud.langfuse.com',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'additionalHeaders',
     type: 'Record<string, string>',
     description: 'Additional headers sent with requests to Langfuse.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'realtime',
     type: 'boolean',
     description: 'Enable realtime mode - exports spans immediately instead of batching',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'flushAt',
     type: 'number',
     description: 'Maximum number of spans per OTEL export batch. Forwarded to the underlying LangfuseSpanProcessor.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'flushInterval',
     type: 'number',
     description:
       'Maximum time in seconds before pending spans are exported. Forwarded to the underlying LangfuseSpanProcessor.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'environment',
     type: 'string',
     description: 'Environment tag for traces (e.g. production, staging). Shows in Langfuse UI for filtering.',
-    required: false,
+    isOptional: true,
   },
   {
     name: 'release',
     type: 'string',
     description: 'Release tag for traces (e.g. git commit hash). Used for version tracking.',
-    required: false,
+    isOptional: true,
+  },
+  {
+    name: 'resourceAttributes',
+    type: 'DetectedResourceAttributes',
+    description: 'OpenTelemetry resource attributes, such as service.version. Values here override the defaults.',
+    isOptional: true,
   },
   {
     name: 'logLevel',
     type: "'debug' | 'info' | 'warn' | 'error'",
-    description: "Logger level (default: 'warn')",
-    required: false,
+    description:
+      "Level for the logger the exporter creates when no `logger` is passed (default: 'info'). It has no effect on a supplied `logger`. When the exporter is registered with Mastra, Mastra replaces this logger with the application logger.",
+    isOptional: true,
   },
 ]}
 />
@@ -165,6 +173,17 @@ Mastra spans are converted to OTel format and sent to Langfuse via `LangfuseSpan
 - Spans with a `model` attribute → Langfuse generations
 - All other spans → Langfuse spans
 - Parent-child relationships are preserved via OTel trace/span IDs
+
+## Cost tracking
+
+Langfuse reports cost from `langfuse.observation.cost_details`. The exporter sends that field only for model generation spans whose cost metadata meets all of these conditions:
+
+- The span is a `MODEL_GENERATION` span.
+- `costContext.costMetadata.source` is `'provider_reported'`, meaning the model provider returned the cost. Estimated costs aren't exported, so Langfuse can apply its own model pricing instead.
+- `costContext.costUnit` is `'USD'`.
+- `costContext.estimatedCost` is a finite, non-negative number.
+
+When any condition fails, the generation is exported without cost details and Langfuse falls back to its own pricing model, which also covers providers such as most self-hosted or direct model APIs that don't report cost until you configure model prices in Langfuse.
 
 ## Prompt linking
 

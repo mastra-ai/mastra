@@ -110,15 +110,12 @@ export function MCPClientCreateContent({
                 .split('\n')
                 .map(a => a.trim())
                 .filter(Boolean),
-              env: values.env.reduce(
-                (acc, { key, value }) => {
-                  if (key.trim()) {
-                    acc[key.trim()] = value;
-                  }
-                  return acc;
-                },
-                {} as Record<string, string>,
-              ),
+              env: values.env.reduce<Record<string, string>>((acc, { key, value }) => {
+                if (key.trim()) {
+                  acc[key.trim()] = value;
+                }
+                return acc;
+              }, {}),
             }),
       },
     };

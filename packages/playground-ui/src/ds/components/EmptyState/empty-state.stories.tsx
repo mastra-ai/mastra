@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Inbox } from 'lucide-react';
 import { Button } from '../Button';
 import { EmptyStateIllustration } from './empty-state-illustration';
 import { EmptyState } from './EmptyState';
+import { IconInboxEmpty } from '@/ds/icons/central/IconInboxEmpty';
 
 const meta: Meta<typeof EmptyState> = {
   title: 'Feedback/EmptyState',
@@ -19,7 +19,7 @@ export const Default: Story = {
   args: {
     titleSlot: 'No items yet',
     descriptionSlot: 'Get started by creating your first item.',
-    actionSlot: <Button>Create Item</Button>,
+    actionSlot: <Button>Create item</Button>,
   },
 };
 
@@ -35,7 +35,7 @@ export const NoFiles: Story = {
   args: {
     titleSlot: 'No files',
     descriptionSlot: 'Upload your first file to get started.',
-    actionSlot: <Button>Upload File</Button>,
+    actionSlot: <Button>Upload file</Button>,
   },
 };
 
@@ -43,7 +43,7 @@ export const NoTeamMembers: Story = {
   args: {
     titleSlot: 'No team members',
     descriptionSlot: 'Invite your team members to collaborate on this project.',
-    actionSlot: <Button>Invite Members</Button>,
+    actionSlot: <Button>Invite members</Button>,
   },
 };
 
@@ -58,10 +58,10 @@ export const WithoutAction: Story = {
 export const CustomHeading: Story = {
   args: {
     as: 'h1',
-    iconSlot: <Inbox />,
+    iconSlot: <IconInboxEmpty />,
     titleSlot: 'Welcome to the App',
     descriptionSlot: 'This is your dashboard. Start by exploring the features.',
-    actionSlot: <Button>Get Started</Button>,
+    actionSlot: <Button>Get started</Button>,
   },
 };
 
@@ -117,6 +117,9 @@ const illustrations = [
   ['databases', 'Databases'],
   ['threads', 'Threads'],
   ['deploys', 'Deploys'],
+  ['no-charges', 'Charges'],
+  ['no-alerts', 'Alerts'],
+  ['no-destinations', 'Destinations'],
 ] as const;
 
 export const AllIllustrations: Story = {

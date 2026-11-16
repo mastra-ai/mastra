@@ -2,6 +2,9 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { FactorySandbox } from '@mastra/core/workspace';
 import type { Context } from 'hono';
+import type { IntakeIssue } from '../../capabilities/intake.js';
+import type { PullRequest } from '../../capabilities/version-control.js';
+import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
@@ -20,10 +23,6 @@ import { handleGitLabWebhook } from './webhook.js';
 import type { GitLabWebhookHandlerOptions, ParsedGitLabWebhook } from './webhook.js';
 
 type RouteContext = Context;
-
-function loose(c: unknown): RouteContext {
-  return c as RouteContext;
-}
 
 export interface BuildGitLabRoutesOptions {
   gitlab?: GitLabIntegrationBase;
@@ -86,13 +85,179 @@ function gitlabProjectPayload(source: { id: string; name: string; metadata?: Rec
   };
 }
 
-function positiveId(value: string | undefined): number | null {
+export function positiveId(value: string | undefined): number | null {
   const number = Number(value);
   return value && /^[1-9]\d*$/.test(value) && Number.isSafeInteger(number) ? number : null;
 }
 
 function mergeRequestSourceKey(host: string, projectId: number, mergeRequestIid: number): string {
   return `gitlab-pr:${Buffer.from(JSON.stringify({ version: 1, host, projectId, mergeRequestIid }), 'utf8').toString('base64url')}`;
+}
+
+export const LINKED_BACKLOG_MAX_PAGES = 5;
+const POLLED_ACTOR = '__factory_poll__';
+
+function listedMergeRequestEvent(
+  project: { host: string; projectId: number; projectPath: string },
+  pr: PullRequest,
+): ParsedGitLabWebhook {
+  const iid = Number(pr.id);
+  return {
+    event: 'Merge Request Hook',
+    deliveryId: `poll:merge-request:${project.host}:${project.projectId}:${iid}:${pr.createdAt}`,
+    instanceHost: project.host,
+    payload: {
+      user_username: POLLED_ACTOR,
+      project: { id: project.projectId, path_with_namespace: project.projectPath, web_url: `https://${project.host}/${project.projectPath}` },
+      object_attributes: {
+        iid,
+        action: 'open',
+        state: 'opened',
+        title: pr.title,
+        url: pr.url,
+        created_at: pr.createdAt,
+        updated_at: pr.updatedAt,
+        source_branch: pr.headBranch,
+        target_branch: pr.baseBranch,
+        draft: pr.draft,
+        author: pr.author ? { username: pr.author } : undefined,
+        assignees: (pr.assignees ?? []).map(username => ({ username })),
+        reviewers: (pr.requestedReviewers ?? []).map(username => ({ username })),
+        labels: pr.labels ?? [],
+      },
+    },
+  };
+}
+
+export function listedMergeRequestEvents(
+  project: { host: string; projectId: number; projectPath: string },
+  pr: PullRequest,
+): ParsedGitLabWebhook[] {
+  const opened = listedMergeRequestEvent(project, pr);
+  if (!pr.headSha || pr.updatedAt === pr.createdAt) return [opened];
+  return [
+    opened,
+    {
+      ...opened,
+      deliveryId: `poll:merge-request-head:${project.host}:${project.projectId}:${pr.id}:${pr.updatedAt}:${pr.headSha}`,
+      payload: {
+        ...opened.payload,
+        object_attributes: {
+          ...(opened.payload.object_attributes as Record<string, unknown>),
+          action: 'update',
+          last_commit: { id: pr.headSha },
+        },
+      },
+    },
+  ];
+}
+
+export function listedIssueEvent(issue: IntakeIssue): ParsedGitLabWebhook | null {
+  const source = decodeSourceId(issue.sourceId ?? '');
+  const projectId = source && positiveId(source.projectId);
+  const iid = positiveId(issue.id);
+  const projectPath = issue.source || source?.projectPath;
+  if (!source?.host || !projectId || !iid || !projectPath) return null;
+  return {
+    event: 'Issue Hook',
+    deliveryId: `poll:issue:${source.host}:${projectId}:${iid}:${issue.createdAt}`,
+    instanceHost: source.host,
+    payload: {
+      user_username: POLLED_ACTOR,
+      project: { id: projectId, path_with_namespace: projectPath, web_url: `https://${source.host}/${projectPath}` },
+      object_attributes: {
+        iid,
+        action: 'open',
+        state: 'opened',
+        title: issue.title,
+        url: issue.url,
+        created_at: issue.createdAt,
+        updated_at: issue.updatedAt,
+        author: issue.authorUsername ? { username: issue.authorUsername } : undefined,
+        labels: issue.labels ?? [],
+      },
+    },
+  };
+}
+
+/** Ingests listed events and returns the reasons of the ones the rules ingress rejected. */
+export async function ingestListedEvents(
+  events: Array<ParsedGitLabWebhook | null>,
+  ingest?: BuildGitLabRoutesOptions['ingestFactoryEvent'],
+): Promise<unknown[]> {
+  if (!ingest) return [];
+  const listed = events.filter((event): event is ParsedGitLabWebhook => event !== null);
+  const openings = listed.filter(event => !event.deliveryId.startsWith('poll:merge-request-head:'));
+  const headUpdates = listed.filter(event => event.deliveryId.startsWith('poll:merge-request-head:'));
+  const failures: unknown[] = [];
+  for (const batch of [openings, headUpdates]) {
+    const results = await Promise.allSettled(batch.map(event => ingest(event)));
+    const rejected = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (rejected[0]) {
+      console.warn('[Mastra Factory] Failed to ingest listed GitLab events', { error: rejected[0].reason });
+    }
+    failures.push(...rejected.map(result => result.reason));
+  }
+  return failures;
+}
+
+export async function ingestLinkedGitLabRepositoryBacklog(args: {
+  gitlab: GitLabIntegrationBase;
+  orgId: string;
+  projectRepositoryId: string;
+  ingestFactoryEvent?: BuildGitLabRoutesOptions['ingestFactoryEvent'];
+}): Promise<void> {
+  if (!args.ingestFactoryEvent) return;
+  const storage = args.gitlab.sourceControlStorage;
+  const link = await storage?.projectRepositories.get({ orgId: args.orgId, id: args.projectRepositoryId });
+  if (!link) return;
+  const connection = await storage!.connections.get({ orgId: args.orgId, id: link.connectionId });
+  if (!connection || connection.integrationId !== 'gitlab') return;
+  const linked = await args.gitlab.getLinkedRepository({
+    orgId: args.orgId,
+    factoryProjectId: connection.factoryProjectId,
+    projectRepositoryId: link.id,
+  });
+  if (!linked) return;
+  const projectId = positiveId(linked.repository.externalId);
+  if (!projectId) return;
+  const project = { host: linked.host, projectId, projectPath: linked.repository.slug };
+  const target = await args.gitlab.versionControl.getRepositoryTarget({
+    orgId: args.orgId,
+    repositoryId: linked.repository.id,
+  });
+  for (let page = 1; page <= LINKED_BACKLOG_MAX_PAGES; page += 1) {
+    const result = await args.gitlab.versionControl.listPullRequests({ ...target, includeDrafts: false, cursor: String(page) });
+    await ingestListedEvents(result.pullRequests.flatMap(pr => listedMergeRequestEvents(project, pr)), args.ingestFactoryEvent);
+    if (result.nextCursor === null) break;
+  }
+  const sourceId = encodeSourceId({ host: linked.host, projectId: String(projectId) });
+  let cursor: string | undefined;
+  for (let page = 1; page <= LINKED_BACKLOG_MAX_PAGES; page += 1) {
+    const result = await args.gitlab.intake.listIssues({ connection: target.connection, sourceIds: [sourceId], cursor });
+    await ingestListedEvents(result.issues.map(listedIssueEvent), args.ingestFactoryEvent);
+    if (result.nextCursor === null) break;
+    cursor = result.nextCursor;
+  }
+}
+
+/** Selected GitLab sources routed to one Factory, or null when GitLab intake is turned off. */
+export async function routedGitLabSourceIds(
+  intake: IntakeStorage,
+  { orgId, factoryProjectId }: { orgId: string; factoryProjectId: string },
+): Promise<string[] | null> {
+  await intake.ensureReady();
+  const config = await intake.getConfig({ orgId, integrationIds: ['gitlab'] });
+  const selection = config.gitlab!;
+  if (!selection.enabled) return null;
+  const selected = new Set(selection.sourceIds ?? []);
+  return [
+    ...new Set(
+      (await intake.listBindings({ orgId, integrationId: 'gitlab' }))
+        .filter(binding => binding.factoryProjectId === factoryProjectId && selected.has(binding.sourceId))
+        .map(binding => binding.sourceId),
+    ),
+  ];
 }
 
 async function reconcileGitLabSourceIdentity({
@@ -378,34 +543,17 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
           if ('response' in resolved) return resolved.response;
           const factoryProjectId = c.req.query('factoryProjectId')?.trim();
           if (!factoryProjectId) return c.json({ error: 'invalid_factory_project_id' }, 400);
-          const board = c.req.query('board')?.trim();
-          if (!board) return c.json({ error: 'invalid_board' }, 400);
           if ((await gitlab.resolveOrgId(factoryProjectId)) !== resolved.tenant.orgId) {
             return c.json({ error: 'factory_project_not_found' }, 404);
           }
 
-          await intake.ensureReady();
-          const config = await intake.getConfig({ orgId: resolved.tenant.orgId, integrationIds: ['gitlab'] });
-          const selection = config.gitlab!;
-          if (!selection.enabled) {
+          const sourceIds = await routedGitLabSourceIds(intake, { orgId: resolved.tenant.orgId, factoryProjectId });
+          if (!sourceIds) {
             return c.json(
               { error: 'gitlab_intake_disabled', message: 'GitLab intake is turned off in Settings.' },
               404,
             );
           }
-          const selected = new Set(selection.sourceIds ?? []);
-          const sourceIds = [
-            ...new Set(
-              (await intake.listBindings({ orgId: resolved.tenant.orgId, integrationId: 'gitlab' }))
-                .filter(
-                  binding =>
-                    binding.factoryProjectId === factoryProjectId &&
-                    binding.board === board &&
-                    selected.has(binding.sourceId),
-                )
-                .map(binding => binding.sourceId),
-            ),
-          ];
           if (sourceIds.length === 0) return c.json({ issues: [], nextCursor: null });
 
           try {
@@ -489,15 +637,20 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
           const tenant = auth.tenant(loose(c));
           if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
 
+          // Sessions read by session id; resourceId is the older address.
+          const sessionId = c.req.query('sessionId');
           const resourceId = c.req.query('resourceId');
           const threadId = c.req.query('threadId');
-          const sessionScope = c.req.query('scope');
-          if (!resourceId || !threadId) return c.json({ error: 'resourceId and threadId are required' }, 400);
+          const target = !threadId
+            ? null
+            : sessionId
+              ? { orgId: tenant.orgId, sessionId, threadId }
+              : resourceId
+                ? { orgId: tenant.orgId, resourceId, threadId }
+                : null;
+          if (!target) return c.json({ error: 'sessionId (or resourceId) and threadId are required' }, 400);
 
-          const subscriptions = await listMergeRequestSubscriptionsForThread(
-            { orgId: tenant.orgId, resourceId, threadId, sessionScope },
-            gitlab.integrationStorage,
-          );
+          const subscriptions = await listMergeRequestSubscriptionsForThread(target, gitlab.integrationStorage);
           return c.json({
             subscriptions: subscriptions.map(subscription => ({
               id: subscription.id,

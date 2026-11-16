@@ -386,13 +386,15 @@ Input validation includes:
 
 Provider responses must contain exactly one answer for each question. Each answer must match the question type or be a refusal. The classifier also rejects invalid choices, out-of-range scores or probabilities, incomplete probability distributions, non-finite token counts, malformed warnings, and invalid response timestamps.
 
-Only retryable AI SDK `APICallError` failures are retried. Other errors reject immediately. When all retries fail, `decide()` rethrows the last provider error. Aborting the supplied signal rejects with the signal's abort reason, including when cancellation occurs during retry backoff.
+Only retryable AI SDK `APICallError` failures are retried, two times by default. Set `maxRetries` to change the count. Other errors reject immediately. When all retries fail, `decide()` rethrows the last provider error. Aborting the supplied signal rejects with the signal's abort reason, including when cancellation occurs during retry backoff.
 
 ## Observability
 
 When an active Mastra span exists, `decide()` creates a `CLASSIFIER_EVALUATION` child span. The span input holds the evaluated `state` and the questions. The span output holds the answers, including probabilities. Span attributes record the classifier and model identifiers, provider, question count and types, attempts, duration, and token usage. The token usage also produces [token and cost metrics](/reference/observability/metrics/automatic-metrics#token-usage-metrics).
 
 To keep the state and answers out of exported traces, set `hideInput` and `hideOutput` in the `tracingOptions` of the agent or workflow run that calls the classifier. See [hiding sensitive input/output](/docs/observability/tracing/overview#hiding-sensitive-inputoutput).
+
+In [Studio](/docs/studio/overview), filter traces by the Classifier entity type to see classifier calls on their own. Workflow classifier steps appear as classifier nodes in the workflow graph.
 
 ## Customize provider responses
 

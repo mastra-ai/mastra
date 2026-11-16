@@ -427,20 +427,21 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
         });
       }
 
-      // Handle Date conversions to millisecond timestamps for DateTime64(3)
+      // Send dates as ISO strings: ClickHouse 26.8+ reads bare JSONEachRow numbers
+      // for DateTime64 columns as Unix seconds, so epoch milliseconds would overflow.
       const data: Record<string, any> = { ...updates };
       if (data.endedAt instanceof Date) {
-        data.endedAt = data.endedAt.getTime();
+        data.endedAt = data.endedAt.toISOString();
       }
       if (data.startedAt instanceof Date) {
-        data.startedAt = data.startedAt.getTime();
+        data.startedAt = data.startedAt.toISOString();
       }
 
       // Merge updates and re-insert (ClickHouse uses ReplacingMergeTree)
       const updated = {
         ...existing,
         ...data,
-        updatedAt: Date.now(),
+        updatedAt: new Date().toISOString(),
       };
 
       await this.client.insert({
@@ -760,7 +761,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
 
   async batchUpdateSpans(args: BatchUpdateSpansArgs): Promise<void> {
     try {
-      const now = Date.now();
+      const now = new Date().toISOString();
 
       // Note: ClickHouse doesn't support traditional UPDATE operations with MergeTree engines.
       // Updates are performed by loading existing data, merging changes, and re-inserting.
@@ -802,13 +803,13 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
         const existing = current.get(key);
         if (!existing) continue;
 
-        // Convert Date objects to millisecond timestamps for DateTime64(3)
+        // ISO strings, not epoch ms: see updateSpan
         const updates: Record<string, any> = { ...record.updates };
         if (updates.startedAt instanceof Date) {
-          updates.startedAt = updates.startedAt.getTime();
+          updates.startedAt = updates.startedAt.toISOString();
         }
         if (updates.endedAt instanceof Date) {
-          updates.endedAt = updates.endedAt.getTime();
+          updates.endedAt = updates.endedAt.toISOString();
         }
 
         current.set(key, { ...existing, ...updates, updatedAt: now, __updated: true });

@@ -1,14 +1,31 @@
 import type { MessageList } from '../agent/message-list';
 import { createSignal } from '../agent/signals';
 import type { AgentSignalInput, CreatedAgentSignal } from '../agent/signals';
+import { createRunScopeKey } from '../mastra/run-scope';
 import type { ProcessorStreamWriter } from './index';
+
+/**
+ * Where a processor's `sendSignal` goes once the step that created it has
+ * returned. Durable engines rebuild the MessageList for every step, so a held
+ * `sendSignal` writing into the old list would never reach the model.
+ */
+export interface ProcessorLateSignalSink {
+  isClosed(): boolean;
+  send(signalInput: AgentSignalInput): Promise<CreatedAgentSignal>;
+}
+
+export const PROCESSOR_LATE_SIGNAL_SINK = createRunScopeKey<ProcessorLateSignalSink>('processor-late-signal-sink');
 
 export function createProcessorSendSignal(args: {
   messageList: MessageList;
   writer?: ProcessorStreamWriter;
   rotateResponseMessageId?: () => string;
+  lateSink?: ProcessorLateSignalSink;
 }): (signalInput: AgentSignalInput) => Promise<CreatedAgentSignal> {
   return async signalInput => {
+    if (args.lateSink?.isClosed()) {
+      return args.lateSink.send(signalInput);
+    }
     const signal = createSignal(signalInput);
     // Only seal the in-flight response message when a rotation follows. Rotation
     // marks the boundary itself (MessageList.rotateResponseMessageId); stamping it

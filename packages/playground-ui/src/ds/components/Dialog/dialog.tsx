@@ -1,5 +1,4 @@
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
-import { X } from 'lucide-react';
 import * as React from 'react';
 
 import { DialogAction } from './dialog-action';
@@ -12,6 +11,7 @@ import type { TextButtonSize } from '@/ds/components/Button';
 import { Drawer, DrawerContent } from '@/ds/components/Drawer';
 import type { DrawerProps } from '@/ds/components/Drawer';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { cn } from '@/lib/utils';
 
@@ -57,7 +57,7 @@ function Dialog({
   }
 
   return (
-    <DialogContext.Provider value={{ intent, pending }}>
+    <DialogContext.Provider value={{ intent, pending, isDrawer }}>
       {isDrawer ? (
         <Drawer {...rootProps} onOpenChange={handleOpenChange} />
       ) : (
@@ -109,8 +109,7 @@ function DialogContent({
   initialFocus,
   ...props
 }: DialogContentProps) {
-  const { intent, pending } = useDialogContext();
-  const isDrawer = useIsDrawer();
+  const { intent, pending, isDrawer } = useDialogContext();
   const closeRef = React.useRef<HTMLButtonElement>(null);
   const isDestructive = intent === 'destructive';
   const popupProps = {
@@ -130,7 +129,7 @@ function DialogContent({
       className={cn('absolute right-4', isDrawer ? 'top-1.5' : 'top-4')}
       render={
         <Button variant="ghost" size="icon-sm" aria-label="Close">
-          <X />
+          <IconCrossMedium />
         </Button>
       }
     />

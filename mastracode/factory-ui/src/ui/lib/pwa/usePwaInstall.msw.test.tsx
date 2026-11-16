@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { BeforeInstallPromptEvent } from './usePwaInstall';
+import { takeCapturedInstallPrompt } from './installPromptCapture';
 import { INSTALL_BANNER_DISMISS_DURATION_MS } from './persistence';
 import { usePwaInstall } from './usePwaInstall';
 
@@ -19,13 +20,13 @@ function setUserAgent(userAgent: string) {
 }
 
 function setStandalone(standalone: boolean) {
-  window.matchMedia = ((query: string) =>
+  window.matchMedia = (query: string) =>
     ({
       matches: standalone && query === '(display-mode: standalone)',
       media: query,
       addEventListener: () => {},
       removeEventListener: () => {},
-    }) as unknown as MediaQueryList) as typeof window.matchMedia;
+    }) as unknown as MediaQueryList;
 }
 
 function createInstallPromptEvent(outcome: 'accepted' | 'dismissed') {
@@ -41,6 +42,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  takeCapturedInstallPrompt();
   setUserAgent(originalUserAgent);
   window.matchMedia = originalMatchMedia;
 });

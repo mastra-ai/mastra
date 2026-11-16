@@ -105,7 +105,7 @@ function textStreamReader(id: string, chunks: string[], attributes: Record<strin
       return {
         next: async () =>
           index < chunks.length
-            ? { value: chunks[index++]!, done: false as const }
+            ? { value: chunks[index++], done: false as const }
             : { value: undefined, done: true as const },
       };
     },
@@ -190,7 +190,7 @@ describe('voice call', () => {
     fireEvent.click(screen.getByTestId('voice-call-button'));
 
     await waitFor(() => expect(fakeRooms).toHaveLength(1));
-    const room = fakeRooms[0]!;
+    const room = fakeRooms[0];
     // resourceId matches the sidebar's listing convention so the call's thread is visible.
     expect(onConnectionDetails).toHaveBeenCalledWith({
       agentId: 'support',
@@ -216,7 +216,7 @@ describe('voice call', () => {
     const { invalidateSpy } = await renderHarness();
     fireEvent.click(screen.getByTestId('voice-call-button'));
     await waitFor(() => expect(fakeRooms).toHaveLength(1));
-    const room = fakeRooms[0]!;
+    const room = fakeRooms[0];
     await waitFor(() => expect(room.localParticipant.setMicrophoneEnabled).toHaveBeenCalled());
 
     act(() => {
@@ -251,7 +251,7 @@ describe('voice call', () => {
     const { invalidateSpy } = await renderHarness();
     fireEvent.click(screen.getByTestId('voice-call-button'));
     await waitFor(() => expect(fakeRooms).toHaveLength(1));
-    const room = fakeRooms[0]!;
+    const room = fakeRooms[0];
     await waitFor(() => expect(room.localParticipant.setMicrophoneEnabled).toHaveBeenCalled());
 
     fireEvent.click(screen.getByTestId('voice-call-button'));

@@ -4,7 +4,8 @@ import { InMemoryStore } from '../storage/mock';
 import { MastraLanguageModelV2Mock } from '../test-utils/llm-mock';
 import { submitPlanTool } from '../tools/builtin/submit-plan';
 import { AgentController } from './agent-controller';
-import { migratePersistedModelSelection, type Session } from './session';
+import { migratePersistedModelSelection } from './session';
+import type { Session } from './session';
 import { createMockWorkspace } from './test-utils';
 
 type AgentControllerTestState = { currentModelId?: string };
@@ -103,6 +104,13 @@ describe('AgentController single-model persistence across restarts', () => {
 
   beforeEach(() => {
     storage = new InMemoryStore();
+  });
+
+  it('keeps mode agents with the same id usable without replacing the first registration', async () => {
+    const { controller, agents } = await buildController(storage);
+    const mastra = controller.getMastra();
+    expect(mastra?.getAgent('test-agent')).toBe(agents.build);
+    expect(agents.plan.getMastraInstance()).not.toBe(mastra);
   });
 
   it('keeps the selected model when switching modes', async () => {

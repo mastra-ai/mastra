@@ -79,6 +79,7 @@ import { expect, vi } from 'vitest';
 import type { WorkflowRunState } from '../../../workflows/types';
 import type { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
+import { storeRunsInV2 } from './storage-version';
 
 export type RestartKind = 'durable' | 'evented' | 'evented-fallback' | 'workflow';
 
@@ -205,6 +206,8 @@ export type HoldWrite = {
 
 export type ScenarioOptions<K extends RestartKind> = {
   kind: K;
+  /** Serialize workflow rows at each write, as persistent adapters do. */
+  storageMode?: 'serializing';
   /** Pass explicit ids: core's Vitest setup stubs `crypto.randomUUID()`. */
   runId: string;
   /** Builds the agent (a plain `Agent`, wrapped per `kind`) or the committed workflow. Called once per graph. */
@@ -228,7 +231,10 @@ export type Graph = {
 
 async function buildGraph<K extends RestartKind>(options: ScenarioOptions<K>, generation: number): Promise<Graph> {
   const core = await loadGraph();
-  const storage = new core.InMemoryStore();
+  const storage =
+    options.storageMode === 'serializing'
+      ? (await import('../../../storage/domains/workflows/serializing-store.test-utils')).createSerializingStore().store
+      : new core.InMemoryStore();
   const built = options.build({ core, generation } as BuildContext);
   let mastra: any;
   try {
@@ -239,10 +245,15 @@ async function buildGraph<K extends RestartKind>(options: ScenarioOptions<K>, ge
       return { core, mastra, storage, workflows, generation, workflow: mastra.getWorkflowById(built.id) };
     }
 
-    const agent =
+    // Checkpoints are v1 rows, restored through `persistWorkflowSnapshot`, and `copyStore` carries
+    // v2's tables over as they are now rather than as they were at the checkpoint. So agents
+    // store their runs in v1.
+    const agent = storeRunsInV2(
       options.kind === 'durable'
         ? core.createDurableAgent({ agent: built })
-        : core.createEventedAgent({ agent: built });
+        : core.createEventedAgent({ agent: built }),
+      false,
+    );
     // Before `new Mastra(...)`: the engine resolves during agent registration.
     if (options.kind === 'evented-fallback') {
       vi.spyOn(storage.stores.workflows!, 'supportsConcurrentUpdates').mockReturnValue(false);

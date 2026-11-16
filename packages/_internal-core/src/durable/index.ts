@@ -6,9 +6,101 @@ export interface DurableStepFinishState {
   };
 }
 
+interface DurableToolResultRecord {
+  toolCallId?: string;
+  result?: unknown;
+  error?: unknown;
+}
+
+// AI SDK's model output for a tool that returned `result` without error.
+function toolModelOutput(result: unknown) {
+  return typeof result === 'string' ? { type: 'text', value: result } : { type: 'json', value: result ?? null };
+}
+
+function sameJson(a: unknown, b: unknown): boolean {
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Drops a tool-result part's `output` from step content when it can be rebuilt
+ * from the step's `toolResults`. Step records are copied into every durable
+ * snapshot, so storing each tool result twice per record multiplies snapshot
+ * size (#20747). `expandDurableStepContent` restores the dropped outputs.
+ */
+export function compactDurableStepContent(content: unknown[], toolResults: DurableToolResultRecord[] = []): unknown[] {
+  return content.map(part => {
+    const p = part as { type?: string; toolCallId?: string; output?: unknown };
+    if (p?.type !== 'tool-result') return part;
+    const toolResult = toolResults.find(r => r.toolCallId === p.toolCallId);
+    if (!toolResult || toolResult.error !== undefined) return part;
+    if (!sameJson(p.output, toolModelOutput(toolResult.result))) return part;
+    const { output: _output, ...rest } = p;
+    return rest;
+  });
+}
+
+/** Restores the tool-result outputs `compactDurableStepContent` dropped. */
+export function expandDurableStepContent(content: unknown[], toolResults: DurableToolResultRecord[] = []): unknown[] {
+  return content.map(part => {
+    const p = part as { type?: string; toolCallId?: string; output?: unknown };
+    if (p?.type !== 'tool-result' || 'output' in p) return part;
+    const toolResult = toolResults.find(r => r.toolCallId === p.toolCallId);
+    return toolResult ? { ...p, output: toolModelOutput(toolResult.result) } : part;
+  });
+}
+
+/** Step records with their full content, for callers that hand them to user code. */
+export function expandDurableSteps<T>(steps: T[]): T[] {
+  return steps.map(step => {
+    const s = step as { content?: unknown; toolResults?: DurableToolResultRecord[] };
+    return Array.isArray(s?.content) ? { ...step, content: expandDurableStepContent(s.content, s.toolResults) } : step;
+  });
+}
+
+export type DurableToolResultPart = { type: 'tool-result'; toolCallId?: string; toolName?: string; dynamic?: boolean };
+
+/** A step as `stopWhen` sees it: tool results are the AI SDK parts from its content. */
+export type DurableStopConditionStep<T> = Omit<T, 'toolResults'> & {
+  toolResults: DurableToolResultPart[];
+  staticToolResults: DurableToolResultPart[];
+  dynamicToolResults: DurableToolResultPart[];
+};
+
+function isToolResultPart(part: unknown): part is DurableToolResultPart {
+  return (part as { type?: unknown } | null)?.type === 'tool-result';
+}
+
+/**
+ * Step records for a user's `stopWhen`. It is an AI SDK stop condition, so each
+ * step's tool results must be the AI SDK tool-result parts from its content, as
+ * the default loop builds them (#28519). The records themselves keep tool-call
+ * payloads in `toolResults`, which compaction reads. Records written before
+ * steps carried content are returned as stored.
+ */
+export function durableStopConditionSteps<T>(steps: T[]): Array<DurableStopConditionStep<T> | T> {
+  return expandDurableSteps(steps).map(step => {
+    const content = (step as { content?: unknown } | null)?.content;
+    if (!Array.isArray(content)) return step;
+    const toolResults = content.filter(isToolResultPart);
+    return {
+      ...step,
+      toolResults,
+      staticToolResults: toolResults.filter(part => part.dynamic === false),
+      dynamicToolResults: toolResults.filter(part => part.dynamic === true),
+    };
+  });
+}
+
 export function buildDurableStepContent(state: DurableStepFinishState): unknown[] {
   const step = state.accumulatedSteps.at(-1) as any;
   if (!step) return [];
+  // Steps recorded since content was added to the step record carry the same
+  // content stopWhen sees; rebuild only for snapshots written before that.
+  if (Array.isArray(step.content)) return expandDurableStepContent(step.content, step.toolResults);
 
   const content: unknown[] = [];
   if (step.text) {

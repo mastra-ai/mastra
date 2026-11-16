@@ -92,9 +92,8 @@ export class CloudflareVoice extends MastraVoice {
       const payload = { audio: base64Audio, account_id: options?.account_id || defaultListeningModel.account_id };
       const response = (await this.client.ai.run(model, payload)) as any;
       return response.text as string;
-    } else {
-      throw new Error('Neither binding nor REST client is configured');
     }
+    throw new Error('Neither binding nor REST client is configured');
   }
   async speak(): Promise<NodeJS.ReadableStream> {
     throw new Error('This feature is not yet implemented.');

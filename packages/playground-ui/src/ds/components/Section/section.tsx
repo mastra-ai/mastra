@@ -4,7 +4,8 @@ import { SectionDivider } from './section-divider';
 import { SectionHeader } from './section-header';
 import { SectionHeaderText } from './section-header-text';
 import { SectionHeading } from './section-heading';
-import { SectionRoot, type SectionRootProps } from './section-root';
+import { SectionRoot } from './section-root';
+import type { SectionRootProps } from './section-root';
 import { SectionDestructiveRow, SectionRow, SectionViewOnlyRow } from './section-row';
 
 export { type SectionContentProps } from './section-content';

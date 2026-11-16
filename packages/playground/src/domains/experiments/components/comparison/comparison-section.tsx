@@ -2,8 +2,8 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Card } from '@mastra/playground-ui/components/Card';
 import { CollapsibleBox, useCollapsibleBox } from '@mastra/playground-ui/components/CollapsibleBox';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { IconMinimize45 } from '@mastra/playground-ui/icons/central/IconMinimize45';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Minimize2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 /** Spacing between the sections of a comparison cell, shared by every cell so rows line up. */
@@ -19,6 +19,9 @@ export interface ComparisonSectionProps {
   collapsible?: boolean;
   /** Wraps the content in a card (a destructive box when `tone` is negative), with the clipping inside it so the rounded frame stays intact. */
   framed?: boolean;
+  /** Controls the expansion from outside, so sibling sections can expand together. */
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
   children: ReactNode;
 }
 
@@ -32,9 +35,21 @@ export function ComparisonSection({
   tone = 'default',
   collapsible = true,
   framed = false,
+  expanded,
+  onExpandedChange,
   children,
 }: ComparisonSectionProps) {
-  const box = useCollapsibleBox({ collapsedHeight: 160 });
+  const ownBox = useCollapsibleBox({ collapsedHeight: 160 });
+  // Clipping is still measured per box; only the expanded flag comes from outside when controlled.
+  const box =
+    expanded === undefined || !onExpandedChange
+      ? ownBox
+      : {
+          ...ownBox,
+          isExpanded: expanded,
+          setExpanded: onExpandedChange,
+          toggleExpanded: () => onExpandedChange(!expanded),
+        };
   const content = collapsible ? (
     <CollapsibleBox state={box} expandLabel="Expand">
       {children}
@@ -63,7 +78,7 @@ export function ComparisonSection({
         )}
         {collapsible && box.isExpanded && box.isClipped && (
           <div className="flex justify-center pt-1">
-            <Button size="sm" variant="ghost" icon={<Minimize2 />} onClick={() => box.setExpanded(false)}>
+            <Button size="sm" variant="ghost" icon={<IconMinimize45 />} onClick={() => box.setExpanded(false)}>
               Collapse
             </Button>
           </div>

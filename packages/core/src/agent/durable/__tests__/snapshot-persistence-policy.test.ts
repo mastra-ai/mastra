@@ -25,6 +25,7 @@ import { Agent } from '../../agent';
 import type { ToolsInput } from '../../types';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
+import { storeRunsInV2 } from './storage-version';
 
 function fakeLogger() {
   return {
@@ -119,10 +120,14 @@ async function setup(options: {
     model: options.model as LanguageModelV2,
     tools: options.tools,
   });
-  const durableAgent = createDurableAgent({
-    agent: baseAgent,
-    shouldPersistSnapshot: options.shouldPersistSnapshot,
-  });
+  // The tests count v1 snapshot writes.
+  const durableAgent = storeRunsInV2(
+    createDurableAgent({
+      agent: baseAgent,
+      shouldPersistSnapshot: options.shouldPersistSnapshot,
+    }),
+    false,
+  );
   const logger = fakeLogger();
   const mastra = new Mastra({
     agents: { [options.agentId]: durableAgent as any },

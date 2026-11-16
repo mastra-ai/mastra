@@ -156,7 +156,8 @@ The `extract` parameter accepts the following fields:
     name: 'embeddingOnly',
     type: 'boolean',
     isOptional: true,
-    description: 'If true, only generate embeddings without actual questions',
+    description:
+      'Accepted but currently has no effect. Questions are still generated and returned in `questionsThisExcerptCanAnswer`',
   },
 ]}
 />
@@ -199,7 +200,7 @@ The `extract` parameter accepts the following fields:
   },
   {
     name: 'llm',
-    type: 'MastraLanguageModel',
+    type: 'MastraLanguageModel | MastraLegacyLanguageModel',
     isOptional: true,
     description: 'AI SDK language model to use for extraction.',
   },

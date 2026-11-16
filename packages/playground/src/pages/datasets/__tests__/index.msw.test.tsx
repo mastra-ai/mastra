@@ -128,7 +128,7 @@ describe('Datasets page', () => {
       renderPage();
 
       fireEvent.click(await screen.findByRole('button', { name: 'New dataset' }));
-      fireEvent.click(await screen.findByRole('button', { name: 'Create Dataset' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Create dataset' }));
 
       expect(await screen.findByText('Dataset page')).not.toBeNull();
       expect(screen.getByTestId('location').textContent).toBe('/datasets/created-dataset');

@@ -128,6 +128,7 @@ You can create a step directly from an agent. The step will use the agent's name
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 import { testAgent } from '../agents/test-agent'
+import { createStep } from '@mastra/core/workflows'
 
 const agentStep = createStep(testAgent)
 // inputSchema: { prompt: string }
@@ -139,6 +140,9 @@ const agentStep = createStep(testAgent)
 Pass `structuredOutput` to have the agent return typed structured data:
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
+import { createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
+
 const articleSchema = z.object({
   title: z.string(),
   summary: z.string(),
@@ -301,9 +305,16 @@ A classifier without constructor-configured questions can't be used as a workflo
             description: 'Access to Mastra services (agents, tools, etc.)',
           },
           {
+            name: 'getStepResultAsync',
+            type: '(step: Step | string) => Promise<any>',
+            description:
+              "Function to access results from other steps. Resolves to the step's output, or `null` if the step hasn't completed successfully.",
+          },
+          {
             name: 'getStepResult',
             type: '(step: Step | string) => any',
-            description: 'Function to access results from other steps',
+            description:
+              'Deprecated. Use `await getStepResultAsync(step)` instead. `getStepResult` will be removed in a future major release.',
           },
           {
             name: 'getInitData',

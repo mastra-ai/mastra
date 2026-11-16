@@ -3,8 +3,9 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
+import { IconReceiptBill } from '@mastra/playground-ui/icons/central/IconReceiptBill';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
-import { GaugeIcon, ReceiptText } from 'lucide-react';
 
 export type ExperimentScorePanelProps = {
   /** Always mount the panel and pass `undefined` to close it, so the drawer can animate out. */
@@ -47,7 +48,7 @@ function ExperimentScorePanelBody({
   onShowTrace,
 }: Omit<ExperimentScorePanelProps, 'score'> & { score: ClientScoreRowData }) {
   const isCodeBased = isCodeBasedScorer(score);
-  const naText = isCodeBased ? 'N/A — code-based scorer' : 'N/A — step not configured';
+  const naText = isCodeBased ? 'Not applicable (code-based scorer)' : 'Step not configured';
 
   return (
     <>
@@ -59,7 +60,7 @@ function ExperimentScorePanelBody({
         </DataPanel.Heading>
         <DataPanel.HeaderActions>
           {onShowTrace && score.traceId && (
-            <Button size="sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
+            <Button size="icon-sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
               <TraceIcon />
             </Button>
           )}
@@ -78,7 +79,7 @@ function ExperimentScorePanelBody({
         <div className="grid gap-3">
           <DataPanel.CodeSection
             title={`Score: ${score.score}`}
-            icon={<GaugeIcon />}
+            icon={<IconGauge />}
             codeStr={score.reason || naText}
             simplified
           />
@@ -87,25 +88,25 @@ function ExperimentScorePanelBody({
             <>
               <DataPanel.CodeSection
                 title="Preprocess Prompt"
-                icon={<ReceiptText />}
+                icon={<IconReceiptBill />}
                 codeStr={score.preprocessPrompt || naText}
                 simplified
               />
               <DataPanel.CodeSection
                 title="Analyze Prompt"
-                icon={<ReceiptText />}
+                icon={<IconReceiptBill />}
                 codeStr={score.analyzePrompt || naText}
                 simplified
               />
               <DataPanel.CodeSection
                 title="Generate Score Prompt"
-                icon={<ReceiptText />}
+                icon={<IconReceiptBill />}
                 codeStr={score.generateScorePrompt || naText}
                 simplified
               />
               <DataPanel.CodeSection
                 title="Generate Reason Prompt"
-                icon={<ReceiptText />}
+                icon={<IconReceiptBill />}
                 codeStr={score.generateReasonPrompt || naText}
                 simplified
               />

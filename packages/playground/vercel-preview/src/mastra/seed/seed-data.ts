@@ -81,13 +81,13 @@ interface Run {
 function buildRuns(): Run[] {
   // 14 runs spread across the last ~23 hours, deterministically varied by index.
   return Array.from({ length: 14 }, (_, index) => {
-    const model = MODELS[index % MODELS.length]!;
+    const model = MODELS[index % MODELS.length];
     const status: 'ok' | 'error' = index % 7 === 6 ? 'error' : 'ok';
     return {
       index,
       minutesAgo: 20 + index * 95, // 20m ago up to ~22.5h ago
       model,
-      resourceId: RESOURCES[index % RESOURCES.length]!,
+      resourceId: RESOURCES[index % RESOURCES.length],
       threadId: `metric-thread-${index % 6}`,
       inputTokens: 320 + index * 45,
       outputTokens: 90 + index * 18,
@@ -95,8 +95,8 @@ function buildRuns(): Run[] {
       durationMs: 640 + index * 130,
       usedTool: index % 2 === 0,
       status,
-      prompt: PROMPTS[index % PROMPTS.length]!,
-      reply: REPLIES[index % REPLIES.length]!,
+      prompt: PROMPTS[index % PROMPTS.length],
+      reply: REPLIES[index % REPLIES.length],
     };
   });
 }
@@ -124,8 +124,8 @@ export function buildSeedData(now: number) {
   }));
 
   const messages = threads.flatMap((thread, i) => {
-    const prompt = PROMPTS[i % PROMPTS.length]!;
-    const reply = REPLIES[i % REPLIES.length]!;
+    const prompt = PROMPTS[i % PROMPTS.length];
+    const reply = REPLIES[i % REPLIES.length];
     const createdAt = thread.createdAt;
     return [
       {

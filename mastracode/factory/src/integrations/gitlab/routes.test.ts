@@ -14,13 +14,14 @@ function buildApp(
   gitlab: GitLabIntegrationBase,
   user: TestAuthUser | null,
   intake?: Parameters<typeof buildGitLabRoutes>[0]['intake'],
+  ingestFactoryEvent?: Parameters<typeof buildGitLabRoutes>[0]['ingestFactoryEvent'],
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app, buildGitLabRoutes({ gitlab, auth: fakeRouteAuth({ enabled: true }), intake }));
+  mountApiRoutes(app, buildGitLabRoutes({ gitlab, auth: fakeRouteAuth({ enabled: true }), intake, ingestFactoryEvent }));
   return app;
 }
 
@@ -72,7 +73,7 @@ describe('GitLab UI routes', () => {
     expect(absent.status).toBe(404);
     expect(list).not.toHaveBeenCalled();
 
-    linked.mockResolvedValue({ repository: { id: 'repo-1', externalId: '10' }, host: 'gitlab.com' } as never);
+    linked.mockResolvedValue({ repository: { id: 'repo-1', externalId: '10', slug: 'acme/app' }, host: 'gitlab.com' } as never);
     list.mockResolvedValue({
       pullRequests: [
         {
@@ -96,13 +97,16 @@ describe('GitLab UI routes', () => {
       ],
       nextCursor: null,
     });
-    const response = await buildApp(gitlab, orgUser()).request(path);
+    const ingest = vi.fn().mockResolvedValue({ status: 'committed' });
+    const response = await buildApp(gitlab, orgUser(), undefined, ingest).request(path);
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.pullRequests[0]).toMatchObject({ number: 5, title: 'Validate MR' });
     expect(body.pullRequests[0].externalId).toMatch(/^gitlab-pr:/);
     expect(target).toHaveBeenCalledWith({ orgId: 'org1', repositoryId: 'repo-1' });
     expect(list).toHaveBeenCalledWith(expect.objectContaining({ includeDrafts: false, cursor: '1' }));
+    // The list is a read: the reconcile sweep files the card, a board poll never does.
+    expect(ingest).not.toHaveBeenCalled();
   });
 
   it('reports direct server configuration without exposing credentials', async () => {
@@ -276,7 +280,7 @@ describe('GitLab UI routes', () => {
       listBindings: vi
         .fn()
         .mockResolvedValue([
-          { integrationId: 'gitlab', sourceId: legacyId, factoryProjectId: 'factory-1', board: 'work' },
+          { integrationId: 'gitlab', sourceId: legacyId, factoryProjectId: 'factory-1' },
         ]),
       migrateSourceIds: vi.fn().mockResolvedValue({
         migrations: [{ from: legacyId, to: canonicalId }],
@@ -297,7 +301,7 @@ describe('GitLab UI routes', () => {
   it('lists only selected GitLab sources routed to the caller-owned Factory', async () => {
     const gitlab = new GitLabIntegration({ accessToken: 'group-token' });
     const factoryProjectId = '11111111-1111-4111-8111-111111111111';
-    const sourceId = encodeSourceId({ connectionId: 'direct', projectId: '10', projectPath: 'acme/app' });
+    const sourceId = encodeSourceId({ host: 'gitlab.com', projectId: '10' });
     vi.spyOn(gitlab, 'resolveOrgId').mockResolvedValue('org1');
     vi.spyOn(gitlab.intake, 'listIssues').mockResolvedValue({
       issues: [
@@ -306,7 +310,26 @@ describe('GitLab UI routes', () => {
           identifier: 'acme/app#42',
           title: 'Fix routed intake',
           url: 'https://gitlab.com/acme/app/-/issues/42',
-          author: 'grace',
+          author: 'Grace Hopper',
+          authorUsername: 'grace',
+          state: 'opened',
+          stateType: 'unstarted',
+          priority: null,
+          assignee: 'Ada Lovelace',
+          assignees: ['Ada Lovelace'],
+          source: 'acme/app',
+          sourceId,
+          labels: [],
+          commentCount: 0,
+          createdAt: '2026-09-01T00:00:00Z',
+          updatedAt: '2026-09-01T00:00:00Z',
+        },
+        {
+          id: '43',
+          identifier: 'acme/app#43',
+          title: 'Unknown login',
+          url: 'https://gitlab.com/acme/app/-/issues/43',
+          author: 'Grace Hopper',
           state: 'opened',
           stateType: 'unstarted',
           priority: null,
@@ -326,19 +349,21 @@ describe('GitLab UI routes', () => {
       ensureReady: vi.fn(),
       getConfig: vi.fn().mockResolvedValue({ gitlab: { enabled: true, sourceIds: [sourceId, 'other'] } }),
       listBindings: vi.fn().mockResolvedValue([
-        { integrationId: 'gitlab', sourceId, factoryProjectId, board: 'work' },
-        { integrationId: 'gitlab', sourceId: 'other', factoryProjectId, board: 'planning' },
+        { integrationId: 'gitlab', sourceId, factoryProjectId },
+        { integrationId: 'gitlab', sourceId: 'other', factoryProjectId: 'another-factory' },
       ]),
     } as unknown as NonNullable<Parameters<typeof buildGitLabRoutes>[0]['intake']>;
 
-    const response = await buildApp(gitlab, orgUser(), intake).request(
-      '/web/gitlab/issues?factoryProjectId=' + factoryProjectId + '&board=work',
+    const ingest = vi.fn().mockResolvedValue({ status: 'committed' });
+    const response = await buildApp(gitlab, orgUser(), intake, ingest).request(
+      '/web/gitlab/issues?factoryProjectId=' + factoryProjectId,
     );
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(decodeIssueReference(body.issues[0].externalId)).toMatchObject({ projectId: '10', issueIid: 42 });
     expect(gitlab.intake.listIssues).toHaveBeenCalledWith(expect.objectContaining({ sourceIds: [sourceId] }));
+    expect(ingest).not.toHaveBeenCalled();
   });
 
   it('loads details only for a selected GitLab source routed to the caller-owned Factory', async () => {
@@ -371,7 +396,7 @@ describe('GitLab UI routes', () => {
     const intake = {
       ensureReady: vi.fn(),
       getConfig: vi.fn().mockResolvedValue({ gitlab: { enabled: true, sourceIds: [sourceId] } }),
-      listBindings: vi.fn().mockResolvedValue([{ integrationId: 'gitlab', sourceId, factoryProjectId, board: 'work' }]),
+      listBindings: vi.fn().mockResolvedValue([{ integrationId: 'gitlab', sourceId, factoryProjectId }]),
     } as unknown as NonNullable<Parameters<typeof buildGitLabRoutes>[0]['intake']>;
 
     const response = await buildApp(gitlab, orgUser(), intake).request(

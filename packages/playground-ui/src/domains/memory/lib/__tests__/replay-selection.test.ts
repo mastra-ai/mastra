@@ -21,7 +21,7 @@ function record(id: string, lastObservedAt: string, updatedAt: string = lastObse
     config: { messageTokens: 0, observationTokens: 0 },
     createdAt: lastObservedAt,
     updatedAt,
-  } as OMHistoryRecord;
+  };
 }
 
 const records = [

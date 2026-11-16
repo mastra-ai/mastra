@@ -1,15 +1,12 @@
 import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
-import {
-  listResolvableModePacks,
-  resolvePackSelection,
-  type PackSelection,
-} from '@mastra/code-sdk/onboarding/pack-activation';
+import { listResolvableModePacks, resolvePackSelection } from '@mastra/code-sdk/onboarding/pack-activation';
+import type { PackSelection } from '@mastra/code-sdk/onboarding/pack-activation';
 import {
   loadSettings,
   resolveThreadActiveModelPackId,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
-  type GlobalSettings,
 } from '@mastra/code-sdk/onboarding/settings';
+import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
 import type { AgentControllerThinkingLevel } from '@mastra/core/agent-controller';
 import type { TUIState } from '../state.js';
 

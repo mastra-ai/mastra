@@ -38,18 +38,11 @@ export function sessionOwnerFilterValue(userId: string): string {
   return `${SESSION_OWNER_PREFIX}${userId}`;
 }
 
-export function defaultSessionFilters(viewerUserId: string | undefined): SessionFiltersState {
-  return viewerUserId ? { ...EMPTY_SESSION_FILTERS, owner: MY_SESSIONS } : EMPTY_SESSION_FILTERS;
-}
-
-export function activeSessionFilterCount(
-  filters: SessionFiltersState,
-  defaults: SessionFiltersState = EMPTY_SESSION_FILTERS,
-): number {
+export function activeSessionFilterCount(filters: SessionFiltersState): number {
   return (
-    Number(filters.owner !== defaults.owner) +
-    Number(filters.status !== defaults.status) +
-    Number(filters.updated !== defaults.updated)
+    Number(filters.owner !== EMPTY_SESSION_FILTERS.owner) +
+    Number(filters.status !== EMPTY_SESSION_FILTERS.status) +
+    Number(filters.updated !== EMPTY_SESSION_FILTERS.updated)
   );
 }
 
@@ -79,11 +72,16 @@ export function filterSessionRows(
 ): SessionListRow[] {
   const cutoff = updatedCutoff(filters.updated, now);
 
-  return rows.filter(row => {
-    if (!matchesOwner(row, filters.owner, viewerUserId)) return false;
-    if (filters.status !== 'all' && row.status !== filters.status) return false;
-    if (cutoff !== undefined && new Date(row.updatedAt).getTime() < cutoff) return false;
-    return true;
+  const matches = (row: SessionListRow) =>
+    matchesOwner(row, filters.owner, viewerUserId) &&
+    (filters.status === 'all' || row.status === filters.status) &&
+    (cutoff === undefined || new Date(row.updatedAt).getTime() >= cutoff);
+
+  // A card with revealed sessions matches when any of its sessions does, and lists only the ones that match.
+  return rows.flatMap(row => {
+    if (!row.childRows) return matches(row) ? [row] : [];
+    const childRows = row.childRows.filter(matches);
+    return matches(row) || childRows.length > 0 ? [{ ...row, childRows }] : [];
   });
 }
 

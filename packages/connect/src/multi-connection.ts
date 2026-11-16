@@ -20,6 +20,8 @@ export interface NamedConnection {
   name: string;
   /** Raw accountLabel from the platform, if any (may be null/empty). */
   accountLabel?: string | null;
+  /** Resource key the connection is scoped to; null for global connections. */
+  resourceId?: string | null;
 }
 
 /**
@@ -54,7 +56,12 @@ export function toNamedConnections(candidates: ProjectConnection[]): NamedConnec
       }
     }
     usedNames.add(name);
-    named.push({ id: connection.id, name, accountLabel: connection.accountLabel ?? null });
+    named.push({
+      id: connection.id,
+      name,
+      accountLabel: connection.accountLabel ?? null,
+      resourceId: connection.resourceId ?? null,
+    });
   }
   return named;
 }
@@ -389,11 +396,19 @@ export async function buildMcpMultiConnectionTools(input: {
   disallowTools?: string[];
   requireApproval?: boolean | string[];
   client: ResolvedClient;
+  /**
+   * Resource-free client for global connections' transports. The MCP client
+   * cache is shared across resource scopes, so a global connection's
+   * transport must not carry whichever scope's resource header resolved it
+   * first. Defaults to `client` (already resource-free in the global scope).
+   */
+  globalClient?: ResolvedClient;
   mcpClients: Map<string, { integrationId: string; connectionId: string; client: MCPClient }>;
   resolverId: number;
 }): Promise<ToolsInput> {
   const { registration, connections, allowTools, disallowTools, requireApproval, client, mcpClients, resolverId } =
     input;
+  const globalClient = input.globalClient ?? client;
   const requireApprovalFor = Array.isArray(requireApproval) ? compileToolMatcher(requireApproval) : undefined;
   // The `<provider>__list_connections` key exists only on the wrapper; strip
   // it from either filter that reaches MCP discovery so a caller that
@@ -427,7 +442,7 @@ export async function buildMcpMultiConnectionTools(input: {
       const cacheKey = `${registration.integrationId}::${connection.id}`;
       let entry = mcpClients.get(cacheKey);
       if (!entry) {
-        const transport = platformMcpTransport(client, connection.id);
+        const transport = platformMcpTransport(connection.resourceId == null ? globalClient : client, connection.id);
         entry = {
           integrationId: registration.integrationId,
           connectionId: connection.id,

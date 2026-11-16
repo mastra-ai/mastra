@@ -123,9 +123,14 @@ export type ScheduleOwnerType = 'agent' | (string & {});
 export type Schedule = {
   id: string;
   target: ScheduleTarget;
+  /** Cron expression. Empty string for one-off schedules (see `runAt`). */
   cron: string;
   timezone?: string;
   status: ScheduleStatus;
+  /** One-off fire time (ms epoch). When set, the schedule fires once and then becomes `completed`. */
+  runAt?: number;
+  /** Bounded cron end (ms epoch). The schedule never fires after `endAt` and becomes `completed`. */
+  endAt?: number;
   nextFireAt: number;
   lastFireAt?: number;
   lastRunId?: string;
@@ -239,7 +244,10 @@ export type ScheduleTriggerListOptions = {
 
 /** Fields that can be patched via {@link SchedulesStorage.updateSchedule}. */
 export type ScheduleUpdate = Partial<
-  Pick<Schedule, 'cron' | 'timezone' | 'status' | 'nextFireAt' | 'metadata' | 'target' | 'ownerType' | 'ownerId'>
+  Pick<
+    Schedule,
+    'cron' | 'timezone' | 'status' | 'nextFireAt' | 'metadata' | 'target' | 'ownerType' | 'ownerId' | 'runAt' | 'endAt'
+  >
 >;
 
 /**
@@ -272,7 +280,10 @@ export abstract class SchedulesStorage extends StorageDomain {
   abstract listSchedules(filter?: ScheduleFilter): Promise<Schedule[]>;
 
   /**
-   * List schedules whose `nextFireAt <= now` and whose `status === 'active'`.
+   * List schedules whose `nextFireAt <= now` and whose `status === 'active'`,
+   * ordered by `nextFireAt` ascending. Adapters must apply that ordering
+   * before `limit`: the scheduler relies on `listDueSchedules(Number.MAX_SAFE_INTEGER, 1)`
+   * to find the earliest active fire without loading every schedule.
    * Used by the scheduler tick loop.
    */
   abstract listDueSchedules(now: number, limit?: number): Promise<Schedule[]>;
@@ -287,6 +298,7 @@ export abstract class SchedulesStorage extends StorageDomain {
    * Returns true if the row's `nextFireAt` matched `expectedNextFireAt` and
    * was advanced to `newNextFireAt`. Returns false if another instance
    * already advanced it (meaning the caller should skip publishing).
+   *
    * When `newStatus` is provided, the row's status is written in the same
    * atomic update.
    */

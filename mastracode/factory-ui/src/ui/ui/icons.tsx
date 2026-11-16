@@ -12,7 +12,8 @@ function svg(path: React.ReactNode, size = 16, className?: string, title?: strin
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={2}
+      // Same line weight as the lucide icons beside these (Playground UI's token).
+      style={{ strokeWidth: 'var(--icon-stroke-width, 2)' }}
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}

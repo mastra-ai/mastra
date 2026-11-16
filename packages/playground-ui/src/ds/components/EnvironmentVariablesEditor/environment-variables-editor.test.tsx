@@ -178,7 +178,7 @@ describe('EnvironmentVariablesEditor', () => {
     const onSave = vi.fn();
     render(<TestEditor onSave={onSave} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add Variable' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add variable' }));
     fireEvent.change(screen.getAllByPlaceholderText('e.g: OPEN_AI_KEY')[1], {
       target: { value: ' API_KEY ' },
     });

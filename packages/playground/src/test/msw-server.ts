@@ -16,6 +16,11 @@ export const defaultHandlers: HttpHandler[] = [
     HttpResponse.json({ skills: [], total: 0, page: 1, perPage: 50, hasMore: false }),
   ),
   http.get('*/api/system/packages', () => HttpResponse.json(defaultSystemPackages)),
+  // The sidebar probes the end-user connect surface; the dev-server default is
+  // "routes not mounted" (404). Suites exercising the surface override this.
+  http.get('*/connect/providers', () =>
+    HttpResponse.json({ error: { code: 'not_found', message: 'Not found' } }, { status: 404 }),
+  ),
 ];
 
 export const server = setupServer(...defaultHandlers);

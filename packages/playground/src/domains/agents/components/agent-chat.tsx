@@ -41,7 +41,7 @@ export const AgentChat = ({
     isFetchingNextPage,
   } = useAgentMessages({
     agentId: agentId,
-    threadId: isNewThread ? undefined : threadId!,
+    threadId: isNewThread ? undefined : threadId,
     memory: memory ?? false,
     requestContext: requestContext,
   });

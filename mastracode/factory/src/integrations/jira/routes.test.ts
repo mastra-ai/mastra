@@ -18,7 +18,7 @@ let seed!: FactoryStorageTestSeed;
 const listJiraSources = vi.fn(async () => [
   { id: '1', name: 'Engineering', type: 'project', metadata: { key: 'ENG' } },
 ]);
-const listActiveJiraIssues = vi.fn(async (_after?: string, _projectIds?: string[]) => ({
+const listActiveJiraIssues = vi.fn(async (_after?: string, _scopes?: unknown[]) => ({
   issues: [
     {
       id: '10001',
@@ -48,7 +48,6 @@ function buildApp(
     authEnabled?: boolean;
     withJira?: boolean;
     withIntake?: boolean;
-    ingestFactoryIssues?: (input: unknown) => Promise<unknown>;
   } = {},
 ) {
   const app = new Hono();
@@ -62,13 +61,24 @@ function buildApp(
       jira: (options.withJira ?? true) ? jira : undefined,
       auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
       intake: (options.withIntake ?? true) ? seed.intake : undefined,
-      ...(options.ingestFactoryIssues ? { ingestFactoryIssues: options.ingestFactoryIssues } : {}),
     }),
   );
   return app;
 }
 
 const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
+
+const createProject = async (id: string) => {
+  const now = new Date();
+  await seed.storage.ops.insertOne('factory_projects', {
+    id,
+    org_id: 'org1',
+    created_by: 'u1',
+    name: id,
+    created_at: now,
+    updated_at: now,
+  });
+};
 
 beforeEach(async () => {
   seed = await createFactoryStorageForTests();
@@ -173,12 +183,12 @@ describe('issues route', () => {
       project: 'ENG',
     });
     expect(json.nextCursor).toBe('page-2');
-    expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, ['1']);
+    expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, [{ projectId: '1', include: null, exclude: [] }]);
   });
 
   it('forwards the pagination cursor', async () => {
     await buildApp(org1()).request('/web/jira/issues?after=page-2');
-    expect(listActiveJiraIssues).toHaveBeenCalledWith('page-2', ['1']);
+    expect(listActiveJiraIssues).toHaveBeenCalledWith('page-2', [{ projectId: '1', include: null, exclude: [] }]);
   });
 
   it('rejects malformed cursors', async () => {
@@ -240,13 +250,13 @@ describe('issues route — Factory source bindings', () => {
   const projectB = '22222222-2222-4222-8222-222222222222';
 
   const seedProjects = async (count: number) => {
-    for (let i = 0; i < count; i += 1) {
-      await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: `project-${i}` } });
+    for (const id of [projectA, projectB].slice(0, count)) {
+      await createProject(id);
     }
   };
 
   const bind = (sourceId: string, factoryProjectId: string, board = 'work') =>
-    seed.intake.setBinding({ orgId: 'org1', integrationId: 'jira', sourceId, factoryProjectId, board });
+    seed.intake.setBinding({ orgId: 'org1', integrationId: 'jira', sourceId, factoryProjectId });
 
   beforeEach(async () => {
     await seed.intake.saveConfig({
@@ -263,7 +273,7 @@ describe('issues route — Factory source bindings', () => {
     const res = await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}`);
 
     expect(res.status).toBe(200);
-    expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, ['1']);
+    expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, [{ projectId: '1', include: null, exclude: [] }]);
   });
 
   it('hides sources routed to another Factory from this board', async () => {
@@ -296,29 +306,13 @@ describe('issues route — Factory source bindings', () => {
     expect(listActiveJiraIssues).not.toHaveBeenCalled();
   });
 
-  it('withholds a source routed to the Factory without a board', async () => {
-    await seedProjects(2);
-    await seed.intake.setBinding({
-      orgId: 'org1',
-      integrationId: 'jira',
-      sourceId: '1',
-      factoryProjectId: projectA,
-    });
-
-    const res = await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}`);
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
-    expect(listActiveJiraIssues).not.toHaveBeenCalled();
-  });
-
   it('forwards the pagination cursor together with the scoped selection', async () => {
     await seedProjects(2);
     await bind('1', projectA);
 
     await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}&after=page-2`);
 
-    expect(listActiveJiraIssues).toHaveBeenCalledWith('page-2', ['1']);
+    expect(listActiveJiraIssues).toHaveBeenCalledWith('page-2', [{ projectId: '1', include: null, exclude: [] }]);
   });
 
   it('keeps the unscoped selection for callers that omit the Factory project', async () => {
@@ -328,49 +322,10 @@ describe('issues route — Factory source bindings', () => {
     const res = await buildApp(org1()).request('/web/jira/issues');
 
     expect(res.status).toBe(200);
-    expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, ['1', '2']);
-  });
-
-  it('ingests a board-scoped listing through the Factory rules', async () => {
-    await seedProjects(2);
-    await bind('1', projectA);
-    const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
-
-    const res = await buildApp(org1(), { ingestFactoryIssues }).request(
-      `/web/jira/issues?factoryProjectId=${projectA}`,
-    );
-
-    expect(res.status).toBe(200);
-    expect(ingestFactoryIssues).toHaveBeenCalledWith({
-      orgId: 'org1',
-      userId: 'u1',
-      factoryProjectId: projectA,
-      issues: [
-        expect.objectContaining({
-          id: '10001',
-          identifier: 'ENG-42',
-          title: 'Fix intake sync',
-          stateType: 'unstarted',
-          assignee: 'Ada',
-          author: 'Grace',
-          project: 'ENG',
-          site: null,
-          sourceId: '1',
-        }),
-      ],
-      intakeBoards: { '1': 'work' },
-    });
-  });
-
-  it('does not ingest an unscoped listing', async () => {
-    await seedProjects(2);
-    await bind('1', projectA);
-    const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
-
-    const res = await buildApp(org1(), { ingestFactoryIssues }).request('/web/jira/issues');
-
-    expect(res.status).toBe(200);
-    expect(ingestFactoryIssues).not.toHaveBeenCalled();
+    expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, [
+      { projectId: '1', include: null, exclude: [] },
+      { projectId: '2', include: null, exclude: [] },
+    ]);
   });
 });
 
@@ -400,13 +355,12 @@ describe('issue detail route', () => {
   const detailUrl = `/web/jira/issues/ENG-42?factoryProjectId=${projectA}&issueRef=ENG-42`;
 
   beforeEach(async () => {
-    await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-a' } });
+    await createProject(projectA);
     await seed.intake.setBinding({
       orgId: 'org1',
       integrationId: 'jira',
       sourceId: '1',
       factoryProjectId: projectA,
-      board: 'work',
     });
   });
 

@@ -1,6 +1,5 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
-import type { MemorySettingsRecord } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { hasResolvedOrg, seedSessionOrg } from './org-seed.js';
 
@@ -8,30 +7,8 @@ import { hasResolvedOrg, seedSessionOrg } from './org-seed.js';
 export const DEFAULT_OBSERVATION_THRESHOLD = 30_000;
 export const DEFAULT_REFLECTION_THRESHOLD = 40_000;
 
-/**
- * Layer a channel sender's own row over the project's shared row. The sender
- * wins only for knobs they saved; an unsaved (`null`) knob keeps the project's
- * value rather than resetting to Auto or the built-in default, because the
- * project's choice may be the only credentialed one.
- */
-export function layerPersonalMemorySettings(
-  project: MemorySettingsRecord | null,
-  personal: MemorySettingsRecord | null,
-): MemorySettingsRecord | null {
-  if (!personal) return project;
-  if (!project) return personal;
-  return {
-    ...project,
-    observerModelId: personal.observerModelId ?? project.observerModelId,
-    reflectorModelId: personal.reflectorModelId ?? project.reflectorModelId,
-    observationThreshold: personal.observationThreshold ?? project.observationThreshold,
-    reflectionThreshold: personal.reflectionThreshold ?? project.reflectionThreshold,
-    observeAttachments: personal.observeAttachments ?? project.observeAttachments,
-  };
-}
-
 export interface MemorySettingsHydrationSession {
-  readonly identity: { getResourceId(): string };
+  readonly identity: { getId(): string };
   state: {
     get: () => MastraCodeState | undefined;
     set: (updates: Partial<MastraCodeState>) => Promise<void> | void;
@@ -60,7 +37,7 @@ export async function hydrateSessionMemorySettings(
   if (isFactoryRun && hasResolvedOrg(state.factoryOrgId)) return;
 
   try {
-    const record = await sourceControl.sessions.getBySessionId(session.identity.getResourceId());
+    const record = await sourceControl.sessions.getBySessionId(session.identity.getId());
     await seedSessionOrg(session, record?.orgId);
   } catch (error) {
     console.warn('[Factory session hydration] Unable to resolve the session organization.', error);

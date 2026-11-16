@@ -4,10 +4,11 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useLLMProviders } from '@mastra/react/hooks/llm';
-import { Lock, RotateCcw } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useModelReset } from '../../context/model-reset-context';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
@@ -70,6 +71,8 @@ export const AgentMetadataModelSwitcher = ({
         });
         console.info('Model updated:', result);
       } catch (error) {
+        setSelectedModel(defaultModel);
+        setSelectedProvider(defaultProvider || '');
         console.error('Failed to update model:', error);
       } finally {
         setLoading(false);
@@ -187,7 +190,7 @@ export const AgentMetadataModelSwitcher = ({
         className={cn(raisedSurfaceStyle, 'flex items-center gap-2 rounded-md px-3 py-2')}
         data-testid="agent-metadata-model-locked"
       >
-        <Lock className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <IconLock className="h-4 w-4 shrink-0 text-muted-foreground" />
         <Txt as="span" variant="caption" tone="ink" className="truncate">
           {lockedLabel}
         </Txt>
@@ -228,13 +231,12 @@ export const AgentMetadataModelSwitcher = ({
 
         <Button
           variant="default"
-          size="md"
+          size="icon-md"
           onClick={handleReset}
           disabled={loading}
-          className="flex items-center gap-1.5 border-0! whitespace-nowrap"
-          title="Reset to original model"
+          tooltip="Reset to original model"
         >
-          <RotateCcw className="h-3.5 w-3.5" />
+          <IconArrowRotateCounterClockwise />
         </Button>
       </div>
 

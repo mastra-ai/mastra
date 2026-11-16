@@ -79,7 +79,7 @@ export function ToolsList({
           <DataList.TopCellSmart
             long="Agents"
             short={<AgentIcon />}
-            tooltip="Attached Agents"
+            tooltip="Attached agents"
             className="text-center"
           />
         )}

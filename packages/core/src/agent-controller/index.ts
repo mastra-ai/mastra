@@ -13,7 +13,12 @@ export {
   MODEL_PERSISTENCE_VERSION_KEY,
   migratePersistedModelSelection,
 } from './session';
-export { SessionStartupCancelledError, isSessionStartupCancelledError } from './errors';
+export {
+  SessionNotStartedError,
+  SessionStartupCancelledError,
+  isSessionNotStartedError,
+  isSessionStartupCancelledError,
+} from './errors';
 export type { ReservedThreadMetadataKey, SessionBeforeAgentEndListener, SuspensionAddress } from './session';
 export type { MessageAuthor } from './message-author';
 export {

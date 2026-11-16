@@ -186,7 +186,7 @@ await agent.streamLegacy('message for agent')
             type: 'StreamTextOnStepFinishCallback<any> | never',
             isOptional: true,
             description:
-              'Callback function called after each execution step. Receives step details as a JSON string. Unavailable for structured output',
+              'Callback function called after each execution step. Receives the step result (text, tool calls, tool results, usage, finish reason) plus the `runId`. Unavailable for structured output',
           },
           {
             name: 'resourceId',
@@ -194,56 +194,6 @@ await agent.streamLegacy('message for agent')
             isOptional: true,
             description:
               '**Deprecated.** Use `memory.resource` instead. Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.',
-          },
-          {
-            name: 'telemetry',
-            type: 'TelemetrySettings',
-            isOptional: true,
-            description: 'Settings for telemetry collection during streaming.',
-            properties: [
-              {
-                parameters: [
-                  {
-                    name: 'isEnabled',
-                    type: 'boolean',
-                    isOptional: true,
-                    description: 'Enable or disable telemetry. Disabled by default while experimental.',
-                  },
-                ],
-              },
-              {
-                parameters: [
-                  {
-                    name: 'recordInputs',
-                    type: 'boolean',
-                    isOptional: true,
-                    description:
-                      'Enable or disable input recording. Enabled by default. You might want to disable input recording to avoid recording sensitive information.',
-                  },
-                ],
-              },
-              {
-                parameters: [
-                  {
-                    name: 'recordOutputs',
-                    type: 'boolean',
-                    isOptional: true,
-                    description:
-                      'Enable or disable output recording. Enabled by default. You might want to disable output recording to avoid recording sensitive information.',
-                  },
-                ],
-              },
-              {
-                parameters: [
-                  {
-                    name: 'functionId',
-                    type: 'string',
-                    isOptional: true,
-                    description: 'Identifier for this function. Used to group telemetry data by function.',
-                  },
-                ],
-              },
-            ],
           },
           {
             name: 'temperature',

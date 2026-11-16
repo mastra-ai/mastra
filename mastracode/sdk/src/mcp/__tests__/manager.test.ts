@@ -19,7 +19,42 @@ const mcpMocks = vi.hoisted(() => {
 
 // Mock @mastra/mcp before importing manager
 vi.mock('@mastra/mcp', () => {
-  return mcpMocks;
+  /**
+   * The real client calls `onServerSettled` once per server as discovery settles.
+   * Emulate that from whatever aggregate result a test's listing mock returns, and
+   * keep the mock reachable so tests can still re-stub it after construction.
+   */
+  const settling = (listing: any) =>
+    new Proxy(listing, {
+      apply(target, thisArg, args) {
+        const onServerSettled = args[0]?.onServerSettled;
+        const only: string[] | undefined = args[0]?.serverNames;
+        return Promise.resolve(Reflect.apply(target, thisArg, args)).then((result: any) => {
+          const names = new Set([...Object.keys(result?.toolsets ?? {}), ...Object.keys(result?.errors ?? {})]);
+          for (const name of names) {
+            if (only && !only.includes(name)) continue;
+            const error = result.errors?.[name];
+            onServerSettled?.(
+              name,
+              error ? { error: { message: error }, duration: 0 } : { value: result.toolsets[name], duration: 0 },
+            );
+          }
+          return result;
+        });
+      },
+    });
+
+  const MCPClient = function (this: any, ...args: any[]) {
+    mcpMocks.MCPClient.apply(this, args);
+    let listing = this.listToolsetsWithErrors && settling(this.listToolsetsWithErrors);
+    Object.defineProperty(this, 'listToolsetsWithErrors', {
+      get: () => listing,
+      set: value => {
+        listing = settling(value);
+      },
+    });
+  };
+  return { ...mcpMocks, MCPClient, MCP_DISCOVERY_TIMEOUT_CODE: 'MCP_DISCOVERY_TIMEOUT' };
 });
 
 // Mock config module to control what loadMcpConfig returns
@@ -312,6 +347,55 @@ describe('createMcpManager', () => {
       expect(call.id).toBe('mastra-code-mcp');
       expect(call.servers).toHaveProperty('fs');
       expect(call.servers).toHaveProperty('remote');
+    });
+
+    it('returns tools in config order even when a later server settles first', async () => {
+      setupConfig({
+        mcpServers: {
+          fs: { command: 'npx' },
+          remote: { url: 'https://example.com/mcp' },
+        },
+      });
+
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({
+          toolsets: { remote: { context: {} }, fs: { read: {}, write: {} } },
+          errors: {},
+        });
+        this.disconnect = vi.fn();
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      expect(Object.keys(manager.getTools())).toEqual(['fs_read', 'fs_write', 'remote_context']);
+    });
+
+    it('keeps the tools of a server whose name starts with another server name', async () => {
+      setupConfig({
+        mcpServers: {
+          foo: { command: 'npx' },
+          foo_bar: { command: 'npx' },
+        },
+      });
+
+      // `foo_bar` settles first, so its tool is registered before `foo` settles.
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({
+          toolsets: { foo_bar: { ping: {} }, foo: { ping: {} } },
+          errors: {},
+        });
+        this.disconnect = vi.fn();
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      expect(Object.keys(manager.getTools())).toEqual(['foo_ping', 'foo_bar_ping']);
+      expect(manager.getServerStatuses().find(s => s.name === 'foo_bar')).toMatchObject({
+        connected: true,
+        toolNames: ['foo_bar_ping'],
+      });
     });
   });
 
@@ -819,6 +903,9 @@ describe('createMcpManager', () => {
       const result = await manager.reconnectServer('fs');
 
       expect(mockReconnectServer).toHaveBeenCalledWith('fs');
+      expect(mockInstance.listToolsetsWithErrors).toHaveBeenLastCalledWith(
+        expect.objectContaining({ serverNames: ['fs'] }),
+      );
       expect(result.connected).toBe(true);
       expect(result.toolCount).toBe(3);
       expect(result.toolNames).toEqual(['fs_read', 'fs_write', 'fs_list']);

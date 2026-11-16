@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PinoLogger } from '@mastra/loggers';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { buildFactoryUI, resolveFactoryUIDevDist } from './factory-ui-build';
+import { buildFactoryUI, copyFactorySkills, resolveFactoryUIDevDist } from './factory-ui-build';
 
 const logger = new PinoLogger({ name: 'test', level: 'silent' });
 
@@ -52,6 +52,48 @@ describe('buildFactoryUI', () => {
 
   it('throws when the prebuilt Factory UI is missing', async () => {
     await expect(buildFactoryUI(mastraDir, logger, factoryUISource)).rejects.toThrow(/Prebuilt Factory UI not found/);
+  });
+});
+
+describe('copyFactorySkills', () => {
+  let tmpDir: string;
+  let mastraDir: string;
+  let outputDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), 'factory-skills-build-test-'));
+    mastraDir = join(tmpDir, 'project', 'src', 'mastra');
+    outputDir = join(tmpDir, 'project', '.mastra', 'output');
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('copies src/mastra/factory-skills into the build output in place of the public folder copy', async () => {
+    await mkdir(join(mastraDir, 'factory-skills', 'release-notes'), { recursive: true });
+    await writeFile(join(mastraDir, 'factory-skills', 'release-notes', 'SKILL.md'), 'current');
+    // What copyPublic() left from the older src/mastra/public/factory-skills.
+    await mkdir(join(outputDir, 'factory-skills', 'release-notes'), { recursive: true });
+    await writeFile(join(outputDir, 'factory-skills', 'release-notes', 'SKILL.md'), 'public');
+    await mkdir(join(outputDir, 'factory-skills', 'old-skill'), { recursive: true });
+    await writeFile(join(outputDir, 'factory-skills', 'old-skill', 'SKILL.md'), 'old');
+
+    await copyFactorySkills(mastraDir, outputDir, logger);
+
+    await expect(readFile(join(outputDir, 'factory-skills', 'release-notes', 'SKILL.md'), 'utf8')).resolves.toBe(
+      'current',
+    );
+    // Factory resolves only src/mastra/factory-skills when both exist, so the build must not keep public-only skills.
+    await expect(readFile(join(outputDir, 'factory-skills', 'old-skill', 'SKILL.md'), 'utf8')).rejects.toThrow(
+      'ENOENT',
+    );
+  });
+
+  it('does nothing when the project has no factory-skills folder', async () => {
+    await copyFactorySkills(mastraDir, outputDir, logger);
+
+    await expect(readFile(join(outputDir, 'factory-skills', 'x', 'SKILL.md'), 'utf8')).rejects.toThrow('ENOENT');
   });
 });
 

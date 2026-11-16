@@ -13,7 +13,7 @@ Use this page for the file-based convention. For code-defined skills, see [Agent
 
 ## Quickstart
 
-The simplest skill is one markdown file under `skills/`. The filename becomes the skill name, and `description` tells the agent when to load it.
+The simplest skill is one markdown file under `skills/`. The filename becomes the skill name unless the frontmatter sets `name`, which takes precedence. The `description` tells the agent when to load it.
 
 ```markdown title="src/mastra/agents/weather/skills/temperature-units.md"
 ---

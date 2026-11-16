@@ -17,9 +17,11 @@ import { WorkflowHeader } from './workflow-header';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
-import { navCrumb, workflowCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
+import { navCrumb, workflowCrumb } from '@/domains/navigation/crumbs';
+import type { CrumbDef } from '@/domains/navigation/crumbs';
 import { WorkflowRunActions } from '@/domains/run-options/components/workflow-run-actions';
-import { WorkflowPageTabs, type WorkflowPageTab } from '@/domains/workflows/components/workflow-page-tabs';
+import { WorkflowPageTabs } from '@/domains/workflows/components/workflow-page-tabs';
+import type { WorkflowPageTab } from '@/domains/workflows/components/workflow-page-tabs';
 
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId, runId } = useParams();

@@ -5,11 +5,13 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { Check, PlusIcon, XIcon } from 'lucide-react';
 import { Controller, useWatch } from 'react-hook-form';
 import type { UseFormReturn } from 'react-hook-form';
-
 import { MCPServerCombobox } from '../mcp-server-combobox';
 import type { MCPClientFormValues } from './use-mcp-client-form';
 import { SectionHeader } from '@/domains/cms';
@@ -100,8 +102,8 @@ export function MCPClientFormSidebar({
               <div className="flex flex-col gap-1.5">
                 <MCPServerCombobox
                   onValueChange={onPreFillFromServer}
-                  placeholder="Select a server..."
-                  searchPlaceholder="Search servers..."
+                  placeholder="Select a server"
+                  searchPlaceholder="Search servers"
                   emptyText="No servers found"
                   container={containerRef}
                 />
@@ -195,14 +197,19 @@ export function MCPClientFormSidebar({
                         {...register(`env.${index}.value`)}
                       />
                       {!readOnly && (
-                        <Button variant="ghost" size="sm" onClick={() => removeEnvVar(index)}>
-                          <XIcon className="h-3 w-3" />
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Remove variable"
+                          onClick={() => removeEnvVar(index)}
+                        >
+                          <IconCrossMedium />
                         </Button>
                       )}
                     </div>
                   ))}
                   {!readOnly && (
-                    <Button size="sm" onClick={addEnvVar} className="w-fit" icon={<PlusIcon />}>
+                    <Button size="sm" onClick={addEnvVar} className="w-fit" icon={<IconPlusMedium />}>
                       Add variable
                     </Button>
                   )}
@@ -258,7 +265,7 @@ export function MCPClientFormSidebar({
             ) : (
               <>
                 <Icon>
-                  <Check />
+                  <IconCheckmark2Medium />
                 </Icon>
                 {submitLabel}
               </>

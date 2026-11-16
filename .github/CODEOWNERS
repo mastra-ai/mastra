@@ -189,6 +189,7 @@
 # ============================================================================
 /channels/slack/ @CalebBarnes @NikAiyer
 /signals/github/ @TylerBarnes @CalebBarnes @abhiaiyer91
+/signals/ring/ @PaulieScanlon
 /embedders/voyageai/ @TylerBarnes @CalebBarnes @abhiaiyer91
 /integrations/ @abhiaiyer91 @wardpeet
 /ee/ @junydania @rphansen91 @YujohnNattrass

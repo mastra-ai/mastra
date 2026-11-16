@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { config } from 'dotenv';
 import { getAnalytics } from '../../analytics/index.js';
 import { logger } from '../../utils/logger';
-import { shouldSkipDotenvLoading } from '../utils';
+import { getSourceMapNodeArgs, shouldSkipDotenvLoading } from '../utils';
 interface StartOptions {
   dir?: string;
   env?: string;
@@ -39,7 +39,10 @@ export async function start(options: StartOptions = {}) {
       throw new Error(`Output directory ${outputPath} does not exist`);
     }
 
-    const commands = [];
+    // The build output is all `start` has (src/ may not exist where it runs), so
+    // the presence of the map tells whether `bundler.sourcemap` was on at build time.
+    const hasSourceMaps = fs.existsSync(join(outputPath, 'index.mjs.map'));
+    const commands = getSourceMapNodeArgs(hasSourceMaps, process.env.NODE_OPTIONS);
 
     if (options.customArgs) {
       commands.push(...options.customArgs);

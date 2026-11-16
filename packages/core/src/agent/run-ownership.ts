@@ -23,3 +23,13 @@ const configuredRenewIntervalMs = readPositiveIntEnv(
  */
 export const AGENT_LEASE_RENEW_INTERVAL_MS =
   configuredRenewIntervalMs < AGENT_LEASE_TTL_MS ? configuredRenewIntervalMs : DEFAULT_RENEW_INTERVAL_MS;
+
+/**
+ * How long a run that lost its thread lease lets a tool call that is already running go on before stopping it.
+ * The thread's new owner may be working meanwhile, so a tool that never returns must not keep the old run going for
+ * long. Overridable via `MASTRA_AGENT_THREAD_LEASE_LOST_TOOL_GRACE_MS`.
+ */
+export const AGENT_LEASE_LOST_TOOL_GRACE_MS = readPositiveIntEnv(
+  'MASTRA_AGENT_THREAD_LEASE_LOST_TOOL_GRACE_MS',
+  300_000,
+);

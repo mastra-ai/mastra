@@ -11,6 +11,7 @@ import type {
   ResponseTool,
   ResponseUsage,
 } from '../schemas/responses';
+import { listAgentsVisibleTo } from './agent-access';
 import { getEffectiveResourceId, validateThreadOwnership } from './utils';
 
 export type ThreadExecutionContext = {
@@ -225,7 +226,7 @@ export async function findResponseTurnRecordAcrossAgents({
     return null;
   }
 
-  const agents = Object.values(mastra.listAgents()) as Agent<any, any, any, any>[];
+  const agents = Object.values(listAgentsVisibleTo(mastra.listAgents(), requestContext)) as Agent<any, any, any, any>[];
   for (const agent of agents) {
     const match = await findResponseTurnRecord({ agent, responseId, requestContext });
     if (match) {
@@ -255,7 +256,7 @@ export async function findConversationThreadAcrossAgents({
   }
 
   const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
-  const agents = Object.values(mastra.listAgents()) as Agent<any, any, any, any>[];
+  const agents = Object.values(listAgentsVisibleTo(mastra.listAgents(), requestContext)) as Agent<any, any, any, any>[];
 
   for (const agent of agents) {
     const memoryStore = await getAgentMemoryStore({ agent, requestContext });

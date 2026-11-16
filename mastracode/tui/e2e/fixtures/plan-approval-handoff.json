@@ -4,6 +4,17 @@
       "match": {
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
+        "userMessage": "Goal: # E2E Approval Plan",
+        "sequenceIndex": 0
+      },
+      "response": {
+        "content": "{\"decision\":\"done\",\"reason\":\"The approved plan goal is verified.\"}"
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
         "userMessage": "Create a concise implementation plan for the plan approval e2e test.",
         "hasToolResult": false
       },

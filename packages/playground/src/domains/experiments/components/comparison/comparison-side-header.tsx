@@ -1,26 +1,30 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { getShortId } from '@mastra/playground-ui/components/Text';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { IconCalendar1 } from '@mastra/playground-ui/icons/central/IconCalendar1';
+import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
+import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconClock } from '@mastra/playground-ui/icons/central/IconClock';
+import { IconCoins } from '@mastra/playground-ui/icons/central/IconCoins';
+import { IconExclamationCircle } from '@mastra/playground-ui/icons/central/IconExclamationCircle';
+import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
+import { IconHashtag } from '@mastra/playground-ui/icons/central/IconHashtag';
+import { IconHistory } from '@mastra/playground-ui/icons/central/IconHistory';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconStar } from '@mastra/playground-ui/icons/central/IconStar';
+import { IconTarget } from '@mastra/playground-ui/icons/central/IconTarget';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
-import {
-  CalendarIcon,
-  CircleAlertIcon,
-  ClockIcon,
-  CoinsIcon,
-  GaugeIcon,
-  HashIcon,
-  HistoryIcon,
-  TargetIcon,
-  StarIcon,
-} from 'lucide-react';
+import { useState } from 'react';
+import { RenameExperimentDialog } from '../rename-experiment-dialog';
 import type { ComparisonRole } from './build-comparison-rows';
 import { ComparisonDatasetVersion } from './comparison-dataset-version';
 import {
@@ -33,7 +37,9 @@ import {
 } from './comparison-metric-format';
 import { ComparisonMetricList, ScorerLabel } from './comparison-metric-list';
 import type { ComparisonMetric } from './comparison-metric-list';
-import { ComparisonSection, sectionStackClass } from './comparison-section';
+import { ComparisonSection } from './comparison-section';
+import { sideVariant } from './constants';
+import { useCompareMetricPreferences } from './use-compare-metric-preferences';
 
 export interface ScorerSummary {
   scorerId: string;
@@ -57,10 +63,84 @@ export interface ComparisonSideMetrics {
   tokens?: number;
 }
 
-export interface ComparisonSideHeaderProps {
+export interface ComparisonSideTitleProps {
   role: ComparisonRole;
   /** Column badge, e.g. `Baseline` or `Contender 2`. */
   label: string;
+  experiment?: DatasetExperiment;
+  /** Makes this contender the baseline. Omitted on the baseline itself. */
+  onSetBaseline?: () => void;
+}
+
+/** Title of one comparison side: a menu to view or rename the experiment, and its Baseline/Contender badge. */
+export function ComparisonSideTitle({ role, label, experiment, onSetBaseline }: ComparisonSideTitleProps) {
+  const { Link } = useLinkComponent();
+  const [renameOpen, setRenameOpen] = useState(false);
+  const shortId = experiment ? (getShortId(experiment.id) ?? experiment.id) : null;
+  // The rename route is dataset-scoped, so caller-run experiments without a dataset can't be renamed.
+  const canRename = Boolean(experiment?.datasetId);
+
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      {experiment && (
+        <DropdownMenu>
+          <DropdownMenu.Trigger
+            render={
+              <Button size="sm" className="max-w-full min-w-0">
+                <span className="min-w-0 truncate">{experiment.name || shortId}</span>
+                <IconChevronBottom aria-hidden />
+              </Button>
+            }
+          />
+          <DropdownMenu.Content align="start" className="min-w-48">
+            <DropdownMenu.Item render={<Link href={`/experiments/${experiment.id}`} />}>
+              <IconChainLink3 /> View experiment
+            </DropdownMenu.Item>
+            {canRename && (
+              <DropdownMenu.Item onSelect={() => setRenameOpen(true)}>
+                <IconPencil /> Rename experiment
+              </DropdownMenu.Item>
+            )}
+          </DropdownMenu.Content>
+        </DropdownMenu>
+      )}
+      {/* Mounted on demand so the form state is seeded from the experiment each time it opens. */}
+      {experiment && renameOpen && <RenameExperimentDialog experiment={experiment} open onOpenChange={setRenameOpen} />}
+      <div className="ml-auto shrink-0">
+        {onSetBaseline ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label="Set as baseline"
+                  onClick={onSetBaseline}
+                  className={cn('cursor-pointer rounded-[7px] hover:brightness-110', focusRing)}
+                />
+              }
+            >
+              <Badge variant={sideVariant[role]} size="md" icon={<IconStar />}>
+                {label}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>Set as baseline</TooltipContent>
+          </Tooltip>
+        ) : (
+          <Badge
+            variant={sideVariant[role]}
+            size="md"
+            icon={role === 'baseline' ? <IconStar className="fill-current" /> : <IconStar />}
+          >
+            {label}
+          </Badge>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export interface ComparisonSideSummaryProps {
+  role: ComparisonRole;
   experiment?: DatasetExperiment;
   /** Per-scorer averages across every item. Contenders also render their delta against the baseline. */
   summary?: ScorerSummary[];
@@ -69,29 +149,23 @@ export interface ComparisonSideHeaderProps {
   baselineMetrics?: ComparisonSideMetrics;
   /** Highlights the dataset version when this experiment disagrees with the baseline on it. */
   versionMismatch?: boolean;
-  /** Makes this contender the baseline. Omitted on the baseline itself. */
-  onSetBaseline?: () => void;
   /** Shows the total cost and tokens lines. False when the observability storage cannot serve metrics. */
   showUsage?: boolean;
 }
 
-const sideVariant = { baseline: 'purple', contender: 'blue' } as const;
-
-/** Header cell of one comparison side: which experiment it is, and its run-level figures. */
-export function ComparisonSideHeader({
+/** Run-level figures of one comparison side. */
+export function ComparisonSideSummary({
   role,
-  label,
   experiment,
   summary,
   metrics,
   baselineMetrics,
   versionMismatch,
-  onSetBaseline,
   showUsage = false,
-}: ComparisonSideHeaderProps) {
+}: ComparisonSideSummaryProps) {
   const { Link, paths } = useLinkComponent();
+  const { isMetricVisible } = useCompareMetricPreferences();
 
-  const shortId = experiment ? (getShortId(experiment.id) ?? experiment.id) : null;
   const createdAt = experiment?.createdAt ? new Date(experiment.createdAt) : null;
 
   const isContender = role === 'contender';
@@ -104,7 +178,7 @@ export function ComparisonSideHeader({
           ? [
               {
                 id: 'target',
-                icon: experiment.targetType === 'agent' ? <AgentIcon /> : <TargetIcon />,
+                icon: experiment.targetType === 'agent' ? <AgentIcon /> : <IconTarget />,
                 label: experiment.targetType === 'agent' ? 'Agent' : 'Target',
                 value:
                   experiment.targetType === 'agent' ? (
@@ -122,7 +196,7 @@ export function ComparisonSideHeader({
           ? [
               {
                 id: 'dataset-version',
-                icon: <HistoryIcon />,
+                icon: <IconHistory />,
                 label: 'Dataset version',
                 value: (
                   <ComparisonDatasetVersion
@@ -139,7 +213,7 @@ export function ComparisonSideHeader({
           ? [
               {
                 id: 'created-at',
-                icon: <CalendarIcon />,
+                icon: <IconCalendar1 />,
                 label: 'Created',
                 value: formatDate(createdAt, 'date'),
                 delta: null,
@@ -156,9 +230,10 @@ export function ComparisonSideHeader({
       ? [
           {
             id: 'total-cost',
-            icon: <CoinsIcon />,
+            icon: <IconCoins />,
             label: 'Total cost',
             value: formatCostValue(usage.cost, usage.costUnit),
+            rawValue: usage.cost,
             delta: usage.costUnit === baselineMetrics?.costUnit ? trend(usage.cost, baselineMetrics?.cost) : null,
             formatDelta: costDeltaFormatter(usage.costUnit),
             higherIsBetter: false,
@@ -170,9 +245,10 @@ export function ComparisonSideHeader({
       ? [
           {
             id: 'avg-duration',
-            icon: <ClockIcon />,
+            icon: <IconClock />,
             label: 'Avg duration',
             value: formatDuration(metrics.averageDurationMs) ?? '-',
+            rawValue: metrics.averageDurationMs,
             delta: trend(metrics.averageDurationMs, baselineMetrics?.averageDurationMs),
             formatDelta: formatDurationDelta,
             higherIsBetter: false,
@@ -185,9 +261,10 @@ export function ComparisonSideHeader({
       ? [
           {
             id: 'avg-score',
-            icon: <GaugeIcon />,
+            icon: <IconGauge />,
             label: 'Avg score',
             value: formatScore(metrics.averageScore),
+            rawValue: metrics.averageScore,
             delta: trend(metrics.averageScore, baselineMetrics?.averageScore),
             emphasis: true,
           },
@@ -197,9 +274,10 @@ export function ComparisonSideHeader({
       ? [
           {
             id: 'total-tokens',
-            icon: <HashIcon />,
+            icon: <IconHashtag />,
             label: 'Total tokens',
             value: formatTokenCount(usage.tokens),
+            rawValue: usage.tokens,
             delta: trend(usage.tokens, baselineMetrics?.tokens),
             formatDelta: formatTokenCount,
             higherIsBetter: false,
@@ -211,7 +289,7 @@ export function ComparisonSideHeader({
       ? [
           {
             id: 'errors',
-            icon: <CircleAlertIcon />,
+            icon: <IconExclamationCircle />,
             label: 'Errors',
             value: String(metrics.errorCount),
             delta: trend(metrics.errorCount, baselineMetrics?.errorCount),
@@ -225,59 +303,17 @@ export function ComparisonSideHeader({
       icon: <ScorersIcon />,
       label: <ScorerLabel scorerId={scorerId} />,
       value: formatScore(average),
+      rawValue: average,
       delta: isContender ? delta : null,
     })),
   ];
 
-  return (
-    <div className={sectionStackClass}>
-      <div className="flex min-w-0 items-center gap-2">
-        {experiment && (
-          <Button
-            render={<Link href={`/experiments/${experiment.id}`} />}
-            size="sm"
-            className="max-w-full min-w-0"
-            aria-label={`Open experiment ${experiment.name || shortId}`}
-          >
-            <span className="min-w-0 truncate">{experiment.name || shortId}</span>
-          </Button>
-        )}
-        <div className="ml-auto shrink-0">
-          {onSetBaseline ? (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    aria-label="Set as baseline"
-                    onClick={onSetBaseline}
-                    className={cn('cursor-pointer rounded-[7px] hover:brightness-110', focusRing)}
-                  />
-                }
-              >
-                <Badge variant={sideVariant[role]} size="md" icon={<StarIcon />}>
-                  {label}
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent>Set as baseline</TooltipContent>
-            </Tooltip>
-          ) : (
-            <Badge
-              variant={sideVariant[role]}
-              size="md"
-              icon={role === 'baseline' ? <StarIcon className="fill-current" /> : <StarIcon />}
-            >
-              {label}
-            </Badge>
-          )}
-        </div>
-      </div>
+  const visibleMetrics = summaryMetrics.filter(metric => isMetricVisible(metric.id));
+  if (visibleMetrics.length === 0) return null;
 
-      {summaryMetrics.length > 0 && (
-        <ComparisonSection title="Summary" collapsible={false}>
-          <ComparisonMetricList metrics={summaryMetrics} />
-        </ComparisonSection>
-      )}
-    </div>
+  return (
+    <ComparisonSection title="Summary" collapsible={false}>
+      <ComparisonMetricList metrics={visibleMetrics} />
+    </ComparisonSection>
   );
 }

@@ -65,4 +65,28 @@ describe('ModelDefaultsStorage', () => {
     expect(await seed.modelDefaults.get({ orgId: 'org-1', userId: 'user-2' })).not.toBeNull();
     expect(await seed.modelDefaults.clear({ orgId: 'org-1', userId: 'user-1' })).toBe(false);
   });
+
+  it('a personal thinking level needs a personal model and survives a model change', async () => {
+    const seed = await createFactoryStorageForTests();
+    const user = { orgId: 'org-1', userId: 'user-1' };
+
+    expect(await seed.modelDefaults.setThinkingLevel({ ...user, thinkingLevel: 'high' })).toBeNull();
+    expect(await seed.modelDefaults.get(user)).toBeNull();
+
+    await seed.modelDefaults.set({ ...user, modelId: 'openai/gpt-5.6' });
+    expect(await seed.modelDefaults.get(user)).toMatchObject({ modelId: 'openai/gpt-5.6', thinkingLevel: null });
+    expect(await seed.modelDefaults.setThinkingLevel({ ...user, thinkingLevel: 'high' })).toMatchObject({
+      thinkingLevel: 'high',
+    });
+    expect(await seed.modelDefaults.get(user)).toMatchObject({ thinkingLevel: 'high' });
+
+    await seed.modelDefaults.set({ ...user, modelId: 'anthropic/claude-opus-5' });
+    expect(await seed.modelDefaults.get(user)).toMatchObject({
+      modelId: 'anthropic/claude-opus-5',
+      thinkingLevel: 'high',
+    });
+
+    await seed.modelDefaults.clear(user);
+    expect(await seed.modelDefaults.get(user)).toBeNull();
+  });
 });

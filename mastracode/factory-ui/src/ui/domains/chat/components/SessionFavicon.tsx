@@ -1,8 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 import type { ChatSessionPhase } from '../../workspaces/services/sessionStatus';
-
-const DEFAULT_FAVICON = '/mastra.svg';
 
 const FAVICONS: Record<ChatSessionPhase, string> = {
   initializing: '/favicon-session-initializing.svg',
@@ -11,15 +9,19 @@ const FAVICONS: Record<ChatSessionPhase, string> = {
   error: '/favicon-session-error.svg',
 };
 
+function getFavicon() {
+  return document.querySelector<HTMLLinkElement>('link[rel~="icon"]');
+}
+
 function setFavicon(href: string) {
-  const favicon = document.querySelector<HTMLLinkElement>('link[rel~="icon"]');
+  const favicon = getFavicon();
   if (!favicon) return;
   favicon.type = 'image/svg+xml';
   favicon.href = href;
 }
 
 export interface SessionFaviconProps {
-  /** Omitted leaves the default Mastra favicon in place. */
+  /** Omitted leaves the page's default favicon in place (green in Vite dev). */
   state?: ChatSessionPhase;
 }
 
@@ -28,9 +30,13 @@ export interface SessionFaviconProps {
  * at once race each other's cleanup and leave the default icon behind.
  */
 export function SessionFavicon({ state }: SessionFaviconProps) {
+  const defaultFavicon = useRef<string | null>(null);
+
   useEffect(() => {
-    setFavicon(state ? FAVICONS[state] : DEFAULT_FAVICON);
-    return () => setFavicon(DEFAULT_FAVICON);
+    defaultFavicon.current ??= getFavicon()?.getAttribute('href') ?? '/mastra.svg';
+    const fallback = defaultFavicon.current;
+    setFavicon(state ? FAVICONS[state] : fallback);
+    return () => setFavicon(fallback);
   }, [state]);
 
   return null;

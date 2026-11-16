@@ -1,7 +1,10 @@
+import { IconClock } from '@mastra/playground-ui/icons/central/IconClock';
+import { IconCoins } from '@mastra/playground-ui/icons/central/IconCoins';
+import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
+import { IconHashtag } from '@mastra/playground-ui/icons/central/IconHashtag';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import type { ExperimentItemUsage } from '@mastra/react/hooks/experiments';
-import { ClockIcon, CoinsIcon, GaugeIcon, HashIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import {
   costDeltaFormatter,
@@ -55,9 +58,10 @@ export function itemMetrics({
     ? [
         {
           id: 'cost',
-          icon: <CoinsIcon />,
+          icon: <IconCoins />,
           label: 'Cost',
           value: formatCostValue(usage?.estimatedCost, costUnit),
+          rawValue: usage?.estimatedCost,
           delta: costDelta ?? null,
           formatDelta: costDeltaFormatter(costUnit),
           higherIsBetter: false,
@@ -69,9 +73,10 @@ export function itemMetrics({
     ? [
         {
           id: 'tokens',
-          icon: <HashIcon />,
+          icon: <IconHashtag />,
           label: 'Tokens',
           value: formatTokenCount(totalTokens(usage)),
+          rawValue: totalTokens(usage),
           delta: tokenDelta ?? null,
           formatDelta: formatTokenCount,
           higherIsBetter: false,
@@ -85,9 +90,10 @@ export function itemMetrics({
       : [
           {
             id: 'duration',
-            icon: <ClockIcon />,
+            icon: <IconClock />,
             label: 'Duration',
             value: formatDuration(durationMs) ?? '-',
+            rawValue: durationMs,
             delta: durationDeltaMs ?? null,
             formatDelta: formatDurationDelta,
             higherIsBetter: false,
@@ -98,9 +104,10 @@ export function itemMetrics({
     ? [
         {
           id: 'avg-score',
-          icon: <GaugeIcon />,
+          icon: <IconGauge />,
           label: 'Avg score',
           value: formatScore(averageScore.value),
+          rawValue: averageScore.value,
           delta: averageScore.delta ?? null,
         },
       ]
@@ -123,6 +130,7 @@ export function itemMetrics({
       ) : (
         formatScore(score.value)
       ),
+      rawValue: score.value,
       delta: score.delta ?? null,
     })),
   ];

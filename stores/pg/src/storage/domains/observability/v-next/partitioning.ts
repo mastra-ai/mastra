@@ -11,19 +11,16 @@
  *                            parent and let partman maintain future partitions.
  *
  *  3. Neither extension    → pre-create a rolling window of daily partitions
- *                            (yesterday + today + N future days). Future
- *                            partitions can be extended by a separate Mastra
- *                            CLI command, which is also the surface that will
- *                            implement retention cleanup.
+ *                            (yesterday + today + N future days) at init, and
+ *                            create a missing day partition inside that same
+ *                            window on demand when a write hits it.
  *
- * This module deliberately does not implement retention deletes / drops.
- * The goal here is to leave the schema in a shape that a follow-up
- * `mastra retention` command can act on without further migrations.
+ * This module only creates partitions. Retention, which drops partitions or
+ * chunks older than a cutoff, lives in `./retention.ts` behind `prune()`.
  */
 
 import type { DbClient } from '../../../client';
 import { ALL_SIGNAL_TABLES, qualifiedName, qualifiedTable, SIGNAL_TIME_COLUMN } from './ddl';
-import { isDuplicateRelationError } from './pg-errors';
 
 export type PartitionMode = 'timescale' | 'partman' | 'native';
 
@@ -112,81 +109,134 @@ export async function ensureNativePartitions(
   schema: string,
   options: PartitioningOptions = {},
 ): Promise<void> {
-  const futureDays = options.futureDays ?? DEFAULT_FUTURE_DAYS;
-  const includeYesterday = options.includeYesterday ?? true;
-  const start = includeYesterday ? -1 : 0;
   // Freeze the base UTC day before the loop. If we recomputed `Date.now()`
   // inside the loop, a run that crossed midnight UTC could skip one expected
   // day for later tables and create an extra far-future partition for them.
-  const baseNowMs = Date.now();
+  const windowDays = partitionWindow(options);
 
   for (const table of ALL_SIGNAL_TABLES) {
-    for (let i = start; i <= futureDays; i++) {
-      const d = new Date(baseNowMs + i * 86_400_000);
-      const { start: partStart, end: partEnd, suffix } = dayBounds(d);
-      const childName = partitionName(table, suffix);
-      const child = qualifiedName(schema, childName);
-      const parent = qualifiedTable(schema, table);
-      // Two-phase partition creation. `CREATE TABLE ... PARTITION OF` takes
-      // ACCESS EXCLUSIVE on the parent for the duration of the statement,
-      // which blocks every concurrent read and write against every other
-      // partition. Splitting into `CREATE TABLE (LIKE ...) + ALTER TABLE
-      // ATTACH PARTITION` keeps the parent lock at SHARE UPDATE EXCLUSIVE
-      // (since PG 12), which only blocks DDL and vacuum — concurrent
-      // inserts and reads against today's partition keep flowing.
-      //
-      // Postgres requires partition bounds in `FOR VALUES FROM (…) TO (…)`
-      // to be constant expressions at parse time — `$N` placeholders are
-      // resolved at execution and so are rejected here. `partStart` /
-      // `partEnd` are produced by `dayBounds()` (formatted from a JS Date)
-      // and never touch user input, so the template interpolation is safe.
-      try {
+    await ensureDayPartitions(client, schema, table, windowDays);
+  }
+}
+
+/** The UTC days init() pre-creates: yesterday (optional) through today + futureDays. */
+export function partitionWindow(options: PartitioningOptions = {}, nowMs = Date.now()): Date[] {
+  const futureDays = options.futureDays ?? DEFAULT_FUTURE_DAYS;
+  const start = (options.includeYesterday ?? true) ? -1 : 0;
+  const days: Date[] = [];
+  for (let i = start; i <= futureDays; i++) {
+    days.push(new Date(nowMs + i * 86_400_000));
+  }
+  return days;
+}
+
+/**
+ * Keeps only the days inside the current partition window. The write path
+ * creates partitions on demand within that window only, so a row with a
+ * client-supplied timestamp far in the past or future cannot make the
+ * database grow a table per day it names.
+ */
+export function withinPartitionWindow(days: Date[], options: PartitioningOptions = {}): Date[] {
+  const allowed = new Set(partitionWindow(options).map(d => dayBounds(d).suffix));
+  return days.filter(d => allowed.has(dayBounds(d).suffix));
+}
+
+/**
+ * Creates and attaches a partition of `schema.table` for each UTC day in
+ * `days` that has none. Each day is a `CREATE TABLE (LIKE parent)` followed by
+ * `ATTACH PARTITION`, in one transaction, so a failed attach leaves no
+ * detached child behind. When either step fails, the catalog is read again: a
+ * day that a concurrent caller attached meanwhile counts as done, and any
+ * other failure is rethrown.
+ */
+export async function ensureDayPartitions(
+  client: DbClient,
+  schema: string,
+  table: string,
+  days: Date[],
+): Promise<void> {
+  const parent = qualifiedTable(schema, table);
+  // Days that already have an attached partition run no DDL at all. A write
+  // whose batch mixes an existing day with a missing one then only touches
+  // the missing day, and a role that may not ATTACH is never asked to for a
+  // day that needs nothing.
+  const attached = await attachedPartitionNames(client, schema, table);
+  for (const d of days) {
+    const { start: partStart, end: partEnd, suffix } = dayBounds(d);
+    const childName = partitionName(table, suffix);
+    if (attached.has(childName)) continue;
+    const child = qualifiedName(schema, childName);
+    // Two-phase partition creation. `CREATE TABLE ... PARTITION OF` takes
+    // ACCESS EXCLUSIVE on the parent for the duration of the statement,
+    // which blocks every concurrent read and write against every other
+    // partition. Splitting into `CREATE TABLE (LIKE ...) + ALTER TABLE
+    // ATTACH PARTITION` keeps the parent lock at SHARE UPDATE EXCLUSIVE
+    // (since PG 12), which only blocks DDL and vacuum — concurrent
+    // inserts and reads against today's partition keep flowing.
+    //
+    // Postgres requires partition bounds in `FOR VALUES FROM (…) TO (…)`
+    // to be constant expressions at parse time — `$N` placeholders are
+    // resolved at execution and so are rejected here. `partStart` /
+    // `partEnd` are produced by `dayBounds()` (formatted from a JS Date)
+    // and never touch user input, so the template interpolation is safe.
+    //
+    // Both statements run in one transaction so a failed ATTACH (for
+    // example a role that can create tables but does not own the parent)
+    // rolls the CREATE back instead of leaving a detached child that the
+    // owner's next init() cannot attach either.
+    try {
+      await client.tx(async t => {
         // `LIKE parent INCLUDING ALL` copies columns, defaults, NOT NULL,
         // PRIMARY KEY, and indexes but not the parent's partition spec, so
         // the child becomes a regular table that can later be attached as
         // a partition. Index names are auto-generated per child and don't
         // collide across days.
-        await client.none(`CREATE TABLE IF NOT EXISTS ${child} (LIKE ${parent} INCLUDING ALL)`);
-      } catch (error) {
-        // `CREATE TABLE IF NOT EXISTS` is not atomic under concurrency;
-        // a parallel init() can win the race between the existence check
-        // and the create. Treat the duplicate as success.
-        if (!isDuplicateRelationError(error)) throw error;
-      }
-
-      try {
+        await t.none(`CREATE TABLE IF NOT EXISTS ${child} (LIKE ${parent} INCLUDING ALL)`);
         // ATTACH PARTITION on an empty child is fast: there are no rows to
         // scan against the partition constraint, and the parent lock is
         // SHARE UPDATE EXCLUSIVE rather than ACCESS EXCLUSIVE.
-        await client.none(
+        await t.none(
           `ALTER TABLE ${parent} ATTACH PARTITION ${child}
            FOR VALUES FROM ('${partStart}') TO ('${partEnd}')`,
         );
-      } catch (error) {
-        // The child can already be attached from a previous init() or from
-        // a concurrent caller that won the race between our CREATE and
-        // ATTACH. Either way, treat "already a partition of this parent"
-        // as success.
-        if (!isAlreadyAttachedError(error)) throw error;
-      }
+      });
+    } catch (error) {
+      // A concurrent init() or write can win the race between our listing
+      // and our CREATE + ATTACH, which then fails as a duplicate relation or
+      // "already a partition" (wording depends on `lc_messages`). The catalog
+      // is the locale-proof witness: if the day is attached now, whoever
+      // attached it served this call; anything else is a real failure.
+      const attachedNow = await attachedPartitionNames(client, schema, table);
+      if (!attachedNow.has(childName)) throw error;
     }
   }
 }
 
+/** Names of the children attached to `schema.table`, read from the catalog so no search_path can shadow it. */
+async function attachedPartitionNames(client: DbClient, schema: string, table: string): Promise<Set<string>> {
+  const rows = await client.manyOrNone<{ relname: string }>(
+    `SELECT c.relname
+     FROM pg_catalog.pg_inherits i
+     JOIN pg_catalog.pg_class c ON c.oid = i.inhrelid
+     WHERE i.inhparent = (
+       SELECT p.oid
+       FROM pg_catalog.pg_class p
+       JOIN pg_catalog.pg_namespace n ON n.oid = p.relnamespace
+       WHERE n.nspname = $1 AND p.relname = $2
+     )`,
+    [schema, table],
+  );
+  return new Set(rows.map(r => r.relname));
+}
+
 /**
- * `ALTER TABLE ATTACH PARTITION` fails with `42P17 invalid_object_definition`
- * when the target table is already a partition of *any* parent (including
- * the one we want). On older PG it can also surface as 42710 or a generic
- * message. We err on the side of treating any "already a partition" wording
- * as success so concurrent inits converge cleanly.
+ * `23514` raised by `ExecFindPartition`: the row's day has no attached
+ * partition. The message is matched as a fallback only, because Postgres
+ * translates it when `lc_messages` is not English.
  */
-function isAlreadyAttachedError(error: unknown): boolean {
-  const code = (error as { code?: string } | undefined)?.code;
-  const message = (error as { message?: string } | undefined)?.message ?? '';
-  if (code === '42P17' || code === '42710') {
-    return /is already a partition/i.test(message) || /already a partition/i.test(message);
-  }
-  return /is already a partition/i.test(message);
+export function isMissingPartitionError(error: unknown): boolean {
+  const { code, routine, message = '' } = (error ?? {}) as { code?: string; routine?: string; message?: string };
+  return code === '23514' && (routine === 'ExecFindPartition' || /no partition of relation/i.test(message));
 }
 
 /**
@@ -259,18 +309,22 @@ export async function ensureTimescaleHypertables(client: DbClient, schema: strin
  * adapter run against current arm64-friendly images without breaking existing
  * 4.x deployments.
  */
+async function partmanParentRegistered(client: DbClient, schema: string, table: string): Promise<boolean> {
+  const row = await client.oneOrNone<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM partman.part_config
+       WHERE parent_table = format('%I.%I', $1::text, $2::text)
+     ) AS "exists"`,
+    [schema, table],
+  );
+  return Boolean(row?.exists);
+}
+
 export async function ensurePartmanHypertables(client: DbClient, schema: string): Promise<void> {
   const partmanMajor = getPartmanMajor(await getPartmanVersion(client));
 
   for (const table of ALL_SIGNAL_TABLES) {
-    const exists = await client.oneOrNone<{ exists: boolean }>(
-      `SELECT EXISTS (
-         SELECT 1 FROM partman.part_config
-         WHERE parent_table = format('%I.%I', $1::text, $2::text)
-       ) AS "exists"`,
-      [schema, table],
-    );
-    if (exists?.exists) continue;
+    if (await partmanParentRegistered(client, schema, table)) continue;
 
     // Race: between the EXISTS check above and the `create_parent` call
     // below, a concurrent init in another process can register the parent
@@ -314,14 +368,7 @@ export async function ensurePartmanHypertables(client: DbClient, schema: string)
         const isDeadlock = /deadlock detected/i.test(message);
         if (!isDeadlock) throw error;
 
-        const registered = await client.oneOrNone<{ exists: boolean }>(
-          `SELECT EXISTS (
-             SELECT 1 FROM partman.part_config
-             WHERE parent_table = format('%I.%I', $1::text, $2::text)
-           ) AS "exists"`,
-          [schema, table],
-        );
-        if (registered?.exists) break;
+        if (await partmanParentRegistered(client, schema, table)) break;
         if (attempt === 2) throw error;
         await new Promise(resolve => setTimeout(resolve, 25));
       }

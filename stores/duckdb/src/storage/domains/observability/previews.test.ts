@@ -1,5 +1,6 @@
 import { createPreviewTests } from '@internal/storage-test-utils';
 import { SpanType } from '@mastra/core/observability';
+import { parseTraceQueryRequest, planSpanQuery, planThreadRowsQuery, planTraceQuery } from '@mastra/core/storage';
 import type { CreateSpanRecord, ObservabilityStorage } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DuckDBStore } from '../../../index';
@@ -35,6 +36,7 @@ createPreviewTests(() => storage, {
 describe('DuckDB stored previews', () => {
   const startedAt = new Date('2026-05-01T12:00:00Z');
   const endedAt = new Date('2026-05-01T12:00:01Z');
+  const timeRange = { from: '2026-05-01T00:00:00.000Z', to: '2026-05-02T00:00:00.000Z' };
   const span = (extra: Partial<CreateSpanRecord> = {}): CreateSpanRecord => ({
     traceId: 'trace-rows',
     spanId: 'root-rows',
@@ -100,32 +102,69 @@ describe('DuckDB stored previews', () => {
     expect(spans[0]!.inputPreview).toBe('the input');
   });
 
-  it('lists traces without scanning the input or output payloads', async () => {
-    await storage.batchCreateSpans({ records: [span({ endedAt: null })] });
-    await storage.batchCreateSpans({ records: [span()] });
+  async function columnsScannedBy(read: () => Promise<void>): Promise<string[][]> {
     const query = vi.spyOn(store.db, 'query');
     let calls: unknown[][];
     try {
-      const { spans } = await storage.listTracesLight({ pagination: { page: 0, perPage: 10 } });
-      expect(spans[0]).toMatchObject({ inputPreview: 'the input', outputPreview: 'the output' });
-      calls = query.mock.calls;
+      await read();
+      calls = query.mock.calls.slice();
     } finally {
       query.mockRestore();
     }
-
+    type PlanNode = { name?: string; extra_info?: { Projections?: string | string[] }; children?: PlanNode[] };
+    const scans = (node: PlanNode): string[][] => [
+      ...(node.name?.includes('SCAN') && node.extra_info?.Projections ? [[node.extra_info.Projections].flat()] : []),
+      ...(node.children ?? []).flatMap(scans),
+    ];
     const scanned: string[][] = [];
     for (const [sql, params] of calls) {
-      const plan = await store.db.query<{ explain_value: string }>(`EXPLAIN ${sql}`, params as unknown[]);
-      const text = plan.map(row => row.explain_value).join('\n');
-      for (const [, projections] of text.matchAll(/SCAN[\s\S]*?Projections:([\s\S]*?)(?:Filters:|Estimated|└)/g)) {
-        scanned.push(
-          projections!
-            .split(/[│\n]/)
-            .map(column => column.trim())
-            .filter(Boolean),
-        );
-      }
+      const [plan] = await store.db.query<{ explain_value: string }>(
+        `EXPLAIN (FORMAT JSON) ${sql}`,
+        params as unknown[],
+      );
+      scanned.push(...(JSON.parse(plan!.explain_value) as PlanNode[]).flatMap(scans));
     }
+    return scanned;
+  }
+
+  it('lists traces without scanning the input or output payloads', async () => {
+    await storage.batchCreateSpans({ records: [span({ endedAt: null })] });
+    await storage.batchCreateSpans({ records: [span()] });
+
+    const scanned = await columnsScannedBy(async () => {
+      const { spans } = await storage.listTracesLight({ pagination: { page: 0, perPage: 10 } });
+      expect(spans[0]).toMatchObject({ inputPreview: 'the input', outputPreview: 'the output' });
+    });
+
+    expect(scanned.some(columns => columns.includes('inputPreview'))).toBe(true);
+    expect(scanned.flat()).not.toContain('input');
+    expect(scanned.flat()).not.toContain('output');
+  });
+
+  it('queries spans without scanning the payloads when every preview is stored', async () => {
+    await storage.batchCreateSpans({ records: [span({ endedAt: null })] });
+    await storage.batchCreateSpans({ records: [span()] });
+
+    const scanned = await columnsScannedBy(async () => {
+      const { spans } = await storage.querySpans(planSpanQuery({ timeRange }));
+      expect(spans[0]).toMatchObject({ inputPreview: 'the input', outputPreview: 'the output' });
+    });
+
+    expect(scanned.flat()).not.toContain('input');
+    expect(scanned.flat()).not.toContain('output');
+    const previewLookup = scanned.find(columns => columns.includes('inputPreview'));
+    expect(previewLookup).not.toContain('error');
+  });
+
+  it('queries threads without scanning the input or output payloads when every preview is stored', async () => {
+    await storage.batchCreateSpans({ records: [span({ threadId: 'thread-rows', endedAt: null })] });
+    await storage.batchCreateSpans({ records: [span({ threadId: 'thread-rows' })] });
+
+    const scanned = await columnsScannedBy(async () => {
+      const { threads } = await storage.queryThreads(planThreadRowsQuery({ timeRange: { traces: timeRange } }));
+      expect(threads[0]).toMatchObject({ inputPreview: 'the input', outputPreview: 'the output' });
+    });
+
     expect(scanned.some(columns => columns.includes('inputPreview'))).toBe(true);
     expect(scanned.flat()).not.toContain('input');
     expect(scanned.flat()).not.toContain('output');
@@ -202,5 +241,88 @@ describe('DuckDB stored previews', () => {
     } finally {
       await legacy.close();
     }
+  });
+});
+
+describe('DuckDB payload lookups on a large span_events table', () => {
+  const big = new DuckDBStore({ path: ':memory:' });
+  let observability: ObservabilityStorage;
+  const pageRange = { from: '2026-05-01T00:00:00.000Z', to: '2026-05-02T00:00:00.000Z' };
+  const FILLER_ROWS = 300_000;
+  const root = (id: string, startedAt: Date): CreateSpanRecord => ({
+    traceId: id,
+    spanId: id,
+    parentSpanId: null,
+    name: 'root',
+    spanType: SpanType.AGENT_RUN,
+    isEvent: false,
+    threadId: 'thread-page',
+    startedAt,
+    endedAt: new Date(startedAt.getTime() + 30_000),
+    input: `input ${id}`,
+    output: `output ${id}`,
+    error: null,
+  });
+
+  beforeAll(async () => {
+    observability = (await big.getStore('observability'))!;
+    await observability.init();
+    // A chat that began before the filler and continues on the page, so its first trace is in the oldest row group.
+    await observability.batchCreateSpans({ records: [root('abcdef9', new Date(Date.UTC(2025, 11, 31, 12)))] });
+    await big.db.execute(
+      `INSERT INTO span_events (eventType, timestamp, cursorId, traceId, spanId, name, spanType, isEvent, endedAt, input, output)
+       SELECT 'end', ts, i, md5(i::VARCHAR), md5('span' || i), 'old', 'agent_run', false, ts, '"old"', '"old"'
+       FROM (SELECT i, TIMESTAMP '2026-01-01 00:00:00' + INTERVAL (i) SECOND AS ts FROM range(${FILLER_ROWS}) r(i))`,
+    );
+    // Random-looking ids and distinct times, as in real data. Otherwise DuckDB prunes on the ids'
+    // prefixes, or factors a time shared by every key tuple out of the OR, and no range is needed.
+    await observability.batchCreateSpans({
+      records: [0, 1].map(i => root(`abcdef${i}`, new Date(Date.UTC(2026, 4, 1, 12, i)))),
+    });
+    await big.db.execute(
+      `UPDATE span_events SET inputPreview = NULL, outputPreview = NULL, errorPreview = NULL,
+         hasInputPayload = NULL, hasOutputPayload = NULL, hasErrorPayload = NULL
+       WHERE traceId LIKE 'abcdef%'`,
+    );
+  });
+  afterAll(() => big.close());
+
+  /** Runs a store read, then re-runs its payload lookup to count the rows DuckDB read from the table. */
+  async function lookupRowsScanned(read: () => Promise<unknown>): Promise<number> {
+    const query = vi.spyOn(big.db, 'query');
+    await read();
+    const calls = query.mock.calls.slice();
+    query.mockRestore();
+    const lookup = calls.find(([sql]) => /NULLIF\(input|arg_max\(input,/.test(sql));
+    if (!lookup) throw new Error('Expected the read to run a payload lookup');
+    const [plan] = await big.db.query<{ explain_value: string }>(
+      `EXPLAIN (ANALYZE, FORMAT JSON) ${lookup[0]}`,
+      lookup[1] as unknown[],
+    );
+    const scanned = (node: { operator_rows_scanned?: number; children?: object[] }): number =>
+      (node.operator_rows_scanned ?? 0) + (node.children ?? []).reduce((sum: number, child) => sum + scanned(child), 0);
+    return scanned(JSON.parse(plan!.explain_value));
+  }
+
+  it.each<[string, () => Promise<unknown>]>([
+    [
+      'queryTraces',
+      () =>
+        observability.queryTraces(
+          planTraceQuery(parseTraceQueryRequest({ timeRange: pageRange, pagination: { page: 0, perPage: 10 } })),
+        ),
+    ],
+    [
+      'listTracesLight',
+      () =>
+        observability.listTracesLight({
+          filters: { startedAt: { start: new Date(pageRange.from), end: new Date(pageRange.to) } },
+          pagination: { page: 0, perPage: 10 },
+        }),
+    ],
+    ['querySpans', () => observability.querySpans(planSpanQuery({ timeRange: pageRange }))],
+    ['queryThreads', () => observability.queryThreads(planThreadRowsQuery({ timeRange: { traces: pageRange } }))],
+  ])('%s reads only the row groups that hold the page', async (_name, read) => {
+    expect(await lookupRowsScanned(read)).toBeLessThan((FILLER_ROWS * 2) / 3);
   });
 });

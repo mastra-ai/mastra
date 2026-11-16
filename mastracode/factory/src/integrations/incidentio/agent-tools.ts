@@ -51,16 +51,16 @@ function toolError(action: string, err: unknown): { error: string } {
  * to the project by an intake binding. Same authorization the HTTP detail
  * route enforces — an item outside these sources reads as not found.
  */
-async function routedSourceBoards(
+async function routedSourceIds(
   incidentio: IncidentioAgentToolsHost,
   orgId: string,
   factoryProjectId: string,
-): Promise<Record<string, string>> {
+): Promise<string[]> {
   const intake = incidentio.intakeStorage;
   await intake.ensureReady();
   const config = await intake.getConfig({ orgId, integrationIds: ['incidentio'] });
   const selection = config.incidentio;
-  if (!selection?.enabled) return {};
+  if (!selection?.enabled) return [];
   return scopeSourceIdsToProject({
     intake,
     orgId,
@@ -87,8 +87,8 @@ function createIncidentioGetIssueTool(incidentio: IncidentioAgentToolsHost, orgI
         // board run must not read follow-ups routed to another Factory or not
         // routed at all (same authorization and ordering as the HTTP detail
         // route: bindings are checked before any provider request).
-        const intakeBoards = await routedSourceBoards(incidentio, orgId, factoryProjectId);
-        if (Object.keys(intakeBoards).length === 0) {
+        const sourceIds = await routedSourceIds(incidentio, orgId, factoryProjectId);
+        if (sourceIds.length === 0) {
           return { error: `incident.io item "${issue}" was not found on the connected accounts.` };
         }
         // Resolve through intake dispatch so multi-account Platform deployments
@@ -97,7 +97,7 @@ function createIncidentioGetIssueTool(incidentio: IncidentioAgentToolsHost, orgI
           orgId,
           externalSource: { type: 'issue', externalId: issue },
         });
-        if (!dispatch || !dispatch.sourceId || !(dispatch.sourceId in intakeBoards)) {
+        if (!dispatch || !dispatch.sourceId || !sourceIds.includes(dispatch.sourceId)) {
           return { error: `incident.io item "${issue}" was not found on the connected accounts.` };
         }
         const detail = await incidentio.intake.getIssue({

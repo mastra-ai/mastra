@@ -6,11 +6,19 @@ import type {
   FactorySandboxContext,
 } from '@mastra/core/workspace';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { resolveSandboxEnv, sandboxBuildContext } from '../sandbox/sandbox-env.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { resolveProjectEnvironment } from '../workspace.js';
-import { environmentBuildContext, environmentBuildInputs, redactCredentials, runEnvironmentBuild } from './build.js';
-import type { EnvironmentBuildDeps } from './build.js';
+import {
+  BUILD_START_LEASE_MS,
+  environmentBuildContext,
+  environmentBuildInputs,
+  redactCredentials,
+  runEnvironmentBuild,
+  UNRESOLVED_BUILD_START_TIMEOUT_MS,
+} from './build.js';
+import type { EnvironmentBuildDeps, EnvironmentBuildTrigger } from './build.js';
 
 const SHA_A = 'a'.repeat(40);
 const SHA_B = 'b'.repeat(40);
@@ -102,10 +110,17 @@ async function recordBuild(
 ) {
   const project = await seed.projects.getById({ id: projectId });
   const environment = await resolveProjectEnvironment(seed.sourceControl.forIntegration('github'), project!);
+  const { buildEnvRevision } = sandboxBuildContext(
+    await resolveSandboxEnv(seed.sandboxEnvs, { orgId: 'org-1', projectId }),
+  );
   await seed.projects.update({
     orgId: 'org-1',
     id: projectId,
-    input: { lastBuildId: buildId, activeTemplateHeads: heads, lastBuildInputs: environmentBuildInputs(environment) },
+    input: {
+      lastBuildId: buildId,
+      activeTemplateHeads: heads,
+      lastBuildInputs: environmentBuildInputs(environment, buildEnvRevision),
+    },
   });
 }
 
@@ -136,6 +151,7 @@ function depsFor(
         getRepositoryAccess: async () => ({ token: 'ghs_x', cloneUrl: 'https://github.com/x/y' }) as never,
       },
     },
+    sandboxEnvs: seed.sandboxEnvs,
     now,
   };
 }
@@ -240,6 +256,35 @@ describe('runEnvironmentBuild', () => {
       ).resolves.toMatchObject({ outcome: 'started' });
     }
     expect(sandbox.starts).toHaveLength(edits.length);
+  });
+
+  it('rebuilds on schedule after a Build variable edit, never after a Runtime-only edit', async () => {
+    const { project } = await seedProject(seed, ['acme/api']);
+    const sandbox = new BuildingSandbox();
+    const set = (name: string, value: string, appliesTo: 'build' | 'runtime' | 'both') =>
+      seed.sandboxEnvs.set('org-1', project.id, { name, value, appliesTo }, 'user-1');
+    await set('PROOF_BUILD', 'b1', 'build');
+    await recordBuild(seed, project.id, 'build-ready-0', { 'acme/api': SHA_A });
+
+    await set('RUNTIME_ONLY', 'r1', 'runtime');
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'schedule' }),
+    ).resolves.toEqual({ outcome: 'skipped', reason: 'unchanged' });
+
+    await set('PROOF_BUILD', 'b2', 'build');
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'schedule' }),
+    ).resolves.toMatchObject({ outcome: 'started' });
+    const { buildRevision } = (await seed.sandboxEnvs.revisions('org-1', project.id))!;
+    expect(sandbox.starts[0]!.ctx).toMatchObject({ buildEnv: { PROOF_BUILD: 'b2' }, buildEnvRevision: buildRevision });
+    expect(sandbox.starts[0]!.ctx.buildEnv).not.toHaveProperty('RUNTIME_ONLY');
+  });
+
+  it('fingerprints the build revision only when there is one, and never a value', () => {
+    const environment = { settings: {}, repos: [] } as unknown as Parameters<typeof environmentBuildInputs>[0];
+    expect(environmentBuildInputs(environment, undefined)).toBe(environmentBuildInputs(environment));
+    expect(environmentBuildInputs(environment, 'rev-a')).not.toBe(environmentBuildInputs(environment));
+    expect(environmentBuildInputs(environment, 'rev-a')).not.toBe(environmentBuildInputs(environment, 'rev-b'));
   });
 
   it('rebuilds on schedule when the last build failed or is unknown to the provider', async () => {
@@ -563,7 +608,7 @@ describe('runEnvironmentBuild', () => {
     });
   });
 
-  it('never starts another build after an unrecorded one when the provider cannot list builds', async () => {
+  it('gives up on an unrecorded build the provider cannot list once it outlived the build wait', async () => {
     const { project } = await seedProject(seed, ['acme/api']);
     await seed.projects.update({ orgId: 'org-1', id: project.id, input: { buildOnPushEnabled: true } });
     const sandbox = new BuildingSandbox();
@@ -576,20 +621,157 @@ describe('runEnvironmentBuild', () => {
     };
     const deps = { ...depsFor(seed, sandbox, now), projects, sleep: async () => {} };
 
+    const startedAt = clock.getTime();
     await expect(runEnvironmentBuild(deps, { projectId: project.id, trigger: 'manual' })).resolves.toMatchObject({
       outcome: 'failed',
       reason: 'not_recorded',
     });
-    clock = new Date(clock.getTime() + 11 * 60_000);
-    // Build now included: the earlier start may still be running and can never be reconciled.
-    for (const trigger of ['schedule', 'push', 'manual', 'manual', 'schedule'] as const) {
-      expect(await runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger })).toEqual({
-        outcome: 'skipped',
-        reason: 'unresolved',
-      });
+    // The lapsed lease expired ten minutes in: that build, if it exists, started before then.
+    const lapsedAt = startedAt + BUILD_START_LEASE_MS;
+    const logger = { info: vi.fn() };
+    const at = async (ms: number, trigger: EnvironmentBuildTrigger) => {
+      clock = new Date(ms);
+      return runEnvironmentBuild({ ...depsFor(seed, sandbox, now), logger }, { projectId: project.id, trigger });
+    };
+    // Build now included: the earlier start may still be running and cannot be reconciled yet.
+    for (const [ms, trigger] of [
+      [lapsedAt + 60_000, 'schedule'],
+      [lapsedAt + 60_000, 'push'],
+      [lapsedAt + 10 * 60_000, 'manual'],
+      [lapsedAt + UNRESOLVED_BUILD_START_TIMEOUT_MS - 1, 'manual'],
+    ] as const) {
+      expect(await at(ms, trigger)).toEqual({ outcome: 'skipped', reason: 'unresolved' });
     }
     expect(sandbox.starts).toHaveLength(1);
-    expect(await seed.projects.getById({ id: project.id })).toMatchObject({ buildStartUncertain: true });
+    expect(await seed.projects.getById({ id: project.id })).toMatchObject({
+      buildStartUncertain: true,
+      buildStartUncertainSince: new Date(lapsedAt),
+    });
+
+    // Past the wait the build is treated as failed: Build now builds and clears the mark.
+    await expect(at(lapsedAt + UNRESOLVED_BUILD_START_TIMEOUT_MS, 'manual')).resolves.toMatchObject({
+      outcome: 'started',
+      buildId: 'build-2',
+    });
+    expect(await seed.projects.getById({ id: project.id })).toMatchObject({
+      lastBuildId: 'build-2',
+      buildStartUncertain: false,
+      buildStartUncertainSince: null,
+    });
+    const gaveUp = logger.info.mock.calls.filter(
+      ([msg]) => msg === 'environment build gave up on an unrecorded build start',
+    );
+    expect(gaveUp).toEqual([
+      [
+        'environment build gave up on an unrecorded build start',
+        { factoryProjectId: project.id, trigger: 'manual', uncertainSince: new Date(lapsedAt).toISOString() },
+      ],
+    ]);
+    // From here the recorded build-2 governs: it is running, so a push waits for it.
+    await expect(at(lapsedAt + UNRESOLVED_BUILD_START_TIMEOUT_MS + 60_000, 'push')).resolves.toEqual({
+      outcome: 'skipped',
+      reason: 'in_progress',
+      buildId: 'build-2',
+    });
+    expect(sandbox.starts).toHaveLength(2);
+  });
+
+  it('lets a schedule or push build once an unrecorded start timed out', async () => {
+    const { project } = await seedProject(seed, ['acme/api']);
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { buildOnPushEnabled: true } });
+    const sandbox = new BuildingSandbox();
+    delete sandbox.builds.list;
+    await recordBuild(seed, project.id, 'build-0', { 'acme/api': SHA_A });
+    // A run took the lease and died: it may have started a build nobody recorded.
+    await seed.projects.claimBuildStart({
+      id: project.id,
+      token: 'dead-run',
+      leaseMs: BUILD_START_LEASE_MS,
+      now: clock,
+    });
+    const lapsedAt = clock.getTime() + BUILD_START_LEASE_MS;
+    heads.byBranch.set('acme/api@main', SHA_B);
+
+    clock = new Date(lapsedAt + 60_000);
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'push' }),
+    ).resolves.toEqual({ outcome: 'skipped', reason: 'unresolved' });
+    clock = new Date(lapsedAt + UNRESOLVED_BUILD_START_TIMEOUT_MS);
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'push' }),
+    ).resolves.toMatchObject({ outcome: 'started', buildId: 'build-1', heads: { 'acme/api': SHA_B } });
+    expect(await seed.projects.getById({ id: project.id })).toMatchObject({
+      buildStartUncertain: false,
+      lastPushBuildAt: clock,
+    });
+  });
+
+  it('dates an uncertain mark stored before its timestamp by the first claim that reads it', async () => {
+    const { project } = await seedProject(seed, ['acme/api']);
+    const sandbox = new BuildingSandbox();
+    delete sandbox.builds.list;
+    // A mark written before `build_start_uncertain_since` existed: no date, no claim.
+    await seed.storage.ops.updateMany('factory_projects', { id: project.id }, { build_start_uncertain: true });
+
+    const firstSeen = clock.getTime();
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'manual' }),
+    ).resolves.toEqual({ outcome: 'skipped', reason: 'unresolved' });
+    expect(await seed.projects.getById({ id: project.id })).toMatchObject({
+      buildStartUncertainSince: new Date(firstSeen),
+    });
+    clock = new Date(firstSeen + UNRESOLVED_BUILD_START_TIMEOUT_MS - 1);
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'manual' }),
+    ).resolves.toEqual({ outcome: 'skipped', reason: 'unresolved' });
+    clock = new Date(firstSeen + UNRESOLVED_BUILD_START_TIMEOUT_MS);
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'manual' }),
+    ).resolves.toMatchObject({ outcome: 'started', buildId: 'build-1' });
+    expect(await seed.projects.getById({ id: project.id })).toMatchObject({ buildStartUncertain: false });
+  });
+
+  it('builds on a saved environment change only when a template input changed', async () => {
+    const { project, github } = await seedProject(seed, ['acme/api']);
+    const sandbox = new BuildingSandbox();
+    const settings = () =>
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'settings' });
+
+    // Before the first build there is no template to keep current.
+    expect(await settings()).toEqual({ outcome: 'skipped', reason: 'no_template' });
+    await recordBuild(seed, project.id, 'build-0', { 'acme/api': SHA_A });
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { activeTemplateId: 'tpl-0' } });
+
+    // A new head alone is a push's business, and the check never calls GitHub.
+    heads.byBranch.set('acme/api@main', SHA_B);
+    const { getBranchHead } = await import('../integrations/github/commits.js');
+    vi.mocked(getBranchHead).mockClear();
+    expect(await settings()).toEqual({ outcome: 'skipped', reason: 'unchanged' });
+    expect(getBranchHead).not.toHaveBeenCalled();
+    expect(sandbox.gets).toEqual([]);
+
+    const [link] = await github.projectRepositories.listByProject({ orgId: 'org-1', factoryProjectId: project.id });
+    await github.projectRepositories.update({ orgId: 'org-1', id: link!.id, input: { setupCommand: 'pnpm i' } });
+    await expect(settings()).resolves.toMatchObject({
+      outcome: 'started',
+      buildId: 'build-1',
+      heads: { 'acme/api': SHA_B },
+    });
+    expect(sandbox.starts.map(start => start.ctx.repos?.[0]?.setupCommand)).toEqual(['pnpm i']);
+
+    // The same save again, while that build runs or once it is ready, builds nothing more.
+    sandbox.statusOf = () => 'building';
+    expect(await settings()).toEqual({ outcome: 'skipped', reason: 'unchanged' });
+    sandbox.statusOf = () => 'ready';
+    expect(await settings()).toEqual({ outcome: 'skipped', reason: 'unchanged' });
+
+    // A second change that lands while the build runs waits for it, then builds.
+    sandbox.statusOf = () => 'building';
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { workspaceSetupCommand: 'pnpm build' } });
+    expect(await settings()).toEqual({ outcome: 'skipped', reason: 'in_progress', buildId: 'build-1' });
+    sandbox.statusOf = () => 'ready';
+    await expect(settings()).resolves.toMatchObject({ outcome: 'started', buildId: 'build-2' });
+    expect(sandbox.starts).toHaveLength(2);
   });
 
   it('keeps the push window open when a push finds a build already running', async () => {
@@ -704,8 +886,9 @@ describe('environmentBuildContext', () => {
   it('serves recorded heads and mints per-repository access', async () => {
     const getRepositoryAccess = vi.fn(async () => ({ token: 't', cloneUrl: 'u' }) as never);
     const ctx = environmentBuildContext(
-      { id: 'p1', orgId: 'org-1' },
+      { id: 'p1', orgId: 'org-1', name: 'API factory' },
       {
+        factoryName: 'API factory',
         repos: [
           {
             projectRepositoryId: 'l1',
@@ -725,6 +908,8 @@ describe('environmentBuildContext', () => {
       { getRepositoryAccess },
     );
     expect(ctx.sessionId).toBe('environment-build:p1');
+    expect(ctx.factoryId).toBe('p1');
+    expect(ctx.factoryName).toBe('API factory');
     expect(ctx.repos?.[0]?.setupCommand).toBe('pnpm i');
     expect(ctx.workspaceSetupCommand).toBe('pnpm build');
     expect(ctx.workingDirectory).toBe('/workspace');

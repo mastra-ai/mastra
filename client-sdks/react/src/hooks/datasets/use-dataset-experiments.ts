@@ -42,8 +42,6 @@ export const datasetExperimentQueryOptions = (
   tanstackQueryOptions({
     queryKey: ['dataset-experiment', datasetId, experimentId],
     queryFn: () => client.getDatasetExperiment(datasetId, experimentId),
-    gcTime: 0,
-    staleTime: 0,
     refetchInterval: query => (isInProgress(query.state.data?.status) ? POLL_INTERVAL_MS : false),
   });
 
@@ -128,16 +126,10 @@ export const useDatasetExperiment = <TData = DatasetExperimentResponse>({
   queryOptions?: MastraQueryOptions<DatasetExperimentResponse, TData, DatasetExperimentQueryKey>;
 }): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
-  const { queryKey, queryFn, gcTime, staleTime, refetchInterval } = datasetExperimentQueryOptions(
-    client,
-    datasetId,
-    experimentId,
-  );
+  const { queryKey, queryFn, refetchInterval } = datasetExperimentQueryOptions(client, datasetId, experimentId);
   return useQuery<DatasetExperimentResponse, Error, TData, DatasetExperimentQueryKey>({
     queryKey,
     queryFn,
-    gcTime,
-    staleTime,
     refetchInterval,
     ...queryOptions,
   });

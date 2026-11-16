@@ -2,7 +2,6 @@
 title: "Reference: Content similarity scorer | Evals"
 description: "The createContentSimilarityScorer() function measures the textual similarity between two strings, providing a score that indicates how closely they match."
 packages:
-  - "@mastra/core"
   - "@mastra/evals"
 ---
 
@@ -21,14 +20,16 @@ The `createContentSimilarityScorer()` function accepts a single options object w
     type: 'boolean',
     required: false,
     defaultValue: 'true',
-    description: 'Whether to ignore case differences when comparing strings.',
+    description:
+      'Whether to ignore case differences when comparing strings. Defaults to `true` only when no options object is passed. If you pass an options object, an omitted value is treated as `false`.',
   },
   {
     name: 'ignoreWhitespace',
     type: 'boolean',
     required: false,
     defaultValue: 'true',
-    description: 'Whether to normalize whitespace when comparing strings.',
+    description:
+      'Whether to normalize whitespace when comparing strings. Defaults to `true` only when no options object is passed. If you pass an options object, an omitted value is treated as `false`.',
   },
 ]}
 />
@@ -42,17 +43,12 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
   {
     name: 'runId',
     type: 'string',
-    description: 'The id of the run (optional).',
+    description: 'The id of the run.',
   },
   {
     name: 'preprocessStepResult',
     type: 'object',
     description: 'Object with processed input and output: { processedInput: string, processedOutput: string }',
-  },
-  {
-    name: 'analyzeStepResult',
-    type: 'object',
-    description: 'Object with similarity: { similarity: number }',
   },
   {
     name: 'score',

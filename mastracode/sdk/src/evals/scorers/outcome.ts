@@ -25,7 +25,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { createScorer, filterRun } from '@mastra/core/evals';
 
-import { isBuildCommand, isTestCommand, getExitCode } from './classify-command.js';
+import { isBuildCommand, isTestCommand, getExitCode, isSuccessResult } from './classify-command.js';
 import type { ExtractedToolCall } from './extract-tools.js';
 import { extractToolCalls } from './extract-tools.js';
 
@@ -89,26 +89,32 @@ function isTestArgs(args: Record<string, unknown>): boolean {
   return isTestCommand(String(args.command ?? ''));
 }
 
+function isForegroundCommand(result: ExtractedToolCall): boolean {
+  return result.args.background !== true;
+}
+
 /**
  * Score build/typecheck outcome (final state).
  */
 function scoreBuild(execResults: ExtractedToolCall[]): DimensionResult {
-  const builds = execResults.filter(r => r.toolName === 'execute_command' && isBuildArgs(r.args));
+  const builds = execResults.filter(
+    r => r.toolName === 'execute_command' && isForegroundCommand(r) && isBuildArgs(r.args),
+  );
   if (builds.length === 0) return { score: 0, detail: 'No build/typecheck ran', applicable: false };
 
   const last = builds[builds.length - 1]!;
   if (last.isError) return { score: 0, detail: 'Build/typecheck tool errored', applicable: true };
 
   const exitCode = getExitCode(last.result);
-  if (exitCode === 0) return { score: 1, detail: 'Build/typecheck passed', applicable: true };
   if (exitCode !== null && exitCode !== 0)
     return { score: 0, detail: `Build failed (exit ${exitCode})`, applicable: true };
+  if (typeof last.result === 'string') return { score: 1, detail: 'Build/typecheck passed', applicable: true };
 
-  // Fallback: check result text for TS errors
-  const text = typeof last.result === 'string' ? last.result : JSON.stringify(last.result ?? '');
+  const text = JSON.stringify(last.result ?? '');
   if (/error TS\d+|Cannot find module|is not assignable/i.test(text)) {
     return { score: 0, detail: 'Build failed (TypeScript errors in output)', applicable: true };
   }
+  if (isSuccessResult(last.result)) return { score: 1, detail: 'Build/typecheck passed', applicable: true };
 
   return { score: THRESHOLDS.ambiguousExitScore, detail: 'Build ran, outcome unclear', applicable: true };
 }
@@ -117,24 +123,27 @@ function scoreBuild(execResults: ExtractedToolCall[]): DimensionResult {
  * Score test outcome (final state).
  */
 function scoreTests(execResults: ExtractedToolCall[]): DimensionResult {
-  const tests = execResults.filter(r => r.toolName === 'execute_command' && isTestArgs(r.args));
+  const tests = execResults.filter(
+    r => r.toolName === 'execute_command' && isForegroundCommand(r) && isTestArgs(r.args),
+  );
   if (tests.length === 0) return { score: 0, detail: 'No tests ran', applicable: false };
 
   const last = tests[tests.length - 1]!;
   if (last.isError) return { score: 0, detail: 'Test command errored', applicable: true };
 
   const exitCode = getExitCode(last.result);
-  if (exitCode === 0) return { score: 1, detail: 'Tests passed', applicable: true };
   if (exitCode !== null && exitCode !== 0)
     return { score: 0, detail: `Tests failed (exit ${exitCode})`, applicable: true };
+  if (typeof last.result === 'string') return { score: 1, detail: 'Tests passed', applicable: true };
 
-  const text = typeof last.result === 'string' ? last.result : JSON.stringify(last.result ?? '');
-  if (/\d+ (?:tests? )?passed|✓|PASS/i.test(text) && !/\bfail(?:ed|ure)?\b|\berror\b/i.test(text)) {
-    return { score: 1, detail: 'Tests passed (inferred)', applicable: true };
-  }
+  const text = JSON.stringify(last.result ?? '');
   if (/\bFAIL\b|failed|✗|✘/i.test(text)) {
     return { score: 0, detail: 'Tests failed (inferred)', applicable: true };
   }
+  if (/\d+ (?:tests? )?passed|✓|PASS/i.test(text) && !/\bfail(?:ed|ure)?\b|\berror\b/i.test(text)) {
+    return { score: 1, detail: 'Tests passed (inferred)', applicable: true };
+  }
+  if (isSuccessResult(last.result)) return { score: 1, detail: 'Tests passed', applicable: true };
 
   return { score: THRESHOLDS.ambiguousExitScore, detail: 'Tests ran, outcome unclear', applicable: true };
 }
@@ -218,14 +227,17 @@ function scoreRegression(execResults: ExtractedToolCall[]): DimensionResult {
     ['Build', isBuildArgs],
     ['Tests', isTestArgs],
   ] as const) {
-    const cmds = execResults.filter(r => r.toolName === 'execute_command' && filter(r.args));
+    const cmds = execResults.filter(r => r.toolName === 'execute_command' && isForegroundCommand(r) && filter(r.args));
     if (cmds.length < 2) continue;
 
     let sawPass = false;
     let sawRegression = false;
     for (const cmd of cmds) {
-      const exit = getExitCode(cmd.result);
-      if (exit === 0) {
+      const exitCode = getExitCode(cmd.result);
+      const passed = isSuccessResult(cmd.result, cmd.isError);
+      const failed = cmd.isError || (exitCode !== null && exitCode !== 0);
+
+      if (passed) {
         if (sawRegression) {
           // Recovered from regression
           regressions.push({ label, recovered: true });
@@ -233,7 +245,7 @@ function scoreRegression(execResults: ExtractedToolCall[]): DimensionResult {
         }
         sawPass = true;
       }
-      if (sawPass && exit !== null && exit !== 0) {
+      if (sawPass && failed) {
         sawRegression = true;
       }
     }

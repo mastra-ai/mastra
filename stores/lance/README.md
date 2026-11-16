@@ -26,7 +26,7 @@ await vectorStore.createIndex({
 ## Documentation
 
 - [LanceDB integration guide](https://mastra.ai/integrations/databases/lancedb)
-- [Lance vector reference](https://mastra.ai/reference/vectors/lance)
+- [Lance vector reference](https://mastra.ai/integrations/vectors/lance)
 
 ## Changelog
 

@@ -158,7 +158,7 @@ async function pushToRepo(repoName) {
           cwd: tempDir,
         },
       );
-    } catch (error) {
+    } catch {
       console.log(`No main branch found in local, creating new main branch`);
       execSync(
         `
@@ -200,7 +200,7 @@ async function pushToRepo(repoName) {
     `,
         { stdio: 'inherit', cwd: tempDir },
       );
-    } catch (error) {
+    } catch {
       console.log(`No changes to push to beta branch, skipping`);
     }
 

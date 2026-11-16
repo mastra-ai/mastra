@@ -7,16 +7,10 @@ import {
   ComboboxRoot,
 } from '@mastra/playground-ui/components/Combobox';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { useDatasetItems } from '@mastra/react/hooks/datasets';
 import { sameValue } from './experiment-trigger-options';
 import type { DatasetOption, FieldPopupContainer } from './experiment-trigger-options';
-
-/** "5 items · latest", or the pinned version when one is picked under Advanced. */
-function datasetDetail(itemCount: number | undefined, version: number | undefined) {
-  if (itemCount === undefined) return undefined;
-  const items = `${itemCount} ${itemCount === 1 ? 'item' : 'items'}`;
-  return `${items} · ${version === undefined ? 'latest' : `v${version}`}`;
-}
 
 export interface DatasetFieldProps {
   datasets: DatasetOption[];
@@ -51,7 +45,16 @@ export function DatasetField({ datasets, datasetId, version, onDatasetChange, co
         isItemEqualToValue={sameValue}
         autoHighlight
       >
-        <ComboboxInput placeholder="Select a dataset">{datasetDetail(itemCount, version)}</ComboboxInput>
+        <ComboboxInput placeholder="Select a dataset">
+          {itemCount !== undefined && (
+            <Metadata>
+              <Metadata.Item>
+                {itemCount} {itemCount === 1 ? 'item' : 'items'}
+              </Metadata.Item>
+              <Metadata.Item>{version === undefined ? 'latest' : `v${version}`}</Metadata.Item>
+            </Metadata>
+          )}
+        </ComboboxInput>
         <ComboboxContent container={container}>
           <ComboboxEmpty>No datasets found</ComboboxEmpty>
           <ComboboxList>

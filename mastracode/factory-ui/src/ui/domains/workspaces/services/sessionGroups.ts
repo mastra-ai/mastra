@@ -4,11 +4,12 @@ import type { InstalledBoardInfo } from '../../../../api/types';
 import { orderedBoards } from '../../factory/boardCatalog';
 import { SESSION_ACTIVITY_STATUSES, SESSION_STATUS_LABELS, sessionOwners } from './sessionRows';
 import type { SessionActivityStatus, SessionListRow } from './sessionRows';
+import { SLACK_SESSION_BRANCH_PREFIX } from './user-sessions';
 
 export const SESSION_GROUP_BYS = ['board', 'status', 'owner', 'none'] as const;
 export type SessionGroupBy = (typeof SESSION_GROUP_BYS)[number];
 
-export const DEFAULT_SESSION_GROUP_BY: SessionGroupBy = 'board';
+export const DEFAULT_SESSION_GROUP_BY: SessionGroupBy = 'none';
 
 export const SESSION_GROUP_BY_LABELS: Record<SessionGroupBy, string> = {
   board: 'Board',
@@ -21,11 +22,7 @@ export const SESSION_GROUP_BY_OPTIONS: readonly DropdownMenuRadioOption<SessionG
   value => ({ value, label: SESSION_GROUP_BY_LABELS[value] }),
 );
 
-export function isSessionGroupBy(value: unknown): value is SessionGroupBy {
-  return SESSION_GROUP_BYS.some(groupBy => groupBy === value);
-}
-
-export type SessionGroupIcon = 'board' | 'review' | 'user' | 'status' | 'owner' | 'all';
+export type SessionGroupIcon = 'board' | 'review' | 'user' | 'slack' | 'status' | 'owner' | 'all';
 
 export interface SessionGroupHeading {
   key: string;
@@ -45,6 +42,7 @@ export interface SessionGroupContext {
 }
 
 const USER_GROUP: SessionGroupHeading = { key: 'user', label: 'User', icon: 'user' };
+const SLACK_GROUP: SessionGroupHeading = { key: 'slack', label: 'Slack', icon: 'slack' };
 const ALL_GROUP: SessionGroupHeading = { key: 'all', label: 'All', icon: 'all' };
 
 function boardGroupKey(boardId: string): string {
@@ -66,14 +64,19 @@ const STATUS_GROUPS: readonly SessionGroupHeading[] = SESSION_ACTIVITY_STATUSES.
 }));
 
 const GROUP_KEY_OF_ROW: Record<SessionGroupBy, (row: SessionListRow) => string> = {
-  board: row => (row.board === undefined ? USER_GROUP.key : boardGroupKey(row.board)),
-  status: row => statusGroupKey(row.status),
+  board: row =>
+    row.session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX)
+      ? SLACK_GROUP.key
+      : row.board === undefined
+        ? USER_GROUP.key
+        : boardGroupKey(row.board),
+  status: row => statusGroupKey(row.cardStatus ?? row.status),
   owner: row => ownerGroupKey(row.session.userId),
   none: () => ALL_GROUP.key,
 };
 
 function boardHeading(boardId: string, label: string): SessionGroupHeading {
-  return { key: boardGroupKey(boardId), label, icon: boardId === 'review' ? 'review' : 'board' };
+  return { key: boardGroupKey(boardId), label, icon: 'board' };
 }
 
 function uncatalogedBoardIds(rows: readonly SessionListRow[], catalogIds: ReadonlySet<string>): string[] {
@@ -94,6 +97,7 @@ function boardGroupHeadings(
     ...catalog.map(board => boardHeading(board.id, board.title)),
     ...uncatalogedBoards.map(({ id }) => boardHeading(id, id.charAt(0).toUpperCase() + id.slice(1))),
     USER_GROUP,
+    SLACK_GROUP,
   ];
 }
 
@@ -150,9 +154,13 @@ export function groupSessionRows(
   });
 }
 
-export function collapsedRowsKeepingActive(rows: readonly SessionListRow[]): SessionListRow[] {
-  const visible = rows.slice(0, COLLAPSED_GROUP_ROW_COUNT);
-  const open = rows.find(row => row.active);
-  if (open && !visible.includes(open)) visible.push(open);
+export function collapsedRowsKeepingActive(rows: readonly SessionListRow[], additionalRowCount = 0): SessionListRow[] {
+  const collapsed = rows.slice(0, COLLAPSED_GROUP_ROW_COUNT);
+  // A card whose open session is listed under it keeps the card in view.
+  const open = rows.find(row => row.active || row.childRows?.some(child => child.active));
+  const openOutsideFold = open !== undefined && !collapsed.includes(open);
+  const visible = rows.slice(0, collapsed.length + Number(openOutsideFold) + additionalRowCount);
+  // The open row already occupies a slot, including when a later batch reaches it.
+  if (open && !visible.includes(open)) visible[visible.length - 1] = open;
   return visible;
 }

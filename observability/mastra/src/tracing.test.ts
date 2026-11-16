@@ -33,12 +33,11 @@ expect.extend({
         message: () => `expected ${received} not to be a valid OpenTelemetry span ID (64-bit, 16 hex chars)`,
         pass: true,
       };
-    } else {
-      return {
-        message: () => `expected ${received} to be a valid OpenTelemetry span ID (64-bit, 16 hex chars)`,
-        pass: false,
-      };
     }
+    return {
+      message: () => `expected ${received} to be a valid OpenTelemetry span ID (64-bit, 16 hex chars)`,
+      pass: false,
+    };
   },
 
   toBeValidTraceId(received: string) {
@@ -50,24 +49,19 @@ expect.extend({
         message: () => `expected ${received} not to be a valid OpenTelemetry trace ID (128-bit, 32 hex chars)`,
         pass: true,
       };
-    } else {
-      return {
-        message: () => `expected ${received} to be a valid OpenTelemetry trace ID (128-bit, 32 hex chars)`,
-        pass: false,
-      };
     }
+    return {
+      message: () => `expected ${received} to be a valid OpenTelemetry trace ID (128-bit, 32 hex chars)`,
+      pass: false,
+    };
   },
 });
 
 // TypeScript declarations for custom matchers
 declare module 'vitest' {
-  interface Assertion<T = any> {
-    toBeValidSpanId(): T;
-    toBeValidTraceId(): T;
-  }
-  interface AsymmetricMatchersContaining {
-    toBeValidSpanId(): any;
-    toBeValidTraceId(): any;
+  interface Matchers<R, T> {
+    toBeValidSpanId(): R;
+    toBeValidTraceId(): R;
   }
 }
 

@@ -85,9 +85,8 @@ export class LanceFilterTranslator extends BaseFilterTranslator<LanceVectorFilte
           // Check if key is a nested path or a field
           if (this.isNestedObject(value) && !this.isDateObject(value)) {
             return this.processNestedObject(key, value);
-          } else {
-            return this.processField(key, value);
           }
+          return this.processField(key, value);
         });
         return conditions.join(' AND ');
       }
@@ -99,9 +98,8 @@ export class LanceFilterTranslator extends BaseFilterTranslator<LanceVectorFilte
 
         if (this.isNestedObject(value) && !this.isDateObject(value)) {
           return this.processNestedObject(key!, value);
-        } else {
-          return this.processField(key!, value);
         }
+        return this.processField(key!, value);
       }
     }
 
@@ -131,9 +129,8 @@ export class LanceFilterTranslator extends BaseFilterTranslator<LanceVectorFilte
       if (keys.length === 1 && this.isOperator(keys[0]!)) {
         if (this.isLogicalOperator(keys[0])) {
           return `(${this.processLogicalOperator(keys[0], condObj[keys[0]] as unknown[])})`;
-        } else {
-          throw new Error(BaseFilterTranslator.ErrorMessages.UNSUPPORTED_OPERATOR(keys[0]));
         }
+        throw new Error(BaseFilterTranslator.ErrorMessages.UNSUPPORTED_OPERATOR(keys[0]));
       }
 
       // Handle multiple fields within a logical condition (implicit AND)
@@ -173,9 +170,8 @@ export class LanceFilterTranslator extends BaseFilterTranslator<LanceVectorFilte
 
       if (this.isNestedObject(obj[key]) && !this.isDateObject(obj[key])) {
         return this.processNestedObject(nestedPath, obj[key]);
-      } else {
-        return this.processField(nestedPath, obj[key]);
       }
+      return this.processField(nestedPath, obj[key]);
     });
 
     return conditions.join(' AND ');

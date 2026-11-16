@@ -348,6 +348,10 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
           });
           try {
             const result = await handle.wait();
+            // A process the command left behind can still hold its output after
+            // the command returns. Nothing gets a PID to manage it once the
+            // handle is released, so stop it now.
+            if (handle.exitCode === undefined) await handle.kill();
 
             this.logger.debug('Command completed', {
               sandbox: this.name,

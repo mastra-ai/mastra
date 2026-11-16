@@ -7,12 +7,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMemoryConfig } from '@mastra/react/hooks/memory';
-import { RefreshCcwIcon, ExternalLink, X, Pencil } from 'lucide-react';
 import { useState } from 'react';
 import { useWorkingMemory } from '../../context/agent-working-memory-context';
 import { CodeDisplay } from './code-display';
@@ -142,7 +145,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                 </>
               ) : (
                 <Txt as="p" variant="body" tone="muted">
-                  No working memory content yet. Click "Edit Working Memory" to add content.
+                  No working memory content yet. Click "Edit working memory" to add content.
                 </Txt>
               )}
             </>
@@ -152,7 +155,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
               language={editState.value.trim().startsWith('{') ? 'json' : 'markdown'}
               lineNumbers={false}
               showCopyButton={false}
-              placeholder="Enter working memory content..."
+              placeholder="Enter working memory content"
               value={editState.value}
               onChange={value => setEditState(state => ({ ...state, value }))}
               editable={!isUpdating}
@@ -166,13 +169,13 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
-                        icon={<Pencil />}
+                        icon={<IconPencil />}
                         type="button"
                         aria-disabled="true"
                         onClick={event => event.preventDefault()}
                         className="cursor-not-allowed opacity-50"
                       >
-                        Edit Working Memory
+                        Edit working memory
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
@@ -180,8 +183,8 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                     </TooltipContent>
                   </Tooltip>
                 ) : (
-                  <Button icon={<Pencil />} onClick={() => setIsEditing(true)} disabled={isUpdating}>
-                    Edit Working Memory
+                  <Button icon={<IconPencil />} onClick={() => setIsEditing(true)} disabled={isUpdating}>
+                    Edit working memory
                   </Button>
                 )}
               </>
@@ -199,10 +202,10 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                   }}
                   disabled={isUpdating}
                 >
-                  {isUpdating ? <RefreshCcwIcon className="h-3 w-3 animate-spin" /> : 'Save Changes'}
+                  {isUpdating ? <IconArrowRotateCounterClockwise className="h-3 w-3 animate-spin" /> : 'Save changes'}
                 </Button>
                 <Button
-                  icon={<X />}
+                  icon={<IconCrossMedium />}
                   onClick={() => {
                     setEditState({ source: workingMemoryData, value: workingMemoryData ?? '' });
                     setIsEditing(false);
@@ -232,7 +235,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
             <Txt as="span" variant="body" className="block">
               Learn about working memory
             </Txt>
-            <ExternalLink className="h-3 w-3" />
+            <IconSquareArrowTopRight className="h-3 w-3" />
           </a>
         </div>
       )}

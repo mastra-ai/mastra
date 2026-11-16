@@ -82,6 +82,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       error: vi.fn(),
       update: vi.fn(),
       exportSpan: vi.fn(),
+      snapshot: vi.fn(),
       getParentSpanId: vi.fn(() => parentSpan?.id),
       findParent: vi.fn(),
       executeInContext: vi.fn(async (fn: () => Promise<any>) => fn()),
@@ -148,7 +149,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
       expect(agentRunSpan.error).toHaveBeenCalledTimes(1);
-      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endTree: true });
+      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ outcome: 'error', endTree: true });
       expect(agentRunSpan.error.mock.calls[0][0].error.message).toBe('prepare step failed');
       expect(agentRunSpan.endTree).not.toHaveBeenCalled();
     } finally {
@@ -177,7 +178,13 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
 
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
-      expect(agentRunSpan.error).toHaveBeenCalledWith({ error: prepareError, endTree: true });
+      expect(agentRunSpan.error).toHaveBeenCalledWith({
+        error: prepareError,
+        outcome: 'error',
+        stopReason: 'runtime_error',
+        stopReasonContext: null,
+        endTree: true,
+      });
       expect(agentRunSpan.endTree).not.toHaveBeenCalled();
     } finally {
       createRunSpy.mockRestore();
@@ -215,8 +222,10 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
 
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
-      expect(agentRunSpan.error).toHaveBeenCalled();
-      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endTree: true });
+      expect(agentRunSpan.error).toHaveBeenCalledTimes(2);
+      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ outcome: 'error', endSpan: false });
+      expect(agentRunSpan.error.mock.calls[1][0]).toMatchObject({ outcome: 'error', endTree: true });
+      expect(agentRunSpan.error.mock.calls[1][0].error).toBe(agentRunSpan.error.mock.calls[0][0].error);
       expect(agentRunSpan.endTree).not.toHaveBeenCalled();
     } finally {
       spy.mockRestore();
@@ -283,8 +292,10 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
 
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
-      expect(agentRunSpan.error).toHaveBeenCalled();
-      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endTree: true });
+      expect(agentRunSpan.error).toHaveBeenCalledTimes(2);
+      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ outcome: 'error', endSpan: false });
+      expect(agentRunSpan.error.mock.calls[1][0]).toMatchObject({ outcome: 'error', endTree: true });
+      expect(agentRunSpan.error.mock.calls[1][0].error).toBe(agentRunSpan.error.mock.calls[0][0].error);
       expect(agentRunSpan.endTree).not.toHaveBeenCalled();
       expect(agentRunSpan.error.mock.calls[0][0].error).toBeInstanceOf(MastraError);
       expect(agentRunSpan.error.mock.calls[0][0].error.message).toBe(
@@ -453,8 +464,10 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
 
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
-      expect(agentRunSpan.error).toHaveBeenCalled();
-      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endTree: true });
+      expect(agentRunSpan.error).toHaveBeenCalledTimes(2);
+      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ outcome: 'error', endSpan: false });
+      expect(agentRunSpan.error.mock.calls[1][0]).toMatchObject({ outcome: 'error', endTree: true });
+      expect(agentRunSpan.error.mock.calls[1][0].error).toBe(agentRunSpan.error.mock.calls[0][0].error);
       expect(agentRunSpan.endTree).not.toHaveBeenCalled();
     } finally {
       spy.mockRestore();
@@ -569,8 +582,11 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
       expect(agentRunSpan.error).not.toHaveBeenCalled();
+      // Suspension ends only the agent span: the suspending tool may still be running and owns its own span.
       expect(agentRunSpan.end).toHaveBeenCalledWith({
-        endTree: true,
+        outcome: 'suspend',
+        stopReason: 'approval_required',
+        stopReasonContext: { toolName: 'findUserTool', toolCallId: 'call-1' },
         output: {
           status: 'suspended',
           reason: 'tool-call-approval',
@@ -648,6 +664,8 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       expect(agentRunSpan.error).not.toHaveBeenCalled();
       expect(agentRunSpan.end).toHaveBeenCalledWith({
         endTree: true,
+        outcome: 'abort',
+        stopReason: 'caller_cancelled',
         output: {
           status: 'aborted',
           reason: 'abort',

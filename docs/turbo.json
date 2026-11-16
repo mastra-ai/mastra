@@ -4,7 +4,20 @@
   "tasks": {
     "build": {
       "outputs": ["build/**"],
-      "outputLogs": "new-only"
+      "outputLogs": "new-only",
+      "env": [
+        "ALGOLIA_APP_ID",
+        "ALGOLIA_SEARCH_API_KEY",
+        "GA_ID",
+        "HS_FORM_GUID",
+        "HS_FORM_GUID_LEARN",
+        "HS_PORTAL_ID",
+        "KAPA_GROUP_ID",
+        "KAPA_INTEGRATION_ID",
+        "POSTHOG_API_KEY",
+        "POSTHOG_HOST",
+        "VERCEL_ENV"
+      ]
     }
   }
 }

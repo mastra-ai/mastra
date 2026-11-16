@@ -89,7 +89,13 @@ function settingsSchema(options: E2BFactorySandboxOptions): PublicSchema<E2BFact
   return { ...SETTINGS_SCHEMA, properties } as PublicSchema<E2BFactorySandboxSettings>;
 }
 
-export interface E2BFactorySandboxOptions extends Omit<E2BSandboxOptions, 'id' | 'sandboxId' | 'template'> {
+export interface E2BFactorySandboxOptions extends Omit<E2BSandboxOptions, 'id' | 'sandboxId' | 'template' | 'env'> {
+  /**
+   * Environment variables of every session sandbox. A function receives each
+   * session's context, so a credential can go to one factory's sessions only:
+   * `ctx => (ctx.factoryId === id ? { TOKEN } : {})`.
+   */
+  env?: Record<string, string> | ((ctx: FactorySandboxContext) => Record<string, string>);
   /** Provider-side defaults used when a setting is unset. Never stored by factory. */
   defaults?: Partial<E2BFactorySandboxSettings>;
 }
@@ -137,9 +143,10 @@ export class E2BFactorySandbox extends FactorySandbox<E2BFactorySandboxSettings>
   }
 
   create(ctx: FactorySandboxContext, settings: E2BFactorySandboxSettings): E2BSandbox {
-    const { defaults, ...options } = this.#options;
+    const { defaults, env, ...options } = this.#options;
     return new E2BSandbox({
       ...options,
+      ...(env ? { env: typeof env === 'function' ? env(ctx) : env } : {}),
       id: ctx.sessionId,
       sandboxId: ctx.sandboxId,
       template: this.template(ctx, settings),
@@ -157,9 +164,12 @@ export class E2BFactorySandbox extends FactorySandbox<E2BFactorySandboxSettings>
 
   #templateOptions(ctx: FactorySandboxContext, settings: E2BFactorySandboxSettings): RepoTemplateOptions {
     const { defaults } = this.#options;
-    const { resolveHead: _resolveHead, ...rest } = ctx;
+    // Build env goes in only with its revision: without one, `buildEnv`
+    // values are hashed into the template name.
+    const { resolveHead: _resolveHead, buildEnv, buildEnvRevision, ...rest } = ctx;
     return {
       ...rest,
+      ...(buildEnvRevision ? { buildEnvRevision, ...(buildEnv ? { buildEnv } : {}) } : {}),
       cpuCount: settings.cpuCount ?? defaults?.cpuCount ?? DEFAULT_SETTINGS.cpuCount,
       memoryMB: settings.memoryMb ?? defaults?.memoryMb ?? DEFAULT_SETTINGS.memoryMb,
     };

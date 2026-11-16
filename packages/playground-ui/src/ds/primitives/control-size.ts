@@ -42,6 +42,16 @@ export const controlSizeClasses: Record<ControlSize, string> = {
   lg: 'h-control-lg text-label',
 };
 
+// Inner spacing per rung, as custom properties so every pill-shaped control reads the same two
+// numbers: `--control-px`, the inset from a pill's end to its label (a glyph side takes 2px less,
+// since a glyph draws inside its box), and `--control-gap`, between an icon and its label. Button,
+// a FilterBar chip and an InputGroup set them from here; nothing restates the values.
+export const controlSpacing: Record<ControlSize, string> = {
+  sm: '[--control-px:.9em] [--control-gap:0.3125rem]',
+  md: '[--control-px:.9em] [--control-gap:0.375rem]',
+  lg: '[--control-px:1em] [--control-gap:0.375rem]',
+};
+
 export type ControlTriggerVisualVariant = 'default' | 'ghost';
 
 // Open ("popup-open") state per variant. `default` washes through `--surface-tint`, the

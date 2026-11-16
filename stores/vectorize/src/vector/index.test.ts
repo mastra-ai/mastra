@@ -55,7 +55,7 @@ function waitUntilReady(vector: CloudflareVector, indexName: string) {
     const interval = setInterval(async () => {
       try {
         const stats = await vector.describeIndex({ indexName });
-        if (!!stats) {
+        if (stats) {
           clearInterval(interval);
           resolve(true);
         }

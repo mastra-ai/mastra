@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 
+import { listSearchProps } from './list-search-props';
 import { SearchInput } from './search-input';
 import type { SearchInputProps } from './search-input';
 import { Button } from '@/ds/components/Button';
@@ -11,7 +12,7 @@ const meta: Meta<typeof SearchInput> = {
   parameters: { layout: 'centered' },
   args: {
     label: 'Search spans',
-    placeholder: 'Search spans...',
+    placeholder: 'Search spans',
   },
 };
 
@@ -60,6 +61,23 @@ function CollapsibleSearch(props: Pick<SearchInputProps, 'label' | 'placeholder'
 }
 
 export const Collapsible: Story = {
-  args: { label: 'Search code', placeholder: 'Search...' },
+  args: { label: 'Search code', placeholder: 'Search' },
   render: args => <CollapsibleSearch {...args} />,
+};
+
+/** A list page's search: keeps its own text, reports it after a pause, and Cmd/Ctrl+Shift+F focuses it. */
+function ListPageSearch(props: Pick<SearchInputProps, 'label' | 'placeholder'>) {
+  const [search, setSearch] = useState('');
+
+  return (
+    <div className="grid w-80 gap-2">
+      <SearchInput {...listSearchProps} {...props} onValueChange={setSearch} />
+      <p className="text-caption text-muted-foreground">Searching for: {search || '(nothing)'}</p>
+    </div>
+  );
+}
+
+export const ListPage: Story = {
+  args: { label: 'Search agents', placeholder: 'Search by name or instructions' },
+  render: args => <ListPageSearch {...args} />,
 };

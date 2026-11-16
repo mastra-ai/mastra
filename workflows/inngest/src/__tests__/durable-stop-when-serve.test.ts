@@ -186,8 +186,7 @@ describe('Inngest agent stopWhen (#25851)', () => {
 
     expect(timedOut).toBe(false);
     expect(modelCalls).toBe(1);
-    // COR-1467: Inngest's stream envelope does not emit the leading start chunk.
-    expect(chunkTypes).toEqual(['step-start', 'tool-call', 'tool-result']);
+    expect(chunkTypes).toEqual(['start', 'step-start', 'tool-call', 'tool-result']);
     expect(streamError).toMatchObject({ name: 'TypeError', message: 'stopWhen failed' });
   });
 });

@@ -45,10 +45,15 @@ function successfulOutput(result: Awaited<ReturnType<typeof executeTarget>>, ste
   return step.output;
 }
 
-describe('workflow experiment branch resume', () => {
+describe.each([1, 2] as const)('workflow experiment branch resume (storage v%s)', storageVersion => {
   it('resumes a later suspended branch when an earlier branch has no data', async () => {
     const id = 'multi-branch-partial';
-    const workflow = createWorkflow({ id, inputSchema: z.object({}), outputSchema: z.any() })
+    const workflow = createWorkflow({
+      id,
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+      options: { storageVersion },
+    })
       .parallel([makeSuspendingBranch('branch-a'), makeSuspendingBranch('branch-b')])
       .commit();
     registerWorkflow(id, workflow);
@@ -65,11 +70,17 @@ describe('workflow experiment branch resume', () => {
       id: 'nested-branch',
       inputSchema: z.object({}),
       outputSchema: z.object({ from: z.string() }),
+      options: { storageVersion },
     })
       .then(makeSuspendingBranch('inner'))
       .commit();
     const id = 'multi-branch-nested-first';
-    const workflow = createWorkflow({ id, inputSchema: z.object({}), outputSchema: z.any() })
+    const workflow = createWorkflow({
+      id,
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+      options: { storageVersion },
+    })
       .parallel([nested, makeSuspendingBranch('branch-b')])
       .commit();
     registerWorkflow(id, workflow, nested);
@@ -86,11 +97,17 @@ describe('workflow experiment branch resume', () => {
       id: 'nested-resume-branch',
       inputSchema: z.object({}),
       outputSchema: z.object({ from: z.string() }),
+      options: { storageVersion },
     })
       .then(makeSuspendingBranch('inner'))
       .commit();
     const id = 'multi-branch-nested-resume';
-    const workflow = createWorkflow({ id, inputSchema: z.object({}), outputSchema: z.any() })
+    const workflow = createWorkflow({
+      id,
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+      options: { storageVersion },
+    })
       .parallel([nested, makeSuspendingBranch('branch-b')])
       .commit();
     registerWorkflow(id, workflow, nested);

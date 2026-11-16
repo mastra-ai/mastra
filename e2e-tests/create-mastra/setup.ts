@@ -10,10 +10,10 @@ import {
   startRegistry,
   stopRegistry,
 } from '../_local-registry-setup/index.js';
-import { getSuitePublishFilters } from '../_local-registry-setup/publish-roots.js';
+import { E2E_TAG, getSuitePublishFilters } from '../_local-registry-setup/publish-roots.js';
 
 const rootDir = fileURLToPath(new URL('../..', import.meta.url));
-const tag = 'create-mastra-e2e-test';
+const tag = E2E_TAG;
 const generatedMastraPackages = [
   'mastra',
   '@mastra/core',

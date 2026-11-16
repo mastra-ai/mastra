@@ -297,7 +297,9 @@ See the [`SandboxProcessManager` reference](/reference/workspace/process-manager
 
 :::note
 
-The Vercel Sandbox SDK doesn't expose a stdin channel for running commands, so `handle.sendStdin()` throws. Filesystem mounting (FUSE) is also not supported by this provider.
+The Vercel Sandbox SDK doesn't expose a stdin channel for running commands, so `handle.sendStdin()` throws.
+
+The Mastra adapter doesn't implement the Workspace filesystem mounting API. The underlying Vercel Sandbox product supports [Filesystem in Userspace (FUSE) mounts](https://vercel.com/docs/sandbox/mount-remote-storage). You can configure a mount directly through the underlying SDK instance exposed by `sandbox.sandbox`, but Mastra doesn't manage its lifecycle.
 
 :::
 

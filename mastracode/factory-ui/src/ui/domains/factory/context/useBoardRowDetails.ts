@@ -1,9 +1,10 @@
 import { useContext } from 'react';
 
+import type { BoardRowDetails } from './BoardRowDetailsContext';
 import { BoardRowDetailsContext } from './BoardRowDetailsContext';
 
-export function useBoardRowDetails(): (open: boolean) => void {
-  const setRowDetailsOpen = useContext(BoardRowDetailsContext);
-  if (!setRowDetailsOpen) throw new Error('useBoardRowDetails must be used within VirtualBoardWindow');
-  return setRowDetailsOpen;
+export function useBoardRowDetails(): BoardRowDetails {
+  const rowDetails = useContext(BoardRowDetailsContext);
+  if (!rowDetails) throw new Error('useBoardRowDetails must be used within VirtualBoardWindow');
+  return rowDetails;
 }

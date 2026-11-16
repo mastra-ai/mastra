@@ -40,7 +40,7 @@ describe('Composer plan feedback', () => {
       });
 
       const composer = await screen.findByRole('textbox', { name: 'Message' });
-      await waitFor(() => expect(composer).toHaveAttribute('placeholder', 'Give feedback on this plan…'));
+      await waitFor(() => expect(composer).toHaveAttribute('placeholder', 'Give feedback on this plan'));
       await user.type(composer, 'Cover the rollback path too.{enter}');
       await waitForMutationsIdle(client);
 

@@ -1,4 +1,5 @@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { SkillSimpleForm } from '@mastra/playground-ui/domains/skills/skill-simple-form';
 import { useAuthCapabilities, useCurrentUser } from '@mastra/react/hooks/auth';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
@@ -14,7 +15,6 @@ import { useStarterUserMessage } from '@/domains/agent-builder/hooks/use-starter
 import { useStoredSkill } from '@/domains/agent-builder/hooks/use-stored-skill';
 import { SkillWorkspaceLayout } from '@/domains/agent-builder/layouts/skill-workspace-layout';
 import { SkillChatComposer } from '@/domains/agents/components/agent-cms-pages/skill-chat-composer';
-import { SkillSimpleForm } from '@/domains/agents/components/agent-cms-pages/skill-simple-form';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export default function AgentBuilderSkillsEdit() {

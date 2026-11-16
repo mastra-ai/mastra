@@ -11,11 +11,13 @@ import {
   TRACE_DATE_FROM_PARAM,
   TRACE_DATE_PRESET_PARAM,
   TRACE_DATE_TO_PARAM,
+  TRACE_FILTER_GROUP_PARAM,
   TRACE_LIST_MODE_PARAM,
   TRACE_PROPERTY_FILTER_PARAM_BY_FIELD,
   TRACE_ROOT_ENTITY_TYPE_PARAM,
   TRACE_STATUS_PARAM,
 } from '../traces/trace-filters';
+import type { TraceFilterGroup, TraceFilterToken } from '../traces/trace-query-filters';
 import type { TraceDatePreset } from '../traces/types';
 import type { DatePreset, DateRange } from './hooks/use-metrics';
 import type { MetricsDimensionalFilter } from './metrics-filters';
@@ -59,12 +61,23 @@ export type DrilldownScope = {
   entityName?: string;
   threadId?: string;
   resourceId?: string;
+  environment?: string;
+  sessionId?: string;
+  userId?: string;
   model?: string;
   provider?: string;
   /** Trace-only. Valid for drill-downs from "errors" segments. */
   status?: 'running' | 'success' | 'error';
   /** Overrides date preset with explicit window bounds. */
   window?: TimeRange;
+  /** Set by cards on pages that span several projects; the page decides how to open that project. */
+  projectId?: string;
+  /**
+   * Traces with at least one span of these types for this entity, nested or not, unlike
+   * `rootEntityType` + `entityName`, which only match the entity that started the trace.
+   * `status: 'error'` keeps traces where such a span failed. Traces only.
+   */
+  span?: { spanTypes: readonly string[]; entityName: string; status?: 'error' };
 };
 
 /** A card's navigation callback. The call site decides where a scope leads. */
@@ -121,6 +134,18 @@ function appendArray(params: URLSearchParams, key: string, values: string[] | un
   for (const v of values) if (v) params.append(key, v);
 }
 
+/** An "and" group of `spans.*` tokens: the Traces page matches them on one span. */
+function spanFilterGroup({ spanTypes, entityName, status }: NonNullable<DrilldownScope['span']>): TraceFilterGroup {
+  const nodes: TraceFilterToken[] = [
+    spanTypes.length === 1
+      ? { id: 'type', fieldId: 'spans.spanType', value: spanTypes[0] ?? '' }
+      : { id: 'type', fieldId: 'spans.spanType', value: [...spanTypes], operatorId: 'in' },
+    { id: 'entity', fieldId: 'spans.entityName', value: entityName },
+  ];
+  if (status) nodes.push({ id: 'status', fieldId: 'spans.status', value: status });
+  return { id: 'metrics-span', logic: 'and', nodes };
+}
+
 /** Build a relative URL to the Traces page pre-filtered by the dashboard
  *  filters + per-card scope. */
 export function buildTracesDrilldownUrl({
@@ -153,14 +178,20 @@ export function buildTracesDrilldownUrl({
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.threadId, scope.threadId ?? dashboardFilter.threadId);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.resourceId, scope.resourceId ?? dashboardFilter.resourceId);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.runId, dashboardFilter.runId);
-  setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.sessionId, dashboardFilter.sessionId);
+  setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.sessionId, scope.sessionId ?? dashboardFilter.sessionId);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.requestId, dashboardFilter.requestId);
-  setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.userId, dashboardFilter.userId);
+  setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.userId, scope.userId ?? dashboardFilter.userId);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.organizationId, dashboardFilter.organizationId);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.experimentId, dashboardFilter.experimentId);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.serviceName, dashboardFilter.serviceName);
-  setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.environment, dashboardFilter.environment);
+  setIfDefined(
+    params,
+    TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.environment,
+    scope.environment ?? dashboardFilter.environment,
+  );
   appendArray(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.tags, dashboardFilter.tags);
+
+  if (scope.span) params.append(TRACE_FILTER_GROUP_PARAM, JSON.stringify(spanFilterGroup(scope.span)));
 
   const query = params.toString();
   return query ? `${tracesBasePath}?${query}` : tracesBasePath;

@@ -36,22 +36,22 @@ describe('useSetAgentModelTool', () => {
 
   it('writes the model provider/name pair to the form', async () => {
     const { tool, form } = renderTool();
-    await tool.execute!({ model: { provider: 'openai', name: 'gpt-4o' } } as any);
+    await tool.execute!({ model: { provider: 'openai', name: 'gpt-4o' } });
     expect(form().getValues('model')).toEqual({ provider: 'openai', name: 'gpt-4o' });
   });
 
   it('cleans provider ids with sub-paths (e.g. openai.responses -> openai)', async () => {
     const { tool, form } = renderTool();
-    await tool.execute!({ model: { provider: 'openai.responses', name: 'gpt-4o' } } as any);
+    await tool.execute!({ model: { provider: 'openai.responses', name: 'gpt-4o' } });
     expect(form().getValues('model')).toEqual({ provider: 'openai', name: 'gpt-4o' });
   });
 
   it('ignores empty provider or name', async () => {
     const { tool, form } = renderTool();
-    await tool.execute!({ model: { provider: '', name: 'gpt-4o' } } as any);
+    await tool.execute!({ model: { provider: '', name: 'gpt-4o' } });
     expect(form().getValues('model')).toBeUndefined();
 
-    await tool.execute!({ model: { provider: 'openai', name: '' } } as any);
+    await tool.execute!({ model: { provider: 'openai', name: '' } });
     expect(form().getValues('model')).toBeUndefined();
   });
 

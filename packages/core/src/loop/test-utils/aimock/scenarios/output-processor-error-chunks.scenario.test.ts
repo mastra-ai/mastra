@@ -19,7 +19,6 @@ import type { ErrorProcessor, Processor } from '../../../../processors';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 describeForAllEngines('AIMock loop scenario: output processors and error chunks', engine => {
-  const itFailsOnInngest = engine === 'inngest' ? it.fails : it;
   const getMock = useLoopScenarioAimock();
 
   function createRecordingProcessor(seen: string[]): Processor {
@@ -67,8 +66,7 @@ describeForAllEngines('AIMock loop scenario: output processors and error chunks'
     expect(seen).toContain('text-delta');
   });
 
-  // Diverges on Inngest; not yet investigated.
-  itFailsOnInngest('shows output processors a terminal error exactly once', async () => {
+  it('shows output processors a terminal error exactly once', async () => {
     const seen: string[] = [];
 
     const errorProcessor: ErrorProcessor = {

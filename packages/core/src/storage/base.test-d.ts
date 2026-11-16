@@ -1,6 +1,5 @@
 import { describe, expectTypeOf, it } from 'vitest';
-import { DOMAIN_KEYS } from './base';
-import type { StorageDomains } from './base';
+import type { DOMAIN_KEYS, StorageDomains } from './base';
 
 /**
  * DOMAIN_KEYS must cover every key of StorageDomains. The exhaustiveness

@@ -9,11 +9,11 @@ import { useSetPermissionForCategoryMutation } from '../useAgentControllerPermis
 import { useAgentControllerPermissions } from '../useAgentControllerPermissions';
 
 const controllerId = 'code';
-const resourceId = 'resource-test';
-const permissionsUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions/${resourceId}/permissions`;
-const categoryUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions/${resourceId}/permissions/category`;
+const sessionId = 'session-test';
+const permissionsUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions/${sessionId}/permissions`;
+const categoryUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions/${sessionId}/permissions/category`;
 
-const hookArgs = { agentControllerId: controllerId, resourceId, baseUrl: TEST_BASE_URL, enabled: true };
+const hookArgs = { agentControllerId: controllerId, sessionId, baseUrl: TEST_BASE_URL, enabled: true };
 
 describe('agent-controller permission hooks', () => {
   describe('when permissions are updated', () => {

@@ -255,7 +255,7 @@ Import and initialize `dd-trace` before all other modules. This allows its auto-
 
 If you see errors like:
 
-```
+```text
 Error: No native build was found for runtime=node abi=137 platform=linuxglibc arch=x64
 ```
 
@@ -272,6 +272,8 @@ This indicates a Node.js version compatibility issue with `dd-trace`'s native mo
 When using bundlers like esbuild, webpack, or the Mastra CLI bundler, you may need to mark `dd-trace` and its dependencies as external:
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
 export const mastra = new Mastra({
   bundler: {
     externals: [
@@ -377,6 +379,9 @@ Import and initialize `dd-trace` at the very top of your application's entry fil
 Add the `DatadogBridge` to your Mastra observability config:
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
@@ -433,7 +438,7 @@ For most bridge users, agent mode is the right choice. APM data can't be sent in
 
 With the `DatadogBridge`, your traces maintain proper hierarchy across `dd-trace` and Mastra boundaries. Service calls made by tools and processors appear under the correct Mastra span:
 
-```
+```text
 HTTP POST /api/chat (from web framework instrumentation)
 └── agent.orchestrator (from Mastra via DatadogBridge)
     ├── chat gpt-5.4 (LLM call)

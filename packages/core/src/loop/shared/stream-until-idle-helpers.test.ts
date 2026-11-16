@@ -61,6 +61,7 @@ const runIdleLoopWithDeps = (deps: {
     {
       activeStreams: new Map(),
       bgManager: {
+        config: {},
         listTasks: deps.listTasks,
         stream: () => deps.bgStream,
       } as any,
@@ -80,6 +81,65 @@ async function drain(stream: ReadableStream<any>): Promise<any[]> {
   }
   return chunks;
 }
+
+describe('runIdleLoop detaches pending durable continuations (COR-1489)', () => {
+  for (const abortAfterDetach of [false, true]) {
+    it(`a late continuation ${abortAfterDetach ? 'still honors explicit cancellation' : 'only loses its observer'}`, async () => {
+      const bg = makeBgStream();
+      const pending = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const signal = new AbortController();
+      const activeStreams = new Map<string, () => void>();
+      const cleanup = vi.fn();
+      const abort = vi.fn();
+      const continuation = vi.fn(async () => {
+        pending.resolve();
+        await release.promise;
+        return {
+          runId: 'late-run',
+          fullStream: streamOf(textChunks('final answer')),
+        };
+      });
+      const ctx = await runIdleLoop(
+        makeAgent(),
+        { memory: { thread: 'thread-1', resource: 'user-1' }, abortSignal: signal.signal },
+        {
+          activeStreams,
+          bgManager: {
+            config: {},
+            listTasks: async () => ({ tasks: [{ id: 'task-1' }], total: 1 }),
+            stream: () => bg.stream,
+          } as any,
+        },
+        async () => ({ fullStream: streamOf(textChunks('first answer')), runId: 'first-run' }),
+        continuation,
+        (_first, context) => context,
+        { detachOnCancel: true, onAbortActive: abort, onForceClose: cleanup },
+      );
+      const reader = ctx.combinedStream.getReader();
+      while ((await reader.read()).value?.type !== 'finish') {
+        /* drain first segment */
+      }
+      bg.push(completedChunk('task-1'));
+      await pending.promise;
+      await reader.cancel();
+      expect(activeStreams.size).toBe(2);
+      expect(cleanup).not.toHaveBeenCalled();
+      if (abortAfterDetach) signal.abort();
+      release.resolve();
+      if (abortAfterDetach) {
+        await vi.waitFor(() => expect(abort).toHaveBeenCalledTimes(2));
+        expect(cleanup).not.toHaveBeenCalled();
+      } else {
+        await vi.waitFor(() => expect(activeStreams.size).toBe(0));
+        expect(cleanup).not.toHaveBeenCalled();
+        expect(abort).not.toHaveBeenCalled();
+      }
+      expect(activeStreams.size).toBe(0);
+      expect(continuation).toHaveBeenCalledTimes(1);
+    });
+  }
+});
 
 describe('runIdleLoop adopts tasks started by a prior wrapper (#26841)', () => {
   it('stays open for a pre-existing running task and runs a continuation when it completes', async () => {
@@ -214,7 +274,7 @@ describe('runIdleLoop adopts tasks started by a prior wrapper (#26841)', () => {
       {},
       {
         activeStreams: new Map(),
-        bgManager: { listTasks, stream: () => bg.stream } as any,
+        bgManager: { config: {}, listTasks, stream: () => bg.stream } as any,
       },
       async () => ({ fullStream: streamOf(textChunks('first answer')), runId: 'run-1' }),
       continuation,
@@ -267,7 +327,7 @@ describe('runIdleLoop adopts tasks started by a prior wrapper (#26841)', () => {
     const ctx = await runIdleLoop(
       makeAgent(),
       {},
-      { activeStreams: new Map(), bgManager: { listTasks: vi.fn(), stream: () => bg.stream } as any },
+      { activeStreams: new Map(), bgManager: { config: {}, listTasks: vi.fn(), stream: () => bg.stream } as any },
       async () => ({ fullStream: firstStream, runId: 'run-1' }),
       continuation,
       (_first: unknown, loopCtx: any) => loopCtx,

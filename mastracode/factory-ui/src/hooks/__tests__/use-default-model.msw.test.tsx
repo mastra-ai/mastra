@@ -11,7 +11,7 @@ const URL = `${TEST_BASE_URL}/web/config/default-model`;
 
 describe('default model hooks', () => {
   it('loads the personal default model', async () => {
-    server.use(http.get(URL, () => HttpResponse.json({ modelId: 'openai/gpt-5' })));
+    server.use(http.get(URL, () => HttpResponse.json({ modelId: 'openai/gpt-5', thinkingLevel: null })));
 
     const { result } = renderHookWithProviders(() => useDefaultModelQuery());
 
@@ -22,7 +22,7 @@ describe('default model hooks', () => {
     let modelId: string | null = null;
     let body: unknown;
     server.use(
-      http.get(URL, () => HttpResponse.json({ modelId })),
+      http.get(URL, () => HttpResponse.json({ modelId, thinkingLevel: null })),
       http.put(URL, async ({ request }) => {
         body = await request.json();
         modelId = 'anthropic/claude-sonnet-4-5';
@@ -48,7 +48,7 @@ describe('default model hooks', () => {
   it('clears the default model and refreshes the query', async () => {
     let modelId: string | null = 'openai/gpt-5';
     server.use(
-      http.get(URL, () => HttpResponse.json({ modelId })),
+      http.get(URL, () => HttpResponse.json({ modelId, thinkingLevel: null })),
       http.delete(URL, () => {
         modelId = null;
         return HttpResponse.json({ ok: true, modelId });

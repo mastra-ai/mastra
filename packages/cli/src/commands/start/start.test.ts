@@ -25,6 +25,7 @@ vi.mock('../../utils/logger', () => ({
 
 vi.mock('../utils', () => ({
   shouldSkipDotenvLoading: vi.fn().mockReturnValue(true),
+  getSourceMapNodeArgs: vi.fn(() => []),
 }));
 
 // start() registers SIGINT/SIGTERM handlers on every call. Snapshot the

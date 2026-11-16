@@ -1,6 +1,7 @@
 import { matchPath, useLocation } from 'react-router';
 
-import { isSettingsSection, type SettingsSection } from '../settingsSections';
+import { isSettingsSection } from '../settingsSections';
+import type { SettingsSection } from '../settingsSections';
 
 /**
  * The active settings section is the `:section` URL segment of

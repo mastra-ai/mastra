@@ -23,6 +23,7 @@ This page covers the [`server`](/reference/configuration#server-options) configu
 - **[Server Adapters](/docs/server/server-adapters)**: Run Mastra with Express, Hono, or your own HTTP server instead of the generated server.
 - **[Custom Adapters](/docs/server/custom-adapters)**: Build adapters for frameworks not officially supported.
 - **[Mastra Client SDK](/docs/server/mastra-client)**: Type-safe client for calling agents, workflows, and tools from browser or server environments.
+- **[Built-in MCP server](/docs/server/mcp)**: Let MCP clients such as Claude Code and Cursor call your agents, workflows, and tools at `/api/mcp`, with the same auth and permissions as the HTTP API.
 - **[A2A](/docs/connections/a2a)**: Expose agents through A2A agent cards and task streams, plus push notifications.
 - **[Authentication](/docs/auth/overview)**: Secure endpoints with JWT, Clerk, Supabase, Firebase, Auth0, or WorkOS.
 
@@ -93,6 +94,12 @@ This behavior is only configurable by using [server adapters](/docs/server/serve
 
 Mastra requires `module` and `moduleResolution` settings compatible with modern Node.js. Legacy options like `CommonJS` or `node` aren't supported.
 
+The `types` option below requires `@types/node`, which is included in projects created with [`create-mastra`](/reference/cli/create-mastra). Add it if your project doesn't have it already:
+
+```bash npm2yarn
+npm install -D @types/node
+```
+
 ```json {4-5} title="tsconfig.json"
 {
   "compilerOptions": {
@@ -103,6 +110,7 @@ Mastra requires `module` and `moduleResolution` settings compatible with modern 
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "skipLibCheck": true,
+    "types": ["node"],
     "noEmit": true,
     "outDir": "dist"
   },

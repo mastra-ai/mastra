@@ -150,7 +150,7 @@ const processor = new SystemPromptScrubber({
 
 ## Extended usage example
 
-For production streaming, set `bufferSize` (for example `bufferSize: 200`) so `SystemPromptScrubber` makes one detection call per sentence instead of one per chunk. Buffering also catches content that is split across chunks. Text then reaches the client in sentence-sized pieces.
+For production streaming, set `bufferSize` (for example `bufferSize: 200`) so `SystemPromptScrubber` makes one detection call per sentence instead of one per chunk. Buffering also catches content that's split across chunks. Text then reaches the client in sentence-sized pieces.
 
 When using `SystemPromptScrubber` as an output processor, it's recommended to combine it with `BatchPartsProcessor` to optimize performance. The `BatchPartsProcessor` batches stream chunks together before passing them to the scrubber, reducing the number of LLM calls required for detection.
 

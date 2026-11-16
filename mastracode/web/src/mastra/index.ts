@@ -19,6 +19,7 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { AgentBrowser } from '@mastra/agent-browser';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
@@ -35,6 +36,7 @@ import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webh
 import { IncidentioIntegration } from '@mastra/factory/integrations/incidentio/integration';
 import { JiraIntegration } from '@mastra/factory/integrations/jira/integration';
 import { PlatformJiraIntegration } from '@mastra/factory/integrations/platform/jira/integration';
+import { PlatformVantaIntegration } from '@mastra/factory/integrations/platform/vanta/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
@@ -235,6 +237,7 @@ const linear =
 // visible `jira` connections. Partial direct configuration falls back
 // to Platform Jira when Platform credentials are available.
 const jiraBaseUrl = process.env.JIRA_BASE_URL?.trim();
+const jiraApiBaseUrl = process.env.JIRA_API_BASE_URL?.trim();
 const jiraEmail = process.env.JIRA_EMAIL?.trim();
 const jiraApiToken = process.env.JIRA_API_TOKEN?.trim();
 const jiraDirectVars = [jiraBaseUrl, jiraEmail, jiraApiToken];
@@ -249,6 +252,7 @@ const jira =
   jiraBaseUrl && jiraEmail && jiraApiToken
     ? new JiraIntegration({
         baseUrl: jiraBaseUrl,
+        ...(jiraApiBaseUrl ? { apiBaseUrl: jiraApiBaseUrl } : {}),
         email: jiraEmail,
         apiToken: jiraApiToken,
       })
@@ -263,6 +267,9 @@ const jira =
 // Platform credentials are configured.
 const incidentioApiKey = process.env.INCIDENT_IO_API_KEY?.trim();
 const incidentio = incidentioApiKey ? new IncidentioIntegration({ apiKey: incidentioApiKey }) : undefined;
+
+// Vanta vulnerability intake through Platform-managed (MastraConnect) Vanta connections.
+const vanta = platformCredentialsConfigured ? new PlatformVantaIntegration() : undefined;
 
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
 // (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, DATABASE_URL, …) never leak into
@@ -328,35 +335,41 @@ const storage = databaseUrl
     });
 const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectionString: databaseUrl }) : undefined;
 
+const slackAppToken = process.env.SLACK_APP_TOKEN?.trim();
+const slackSigningSecret = process.env.SLACK_APP_SIGNING_SECRET?.trim();
+
 // Deployment-stable secret for OAuth/link `state` signing. Shared by the
 // factory's integration signer and the channel-account-link deep link so both
 // sign/verify with the same key: webhook secret first, then the WorkOS cookie
-// password, then the Slack signing secret so a Slack-only deployment still has
+// password, then a Slack transport secret so a Slack-only deployment still has
 // a stable signer. Unset → per-process random secret (single-process local dev
 // only).
 const stateSecret =
   process.env.GITHUB_APP_WEBHOOK_SECRET ||
   process.env.WORKOS_COOKIE_PASSWORD ||
-  process.env.SLACK_APP_SIGNING_SECRET ||
+  slackSigningSecret ||
+  slackAppToken ||
   undefined;
 
-// Slack channels + account linking. Optional: the Slack adapter validates the
-// signing secret at construction, so the integration is only built when the
-// Slack app env is configured. Repo-backed Slack threads come from the
-// factory's source-control owner (GitHub) — the integration wires itself.
-const slackSigningSecret = process.env.SLACK_APP_SIGNING_SECRET?.trim();
-const slack = slackSigningSecret
-  ? new SlackIntegration({
-      signingSecret: slackSigningSecret,
-      botToken: process.env.SLACK_APP_BOT_TOKEN,
-      clientId: process.env.SLACK_APP_CLIENT_ID?.trim(),
-      clientSecret: process.env.SLACK_APP_CLIENT_SECRET?.trim(),
-      // Slack requires an HTTPS redirect_uri, which locally is the tunnel
-      // origin rather than the app's own public URL.
-      oidcRedirectBaseUrl: process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL,
-      uiOrigin: process.env.MASTRACODE_PUBLIC_URL,
-    })
-  : undefined;
+// Slack channels + account linking. Socket Mode is selected when an app-level
+// token is configured; otherwise Slack uses HTTP webhook mode. Repo-backed
+// Slack threads come from the factory's source-control owner (GitHub) — the
+// integration wires itself.
+const slack =
+  slackAppToken || slackSigningSecret
+    ? new SlackIntegration({
+        mode: slackAppToken ? 'socket' : 'webhook',
+        appToken: slackAppToken,
+        signingSecret: slackSigningSecret,
+        botToken: process.env.SLACK_APP_BOT_TOKEN,
+        clientId: process.env.SLACK_APP_CLIENT_ID?.trim(),
+        clientSecret: process.env.SLACK_APP_CLIENT_SECRET?.trim(),
+        // Slack requires an HTTPS redirect_uri, which locally is the tunnel
+        // origin rather than the app's own public URL.
+        oidcRedirectBaseUrl: process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL,
+        uiOrigin: process.env.MASTRACODE_PUBLIC_URL,
+      })
+    : undefined;
 
 const integrations = [
   ...(github ? [github] : []),
@@ -364,6 +377,7 @@ const integrations = [
   ...(linear ? [linear] : []),
   ...(jira ? [jira] : []),
   ...(incidentio ? [incidentio] : []),
+  ...(vanta ? [vanta] : []),
   ...(slack ? [slack] : []),
 ];
 
@@ -398,15 +412,21 @@ const sandbox =
           env: localSandboxEnv(),
         });
 
+// One headless Chromium per session thread, so sessions don't share tabs.
+const browser =
+  process.env.FACTORY_BROWSER?.trim() === 'local' ? new AgentBrowser({ headless: true, scope: 'thread' }) : undefined;
+
 export const factory = new MastraFactory({
   auth,
   secretEncryption,
   integrations,
   configVersion: factoryConfigVersion,
   // Providers every signed-in account may run on this server's own credentials,
-  // e.g. `amazon-bedrock` with AWS credentials + AWS_REGION in the environment.
+  // e.g. `amazon-bedrock` with AWS credentials + AWS_REGION, or `google-vertex`
+  // with Application Default Credentials + GOOGLE_VERTEX_PROJECT and GOOGLE_VERTEX_LOCATION.
   deploymentModelProviders: process.env.FACTORY_DEPLOYMENT_MODEL_PROVIDERS?.split(','),
   sandbox,
+  browser,
   // Per-replica cap on concurrent Factory background dispatches. Unset means
   // the dispatcher default; invalid and non-positive values are ignored.
   dispatcher: {

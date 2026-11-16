@@ -86,6 +86,37 @@ export const useInfiniteDatasets = <TData = DatasetRecord[]>({
   return { ...query, setEndOfListElement };
 };
 
+// The datasetIds filter accepts at most 100 ids per request.
+const DATASET_IDS_PER_REQUEST = 100;
+
+/**
+ * Datasets matching the given ids, in one request per 100 ids, e.g. to name the datasets of listed
+ * experiments without paging through every dataset. Ids without a dataset are absent from the result.
+ */
+export const useDatasetsByIds = ({
+  datasetIds,
+}: {
+  datasetIds: readonly string[];
+}): UseQueryResult<DatasetRecord[], Error> => {
+  const client = useMastraClient();
+  const uniqueIds = [...new Set(datasetIds)].toSorted();
+
+  return useQuery({
+    queryKey: ['datasets', 'by-ids', uniqueIds],
+    enabled: uniqueIds.length > 0,
+    queryFn: async () => {
+      const batches: string[][] = [];
+      for (let index = 0; index < uniqueIds.length; index += DATASET_IDS_PER_REQUEST) {
+        batches.push(uniqueIds.slice(index, index + DATASET_IDS_PER_REQUEST));
+      }
+      const responses = await Promise.all(batches.map(batch => client.listDatasets({ datasetIds: batch })));
+      return responses.flatMap(response => response.datasets);
+    },
+    // Loading more experiments adds ids; keep the names already resolved meanwhile.
+    placeholderData: previousData => previousData,
+  });
+};
+
 /**
  * Hook to fetch a single dataset by ID
  *

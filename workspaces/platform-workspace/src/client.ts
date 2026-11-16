@@ -57,7 +57,7 @@ export function requireOption(value: string | undefined, name: string): string {
   return value;
 }
 
-function resolveSandboxProvider(value: string | undefined): SandboxProvider {
+export function resolveSandboxProvider(value: string | undefined): SandboxProvider {
   const provider = value?.trim() || 'e2b';
   if (provider !== 'railway' && provider !== 'e2b') {
     throw new Error('SANDBOX_PROVIDER must be either "railway" or "e2b"');

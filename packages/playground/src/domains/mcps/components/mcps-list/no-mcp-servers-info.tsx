@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ExternalLinkIcon } from 'lucide-react';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 
 export const NoMCPServersInfo = () => (
   <EmptyState
@@ -16,9 +16,9 @@ export const NoMCPServersInfo = () => (
         variant="ghost"
         render={<a href="https://mastra.ai/docs/tools-mcp/mcp-overview" target="_blank" rel="noopener noreferrer" />}
 
-        icon={<ExternalLinkIcon />}
+        icon={<IconSquareArrowTopRight />}
       >
-        MCP Documentation
+        MCP documentation
       </Button>
     }
     variant="fill"

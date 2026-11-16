@@ -1,8 +1,6 @@
-import {
-  SourceControlConnectionNotFoundError,
-  type SourceControlStorageHandle,
-} from '../storage/domains/source-control/base.js';
-import type { WorkItemRow } from '../storage/domains/work-items/base.js';
+import { SourceControlConnectionNotFoundError } from '../storage/domains/source-control/base.js';
+import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import type { Card } from '../storage/domains/work-items/base.js';
 
 export type WorkItemRepositoryResolution =
   | { status: 'resolved'; projectRepositoryId: string; slug: string }
@@ -93,13 +91,13 @@ export async function resolveWorkItemRepository(args: {
   sourceControl: SourceControlStorageHandle;
   orgId: string;
   factoryProjectId: string;
-  item: Pick<WorkItemRow, 'metadata'>;
+  item: Pick<Card, 'metadata'> & { workItem: Pick<Card['workItem'], 'metadata'> };
   linearRepositoryMap?: Record<string, string>;
 }): Promise<WorkItemRepositoryResolution> {
   const { sourceControl, item, linearRepositoryMap } = args;
-  const metadata = item.metadata ?? {};
+  const metadata = item.workItem.metadata ?? {};
   const linked = await listLinkedRepositories(args);
-  const repositorySignal = typeof metadata.repository === 'string' ? metadata.repository : undefined;
+  const repositorySignal = typeof item.metadata?.repository === 'string' ? item.metadata.repository : undefined;
   const externalRepositorySignal = getExternalRepositoryId(sourceControl.integrationId, metadata);
   const linearProjectId = typeof metadata.linearProjectId === 'string' ? metadata.linearProjectId : undefined;
   const mappedRepository = linearProjectId ? linearRepositoryMap?.[linearProjectId] : undefined;

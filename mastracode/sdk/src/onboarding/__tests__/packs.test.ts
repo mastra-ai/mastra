@@ -7,8 +7,8 @@ import {
   resolveAutoOMModelId,
   resolveProviderOMDefault,
   selectPreferredOMPack,
-  type ProviderAccess,
 } from '../packs.js';
+import type { ProviderAccess } from '../packs.js';
 
 function providerAccess(overrides: Partial<ProviderAccess> = {}): ProviderAccess {
   return {

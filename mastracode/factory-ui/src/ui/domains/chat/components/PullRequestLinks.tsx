@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 
-import { changeRequestNumberForItem } from '../../factory/boardItems';
+import { changeRequestNumberForItem, sourceMetadata } from '../../factory/boardItems';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import type { ChangeRequestProvider, PullRequestSubscription } from '../../factory/services/githubSubscriptions';
 import type { WorkItem } from '../../factory/services/workItems';
@@ -20,8 +20,9 @@ const CHANGE_REQUEST_WORDING: Record<ChangeRequestProvider, { noun: string; pref
 };
 
 function reviewStatus(reviewItem: WorkItem): PullRequestSubscription['status'] {
-  if (reviewItem.metadata.merged === true) return 'merged';
-  if (reviewItem.metadata.state === 'closed') return 'closed';
+  const metadata = sourceMetadata(reviewItem);
+  if (metadata.state === 'merged' || metadata.merged === true) return 'merged';
+  if (metadata.state === 'closed') return 'closed';
   return 'open';
 }
 

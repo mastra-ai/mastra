@@ -83,6 +83,51 @@ export const mastra = new Mastra({
 })
 ```
 
+## Export to storage and Platform
+
+On Mastra Platform, a nonempty `MASTRA_DEPLOYMENT_ID` disables `MastraStorageExporter` and the deprecated `DefaultExporter` by default. Other exporters remain enabled. The opt-in below applies only to `MastraStorageExporter`. Deprecated `DefaultExporter` stays disabled on Platform even with the flag set to `true`. Migrate to `MastraStorageExporter` to use this option.
+
+:::warning Local storage remains blocked even with the opt-in
+
+`retainStorageExporterOnPlatform: true` **doesn't** enable in-memory, local libSQL, or DuckDB observability writes on Platform. When the observability domain reports local persistence, the built-in storage exporter stays disabled: it won't persist traces, logs, metrics, scores, or feedback to that database. Other exporters continue to receive events.
+
+:::
+
+With updated adapters and `retainStorageExporterOnPlatform: true`, the behavior on Platform is:
+
+| Observability database | Storage export on Platform |
+| - | - |
+| PostgreSQL | Allowed |
+| Remote libSQL/Turso (`libsql://` or `https://`) | Allowed |
+| Local libSQL (`file:` or `:memory:`) | Blocked |
+| libSQL embedded replica with a remote sync URL | Blocked: it still writes locally |
+| DuckDB, including in-memory databases | Blocked |
+| `InMemoryStore`, including the fallback when no storage is configured | Blocked |
+
+To keep writing to your own remote database alongside Platform observability, set [`retainStorageExporterOnPlatform`](/reference/observability/tracing/configuration#observabilityinstanceconfig) to `true` on the observability config:
+
+```typescript
+import { Observability, MastraStorageExporter, MastraPlatformExporter } from '@mastra/observability'
+
+const observability = new Observability({
+  configs: {
+    production: {
+      serviceName: 'my-service',
+      retainStorageExporterOnPlatform: true,
+      exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
+    },
+  },
+})
+```
+
+Pass this `observability` instance to `new Mastra()` alongside your configured `storage` provider. The option applies only to this config, including exporters registered later. It doesn't configure a database or add exporters automatically. Other configs keep the default suppression unless they also opt in.
+
+The restriction applies to the **observability domain**, which can use a different provider from your default application storage. It doesn't disable other storage domains. Outside Platform, local observability storage continues to work.
+
+To enable this guard, upgrade `@mastra/core` and any `@mastra/libsql` or `@mastra/duckdb` adapters alongside `@mastra/observability`: older or custom adapters without the `persistenceLocation` capability retain the existing opt-in behavior and aren't checked for local persistence.
+
+A blocked exporter logs a warning during initialization, but the restriction applies even if your logging setup hides that warning. If dual export isn't writing to your database, check the observability provider against the table above and configure a remote database. Retrying or increasing the batch interval won't enable a blocked exporter.
+
 ## Studio
 
 Access your traces through Studio:
@@ -203,10 +248,11 @@ The MastraStorageExporter includes reliable error handling for production use:
 
 `DefaultExporter` emits structured drop events when it can't persist observability data. Register an exporter or bridge with `onDroppedEvent` to forward these drops to alerting or monitoring.
 
-For two reasons events are dropped:
+Events are dropped for these reasons:
 
 - `unsupported-storage`: The storage provider doesn't implement the signal type.
 - `retry-exhausted`: The exporter retried a batch up to `maxRetries` times and then dropped it.
+- `span-not-updatable`: Under `realtime` or `batch-with-updates`, a span update or end reached storage but didn't apply, because the span was never stored or had already ended. Ended spans don't change.
 
 The following example demonstrates forwarding drop details to a monitoring endpoint:
 

@@ -1,8 +1,8 @@
 import { useMastraClient } from '@mastra/react';
 import { traceSpansQueryOptions, useTraceSpans } from '@mastra/react/hooks/traces';
 import { useQueries } from '@tanstack/react-query';
-import { ExternalLinkIcon, MessageSquareReplyIcon, MessageSquareTextIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import type { FeedbackOptions } from './feedback-options';
 import { TraceScoresTab } from '@/domains/scores';
 import { ThreadTrace, useThreadTraceRow } from '@/domains/traces/components/thread-trace';
 import type { ThreadTraceSelectedSpan } from '@/domains/traces/components/thread-trace';
@@ -15,6 +15,9 @@ import { useTracesListSource } from '@/domains/traces/hooks/use-traces-list-sour
 import type { UseTracesListSourceArgs } from '@/domains/traces/hooks/use-traces-list-source';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
+import { IconBubbleSparkle } from '@/ds/icons/central/IconBubbleSparkle';
+import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
+import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 import { Icon } from '@/ds/icons/Icon';
 import { ScorersIcon } from '@/ds/icons/ScorersIcon';
 import { useLinkComponent } from '@/lib/framework';
@@ -28,6 +31,7 @@ export interface ThreadViewByTraceProps {
   withQueryTrace: boolean;
   /** Shows the per-trace Feedback tab and fetches its feedback. */
   withFeedback: boolean;
+  feedbackOptions?: FeedbackOptions;
   /** Fires when a span detail opens or closes (`null`). */
   onSelectedSpanChange?: (selected: ThreadTraceSelectedSpan | null) => void;
   /** Opens a score from a trace's Scores tab; the app owns routing. */
@@ -46,14 +50,15 @@ export function ThreadViewByTrace({
   threadId,
   withQueryTrace,
   withFeedback,
+  feedbackOptions,
   onSelectedSpanChange,
   onOpenScore,
-  pageSize = 10,
+  pageSize = 3,
 }: ThreadViewByTraceProps) {
   const legacyFilters = useMemo<UseTracesListSourceArgs['legacyFilters']>(() => ({ threadId }), [threadId]);
   const { rows, isLoading, isPlaceholderData, error, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useTracesListSource({
-      initialAutoRefetch: false,
+      autoRefetch: false,
       withQueryTrace,
       legacyFilters,
       limit: pageSize,
@@ -118,7 +123,12 @@ export function ThreadViewByTrace({
       <ThreadTrace.List data-testid="thread-view-by-trace">
         {traceIds.map((traceId, index) => (
           <ThreadTrace.Row key={traceId} traceId={traceId}>
-            <ThreadTraceRowContent turn={index + 1} withFeedback={withFeedback} onOpenScore={onOpenScore} />
+            <ThreadTraceRowContent
+              turn={index + 1}
+              withFeedback={withFeedback}
+              feedbackOptions={feedbackOptions}
+              onOpenScore={onOpenScore}
+            />
           </ThreadTrace.Row>
         ))}
       </ThreadTrace.List>
@@ -130,11 +140,13 @@ export function ThreadViewByTrace({
 function ThreadTraceRowContent({
   turn,
   withFeedback,
+  feedbackOptions,
   onOpenScore,
 }: {
   /** 1-based position among the loaded turns. */
   turn: number;
   withFeedback: boolean;
+  feedbackOptions?: FeedbackOptions;
   onOpenScore: (traceId: string, scoreId: string) => void;
 }) {
   const { traceId, highlightSpans } = useThreadTraceRow();
@@ -149,7 +161,7 @@ function ThreadTraceRowContent({
       <ThreadTrace.Divider label={`Turn ${turn}`}>
         {traceHref && (
           <>
-            <Button render={<Link href={traceHref} />} variant="ghost" size="sm" icon={<ExternalLinkIcon />}>
+            <Button render={<Link href={traceHref} />} variant="ghost" size="sm" icon={<IconSquareArrowTopRight />}>
               Go to trace
             </Button>
             <span aria-hidden className="h-4 w-px bg-border" />
@@ -158,14 +170,14 @@ function ThreadTraceRowContent({
         <ThreadTrace.TabList>
           <ThreadTrace.Tab value="messages">
             <Icon size="xs">
-              <MessageSquareTextIcon />
+              <IconBubbleText />
             </Icon>
             Messages
           </ThreadTrace.Tab>
           {withFeedback && (
             <ThreadTrace.Tab value="feedback">
               <Icon size="xs">
-                <MessageSquareReplyIcon />
+                <IconBubbleSparkle />
               </Icon>
               Feedback
             </ThreadTrace.Tab>
@@ -185,7 +197,7 @@ function ThreadTraceRowContent({
           </ThreadTrace.TabContent>
           {withFeedback && (
             <ThreadTrace.TabContent value="feedback" className="min-h-0 py-3">
-              <TraceFeedbackTab key={traceId} traceId={traceId} variant="thread" />
+              <TraceFeedbackTab key={traceId} traceId={traceId} variant="thread" feedbackOptions={feedbackOptions} />
             </ThreadTrace.TabContent>
           )}
           <ThreadTrace.TabContent value="scores" className="min-h-0 py-3">
@@ -206,3 +218,5 @@ function ThreadTraceRowContent({
     </>
   );
 }
+
+export type { FeedbackOptions } from './feedback-options';

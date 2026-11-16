@@ -355,6 +355,20 @@ describe('jsonValueEquals', () => {
     expect(jsonValueEquals({ a: 1, b: 2 }, { a: 1 })).toBe(false);
   });
 
+  it('should treat objects with different keys as unequal even when values are undefined', () => {
+    expect(jsonValueEquals({ a: 1, b: undefined }, { a: 1, c: 2 })).toBe(false);
+    expect(jsonValueEquals({ a: 1, c: 2 }, { a: 1, b: undefined })).toBe(false);
+    expect(jsonValueEquals({ a: undefined }, { b: undefined })).toBe(false);
+    expect(jsonValueEquals({ a: undefined }, { a: undefined })).toBe(true);
+    expect(jsonValueEquals({ a: undefined }, {})).toBe(false);
+    expect(jsonValueEquals({ p: { x: 1, y: undefined } }, { p: { x: 1, z: undefined } })).toBe(false);
+  });
+
+  it('should ignore non-enumerable keys when matching object keys', () => {
+    const withHiddenKey = Object.defineProperty({ b: 2 }, 'a', { value: 1, enumerable: false });
+    expect(jsonValueEquals({ a: 1 }, withHiddenKey)).toBe(false);
+  });
+
   it('should handle nested structures', () => {
     const obj1 = { a: [1, { b: 2 }], c: 3 };
     const obj2 = { a: [1, { b: 2 }], c: 3 };

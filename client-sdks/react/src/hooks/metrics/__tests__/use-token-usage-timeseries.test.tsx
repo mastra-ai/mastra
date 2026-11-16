@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import '../../../test/english-locale';
 import type { GetMetricTimeSeriesResponse } from '@mastra/client-js';
 import { EntityType } from '@mastra/core/observability';
 import { QueryClient } from '@tanstack/react-query';

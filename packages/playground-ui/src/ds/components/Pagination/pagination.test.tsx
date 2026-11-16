@@ -91,7 +91,7 @@ describe('Pagination', () => {
       </Pagination>,
     );
 
-    const previous = screen.getByRole('button', { name: 'Previous' });
+    const previous = screen.getByRole('button', { name: 'Prev' });
     expect(previous.getAttribute('aria-disabled')).toBe('true');
     await user.tab();
     expect(document.activeElement).toBe(previous);

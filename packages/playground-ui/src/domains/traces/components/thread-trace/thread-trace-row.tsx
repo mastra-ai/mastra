@@ -35,9 +35,9 @@ export function ThreadTraceRow({ traceId, className, children, ...props }: Threa
   // A long trace is clamped to the real height of its messages column (not a nominal row height),
   // so the timeline never dwarfs the turn it belongs to. The refs live here because the messages
   // and the timeline are sibling parts.
-  const messages = useMeasuredAutoHeight<HTMLDivElement>();
-  const timeline = useMeasuredAutoHeight<HTMLDivElement>();
-  const detailsHeader = useMeasuredAutoHeight<HTMLDivElement>();
+  const messages = useMeasuredAutoHeight();
+  const timeline = useMeasuredAutoHeight();
+  const detailsHeader = useMeasuredAutoHeight();
 
   // Which view the messages column shows (Messages / Feedback / Scores), one per row.
   const [tab, setTab] = useState<string>(THREAD_TRACE_MESSAGES_TAB);

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { MASTRA_SCOPES_KEY, RequestContext } from '../../../../request-context';
+import type { RequestContext } from '../../../../request-context';
+import { MASTRA_SCOPES_KEY } from '../../../../request-context';
 import { MastraServerBase } from '../../../../server/base';
 import { MessageList } from '../../../message-list';
 import { resolveAgentScopes } from '../../../scopes';

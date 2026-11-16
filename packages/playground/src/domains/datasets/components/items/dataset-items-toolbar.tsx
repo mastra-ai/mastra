@@ -3,12 +3,18 @@
 import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
+import { IconArrowOutOfBox } from '@mastra/playground-ui/icons/central/IconArrowOutOfBox';
+import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
+import { IconFolderAddRight } from '@mastra/playground-ui/icons/central/IconFolderAddRight';
+import { IconMoveFolder } from '@mastra/playground-ui/icons/central/IconMoveFolder';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Upload, FileJson, Download, FolderPlus, FolderOutput, Trash2, ChevronDown } from 'lucide-react';
 
 export type DatasetItemsToolbarProps = {
   // Normal mode actions
@@ -82,11 +88,12 @@ export function DatasetItemsToolbar({
 
   const searchField = showItemActions && (
     <div className="max-w-120 flex-1">
-      <ListSearch
+      <SearchInput
+        {...listSearchProps}
         label="Search items"
-        placeholder="Search items..."
+        placeholder="Search items"
         value={searchQuery ?? ''}
-        onSearch={query => onSearchChange?.(query)}
+        onValueChange={query => onSearchChange?.(query)}
       />
     </div>
   );
@@ -95,37 +102,37 @@ export function DatasetItemsToolbar({
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
         <Button>
-          {selectedCount} selected <ChevronDown />
+          {selectedCount} selected <IconChevronBottom />
         </Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" className="w-72">
         {onExportClick && (
           <DropdownMenu.Item onSelect={onExportClick}>
-            <Download /> Export CSV
+            <IconArrowInbox /> Export CSV
           </DropdownMenu.Item>
         )}
         {onExportJsonClick && (
           <DropdownMenu.Item onSelect={onExportJsonClick}>
-            <Download /> Export JSON
+            <IconArrowInbox /> Export JSON
           </DropdownMenu.Item>
         )}
         {onCreateDatasetClick && (
           <DropdownMenu.Item onSelect={onCreateDatasetClick}>
-            <FolderPlus />
-            <span>Create Dataset from Items</span>
+            <IconFolderAddRight />
+            <span>Create dataset from items</span>
           </DropdownMenu.Item>
         )}
         {onAddToDatasetClick && (
           <DropdownMenu.Item onSelect={onAddToDatasetClick}>
-            <FolderOutput />
-            <span>Copy Items to Dataset</span>
+            <IconMoveFolder />
+            <span>Copy items to dataset</span>
           </DropdownMenu.Item>
         )}
         {onDeleteClick && (
           <>
             <DropdownMenu.Separator />
             <DropdownMenu.Item onSelect={onDeleteClick} variant="destructive">
-              <Trash2 /> Delete Items
+              <TrashIcon /> Delete items
             </DropdownMenu.Item>
           </>
         )}
@@ -155,16 +162,16 @@ export function DatasetItemsToolbar({
             </CreateButton>
             <DropdownMenu>
               <DropdownMenu.Trigger asChild>
-                <Button aria-label="Dataset actions menu">
-                  <ChevronDown />
+                <Button size="icon-md" aria-label="Dataset actions menu">
+                  <IconChevronBottom />
                 </Button>
               </DropdownMenu.Trigger>
               <DropdownMenu.Content align="end">
                 <DropdownMenu.Item onSelect={onImportClick}>
-                  <Upload /> Import CSV
+                  <IconArrowOutOfBox /> Import CSV
                 </DropdownMenu.Item>
                 <DropdownMenu.Item onSelect={onImportJsonClick}>
-                  <FileJson /> Import JSON
+                  <IconFileText /> Import JSON
                 </DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu>

@@ -6,16 +6,18 @@
  * enabling proper test isolation via resetMocks().
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { simulateReadableStream } from '@internal/ai-sdk-v4';
+import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 // @ts-ignore - module resolution for test utilities
-import { MockLanguageModelV1, MockLanguageModelV2 } from '@internal/ai-sdk-v4/test';
-import { Mastra } from '@mastra/core/mastra';
 import type { StreamEvent } from '@mastra/core/workflows';
-import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
+import { describe, it, expect, onTestFinished, vi } from 'vitest';
+import { z } from 'zod';
 import { MockRegistry } from '../mock-registry';
+import { stepsOf } from '../steps';
+import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 
 /**
  * Create all workflows needed for streaming tests.
@@ -289,9 +291,6 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
-  // Note: Agent streaming tests remain in engine-specific files because they require
-  // MockLanguageModel which has module resolution issues when imported from shared suite.
-
   // Test: should handle streaming suspend and resume flow
   {
     mockRegistry.register('streaming-suspend-resume-workflow:getUserInputAction', () =>
@@ -553,12 +552,12 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
   if (Agent) {
     // Track what options were received
     let receivedOptions: any = null;
-    const doStreamSpy = vi.fn(async ({ prompt, temperature }: any) => {
+    const doStreamSpy = vi.fn<LanguageModelV1['doStream']>(async ({ prompt, temperature }) => {
       // Capture options that were passed
       receivedOptions = { temperature };
 
       // Check if instructions were overridden in the messages
-      const systemMessage = prompt?.find((m: any) => m.role === 'system');
+      const systemMessage = prompt.find(m => m.role === 'system');
       if (systemMessage?.content) {
         receivedOptions.instructionsOverridden = systemMessage.content.includes('overridden instructions');
       }
@@ -985,7 +984,8 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
 
           const resumeResult = await getWorkflowState();
 
-          expect(resumeResult.steps).toMatchObject({
+          const resumeSteps = await stepsOf(resumeResult);
+          expect(resumeSteps).toMatchObject({
             input: { input: 'test' },
             getUserInput: {
               status: 'success',
@@ -1008,7 +1008,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
               endedAt: expect.any(Number),
             },
           });
-          expect(resumeResult.steps.promptAgent).not.toHaveProperty('suspendedAt');
+          expect(resumeSteps.promptAgent).not.toHaveProperty('suspendedAt');
         },
       );
 
@@ -1098,337 +1098,342 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         ]);
       });
 
-      it('should be able to use an agent as a step with detailed events (streamLegacy)', async () => {
-        const { createWorkflow, createStep, Agent } = ctx;
+      it.skipIf(skipTests.streamingAgentDetailedEventsLegacy)(
+        'should be able to use an agent as a step with detailed events (streamLegacy)',
+        async ({ skip }) => {
+          const { createWorkflow, createStep, Agent, Mastra } = ctx;
 
-        if (!Agent) {
-          // Skip if Agent not provided
-          return;
-        }
+          if (!Agent || !Mastra) {
+            return skip('engine factory does not provide Agent or Mastra');
+          }
 
-        const workflow = createWorkflow({
-          id: 'agent-detailed-streaming-test',
-          inputSchema: z.object({
-            prompt1: z.string(),
-            prompt2: z.string(),
-          }),
-          outputSchema: z.object({}),
-        });
-
-        const agent = new Agent({
-          id: 'test-agent-1',
-          name: 'test-agent-1',
-          instructions: 'test agent instructions',
-          model: new MockLanguageModelV1({
-            doStream: async () => ({
-              stream: simulateReadableStream({
-                chunks: [
-                  { type: 'text-delta', textDelta: 'Paris' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    logprobs: undefined,
-                    usage: { completionTokens: 10, promptTokens: 3 },
-                  },
-                ],
-              }),
-              rawCall: { rawPrompt: null, rawSettings: {} },
+          const workflow = createWorkflow({
+            id: 'agent-detailed-streaming-test',
+            inputSchema: z.object({
+              prompt1: z.string(),
+              prompt2: z.string(),
             }),
-          }),
-        });
+            outputSchema: z.object({}),
+          });
 
-        const agent2 = new Agent({
-          id: 'test-agent-2',
-          name: 'test-agent-2',
-          instructions: 'test agent instructions',
-          model: new MockLanguageModelV1({
-            doStream: async () => ({
-              stream: simulateReadableStream({
-                chunks: [
-                  { type: 'text-delta', textDelta: 'London' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    logprobs: undefined,
-                    usage: { completionTokens: 10, promptTokens: 3 },
-                  },
-                ],
+          const agent = new Agent({
+            id: 'test-agent-1',
+            name: 'test-agent-1',
+            instructions: 'test agent instructions',
+            model: new MockLanguageModelV1({
+              doStream: async () => ({
+                stream: simulateReadableStream({
+                  chunks: [
+                    { type: 'text-delta', textDelta: 'Paris' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      logprobs: undefined,
+                      usage: { completionTokens: 10, promptTokens: 3 },
+                    },
+                  ],
+                }),
+                rawCall: { rawPrompt: null, rawSettings: {} },
               }),
-              rawCall: { rawPrompt: null, rawSettings: {} },
             }),
-          }),
-        });
+          });
 
-        const startStep = createStep({
-          id: 'start',
-          inputSchema: z.object({
-            prompt1: z.string(),
-            prompt2: z.string(),
-          }),
-          outputSchema: z.object({ prompt1: z.string(), prompt2: z.string() }),
-          execute: async ({ inputData }) => ({
-            prompt1: inputData.prompt1,
-            prompt2: inputData.prompt2,
-          }),
-        });
+          const agent2 = new Agent({
+            id: 'test-agent-2',
+            name: 'test-agent-2',
+            instructions: 'test agent instructions',
+            model: new MockLanguageModelV1({
+              doStream: async () => ({
+                stream: simulateReadableStream({
+                  chunks: [
+                    { type: 'text-delta', textDelta: 'London' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      logprobs: undefined,
+                      usage: { completionTokens: 10, promptTokens: 3 },
+                    },
+                  ],
+                }),
+                rawCall: { rawPrompt: null, rawSettings: {} },
+              }),
+            }),
+          });
 
-        new Mastra({
-          workflows: { 'agent-detailed-streaming-test': workflow },
-          agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
-          idGenerator: () => randomUUID(),
-        });
+          const startStep = createStep({
+            id: 'start',
+            inputSchema: z.object({
+              prompt1: z.string(),
+              prompt2: z.string(),
+            }),
+            outputSchema: z.object({ prompt1: z.string(), prompt2: z.string() }),
+            execute: async ({ inputData }) => ({
+              prompt1: inputData.prompt1,
+              prompt2: inputData.prompt2,
+            }),
+          });
 
-        const agentStep1 = createStep(agent);
-        const agentStep2 = createStep(agent2);
+          const host = new Mastra({
+            workflows: { 'agent-detailed-streaming-test': workflow },
+            agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+            idGenerator: () => randomUUID(),
+          });
+          // Event-driven engines execute steps through the host's workers, so start them.
+          await host.startWorkers();
+          onTestFinished(() => host.stopWorkers());
 
-        workflow
-          .then(startStep)
-          .map({
-            prompt: {
-              step: startStep,
-              path: 'prompt1',
+          const agentStep1 = createStep(agent);
+          const agentStep2 = createStep(agent2);
+
+          workflow
+            .then(startStep)
+            .map({
+              prompt: {
+                step: startStep,
+                path: 'prompt1',
+              },
+            })
+            .then(agentStep1)
+            .map({
+              prompt: {
+                step: startStep,
+                path: 'prompt2',
+              },
+            })
+            .then(agentStep2)
+            .commit();
+
+          const run = await workflow.createRun({
+            runId: 'test-run-id',
+          });
+          const { stream } = run.streamLegacy({
+            inputData: {
+              prompt1: 'Capital of France, just the name',
+              prompt2: 'Capital of UK, just the name',
             },
-          })
-          .then(agentStep1)
-          .map({
-            prompt: {
-              step: startStep,
-              path: 'prompt2',
+          });
+
+          const values: StreamEvent[] = [];
+          for await (const value of stream.values()) {
+            values.push(value);
+          }
+
+          expect(values).toMatchObject([
+            {
+              payload: { runId: 'test-run-id' },
+              type: 'start',
             },
-          })
-          .then(agentStep2)
-          .commit();
-
-        const run = await workflow.createRun({
-          runId: 'test-run-id',
-        });
-        const { stream } = run.streamLegacy({
-          inputData: {
-            prompt1: 'Capital of France, just the name',
-            prompt2: 'Capital of UK, just the name',
-          },
-        });
-
-        const values: StreamEvent[] = [];
-        for await (const value of stream.values()) {
-          values.push(value);
-        }
-
-        expect(values).toMatchObject([
-          {
-            payload: { runId: 'test-run-id' },
-            type: 'start',
-          },
-          {
-            payload: {
-              id: 'start',
+            {
               payload: {
-                prompt1: 'Capital of France, just the name',
-                prompt2: 'Capital of UK, just the name',
+                id: 'start',
+                payload: {
+                  prompt1: 'Capital of France, just the name',
+                  prompt2: 'Capital of UK, just the name',
+                },
+                startedAt: expect.any(Number),
+                stepCallId: expect.any(String),
+                status: 'running',
               },
-              startedAt: expect.any(Number),
-              stepCallId: expect.any(String),
-              status: 'running',
+              type: 'step-start',
             },
-            type: 'step-start',
-          },
-          {
-            payload: {
-              id: 'start',
-              output: {
-                prompt1: 'Capital of France, just the name',
-                prompt2: 'Capital of UK, just the name',
-              },
-              endedAt: expect.any(Number),
-              status: 'success',
-            },
-            type: 'step-result',
-          },
-          {
-            payload: {
-              id: 'start',
-              stepCallId: expect.any(String),
-              metadata: {},
-            },
-            type: 'step-finish',
-          },
-          {
-            payload: {
-              id: expect.stringMatching(/^mapping_/),
+            {
               payload: {
-                prompt1: 'Capital of France, just the name',
-                prompt2: 'Capital of UK, just the name',
+                id: 'start',
+                output: {
+                  prompt1: 'Capital of France, just the name',
+                  prompt2: 'Capital of UK, just the name',
+                },
+                endedAt: expect.any(Number),
+                status: 'success',
               },
-              startedAt: expect.any(Number),
-              stepCallId: expect.any(String),
-              status: 'running',
+              type: 'step-result',
             },
-            type: 'step-start',
-          },
-          {
-            payload: {
-              id: expect.stringMatching(/^mapping_/),
-              endedAt: expect.any(Number),
-              output: {
+            {
+              payload: {
+                id: 'start',
+                stepCallId: expect.any(String),
+                metadata: {},
+              },
+              type: 'step-finish',
+            },
+            {
+              payload: {
+                id: expect.stringMatching(/^mapping_/),
+                payload: {
+                  prompt1: 'Capital of France, just the name',
+                  prompt2: 'Capital of UK, just the name',
+                },
+                startedAt: expect.any(Number),
+                stepCallId: expect.any(String),
+                status: 'running',
+              },
+              type: 'step-start',
+            },
+            {
+              payload: {
+                id: expect.stringMatching(/^mapping_/),
+                endedAt: expect.any(Number),
+                output: {
+                  prompt: 'Capital of France, just the name',
+                },
+                status: 'success',
+              },
+              type: 'step-result',
+            },
+            {
+              payload: {
+                id: expect.stringMatching(/^mapping_/),
+                metadata: {},
+                stepCallId: expect.any(String),
+              },
+              type: 'step-finish',
+            },
+            {
+              payload: {
+                id: 'test-agent-1',
+                payload: {
+                  prompt: 'Capital of France, just the name',
+                },
+                startedAt: expect.any(Number),
+                stepCallId: expect.any(String),
+                status: 'running',
+              },
+              type: 'step-start',
+            },
+            {
+              args: {
                 prompt: 'Capital of France, just the name',
               },
-              status: 'success',
+              name: 'test-agent-1',
+              type: 'tool-call-streaming-start',
             },
-            type: 'step-result',
-          },
-          {
-            payload: {
-              id: expect.stringMatching(/^mapping_/),
-              metadata: {},
-              stepCallId: expect.any(String),
-            },
-            type: 'step-finish',
-          },
-          {
-            payload: {
-              id: 'test-agent-1',
-              payload: {
+            {
+              args: {
                 prompt: 'Capital of France, just the name',
               },
-              startedAt: expect.any(Number),
-              stepCallId: expect.any(String),
-              status: 'running',
+              argsTextDelta: 'Paris',
+              name: 'test-agent-1',
+              type: 'tool-call-delta',
             },
-            type: 'step-start',
-          },
-          {
-            args: {
-              prompt: 'Capital of France, just the name',
-            },
-            name: 'test-agent-1',
-            type: 'tool-call-streaming-start',
-          },
-          {
-            args: {
-              prompt: 'Capital of France, just the name',
-            },
-            argsTextDelta: 'Paris',
-            name: 'test-agent-1',
-            type: 'tool-call-delta',
-          },
-          {
-            args: {
-              prompt: 'Capital of France, just the name',
-            },
-            name: 'test-agent-1',
-            type: 'tool-call-streaming-finish',
-          },
-          {
-            payload: {
-              id: 'test-agent-1',
-              output: {
-                text: 'Paris',
+            {
+              args: {
+                prompt: 'Capital of France, just the name',
               },
-              endedAt: expect.any(Number),
-              status: 'success',
+              name: 'test-agent-1',
+              type: 'tool-call-streaming-finish',
             },
-            type: 'step-result',
-          },
-          {
-            payload: {
-              id: 'test-agent-1',
-              metadata: {},
-              stepCallId: expect.any(String),
-            },
-            type: 'step-finish',
-          },
-          {
-            payload: {
-              id: expect.stringMatching(/^mapping_/),
+            {
               payload: {
-                text: 'Paris',
+                id: 'test-agent-1',
+                output: {
+                  text: 'Paris',
+                },
+                endedAt: expect.any(Number),
+                status: 'success',
               },
-              startedAt: expect.any(Number),
-              stepCallId: expect.any(String),
-              status: 'running',
+              type: 'step-result',
             },
-            type: 'step-start',
-          },
-          {
-            payload: {
-              id: expect.stringMatching(/^mapping_/),
-              endedAt: expect.any(Number),
-              output: {
+            {
+              payload: {
+                id: 'test-agent-1',
+                metadata: {},
+                stepCallId: expect.any(String),
+              },
+              type: 'step-finish',
+            },
+            {
+              payload: {
+                id: expect.stringMatching(/^mapping_/),
+                payload: {
+                  text: 'Paris',
+                },
+                startedAt: expect.any(Number),
+                stepCallId: expect.any(String),
+                status: 'running',
+              },
+              type: 'step-start',
+            },
+            {
+              payload: {
+                id: expect.stringMatching(/^mapping_/),
+                endedAt: expect.any(Number),
+                output: {
+                  prompt: 'Capital of UK, just the name',
+                },
+                status: 'success',
+              },
+              type: 'step-result',
+            },
+            {
+              payload: {
+                id: expect.stringMatching(/^mapping_/),
+                metadata: {},
+                stepCallId: expect.any(String),
+              },
+              type: 'step-finish',
+            },
+            {
+              payload: {
+                id: 'test-agent-2',
+                payload: {
+                  prompt: 'Capital of UK, just the name',
+                },
+                startedAt: expect.any(Number),
+                stepCallId: expect.any(String),
+                status: 'running',
+              },
+              type: 'step-start',
+            },
+            {
+              args: {
                 prompt: 'Capital of UK, just the name',
               },
-              status: 'success',
+              name: 'test-agent-2',
+              type: 'tool-call-streaming-start',
             },
-            type: 'step-result',
-          },
-          {
-            payload: {
-              id: expect.stringMatching(/^mapping_/),
-              metadata: {},
-              stepCallId: expect.any(String),
-            },
-            type: 'step-finish',
-          },
-          {
-            payload: {
-              id: 'test-agent-2',
-              payload: {
+            {
+              args: {
                 prompt: 'Capital of UK, just the name',
               },
-              startedAt: expect.any(Number),
-              stepCallId: expect.any(String),
-              status: 'running',
+              argsTextDelta: 'London',
+              name: 'test-agent-2',
+              type: 'tool-call-delta',
             },
-            type: 'step-start',
-          },
-          {
-            args: {
-              prompt: 'Capital of UK, just the name',
-            },
-            name: 'test-agent-2',
-            type: 'tool-call-streaming-start',
-          },
-          {
-            args: {
-              prompt: 'Capital of UK, just the name',
-            },
-            argsTextDelta: 'London',
-            name: 'test-agent-2',
-            type: 'tool-call-delta',
-          },
-          {
-            args: {
-              prompt: 'Capital of UK, just the name',
-            },
-            name: 'test-agent-2',
-            type: 'tool-call-streaming-finish',
-          },
-          {
-            payload: {
-              id: 'test-agent-2',
-              endedAt: expect.any(Number),
-              output: {
-                text: 'London',
+            {
+              args: {
+                prompt: 'Capital of UK, just the name',
               },
-              status: 'success',
+              name: 'test-agent-2',
+              type: 'tool-call-streaming-finish',
             },
-            type: 'step-result',
-          },
-          {
-            payload: {
-              id: 'test-agent-2',
-              metadata: {},
-              stepCallId: expect.any(String),
+            {
+              payload: {
+                id: 'test-agent-2',
+                endedAt: expect.any(Number),
+                output: {
+                  text: 'London',
+                },
+                status: 'success',
+              },
+              type: 'step-result',
             },
-            type: 'step-finish',
-          },
-          {
-            payload: {
-              runId: 'test-run-id',
+            {
+              payload: {
+                id: 'test-agent-2',
+                metadata: {},
+                stepCallId: expect.any(String),
+              },
+              type: 'step-finish',
             },
-            type: 'finish',
-          },
-        ]);
-      });
+            {
+              payload: {
+                runId: 'test-run-id',
+              },
+              type: 'finish',
+            },
+          ]);
+        },
+      );
 
       it('should be able to use an agent as a step (stream)', async () => {
         const entry = registry!['agent-streaming-workflow']!;
@@ -1505,19 +1510,19 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         expect(receivedOptions?.instructionsOverridden).toBe(true);
       });
 
-      it('should pass agentOptions with callbacks when wrapping agent with createStep', async () => {
-        const { createWorkflow, createStep, Agent } = ctx;
+      it('should pass agentOptions with callbacks when wrapping agent with createStep', async ({ skip }) => {
+        const { createWorkflow, createStep, Agent, Mastra } = ctx;
 
-        if (!Agent) {
-          return;
+        if (!Agent || !Mastra) {
+          return skip('engine factory does not provide Agent or Mastra');
         }
 
         const onFinishSpy = vi.fn();
         const onChunkSpy = vi.fn();
         const maxSteps = 5;
 
-        const doStreamSpy = vi.fn<any>(async ({ prompt, temperature }: { prompt: any; temperature: any }) => {
-          const systemMessage = prompt?.find((m: any) => m.role === 'system');
+        const doStreamSpy = vi.fn<LanguageModelV1['doStream']>(async ({ prompt, temperature }) => {
+          const systemMessage = prompt.find(m => m.role === 'system');
           expect(systemMessage?.content).toContain('overridden instructions');
           expect(systemMessage?.content).not.toContain('original instructions');
           expect(temperature).toBe(0.7);
@@ -1553,11 +1558,14 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           outputSchema: z.object({ text: z.string() }),
         });
 
-        new Mastra({
+        const host = new Mastra({
           workflows: { 'test-workflow-agent-options-callbacks': workflow },
           agents: { 'test-agent-with-options': agent },
           idGenerator: () => randomUUID(),
         });
+        // Event-driven engines execute steps through the host's workers, so start them.
+        await host.startWorkers();
+        onTestFinished(() => host.stopWorkers());
 
         const agentStep = createStep(agent, {
           maxSteps,
@@ -1585,11 +1593,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         expect(onChunkSpy).toHaveBeenCalled();
       });
 
-      it('should be able to use an agent as a step with detailed events (stream vNext)', async () => {
-        const { createWorkflow, createStep, Agent } = ctx;
+      it('should be able to use an agent as a step with detailed events (stream vNext)', async ({ skip }) => {
+        const { createWorkflow, createStep, Agent, Mastra } = ctx;
 
-        if (!Agent) {
-          return;
+        if (!Agent || !Mastra) {
+          return skip('engine factory does not provide Agent or Mastra');
         }
 
         const workflow = createWorkflow({
@@ -1658,11 +1666,14 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           }),
         });
 
-        new Mastra({
+        const host = new Mastra({
           workflows: { 'agent-vnext-streaming-test': workflow },
           agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
           idGenerator: () => randomUUID(),
         });
+        // Event-driven engines execute steps through the host's workers, so start them.
+        await host.startWorkers();
+        onTestFinished(() => host.stopWorkers());
 
         const agentStep1 = createStep(agent);
         const agentStep2 = createStep(agent2);
@@ -1719,12 +1730,15 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         });
       });
 
-      it('should be able to use an agent as a step (non-streaming)', async () => {
-        const { createWorkflow, createStep, Agent } = ctx;
+      it('should be able to use an agent as a step (non-streaming)', async ({ skip }) => {
+        const { createWorkflow, createStep, Agent, Mastra } = ctx;
 
-        if (!Agent) {
-          return;
+        if (!Agent || !Mastra) {
+          return skip('engine factory does not provide Agent or Mastra');
         }
+
+        const agent1Prompts: string[] = [];
+        const agent2Prompts: string[] = [];
 
         const workflow = createWorkflow({
           id: 'agent-nonstreaming-test',
@@ -1738,20 +1752,23 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           instructions: 'test agent instructions',
           description: 'test-agent-1 description',
           model: new MockLanguageModelV1({
-            doStream: async () => ({
-              stream: simulateReadableStream({
-                chunks: [
-                  { type: 'text-delta', textDelta: 'Paris' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    logprobs: undefined,
-                    usage: { completionTokens: 10, promptTokens: 3 },
-                  },
-                ],
-              }),
-              rawCall: { rawPrompt: null, rawSettings: {} },
-            }),
+            doStream: async ({ prompt }) => {
+              agent1Prompts.push(JSON.stringify(prompt));
+              return {
+                stream: simulateReadableStream({
+                  chunks: [
+                    { type: 'text-delta', textDelta: 'Paris' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      logprobs: undefined,
+                      usage: { completionTokens: 10, promptTokens: 3 },
+                    },
+                  ],
+                }),
+                rawCall: { rawPrompt: null, rawSettings: {} },
+              };
+            },
           }),
         });
 
@@ -1761,20 +1778,23 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           instructions: 'test agent instructions',
           description: 'test-agent-2 description',
           model: new MockLanguageModelV1({
-            doStream: async () => ({
-              stream: simulateReadableStream({
-                chunks: [
-                  { type: 'text-delta', textDelta: 'London' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    logprobs: undefined,
-                    usage: { completionTokens: 10, promptTokens: 3 },
-                  },
-                ],
-              }),
-              rawCall: { rawPrompt: null, rawSettings: {} },
-            }),
+            doStream: async ({ prompt }) => {
+              agent2Prompts.push(JSON.stringify(prompt));
+              return {
+                stream: simulateReadableStream({
+                  chunks: [
+                    { type: 'text-delta', textDelta: 'London' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      logprobs: undefined,
+                      usage: { completionTokens: 10, promptTokens: 3 },
+                    },
+                  ],
+                }),
+                rawCall: { rawPrompt: null, rawSettings: {} },
+              };
+            },
           }),
         });
 
@@ -1788,11 +1808,14 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           }),
         });
 
-        new Mastra({
+        const host = new Mastra({
           workflows: { 'agent-nonstreaming-test': workflow },
           agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
           idGenerator: () => randomUUID(),
         });
+        // Event-driven engines execute steps through the host's workers, so start them.
+        await host.startWorkers();
+        onTestFinished(() => host.stopWorkers());
 
         const agentStep1 = createStep(agent);
         const agentStep2 = createStep(agent2);
@@ -1810,21 +1833,27 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
         });
 
-        expect(result.steps['test-agent-1']).toEqual({
+        const steps = await stepsOf(result);
+        // Engines may omit a step's payload from the result when it repeats the previous
+        // step's output (the default engine does since #11755), so assert the prompt the
+        // agent actually received instead.
+        expect(steps['test-agent-1']).toMatchObject({
           status: 'success',
           output: { text: 'Paris' },
-          payload: { prompt: 'Capital of France, just the name' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-
-        expect(result.steps['test-agent-2']).toEqual({
+        expect(steps['test-agent-2']).toMatchObject({
           status: 'success',
           output: { text: 'London' },
-          payload: { prompt: 'Capital of UK, just the name' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+        // Each agent received the prompt its preceding .map() selected.
+        expect(agent1Prompts).toHaveLength(1);
+        expect(agent1Prompts[0]).toContain('Capital of France, just the name');
+        expect(agent2Prompts).toHaveLength(1);
+        expect(agent2Prompts[0]).toContain('Capital of UK, just the name');
 
         expect(workflow.steps['test-agent-1']?.description).toBe('test-agent-1 description');
         expect(workflow.steps['test-agent-2']?.description).toBe('test-agent-2 description');
@@ -1832,12 +1861,15 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         expect(workflow.steps['test-agent-2']?.component).toBe('AGENT');
       });
 
-      it('should be able to use an agent as a step via mastra instance', async () => {
-        const { createWorkflow, createStep, Agent } = ctx;
+      it('should be able to use an agent as a step via mastra instance', async ({ skip }) => {
+        const { createWorkflow, createStep, Agent, Mastra } = ctx;
 
-        if (!Agent) {
-          return;
+        if (!Agent || !Mastra) {
+          return skip('engine factory does not provide Agent or Mastra');
         }
+
+        const agent1Prompts: string[] = [];
+        const agent2Prompts: string[] = [];
 
         const workflow = createWorkflow({
           id: 'agent-mastra-instance-test',
@@ -1850,12 +1882,15 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           name: 'test-agent-1',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({
-            doGenerate: async () => ({
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 10, completionTokens: 20 },
-              text: 'Paris',
-            }),
+            doGenerate: async ({ prompt }) => {
+              agent1Prompts.push(JSON.stringify(prompt));
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 10, completionTokens: 20 },
+                text: 'Paris',
+              };
+            },
           }),
         });
 
@@ -1864,12 +1899,15 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           name: 'test-agent-2',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({
-            doGenerate: async () => ({
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 10, completionTokens: 20 },
-              text: 'London',
-            }),
+            doGenerate: async ({ prompt }) => {
+              agent2Prompts.push(JSON.stringify(prompt));
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 10, completionTokens: 20 },
+                text: 'London',
+              };
+            },
           }),
         });
 
@@ -1883,11 +1921,14 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           }),
         });
 
-        new Mastra({
+        const host = new Mastra({
           logger: false,
           workflows: { 'agent-mastra-instance-test': workflow },
           agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
         });
+        // Event-driven engines execute steps through the host's workers, so start them.
+        await host.startWorkers();
+        onTestFinished(() => host.stopWorkers());
 
         workflow
           .then(startStep)
@@ -1924,30 +1965,36 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
         });
 
-        expect(result.steps['agent-step-1']).toEqual({
+        const steps = await stepsOf(result);
+        // Engines may omit a step's payload from the result when it repeats the previous
+        // step's output (the default engine does since #11755), so assert the prompt the
+        // agent actually received instead.
+        expect(steps['agent-step-1']).toMatchObject({
           status: 'success',
           output: { text: 'Paris' },
-          payload: { prompt: 'Capital of France, just the name' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-
-        expect(result.steps['agent-step-2']).toEqual({
+        expect(steps['agent-step-2']).toMatchObject({
           status: 'success',
           output: { text: 'London' },
-          payload: { prompt: 'Capital of UK, just the name' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+        // Each agent received the prompt its preceding .map() selected.
+        expect(agent1Prompts).toHaveLength(1);
+        expect(agent1Prompts[0]).toContain('Capital of France, just the name');
+        expect(agent2Prompts).toHaveLength(1);
+        expect(agent2Prompts[0]).toContain('Capital of UK, just the name');
       });
 
       it.skipIf(skipTests.streamingTripwireInput)(
         'should bubble up tripwire from agent input processor to workflow result',
-        async () => {
-          const { createWorkflow, createStep, Agent } = ctx;
+        async ({ skip }) => {
+          const { createWorkflow, createStep, Agent, Mastra } = ctx;
 
-          if (!Agent) {
-            return;
+          if (!Agent || !Mastra) {
+            return skip('engine factory does not provide Agent or Mastra');
           }
 
           const tripwireProcessor = {
@@ -2009,6 +2056,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           const agentStep = createStep(agent);
           workflow.then(agentStep).commit();
 
+          const host = new Mastra({ logger: false, workflows: { [workflow.id]: workflow } });
+          // Event-driven engines execute steps through the host's workers, so start them.
+          await host.startWorkers();
+          onTestFinished(() => host.stopWorkers());
+
           const run = await workflow.createRun();
           const result = await run.start({
             inputData: { prompt: 'This message contains blocked content' },
@@ -2025,11 +2077,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
 
       it.skipIf(skipTests.streamingTripwireStreaming)(
         'should return tripwire status when streaming agent in workflow',
-        async () => {
-          const { createWorkflow, createStep, Agent } = ctx;
+        async ({ skip }) => {
+          const { createWorkflow, createStep, Agent, Mastra } = ctx;
 
-          if (!Agent) {
-            return;
+          if (!Agent || !Mastra) {
+            return skip('engine factory does not provide Agent or Mastra');
           }
 
           const tripwireProcessor = {
@@ -2091,6 +2143,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           const agentStep = createStep(agent);
           workflow.then(agentStep).commit();
 
+          const host = new Mastra({ logger: false, workflows: { [workflow.id]: workflow } });
+          // Event-driven engines execute steps through the host's workers, so start them.
+          await host.startWorkers();
+          onTestFinished(() => host.stopWorkers());
+
           const run = await workflow.createRun();
 
           // Use streaming to verify workflow returns tripwire status
@@ -2117,11 +2174,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
 
       it.skipIf(skipTests.streamingTripwireOutputStream)(
         'should handle tripwire from output stream processor in agent within workflow',
-        async () => {
-          const { createWorkflow, createStep, Agent } = ctx;
+        async ({ skip }) => {
+          const { createWorkflow, createStep, Agent, Mastra } = ctx;
 
-          if (!Agent) {
-            return;
+          if (!Agent || !Mastra) {
+            return skip('engine factory does not provide Agent or Mastra');
           }
 
           const outputStreamTripwireProcessor = {
@@ -2180,6 +2237,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           const agentStep = createStep(agent);
           workflow.then(agentStep).commit();
 
+          const host = new Mastra({ logger: false, workflows: { [workflow.id]: workflow } });
+          // Event-driven engines execute steps through the host's workers, so start them.
+          await host.startWorkers();
+          onTestFinished(() => host.stopWorkers());
+
           const run = await workflow.createRun();
 
           const result = await run.start({
@@ -2198,11 +2260,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
 
       it.skipIf(skipTests.schemaStructuredOutput)(
         'should pass structured output from agent step to next step with correct types',
-        async () => {
-          const { createWorkflow, createStep, Agent } = ctx;
+        async ({ skip }) => {
+          const { createWorkflow, createStep, Agent, Mastra } = ctx;
 
-          if (!Agent) {
-            return;
+          if (!Agent || !Mastra) {
+            return skip('engine factory does not provide Agent or Mastra');
           }
 
           const articleSchema = z.object({
@@ -2278,11 +2340,14 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
             outputSchema: z.object({ processed: z.boolean(), tagCount: z.number() }),
           });
 
-          new Mastra({
+          const host = new Mastra({
             workflows: { 'article-workflow': workflow },
             agents: { 'article-generator': agent },
             idGenerator: () => randomUUID(),
           });
+          // Event-driven engines execute steps through the host's workers, so start them.
+          await host.startWorkers();
+          onTestFinished(() => host.stopWorkers());
 
           workflow
             .then(agentStep)

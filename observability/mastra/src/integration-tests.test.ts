@@ -10,7 +10,7 @@ import { executeWithContext } from '@mastra/core/observability/context-storage';
 
 // Core Mastra imports
 import type { Processor } from '@mastra/core/processors';
-import { MockStore } from '@mastra/core/storage';
+import { MockStore, buildCreateSpanRecord } from '@mastra/core/storage';
 import type { InferSchemaOutput } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
@@ -207,9 +207,8 @@ function extractPromptText(prompt: any): string {
         return String(msg);
       })
       .join(' ');
-  } else {
-    return String(prompt);
   }
+  return String(prompt);
 }
 
 /**
@@ -1831,16 +1830,15 @@ describe('Tracing Integration Tests', () => {
                 warnings: [],
                 response: { id: '00000000-0000-0000-0000-000000000001', modelId: 'mock-model-id' },
               };
-            } else {
-              // Second call: After tool execution, agent returns the final answer
-              return {
-                content: [{ type: 'text', text: 'The result of 5 + 3 is 8.' }],
-                finishReason: 'stop' as const,
-                usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
-                warnings: [],
-                response: { id: '00000000-0000-0000-0000-000000000002', modelId: 'mock-model-id' },
-              };
             }
+            // Second call: After tool execution, agent returns the final answer
+            return {
+              content: [{ type: 'text', text: 'The result of 5 + 3 is 8.' }],
+              finishReason: 'stop' as const,
+              usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+              warnings: [],
+              response: { id: '00000000-0000-0000-0000-000000000002', modelId: 'mock-model-id' },
+            };
           },
           doStream: async () => {
             callCount++;
@@ -1879,20 +1877,19 @@ describe('Tracing Integration Tests', () => {
                   },
                 ]),
               };
-            } else {
-              // Second call: After tool execution, agent returns the final answer
-              return {
-                stream: convertArrayToReadableStream([
-                  { type: 'response-metadata', id: '00000000-0000-0000-0000-000000000002', modelId: 'mock-model-id' },
-                  { type: 'text-delta', id: '2', delta: 'The result of 5 + 3 is 8.' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
-                  },
-                ]),
-              };
             }
+            // Second call: After tool execution, agent returns the final answer
+            return {
+              stream: convertArrayToReadableStream([
+                { type: 'response-metadata', id: '00000000-0000-0000-0000-000000000002', modelId: 'mock-model-id' },
+                { type: 'text-delta', id: '2', delta: 'The result of 5 + 3 is 8.' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+                },
+              ]),
+            };
           },
         });
 
@@ -2157,6 +2154,104 @@ describe('Tracing Integration Tests', () => {
       const allSpans = testExporter.getAllSpans();
       const spansWithContext = allSpans.filter(s => s.requestContext);
       expect(spansWithContext.length).toBeGreaterThanOrEqual(1);
+
+      finalExpectations(testExporter);
+    });
+  });
+
+  describe('parent and root entity on exported spans', () => {
+    it('carries the owning parent and root entity from a real agent → tool span tree', async () => {
+      const testAgent = new Agent({
+        id: 'entity-agent',
+        name: 'Entity Agent',
+        instructions: 'You are a test agent',
+        model: mockModelV2,
+        tools: { calculator: calculatorTool },
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { testAgent },
+      });
+
+      await mastra.getAgent('testAgent').generate('Calculate 5 + 3');
+
+      const [agentSpan] = testExporter.getSpansByType(SpanType.AGENT_RUN);
+      const [toolSpan] = testExporter.getSpansByType(SpanType.TOOL_CALL);
+      expect(agentSpan).toBeDefined();
+      expect(toolSpan).toBeDefined();
+
+      expect(agentSpan).toMatchObject({
+        entityType: EntityType.AGENT,
+        entityId: 'entity-agent',
+        rootEntityType: EntityType.AGENT,
+        rootEntityId: 'entity-agent',
+        rootEntityName: 'Entity Agent',
+      });
+      expect(agentSpan?.parentEntityType).toBeUndefined();
+
+      expect(toolSpan).toMatchObject({
+        entityType: EntityType.TOOL,
+        entityId: 'calculator',
+        parentEntityType: EntityType.AGENT,
+        parentEntityId: 'entity-agent',
+        parentEntityName: 'Entity Agent',
+        rootEntityType: EntityType.AGENT,
+        rootEntityId: 'entity-agent',
+        rootEntityName: 'Entity Agent',
+      });
+
+      expect(buildCreateSpanRecord(toolSpan!)).toMatchObject({
+        parentEntityType: EntityType.AGENT,
+        parentEntityId: 'entity-agent',
+        parentEntityName: 'Entity Agent',
+        parentEntityVersionId: null,
+        rootEntityType: EntityType.AGENT,
+        rootEntityId: 'entity-agent',
+        rootEntityName: 'Entity Agent',
+        rootEntityVersionId: null,
+      });
+
+      finalExpectations(testExporter);
+    });
+
+    it('reports the agent version only on agent-owned spans and signals', async () => {
+      const testAgent = new Agent({
+        id: 'versioned-agent',
+        name: 'Versioned Agent',
+        instructions: 'You are a test agent',
+        model: mockModelV2,
+        tools: { calculator: calculatorTool },
+      });
+      testAgent.__setRawConfig({ resolvedVersionId: 'v3' });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { testAgent },
+      });
+
+      await mastra.getAgent('testAgent').generate('Calculate 5 + 3');
+
+      const [agentSpan] = testExporter.getSpansByType(SpanType.AGENT_RUN);
+      const [toolSpan] = testExporter.getSpansByType(SpanType.TOOL_CALL);
+      expect(agentSpan).toBeDefined();
+      expect(toolSpan).toBeDefined();
+      // The tool still inherits the agent's metadata
+      expect(toolSpan?.metadata?.entityVersionId).toBe('v3');
+
+      expect(buildCreateSpanRecord(agentSpan!).entityVersionId).toBe('v3');
+      expect(buildCreateSpanRecord(toolSpan!)).toMatchObject({
+        entityId: 'calculator',
+        entityVersionId: null,
+        parentEntityId: 'versioned-agent',
+        parentEntityVersionId: 'v3',
+      });
+
+      const [agentDuration] = testExporter.getMetricsByName('mastra_agent_duration_ms');
+      const [toolDuration] = testExporter.getMetricsByName('mastra_tool_duration_ms');
+      expect(agentDuration?.correlationContext?.entityVersionId).toBe('v3');
+      expect(toolDuration?.correlationContext).toMatchObject({ entityId: 'calculator', parentEntityVersionId: 'v3' });
+      expect(toolDuration?.correlationContext?.entityVersionId).toBeUndefined();
 
       finalExpectations(testExporter);
     });

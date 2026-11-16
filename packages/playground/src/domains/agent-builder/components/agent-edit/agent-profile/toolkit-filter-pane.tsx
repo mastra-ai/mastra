@@ -221,11 +221,11 @@ export const ToolkitFilterPane = ({
       data-testid={`${TEST_ID_PREFIX}-filter`}
     >
       <SearchInput
-        label="Filter toolkits"
+        label="Search toolkits"
         size="md"
         className="flex-none"
         data-testid={`${TEST_ID_PREFIX}-filter-search`}
-        placeholder="Filter toolkits..."
+        placeholder="Search toolkits"
         value={search}
         onValueChange={setSearch}
       />
@@ -242,9 +242,6 @@ export const ToolkitFilterPane = ({
             Select all
           </Txt>
         </button>
-        <Txt as="span" variant="meta" tone="faint" aria-hidden>
-          ·
-        </Txt>
         <button
           type="button"
           onClick={onClearAll}

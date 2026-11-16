@@ -1,5 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { formatModelName, formatProviderName, resolveModel } from './model';
+import { compareModelReleaseDates, formatModelName, formatProviderName, resolveModel } from './model';
+
+describe('compareModelReleaseDates', () => {
+  describe('when release dates are available', () => {
+    it('orders newer releases before older releases', () => {
+      expect(compareModelReleaseDates('2025-08-07', '2024-05-13')).toBeLessThan(0);
+      expect(compareModelReleaseDates('2024-05-13', '2025-08-07')).toBeGreaterThan(0);
+    });
+
+    it('leaves same-day releases tied for the caller to order by name', () => {
+      expect(compareModelReleaseDates('2025-08-07', '2025-08-07')).toBe(0);
+    });
+  });
+
+  describe('when dates are missing or invalid', () => {
+    it.each([undefined, '', 'unknown'])('puts %s after a dated model', date => {
+      expect(compareModelReleaseDates(date, '2025-08-07')).toBeGreaterThan(0);
+      expect(compareModelReleaseDates('2025-08-07', date)).toBeLessThan(0);
+    });
+
+    it('leaves undated models tied for the caller to order by name', () => {
+      expect(compareModelReleaseDates(undefined, 'unknown')).toBe(0);
+    });
+  });
+});
 
 describe('resolveModel', () => {
   it('splits the provider from the model and names both', () => {

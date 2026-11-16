@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CheckIcon, MailIcon, SearchIcon, SendIcon, XIcon } from 'lucide-react';
 import { Field, FieldError, FieldLabel } from '../Field';
 import { Kbd } from '../Kbd';
 import { Txt } from '../Txt/Txt';
@@ -11,6 +10,11 @@ import {
   InputGroupText,
   InputGroupTextarea,
 } from './input-group';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconEmail2 } from '@/ds/icons/central/IconEmail2';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
+import { IconSend } from '@/ds/icons/central/IconSend';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const meta: Meta<typeof InputGroup> = {
@@ -39,7 +43,7 @@ export const WithTextarea: Story = {
     <div className="flex w-80 flex-col gap-3">
       <InputGroup>
         <InputGroupAddon>
-          <SearchIcon />
+          <IconMagnifyingGlass />
         </InputGroupAddon>
         <InputGroupInput placeholder="Search" />
       </InputGroup>
@@ -55,9 +59,9 @@ export const WithInlineStartIcon: Story = {
     <div className="w-80">
       <InputGroup>
         <InputGroupAddon>
-          <SearchIcon />
+          <IconMagnifyingGlass />
         </InputGroupAddon>
-        <InputGroupInput placeholder="Search..." />
+        <InputGroupInput placeholder="Search" />
       </InputGroup>
     </div>
   ),
@@ -70,7 +74,7 @@ export const WithInlineEndButton: Story = {
         <InputGroupInput placeholder="Email address" type="email" />
         <InputGroupAddon align="inline-end">
           <InputGroupButton aria-label="Submit">
-            <SendIcon />
+            <IconSend />
           </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>
@@ -83,12 +87,12 @@ export const WithLeadingAndTrailing: Story = {
     <div className="w-80">
       <InputGroup>
         <InputGroupAddon>
-          <MailIcon />
+          <IconEmail2 />
         </InputGroupAddon>
         <InputGroupInput placeholder="you@example.com" />
         <InputGroupAddon align="inline-end">
           <InputGroupButton aria-label="Clear">
-            <XIcon />
+            <IconCrossMedium />
           </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>
@@ -114,9 +118,9 @@ export const WithKbd: Story = {
     <div className="w-80">
       <InputGroup>
         <InputGroupAddon>
-          <SearchIcon />
+          <IconMagnifyingGlass />
         </InputGroupAddon>
-        <InputGroupInput placeholder="Search..." />
+        <InputGroupInput placeholder="Search" />
         <InputGroupAddon align="inline-end">
           <Kbd>⌘K</Kbd>
         </InputGroupAddon>
@@ -142,10 +146,10 @@ export const BlockEndAddon: Story = {
   render: () => (
     <div className="w-80">
       <InputGroup>
-        <InputGroupTextarea placeholder="Type a message..." />
+        <InputGroupTextarea placeholder="Type a message" />
         <InputGroupAddon align="block-end">
           <InputGroupButton aria-label="Submit">
-            <CheckIcon />
+            <IconCheckmark2Medium />
           </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>
@@ -158,19 +162,19 @@ export const Sizes: Story = {
     <div className="flex w-80 flex-col gap-3">
       <InputGroup size="sm">
         <InputGroupAddon>
-          <SearchIcon />
+          <IconMagnifyingGlass />
         </InputGroupAddon>
         <InputGroupInput placeholder="Small" />
       </InputGroup>
       <InputGroup size="md">
         <InputGroupAddon>
-          <SearchIcon />
+          <IconMagnifyingGlass />
         </InputGroupAddon>
         <InputGroupInput placeholder="Medium" />
       </InputGroup>
       <InputGroup size="lg">
         <InputGroupAddon>
-          <SearchIcon />
+          <IconMagnifyingGlass />
         </InputGroupAddon>
         <InputGroupInput placeholder="Large" />
       </InputGroup>
@@ -183,7 +187,7 @@ export const Disabled: Story = {
     <div className="w-80">
       <InputGroup>
         <InputGroupAddon>
-          <MailIcon />
+          <IconEmail2 />
         </InputGroupAddon>
         <InputGroupInput placeholder="Disabled" disabled value="locked@example.com" />
       </InputGroup>
@@ -197,7 +201,7 @@ export const Invalid: Story = {
       <FieldLabel>Email</FieldLabel>
       <InputGroup>
         <InputGroupAddon>
-          <MailIcon />
+          <IconEmail2 />
         </InputGroupAddon>
         <InputGroupInput placeholder="Invalid" defaultValue="not an email" />
       </InputGroup>
@@ -210,7 +214,7 @@ export const Textarea: Story = {
   render: () => (
     <div className="w-80">
       <InputGroup>
-        <InputGroupTextarea placeholder="Write a comment..." />
+        <InputGroupTextarea placeholder="Write a comment" />
       </InputGroup>
     </div>
   ),
@@ -225,9 +229,9 @@ export const OnDifferentSurfaces: Story = {
         </Txt>
         <InputGroup>
           <InputGroupAddon>
-            <SearchIcon />
+            <IconMagnifyingGlass />
           </InputGroupAddon>
-          <InputGroupInput aria-label="Search agents on the sidebar" placeholder="Search agents..." />
+          <InputGroupInput aria-label="Search agents on the sidebar" placeholder="Search agents" />
         </InputGroup>
       </div>
       <div className="rounded-lg border border-border bg-background p-4">
@@ -236,9 +240,9 @@ export const OnDifferentSurfaces: Story = {
         </Txt>
         <InputGroup>
           <InputGroupAddon>
-            <SearchIcon />
+            <IconMagnifyingGlass />
           </InputGroupAddon>
-          <InputGroupInput aria-label="Search agents on the main canvas" placeholder="Search agents..." />
+          <InputGroupInput aria-label="Search agents on the main canvas" placeholder="Search agents" />
         </InputGroup>
       </div>
       <div className={`${raisedSurfaceStyle} rounded-lg p-4`}>
@@ -247,9 +251,9 @@ export const OnDifferentSurfaces: Story = {
         </Txt>
         <InputGroup>
           <InputGroupAddon>
-            <SearchIcon />
+            <IconMagnifyingGlass />
           </InputGroupAddon>
-          <InputGroupInput aria-label="Search agents on a card" placeholder="Search agents..." />
+          <InputGroupInput aria-label="Search agents on a card" placeholder="Search agents" />
         </InputGroup>
       </div>
       <div className="rounded-lg border border-border bg-popover p-4">
@@ -258,9 +262,9 @@ export const OnDifferentSurfaces: Story = {
         </Txt>
         <InputGroup>
           <InputGroupAddon>
-            <SearchIcon />
+            <IconMagnifyingGlass />
           </InputGroupAddon>
-          <InputGroupInput aria-label="Search agents in a popover" placeholder="Search agents..." />
+          <InputGroupInput aria-label="Search agents in a popover" placeholder="Search agents" />
         </InputGroup>
       </div>
     </div>

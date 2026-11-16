@@ -851,6 +851,53 @@ describe('MastraClient', () => {
       });
     });
 
+    describe('resumeBackgroundTask', () => {
+      const respondWith = (body: unknown) =>
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          headers: { get: () => 'application/json' },
+          json: async () => body,
+        });
+      const sent = () => {
+        const [url, init] = (global.fetch as any).mock.calls[0];
+        return { url, method: init.method, body: JSON.parse(init.body) };
+      };
+
+      it('POSTs the answer and the suspension it answers to the resume route', async () => {
+        respondWith({ id: 'task/1', status: 'running' });
+        const suspendedAt = new Date('2026-10-30T10:00:00.000Z');
+
+        const result = await client.resumeBackgroundTask('task/1', { approved: true }, { suspendedAt });
+
+        expect(sent()).toEqual({
+          url: 'http://localhost:4111/api/background-tasks/task%2F1/resume',
+          method: 'POST',
+          body: { resumeData: { approved: true }, suspendedAt: '2026-10-30T10:00:00.000Z' },
+        });
+        expect(result).toEqual({ id: 'task/1', status: 'running' });
+      });
+
+      it('passes a suspendedAt string or epoch through unchanged and omits it when not given', async () => {
+        respondWith({});
+        await client.resumeBackgroundTask('t1', 'yes', { suspendedAt: 1793370000000 });
+        expect(sent().body).toEqual({ resumeData: 'yes', suspendedAt: 1793370000000 });
+
+        (global.fetch as any).mockClear();
+        respondWith({});
+        await client.resumeBackgroundTask('t1', null);
+        expect(sent().body).toEqual({ resumeData: null });
+      });
+
+      it('sends the answer once: a lost response is not retried, so the answer cannot land twice', async () => {
+        const retrying = new MastraClient({ baseUrl: 'http://localhost:4111', retries: 2, backoffMs: 1 });
+        (global.fetch as any).mockRejectedValueOnce(new TypeError('fetch failed'));
+        respondWith({ id: 't1', status: 'running' });
+
+        await expect(retrying.resumeBackgroundTask('t1', { approved: true })).rejects.toThrow('fetch failed');
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+      });
+    });
+
     describe('getBackgroundTask', () => {
       it('calls GET /background-tasks/:backgroundTaskId', async () => {
         const mockTask = { id: 'background-task-1', status: 'completed', toolName: 'tool' };
@@ -1081,6 +1128,17 @@ describe('MastraClient', () => {
 
       expect(global.fetch).toHaveBeenCalledWith(
         'http://localhost:4111/api/datasets/dataset-1/experiments/experiment-1/results?page=1&tags=a&tags=b+c',
+        expect.any(Object),
+      );
+    });
+
+    it('sends the review status filter for experiment result listings', async () => {
+      mockSuccess();
+
+      await client.listDatasetExperimentResults('dataset-1', 'experiment-1', { perPage: 100, status: 'needs-review' });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/datasets/dataset-1/experiments/experiment-1/results?perPage=100&status=needs-review',
         expect.any(Object),
       );
     });
@@ -1458,6 +1516,35 @@ describe('MastraClient', () => {
         description,
         metadata,
       });
+    });
+
+    it('triggerDatasetExperiment posts agentModel in the request body', async () => {
+      const agentModel = { provider: 'openai', modelId: 'gpt-5-mini' };
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({
+          experimentId: 'exp-1',
+          status: 'pending',
+          totalItems: 1,
+          succeededCount: 0,
+          failedCount: 0,
+          startedAt: new Date().toISOString(),
+          completedAt: null,
+          results: [],
+        }),
+      });
+
+      await client.triggerDatasetExperiment({
+        datasetId: 'ds-1',
+        targetType: 'agent',
+        targetId: 'agent-1',
+        agentModel,
+      });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/experiments');
+      expect(JSON.parse(init.body)).toMatchObject({ targetType: 'agent', targetId: 'agent-1', agentModel });
     });
 
     it('updateDatasetExperiment should PATCH the experiment route with name, description and metadata', async () => {

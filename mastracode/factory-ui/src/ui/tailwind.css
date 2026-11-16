@@ -1,17 +1,7 @@
 @import 'tailwindcss';
 @import '@mastra/playground-ui/components.css';
 @import '@mastra/playground-ui/sources.css';
-
-/* Mona Sans everywhere, same as Studio. Faces come from
- * @fontsource-variable/mona-sans, imported in main.tsx. */
-@layer base {
-  :root {
-    --font-display:
-      'Mona Sans Variable', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-      'Segoe UI Symbol', 'Noto Color Emoji';
-    --font-body: var(--font-display);
-  }
-}
+@import '@mastra/playground-ui/fonts.css';
 
 /* The board card's corner. It is not a free number: a card is a rounded box with
  * a capsule pill sitting in its bottom corner, and the two only look concentric

@@ -28,7 +28,7 @@ const vectorStore = new PgVector({
 
 ## Documentation
 
-- [@mastra/pg documentation](https://mastra.ai/reference/vectors/pg)
+- [@mastra/pg documentation](https://mastra.ai/integrations/vectors/pg)
 
 ## Changelog
 

@@ -145,7 +145,7 @@ describe('server CORS', () => {
     expect(response.headers.get('Access-Control-Allow-Credentials')).toBeNull();
   });
 
-  it('keeps auth credential defaults for legacy CORS config', async () => {
+  it('reflects the origin without credentials when auth is set and no origin is configured', async () => {
     const mastra = new Mastra({
       server: {
         auth: {
@@ -155,9 +155,42 @@ describe('server CORS', () => {
     });
     const app = await createHonoServer(mastra, { tools: {} });
 
+    const response = await app.request(preflight('/api/agents', 'https://evil.example'));
+
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://evil.example');
+    expect(response.headers.get('Access-Control-Allow-Credentials')).toBeNull();
+  });
+
+  it('allows credentials by default for explicitly configured origins when auth is set', async () => {
+    const mastra = new Mastra({
+      server: {
+        auth: {
+          authenticateToken: async () => ({ id: 'user' }),
+        },
+        cors: { origin: ['https://app.example'] },
+      },
+    });
+    const app = await createHonoServer(mastra, { tools: {} });
+
     const response = await app.request(preflight('/api/agents', 'https://app.example'));
 
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://app.example');
+    expect(response.headers.get('Access-Control-Allow-Credentials')).toBe('true');
+  });
+
+  it('respects an explicit credentials setting when auth is set without origins', async () => {
+    const mastra = new Mastra({
+      server: {
+        auth: {
+          authenticateToken: async () => ({ id: 'user' }),
+        },
+        cors: { credentials: true },
+      },
+    });
+    const app = await createHonoServer(mastra, { tools: {} });
+
+    const response = await app.request(preflight('/api/agents', 'https://app.example'));
+
     expect(response.headers.get('Access-Control-Allow-Credentials')).toBe('true');
   });
 

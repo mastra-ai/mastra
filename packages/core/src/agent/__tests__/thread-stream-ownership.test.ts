@@ -212,6 +212,52 @@ describe('thread ownership (#24878)', () => {
     run.complete();
   });
 
+  // A failed lease check defers the registration; a later stream-part promotes the run. The owner agent
+  // from the registration must survive that, or a same-agent follow-up is treated as cross-agent.
+  it('delivers a thread-targeted signal to a remote run promoted after a failed lease check', async () => {
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const pubsub = new LeasePubSub();
+    const agent = { id: 'promoted-signal-agent', stream: vi.fn() } as unknown as Agent<any, any, any, any>;
+    const threadId = 'promoted-signal-thread';
+    const resourceId = 'promoted-signal-user';
+    const topic = `agent.thread-stream.${encodeURIComponent([resourceId, threadId].join('\u0000'))}`;
+
+    const subscription = await senderRuntime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    vi.spyOn(pubsub, 'getLeaseOwner').mockRejectedValueOnce(new Error('Lease unavailable'));
+    const run = registerRun(ownerRuntime, agent, pubsub, 'remote-run', threadId, resourceId);
+    await run.registered;
+    await nextTicks(10);
+    const streamId = pubsub.deliveries.find(
+      ({ event }) => event.data?.type === 'run-registered' && event.runId === 'remote-run',
+    )?.event.data.streamId;
+    await pubsub.publish(topic, {
+      type: 'agent.thread-stream',
+      runId: 'remote-run',
+      data: {
+        type: 'stream-part',
+        runId: 'remote-run',
+        streamId,
+        sourceId: 'origin',
+        part: { type: 'text-delta', payload: { text: 'live' } },
+      },
+    });
+    await vi.waitFor(() => expect(subscription.activeRunId()).toBe('remote-run'));
+
+    const result = senderRuntime.sendSignal(
+      agent,
+      { type: 'user-message', contents: 'steer' },
+      { resourceId, threadId, ifActive: { behavior: 'discard' } },
+      pubsub,
+    );
+
+    await expect(result.accepted).resolves.toEqual({ action: 'discard' });
+    expect((agent as any).stream).not.toHaveBeenCalled();
+
+    subscription.unsubscribe();
+    run.complete();
+  });
+
   it('ignores a live same-source redelivery for a finished local run', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const pubsub = new LeasePubSub();

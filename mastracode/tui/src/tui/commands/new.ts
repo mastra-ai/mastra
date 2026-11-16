@@ -1,4 +1,5 @@
 import { disposeAssistantRenderState } from '../assistant-render-registry.js';
+import { clearPendingTools } from '../state.js';
 import { setCurrentThreadTitle } from '../thread-title.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -27,8 +28,7 @@ export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> 
   state.agentRunStartedAt = undefined;
   state.agentRunLastStreamPartAt = undefined;
   state.chatContainer.clear();
-  state.pendingTools.clear();
-  state.pendingTaskToolIds?.clear();
+  clearPendingTools(state);
   state.pendingSubagents.clear();
   state.pendingSignalMessageComponentsById.clear();
   state.followUpComponents = [];

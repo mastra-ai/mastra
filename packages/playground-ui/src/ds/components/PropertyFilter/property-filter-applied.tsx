@@ -1,4 +1,3 @@
-import { LockIcon, XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '../Button';
@@ -8,6 +7,8 @@ import { PickMultiPanel } from './pick-multi-panel';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Input } from '@/ds/components/Input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconLock } from '@/ds/icons/central/IconLock';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
 
 export type PropertyFilterAppliedProps = {
@@ -73,7 +74,7 @@ function LockedTokenPill({ field, value, tooltipContent }: LockedTokenPillProps)
             <ButtonsGroupText>is</ButtonsGroupText>
             <ButtonsGroupText>{display}</ButtonsGroupText>
             <ButtonsGroupText>
-              <LockIcon />
+              <IconLock />
             </ButtonsGroupText>
           </ButtonsGroup>
         </TooltipTrigger>
@@ -137,13 +138,14 @@ function TextTokenPill({ field, value, onChange, onRemove, disabled, autoFocus }
         }}
       />
       <Button
+        size="icon-md"
         type="button"
         disabled={disabled}
         aria-label={`Remove ${field.label} filter`}
         onMouseDown={e => e.preventDefault()}
         onClick={onRemove}
       >
-        <XIcon />
+        <IconCrossMedium />
       </Button>
     </ButtonsGroup>
   );
@@ -175,8 +177,14 @@ function PickMultiTokenPill({ field, token, tokens, onChange, onRemove, disabled
           <PickMultiPanel field={field} tokens={tokens} onChange={onChange} />
         </PopoverContent>
       </Popover>
-      <Button type="button" disabled={disabled} aria-label={`Remove ${field.label} filter`} onClick={onRemove}>
-        <XIcon />
+      <Button
+        size="icon-md"
+        type="button"
+        disabled={disabled}
+        aria-label={`Remove ${field.label} filter`}
+        onClick={onRemove}
+      >
+        <IconCrossMedium />
       </Button>
     </ButtonsGroup>
   );
@@ -267,12 +275,13 @@ export function PropertyFilterApplied({
             <ButtonsGroupText>is</ButtonsGroupText>
             <ButtonsGroupText>{stringifyTokenValue(token.value)}</ButtonsGroupText>
             <Button
+              size="icon-md"
               type="button"
               disabled={disabled}
               aria-label={`Remove ${field.label} filter`}
               onClick={() => removeTokenAt(index)}
             >
-              <XIcon />
+              <IconCrossMedium />
             </Button>
           </ButtonsGroup>
         );

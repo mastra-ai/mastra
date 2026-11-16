@@ -649,5 +649,5 @@ export async function removeConnectionAction(
 
 function describeConnection(provider: string, connection: ProjectConnection): string {
   const label = connectionLabel(connection);
-  return label ? `${provider.toLowerCase()} (${label})` : `${provider.toLowerCase()}`;
+  return label ? `${provider.toLowerCase()} (${label})` : provider.toLowerCase();
 }

@@ -1,13 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
+import { createProviderWorkItemForTests } from '../storage/test-utils.js';
+import { workItemBranch } from '../work-item-branch.js';
 import { defineBoard } from './define-board.js';
-import { createBoardRegistry } from './registry.js';
+import { boardRegistryOf, createBoardRegistry } from './registry.js';
 import {
+  awaitsAcceptance,
+  boardFlow,
   boardForWorkItem,
+  cardOwnsBranch,
   isTerminalWorkItem,
+  pullRequestSourceNumber,
   resolveBoardClosure,
   resolveBoardToolRule,
   resolvePhaseSemantics,
+  reviewedPullRequest,
   workItemPhaseSemantics,
 } from './semantics.js';
 import { createTestBoard } from './test-utils.js';
@@ -23,13 +30,13 @@ describe('boardForWorkItem', () => {
     ).toBe('release');
   });
 
-  it('infers Review for legacy pull-request rows and Work otherwise', () => {
+  it('puts every row without a board on Work, pull requests included', () => {
     expect(
       boardForWorkItem({
         board: null,
         externalSource: { integrationId: 'github', type: 'pull-request', externalId: '1' },
       }),
-    ).toBe('review');
+    ).toBe('work');
     expect(boardForWorkItem({ board: null, externalSource: null })).toBe('work');
   });
 });
@@ -41,7 +48,7 @@ describe('resolvePhaseSemantics', () => {
     expect(resolvePhaseSemantics(boards, 'release', 'queued')).toEqual({ kind: 'resting' });
     expect(resolvePhaseSemantics(boards, 'release', 'shipping')).toEqual({ kind: 'working', role: 'release' });
     expect(resolvePhaseSemantics(boards, 'release', 'shipped')).toEqual({ kind: 'terminal' });
-    expect(resolvePhaseSemantics(boards, 'work', 'planning')).toEqual({ kind: 'working', role: 'plan' });
+    expect(resolvePhaseSemantics(boards, 'work', 'planning')).toEqual({ kind: 'working', role: 'work' });
     expect(resolvePhaseSemantics(boards, 'work', 'done')).toEqual({ kind: 'terminal' });
   });
 
@@ -49,7 +56,7 @@ describe('resolvePhaseSemantics', () => {
     expect(resolvePhaseSemantics(boards, 'missing', 'done')).toBeUndefined();
     expect(resolvePhaseSemantics(boards, 'release', 'done')).toBeUndefined();
     expect(resolvePhaseSemantics(boards, 'release', 'intake')).toBeUndefined();
-    const only = createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false });
+    const only = boardRegistryOf([createTestBoard()]);
     expect(resolvePhaseSemantics(only, 'work', 'done')).toBeUndefined();
   });
 
@@ -80,7 +87,7 @@ describe('workItemPhaseSemantics', () => {
       workItemPhaseSemantics(boards, {
         board: null,
         externalSource: { integrationId: 'github', type: 'pull-request', externalId: '1' },
-        stages: ['review'],
+        stages: ['pr-review'],
       }),
     ).toEqual({ kind: 'working', role: 'review' });
   });
@@ -89,6 +96,54 @@ describe('workItemPhaseSemantics', () => {
     expect(
       workItemPhaseSemantics(boards, { board: 'work', externalSource: null, stages: ['review', 'done'] }),
     ).toBeUndefined();
+  });
+});
+
+describe('boardFlow', () => {
+  it('never takes a second pull request review phase for self-review', () => {
+    const board = defineBoard({
+      id: 'ship',
+      name: 'Ship',
+      initialPhase: 'inbox',
+      phases: {
+        inbox: { name: 'Inbox', kind: 'resting', nextPhases: ['make'] },
+        make: { name: 'Make', kind: 'working', runner: { context: 'work' }, nextPhases: ['pr'] },
+        pr: {
+          name: 'PR',
+          kind: 'working',
+          runner: { context: 'review' },
+          tools: ['factory_record_review_verdict', 'factory_review_source'],
+          nextPhases: ['recheck', 'shipped'],
+        },
+        recheck: {
+          name: 'Recheck',
+          kind: 'working',
+          runner: { context: 'review' },
+          tools: ['factory_record_review_verdict', 'factory_review_source'],
+          nextPhases: ['shipped'],
+        },
+        shipped: { name: 'Shipped', kind: 'terminal' },
+      },
+    });
+    expect(boardFlow(board)).toMatchObject({ pullRequestReview: 'pr', build: 'make' });
+    expect(boardFlow(board).selfReview).toBeUndefined();
+  });
+
+  it('marks no triage phase on a board that builds nothing', () => {
+    const board = defineBoard({
+      id: 'post',
+      name: 'Post',
+      initialPhase: 'inbox',
+      phases: {
+        inbox: { name: 'Inbox', kind: 'resting', nextPhases: ['draft'] },
+        draft: { name: 'Draft', kind: 'working', runner: { context: 'work' }, nextPhases: ['publish'] },
+        publish: { name: 'Publish', kind: 'working', runner: { context: 'publish' }, nextPhases: ['done'] },
+        done: { name: 'Done', kind: 'terminal' },
+      },
+    });
+    expect(boardFlow(board).triage).toBeUndefined();
+    expect(awaitsAcceptance(board, 'draft')).toBe(false);
+    expect(awaitsAcceptance(board, 'inbox')).toBe(true);
   });
 });
 
@@ -107,14 +162,14 @@ describe('resolveBoardToolRule', () => {
     });
     const boards = createBoardRegistry({ boards: [release] });
     expect(resolveBoardToolRule(boards, 'release', 'ship_it')).toBe(onResult);
-    expect(resolveBoardToolRule(boards, 'work', 'submit_plan')).toBeTypeOf('function');
+    // Work declares no tool rules: Planning's exit tool moves the card instead.
+    expect(resolveBoardToolRule(boards, 'work', 'factory_record_review_verdict')).toBeUndefined();
+    expect(resolveBoardToolRule(boards, 'work', 'submit_plan')).toBeUndefined();
     expect(resolveBoardToolRule(boards, 'review', 'submit_plan')).toBeUndefined();
     expect(resolveBoardToolRule(boards, 'release', 'submit_plan')).toBeUndefined();
     expect(resolveBoardToolRule(boards, 'work', 'ship_it')).toBeUndefined();
     expect(resolveBoardToolRule(boards, 'missing', 'ship_it')).toBeUndefined();
-    expect(
-      resolveBoardToolRule(createBoardRegistry({ boards: [], includeDefaultBoards: false }), 'work', 'submit_plan'),
-    ).toBeUndefined();
+    expect(resolveBoardToolRule(boardRegistryOf([]), 'work', 'submit_plan')).toBeUndefined();
   });
 });
 
@@ -129,7 +184,7 @@ describe('isTerminalWorkItem', () => {
   });
 
   it('falls back to the built-in names only for Work and Review rows on uninstalled boards', () => {
-    const none = createBoardRegistry({ includeDefaultBoards: false });
+    const none = boardRegistryOf([]);
     expect(isTerminalWorkItem(none, { board: 'work', externalSource: null, stages: ['done'] })).toBe(true);
     expect(isTerminalWorkItem(none, { board: null, externalSource: null, stages: ['canceled'] })).toBe(true);
     expect(isTerminalWorkItem(none, { board: 'ghost', externalSource: null, stages: ['done'] })).toBe(false);
@@ -182,5 +237,44 @@ describe('resolveBoardClosure', () => {
   it('is undefined for boards that declare no mapping or are not installed', () => {
     expect(resolveBoardClosure(boards, { board: 'release', externalSource: null, stages: ['queued'] })).toBeUndefined();
     expect(resolveBoardClosure(boards, { board: 'gone', externalSource: null, stages: ['queued'] })).toBeUndefined();
+  });
+});
+
+describe('branch ownership', () => {
+  const card = {
+    id: 'item-0001',
+    externalSource: { integrationId: 'github', type: 'issue' as const, externalId: '42' },
+    workItem: { metadata: { number: 42 } },
+  };
+  const buildBranch = workItemBranch({ id: 'item-0001', source: 'github-issue', metadata: { number: 42 } });
+
+  it("owns its build branch with no session, plus any session's branch, and nothing else", () => {
+    expect(cardOwnsBranch({ ...card, sessions: {} }, buildBranch)).toBe(true);
+    expect(cardOwnsBranch({ ...card, sessions: { work: { branch: 'legacy/42' } } }, 'legacy/42')).toBe(true);
+    expect(cardOwnsBranch({ ...card, sessions: {} }, 'feature-42')).toBe(false);
+    expect(cardOwnsBranch({ ...card, sessions: {} }, '')).toBe(false);
+  });
+});
+
+describe('the number of an attached change request', () => {
+  it("reads a GitLab merge request's iid from its facts, not from digits at the end of its key", () => {
+    // GitLab keys are base64url JSON, so trailing digits are an accident of the encoding.
+    const key = `gitlab-pr:${Buffer.from(JSON.stringify({ version: 1, host: 'gitlab.com', projectId: 7, mergeRequestIid: 17 })).toString('base64url')}`;
+    const issue = createProviderWorkItemForTests({
+      id: 'item-1',
+      title: 'Fix it',
+      source: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab-issue:42' },
+      metadata: {},
+    });
+    const mergeRequest = createProviderWorkItemForTests({
+      id: 'item-1',
+      title: 'Fix it',
+      source: { integrationId: 'gitlab', type: 'pull-request', externalId: key },
+      metadata: { gitlabMergeRequestIid: 17, state: 'open' },
+    }).sources[0]!;
+    const attached = reviewedPullRequest({ workItem: { ...issue, sources: [...issue.sources, mergeRequest] } });
+
+    expect(attached && pullRequestSourceNumber(attached)).toBe(17);
+    expect(/(\d+)$/.exec(key)?.[1]).not.toBe('17');
   });
 });

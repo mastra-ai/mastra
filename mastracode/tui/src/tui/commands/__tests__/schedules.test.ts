@@ -43,6 +43,13 @@ function answer(...answers: Array<string | null>) {
 beforeEach(() => {
   asked = [];
   modal.askModalQuestion.mockReset();
+  // Pin the clock to midday so a 5m schedule never crosses midnight, where the next fire gains a date prefix.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(2026, 8, 29, 12, 0, 0));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 function createContext(

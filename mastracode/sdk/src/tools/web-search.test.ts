@@ -63,46 +63,46 @@ describe('createConfiguredWebTools', () => {
     else process.env.TAVILY_API_KEY = originalTavilyKey;
   });
 
-  it('selects Tavily in auto mode when both provider keys are configured', () => {
+  it('selects Tavily in auto mode when both provider keys are configured', async () => {
     process.env.PARALLEL_API_KEY = 'parallel-key';
     process.env.TAVILY_API_KEY = 'tavily-key';
 
-    const tools = createConfiguredWebTools();
+    const tools = await createConfiguredWebTools();
 
     expect(tools?.web_search.description).toBe('tavily search');
     expect(tools?.web_extract.description).toBe('tavily extract');
   });
 
-  it('honors an explicit Parallel preference when its key is configured', () => {
+  it('honors an explicit Parallel preference when its key is configured', async () => {
     process.env.PARALLEL_API_KEY = 'parallel-key';
     process.env.TAVILY_API_KEY = 'tavily-key';
     settingsMock.webSearchProvider = 'parallel';
 
-    const tools = createConfiguredWebTools();
+    const tools = await createConfiguredWebTools();
 
     expect(tools?.web_search.description).toBe('parallel search');
     expect(tools?.web_extract.description).toBe('parallel extract');
   });
 
-  it('falls back to the configured provider when the preferred key is missing', () => {
+  it('falls back to the configured provider when the preferred key is missing', async () => {
     process.env.TAVILY_API_KEY = 'tavily-key';
     settingsMock.webSearchProvider = 'parallel';
 
-    const tools = createConfiguredWebTools();
+    const tools = await createConfiguredWebTools();
 
     expect(tools?.web_search.description).toBe('tavily search');
   });
 
-  it('selects Parallel in auto mode when only its key is configured', () => {
+  it('selects Parallel in auto mode when only its key is configured', async () => {
     process.env.PARALLEL_API_KEY = 'parallel-key';
 
-    const tools = createConfiguredWebTools();
+    const tools = await createConfiguredWebTools();
 
     expect(tools?.web_search.description).toBe('parallel search');
     expect(tools?.web_extract.description).toBe('parallel extract');
   });
 
-  it('returns no model-independent tools when neither key is configured', () => {
+  it('returns no model-independent tools when neither key is configured', async () => {
     expect(createConfiguredWebTools()).toBeUndefined();
   });
 
@@ -122,8 +122,8 @@ describe('createConfiguredWebTools', () => {
 });
 
 describe('Parallel web tool adapters', () => {
-  it('uses Mastra Code query input instead of Parallel searchQueries', () => {
-    const tool = createParallelWebSearchTool();
+  it('uses Mastra Code query input instead of Parallel searchQueries', async () => {
+    const tool = await createParallelWebSearchTool();
     const inputSchema = tool.inputSchema as z.ZodType;
 
     expect(inputSchema.safeParse({ query: 'example query' }).success).toBe(true);
@@ -145,7 +145,7 @@ describe('Parallel web tool adapters', () => {
       usage: [{ name: 'search', count: 1 }],
       warnings: [],
     });
-    const tool = createParallelWebSearchTool();
+    const tool = await createParallelWebSearchTool();
 
     const output = await tool.execute!({ query: 'example query' }, {} as never);
 
@@ -181,7 +181,7 @@ describe('Parallel web tool adapters', () => {
       usage: [{ name: 'extract', count: 1 }],
       warnings: [],
     });
-    const tool = createParallelWebExtractTool();
+    const tool = await createParallelWebExtractTool();
 
     const output = await tool.execute!({ urls: ['https://example.com/page'] }, {} as never);
 
@@ -196,7 +196,7 @@ describe('Parallel web tool adapters', () => {
       message: 'Invalid Parallel search input',
       validationErrors: { errors: ['Invalid Parallel search input'], fields: {} },
     });
-    const tool = createParallelWebSearchTool();
+    const tool = await createParallelWebSearchTool();
 
     await expect(tool.execute!({ query: 'example query' }, {} as never)).rejects.toThrow(
       'Invalid Parallel search input',
@@ -205,7 +205,7 @@ describe('Parallel web tool adapters', () => {
 
   it('rejects missing Parallel extract output', async () => {
     providerMocks.parallelExtractExecute.mockResolvedValueOnce(undefined);
-    const tool = createParallelWebExtractTool();
+    const tool = await createParallelWebExtractTool();
 
     await expect(tool.execute!({ urls: ['https://example.com/page'] }, {} as never)).rejects.toThrow(
       'Parallel extract returned no output',

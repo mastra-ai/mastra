@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { RefreshCwIcon, SaveIcon, SearchIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -17,6 +16,9 @@ import {
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/ds/components/InputGroup';
 import { Notice } from '@/ds/components/Notice';
 import { TooltipProvider } from '@/ds/components/Tooltip';
+import { IconArrowRotateClockwise } from '@/ds/icons/central/IconArrowRotateClockwise';
+import { IconFloppyDisk1 } from '@/ds/icons/central/IconFloppyDisk1';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { useEnvironmentVariablesEditor } from '@/hooks/use-environment-variables-editor';
 import { collectEnvironmentVariables, rowsFromEnvironmentVariables } from '@/lib/env-file';
 import type { EnvironmentVariableEntry } from '@/lib/env-file';
@@ -107,8 +109,8 @@ function DemoEditor({ initialRows }: { initialRows: EnvironmentVariableEntry[] }
               disabled={!editor.isDirty || editor.hasDuplicateKeys}
               onClick={save}
             >
-              <RefreshCwIcon />
-              Save & Restart
+              <IconArrowRotateClockwise />
+              Save & restart
             </Button>
             <Button
               type="button"
@@ -118,7 +120,7 @@ function DemoEditor({ initialRows }: { initialRows: EnvironmentVariableEntry[] }
               disabled={!editor.isDirty || editor.hasDuplicateKeys}
               onClick={save}
             >
-              <SaveIcon />
+              <IconFloppyDisk1 />
             </Button>
             <Button
               type="button"
@@ -189,7 +191,7 @@ function EnvironmentVariablesPage({ children }: { children?: ReactNode }) {
         <div>
           <InputGroup>
             <InputGroupAddon>
-              <SearchIcon aria-hidden className="size-4" />
+              <IconMagnifyingGlass aria-hidden className="size-4" />
             </InputGroupAddon>
             <InputGroupInput
               placeholder="Search variables"
@@ -228,7 +230,7 @@ function EnvironmentVariablesDrawerStory() {
       <Drawer side="right" variant="floating" overlay="visible" open={open} onOpenChange={setOpen}>
         <DrawerTrigger asChild>
           <Button variant="primary" size="sm">
-            Add Environment Variable
+            Add environment variable
           </Button>
         </DrawerTrigger>
         <DrawerContent className="w-3xl max-w-[calc(100vw-2rem)]">
@@ -241,7 +243,7 @@ function EnvironmentVariablesDrawerStory() {
               <div className="grid gap-6">
                 <EnvironmentVariablesEditor.UploadError />
                 <EnvironmentVariablesEditor.Rows />
-                <EnvironmentVariablesEditor.AddButton>Add Another</EnvironmentVariablesEditor.AddButton>
+                <EnvironmentVariablesEditor.AddButton>Add another</EnvironmentVariablesEditor.AddButton>
                 <EnvironmentVariablesEditor.DuplicateKeysError />
               </div>
             </DrawerBody>

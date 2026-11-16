@@ -11,7 +11,7 @@ packages:
 
 `createNotificationInboxTool()` creates a Mastra tool that lets an agent inspect and manage notification inbox records for the current thread.
 
-Use this tool with durable notification signals. For sending notification records, see [`Agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options).
+Use this tool with durable notification signals. For sending notification records, see [`Agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options). For record fields, priorities, statuses, and delivery policy, see the [Notifications reference](/reference/signals/notifications).
 
 ## Usage example
 
@@ -85,13 +85,15 @@ The generated tool has the id `notification-inbox` and accepts these input field
     name: 'status',
     type: "'pending' | 'delivered' | 'seen' | 'dismissed' | 'archived' | 'discarded' | 'failed'",
     isOptional: true,
-    description: 'Status filter for list, read, or search actions.',
+    description:
+      'Status filter for list, read, or search actions. See [NotificationStatus](/reference/signals/notifications#priorities-and-statuses).',
   },
   {
     name: 'priority',
     type: "'low' | 'medium' | 'high' | 'urgent'",
     isOptional: true,
-    description: 'Priority filter for list, read, or search actions.',
+    description:
+      'Priority filter for list, read, or search actions. See [NotificationPriority](/reference/signals/notifications#priorities-and-statuses).',
   },
   {
     name: 'source',

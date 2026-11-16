@@ -32,9 +32,9 @@ describe('ItemDetailDialog', () => {
         />,
       );
 
-      fireEvent.click(screen.getByRole('button', { name: 'Purge Data' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Purge data' }));
       const confirmation = await screen.findByRole('alertdialog');
-      fireEvent.click(within(confirmation).getByRole('button', { name: 'Purge Data' }));
+      fireEvent.click(within(confirmation).getByRole('button', { name: 'Purge data' }));
 
       expect((await within(confirmation).findByRole('button', { name: 'Purging...' })).hasAttribute('disabled')).toBe(
         true,

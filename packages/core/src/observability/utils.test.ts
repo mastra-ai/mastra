@@ -9,6 +9,10 @@ describe('getEntityTypeForSpan', () => {
     expect(getEntityTypeForSpan({ spanType: SpanType.RAG_INGESTION })).toBe('rag_ingestion');
   });
 
+  it('maps classifier evaluation spans to the classifier entity type', () => {
+    expect(getEntityTypeForSpan({ spanType: SpanType.CLASSIFIER_EVALUATION })).toBe('classifier');
+  });
+
   it('prefers an explicit entity type when present', () => {
     expect(
       getEntityTypeForSpan({

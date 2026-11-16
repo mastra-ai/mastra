@@ -1,6 +1,5 @@
 import type { EntityType } from '@mastra/core/observability';
 import type { MetricsDimensionalFilter } from '@mastra/react/hooks/metrics';
-import { CloudIcon, CpuIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { traceFilterFieldColor, traceFilterFieldIcon } from '../traces/trace-filters';
 import type {
@@ -10,6 +9,8 @@ import type {
   FilterBarOption,
 } from '@/ds/components/FilterBar/types';
 import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
+import { IconChip } from '@/ds/icons/central/IconChip';
+import { IconCloud } from '@/ds/icons/central/IconCloud';
 
 type EntityTypeValue = `${EntityType}`;
 
@@ -19,6 +20,7 @@ export const METRICS_ROOT_ENTITY_TYPE_OPTIONS = [
   { label: 'Workflow', entityType: 'workflow_run' },
   { label: 'Scorer', entityType: 'scorer' },
   { label: 'Ingest', entityType: 'rag_ingestion' },
+  { label: 'Classifier', entityType: 'classifier' },
 ] as const satisfies readonly { label: string; entityType: EntityTypeValue }[];
 
 /** Field IDs that live in dedicated URL params (not the generic `filterX` set). */
@@ -216,8 +218,8 @@ const METRICS_FILTER_BAR_LABELS: Record<MetricsFilterBarFieldId, string> = {
 
 /** Icons for the dimensions the trace filters key differently (`spans.provider`, `spans.model`). */
 const METRICS_FILTER_BAR_ICONS: Partial<Record<MetricsFilterBarFieldId, LucideIcon>> = {
-  provider: CloudIcon,
-  model: CpuIcon,
+  provider: IconCloud,
+  model: IconChip,
 };
 
 const METRICS_FILTER_BAR_TEXT_FIELD_IDS = [

@@ -170,7 +170,7 @@ describe('ClickHouse Spans Table Migration', () => {
    */
   async function getTableSortingKey(tableName: string): Promise<string | null> {
     const result = await client.query({
-      query: `SELECT sorting_key FROM system.tables WHERE name = {tableName:String}`,
+      query: `SELECT sorting_key FROM system.tables WHERE database = currentDatabase() AND name = {tableName:String}`,
       query_params: { tableName },
       format: 'JSONEachRow',
     });
@@ -883,7 +883,7 @@ describe('ClickHouse Migration Required Error', () => {
 
     // Verify table has old sorting key
     const result = await client.query({
-      query: `SELECT sorting_key FROM system.tables WHERE name = {tableName:String}`,
+      query: `SELECT sorting_key FROM system.tables WHERE database = currentDatabase() AND name = {tableName:String}`,
       query_params: { tableName: TABLE_SPANS },
       format: 'JSONEachRow',
     });
@@ -1015,7 +1015,7 @@ describe('ClickHouse Migration Required Error', () => {
 
     // Verify table has correct sorting key
     const result = await client.query({
-      query: `SELECT sorting_key FROM system.tables WHERE name = {tableName:String}`,
+      query: `SELECT sorting_key FROM system.tables WHERE database = currentDatabase() AND name = {tableName:String}`,
       query_params: { tableName: TABLE_SPANS },
       format: 'JSONEachRow',
     });
@@ -1030,7 +1030,7 @@ describe('ClickHouse Migration Required Error', () => {
 
     // Verify table has correct sorting key
     const result = await client.query({
-      query: `SELECT sorting_key FROM system.tables WHERE name = {tableName:String}`,
+      query: `SELECT sorting_key FROM system.tables WHERE database = currentDatabase() AND name = {tableName:String}`,
       query_params: { tableName: TABLE_SPANS },
       format: 'JSONEachRow',
     });

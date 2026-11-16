@@ -115,7 +115,7 @@ export function createTerminalStageCleanup(options: TerminalStageCleanupOptions)
         supersededAt: new Date(),
       });
     } catch {
-      // Best-effort; legacy rows are repaired at the next startup.
+      // Best-effort; a stale row stays until someone clears it from the card.
     }
     try {
       await options.releaseSandboxes?.(args);

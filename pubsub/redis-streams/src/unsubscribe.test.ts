@@ -51,7 +51,7 @@ describe('unsubscribe acquired batches', () => {
       connect: vi.fn(),
       quit: vi.fn(),
       xGroupCreate: vi.fn(),
-      xGroupDestroy: vi.fn(),
+      xGroupDestroy: vi.fn(async () => {}),
       xPendingRange: vi.fn(async () =>
         entries.map(e => ({ id: e.id, consumer: 'c', millisecondsSinceLastDelivery: 1, deliveriesCounter: 1 })),
       ),
@@ -61,7 +61,9 @@ describe('unsubscribe acquired batches', () => {
     };
     reader = { on: vi.fn(), connect: vi.fn(), quit: vi.fn(), xReadGroup: vi.fn(() => read.promise) };
     clients.create.mockReset().mockReturnValueOnce(writer);
-    ps = new RedisStreamsPubSub({ reclaimIntervalMs: 10 });
+    // The fake writer models bare XGROUP CREATE / XADD (no MULTI); the idle-TTL
+    // MULTI path is covered against real Redis in connection-and-cleanup.test.ts.
+    ps = new RedisStreamsPubSub({ reclaimIntervalMs: 10, streamIdleTtlMs: 0 });
   });
   afterEach(async () => {
     read.resolve(null);

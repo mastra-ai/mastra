@@ -295,6 +295,42 @@ describe.each(ENGINES)('declarative step runtime ($name engine)', ({ evented }) 
     }
   });
 
+  it.each([
+    { factory: 'default', createToolStep: createStep },
+    { factory: 'evented', createToolStep: createEventedStep },
+  ])(
+    'streams progress from a tool used as a workflow step with the $factory factory (#28564, #29164)',
+    async ({ createToolStep }) => {
+      const progressTool = createTool({
+        id: 'progress-tool',
+        description: 'Doubles a number while reporting progress',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ doubled: z.number() }),
+        execute: async ({ value }, context) => {
+          await context.writer?.custom({ type: 'data-progress', data: { value } });
+          return { doubled: value * 2 };
+        },
+      });
+      const wf = createWorkflow({
+        id: 'rt-progress-tool',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ doubled: z.number() }),
+      })
+        .then(createToolStep(progressTool))
+        .commit();
+      bind(wf);
+
+      const run = await wf.createRun();
+      const events = [];
+      for await (const event of run.stream({ inputData: { value: 5 } }).fullStream) {
+        events.push(event);
+      }
+
+      expect(events).toContainEqual(expect.objectContaining({ type: 'data-progress', data: { value: 5 } }));
+      expect(events).toContainEqual(expect.objectContaining({ type: 'workflow-finish' }));
+    },
+  );
+
   it('createStep() of a spread-copied tool executes with (inputData, context)', async () => {
     // Without marker-based detection the spread copy falls through to the
     // StepParams branch, whose execute passes the whole params object as the
@@ -336,7 +372,7 @@ describe.each(ENGINES)('declarative step runtime ($name engine)', ({ evented }) 
     }
   });
 
-  it('createStep() uses the registered wrapper for a durable: true agent', async () => {
+  it('createStep() runs a durable: true agent without a checkpoint execution wrapper', async () => {
     const agent = textAgent('rt-flag-agent', 'durable response', true);
     const wf = createWorkflow({
       id: 'rt-flag-agent-wf',
@@ -346,49 +382,42 @@ describe.each(ENGINES)('declarative step runtime ($name engine)', ({ evented }) 
       .then(createStep(agent))
       .commit();
     const mastra = bind(wf, { agents: { customRegistrationKey: agent } });
-    const wrapper = mastra.getAgentById(agent.id);
-    expect(wrapper).not.toBe(agent);
-    const originalStream = wrapper.stream.bind(wrapper);
-    const cleanups: ReturnType<typeof vi.fn>[] = [];
-    const stream = vi.spyOn(wrapper, 'stream').mockImplementation(async (...args: any[]) => {
-      const streamResult: any = await originalStream(...args);
-      const cleanup = vi.fn(streamResult.cleanup);
-      cleanups.push(cleanup);
-      return { ...streamResult, cleanup };
-    });
+    const registered = mastra.getAgentById(agent.id);
+    expect(registered).toBe(agent);
+    expect(registered.hasResumableStreams()).toBe(true);
 
     const run = await wf.createRun();
     const result = await run.start({ inputData: { prompt: 'say hi' } });
     expect(result.status).toBe('success');
-    expect(stream).toHaveBeenCalledOnce();
-    expect(cleanups).toHaveLength(1);
-    expect(cleanups[0]).toHaveBeenCalledOnce();
     if (result.status === 'success') {
       expect(result.result).toEqual({ text: 'durable response' });
     }
   });
 
-  it('createStep() keeps a plain agent plain when an explicit durable wrapper of it is registered', async () => {
-    const base = textAgent('explicit-wrapper-agent', 'plain response');
-    const durable = createDurableAgent({ agent: base, cleanupTimeoutMs: 0 });
-    const wf = createWorkflow({
-      id: 'explicit-wrapper-agent-wf',
-      inputSchema: z.object({ prompt: z.string() }),
-      outputSchema: z.any(),
-    })
-      .then(createStep(base))
-      .commit();
-    const mastra = bind(wf, { agents: { durable } });
-    const wrapperStream = vi.spyOn(mastra.getAgentById(base.id), 'stream');
+  it.each([false, true])(
+    'createStep() keeps a plain agent (durable: %s) plain when an explicit durable wrapper of it is registered',
+    async durableStreams => {
+      const base = textAgent('explicit-wrapper-agent', 'plain response', durableStreams);
+      const durable = createDurableAgent({ agent: base, cleanupTimeoutMs: 0 });
+      const wf = createWorkflow({
+        id: 'explicit-wrapper-agent-wf',
+        inputSchema: z.object({ prompt: z.string() }),
+        outputSchema: z.any(),
+      })
+        .then(createStep(base))
+        .commit();
+      const mastra = bind(wf, { agents: { durable } });
+      const wrapperStream = vi.spyOn(mastra.getAgentById(base.id), 'stream');
 
-    const run = await wf.createRun();
-    const result = await run.start({ inputData: { prompt: 'say hi' } });
-    expect(result.status).toBe('success');
-    expect(wrapperStream).not.toHaveBeenCalled();
-    if (result.status === 'success') {
-      expect(result.result).toEqual({ text: 'plain response' });
-    }
-  });
+      const run = await wf.createRun();
+      const result = await run.start({ inputData: { prompt: 'say hi' } });
+      expect(result.status).toBe('success');
+      expect(wrapperStream).not.toHaveBeenCalled();
+      if (result.status === 'success') {
+        expect(result.result).toEqual({ text: 'plain response' });
+      }
+    },
+  );
 
   it('createStep() keeps the supplied agent config for a durable: true agent on a legacy v1 model', async () => {
     const processInput = vi.fn(({ messages }: any) => messages);
@@ -430,7 +459,7 @@ describe.each(ENGINES)('declarative step runtime ($name engine)', ({ evented }) 
     }
   });
 
-  it('createStep() warns when a durable: true agent is registered on a different Mastra', async () => {
+  it('createStep() runs a resumable agent from another Mastra without demanding a durable wrapper', async () => {
     const agent = textAgent('other-mastra-agent', 'plain response', true);
     new Mastra({ agents: { agent }, logger: false });
     const wf = createWorkflow({
@@ -446,7 +475,10 @@ describe.each(ENGINES)('declarative step runtime ($name engine)', ({ evented }) 
     const run = await wf.createRun();
     const result = await run.start({ inputData: { prompt: 'say hi' } });
     expect(result.status).toBe('success');
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('no durable wrapper for it is registered'));
+    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('no durable wrapper for it is registered'));
+    if (result.status === 'success') {
+      expect(result.result).toEqual({ text: 'plain response' });
+    }
   });
 
   it('createStep() keeps an unrelated agent that shares an id with a registered durable agent', async () => {
@@ -716,7 +748,7 @@ describe('evented engine - declarative entries', () => {
   it.each([
     { factory: 'default', createAgentStep: createStep },
     { factory: 'evented', createAgentStep: createEventedStep },
-  ])('uses the registered durable: true wrapper with the $factory factory', async ({ createAgentStep }) => {
+  ])('runs a durable: true plain agent with the $factory factory', async ({ createAgentStep }) => {
     const agent = textAgent('ev-flag-agent', 'durable response', true);
     const wf = createWorkflow({
       id: 'ev-flag-agent-wf',
@@ -726,15 +758,14 @@ describe('evented engine - declarative entries', () => {
       .then(createAgentStep(agent))
       .commit();
     const mastra = bindEvented(wf, { agents: { customRegistrationKey: agent } });
-    const wrapper = mastra.getAgentById(agent.id);
-    expect(wrapper).not.toBe(agent);
-    const stream = vi.spyOn(wrapper, 'stream');
+    const registered = mastra.getAgentById(agent.id);
+    expect(registered).toBe(agent);
+    expect(registered.hasResumableStreams()).toBe(true);
 
     const { seen, endResult } = await driveEvented(mastra, wf.id, 'run-flag-agent', { prompt: 'say hi' });
 
     expect(seen).toContain('workflow.step.run');
     expect(endResult?.status).toBe('success');
-    expect(stream).toHaveBeenCalledOnce();
     expect(endResult?.output).toEqual({ text: 'durable response' });
   });
 

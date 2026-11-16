@@ -73,12 +73,11 @@ export const createPagePaginationSchema = (defaultPerPage?: number) => {
       ...baseSchema,
       perPage: paginationNumber().optional().default(defaultPerPage),
     });
-  } else {
-    return z.object({
-      ...baseSchema,
-      perPage: paginationNumber().optional(),
-    });
   }
+  return z.object({
+    ...baseSchema,
+    perPage: paginationNumber().optional(),
+  });
 };
 
 /**

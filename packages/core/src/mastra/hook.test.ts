@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { runScorer } from '../evals/hooks';
 import { AvailableHooks, deregisterHook, registerHook } from '../hooks';
+import { setScorerHookEntry } from '../hooks/scorer-owner';
 import { createObservabilityContext } from '../observability';
 import { wrapMastra } from '../observability/context';
 import { validateAndSaveScore, createOnScorerHook } from './hooks';
@@ -185,6 +186,31 @@ describe('createOnScorerHook', () => {
         scorerId: 'test-scorer',
         source: 'LIVE',
       }),
+    );
+  });
+
+  it('runs the scorer attached to the payload when it is registered nowhere (#27579)', async () => {
+    const callTimeScorer = { id: 'call-time', name: 'call-time', run: vi.fn().mockResolvedValue({ score: 0.5 }) };
+    mockMastra.getAgentById.mockReturnValue({ listScorers: vi.fn().mockResolvedValue({}) });
+    mockMastra.getScorerById.mockImplementation(() => {
+      throw new Error('Scorer with id call-time not found');
+    });
+    const hookData: any = {
+      runId: 'test-run',
+      scorer: { id: 'call-time' },
+      input: {},
+      output: {},
+      source: 'LIVE',
+      entity: { id: 'test-agent' },
+      entityType: 'AGENT',
+    };
+    setScorerHookEntry(hookData, { scorer: callTimeScorer as any });
+
+    await hook(hookData);
+
+    expect(callTimeScorer.run).toHaveBeenCalledTimes(1);
+    expect(mockScoresStore.saveScore).toHaveBeenCalledWith(
+      expect.objectContaining({ scorerId: 'call-time', entityId: 'test-agent', score: 0.5 }),
     );
   });
 
@@ -435,6 +461,50 @@ describe('createOnScorerHook', () => {
     );
   });
 
+  it.each(['tracing', 'tracingContext'] as const)(
+    'inherits score redaction through the %s observability alias',
+    async observabilityAlias => {
+      const mockScorer = {
+        id: 'test-scorer',
+        name: 'test-scorer',
+        run: vi.fn().mockResolvedValue({
+          score: 0.8,
+          input: { secret: 'prepared-input' },
+          output: { secret: 'prepared-output' },
+        }),
+      };
+      mockMastra.getAgentById.mockReturnValue({
+        listScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
+      });
+
+      await hook({
+        runId: 'test-run',
+        scorer: { id: 'test-scorer' },
+        input: [{ message: 'test' }],
+        output: { result: 'test' },
+        source: 'LIVE',
+        entity: { id: 'test-entity' },
+        entityType: 'AGENT',
+        [observabilityAlias]: {
+          currentSpan: {
+            id: 'span-live',
+            traceId: 'trace-live',
+            isValid: true,
+            traceState: { hideInput: true, hideOutput: false },
+            observabilityInstance: { getExporters: () => [] },
+          },
+        },
+      });
+
+      expect(mockScorer.run).toHaveBeenCalledWith(
+        expect.objectContaining({ _internal: { hideInput: true, hideOutput: false } }),
+      );
+      expect(mockScoresStore.saveScore).toHaveBeenCalledWith(
+        expect.objectContaining({ input: '[REDACTED]', output: '[REDACTED]' }),
+      );
+    },
+  );
+
   it('correlates the score to the exported ancestor span when the current span is hidden', async () => {
     // Durable agents run scorers inside a workflow whose spans are marked
     // internal and never reach storage. The span itself reports which exported
@@ -674,7 +744,7 @@ describe('createOnScorerHook owner-scoped dispatch', () => {
     return {
       runId: 'run-1',
       scorerId: 'test-scorer',
-      scorerObject: { scorer: { id: 'test-scorer', name: 'Test Scorer', description: 'test' } } as any,
+      scorerObject: { scorer: mockScorer },
       input: {},
       output: {},
       requestContext: {},

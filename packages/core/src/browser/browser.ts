@@ -21,8 +21,10 @@
  * Both extend this base class and implement `getTools()` to return their tools.
  */
 
-import { existsSync, unlinkSync, lstatSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, unlinkSync, lstatSync, readdirSync, readlinkSync } from 'node:fs';
+import { createConnection } from 'node:net';
+import { hostname } from 'node:os';
+import { join, resolve } from 'node:path';
 
 import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger/constants';
@@ -94,6 +96,178 @@ export function cleanupProfileLockFiles(
   } catch (err) {
     // Profile directory may not be readable, ignore
     logger?.warn?.(`Failed to clean up profile lock files in ${profilePath}: ${err}`);
+  }
+}
+
+/**
+ * Thrown when a browser profile is held by another running browser process.
+ */
+export class BrowserProfileInUseError extends Error {
+  constructor(
+    readonly profilePath: string,
+    readonly holderPid?: number,
+    readonly holderHost?: string,
+  ) {
+    const holder =
+      holderPid === undefined
+        ? 'another browser process'
+        : `another browser process (PID ${holderPid}${holderHost && holderHost !== hostname() ? ` on host ${holderHost}` : ''})`;
+    const killHint = holderPid === undefined ? '' : ` (for example: kill ${holderPid})`;
+    super(
+      `Browser profile "${profilePath}" is already in use by ${holder}. ` +
+        `Close that browser${killHint} or use a different profile, then try again.`,
+    );
+    this.name = 'BrowserProfileInUseError';
+  }
+}
+
+/**
+ * Resolves true if something is listening on the Unix socket at `socketPath`.
+ * Only a refused connection or a missing socket counts as "nobody listening";
+ * any other outcome is treated as a live listener so a lock is never removed
+ * from a profile that might still be in use.
+ */
+function isSocketAccepting(socketPath: string, timeoutMs = 1000): Promise<boolean> {
+  return new Promise(resolve => {
+    const socket = createConnection(socketPath);
+    const finish = (accepting: boolean) => {
+      socket.destroy();
+      resolve(accepting);
+    };
+    socket.setTimeout(timeoutMs, () => finish(true));
+    socket.once('connect', () => finish(true));
+    socket.once('error', (err: NodeJS.ErrnoException) => finish(err.code !== 'ECONNREFUSED' && err.code !== 'ENOENT'));
+  });
+}
+
+/** How long to wait for a live local lock holder to start listening on its socket. */
+const STARTING_HOLDER_GRACE_MS = 3000;
+
+function isProcessAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 1) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/** How long close() waits for a killed browser to exit before releasing its profile lock. */
+const BROWSER_EXIT_TIMEOUT_MS = 2000;
+
+/** Wait until every PID has exited, or the deadline passes. */
+async function waitForProcessesToExit(pids: Array<number | undefined>, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (pids.some(pid => pid !== undefined && isProcessAlive(pid)) && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+}
+
+/** Read a symlink's target, or undefined if `path` is missing or not a symlink. */
+function readLinkTarget(path: string): string | undefined {
+  try {
+    return readlinkSync(path);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Make a local Chrome profile usable before launching a browser on it.
+ *
+ * Chrome marks a profile as in use with a `SingletonLock` symlink (pointing at
+ * `<hostname>-<pid>`) and a `SingletonSocket` the running browser listens on.
+ * A new Chrome started on a locked profile hands off to the holder and exits,
+ * so no DevTools port ever opens and the launcher fails with ECONNREFUSED. If
+ * the holder is gone but the lock remains (a crash, SIGKILL, a changed
+ * hostname), Chrome may refuse the profile, and the browser stays broken.
+ *
+ * - No lock: nothing to do.
+ * - A browser still listens on the profile's socket: throws
+ *   {@link BrowserProfileInUseError} naming the profile and holding PID.
+ * - Nothing listens: the lock is stale, so the lock files are removed.
+ *
+ * The socket check is used instead of a PID check because a PID can be reused
+ * by an unrelated process, and a hung Chrome still holds its socket.
+ * No-op on Windows, where Chrome does not use these lock files.
+ */
+export async function releaseStaleProfileLock(
+  profilePath: string,
+  logger?: { debug?: (message: string) => void; warn?: (message: string) => void },
+): Promise<void> {
+  if (!profilePath || process.platform === 'win32') return;
+
+  const lockPath = join(profilePath, 'SingletonLock');
+  try {
+    lstatSync(lockPath);
+  } catch {
+    return;
+  }
+  const lockTarget = readLinkTarget(lockPath);
+
+  const match = lockTarget?.match(/^(.*)-(\d+)$/);
+  const holderHost = match?.[1];
+  const holderPid = match ? Number(match[2]) : undefined;
+
+  // SingletonSocket links to the real socket in a temp dir. Connect to the
+  // link target, like Chrome does: the profile path can exceed the Unix
+  // socket path limit.
+  const socketLink = join(profilePath, 'SingletonSocket');
+  const probeSocket = () => {
+    const socketTarget = readLinkTarget(socketLink);
+    return isSocketAccepting(socketTarget ? resolve(profilePath, socketTarget) : socketLink);
+  };
+  let accepting = await probeSocket();
+  // Chrome creates SingletonLock before it starts listening on SingletonSocket.
+  // While the local holder is still alive, give a starting Chrome time to
+  // listen before calling its lock stale. A reused PID stops being waited on
+  // once the window ends.
+  if (!accepting && holderHost === hostname() && holderPid !== undefined && isProcessAlive(holderPid)) {
+    const deadline = Date.now() + STARTING_HOLDER_GRACE_MS;
+    while (!accepting && Date.now() < deadline && isProcessAlive(holderPid)) {
+      await new Promise(r => setTimeout(r, 100));
+      accepting = await probeSocket();
+    }
+  }
+  if (accepting) {
+    throw new BrowserProfileInUseError(profilePath, holderPid, holderHost);
+  }
+
+  logger?.warn?.(
+    `Removing stale browser profile lock in ${profilePath}` + (lockTarget ? ` (left by ${lockTarget})` : ''),
+  );
+  cleanupProfileLockFiles(profilePath, logger);
+}
+
+/**
+ * Log files chrome-launcher writes into the profile directory. It opens them in
+ * append mode and takes Chrome's DevTools port from the first match in
+ * `chrome-err.log`, so on a reused profile it reads the port of the first
+ * launch ever recorded and fails with ECONNREFUSED on that dead port.
+ */
+const CHROME_LAUNCHER_LOG_FILES = ['chrome-err.log', 'chrome-out.log'];
+
+/**
+ * Remove chrome-launcher's log files from a profile so the next launch reads
+ * the DevTools port of the Chrome it just started. Safe to call when the files
+ * don't exist.
+ */
+export function clearChromeLauncherLogs(
+  profilePath: string,
+  logger?: { debug?: (message: string) => void; warn?: (message: string) => void },
+): void {
+  if (!profilePath) return;
+  for (const file of CHROME_LAUNCHER_LOG_FILES) {
+    const fullPath = join(profilePath, file);
+    try {
+      unlinkSync(fullPath);
+      logger?.debug?.(`Removed stale launcher log: ${fullPath}`);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        logger?.warn?.(`Failed to remove launcher log ${fullPath}: ${err}`);
+      }
+    }
   }
 }
 
@@ -445,6 +619,23 @@ export interface KeyboardEventParams {
   windowsVirtualKeyCode?: number;
 }
 
+/**
+ * A cookie for {@link MastraBrowser.setCookies}. Give either `url`, or
+ * `domain` and `path`. A `domain` with a leading dot also covers subdomains.
+ */
+export interface BrowserCookie {
+  name: string;
+  value: string;
+  url?: string;
+  domain?: string;
+  path?: string;
+  /** Unix time in seconds. Omit for a session cookie. */
+  expires?: number;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: 'Strict' | 'Lax' | 'None';
+}
+
 // =============================================================================
 // MastraBrowser Base Class
 // =============================================================================
@@ -486,6 +677,9 @@ export abstract class MastraBrowser extends MastraBase {
 
   /** Error message when status is 'error' */
   error?: string;
+
+  /** Set by retire(): the browser never launches again. */
+  private retired = false;
 
   /**
    * Whether the browser is running in headless mode.
@@ -683,6 +877,50 @@ export abstract class MastraBrowser extends MastraBase {
   protected abstract doClose(): Promise<void>;
 
   /**
+   * Local Chrome profile directory this browser launches with, or undefined
+   * when it does not launch a local browser on a profile (no profile set, or
+   * a remote browser). launch() checks this profile's lock before launching.
+   * Override when the provider can connect to a remote browser in other ways.
+   */
+  protected getLocalProfilePath(): string | undefined {
+    if (this.config.cdpUrl) return undefined;
+    return this.config.profile;
+  }
+
+  /**
+   * Make the local profile safe to launch Chrome on: release a stale lock (or
+   * throw {@link BrowserProfileInUseError} if a live browser holds it), then
+   * clear chrome-launcher's logs. launch() calls this; providers that start
+   * Chrome outside launch() (e.g. a per-thread browser) must call it first too.
+   */
+  protected async prepareLocalProfile(): Promise<void> {
+    const localProfile = this.getLocalProfilePath();
+    if (!localProfile) return;
+    await releaseStaleProfileLock(localProfile, this.logger);
+    clearChromeLauncherLogs(localProfile, this.logger);
+  }
+
+  /**
+   * Remove this browser's profile lock after it closed, unless another browser
+   * now holds the profile. A close that finishes late (after a replacement
+   * already launched on the same profile) must not delete the live lock.
+   *
+   * Killing Chrome only sends a signal: until it exits its socket still
+   * accepts and the lock looks held. So wait for the closed browser's
+   * processes (`pids`) to exit first.
+   */
+  private async releaseProfileLockAfterClose(pids: Array<number | undefined> = []): Promise<void> {
+    if (!this.config.profile) return;
+    await waitForProcessesToExit(pids, BROWSER_EXIT_TIMEOUT_MS);
+    try {
+      await releaseStaleProfileLock(this.config.profile, this.logger);
+    } catch (err) {
+      if (!(err instanceof BrowserProfileInUseError)) throw err;
+      this.logger.debug?.(`Leaving profile lock in ${this.config.profile}: another browser holds it`);
+    }
+  }
+
+  /**
    * Get the CDP WebSocket URL for connecting to this browser.
    * CLI providers (BrowserViewer) implement this to expose the URL for CLI tools.
    * SDK providers typically return null as they manage their own CDP connections.
@@ -705,6 +943,8 @@ export abstract class MastraBrowser extends MastraBase {
       this.setCurrentThread(threadId);
     }
 
+    this.assertNotRetired();
+
     // Already ready
     if (this.status === 'ready') {
       return;
@@ -725,6 +965,7 @@ export abstract class MastraBrowser extends MastraBase {
 
     this._launchPromise = (async () => {
       try {
+        await this.prepareLocalProfile();
         await this.doLaunch();
         this.status = 'ready';
 
@@ -752,6 +993,9 @@ export abstract class MastraBrowser extends MastraBase {
    * Race-condition-safe - handles concurrent calls, status management, and lifecycle hooks.
    */
   async close(): Promise<void> {
+    for (const key of new Set([...this.pendingCookies.keys(), ...this.cookieQueueUpdates.keys()])) {
+      this.dropQueuedCookies(key);
+    }
     // Already closed
     if (this.status === 'closed') {
       return;
@@ -789,32 +1033,76 @@ export abstract class MastraBrowser extends MastraBase {
     this.status = 'closing';
 
     this._closePromise = (async () => {
+      let closed = false;
+      // Snapshot before doClose(): a disconnect handler it triggers clears the tracked PIDs.
+      const pids = [this.sharedBrowserPid, ...this.threadBrowserPids.values()];
       try {
         await this.doClose();
+        closed = true;
+        // Kill orphaned child processes (GPU, renderer, crashpad, etc.) before
+        // any further await: once status is 'closed', ensureReady() can relaunch
+        // and register new PIDs that must not be killed.
+        this.killProcesses();
         this.status = 'closed';
         this.notifyBrowserClosed();
         // Clean up stale lock files only after confirmed shutdown.
         // Removing them from a live profile (if doClose threw) could cause corruption.
-        if (this.config.profile) {
-          cleanupProfileLockFiles(this.config.profile, this.logger);
-        }
+        await this.releaseProfileLockAfterClose(pids);
       } catch (err) {
         this.status = 'error';
         this.error = err instanceof Error ? err.message : String(err);
         throw err;
       } finally {
         this._closePromise = undefined;
-        // Kill orphaned child processes (GPU, renderer, crashpad, etc.)
-        killProcessGroup(this.sharedBrowserPid, this.logger);
-        this.sharedBrowserPid = undefined;
-        for (const [, pid] of this.threadBrowserPids) {
-          killProcessGroup(pid, this.logger);
-        }
-        this.threadBrowserPids.clear();
+        if (!closed) this.killProcesses();
       }
     })();
 
     return this._closePromise;
+  }
+
+  /**
+   * Throw if retire() was called. Subclasses that start browsers outside
+   * launch()/ensureReady() (e.g. per-thread sessions) must call this first.
+   */
+  protected assertNotRetired(): void {
+    if (this.retired) {
+      throw new Error(`Browser ${this.id} was retired and cannot be used`);
+    }
+  }
+
+  /**
+   * Close the browser for good. Unlike close(), a retired browser never
+   * relaunches, so a caller still holding it (e.g. a tool call that started
+   * before the browser was replaced) gets an error instead of a new Chrome
+   * that nothing tracks.
+   */
+  async retire(): Promise<void> {
+    this.retired = true;
+    await this.close();
+  }
+
+  /**
+   * SIGKILL the browser processes this instance launched. For when close()
+   * cannot be waited on (it hangs, or the process is about to exit), so the
+   * browser does not outlive its owner and keep holding its profile.
+   */
+  /**
+   * SIGKILL the process group of a local browser this class does not track
+   * (e.g. one that started after retire() and was never registered).
+   * Only pass PIDs of browsers launched on this machine.
+   */
+  protected killBrowserProcessGroup(pid: number | undefined): void {
+    killProcessGroup(pid, this.logger);
+  }
+
+  killProcesses(): void {
+    killProcessGroup(this.sharedBrowserPid, this.logger);
+    this.sharedBrowserPid = undefined;
+    for (const [, pid] of this.threadBrowserPids) {
+      killProcessGroup(pid, this.logger);
+    }
+    this.threadBrowserPids.clear();
   }
 
   /**
@@ -839,6 +1127,7 @@ export abstract class MastraBrowser extends MastraBase {
    * If browser was previously closed, it will be re-launched.
    */
   async ensureReady(): Promise<void> {
+    this.assertNotRetired();
     if (this.status === 'ready') {
       // Check if browser is still alive (handles external closure)
       // checkBrowserAlive() should save lastBrowserState internally if it detects closure
@@ -864,6 +1153,7 @@ export abstract class MastraBrowser extends MastraBase {
     if (this.status === 'closing') {
       // Wait for close to complete, then re-launch
       await this._closePromise;
+      this.assertNotRetired();
       this.status = 'pending';
       await this.launch();
       return;
@@ -1000,10 +1290,12 @@ export abstract class MastraBrowser extends MastraBase {
   handleBrowserDisconnected(): void {
     const scope = this.threadManager?.getScope();
     const threadId = this.getCurrentThread();
+    let closedPid: number | undefined;
 
     if (scope === 'thread' && threadId !== DEFAULT_THREAD_ID) {
       // Kill orphaned child processes for this thread
       const pid = this.threadBrowserPids.get(threadId);
+      closedPid = pid;
       killProcessGroup(pid, this.logger);
       this.threadBrowserPids.delete(threadId);
       // Only clear the specific thread's session - other threads have independent browsers
@@ -1014,6 +1306,7 @@ export abstract class MastraBrowser extends MastraBase {
       this.notifyBrowserClosed(threadId);
     } else {
       // Kill orphaned child processes for the shared browser
+      closedPid = this.sharedBrowserPid;
       killProcessGroup(this.sharedBrowserPid, this.logger);
       this.sharedBrowserPid = undefined;
       // For 'shared' scope or default thread, the shared browser is gone
@@ -1031,9 +1324,9 @@ export abstract class MastraBrowser extends MastraBase {
 
     // Clean up stale lock files in the profile directory
     // This is especially important for external/manual close which may leave locks behind
-    if (this.config.profile) {
-      cleanupProfileLockFiles(this.config.profile, this.logger);
-    }
+    void this.releaseProfileLockAfterClose([closedPid]).catch(err => {
+      this.logger.debug?.(`Failed to release profile lock: ${err}`);
+    });
   }
 
   /**
@@ -1400,6 +1693,8 @@ export abstract class MastraBrowser extends MastraBase {
    * @param threadId - The thread ID whose session should be closed
    */
   async closeThreadSession(threadId: string): Promise<void> {
+    // A shared browser outlives any one thread, so its queue stays.
+    if (this.getScope() === 'thread') this.dropQueuedCookies(threadId);
     if (!this.threadManager) {
       return;
     }
@@ -1411,8 +1706,10 @@ export abstract class MastraBrowser extends MastraBase {
     // Notify callbacks registered for this specific thread
     this.notifyBrowserClosed(threadId);
     // Clean up any stale lock files in the profile directory
-    if (this.config.profile) {
-      cleanupProfileLockFiles(this.config.profile, this.logger);
+    try {
+      await this.releaseProfileLockAfterClose([pid]);
+    } catch (err) {
+      this.logger.debug?.(`Failed to release profile lock: ${err}`);
     }
   }
 
@@ -1437,9 +1734,9 @@ export abstract class MastraBrowser extends MastraBase {
     // Notify only the callbacks registered for this specific thread
     this.notifyBrowserClosed(threadId);
     // Clean up any stale lock files in the profile directory
-    if (this.config.profile) {
-      cleanupProfileLockFiles(this.config.profile, this.logger);
-    }
+    void this.releaseProfileLockAfterClose([pid]).catch(err => {
+      this.logger.debug?.(`Failed to release profile lock: ${err}`);
+    });
   }
 
   /**
@@ -1520,6 +1817,109 @@ export abstract class MastraBrowser extends MastraBase {
    */
   async injectKeyboardEvent(_event: KeyboardEventParams, _threadId?: string): Promise<void> {
     throw new Error('Keyboard event injection not supported by this provider');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cookies
+  // ---------------------------------------------------------------------------
+
+  /** Cookies waiting for a browser to open, by thread (one shared entry with `scope: 'shared'`). */
+  private readonly pendingCookies = new Map<string, BrowserCookie[]>();
+
+  /** The last queued cookie update per queue key, so updates run one at a time. */
+  private readonly cookieQueueUpdates = new Map<string, Promise<unknown>>();
+
+  /** Bumped when a queue is dropped, so an update already under way can't queue its cookies again. */
+  private readonly cookieQueueGenerations = new Map<string, number>();
+
+  private dropQueuedCookies(key: string): void {
+    this.pendingCookies.delete(key);
+    // Only an update under way can hold the old generation; with none, forget the key.
+    if (this.cookieQueueUpdates.has(key)) {
+      this.cookieQueueGenerations.set(key, (this.cookieQueueGenerations.get(key) ?? 0) + 1);
+    } else {
+      this.cookieQueueGenerations.delete(key);
+    }
+  }
+
+  /** Add cookies to the open browser. If it rejects them, they leave the queue, so they can't fail every later call. */
+  private async addOrForget(cookies: BrowserCookie[], key: string, threadId: string): Promise<boolean> {
+    try {
+      return await this.addCookiesToOpenBrowser(cookies, threadId);
+    } catch (error) {
+      this.pendingCookies.delete(key);
+      throw error;
+    }
+  }
+
+  /** Run cookie updates for one queue key in call order, so overlapping calls don't lose cookies. */
+  private updateCookieQueue<T>(key: string, update: () => Promise<T>): Promise<T> {
+    const result = (this.cookieQueueUpdates.get(key) ?? Promise.resolve()).then(update, update);
+    const settled = result.catch(() => {});
+    this.cookieQueueUpdates.set(key, settled);
+    void settled.then(() => {
+      if (this.cookieQueueUpdates.get(key) === settled) this.cookieQueueUpdates.delete(key);
+    });
+    return result;
+  }
+
+  /** With `scope: 'shared'` every thread uses one browser, so they share one queue. */
+  private cookieQueueKey(threadId: string): string {
+    return this.getScope() === 'shared' ? DEFAULT_THREAD_ID : threadId;
+  }
+
+  /**
+   * Add cookies to a thread's browser, so its pages can open a site your app
+   * signed in to some other way. Cookies set before the browser opens are
+   * added when it does. With `scope: 'shared'` every thread uses one browser,
+   * so the cookies reach every thread.
+   *
+   * @param cookies - Cookies to add
+   * @param threadId - Optional thread ID (defaults to the current thread)
+   * @throws If this provider can't set cookies
+   */
+  async setCookies(cookies: BrowserCookie[], threadId?: string): Promise<void> {
+    for (const cookie of cookies) {
+      if (!cookie.url && !(cookie.domain && cookie.path)) {
+        throw new Error(`Cookie "${cookie.name}" needs a url, or a domain and a path`);
+      }
+    }
+    const effectiveThreadId = threadId ?? this.getCurrentThread();
+    const key = this.cookieQueueKey(effectiveThreadId);
+    const generation = this.cookieQueueGenerations.get(key) ?? 0;
+    const dropped = () => (this.cookieQueueGenerations.get(key) ?? 0) !== generation;
+    await this.updateCookieQueue(key, async () => {
+      // The thread or browser closed after this call: its cookies go with it.
+      if (dropped()) return;
+      // Cookies still waiting go first, so an older value never overwrites a newer one.
+      const all = [...(this.pendingCookies.get(key) ?? []), ...cookies];
+      if (await this.addOrForget(all, key, effectiveThreadId)) {
+        this.pendingCookies.delete(key);
+        return;
+      }
+      if (!dropped()) this.pendingCookies.set(key, all);
+    });
+  }
+
+  /**
+   * Add cookies to the thread's browser if it's open. Override to support
+   * {@link setCookies}, and call {@link addPendingCookies} once a thread's
+   * browser opens, before it loads a page.
+   *
+   * @returns false when the thread has no open browser yet
+   */
+  protected async addCookiesToOpenBrowser(_cookies: BrowserCookie[], _threadId: string): Promise<boolean> {
+    throw new Error(`${this.provider} does not support setting cookies`);
+  }
+
+  /** Add the cookies {@link setCookies} queued while the thread's browser wasn't open. */
+  protected async addPendingCookies(threadId: string): Promise<void> {
+    const key = this.cookieQueueKey(threadId);
+    await this.updateCookieQueue(key, async () => {
+      const pending = this.pendingCookies.get(key);
+      if (!pending) return;
+      if (await this.addOrForget(pending, key, threadId)) this.pendingCookies.delete(key);
+    });
   }
 
   // ---------------------------------------------------------------------------

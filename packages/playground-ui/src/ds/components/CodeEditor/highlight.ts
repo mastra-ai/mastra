@@ -1,14 +1,27 @@
-import type { HighlighterCore, ThemedToken } from 'shiki/core';
+import type { StreamParser } from '@codemirror/language';
+import { TreeFragment } from '@lezer/common';
+import type { Parser, Tree } from '@lezer/common';
+import { highlightTree, tagHighlighter, tags as t } from '@lezer/highlight';
+
+export interface HighlightToken {
+  content: string;
+  className?: string;
+}
+
+export interface HighlightResult {
+  code: string;
+  tokens: HighlightToken[][];
+  /** Parse tree for `code`. Pass the result back as `previous` so appended code re-parses only the new tail. */
+  tree: Tree;
+}
 
 /**
- * Languages we support for syntax highlighting in code blocks. A superset of
- * the editable CodeMirror `codeLanguages` set: read-only blocks (markdown
- * fences, chat output) also carry yaml, diff, css, html, xml and sql. Using
- * fine-grained Shiki imports (rather than the full `shiki` bundle) means only
- * these grammars are bundled, instead of a chunk for every language Shiki
- * knows about.
+ * Languages we support for syntax highlighting in read-only code blocks. A
+ * superset of the editable CodeMirror `codeLanguages` set: read-only blocks
+ * (markdown fences, chat output) also carry python, yaml, diff, css, html, xml
+ * and sql.
  */
-const langAliases: Record<string, string> = {
+const langAliases: Record<string, Lang> = {
   js: 'javascript',
   javascript: 'javascript',
   mjs: 'javascript',
@@ -43,58 +56,115 @@ const langAliases: Record<string, string> = {
   sql: 'sql',
 };
 
-let highlighterPromise: Promise<HighlighterCore> | null = null;
-
-function getHighlighter(): Promise<HighlighterCore> {
-  if (!highlighterPromise) {
-    highlighterPromise = (async () => {
-      const [{ createHighlighterCore }, { createJavaScriptRegexEngine }] = await Promise.all([
-        import('shiki/core'),
-        import('shiki/engine/javascript'),
-      ]);
-
-      return createHighlighterCore({
-        themes: [import('shiki/themes/github-light.mjs'), import('shiki/themes/github-dark.mjs')],
-        langs: [
-          import('shiki/langs/javascript.mjs'),
-          import('shiki/langs/typescript.mjs'),
-          import('shiki/langs/tsx.mjs'),
-          import('shiki/langs/jsx.mjs'),
-          import('shiki/langs/json.mjs'),
-          import('shiki/langs/bash.mjs'),
-          import('shiki/langs/markdown.mjs'),
-          import('shiki/langs/python.mjs'),
-          import('shiki/langs/yaml.mjs'),
-          import('shiki/langs/diff.mjs'),
-          import('shiki/langs/css.mjs'),
-          import('shiki/langs/html.mjs'),
-          import('shiki/langs/xml.mjs'),
-          import('shiki/langs/sql.mjs'),
-        ],
-        engine: createJavaScriptRegexEngine(),
-      });
-    })();
-  }
-
-  return highlighterPromise;
+async function streamParser(mode: Promise<StreamParser<unknown>>): Promise<Parser> {
+  const [{ StreamLanguage }, parser] = await Promise.all([import('@codemirror/language'), mode]);
+  return StreamLanguage.define(parser).parser;
 }
 
-export async function highlight(code: string, language: string): Promise<ThemedToken[][] | null> {
+async function jsParser(options: { jsx?: boolean; typescript?: boolean }): Promise<Parser> {
+  const { javascript } = await import('@codemirror/lang-javascript');
+  return javascript(options).language.parser;
+}
+
+// Dynamic imports keep each grammar in its own lazily-loaded chunk.
+const loaders = {
+  javascript: () => jsParser({}),
+  jsx: () => jsParser({ jsx: true }),
+  typescript: () => jsParser({ typescript: true }),
+  tsx: () => jsParser({ jsx: true, typescript: true }),
+  json: () => import('@codemirror/lang-json').then(m => m.jsonLanguage.parser),
+  markdown: () => import('@codemirror/lang-markdown').then(m => m.markdownLanguage.parser),
+  bash: () => streamParser(import('@codemirror/legacy-modes/mode/shell').then(m => m.shell)),
+  python: () => streamParser(import('@codemirror/legacy-modes/mode/python').then(m => m.python)),
+  yaml: () => streamParser(import('@codemirror/legacy-modes/mode/yaml').then(m => m.yaml)),
+  diff: () => streamParser(import('@codemirror/legacy-modes/mode/diff').then(m => m.diff)),
+  css: () => streamParser(import('@codemirror/legacy-modes/mode/css').then(m => m.css)),
+  html: () => streamParser(import('@codemirror/legacy-modes/mode/xml').then(m => m.html)),
+  xml: () => streamParser(import('@codemirror/legacy-modes/mode/xml').then(m => m.xml)),
+  sql: () => streamParser(import('@codemirror/legacy-modes/mode/sql').then(m => m.standardSQL)),
+} satisfies Record<string, () => Promise<Parser>>;
+
+type Lang = keyof typeof loaders;
+
+const parsers = new Map<Lang, Promise<Parser>>();
+
+function getParser(lang: Lang): Promise<Parser> {
+  let parser = parsers.get(lang);
+  if (!parser) {
+    parser = loaders[lang]();
+    // Let a failed chunk load be retried on the next highlight pass.
+    parser.catch(() => parsers.delete(lang));
+    parsers.set(lang, parser);
+  }
+  return parser;
+}
+
+/**
+ * Maps Lezer highlight tags to role classes styled in `components.css`. Both the
+ * read-only `<Code>` viewer and every CodeMirror editor (`useCodemirrorTheme`)
+ * use it, so they share one palette (`--syntax-*`).
+ */
+export const syntaxHighlighter = tagHighlighter([
+  { tag: [t.comment, t.bracket], class: 'syntax-comment' },
+  { tag: [t.string, t.meta, t.regexp, t.name, t.quote, t.standard(t.tagName)], class: 'syntax-string' },
+  { tag: [t.atom, t.bool, t.special(t.variableName)], class: 'syntax-literal' },
+  { tag: [t.keyword, t.operator, t.tagName, t.deleted], class: 'syntax-keyword' },
+  { tag: [t.function(t.propertyName), t.propertyName, t.variableName, t.number], class: 'syntax-name' },
+  {
+    tag: [t.definition(t.variableName), t.function(t.variableName), t.className, t.attributeName, t.url],
+    class: 'syntax-definition',
+  },
+  { tag: t.link, class: 'syntax-link' },
+  { tag: t.heading, class: 'syntax-heading' },
+  { tag: t.emphasis, class: 'syntax-emphasis' },
+  { tag: t.strong, class: 'syntax-strong' },
+  { tag: t.strikethrough, class: 'syntax-strike' },
+  { tag: t.invalid, class: 'syntax-invalid' },
+]);
+
+/** Lets Lezer reuse the previous tree when `code` only appends to it, as a streaming fence does. */
+function reusableFragments(code: string, previous: HighlightResult | undefined) {
+  if (!previous || !code.startsWith(previous.code)) return undefined;
+  const end = previous.code.length;
+  return TreeFragment.applyChanges(TreeFragment.addTree(previous.tree), [
+    { fromA: end, toA: end, fromB: end, toB: code.length },
+  ]);
+}
+
+/**
+ * Tokenizes `code` into lines of tokens. Joining every token's content with
+ * `\n` between lines reproduces `code` exactly. Returns `null` for languages
+ * without a grammar. `previous` must come from the same language.
+ */
+export async function highlight(
+  code: string,
+  language: string,
+  previous?: HighlightResult,
+): Promise<HighlightResult | null> {
   const lang = langAliases[language?.toLowerCase()];
   if (!lang) return null;
 
-  const highlighter = await getHighlighter();
+  const parser = await getParser(lang);
+  const tree = parser.parse(code, reusableFragments(code, previous));
+  let line: HighlightToken[] = [];
+  const lines = [line];
 
-  const { tokens } = highlighter.codeToTokens(code, {
-    lang,
-    defaultColor: false,
-    themes: {
-      light: 'github-light',
-      dark: 'github-dark',
-    },
+  const push = (text: string, className?: string) => {
+    text.split('\n').forEach((part, i) => {
+      if (i > 0) lines.push((line = []));
+      if (part) line.push(className ? { content: part, className } : { content: part });
+    });
+  };
+
+  let pos = 0;
+  highlightTree(tree, syntaxHighlighter, (from, to, className) => {
+    if (from > pos) push(code.slice(pos, from));
+    push(code.slice(from, to), className);
+    pos = to;
   });
+  if (pos < code.length) push(code.slice(pos));
 
-  return tokens;
+  return { code, tokens: lines, tree };
 }
 
 export function languageForPath(path: string | undefined): string | undefined {

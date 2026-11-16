@@ -617,7 +617,7 @@ function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
 
 /** Convert HSL to RGB (0–1). */
 function hslToRgb(h: number, s: number, l: number): [number, number, number] {
-  h = h / 360;
+  h /= 360;
   if (s === 0) return [l, l, l];
   const hue2rgb = (p: number, q: number, t: number) => {
     if (t < 0) t += 1;

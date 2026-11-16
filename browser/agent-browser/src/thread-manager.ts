@@ -30,6 +30,8 @@ export interface AgentBrowserThreadManagerConfig extends ThreadManagerConfig {
   resolveCdpUrl?: (cdpUrl: string | (() => string | Promise<string>)) => Promise<string>;
   /** Callback when a new browser manager is created for a thread */
   onBrowserCreated?: (manager: BrowserManager, threadId: string) => void;
+  /** Runs once a thread's browser is open, before saved tabs are restored (e.g. to add cookies) */
+  onBrowserOpened?: (threadId: string) => Promise<void>;
 }
 
 /**
@@ -49,12 +51,14 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
   protected readonly browserConfig: BrowserConfig;
   private readonly resolveCdpUrl?: (cdpUrl: string | (() => string | Promise<string>)) => Promise<string>;
   protected readonly onBrowserCreated?: (manager: BrowserManager, threadId: string) => void;
+  protected readonly onBrowserOpened?: (threadId: string) => Promise<void>;
 
   constructor(config: AgentBrowserThreadManagerConfig) {
     super(config);
     this.browserConfig = config.browserConfig;
     this.resolveCdpUrl = config.resolveCdpUrl;
     this.onBrowserCreated = config.onBrowserCreated;
+    this.onBrowserOpened = config.onBrowserOpened;
   }
 
   /**
@@ -113,6 +117,7 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
       this.threadManagers.set(threadId, manager);
 
       try {
+        await this.onBrowserOpened?.(threadId);
         // Restore browser state if available (before notifying parent to avoid screencast race)
         if (savedState && savedState.tabs.length > 0) {
           this.logger?.debug?.(`Restoring browser state for thread ${threadId}: ${savedState.tabs.length} tabs`);

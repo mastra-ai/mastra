@@ -24,7 +24,7 @@ const headingRoles: TextRole[] = [
   'card-title-tight',
   'card-title-strong',
 ];
-const textRoles: TextRole[] = ['body', 'label', 'body-sm', 'column', 'caption', 'meta'];
+const textRoles: TextRole[] = ['body', 'label', 'body-sm', 'menu', 'column', 'caption', 'meta'];
 const monoRoles: TextRole[] = ['body', 'body-sm', 'caption', 'meta'];
 
 const families: { token: string; use: string; className: string; sample: string }[] = [
@@ -52,6 +52,7 @@ const samples: Record<TextRole, string> = {
   hero: 'Build with an agent factory',
   lead: 'Agents pick up scoped work, collaborate, and ship changes you can review.',
   eyebrow: 'Recent activity',
+  'display-lg': '$1,284.17',
   display: 'Build agents that ship',
   title: 'Agent overview',
   heading: 'Recent activity',
@@ -61,7 +62,8 @@ const samples: Record<TextRole, string> = {
   'card-title': 'Fix the deployment configuration',
   'card-title-tight': 'Review the deployment configuration',
   'card-title-strong': 'Investigate the deployment configuration',
-  'body-sm': 'Table cells, menu items and field values',
+  'body-sm': 'Table cells and field values',
+  menu: 'Sort · Activity · Reset to default',
   column: 'STATUS',
   caption: 'Secondary information and supporting copy',
   meta: 'METADATA · 12:42 PM',
@@ -145,7 +147,7 @@ export const TypographyFoundations: Story = {
     >
       <FoundationSection
         label="Typeface"
-        description="Three roles, three tokens. The package defaults them to system stacks so it carries no font licence; a product overrides the tokens in its own CSS and every text role follows — Studio points display and body at Mona Sans and mono at Commit Mono, which is what renders below. There is no serif family: display is a role, not a typeface."
+        description="Three roles, three tokens. They default to system stacks; the package's fonts.css points display and body at Mona Sans and mono at Commit Mono, which is what renders below, and every text role follows. There is no serif family: display is a role, not a typeface."
       >
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {families.map(family => (

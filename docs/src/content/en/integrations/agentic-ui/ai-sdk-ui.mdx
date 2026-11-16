@@ -251,6 +251,52 @@ export default function Chat() {
 
 Use [`prepareSendMessagesRequest`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#transport.default-chat-transport.prepare-send-messages-request) to customize the request sent to the chat route, for example to pass additional configuration to the agent.
 
+### Resume a chat stream after a disconnect
+
+Enable resumable streams on the Mastra route:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { chatRoute } from '@mastra/ai-sdk'
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: '/chat',
+        agent: 'weatherAgent',
+        resumable: true,
+      }),
+    ],
+  },
+})
+```
+
+Pass a stable chat ID and `resume: true` to `useChat()`. AI SDK UI reconnects through `GET /chat/:chatId/stream` when the component mounts again while the generation is still active.
+
+```tsx title="src/components/chat.tsx" oxfmt:false
+import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport } from 'ai'
+
+export function Chat({ chatId }: { chatId: string }) {
+  const { messages, sendMessage, status } = useChat({
+    id: chatId,
+    resume: true,
+    transport: new DefaultChatTransport({
+      api: 'http://localhost:4111/chat',
+    }),
+  })
+
+  // ...render messages and call sendMessage()
+}
+```
+
+Keep `chatId` in a URL, browser storage, or application state so a refresh reuses the same value. Resumption only applies to an active run. Completed or unavailable runs return `204`, so load completed chat history from memory separately.
+
+Resumable mode lets generation continue after the POST connection closes, which means `useChat().stop()` doesn't cancel the agent run. Active-run discovery is process-local, so the reconnect request must reach the same running Mastra server process.
+
+If the chat uses a resource ID, authentication middleware must set `MASTRA_RESOURCE_ID_KEY` in the request context. Don't send the resource ID only as `memory.resource` in the POST body because the reconnecting GET request has no body.
+
 ### Client tools with `useChat()`
 
 A tool without an `execute` function runs on the client. When the model calls it, the agent's run ends at that step and the stream finishes with a `tool-{toolKey}` part in the `input-available` state. To let the agent continue, run the tool in the browser, add its result with `addToolOutput()`, and send the conversation back. `sendAutomaticallyWhen` sends the next request once every tool call in the last assistant message has a result:
@@ -310,6 +356,8 @@ sendMessage(
 ```
 
 `suspended` is the `data` of the latest `data-tool-call-suspended` part in `messages`.
+
+When the tool runs inside a [subagent](/docs/agents/human-in-the-loop#identify-which-subagent-tool-paused), `toolCallId` on `data-tool-call-suspended` and `data-tool-call-approval` parts is the supervisor's call to the subagent. The parts also include `delegatedToolCallId` and `delegatedToolName`, which name the subagent's tool call that paused. Use them to label the prompt you render, and keep using `runId` and `toolCallId` to resume.
 
 ## Using Mastra Memory
 

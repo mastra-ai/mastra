@@ -12,6 +12,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../request-context';
 import { MockStore } from '../../storage/mock';
+import { restoreLiveRequestContext } from './helpers';
 import { createStep, createWorkflow } from '.';
 
 const looseObject = z.looseObject({});
@@ -83,6 +84,21 @@ function withToken(token: string) {
 }
 
 describe('evented engine auth token persistence', () => {
+  it.each([TOKEN, undefined])('restores committed context using only the live bearer token %s', token => {
+    const stored = { tenant: 'committed', [MASTRA_AUTH_TOKEN_KEY]: 'expired-stored-token' };
+    const live = token === undefined ? { tenant: 'stale' } : { tenant: 'stale', [MASTRA_AUTH_TOKEN_KEY]: token };
+    const restored = restoreLiveRequestContext(stored, live);
+    expect(restored).toEqual(
+      token === undefined
+        ? { tenant: 'committed' }
+        : {
+            tenant: 'committed',
+            [MASTRA_AUTH_TOKEN_KEY]: token,
+          },
+    );
+    expect(stored[MASTRA_AUTH_TOKEN_KEY]).toBe('expired-stored-token');
+    expect(live.tenant).toBe('stale');
+  });
   it('keeps the live token out of every snapshot write while steps still see it', async () => {
     const { mastra, storage, workflow, seenTokens } = setup();
     const { workflowsStore, writes } = await spyOnWrites(storage);

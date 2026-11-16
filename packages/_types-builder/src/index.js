@@ -1,10 +1,10 @@
 import { spawn } from 'node:child_process';
-import { builtinModules } from 'node:module';
+import { builtinModules, createRequire } from 'node:module';
 import { glob as globby } from 'tinyglobby';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { statSync } from 'node:fs';
-import { replaceTypes } from './replace-types.js';
+import { createReplaceTypesState, replaceTypes } from './replace-types.js';
 import { embedTypes } from './embed-types.js';
 
 const rgxFrom = /(?<=from )['|"](.*)['|"]/gm;
@@ -22,28 +22,9 @@ function isNodeBuiltinModuleSpecifier(moduleSpecifier) {
   return false;
 }
 
-// pnpm-specific environment variables that npm doesn't recognize
-// These cause "Unknown env config" warnings when passed to npx/npm
-const pnpmSpecificEnvVars = new Set([
-  'npm_config_catalog',
-  'npm_config_verify-deps-before-run',
-  'npm_config_npm-globalconfig',
-  'npm_config__jsr-registry',
-  'npm_config_patched-dependencies',
-  'pnpm_config_catalog',
-  'pnpm_config_verify-deps-before-run',
-  'pnpm_config_npm-globalconfig',
-  'pnpm_config__jsr-registry',
-  'pnpm_config_patched-dependencies',
-]);
-
-/**
- * Get a filtered copy of process.env without pnpm-specific npm_config_* or pnpm_config_* variables
- * @returns {NodeJS.ProcessEnv}
- */
-function getFilteredEnv() {
-  return Object.fromEntries(Object.entries(process.env).filter(([key]) => !pnpmSpecificEnvVars.has(key)));
-}
+// Always emit declarations with this package's TypeScript 7 compiler, regardless of the
+// `typescript` version a package pins for its own tooling.
+const tscBin = path.join(path.dirname(createRequire(import.meta.url).resolve('typescript/package.json')), 'bin', 'tsc');
 
 function stripComments(code) {
   return code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
@@ -155,13 +136,9 @@ async function validateDeclarationRuntimeImports(rootDir, bundledPackages) {
  */
 export async function generateTypes(rootDir, bundledPackages = new Set(), { rollupTypes = {} } = {}) {
   try {
-    // Use spawn instead of exec to properly inherit stdio
-    // Use shell: true for cross-platform compatibility
-    const tscProcess = spawn('npx', ['tsc', '-p', 'tsconfig.build.json'], {
+    const tscProcess = spawn(process.execPath, [tscBin, '-p', 'tsconfig.build.json'], {
       cwd: rootDir,
       stdio: 'inherit',
-      shell: true,
-      env: getFilteredEnv(),
     });
 
     await new Promise((resolve, reject) => {
@@ -192,11 +169,12 @@ export async function generateTypes(rootDir, bundledPackages = new Set(), { roll
       );
     }
 
+    const replaceTypesState = createReplaceTypesState();
     for (const dtsFile of dtsFiles) {
       const fullPath = path.join(rootDir, dtsFile);
       if (bundledPackages.size) {
         try {
-          await replaceTypes(fullPath, rootDir, bundledPackages);
+          await replaceTypes(fullPath, rootDir, bundledPackages, replaceTypesState);
         } catch (err) {
           // eslint-disable-next-line no-console
           console.log(`failed to embed types: ${fullPath}`, err);

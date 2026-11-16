@@ -7,6 +7,36 @@ export type InlineLinkEntry =
   | string // Domain pattern — HEAD determines mime type, checked against inlineMedia
   | { match: string; mimeType: string }; // Domain + forced mime type (skips HEAD & inlineMedia)
 
+const TEXT_APPLICATION_TYPES = new Set([
+  'application/json',
+  'application/ld+json',
+  'application/x-ndjson',
+  'application/xml',
+  'application/yaml',
+  'application/x-yaml',
+  'application/toml',
+  'application/sql',
+  'application/javascript',
+  'application/typescript',
+  'application/x-sh',
+]);
+
+/**
+ * Whether a non-inline attachment can be decoded as UTF-8 and handed to the
+ * agent as text (plain text, CSV, JSON, YAML, XML, logs, source code, …).
+ * @internal
+ */
+export function isTextMimeType(mimeType: string): boolean {
+  const type = (mimeType.split(';')[0] ?? '').trim().toLowerCase();
+  return (
+    type.startsWith('text/') ||
+    TEXT_APPLICATION_TYPES.has(type) ||
+    type.endsWith('+json') ||
+    type.endsWith('+xml') ||
+    type.endsWith('+yaml')
+  );
+}
+
 /** Resolved inline-link rule after normalisation. */
 export interface InlineLinkRule {
   match: string;

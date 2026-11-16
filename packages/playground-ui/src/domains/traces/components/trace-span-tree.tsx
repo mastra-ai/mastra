@@ -3,11 +3,9 @@ import type { UISpan } from '../types';
 import type { SpanRowContext } from './span-rows';
 import { SpanRows } from './span-rows';
 import { SpanTreeRow } from './span-tree-row';
-import { SpanTypeLegend } from './span-type-legend';
 import { TraceSpanTreeSkeleton } from './trace-span-tree-skeleton';
-import { Txt } from '@/ds/components/Txt/Txt';
 import { cn } from '@/lib/utils';
-import { formatDurationPrecise } from '@/utils/duration';
+import { formatDuration } from '@/utils/duration';
 
 export type TraceSpanTreeProps = {
   hierarchicalSpans: UISpan[];
@@ -20,7 +18,7 @@ export type TraceSpanTreeProps = {
   featuredSpanIds?: string[];
   /** Row scrolled into view once it is mounted (ancestors auto-expand when the span is featured). */
   revealSpanId?: string;
-  /** Rendered full-width above the span type legend row. */
+  /** Rendered full-width above the span rows. */
   leadingSlot?: ReactNode;
   /** Optional end-of-row cell. By default rows have no trailing cell; the duration is shown under the span name. */
   renderTrailing?: (ctx: SpanRowContext) => ReactNode;
@@ -30,11 +28,7 @@ export function TraceSpanTreeLoading() {
   return <TraceSpanTreeSkeleton />;
 }
 
-const durationMeta = (ctx: SpanRowContext) => (
-  <Txt as="span" variant="meta" font="mono">
-    {formatDurationPrecise(ctx.span.latency)}
-  </Txt>
-);
+const durationMeta = (ctx: SpanRowContext) => formatDuration(ctx.span.latency);
 
 /** Hierarchical span tree: expand toggle, name and duration per row, plus an optional trailing cell. */
 export function TraceSpanTree({
@@ -55,7 +49,6 @@ export function TraceSpanTree({
   return (
     <>
       {leadingSlot}
-      <SpanTypeLegend spans={hierarchicalSpans} />
       <div
         className={cn('grid content-start items-start gap-y-px overflow-hidden pb-1', {
           'grid-cols-[minmax(0,1fr)]': !renderTrailing,

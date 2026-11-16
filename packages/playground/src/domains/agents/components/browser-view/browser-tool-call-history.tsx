@@ -37,7 +37,7 @@ export function BrowserToolCallHistory({ className }: BrowserToolCallHistoryProp
       >
         <DisclosureChevron className="size-3.5 text-muted-foreground" />
         <Txt as="span" variant="column" tone="muted">
-          Browser Actions ({toolCalls.length})
+          Browser actions ({toolCalls.length})
         </Txt>
       </button>
 

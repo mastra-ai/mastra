@@ -1,16 +1,18 @@
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { DataListTopCell } from './data-list-top-cell';
 import type { DataListTopCellProps } from './data-list-top-cell';
 import { Button } from '@/ds/components/Button';
+import { IconArrowDown } from '@/ds/icons/central/IconArrowDown';
+import { IconArrowTopBottom } from '@/ds/icons/central/IconArrowTopBottom';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
 import { cn } from '@/lib/utils';
 
 export type DataListSort = 'asc' | 'desc';
 
 const sortIcons = {
-  asc: ArrowUp,
-  desc: ArrowDown,
-  none: ArrowUpDown,
+  asc: IconArrowUp,
+  desc: IconArrowDown,
+  none: IconArrowTopBottom,
 };
 
 const sortLabels = {
@@ -38,6 +40,8 @@ export type DataListSortableTopCellProps<K extends string = string> = Omit<
   sort?: DataListSort;
   onSortChange: (sort: DataListSort, key: K) => void;
   align?: 'start' | 'end';
+  /** Names the column in the sort button's accessible label. Defaults to `children` when it is a string, else `sortKey`. */
+  label?: string;
 };
 
 export function DataListSortableTopCell<K extends string = string>({
@@ -46,18 +50,18 @@ export function DataListSortableTopCell<K extends string = string>({
   sort,
   onSortChange,
   align = 'start',
+  label = typeof children === 'string' ? children : sortKey,
   className,
   ...props
 }: DataListSortableTopCellProps<K>) {
   const next: DataListSort = sort === 'asc' ? 'desc' : 'asc';
   const SortIcon = sortIcons[sort ?? 'none'];
-  const label = typeof children === 'string' ? children : sortKey;
   const current = sort ? `sorted ${sortLabels[sort]}` : 'not sorted';
 
   return (
     <DataListTopCell
       data-sort={sort ?? 'none'}
-      className={cn('gap-1 overflow-visible', align === 'end' && 'flex-row-reverse', className)}
+      className={cn('gap-1 overflow-visible', align === 'end' && 'justify-end', className)}
       {...props}
     >
       <span className="min-w-0 truncate">{children}</span>

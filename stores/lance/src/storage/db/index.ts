@@ -545,13 +545,12 @@ export class LanceDB extends MastraBase {
 
             // Handle different types appropriately
             if (typeof value === 'string') {
-              return `${quotedKey} = '${value}'`;
+              return `${quotedKey} = '${value.replaceAll("'", "''")}'`;
             } else if (value === null) {
               return `${quotedKey} IS NULL`;
-            } else {
-              // For numbers, booleans, etc.
-              return `${quotedKey} = ${value}`;
             }
+            // For numbers, booleans, etc.
+            return `${quotedKey} = ${value}`;
           })
           .join(' AND ');
 

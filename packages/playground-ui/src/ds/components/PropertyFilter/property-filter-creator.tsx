@@ -1,12 +1,3 @@
-import {
-  ArrowLeftIcon,
-  ChevronRightIcon,
-  FilterIcon,
-  ListFilterPlusIcon,
-  PlusIcon,
-  ListFilterPlus,
-  X,
-} from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ButtonHTMLAttributes } from 'react';
 import { PickMultiPanel } from './pick-multi-panel';
@@ -17,17 +8,25 @@ import { Combobox } from '@/ds/components/Combobox/combobox';
 import { Field, FieldError } from '@/ds/components/Field';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
 import { Txt } from '@/ds/components/Txt';
-import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
-import { MENU_SIDE_OFFSET, menuEmptyClass, menuItemClass, menuItemTrailingIconClass } from '@/ds/primitives/menu-item';
+import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
+import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconFilter1 } from '@/ds/icons/central/IconFilter1';
+import { IconFilter2 } from '@/ds/icons/central/IconFilter2';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import {
+  MENU_SIDE_OFFSET,
+  menuEmptyClass,
+  menuItemButtonClass,
+  menuItemTrailingIconClass,
+} from '@/ds/primitives/menu-item';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
-// Plain <button>s navigated with roving focus (not Base UI): the fluid highlight follows focus.
-const filterItemClass = cn(menuItemClass, 'focus:text-foreground');
-
+// Plain <button>s navigated with roving focus (not Base UI).
 const FilterMenuButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement>>((props, ref) => (
-  <button type="button" role="menuitem" data-filter-item="" ref={useFluidMenuItemRef(ref)} {...props} />
+  <button type="button" role="menuitem" data-filter-item="" ref={ref} {...props} />
 ));
 FilterMenuButton.displayName = 'FilterMenuButton';
 
@@ -65,7 +64,7 @@ export function PropertyFilterCreator({
   fields,
   tokens,
   onTokensChange,
-  label = 'Add Filter',
+  label = 'Add filter',
   disabled,
   size,
   onStartTextFilter,
@@ -77,7 +76,6 @@ export function PropertyFilterCreator({
     return fields.filter(f => !hidden.has(f.id));
   }, [fields, hiddenFieldIds]);
   const [open, setOpen] = useState(false);
-  const menu = useFluidMenu<HTMLDivElement>();
   const [fieldId, setFieldId] = useState<string | undefined>();
   const [multiValue, setMultiValue] = useState<string[]>([]);
   const [error, setError] = useState<string | undefined>();
@@ -170,12 +168,12 @@ export function PropertyFilterCreator({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button size={size} disabled={disabled} icon={<ListFilterPlusIcon />}>
+        <Button size={size} disabled={disabled} icon={<IconFilter2 />}>
           {label}
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        align="end"
+        align="start"
         sideOffset={MENU_SIDE_OFFSET}
         className={cn('w-64', selectedField ? 'p-3' : 'p-1')}
         initialFocus={false}
@@ -196,18 +194,17 @@ export function PropertyFilterCreator({
                 className={cn(quietTextHover, controlStateColorTransition)}
                 onClick={reset}
               >
-                <ArrowLeftIcon className="size-4" />
+                <IconArrowLeft className="size-4" />
               </button>
-              <FilterIcon className="size-4 shrink-0 text-muted-foreground" />
-              <Txt as="span" variant="caption" tone="muted">{`${selectedField.label} · is`}</Txt>
+              <IconFilter1 className="size-4 shrink-0 text-muted-foreground" />
+              <Txt as="span" variant="caption" tone="muted">{`${selectedField.label} is`}</Txt>
             </div>
           )}
 
           {!selectedField && (
             <div
               role="menu"
-              className={cn('max-h-[80dvh] overflow-auto', menu.containerClassName)}
-              {...menu.getContainerProps({})}
+              className="max-h-[80dvh] overflow-auto"
               onKeyDown={e => {
                 if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
                 const buttons = Array.from(
@@ -225,7 +222,7 @@ export function PropertyFilterCreator({
                 buttons[next]?.focus();
               }}
             >
-              <FluidMenuItems menu={menu}>
+              <>
                 {visibleFields.length > 0 ? (
                   visibleFields.map(f => {
                     const used = singleUseFieldIds.has(f.id);
@@ -245,7 +242,7 @@ export function PropertyFilterCreator({
                     return (
                       <FilterMenuButton
                         key={f.id}
-                        className={cn(filterItemClass, 'group')}
+                        className={cn(menuItemButtonClass, 'group')}
                         disabled={used}
                         onClick={() => {
                           setError(undefined);
@@ -266,10 +263,10 @@ export function PropertyFilterCreator({
                           <span
                             className={cn(
                               menuItemTrailingIconClass,
-                              'text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100',
+                              'text-muted-foreground opacity-0 group-hover:opacity-100 group-focus:opacity-100',
                             )}
                           >
-                            <PlusIcon />
+                            <IconPlusMedium />
                           </span>
                         )}
                       </FilterMenuButton>
@@ -278,7 +275,7 @@ export function PropertyFilterCreator({
                 ) : (
                   <div className={menuEmptyClass}>No matching property.</div>
                 )}
-              </FluidMenuItems>
+              </>
             </div>
           )}
 
@@ -293,7 +290,7 @@ export function PropertyFilterCreator({
                   setError(undefined);
                 }}
                 placeholder={selectedField.placeholder ?? `Choose ${selectedField.label}`}
-                searchPlaceholder={`Search ${selectedField.label.toLowerCase()}...`}
+                searchPlaceholder={`Search ${selectedField.label.toLowerCase()}`}
                 emptyText={selectedField.emptyText ?? 'No option found.'}
                 size="md"
                 aria-label={selectedField.label}
@@ -304,10 +301,10 @@ export function PropertyFilterCreator({
 
           {selectedField && (
             <div className="flex items-center justify-end gap-2">
-              <Button icon={<X />} variant="ghost" size="md" onClick={() => setOpen(false)}>
+              <Button icon={<IconCrossMedium />} variant="ghost" size="md" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button icon={<ListFilterPlus />} size="md" onClick={commit}>
+              <Button icon={<IconFilter2 />} size="md" onClick={commit}>
                 Add filter
               </Button>
             </div>
@@ -349,7 +346,7 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
     >
       <PopoverTrigger asChild>
         <FilterMenuButton
-          className={filterItemClass}
+          className={menuItemButtonClass}
           onKeyDown={e => {
             if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
             if (!open) onToggle(field.id);
@@ -362,11 +359,11 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
             });
           }}
         >
-          {open && <ChevronRightIcon className="text-muted-foreground" />}
+          {open && <IconChevronRight className="text-muted-foreground" />}
           <span className="truncate">{field.label}</span>
           {!open && (
             <span className={cn(menuItemTrailingIconClass, 'text-muted-foreground')}>
-              <ChevronRightIcon />
+              <IconChevronRight />
             </span>
           )}
         </FilterMenuButton>

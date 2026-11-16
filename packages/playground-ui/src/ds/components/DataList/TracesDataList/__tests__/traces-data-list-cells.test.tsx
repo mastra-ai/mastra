@@ -21,6 +21,7 @@ describe('TracesDataListTypeCell', () => {
       [EntityType.WORKFLOW_STEP, 'Step'],
       [EntityType.TOOL, 'Tool'],
       [EntityType.SCORER, 'Scorer'],
+      [EntityType.CLASSIFIER, 'Classifier'],
       [EntityType.MEMORY, 'Memory'],
       [EntityType.MCP_SERVER, 'MCP Server'],
       [EntityType.INPUT_PROCESSOR, 'Processor'],

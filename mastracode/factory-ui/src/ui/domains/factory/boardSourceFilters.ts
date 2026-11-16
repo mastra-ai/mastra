@@ -1,6 +1,5 @@
-import type { BoardCandidate } from './boardCandidates';
-import type { BoardFilterState } from './boardFilters';
-import type { WorkItem, WorkItemSource } from './services/workItems';
+import { pickedBoardSources, PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
+import type { SourceFilters } from '@mastra/factory/work-items/card-source-filters';
 
 export const BOARD_SOURCE_OPTIONS = [
   { value: 'github', label: 'GitHub' },
@@ -8,29 +7,13 @@ export const BOARD_SOURCE_OPTIONS = [
   { value: 'linear', label: 'Linear' },
   { value: 'jira', label: 'Jira' },
   { value: 'incidentio', label: 'incident.io' },
+  { value: 'detail', label: 'Detail' },
   { value: 'manual', label: 'Manual' },
-];
-
-export function boardSource(source: WorkItemSource): string {
-  if (source === 'incidentio-follow-up') return 'incidentio';
-  return source.split('-')[0];
-}
+  // Not a provider: any card carrying a pull or merge request, its own or attached to its issue.
+  { value: PULL_REQUEST_SOURCE_FILTER, label: 'Pull requests' },
+] as const;
 
 /** Source and project filters determine which intake feeds to browse. */
-export function hasBoardSourceFilters(filters: Pick<BoardFilterState, 'sources' | 'linearProjectIds'>): boolean {
-  if (filters.sources.size > 0) return true;
-  return filters.linearProjectIds.size > 0;
-}
-
-/** Live metadata wins, including an issue moved out of a project; stored metadata covers older pages. */
-export function cardMatchesSourceFilters(
-  card: Pick<WorkItem, 'source' | 'metadata'>,
-  filters: Pick<BoardFilterState, 'sources' | 'linearProjectIds'>,
-  liveCandidate?: BoardCandidate,
-): boolean {
-  if (filters.sources.size > 0 && !filters.sources.has(boardSource(card.source))) return false;
-  if (filters.linearProjectIds.size === 0) return true;
-  if (card.source !== 'linear-issue') return false;
-  const projectId = (liveCandidate ?? card).metadata.linearProjectId;
-  return typeof projectId === 'string' && filters.linearProjectIds.has(projectId);
+export function hasBoardSourceFilters(filters: SourceFilters): boolean {
+  return pickedBoardSources(filters).size > 0;
 }

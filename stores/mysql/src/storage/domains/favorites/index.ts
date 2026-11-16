@@ -91,6 +91,7 @@ export class FavoritesMySQL extends FavoritesStorage {
    * Currently no default indexes are defined for favorites.
    */
   async createDefaultIndexes(): Promise<void> {
+    // oxlint-disable-next-line no-useless-return -- Preserve the explicit skip-index guard and its property read.
     if (this.#skipDefaultIndexes) return;
     // No default indexes for favorites domain
   }

@@ -12,6 +12,9 @@ The `.classifier()` method adds a configured [`Classifier`](/reference/classifie
 ## Usage example
 
 ```typescript filename="src/mastra/workflows/ticket-triage.ts"
+import { createWorkflow } from '@mastra/core/workflows'
+import { z } from 'zod'
+
 const workflow = createWorkflow({
   id: 'ticket-triage',
   inputSchema: z.object({ message: z.string() }),
@@ -101,6 +104,8 @@ Mappings use the same validated path grammar as other workflow steps and persist
 Register the classifier on the same `Mastra` instance that runs the workflow:
 
 ```typescript filename="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
 export const mastra = new Mastra({
   classifiers: { router },
   workflows: { workflow },

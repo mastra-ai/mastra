@@ -19,9 +19,8 @@ export async function mastraLLMNode(
   return mapVoiceStream(source, chunk => {
     if (typeof chunk === 'object' && chunk.delta?.extra?.[VOICE_FLUSH_METADATA] === true) {
       return FlushSentinel;
-    } else {
-      return chunk;
     }
+    return chunk;
   });
 }
 

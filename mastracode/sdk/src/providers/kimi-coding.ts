@@ -6,6 +6,8 @@ import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore, OAuthCredential } from '../auth/types.js';
 
 const PROVIDER_ID = 'kimi-for-coding';
+const PROVIDER_NAME = 'Kimi For Coding';
+const INVALID_CREDENTIALS_MESSAGE = `${PROVIDER_NAME} credentials are invalid. Please reconnect the account.`;
 // Pi's provider root is https://api.kimi.com/coding. The AI SDK expects the
 // versioned Anthropic base URL and appends /messages itself.
 const BASE_URL = 'https://api.kimi.com/coding/v1';
@@ -27,10 +29,10 @@ export function buildKimiCodingOAuthFetch(options: { credentialStore?: Credentia
     store.reload();
     const credential = store.get(PROVIDER_ID);
     if (!credential || credential.type !== 'oauth') {
-      throw new ProviderAuthRequiredError('Not logged in to Kimi For Coding.');
+      throw ProviderAuthRequiredError.notSignedIn(PROVIDER_NAME);
     }
     if (!isKimiCodingDeviceId(credential.deviceId)) {
-      throw new ProviderAuthRequiredError('Kimi For Coding credentials are invalid. Please reconnect the account.');
+      throw new ProviderAuthRequiredError(INVALID_CREDENTIALS_MESSAGE);
     }
     let token: string | undefined;
     let activeCredential: OAuthCredential | undefined = credential;
@@ -43,9 +45,9 @@ export function buildKimiCodingOAuthFetch(options: { credentialStore?: Credentia
       const reloaded = store.get(PROVIDER_ID);
       activeCredential = reloaded?.type === 'oauth' ? { ...reloaded, access: token ?? reloaded.access } : undefined;
     }
-    if (!token) throw new ProviderAuthRequiredError('Failed to refresh the Kimi For Coding token.');
+    if (!token) throw ProviderAuthRequiredError.signInExpired(PROVIDER_NAME);
     if (!activeCredential || !isKimiCodingDeviceId(activeCredential.deviceId)) {
-      throw new ProviderAuthRequiredError('Kimi For Coding credentials are invalid. Please reconnect the account.');
+      throw new ProviderAuthRequiredError(INVALID_CREDENTIALS_MESSAGE);
     }
     const deviceHeaders = getKimiCodingDeviceHeaders(activeCredential.deviceId);
 
@@ -56,7 +58,7 @@ export function buildKimiCodingOAuthFetch(options: { credentialStore?: Credentia
     headers.delete('x-api-key');
     headers.set('Authorization', `Bearer ${token}`);
     return rejectUnauthorizedResponse(await fetch(input, { ...init, headers }), {
-      providerName: 'Kimi For Coding',
+      providerName: PROVIDER_NAME,
       requestUrl: input instanceof URL ? input.toString() : typeof input === 'string' ? input : input.url,
     });
   }) as typeof fetch;

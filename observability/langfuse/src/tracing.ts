@@ -439,7 +439,15 @@ function mapMastraToLangfuseAttributes(
     // evaluators mapped to Trace input/output and leaves the trace view without
     // the top-level request/response. Serialization failures (circular refs,
     // bigint) skip the attribute rather than failing the span export.
-    const traceInput = serializeTraceIo(span.input);
+    // A resumed run (after a suspend such as tool-call approval) continues the
+    // original trace: core marks it with parentSpanId === resumedFromSpanId.
+    // Its input is the resume payload, not the user's message, and Langfuse
+    // applies trace-level attributes from any span (last writer wins), so it
+    // must not replace the trace input the original run already set. Its
+    // output IS the turn's final reply, so trace output is still written.
+    const resumedContinuation =
+      span.parentSpanId !== undefined && span.parentSpanId === span.metadata?.resumedFromSpanId;
+    const traceInput = resumedContinuation ? undefined : serializeTraceIo(span.input);
     if (traceInput !== undefined) {
       attributes['langfuse.trace.input'] = traceInput;
     }

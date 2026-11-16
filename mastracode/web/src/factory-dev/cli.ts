@@ -356,6 +356,8 @@ async function run() {
       './mastracode/factory-ui',
       '--filter',
       './packages/playground-ui',
+      '--filter',
+      './client-sdks/react',
       '--env-mode=loose',
     ],
     { nodeOptions: { cwd: root, stdio: 'inherit', env } },

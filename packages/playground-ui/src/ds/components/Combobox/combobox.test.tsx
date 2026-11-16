@@ -542,7 +542,7 @@ describe('Combobox', () => {
     it('shows its own invitation while nothing is chosen', () => {
       render(<Combobox options={providers} />);
 
-      expect(trigger().textContent).toContain('Select option...');
+      expect(trigger().textContent).toContain('Select option');
     });
 
     it('names itself when no label names it', () => {

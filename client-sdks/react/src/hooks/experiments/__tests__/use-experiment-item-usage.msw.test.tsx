@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MastraReactProvider } from '../../../mastra-react-provider';
 
 import { server } from '../../../test/msw-server';
@@ -13,6 +13,7 @@ import { useExperimentsItemUsage } from '../use-experiment-item-usage';
 import {
   BASELINE_EXPERIMENT_ID,
   CONTENDER_EXPERIMENT_ID,
+  baselineBreakdown,
   breakdownByExperimentId,
 } from './fixtures/experiment-item-usage';
 
@@ -216,7 +217,7 @@ describe('useExperimentsItemUsage', () => {
   });
 
   describe('when an experiment is running', () => {
-    it('refetches its usage on an interval', async () => {
+    it('sends no breakdown request', async () => {
       useBreakdownHandler();
 
       const { result } = renderHook(
@@ -228,10 +229,96 @@ describe('useExperimentsItemUsage', () => {
         { wrapper: makeWrapper() },
       );
 
-      await waitFor(() => expect(result.current.data[BASELINE_EXPERIMENT_ID]).toBeDefined());
-      expect(rawRequests).toHaveLength(1);
+      await act(() => new Promise(resolve => setTimeout(resolve, 50)));
 
-      await waitFor(() => expect(rawRequests.length).toBeGreaterThan(1), { timeout: 4000 });
+      expect(rawRequests).toHaveLength(0);
+      expect(result.current.data[BASELINE_EXPERIMENT_ID]).toBeUndefined();
+    });
+  });
+
+  describe('when a running experiment completes', () => {
+    it('fetches its usage once', async () => {
+      useBreakdownHandler();
+
+      const { result, rerender } = renderHook(
+        ({ status }: { status: 'running' | 'completed' }) =>
+          useExperimentsItemUsage({ experiments: [{ id: BASELINE_EXPERIMENT_ID, status }], supportsMetrics: true }),
+        { wrapper: makeWrapper(), initialProps: { status: 'running' } },
+      );
+      await act(() => new Promise(resolve => setTimeout(resolve, 50)));
+      expect(rawRequests).toHaveLength(0);
+
+      rerender({ status: 'completed' });
+
+      await waitFor(() => expect(result.current.data[BASELINE_EXPERIMENT_ID]?.summary.estimatedCost).toBe(0.003));
+      await act(() => new Promise(resolve => setTimeout(resolve, 50)));
+      expect(rawRequests).toHaveLength(1);
+    });
+  });
+
+  describe('when metrics are still flushing after completion', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('retries and reports the cost once it lands', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      let calls = 0;
+      server.use(
+        http.post(`${BASE_URL}/api/observability/metrics/breakdown`, () => {
+          calls += 1;
+          return HttpResponse.json(calls === 1 ? { groups: [] } : baselineBreakdown);
+        }),
+      );
+
+      const { result } = renderHook(
+        () =>
+          useExperimentsItemUsage({
+            experiments: [{ id: BASELINE_EXPERIMENT_ID, status: 'completed' }],
+            supportsMetrics: true,
+          }),
+        { wrapper: makeWrapper() },
+      );
+      await waitFor(() => expect(calls).toBe(1));
+
+      await act(() => vi.advanceTimersByTimeAsync(2500));
+
+      await waitFor(() => expect(result.current.data[BASELINE_EXPERIMENT_ID]?.summary.estimatedCost).toBe(0.003));
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+      expect(calls).toBe(2);
+    });
+  });
+
+  describe('when breakdowns stay empty after completion', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('stops retrying after 5 attempts', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      let calls = 0;
+      server.use(
+        http.post(`${BASE_URL}/api/observability/metrics/breakdown`, () => {
+          calls += 1;
+          return HttpResponse.json({ groups: [] });
+        }),
+      );
+
+      renderHook(
+        () =>
+          useExperimentsItemUsage({
+            experiments: [{ id: BASELINE_EXPERIMENT_ID, status: 'completed' }],
+            supportsMetrics: true,
+          }),
+        { wrapper: makeWrapper() },
+      );
+      await waitFor(() => expect(calls).toBe(1));
+
+      for (let i = 0; i < 10; i++) {
+        await act(() => vi.advanceTimersByTimeAsync(2500));
+      }
+
+      expect(calls).toBe(5);
     });
   });
 });

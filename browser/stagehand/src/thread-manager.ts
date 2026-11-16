@@ -33,6 +33,8 @@ export interface StagehandThreadManagerConfig extends ThreadManagerConfig {
   createStagehand?: () => Promise<V3>;
   /** Callback when a new browser/Stagehand instance is created for a thread */
   onBrowserCreated?: (stagehand: V3, threadId: string) => void;
+  /** Runs once a thread's browser is open, before saved tabs are restored (e.g. to add cookies) */
+  onBrowserOpened?: (threadId: string) => Promise<void>;
 }
 
 /**
@@ -46,11 +48,13 @@ export class StagehandThreadManager extends ThreadManager<V3> {
   protected override sessions: Map<string, StagehandThreadSession> = new Map();
   private createStagehand?: () => Promise<V3>;
   private onBrowserCreated?: (stagehand: V3, threadId: string) => void;
+  private onBrowserOpened?: (threadId: string) => Promise<void>;
 
   constructor(config: StagehandThreadManagerConfig) {
     super(config);
     this.createStagehand = config.createStagehand;
     this.onBrowserCreated = config.onBrowserCreated;
+    this.onBrowserOpened = config.onBrowserOpened;
   }
 
   /**
@@ -92,6 +96,15 @@ export class StagehandThreadManager extends ThreadManager<V3> {
       const stagehand = await this.createStagehand();
       session.stagehand = stagehand;
       this.threadManagers.set(threadId, stagehand);
+      try {
+        await this.onBrowserOpened?.(threadId);
+      } catch (error) {
+        // Don't leave a half-opened browser registered for the thread.
+        this.threadManagers.delete(threadId);
+        session.stagehand = undefined;
+        await stagehand.close().catch(() => {});
+        throw error;
+      }
 
       // Restore browser state if available (before notifying parent to avoid screencast race)
       if (savedState && savedState.tabs.length > 0) {

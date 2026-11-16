@@ -338,7 +338,7 @@ export class ElasticSearchFilterTranslator extends BaseFilterTranslator<ElasticS
         wildcardPattern = '*' + wildcardPattern;
       }
       if (!hasEndAnchor) {
-        wildcardPattern = wildcardPattern + '*';
+        wildcardPattern += '*';
       }
 
       return { wildcard: { [field]: { value: wildcardPattern } } };

@@ -118,7 +118,6 @@ describe('public approval completion keeps one answer identity', () => {
       await controller.init();
       const session = await controller.createSession({
         resourceId: 'identity-user',
-        scope: 'thread:identity-thread',
         threadId: 'identity-thread',
       });
       const events: AgentControllerEvent[] = [];

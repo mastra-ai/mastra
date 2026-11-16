@@ -33,7 +33,7 @@
   .mastra-markdown :is(h1, h2, h3, h4, h5, h6) {
     margin: 1.6em 0 0.6em;
     color: var(--foreground);
-    font-weight: 500;
+    font-weight: var(--font-weight-medium);
     letter-spacing: -0.012em;
     line-height: 1.35;
   }
@@ -54,9 +54,11 @@
     font-size: 1em;
   }
 
+  /* Markdown has one bold. Inside prose it has no size or colour change to lean on, so it
+     needs a bigger step than the strong weight (515) gives over regular text (465). */
   .mastra-markdown strong {
     color: var(--foreground);
-    font-weight: 500;
+    font-weight: 550;
   }
 
   .mastra-markdown em {
@@ -158,20 +160,91 @@
     width: max-content;
     max-width: 100%;
     margin: 0.9em 0;
-    border-collapse: collapse;
-    font-size: 0.95em;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: var(--text-body-sm);
+    line-height: var(--text-body-sm--line-height);
   }
 
   .mastra-markdown :is(th, td) {
-    border: 1px solid var(--border);
-    padding: 0.4em 0.7em;
+    border: 0;
+    padding: calc(var(--spacing) * 2.5) calc(var(--spacing) * 3);
     text-align: left;
+    vertical-align: top;
   }
 
   .mastra-markdown th {
-    background: var(--fill-subtle);
+    background: var(--fill);
     color: var(--foreground);
-    font-weight: 500;
+    font-size: var(--text-column);
+    font-weight: var(--text-column--font-weight);
+  }
+
+  /* Keep the first row's rounded hover fill clear of the highlighted header. */
+  .mastra-markdown thead::after {
+    content: '';
+    display: table-row;
+    height: 1px;
+  }
+
+  .mastra-markdown :is(th, td):first-child {
+    border-top-left-radius: var(--radius-md);
+    border-bottom-left-radius: var(--radius-md);
+  }
+
+  .mastra-markdown :is(th, td):last-child {
+    border-top-right-radius: var(--radius-md);
+    border-bottom-right-radius: var(--radius-md);
+  }
+
+  /* Cell segments join into a straight divider. Only its outside ends fade,
+   * matching MetricsTable without introducing seams between columns. */
+  .mastra-markdown tbody tr:not(:last-child) td {
+    position: relative;
+  }
+
+  .mastra-markdown tbody tr:not(:last-child) td::after {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    border-bottom: 1px solid var(--border);
+    pointer-events: none;
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      black var(--markdown-table-divider-start, 0px),
+      black calc(100% - var(--markdown-table-divider-end, 0px)),
+      transparent
+    );
+  }
+
+  .mastra-markdown tbody tr:not(:last-child) td:first-child::after {
+    --markdown-table-divider-start: calc(var(--spacing) * 1.5);
+  }
+
+  .mastra-markdown tbody tr:not(:last-child) td:last-child::after {
+    --markdown-table-divider-end: calc(var(--spacing) * 1.5);
+  }
+
+  @media (hover: hover) {
+    .mastra-markdown tbody tr:hover td {
+      background: var(--fill-subtle);
+    }
+
+    .mastra-markdown tbody tr:hover td::after,
+    .mastra-markdown tbody tr:has(+ tr:hover) td::after {
+      opacity: 0;
+    }
+  }
+
+  .mastra-markdown tbody tr:focus-within td {
+    background: var(--fill-subtle);
+  }
+
+  .mastra-markdown tbody tr:focus-within td::after,
+  .mastra-markdown tbody tr:has(+ tr:focus-within) td::after {
+    opacity: 0;
   }
 
   .mastra-markdown img {

@@ -17,38 +17,64 @@
 
 .brand-loader circle,
 .brand-loader line {
+  transform-box: view-box;
   animation: brand-loader-pulse 1.8s ease-in-out infinite;
 }
 
 .brand-loader .brand-loader-b1 {
+  --brand-loader-check: translate(3.502px, -6.192px) scale(0);
+  --brand-loader-cross: translate(12.502px, -5.692px) scale(0);
+  transform-origin: 4.498px 16.192px;
   animation-delay: 0s;
 }
 
 .brand-loader .brand-loader-b2 {
+  --brand-loader-check: translate(-2.387px, 5.502px) scale(0.256);
+  --brand-loader-cross: translate(-0.387px, -0.998px) scale(0.256);
+  transform-origin: 10.387px 4.498px;
   animation-delay: 0.09s;
 }
 
 .brand-loader .brand-loader-ln23 {
+  --brand-loader-check: translate(-2.387px, 5.502px) rotate(45deg) scaleX(0.633944) rotate(-60.888deg);
+  --brand-loader-cross: translate(-0.387px, -0.998px) rotate(45deg) scaleX(1.479202) rotate(-60.888deg);
+  transform-origin: 10.387px 4.498px;
   animation-delay: 0.135s;
 }
 
 .brand-loader .brand-loader-b3 {
+  --brand-loader-check: translate(-2.899px, -0.192px) scale(0.256);
+  --brand-loader-cross: translate(7.101px, 1.308px) scale(0.256);
+  transform-origin: 16.899px 16.192px;
   animation-delay: 0.18s;
 }
 
 .brand-loader .brand-loader-ln34 {
+  --brand-loader-check: translate(-2.899px, -0.192px) rotate(-45deg) scaleX(1.300426) rotate(63.042deg);
+  --brand-loader-cross: translate(7.101px, 1.308px) rotate(-90deg) scaleX(1.072797) rotate(63.042deg);
+  --brand-loader-cross-opacity: 0;
+  transform-origin: 16.899px 16.192px;
   animation-delay: 0.225s;
 }
 
 .brand-loader .brand-loader-b4 {
+  --brand-loader-check: translate(3.185px, -0.56px) scale(0.256);
+  --brand-loader-cross: translate(1.185px, -1.06px) scale(0.256);
+  transform-origin: 22.815px 4.56px;
   animation-delay: 0.27s;
 }
 
 .brand-loader .brand-loader-ln45 {
+  --brand-loader-check: translate(3.185px, -0.56px) scale(0);
+  --brand-loader-cross: translate(1.185px, -1.06px) rotate(135deg) scaleX(1.525604) rotate(-63.676deg);
+  transform-origin: 22.815px 4.56px;
   animation-delay: 0.315s;
 }
 
 .brand-loader .brand-loader-b5 {
+  --brand-loader-check: translate(-2.57px, -12.192px) scale(0);
+  --brand-loader-cross: translate(-18.57px, 1.308px) scale(0.256);
+  transform-origin: 28.57px 16.192px;
   animation-delay: 0.36s;
 }
 

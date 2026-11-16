@@ -56,6 +56,8 @@ BM25 scores documents by term frequency and document length. It needs no externa
 To tune term-frequency saturation and document-length normalization, pass `k1` and `b`:
 
 ```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   bm25: {
@@ -140,11 +142,39 @@ const workspace = new Workspace({
 
 `Object.assign()` adds `batch` and `maxBatchSize` as properties on the function. Mastra reads them as metadata and doesn't pass them to the provider. Single-text embedders with the `(text: string) => Promise<number[]>` signature remain supported.
 
+### Server-side embeddings
+
+Some vector stores generate the embeddings themselves. With one of those, leave `embedder` out: Mastra sends the file text, and the database embeds it on write and embeds the search string on query.
+
+MongoDB does this through [Automated Embedding](/integrations/vectors/mongodb#automated-embedding). Name a Voyage AI model on the vector store:
+
+```typescript title="src/mastra/workspaces.ts"
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace'
+import { MongoDBVector } from '@mastra/mongodb'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  vectorStore: new MongoDBVector({
+    id: 'workspace-search',
+    uri: process.env.MONGODB_URI!,
+    dbName: process.env.MONGODB_DB_NAME!,
+    // highlight-next-line
+    autoEmbed: { model: 'voyage-4' },
+  }),
+})
+```
+
+MongoDB embeds new documents in the background, so content indexed moments ago may not show up in search results yet. See the [MongoDB reference](/integrations/vectors/mongodb#automated-embedding) for what Automated Embedding requires.
+
+Every other store expects your application to supply the vectors and keeps requiring an `embedder`.
+
 ### Hybrid search
 
 Configure both BM25 and vector search to combine keyword and semantic results:
 
 ```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   bm25: true,
@@ -155,9 +185,11 @@ const workspace = new Workspace({
 
 ### Custom index name
 
-The vector index name defaults to a sanitized version of the workspace ID followed by `_search`. Set `searchIndexName` when you need a stable or shared name:
+The vector index name defaults to a sanitized version of the workspace ID followed by `_search`, or `_search_selfembed` when the vector store generates the embeddings. Set `searchIndexName` when you need a stable or shared name:
 
 ```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   vectorStore: pineconeVector,
@@ -187,6 +219,31 @@ await workspace.index('/docs/api.md', apiDocContent, {
 ```
 
 Manual indexing works well for database records and API responses, or when you need to preprocess, chunk, or annotate content yourself.
+
+### Index application content
+
+A workspace needs a `filesystem`, `sandbox`, or `skills` provider even when your application reads content and passes it to `workspace.index()`. Without one, the `Workspace` constructor throws `Workspace requires at least a filesystem, sandbox, or skills`.
+
+Configuring a filesystem doesn't mean the agent should use it. By default, an agent with this workspace also gets file tools such as `mastra_workspace_read_file` and `mastra_workspace_write_file`. To expose only search, disable all workspace tools and re-enable the search tool:
+
+```typescript title="src/mastra/workspaces.ts"
+import { LocalFilesystem, Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: true,
+  tools: {
+    enabled: false,
+    [WORKSPACE_TOOLS.SEARCH.SEARCH]: { enabled: true },
+  },
+})
+
+for (const document of documents) {
+  await workspace.index(document.id, document.content)
+}
+```
+
+Your application keeps calling `workspace.index()` directly. The tool settings only control what the agent can call.
 
 ### Keep files and the index in sync
 
@@ -279,6 +336,8 @@ const workspace = new Workspace({
 The index tool accepts the same supplied `path`, `content`, and optional metadata as `workspace.index()`. Because it can trigger embedding calls and vector-store writes, require approval when agents shouldn't mutate the index without review:
 
 ```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   bm25: true,
@@ -332,6 +391,9 @@ Top-level `await` keeps module startup pending until initialization finishes. Wh
 Each `autoIndexPaths` entry can be a file, directory, or glob pattern. Recursive directory and glob traversal is limited to ten levels:
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   bm25: true,

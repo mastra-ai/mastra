@@ -41,6 +41,7 @@ function createMockSpan(name: string, parentSpan?: any) {
     error: vi.fn(),
     update: vi.fn(),
     exportSpan: vi.fn(),
+    snapshot: vi.fn(),
     getParentSpanId: vi.fn(() => parentSpan?.id),
     findParent: vi.fn(),
     executeInContext: vi.fn(async (fn: () => Promise<any>) => fn()),

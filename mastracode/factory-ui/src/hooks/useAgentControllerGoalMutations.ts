@@ -6,8 +6,7 @@ import {
 
 interface AgentControllerGoalMutationArgs {
   agentControllerId: string;
-  resourceId: string;
-  scope?: string;
+  sessionId: string;
   baseUrl?: string;
   enabled?: boolean;
 }

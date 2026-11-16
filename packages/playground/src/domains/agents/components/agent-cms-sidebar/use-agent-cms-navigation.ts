@@ -55,9 +55,7 @@ export function useAgentCmsNavigation(
         : null;
 
     const currentSection = currentIndex >= 0 ? sections[currentIndex] : null;
-    const isNextDisabled = currentSection?.required
-      ? !descriptions[currentSection.descriptionKey as keyof typeof descriptions].done
-      : false;
+    const isNextDisabled = currentSection?.required ? !descriptions[currentSection.descriptionKey].done : false;
 
     return { previous, next, isNextDisabled };
   }, [currentIndex, basePath, descriptions, sections]);

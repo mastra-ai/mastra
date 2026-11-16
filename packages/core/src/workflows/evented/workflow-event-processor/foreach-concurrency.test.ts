@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { MASTRA_AUTH_TOKEN_KEY } from '../../../request-context';
 import { processWorkflowForEach } from './loop';
 
 /**
@@ -27,12 +28,20 @@ async function kickOffForeach({
   initData,
   currentOutput,
   currentSuspendPayload,
+  restart = false,
+  executionPath = [0],
+  requestContext = {},
+  updateWorkflowResults = vi.fn(),
 }: {
   concurrency: number | ((ctx: { inputData: unknown; getInitData: () => unknown }) => number);
   items: unknown[];
   initData?: unknown;
   currentOutput?: unknown[];
   currentSuspendPayload?: unknown;
+  restart?: boolean;
+  executionPath?: number[];
+  requestContext?: Record<string, unknown>;
+  updateWorkflowResults?: ReturnType<typeof vi.fn>;
 }) {
   const published: any[] = [];
   const pubsub = {
@@ -40,13 +49,13 @@ async function kickOffForeach({
       published.push(event);
     },
   } as any;
-  const mastra = { getStorage: () => undefined } as any;
+  const mastra = { getStorage: () => ({ getStore: async () => ({ updateWorkflowResults }) }) } as any;
 
   await processWorkflowForEach(
     {
       workflowId: 'wf',
       runId: 'run-1',
-      executionPath: [0],
+      executionPath,
       stepResults: {
         ...(initData === undefined ? {} : { input: initData }),
         ...(currentOutput === undefined
@@ -63,8 +72,9 @@ async function kickOffForeach({
       } as any,
       activeStepsPath: {},
       resumeSteps: [],
+      restart: restart ? {} : undefined,
       prevResult: { status: 'success', output: items, startedAt: 1, endedAt: 2, payload: {} },
-      requestContext: {},
+      requestContext,
     } as any,
     { pubsub, mastra, step: makeForeachStep(concurrency) },
   );
@@ -96,6 +106,96 @@ describe('processWorkflowForEach concurrency resolution', () => {
     ]);
     // Resolver sees the foreach input and the run's init data.
     expect(resolverCalls).toEqual([{ inputData: items, initData }]);
+  });
+
+  it.each([1, 2])('reschedules unfinished restart slots with concurrency %i', async concurrency => {
+    const completed = { status: 'success', output: 'first' };
+    const events = await kickOffForeach({
+      concurrency,
+      items: [1, 2, 3],
+      currentOutput: [completed, null, null],
+      restart: true,
+    });
+
+    expect(events).toHaveLength(concurrency);
+    expect(events.map(event => event.data.executionPath)).toEqual(
+      Array.from({ length: concurrency }, (_, index) => [0, index + 1]),
+    );
+    for (const event of events) {
+      expect(event.data.restart).toBeUndefined();
+      expect(event.data.stepResults.body.output[0]).toEqual(completed);
+    }
+  });
+
+  it('strips the live auth token from restart writes without removing it from iteration events', async () => {
+    const requestContext = { [MASTRA_AUTH_TOKEN_KEY]: 'test-only-token', tenant: 'acme' };
+    const updateWorkflowResults = vi.fn();
+    const events = await kickOffForeach({
+      concurrency: 1,
+      items: [1, 2],
+      currentOutput: ['first', null],
+      restart: true,
+      requestContext,
+      updateWorkflowResults,
+    });
+
+    expect(updateWorkflowResults).toHaveBeenCalledTimes(2);
+    for (const [write] of updateWorkflowResults.mock.calls) {
+      expect(write.requestContext).toEqual({ tenant: 'acme' });
+    }
+    expect(events).toHaveLength(1);
+    expect(events[0].data.requestContext).toEqual(requestContext);
+    expect(requestContext[MASTRA_AUTH_TOKEN_KEY]).toBe('test-only-token');
+  });
+
+  it('advances the workflow path when restarting an already-complete foreach', async () => {
+    const events = await kickOffForeach({
+      concurrency: 1,
+      items: [1, 2],
+      currentOutput: ['first', 'second'],
+      executionPath: [0, 1],
+      restart: true,
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0].data.executionPath).toEqual([1]);
+    expect(events[0].data.prevResult.output).toEqual(['first', 'second']);
+  });
+
+  it('launches a normal initial batch on a pre-first-step restart', async () => {
+    const events = await kickOffForeach({ concurrency: 2, items: [1, 2, 3], restart: true });
+    expect(events.map(event => event.data.executionPath)).toEqual([
+      [0, 0],
+      [0, 1],
+    ]);
+    expect(events.every(event => event.data.restart === undefined)).toBe(true);
+  });
+
+  it('launches the next unscheduled item normally on restart', async () => {
+    const events = await kickOffForeach({
+      concurrency: 1,
+      items: [1, 2, 3],
+      currentOutput: ['first'],
+      executionPath: [0, 0],
+      restart: true,
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0].data.executionPath).toEqual([0, 1]);
+    expect(events[0].data.restart).toBeUndefined();
+  });
+
+  it('keeps suspended restart iterations within the concurrency limit', async () => {
+    const events = await kickOffForeach({
+      concurrency: 1,
+      items: [1, 2],
+      currentOutput: [{ status: 'suspended', suspendPayload: { approval: true } }, null],
+      executionPath: [0, 0],
+      restart: true,
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: 'workflow.step.end',
+      data: { executionPath: [0], prevResult: { status: 'suspended' } },
+    });
   });
 
   it('still supports static concurrency numbers', async () => {

@@ -103,8 +103,9 @@ export function CompareExperimentsContent({
     );
   }
 
+  // The single scroller of the comparison, on both axes, so the table's sticky titles pin to it.
   return (
-    <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
+    <div className="h-full overflow-auto">
       <div className="grid w-full content-start">
         <Txt as="h1" variant="heading" className="sr-only">
           Experiments comparison

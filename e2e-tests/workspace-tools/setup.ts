@@ -9,13 +9,14 @@ import { copyFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { startRegistry } from '../_local-registry-setup';
 import { publishPackages } from '../_local-registry-setup/publish';
+import { E2E_TAG } from '../_local-registry-setup/publish-roots.js';
 
 const _require = createRequire(import.meta.url);
 
 export default async function setup(project: TestProject) {
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const rootDir = join(__dirname, '..', '..');
-  const tag = 'workspace-tools-e2e';
+  const tag = E2E_TAG;
   const teardown = await prepareMonorepo(rootDir, globby, tag);
 
   const verdaccioPath = _require.resolve('verdaccio/bin/verdaccio');

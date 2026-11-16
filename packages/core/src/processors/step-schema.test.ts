@@ -323,6 +323,15 @@ describe('ProcessorOutputResultPhaseSchema', () => {
       messageList: fakeMessageList,
       result: { text: 'hi', usage: {}, finishReason: 'stop', steps: [] },
     }));
+  it('still accepts the deprecated inputAccepted on the result', () => {
+    const parsed = ProcessorOutputResultPhaseSchema.parse({
+      phase: 'outputResult',
+      messages: [],
+      messageList: fakeMessageList,
+      result: { text: '', usage: {}, finishReason: 'error', steps: [], inputAccepted: true },
+    });
+    expect(parsed.result?.inputAccepted).toBe(true);
+  });
   it('rejects wrong phase', () =>
     fail(ProcessorOutputResultPhaseSchema, { phase: 'input', messages: [], messageList: fakeMessageList }));
 });

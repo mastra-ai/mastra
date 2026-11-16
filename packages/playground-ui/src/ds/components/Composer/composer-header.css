@@ -1,0 +1,48 @@
+/* The composer covers the surface's square lower edge throughout the transition. */
+.composer-header {
+  margin-bottom: 0;
+  transition: margin-bottom var(--duration-normal) var(--ease-out-custom);
+
+  &[data-open] {
+    margin-bottom: -24px;
+  }
+
+  &:has([data-slot='composer-header-surface']:empty) {
+    display: none;
+  }
+
+  /* Anchored to the composer's top edge and grows upward, so it never pushes the content above. */
+  &[data-placement='overlay'] {
+    position: absolute;
+    inset-inline: 0;
+    bottom: calc(100% - 24px);
+    margin-bottom: 0;
+    transition: none;
+  }
+}
+
+/* An open overlay notice takes the status row's place; the row keeps its space so nothing shifts. */
+[data-slot='composer-status']:has(+ [data-slot='composer'] .composer-header[data-placement='overlay'][data-open]) {
+  visibility: hidden;
+}
+
+.composer-header-panel {
+  height: var(--collapsible-panel-height);
+  overflow: hidden;
+  transition:
+    height var(--duration-normal) var(--ease-out-custom),
+    opacity var(--duration-normal) var(--ease-out-custom);
+
+  &[data-starting-style],
+  &[data-ending-style] {
+    height: 0;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-header,
+  .composer-header-panel {
+    transition: none;
+  }
+}

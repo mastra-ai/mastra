@@ -20,8 +20,12 @@ import type { LoopOptions } from './types';
  * today; fields note which engine currently writes them.
  */
 export interface LoopIterationState<TStep = unknown> {
-  /** Steps accumulated across iterations, passed to `stopWhen` (both engines). */
-  accumulatedSteps: TStep[];
+  /**
+   * Steps accumulated across iterations, passed to `stopWhen` (both engines).
+   * The durable loop keeps them in workflow state instead on runs that seed
+   * them there (see `readAccumulatedSteps`).
+   */
+  accumulatedSteps?: TStep[];
   /**
    * Two-phase feedback stop: `onIterationComplete` returned
    * `{ continue: false, feedback }`, so one more LLM turn runs with the
@@ -54,6 +58,7 @@ export interface LoopIterationState<TStep = unknown> {
  * main loop needs.
  */
 export interface MainLoopIterationState<TStep> extends LoopIterationState<TStep> {
+  accumulatedSteps: TStep[];
   pendingFeedbackStop: boolean;
   resumeContinuationPending: boolean;
   /**

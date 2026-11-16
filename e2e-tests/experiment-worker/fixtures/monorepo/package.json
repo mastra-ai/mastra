@@ -5,9 +5,9 @@
   "type": "module",
   "dependencies": {
     "@fixture/local-model": "workspace:*",
-    "@mastra/core": "experiment-worker-e2e-test"
+    "@mastra/core": "e2e-test"
   },
   "devDependencies": {
-    "mastra": "experiment-worker-e2e-test"
+    "mastra": "e2e-test"
   }
 }

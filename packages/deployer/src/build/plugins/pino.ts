@@ -49,6 +49,7 @@ export function pino() {
               const reference = this.emitFile({
                 type: 'chunk',
                 id: resolvedEntry.id,
+                // oxlint-disable-next-line typescript/no-unnecessary-template-expression -- Preserve string coercion for filenames supplied by Rollup plugins.
                 name: `${file.file}`,
                 importer: resolvedPino.id,
               });

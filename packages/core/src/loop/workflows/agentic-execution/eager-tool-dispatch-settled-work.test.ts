@@ -9,9 +9,8 @@ import { createTool } from '../../../tools';
 import { EagerToolExecutionCoordinator } from './eager-tool-execution';
 
 /**
- * The two rules eager dispatch has to hold on every path that ends an attempt early:
- * a tool that already ran is never run a second time, and its finished result is
- * never thrown away.
+ * Retry and fallback reuse finished eager work rather than running it twice.
+ * Caller cancellation keeps work completed within a bounded grace period.
  */
 
 type StreamPart = Record<string, unknown>;
@@ -177,7 +176,7 @@ function recordedResults(stream: { messageList: { get: { all: { db: () => unknow
   return JSON.stringify(stream.messageList.get.all.db());
 }
 
-describe('eager tool dispatch — finished work survives every early exit', () => {
+describe('eager tool dispatch — result reuse and caller cancellation', () => {
   afterEach(() => vi.restoreAllMocks());
 
   it('runs an in-flight call once when the last model dies mid-stream with no retry', async () => {
@@ -263,15 +262,15 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     expect(recordedResults(stream)).toContain('[redacted output-available]');
   });
 
-  it('commits a settled result when the caller aborts, and still runs it only once', async () => {
+  it('records a returned result when the caller aborts before it is recorded', async () => {
     const executions: string[] = [];
     const abortController = new AbortController();
-    const settled = deferred();
+    const returning = deferred();
     const model = new MockLanguageModelV2({
       doStream: async ({ abortSignal }) =>
         toolCallThen(async controller => {
-          // The call settles, then the stream stalls until the caller gives up.
-          await settled.promise;
+          // The tool is returning, but its result has not reached the conversation.
+          await returning.promise;
           abortController.abort();
           await new Promise<void>(resolve => {
             if (abortSignal?.aborted) return resolve();
@@ -281,7 +280,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
         }),
     });
 
-    const stream = await createAgent(model, executions, { settled }).stream('go', {
+    const stream = await createAgent(model, executions, { settled: returning }).stream('go', {
       maxSteps: 2,
       eagerToolExecution: true,
       abortSignal: abortController.signal,
@@ -290,18 +289,80 @@ describe('eager tool dispatch — finished work survives every early exit', () =
 
     expect(executions).toEqual(['a']);
     expect(recordedResults(stream)).toContain('answered-a');
+    expect(recordedResults(stream)).toContain('"state":"result"');
+    expect(await stream.finishReason).toBe('aborted');
   });
 
-  it('waits out a running call when the caller aborts mid-stream, then keeps its result', async () => {
-    // Same order as the post-stream pass: a started tool is waited for whether or not it
-    // observes its signal, its result is streamed and recorded, and only then `abort`.
+  it('retains an eager result recorded before caller cancellation', async () => {
+    const executions: string[] = [];
+    const caller = new AbortController();
+    const nextStep = deferred();
+    let attempts = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async ({ abortSignal }) => {
+        if (++attempts === 1) {
+          return toolCallThen(async controller => {
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            });
+            controller.close();
+          });
+        }
+        nextStep.resolve();
+        await new Promise<void>(resolve => {
+          if (abortSignal?.aborted) return resolve();
+          abortSignal?.addEventListener('abort', () => resolve(), { once: true });
+        });
+        throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+      },
+    });
+    const stream = await createAgent(model, executions, {}).stream('go', {
+      maxSteps: 2,
+      eagerToolExecution: true,
+      abortSignal: caller.signal,
+    });
+    const draining = drain(stream);
+    try {
+      await nextStep.promise;
+      expect(recordedResults(stream)).toContain('answered-a');
+      caller.abort();
+      await draining;
+      expect(await stream.finishReason).toBe('aborted');
+      expect(recordedResults(stream)).toContain('answered-a');
+      expect(executions).toEqual(['a']);
+    } finally {
+      caller.abort();
+      await draining;
+    }
+  });
+
+  it('ends caller cancellation before a running eager call settles and discards its late result', async () => {
+    // COR-1488: abort must not wait for an eager tool that ignores its signal.
     const executions: string[] = [];
     const abortController = new AbortController();
     const started = deferred();
     const release = deferred();
+    const finished = deferred();
+    const processedResults: unknown[] = [];
+    let streamedResults = 0;
     const agent = new Agent({
       id: 'eager-abort-agent',
       name: 'Eager abort agent',
+      outputProcessors: [
+        {
+          id: 'inspect-carried-cancellation',
+          processToolResult: ({ result, messageList }) => {
+            processedResults.push(result);
+            return messageList;
+          },
+          processOutputStream: ({ part }) => {
+            if (part.type === 'tool-result') streamedResults++;
+            return part;
+          },
+        },
+      ],
       instructions: 'Call tool-a.',
       model: new MockLanguageModelV2({
         doStream: async ({ abortSignal }) =>
@@ -313,8 +374,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
               abortSignal?.addEventListener('abort', () => resolve(), { once: true });
             });
             controller.error(Object.assign(new Error('aborted'), { name: 'AbortError' }));
-            // Still running, ignoring its signal, when the stream dies; finishes after.
-            release.resolve();
+            // The tool stays blocked until after the aborted stream is drained.
           }),
       }),
       tools: {
@@ -327,6 +387,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
             executions.push(value);
             started.resolve();
             await release.promise;
+            finished.resolve();
             return { answer: `answered-${value}` };
           },
         }),
@@ -339,21 +400,42 @@ describe('eager tool dispatch — finished work survives every early exit', () =
       abortSignal: abortController.signal,
     });
     const types: string[] = [];
+    let drained = false;
+    const draining = (async () => {
+      try {
+        for await (const chunk of stream.fullStream) types.push((chunk as { type: string }).type);
+      } catch {
+        // abort ends the stream
+      }
+      drained = true;
+    })();
     try {
-      for await (const chunk of stream.fullStream) types.push((chunk as { type: string }).type);
-    } catch {
-      // abort ends the stream
+      await expect.poll(() => drained, { timeout: 1_000 }).toBe(true);
+      expect(executions).toEqual(['a']);
+      expect(types.filter(type => type === 'abort')).toHaveLength(1);
+      expect(types.filter(type => type === 'tool-result')).toHaveLength(1);
+      expect(types).not.toContain('tool-error');
+      expect(recordedResults(stream)).not.toContain('answered-a');
+      expect(recordedResults(stream)).toContain('"state":"result"');
+      expect(recordedResults(stream)).toContain('The tool may still be running and its effects are unknown.');
+      expect(processedResults).toEqual([
+        'Tool execution was aborted while running. The tool may still be running and its effects are unknown. Check its status before retrying.',
+      ]);
+      expect(streamedResults).toBe(1);
+      const history = recordedResults(stream);
+      const chunkCount = types.length;
+      release.resolve();
+      await finished.promise;
+      await new Promise(resolve => setImmediate(resolve));
+      expect(recordedResults(stream)).toBe(history);
+      expect(types).toHaveLength(chunkCount);
+    } finally {
+      release.resolve();
+      await draining;
     }
-
-    expect(executions).toEqual(['a']);
-    expect(types).toContain('tool-result');
-    expect(types.indexOf('tool-result')).toBeLessThan(types.indexOf('abort'));
-    expect(recordedResults(stream)).toContain('answered-a');
   });
 
-  it('keeps a call that stopped on the abort in the saved thread as incomplete', async () => {
-    // The default pipeline leaves a started call that observed the abort in history as
-    // incomplete. Eager dispatch must too: the tool ran up to the abort.
+  it('records a cancellation notice for a call that stopped on abort in the saved thread', async () => {
     const executions: string[] = [];
     const abortController = new AbortController();
     const started = deferred();
@@ -414,7 +496,8 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     const { messages } = await memory.recall({ threadId: 'thread-abort', resourceId: 'resource-abort' });
     const saved = JSON.stringify(messages);
     expect(saved).toContain('"toolCallId":"call-a"');
-    expect(saved).toContain('"state":"call"');
+    expect(saved).toContain('"state":"result"');
+    expect(saved).toContain('The tool may still be running and its effects are unknown.');
   });
 
   it('does not leave abort listeners on a caller signal reused across runs', async () => {
@@ -518,10 +601,8 @@ describe('eager tool dispatch — finished work survives every early exit', () =
   it('does not run error processing when the run is aborted while waiting out an in-flight call', async () => {
     const executions: string[] = [];
     const caller = new AbortController();
-    // First wait: the caller aborts. Second wait is the abort exit waiting the call out.
-    const gate: ReturnType<typeof inFlightGate> = inFlightGate({
-      onWait: () => (caller.signal.aborted ? gate.release() : caller.abort()),
-    });
+    // Abort while the retry pipeline waits, keeping the tool blocked until the run ends.
+    const gate = inFlightGate({ onWait: () => caller.abort() });
     let attempts = 0;
     let apiErrorCalls = 0;
     const model = new MockLanguageModelV2({
@@ -555,8 +636,10 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     // The abort ends the wait, so no error processor may act on the dead attempt.
     expect(apiErrorCalls).toBe(0);
     expect(types).toContain('abort');
-    expect(types.indexOf('tool-result')).toBeGreaterThan(-1);
-    expect(types.indexOf('tool-result')).toBeLessThan(types.indexOf('abort'));
+    expect(types.filter(type => type === 'tool-result')).toHaveLength(1);
+    expect(types).not.toContain('tool-error');
+    expect(recordedResults(stream)).toContain('The tool may still be running and its effects are unknown.');
+    expect(recordedResults(stream)).not.toContain('answered-a');
     expect(attempts).toBe(1);
     expect(executions).toEqual(['a']);
   });

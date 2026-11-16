@@ -154,22 +154,18 @@ export class D1DB extends MastraBase {
           result = await statement.bind(...formattedParams).first();
           if (!result) return null;
           return result;
-        } else {
-          result = await statement.bind(...formattedParams).all();
-          const results = result.results || [];
-          return results;
         }
-      } else {
-        if (first) {
-          result = await statement.first();
-          if (!result) return null;
-          return result;
-        } else {
-          result = await statement.all();
-          const results = result.results || [];
-          return results;
-        }
+        result = await statement.bind(...formattedParams).all();
+        const results = result.results || [];
+        return results;
+      } else if (first) {
+        result = await statement.first();
+        if (!result) return null;
+        return result;
       }
+      result = await statement.all();
+      const results = result.results || [];
+      return results;
     } catch (error) {
       throw new MastraError(
         {
@@ -252,9 +248,8 @@ export class D1DB extends MastraBase {
       return this.executeWorkersBindingQuery(options);
     } else if (this.client) {
       return this.executeRestQuery(options);
-    } else {
-      throw new Error('Neither binding nor client is configured');
     }
+    throw new Error('Neither binding nor client is configured');
   }
 
   /**
@@ -445,7 +440,8 @@ export class D1DB extends MastraBase {
       for (const [columnName, column] of Object.entries(args.schema)) {
         if (!existingColumnNames.has(columnName) && args.ifNotExists.includes(columnName)) {
           const sqlType = this.getSqlType(column.type);
-          const defaultValue = this.getDefaultValue(column.type);
+          // Nullable columns start out NULL; a type default would give existing rows a value they never had.
+          const defaultValue = column.nullable ? 'DEFAULT NULL' : this.getDefaultValue(column.type);
           const sql = `ALTER TABLE ${fullTableName} ADD COLUMN ${columnName} ${sqlType} ${defaultValue}`;
           await this.executeQuery({ sql });
           this.logger.debug(`Added column ${columnName} to table ${fullTableName}`);
@@ -628,13 +624,10 @@ export class D1DB extends MastraBase {
               return this.serializeValue(value);
             });
 
-            const recordToUpsert = columns.reduce(
-              (acc, col) => {
-                if (col !== 'createdAt') acc[col] = `excluded.${col}`;
-                return acc;
-              },
-              {} as Record<string, any>,
-            );
+            const recordToUpsert = columns.reduce<Record<string, any>>((acc, col) => {
+              if (col !== 'createdAt') acc[col] = `excluded.${col}`;
+              return acc;
+            }, {});
 
             const query = createSqlBuilder().insert(fullTableName, columns, values, ['id'], recordToUpsert, guard);
 

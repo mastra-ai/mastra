@@ -59,7 +59,7 @@ const { messages } = await memory.listMessages({ threadId: 'thread-123' });
 ## Documentation
 
 - [Oracle Database integration guide](https://mastra.ai/integrations/databases/oracledb)
-- [Oracle Database vector reference](https://mastra.ai/reference/vectors/oracledb)
+- [Oracle Database vector reference](https://mastra.ai/integrations/vectors/oracledb)
 
 ## Changelog
 

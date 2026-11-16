@@ -59,6 +59,18 @@ export class UpstashTransport extends LoggerTransport {
         console.error('Error flushing logs to Upstash:', err);
       });
     }, this.flushInterval);
+    this.updateIntervalRef();
+  }
+
+  // The interval only keeps the process alive while records are waiting to be sent, so an idle transport
+  // doesn't stop a script from exiting, but buffered records still get delivered (or retried) first.
+  // Web-standard runtimes return a numeric timer id without ref()/unref(), so those calls are optional.
+  private updateIntervalRef() {
+    if (this.logBuffer.length > 0 || this.flushPromise) {
+      this.flushIntervalId.ref?.();
+    } else {
+      this.flushIntervalId.unref?.();
+    }
   }
 
   private async executeUpstashCommands(commands: any[][]): Promise<any> {
@@ -89,6 +101,7 @@ export class UpstashTransport extends LoggerTransport {
 
     this.flushPromise = this.flushBatch().finally(() => {
       this.flushPromise = null;
+      this.updateIntervalRef();
     });
     return this.flushPromise;
   }
@@ -160,6 +173,7 @@ export class UpstashTransport extends LoggerTransport {
 
       // Add to buffer
       this.logBuffer.push(log);
+      this.updateIntervalRef();
 
       // Flush once a batch is ready, or earlier if the buffer limit is smaller than a batch
       if (this.logBuffer.length >= Math.min(this.batchSize, this.maxBufferSize)) {

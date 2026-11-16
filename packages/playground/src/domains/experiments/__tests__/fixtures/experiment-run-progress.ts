@@ -19,3 +19,9 @@ export const runningExperiment: DatasetExperiment = {
   failedCount: 1,
   completedAt: null,
 };
+
+/** Mid-run, but the store never recorded when it started. */
+export const runningExperimentWithoutStart: DatasetExperiment = {
+  ...runningExperiment,
+  startedAt: null,
+};

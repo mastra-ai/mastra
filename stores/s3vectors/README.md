@@ -77,7 +77,7 @@ await vectorStore.disconnect();
 
 ## Documentation
 
-- [@mastra/s3vectors documentation](https://mastra.ai/reference/vectors/s3vectors)
+- [@mastra/s3vectors documentation](https://mastra.ai/integrations/vectors/s3vectors)
 
 ## Changelog
 

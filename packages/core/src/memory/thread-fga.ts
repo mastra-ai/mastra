@@ -1,5 +1,5 @@
 import { MastraFGAPermissions } from '../auth/ee';
-import type { ActorSignal, MastraFGAPermissionInput } from '../auth/ee';
+import type { ActorSignal, IFGAProvider, MastraFGAPermissionInput } from '../auth/ee';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 
@@ -12,6 +12,8 @@ export interface CheckThreadFGAOptions {
   requestContext?: RequestContext;
   permission?: MastraFGAPermissionInput;
   actor?: ActorSignal;
+  /** Provider to check against instead of `mastra.getServer().fga`, e.g. the Studio provider for Studio-auth requests. */
+  fgaProvider?: IFGAProvider;
 }
 
 export async function checkThreadFGA({
@@ -23,8 +25,9 @@ export async function checkThreadFGA({
   requestContext,
   permission = MastraFGAPermissions.MEMORY_READ,
   actor,
+  fgaProvider: providedFgaProvider,
 }: CheckThreadFGAOptions): Promise<void> {
-  const fgaProvider = mastra?.getServer()?.fga;
+  const fgaProvider = providedFgaProvider ?? mastra?.getServer()?.fga;
   if (!fgaProvider) return;
 
   const { requireFGA } = await import('../auth/ee/fga-check');

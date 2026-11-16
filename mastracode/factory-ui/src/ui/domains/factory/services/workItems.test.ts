@@ -36,7 +36,7 @@ describe('Factory work item service boundary', () => {
   it('maps provider-neutral server work items to the board source model', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ workItems: [wireItem] })));
 
-    const [item] = (await listWorkItems('', 'project-1')).workItems;
+    const [item] = (await listWorkItems('', 'project-1', undefined, { workItemId: ['item-1'] })).workItems;
 
     expect(item).toMatchObject({
       githubProjectId: 'project-1',
@@ -47,33 +47,28 @@ describe('Factory work item service boundary', () => {
     });
   });
 
-  it('maps Slack thread work items to the Slack board source', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        jsonResponse({
-          workItems: [
-            {
-              ...wireItem,
-              externalSource: {
-                integrationId: 'slack',
-                type: 'slack-thread',
-                externalId: 'slack:C-1:1700.42',
-                url: 'https://app.slack.com/client/T-1/C-1/thread/C-1-170042',
-              },
-            },
-          ],
-        }),
-      ),
-    );
+  const factorySessionLink = 'https://factory.example.com/factories/project-1/workspaces/repo/threads/thread-1';
 
-    const [item] = (await listWorkItems('', 'project-1')).workItems;
+  it.each([
+    [
+      'a thread',
+      { workspaceId: 'T-1', externalId: 'slack:C-1:1700.42' },
+      'https://app.slack.com/client/T-1/C-1/thread/C-1-1700.42',
+    ],
+    [
+      'a thread that saved its Factory session link',
+      { workspaceId: 'T-1', externalId: 'slack:C-1:1700.42', url: factorySessionLink },
+      'https://app.slack.com/client/T-1/C-1/thread/C-1-1700.42',
+    ],
+    ['a direct message', { workspaceId: 'T-1', externalId: 'slack:D-1:' }, 'https://app.slack.com/client/T-1/D-1'],
+    ['a card keyed before workspaces were stored', { externalId: 'slack:C-1:1700.42', url: factorySessionLink }, null],
+  ])('links a Slack card from %s', async (_case, slackSource, url) => {
+    const externalSource = { integrationId: 'slack', type: 'slack-thread', ...slackSource };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ workItems: [{ ...wireItem, externalSource }] })));
 
-    expect(item).toMatchObject({
-      source: 'slack-thread',
-      sourceKey: 'slack:C-1:1700.42',
-      url: 'https://app.slack.com/client/T-1/C-1/thread/C-1-170042',
-    });
+    const [item] = (await listWorkItems('', 'project-1', undefined, { workItemId: ['item-1'] })).workItems;
+
+    expect(item).toMatchObject({ source: 'slack-thread', sourceKey: slackSource.externalId, url });
   });
 
   it('keeps a GitLab merge request as a GitLab review card', async () => {
@@ -85,9 +80,20 @@ describe('Factory work item service boundary', () => {
     };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ workItems: [{ ...wireItem, externalSource }] })));
 
-    const [item] = (await listWorkItems('', 'project-1')).workItems;
+    const [item] = (await listWorkItems('', 'project-1', undefined, { workItemId: ['item-1'] })).workItems;
     expect(item).toMatchObject({ source: 'gitlab-pr', sourceKey: externalSource.externalId, url: externalSource.url });
   });
+
+  it.each([{ workItemId: [] }, { source: [] }])(
+    'answers %o with no card and no request, since sent bare it would read the whole project',
+    async none => {
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ workItems: [wireItem] }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      expect((await listWorkItems('', 'project-1', undefined, none)).workItems).toEqual([]);
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
 
   it('sends provider-neutral external source data when creating a board item', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ workItem: wireItem }));

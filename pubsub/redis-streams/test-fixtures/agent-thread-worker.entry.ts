@@ -5,6 +5,7 @@
  * The worker reads newline-delimited JSON commands on stdin and emits
  * newline-delimited JSON events on stdout. Commands:
  *   {"cmd":"send","sigId":"s1","text":"hello","runMs":300}
+ *   {"cmd":"finish-run","sigId":"s1"}  (ends a run held open via HOLD_SIG_IDS)
  *   {"cmd":"exit"}
  *
  * Events:
@@ -21,10 +22,11 @@ import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline';
 
 import type { Agent } from '@mastra/core/agent';
-// These helpers aren't part of the public test surface; this fixture reaches
-// into workspace source so the child process exercises the real implementations.
+// Each worker is its own process, so the process-wide runtime is this worker's runtime.
+import { agentThreadStreamRuntime } from '@mastra/core/agent/durable';
+// This helper isn't part of the public test surface; this fixture reaches
+// into workspace source so the child process exercises the real implementation.
 import { convertMastraChunkToAISDKBase } from '../../../client-sdks/ai-sdk/src/helpers';
-import { AgentThreadStreamRuntime } from '../../../packages/core/src/agent/thread-stream-runtime';
 
 import { RedisStreamsPubSub } from '../src/index';
 
@@ -32,6 +34,8 @@ const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6381';
 const RESOURCE_ID = process.env.RESOURCE_ID ?? 'rapid-fire-resource';
 const THREAD_ID = process.env.THREAD_ID ?? 'rapid-fire-thread';
 const WORKER_ID = process.env.WORKER_ID ?? 'worker';
+// Workers that model replicas of one deployed agent share an id via AGENT_ID.
+const AGENT_ID = process.env.AGENT_ID ?? `${WORKER_ID}-agent`;
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
 
 function threadTopic() {
@@ -50,9 +54,12 @@ function emit(event: Record<string, unknown>) {
  */
 const runEnds = new Map<string, () => void>();
 
-function makeStubAgent(runMs: number, runtime: AgentThreadStreamRuntime, pubsub: RedisStreamsPubSub) {
+/** Runs for these sigIds stay in flight until a `finish-run` command ends them. */
+const HELD_SIG_IDS = new Set((process.env.HOLD_SIG_IDS ?? '').split(',').filter(Boolean));
+
+function makeStubAgent(runMs: number, runtime: typeof agentThreadStreamRuntime, pubsub: RedisStreamsPubSub) {
   const agent: any = {
-    id: `${WORKER_ID}-agent`,
+    id: AGENT_ID,
     name: `${WORKER_ID} Stub Agent`,
     getMemory: async () => ({ saveMessages: async () => {} }),
     stream: async (input: any, options: any) => {
@@ -60,11 +67,13 @@ function makeStubAgent(runMs: number, runtime: AgentThreadStreamRuntime, pubsub:
       const sigId: string = typeof input === 'string' ? input : (input?.contents ?? input?.text ?? '');
       const runId = options?.runId ?? randomUUID();
       const finished = new Promise<void>(resolve => {
-        const timer = setTimeout(() => {
-          runEnds.delete(sigId);
-          resolve();
-        }, runMs);
-        timer.unref();
+        const timer = HELD_SIG_IDS.has(sigId)
+          ? undefined
+          : setTimeout(() => {
+              runEnds.delete(sigId);
+              resolve();
+            }, runMs);
+        timer?.unref();
         runEnds.set(sigId, () => {
           clearTimeout(timer);
           runEnds.delete(sigId);
@@ -138,7 +147,7 @@ async function collectRun(subscription: any, convert: boolean) {
 
 async function main() {
   const pubsub = new RedisStreamsPubSub({ url: REDIS_URL });
-  const runtime = new AgentThreadStreamRuntime();
+  const runtime = agentThreadStreamRuntime;
   // runMs is fixed per worker (set at boot via env) so the test can vary
   // "slow worker A" vs "fast follower workers B/C" without per-send wiring.
   const runMs = Number(process.env.RUN_MS ?? '300');
@@ -212,6 +221,13 @@ async function main() {
         await pubsub.close();
       } catch {}
       process.exit(0);
+    }
+
+    if (cmd.cmd === 'finish-run') {
+      const end = runEnds.get(cmd.sigId);
+      if (end) end();
+      else emit({ type: 'command-error', cmd: cmd.cmd, error: `no in-flight run for ${cmd.sigId}` });
+      return;
     }
 
     if (cmd.cmd === 'persist') {

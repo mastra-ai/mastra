@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage } from '../';
+import { persistProcessorDataChunk } from '../../../stream/base/output';
+import { CacheKeyGenerator } from '../cache/CacheKeyGenerator';
 import { MessageList } from '../index';
+import { MessageMerger } from './MessageMerger';
 
 type Part = MastraDBMessage['content']['parts'][number];
 const createdAt = new Date('2026-09-14T00:00:00Z');
@@ -97,6 +100,62 @@ describe('MessageMerger insertion positions', () => {
       text('A'),
       text('B'),
     ]);
+  });
+
+  it('preserves distinct data parts with the same payload and deduplicates repeated IDs', () => {
+    const question = (id: string): Part => ({ type: 'data-question', id, data: { prompt: 'Continue?' } });
+    const list = merge([tool('c1'), question('q1')], [tool('c1', true), question('q2')]);
+    expectParts(list, [tool('c1', true), question('q2'), question('q1')]);
+
+    list.add(message([tool('c1', true), question('q1'), question('q2')]), 'response');
+    expectParts(list, [tool('c1', true), question('q2'), question('q1')]);
+  });
+
+  it('deduplicates a stored data part without an ID against an incoming copy with one', () => {
+    const stored: Part = { type: 'data-question', data: { prompt: 'Continue?' } };
+    const withId: Part = { ...stored, id: 'q1' };
+
+    expectParts(merge([tool('c1', true), stored], [tool('c1', true), withId]), [tool('c1', true), stored]);
+    expectParts(merge([tool('c1', true), withId], [tool('c1', true), stored]), [tool('c1', true), withId]);
+  });
+
+  it('matches a stored data part without an ID to at most one incoming ID with the same payload', () => {
+    const stored: Part = { type: 'data-question', data: { prompt: 'Continue?' } };
+    const q1: Part = { ...stored, id: 'q1' };
+    const q2: Part = { ...stored, id: 'q2' };
+
+    // q1 matches its stored copy by ID, so only q2 is left to match the id-less part.
+    expectParts(merge([tool('c1', true), stored, q1], [tool('c1', true), q1, q2]), [tool('c1', true), stored, q1]);
+    expectParts(merge([tool('c1', true), stored], [tool('c1', true), q1, q2]), [tool('c1', true), q1, stored]);
+    expectParts(merge([stored, tool('c1', true)], [tool('c1', true), q1, q2]), [stored, tool('c1', true), q1]);
+  });
+
+  it('treats an empty-string data part ID as an ID', () => {
+    const empty: Part = { type: 'data-question', id: '', data: { prompt: 'Continue?' } };
+    const q1: Part = { ...empty, id: 'q1' };
+
+    expectParts(merge([tool('c1', true), empty], [tool('c1', true), q1]), [tool('c1', true), q1, empty]);
+  });
+
+  it('only counts IDs from data parts with the same type and payload', () => {
+    const stored: Part = { type: 'data-question', data: { prompt: 'Continue?' } };
+    const status: Part = { type: 'data-status', id: 'q1', data: { state: 'waiting' } };
+    const q1: Part = { ...stored, id: 'q1' };
+
+    expectParts(merge([tool('c1', true), stored, status], [tool('c1', true), q1, status]), [
+      tool('c1', true),
+      stored,
+      status,
+    ]);
+  });
+
+  it('keeps an empty-string ID when persisting a processor data chunk', () => {
+    const list = new MessageList();
+    persistProcessorDataChunk(list, 'assistant-1', { type: 'data-question', id: '', data: { prompt: 'Continue?' } });
+
+    const [part] = list.get.all.db()[0]!.content.parts;
+    expect(part).toMatchObject({ type: 'data-question', data: { prompt: 'Continue?' } });
+    expect(part).toHaveProperty('id', '');
   });
 
   it('does not duplicate parts on repeated updates', () => {
@@ -203,5 +262,79 @@ describe('MessageMerger tool updatedAt', () => {
   it('keeps the stamp when a merge repeats the same tool state', () => {
     const list = merge([step, { ...tool('c1', true), updatedAt: 7 } as Part], [tool('c1', true)]);
     expect((list.get.all.db()[0]!.content.parts[1] as { updatedAt?: number }).updatedAt).toBe(7);
+  });
+});
+
+describe('MessageMerger part-count scaling', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const reasoning = (count: number): Part[] =>
+    Array.from({ length: count }, (_, i) => ({
+      type: 'reasoning',
+      reasoning: '',
+      details: [],
+      providerMetadata: { openai: { itemId: `rs_${i}`, reasoningEncryptedContent: `enc_${i}` } },
+    }));
+
+  // Counts part-key builds made by the second add (the merge), which used to grow with n².
+  function keyBuildsForMerge(initial: Part[], incoming: Part[]) {
+    const list = new MessageList();
+    list.add(message(initial), 'response');
+    const spy = vi.spyOn(CacheKeyGenerator, 'fromDBParts');
+    list.add({ ...message(incoming), createdAt: new Date(createdAt.getTime() + 1000) }, 'response');
+    const calls = spy.mock.calls.length;
+    spy.mockRestore();
+    return { calls, parts: list.get.all.db()[0]!.content.parts };
+  }
+
+  it('keys each part a bounded number of times when appending many reasoning parts', () => {
+    const small = keyBuildsForMerge([step], [step, ...reasoning(500)]);
+    const large = keyBuildsForMerge([step], [step, ...reasoning(1000)]);
+
+    expect(small.parts).toHaveLength(501);
+    expect(large.parts).toHaveLength(1001);
+    expect(large.parts.slice(1)).toMatchObject(reasoning(1000));
+    // Linear: about one key per part. Quadratic merging made ~1.5 * n² calls (1.5M for n = 1000).
+    expect(large.calls).toBeLessThanOrEqual(2 * 1002);
+    expect(large.calls / small.calls).toBeLessThan(2.5);
+  });
+
+  it('keys each part a bounded number of times when inserting between tool anchors', () => {
+    const many = reasoning(1000);
+    const { calls, parts } = keyBuildsForMerge([step, tool('c1')], [step, ...many, tool('c1', true), text('done')]);
+
+    expect(parts).toHaveLength(1004);
+    expect(parts[0]).toMatchObject(step);
+    expect(parts.slice(1, 1001)).toMatchObject(many);
+    expect(parts.slice(1001)).toMatchObject([tool('c1', true), step, text('done')]);
+    expect(calls).toBeLessThanOrEqual(2 * 1005);
+  });
+
+  it('scans existing parts between tool anchors a bounded number of times', () => {
+    const existing = reasoning(400);
+    const added = reasoning(800).slice(400);
+    const latest = message([step, tool('c1'), ...existing]);
+    const incoming = message([step, tool('c1', true), ...added, ...existing]);
+
+    // Counts the existing parts read through slices of the merged message's parts. Rescanning the
+    // anchored interval for every inserted part read ~1.5 * n² of them (240k for n = 400).
+    let scanned = 0;
+    const slice = Array.prototype.slice;
+    vi.spyOn(Array.prototype, 'slice').mockImplementation(function (this: unknown[], ...args) {
+      const result = slice.apply(this, args);
+      if (this === latest.content.parts) scanned += result.length;
+      return result;
+    });
+    MessageMerger.merge(latest, incoming);
+    vi.restoreAllMocks();
+
+    const parts = latest.content.parts;
+    expect(parts).toHaveLength(802);
+    expect(parts.slice(0, 2)).toMatchObject([step, tool('c1', true)]);
+    expect(parts.slice(2, 402)).toMatchObject(added);
+    expect(parts.slice(402)).toMatchObject(existing);
+    expect(scanned).toBeLessThanOrEqual(2 * 802);
   });
 });

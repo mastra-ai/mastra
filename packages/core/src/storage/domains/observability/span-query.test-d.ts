@@ -14,6 +14,12 @@ test('the span contract shares scalar predicates and keeps authorization outside
   expectTypeOf<SpanQueryRow>().not.toHaveProperty('errorTruncated');
 });
 
+test('span rows expose optional, nullable outcome fields', () => {
+  expectTypeOf<SpanQueryRow['outcome']>().toEqualTypeOf<string | null | undefined>();
+  expectTypeOf<SpanQueryRow['stopReason']>().toEqualTypeOf<string | null | undefined>();
+  expectTypeOf<SpanQueryRow['stopReasonContext']>().toEqualTypeOf<Record<string, unknown> | null | undefined>();
+});
+
 test('internal span planning helpers are not part of the storage API', () => {
   expectTypeOf<typeof import('../../index')>().not.toHaveProperty('planSpanQuerySelectionPredicate');
   expectTypeOf<typeof import('../../index')>().not.toHaveProperty('digestBinding');

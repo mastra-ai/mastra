@@ -106,7 +106,7 @@ function StubCreateDatasetDialog({ open, onSuccess }: CreateDatasetDialogRenderP
         onSuccess(dataset.id);
       }}
     >
-      Create Dataset
+      Create dataset
     </button>
   );
 }
@@ -144,10 +144,10 @@ describe('SaveAsDatasetItemDialog', () => {
       const createOption = (await screen.findByRole('option', { name: 'Create dataset' })) as HTMLOptionElement;
       const datasetSelect = screen.getByRole('combobox', { name: 'Dataset' }) as HTMLSelectElement;
       fireEvent.change(datasetSelect, { target: { value: createOption.value } });
-      fireEvent.click(await screen.findByRole('button', { name: 'Create Dataset' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Create dataset' }));
 
       await waitFor(() => expect(datasetSelect.value).toBe('dataset-new'));
-      expect((screen.getByRole('button', { name: 'Save Item' }) as HTMLButtonElement).disabled).toBe(false);
+      expect((screen.getByRole('button', { name: 'Save item' }) as HTMLButtonElement).disabled).toBe(false);
     });
   });
 
@@ -163,9 +163,9 @@ describe('SaveAsDatasetItemDialog', () => {
         <MastraReactProvider baseUrl={BASE_URL}>
           <QueryClientProvider client={noRetryClient()}>
             <SaveAsDatasetItemDialog
-              initialInput={'{"foo":1}'}
-              initialGroundTruth={'{"answer":true}'}
-              initialTrajectory={'{"steps":[]}'}
+              initialInput='{"foo":1}'
+              initialGroundTruth='{"answer":true}'
+              initialTrajectory='{"steps":[]}'
               breadcrumb={<span>Trace</span>}
               isOpen
               onClose={vi.fn()}
@@ -195,9 +195,9 @@ describe('SaveAsDatasetItemDialog', () => {
         <MastraReactProvider baseUrl={BASE_URL}>
           <QueryClientProvider client={noRetryClient()}>
             <SaveAsDatasetItemDialog
-              initialInput={'{"foo":1}'}
-              initialGroundTruth={'{"answer":true}'}
-              initialTrajectory={'{"steps":[]}'}
+              initialInput='{"foo":1}'
+              initialGroundTruth='{"answer":true}'
+              initialTrajectory='{"steps":[]}'
               breadcrumb={<span>Trace</span>}
               isOpen
               onClose={vi.fn()}
@@ -241,9 +241,9 @@ describe('SaveAsDatasetItemDialog', () => {
         <MastraReactProvider baseUrl={BASE_URL}>
           <QueryClientProvider client={noRetryClient()}>
             <SaveAsDatasetItemDialog
-              initialInput={'{"next":2}'}
-              initialGroundTruth={'{"expected":"next"}'}
-              initialTrajectory={'{"steps":["next"]}'}
+              initialInput='{"next":2}'
+              initialGroundTruth='{"expected":"next"}'
+              initialTrajectory='{"steps":["next"]}'
               breadcrumb={<span>Trace</span>}
               isOpen
               onClose={vi.fn()}
@@ -276,7 +276,7 @@ describe('SaveAsDatasetItemDialog', () => {
         <SaveAsDatasetItemDialog
           initialInput="{}"
           initialGroundTruth=""
-          initialToolMocks={'[{"toolName":"search","args":{},"output":"ok"}]'}
+          initialToolMocks='[{"toolName":"search","args":{},"output":"ok"}]'
           breadcrumb={<span>Trace</span>}
           isOpen
           onClose={vi.fn()}
@@ -300,7 +300,7 @@ describe('SaveAsDatasetItemDialog', () => {
         <SaveAsDatasetItemDialog
           initialInput="{}"
           initialGroundTruth=""
-          initialToolMocks={'[{"toolName":"search","args":{},"output":"ok"}]'}
+          initialToolMocks='[{"toolName":"search","args":{},"output":"ok"}]'
           breadcrumb={<span>Trace</span>}
           isOpen
           onClose={vi.fn()}
@@ -327,7 +327,7 @@ describe('SaveAsDatasetItemDialog', () => {
           <LinkComponentProvider Link={StubLink} navigate={navigate} paths={stubLinkPaths}>
             <Toaster />
             <SaveAsDatasetItemDialog
-              initialInput={'{"question":"hi"}'}
+              initialInput='{"question":"hi"}'
               initialGroundTruth=""
               breadcrumb={<span>Trace</span>}
               isOpen
@@ -339,7 +339,7 @@ describe('SaveAsDatasetItemDialog', () => {
 
       await screen.findByRole('option', { name: 'Dataset 1' });
       fireEvent.change(screen.getByRole('combobox', { name: 'Dataset' }), { target: { value: 'dataset-1' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Save Item' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save item' }));
 
       expect(await screen.findByText('Added to "Dataset 1"')).not.toBeNull();
       fireEvent.click(screen.getByRole('button', { name: 'Go to dataset' }));
@@ -359,7 +359,7 @@ describe('SaveAsDatasetItemDialog', () => {
           >
             <Toaster />
             <SaveAsDatasetItemDialog
-              initialInput={'{"question":"hi"}'}
+              initialInput='{"question":"hi"}'
               initialGroundTruth=""
               breadcrumb={<span>Trace</span>}
               isOpen
@@ -371,7 +371,7 @@ describe('SaveAsDatasetItemDialog', () => {
 
       await screen.findByRole('option', { name: 'Dataset 1' });
       fireEvent.change(screen.getByRole('combobox', { name: 'Dataset' }), { target: { value: 'dataset-1' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Save Item' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save item' }));
 
       expect(await screen.findByText('Added to "Dataset 1"')).not.toBeNull();
       expect(screen.queryByRole('button', { name: 'Go to dataset' })).toBeNull();

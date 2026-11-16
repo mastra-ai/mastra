@@ -1,6 +1,7 @@
-import { ArrowLeftIcon, XIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button';
+import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { cn } from '@/lib/utils';
 
 export interface DataPanelCloseButtonProps {
@@ -20,21 +21,21 @@ export interface DataPanelCloseButtonProps {
 export function DataPanelCloseButton({
   onClick,
   tooltip = 'Close panel',
-  label = 'Close Panel',
+  label = 'Close panel',
   icon = 'arrow',
   className,
   variant = 'ghost',
 }: DataPanelCloseButtonProps) {
   return (
     <Button
-      size="sm"
+      size="icon-sm"
       variant={variant}
       onClick={onClick}
       aria-label={label}
       tooltip={tooltip}
       className={cn('shrink-0', className)}
     >
-      {icon === 'x' ? <XIcon /> : <ArrowLeftIcon />}
+      {icon === 'x' ? <IconCrossMedium /> : <IconArrowLeft />}
     </Button>
   );
 }

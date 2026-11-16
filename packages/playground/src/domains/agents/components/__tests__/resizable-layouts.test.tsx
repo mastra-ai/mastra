@@ -111,7 +111,7 @@ vi.mock('@mastra/playground-ui/resize/collapsible-panel', async () => {
           data-expand-shortcut={expandShortcut}
           className={props.className as string}
         >
-          <Panel {...(props as Parameters<typeof Panel>[0])} />
+          <Panel {...props} />
         </aside>
       );
     },

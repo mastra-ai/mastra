@@ -1,12 +1,10 @@
-import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { formatCompactTokens, TokenBudget, TokenBudgetDetail } from '@mastra/playground-ui/components/TokenBudget';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { Brain, MessageSquare } from 'lucide-react';
-
 import { useChatRuntime } from '../../context/useChatRuntime';
 import type { OMWork } from '../../services/om';
 import { omWork } from '../../services/om';
+import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
+import { IconBubbleWide } from '@mastra/playground-ui/icons/central/IconBubbleWide';
 
 const messageLabel: Record<OMWork, string> = {
   idle: 'Message window until next observation',
@@ -43,10 +41,7 @@ export function OperationalMemoryStatus() {
 
   return (
     <Popover>
-      <PopoverTrigger
-        aria-label={`Memory budgets: ${spoken.join('. ')}`}
-        className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'gap-3')}
-      >
+      <PopoverTrigger variant="ghost" size="sm" aria-label={`Memory budgets: ${spoken.join('. ')}`} className="gap-3">
         {showMsg && (
           <TokenBudget
             label={messageLabel[work.messages]}
@@ -70,7 +65,7 @@ export function OperationalMemoryStatus() {
         {showMsg && (
           <TokenBudgetDetail
             description="Read into memory once full"
-            icon={<MessageSquare />}
+            icon={<IconBubbleWide />}
             label="Messages"
             threshold={om.threshold}
             tokens={om.pendingTokens}
@@ -80,7 +75,7 @@ export function OperationalMemoryStatus() {
         {showMem && (
           <TokenBudgetDetail
             description="Consolidated into a reflection once full"
-            icon={<Brain />}
+            icon={<IconBrain />}
             label="Observations"
             threshold={om.reflectionThreshold}
             tokens={om.observationTokens}

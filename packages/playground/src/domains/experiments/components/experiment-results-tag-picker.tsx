@@ -1,7 +1,7 @@
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption, ComboboxVariant } from '@mastra/playground-ui/components/Combobox';
-import { Check } from 'lucide-react';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { useMemo, useState } from 'react';
 
 const CREATE_TAG_VALUE = '__create_tag__';
@@ -42,7 +42,7 @@ export function ExperimentResultsTagPicker({
     const existing = sortedVocabulary.map(tag => ({
       label: tag,
       value: tag,
-      end: appliedToAll.has(tag) ? <Check data-testid="tag-applied" className="size-3.5" /> : undefined,
+      end: appliedToAll.has(tag) ? <IconCheckmark2Medium data-testid="tag-applied" className="size-3.5" /> : undefined,
     }));
     const trimmed = search.trim();
     const canCreate = trimmed.length > 0 && !sortedVocabulary.includes(trimmed);
@@ -63,7 +63,7 @@ export function ExperimentResultsTagPicker({
       onValueChange={handleSelect}
       onInputValueChange={setSearch}
       placeholder="Add tag"
-      searchPlaceholder="Search or create tag..."
+      searchPlaceholder="Search or create tag"
       emptyText="Type to create a tag"
       variant={variant}
       size="sm"

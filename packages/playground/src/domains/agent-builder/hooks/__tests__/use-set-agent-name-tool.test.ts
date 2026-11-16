@@ -30,7 +30,7 @@ describe('useSetAgentNameTool', () => {
 
   it('writes a non-empty name to the form', async () => {
     const { tool, form } = renderTool();
-    await tool.execute!({ name: 'My Agent' } as any);
+    await tool.execute!({ name: 'My Agent' });
     expect(form().getValues('name')).toBe('My Agent');
   });
 
@@ -39,7 +39,7 @@ describe('useSetAgentNameTool', () => {
     await tool.execute!({} as any);
     expect(form().getValues('name')).toBe('');
 
-    await tool.execute!({ name: '' } as any);
+    await tool.execute!({ name: '' });
     expect(form().getValues('name')).toBe('');
   });
 });

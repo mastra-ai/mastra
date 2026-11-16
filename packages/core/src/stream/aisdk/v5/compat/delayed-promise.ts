@@ -19,8 +19,11 @@ export class DelayedPromise<T> {
     this._promise = new Promise<T>((resolve, reject) => {
       if (this.status.type === 'resolved') {
         resolve(this.status.value);
-      } else if (this.status.type === 'rejected') {
+        return;
+      }
+      if (this.status.type === 'rejected') {
         reject(this.status.error);
+        return;
       }
 
       this._resolve = resolve;
@@ -33,9 +36,19 @@ export class DelayedPromise<T> {
   resolve(value: T): void {
     this.status = { type: 'resolved', value };
 
-    if (this._promise) {
-      this._resolve?.(value);
+    if (!this._promise) return;
+
+    if (this._resolve) {
+      const resolve = this._resolve;
+      this._resolve = undefined;
+      resolve(value);
+      return;
     }
+
+    // Already settled. A durable stream publishes usage at suspension, then the
+    // resumed finish replaces it. Chain onto the promise itself so a later await
+    // of the getter sees the latest value, not the provisional one.
+    this._promise = this._promise.then(() => value);
   }
 
   reject(error: unknown): void {

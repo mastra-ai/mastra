@@ -90,8 +90,9 @@ describe('signal interruption tracing', () => {
       ended
         .filter(span => span.type === SpanType.MODEL_CHUNK && JSON.stringify(span.output).includes(text))
         .map(span => span.parentSpanId);
-    expect(chunkParents('STALE_REASONING')).toEqual([inferences[0]!.id]);
-    expect(chunkParents('replacement answer')).toEqual([inferences[1]!.id]);
+    // Processed chunks belong to the logical step; MODEL_INFERENCE only measures provider timing.
+    expect(chunkParents('STALE_REASONING')).toEqual([steps[0]!.id]);
+    expect(chunkParents('replacement answer')).toEqual([steps[0]!.id]);
     const replacement = inferences[1]!;
     expect(new Date(replacement.attributes?.completionStartTime as Date).getTime()).toBeGreaterThanOrEqual(
       new Date(replacement.startTime).getTime(),

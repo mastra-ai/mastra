@@ -2,24 +2,20 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
+import { useApiConfig } from '../../../../api/config';
 import { useStartFactoryRun } from '../../../../hooks/useStartFactoryRun';
 import { useCardRepositorySlug } from './useCardRepositorySlug';
-import type { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { itemSessionSpec, itemThreadSession } from '../boardItems';
 import { repositoryMatchesCardSource } from '../boardRepository';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
+import { listWorkItems } from '../services/workItems';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 
 const PREPARING_SESSION_LABEL = 'Preparing session…';
 
 /** Opening the chat session a card carries, and minting one when it has none yet. */
-export function useBoardRuns({
-  factoryProjectId,
-  refetchItems,
-}: {
-  factoryProjectId: string;
-  refetchItems: ReturnType<typeof useWorkItemsQuery>['refetch'];
-}) {
+export function useBoardRuns({ factoryProjectId }: { factoryProjectId: string }) {
+  const { baseUrl } = useApiConfig();
   const { start, startingItemIds, enabled, repositories } = useStartFactoryRun();
   const repositorySlugFor = useCardRepositorySlug(repositories);
   const navigate = useNavigate();
@@ -60,18 +56,20 @@ export function useBoardRuns({
     navigate(`/factories/${factoryProjectId}/workspaces/${session.sessionId}/threads/${session.threadId}`);
   };
 
-  // Refetch failures here used to be silent: an expired auth cookie made every
-  // board click a no-op with no feedback. Toast so the click never dies quietly.
+  // The clicked card alone, read fresh: it may have gained a session since it was listed, or been
+  // deleted. A failed read used to be silent: an expired auth cookie made every board click a
+  // no-op with no feedback. Toast so the click never dies quietly.
   const refreshItem = async (itemId: string) => {
-    const refreshedItems = await refetchItems();
-    if (!refreshedItems.isSuccess) {
-      const cause = refreshedItems.error;
-      toast.error(cause instanceof Error ? cause.message : 'Failed to refresh the board — try reloading the page');
+    let cards: WorkItem[];
+    try {
+      cards = (await listWorkItems(baseUrl, factoryProjectId, undefined, { workItemId: [itemId] })).workItems;
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Failed to refresh the board. Try reloading the page.');
       return;
     }
-    const item = refreshedItems.data.find(candidate => candidate.id === itemId);
+    const item = cards.find(candidate => candidate.id === itemId);
     if (!item) {
-      toast.error('This card no longer exists — the board may be out of date');
+      toast.error('This card no longer exists. The board may be out of date.');
       return;
     }
     return item;
@@ -95,7 +93,10 @@ export function useBoardRuns({
         toast.error("No repository matching this card's provider is linked to this Factory.");
         return;
       }
-      const targetSlug = await repositorySlugFor(refreshed.source, refreshed.metadata);
+      const targetSlug = await repositorySlugFor(refreshed.source, {
+        ...refreshed.metadata,
+        ...refreshed.workItem?.metadata,
+      });
       const hasLinkedTarget = compatibleRepositories.some(repository => repository.slug === targetSlug);
       if (!targetSlug && compatibleRepositories.length > 1) {
         setRepositorySelection({ item: refreshed, ...spec });
@@ -116,6 +117,7 @@ export function useBoardRuns({
           sourceKey: refreshed.sourceKey,
           title: refreshed.title,
           metadata: refreshed.metadata,
+          workItem: refreshed.workItem,
         },
       });
     } finally {
@@ -139,6 +141,7 @@ export function useBoardRuns({
           sourceKey: item.sourceKey,
           title: item.title,
           metadata: item.metadata,
+          workItem: item.workItem,
         },
       });
     } catch (error) {

@@ -56,7 +56,7 @@ describe('ExperimentResultsList', () => {
 
   describe('for a result with an error', () => {
     it('tints the row with the error tone instead of rendering an icon', () => {
-      const { container } = renderList([makeResult('r-1', { message: 'boom' } as DatasetExperimentResult['error'])]);
+      const { container } = renderList([makeResult('r-1', { message: 'boom' })]);
 
       expect(container.querySelector('[data-variant="error"]')).not.toBeNull();
       expect(screen.queryByRole('img', { name: 'Error' })).toBeNull();

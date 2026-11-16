@@ -95,9 +95,11 @@ import type {
   GetTraceQueryValuesResponse,
   QueryThreadsResult,
   TraceQueryObservedFieldsResult,
+  SpanAggregateResponse,
   TraceAggregateResponse,
   TraceQueryResponse,
   TrustedThreadQueryPlan,
+  TrustedSpanAggregatePlan,
   TrustedTraceAggregatePlan,
   TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
@@ -180,6 +182,7 @@ import { deltaPollingSupported } from './polling';
 import { backfillCurrentScores } from './score-current';
 import * as scoresOps from './scores';
 import * as spanQueryOps from './span-query';
+import * as threadQueryOps from './thread-query';
 import * as traceAggregateOps from './trace-aggregate';
 import * as traceQueryOps from './trace-query';
 import * as traceRootsOps from './trace-roots';
@@ -187,8 +190,30 @@ import * as tracingOps from './tracing';
 
 const spanQueryFeatures =
   typeof coreStorage.planSpanQuery === 'function'
-    ? (['span-query', 'span-query-context-fields'] as const)
+    ? ([
+        'span-query',
+        'span-query-context-fields',
+        ...(coreStorage.SPAN_QUERY_ORDER_FIELDS?.includes('durationMs') ? (['span-query-duration-sort'] as const) : []),
+        ...(coreStorage.SPAN_QUERY_ORDER_FIELDS?.includes('model') &&
+        coreStorage.SPAN_QUERY_ORDER_FIELDS?.includes('provider')
+          ? (['span-query-model-provider-sort'] as const)
+          : []),
+        // Core before the fields rejects `model`/`provider` predicates, so only declare them when core plans them.
+        ...('model' in (coreStorage.SPAN_QUERY_FIELD_REGISTRY ?? {}) ? (['span-query-model-fields'] as const) : []),
+      ] as const)
     : ([] as const);
+const spanAggregateFeatures =
+  typeof coreStorage.planSpanAggregate === 'function'
+    ? ([
+        'span-aggregate',
+        // Core before the dimensions rejects `model`/`provider` in `groupBy`, so only declare them when core plans them.
+        ...('model' in (coreStorage.SPAN_AGGREGATE_DIMENSION_REGISTRY ?? {})
+          ? (['span-aggregate-model-dimensions'] as const)
+          : []),
+      ] as const)
+    : ([] as const);
+const threadQueryFeatures =
+  typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : ([] as const);
 
 function buildSignalMigrationRequiredMessage(args: {
   store: 'ClickHouse';
@@ -963,9 +988,18 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'feedback-replacement',
         'trace-query-context-ids',
+        ...traceQueryOps.contextFieldFeatures,
+        ...traceQueryOps.timingFeatures,
+        ...traceQueryOps.outcomeFeatures,
+        'trace-query-root-span-fields',
+        'trace-query-root-entity-id',
         'trace-aggregate',
+        ...traceAggregateOps.aggregateTimeToFirstFeatures,
         ...spanQueryFeatures,
+        ...spanAggregateFeatures,
+        ...threadQueryFeatures,
       ] as const;
     }
 
@@ -985,9 +1019,18 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       'thread-query',
       'trace-query-tenant-scope',
       'feedback',
+      'feedback-replacement',
       'trace-query-context-ids',
+      ...traceQueryOps.contextFieldFeatures,
+      ...traceQueryOps.timingFeatures,
+      ...traceQueryOps.outcomeFeatures,
+      'trace-query-root-span-fields',
+      'trace-query-root-entity-id',
       'trace-aggregate',
+      ...traceAggregateOps.aggregateTimeToFirstFeatures,
       ...spanQueryFeatures,
+      ...spanAggregateFeatures,
+      ...threadQueryFeatures,
     ] as const;
   }
 
@@ -1198,6 +1241,26 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       );
     }
   }
+  override async aggregateSpans(plan: TrustedSpanAggregatePlan): Promise<SpanAggregateResponse> {
+    try {
+      return await traceAggregateOps.aggregateSpans(this.#client, plan, this.#traceQueryTimeoutMs);
+    } catch (error) {
+      if (
+        error instanceof MastraError ||
+        error instanceof coreStorage.TraceQueryExecutionError ||
+        error instanceof coreStorage.TraceQueryResourceLimitError
+      )
+        throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'AGGREGATE_SPANS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
 
   override async getTraceQueryObservedFields(
     plan: TrustedTraceQueryObservedFieldsPlan,
@@ -1243,8 +1306,17 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
   }
 
-  override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
+  override async queryThreads(plan: coreStorage.TrustedThreadRowsQueryPlan): Promise<coreStorage.ThreadQueryResponse>;
+  override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult>;
+  override async queryThreads(
+    plan: TrustedThreadQueryPlan | coreStorage.TrustedThreadRowsQueryPlan,
+  ): Promise<QueryThreadsResult | coreStorage.ThreadQueryResponse>;
+  override async queryThreads(
+    plan: TrustedThreadQueryPlan | coreStorage.TrustedThreadRowsQueryPlan,
+  ): Promise<QueryThreadsResult | coreStorage.ThreadQueryResponse> {
     try {
+      if (plan.result === 'threadRows')
+        return await threadQueryOps.queryThreadRows(this.#client, plan, this.#traceQueryTimeoutMs);
       return await traceQueryOps.queryThreads(this.#client, plan, this.#traceQueryTimeoutMs);
     } catch (error) {
       if (
@@ -1439,6 +1511,23 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { scoreId },
+        },
+        error,
+      );
+    }
+  }
+
+  override async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    try {
+      return await feedbackOps.getFeedbackById(this.#client, feedbackId);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_FEEDBACK_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { feedbackId },
         },
         error,
       );

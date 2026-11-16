@@ -1,0 +1,20 @@
+{
+  "name": "@inner/typeless-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build"
+  },
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@mastra/core": "e2e-test",
+    "@mastra/deployer": "e2e-test",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "mastra": "e2e-test",
+    "tsx": "4.21.0",
+    "typescript": "7.0.2"
+  }
+}

@@ -33,9 +33,9 @@ export function createCloneWorkflows(ctx: WorkflowCreatorContext) {
     );
     mockRegistry.register('clone-workflow:other', () => vi.fn().mockResolvedValue({ other: 26 }));
     mockRegistry.register('clone-workflow:final', () =>
-      vi.fn().mockImplementation(async ({ getStepResult }) => {
-        const startVal = getStepResult('start')?.newValue ?? 0;
-        const otherVal = getStepResult('other-clone')?.other ?? 0;
+      vi.fn().mockImplementation(async ({ getStepResultAsync }) => {
+        const startVal = (await getStepResultAsync('start'))?.newValue ?? 0;
+        const otherVal = (await getStepResultAsync('other-clone'))?.other ?? 0;
         return { finalValue: startVal + otherVal };
       }),
     );
@@ -146,9 +146,9 @@ export function createCloneWorkflows(ctx: WorkflowCreatorContext) {
     );
     mockRegistry.register('spec-result:other', () => vi.fn().mockResolvedValue({ other: 26 }));
     mockRegistry.register('spec-result:final', () =>
-      vi.fn().mockImplementation(async ({ getStepResult }) => {
-        const startVal = getStepResult('start')?.newValue ?? 0;
-        const otherVal = getStepResult('other')?.other ?? 0;
+      vi.fn().mockImplementation(async ({ getStepResultAsync }) => {
+        const startVal = (await getStepResultAsync('start'))?.newValue ?? 0;
+        const otherVal = (await getStepResultAsync('other'))?.other ?? 0;
         return { finalValue: startVal + otherVal };
       }),
     );

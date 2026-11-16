@@ -11,6 +11,7 @@ export const FACTORY_TOOLS_WITHOUT_APPROVAL: readonly string[] = [
   'factory_list_work_items',
   'factory_inspect_work_item',
   'factory_list_attention',
+  'factory_list_audit_events',
   'factory_create_work_item',
   'factory_update_work_item',
   'factory_transition_work_item',
@@ -21,12 +22,18 @@ export const FACTORY_TOOLS_WITHOUT_APPROVAL: readonly string[] = [
   'factory_unsubscribe_work_item',
   'factory_signal_session',
   'factory_message_origin',
+  'factory_list_side_sessions',
+  'factory_subscribe_session',
+  'factory_unsubscribe_session',
   'factory_start_session',
   'factory_answer_approval',
+  'factory_switch_session_model',
+  'factory_recreate_sandbox',
+  'factory_sandbox_port_url',
 ];
 
 export interface FactoryToolPermissionsSession {
-  readonly identity: { getResourceId(): string };
+  readonly identity: { getId(): string };
   readonly permissions: {
     getRules(): PermissionRules;
     setForTool(args: { toolName: string; policy: PermissionPolicy }): Promise<void>;
@@ -48,7 +55,7 @@ export async function applyFactoryToolPermissions(
   { sessions }: FactoryToolPermissionsDependencies,
   toolNames: readonly string[] = FACTORY_TOOLS_WITHOUT_APPROVAL,
 ): Promise<void> {
-  const row = await sessions.getBySessionId(session.identity.getResourceId());
+  const row = await sessions.getBySessionId(session.identity.getId());
   if (!row?.factoryProjectId) return;
   const rules = session.permissions.getRules();
   if (rules.categories.mcp !== undefined) return;

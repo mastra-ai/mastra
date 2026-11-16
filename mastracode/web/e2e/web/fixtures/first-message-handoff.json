@@ -1,0 +1,24 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Second message after a restart"
+      },
+      "response": {
+        "content": "AFTER_RESTART_RESPONSE"
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "First message of a new session"
+      },
+      "response": {
+        "content": "FIRST_MESSAGE_RESPONSE"
+      }
+    }
+  ]
+}

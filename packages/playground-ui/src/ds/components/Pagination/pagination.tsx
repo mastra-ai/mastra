@@ -1,15 +1,13 @@
 import { useRender } from '@base-ui/react/use-render';
-import { ChevronLeft, ChevronRight, Ellipsis } from 'lucide-react';
-import { cloneElement, isValidElement, useMemo, useRef, useState } from 'react';
+import { cloneElement, isValidElement } from 'react';
 import type { ComponentProps, MouseEvent, ReactElement } from 'react';
-import { PaginationContext, usePaginationItemRef } from './pagination-context';
-import type { PaginationContextValue } from './pagination-context';
-import { FluidHoverHighlight } from '@/components/fluid-hover-highlight';
+import { IconChevronLeft } from '@/ds/icons/central/IconChevronLeft';
+import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconDotGrid1x3Horizontal } from '@/ds/icons/central/IconDotGrid1x3Horizontal';
 import { Icon } from '@/ds/icons/Icon';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
 import { raisedControlSurfaceStyle } from '@/ds/primitives/form-element';
-import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
-import { useFluidHover } from '@/hooks/use-fluid-hover';
+import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export type PaginationProps = ComponentProps<'nav'>;
@@ -25,39 +23,10 @@ export function Pagination({ className, 'aria-label': ariaLabel = 'Pagination', 
   );
 }
 
-const isInert = (element: HTMLElement) => element.getAttribute('aria-disabled') === 'true';
-
 export type PaginationContentProps = ComponentProps<'ul'>;
 
 export function PaginationContent({ className, ...props }: PaginationContentProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const hover = useFluidHover(containerRef, { axis: 'x', isItemDisabled: isInert, gapClick: false });
-  const [currentIndex, setCurrentIndex] = useState<number | null>(null);
-  const counterRef = useRef(0);
-  const freeRef = useRef<number[]>([]);
-  const { registerItem } = hover;
-  const context = useMemo<PaginationContextValue>(
-    () => ({
-      registerItem,
-      allocateIndex: () => freeRef.current.pop() ?? counterRef.current++,
-      releaseIndex: index => {
-        freeRef.current.push(index);
-      },
-      setCurrentIndex,
-    }),
-    [registerItem],
-  );
-  const currentIndicator = { ...hover, activeIndex: currentIndex };
-
-  return (
-    <PaginationContext value={context}>
-      <div ref={containerRef} {...hover.handlers} className="relative isolate">
-        <FluidHoverHighlight hover={hover} className="-z-2 rounded-full bg-fill-subtle" />
-        <FluidHoverHighlight hover={currentIndicator} className={cn('-z-1 rounded-full', raisedControlSurfaceStyle)} />
-        <ul data-slot="pagination-content" className={cn('flex items-center gap-1', className)} {...props} />
-      </div>
-    </PaginationContext>
-  );
+  return <ul data-slot="pagination-content" className={cn('flex items-center gap-1', className)} {...props} />;
 }
 
 export type PaginationItemProps = ComponentProps<'li'>;
@@ -68,12 +37,16 @@ export function PaginationItem(props: PaginationItemProps) {
 
 const paginationLinkClass = cn(
   controlSizeClasses.sm,
-  controlStateColorTransition,
   focusRing,
   'relative inline-flex min-w-control-sm cursor-pointer items-center justify-center gap-1 rounded-full px-2.5 text-muted-foreground tabular-nums',
-  'hover:text-foreground aria-[current=page]:text-foreground',
-  'aria-disabled:cursor-not-allowed aria-disabled:text-placeholder aria-disabled:hover:text-placeholder',
+  'aria-disabled:cursor-not-allowed aria-disabled:text-placeholder',
 );
+
+// The current page wears the raised control surface, which carries its own hover tint.
+const paginationLinkStateClass = {
+  idle: 'not-aria-disabled:hover:bg-fill-subtle not-aria-disabled:hover:text-foreground',
+  current: raisedControlSurfaceStyle,
+};
 
 export type PaginationLinkProps = useRender.ComponentProps<'button'> & {
   isActive?: boolean;
@@ -107,29 +80,27 @@ function activationProps(disabled: boolean | undefined, onClick: PaginationLinkP
 }
 
 export function PaginationLink({ isActive, disabled, render, className, onClick, ...props }: PaginationLinkProps) {
-  const ref = usePaginationItemRef();
   return useRender({
     defaultTagName: 'button',
     render: linkRender(render, disabled),
-    ref,
     props: {
       ...elementProps(render, disabled),
       ...props,
       ...activationProps(disabled, onClick),
       'data-slot': 'pagination-link',
       'aria-current': isActive && 'page',
-      className: cn(paginationLinkClass, className),
+      className: cn(paginationLinkClass, paginationLinkStateClass[isActive ? 'current' : 'idle'], className),
     },
   });
 }
 
 export type PaginationPreviousProps = PaginationLinkProps & { text?: string };
 
-export function PaginationPrevious({ text = 'Previous', ...props }: PaginationPreviousProps) {
+export function PaginationPrevious({ text = 'Prev', ...props }: PaginationPreviousProps) {
   return (
     <PaginationLink {...props}>
       <Icon size="sm" aria-hidden>
-        <ChevronLeft />
+        <IconChevronLeft />
       </Icon>
       {text}
     </PaginationLink>
@@ -143,7 +114,7 @@ export function PaginationNext({ text = 'Next', ...props }: PaginationNextProps)
     <PaginationLink {...props}>
       {text}
       <Icon size="sm" aria-hidden>
-        <ChevronRight />
+        <IconChevronRight />
       </Icon>
     </PaginationLink>
   );
@@ -159,7 +130,7 @@ export function PaginationEllipsis({ className, ...props }: PaginationEllipsisPr
       {...props}
     >
       <Icon size="sm" aria-hidden>
-        <Ellipsis />
+        <IconDotGrid1x3Horizontal />
       </Icon>
       <span className="sr-only">More pages</span>
     </span>

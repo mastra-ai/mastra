@@ -78,6 +78,17 @@ function startChild(
       });
     },
     result: new Promise<number | null>(resolve => child.on('close', resolve)),
+    /**
+     * SIGKILLs the fixture process itself. `child` is the tsx launcher, which runs the
+     * fixture in its own node subprocess; killing only the launcher orphans the fixture
+     * (and, in CI containers whose PID 1 does not reap, leaves it a zombie that still
+     * answers `kill(pid, 0)`), so its leases never look stale.
+     */
+    killFixture() {
+      const pid = events[0]?.pid;
+      if (!pid) throw new Error(`${role} has not reported its pid yet`);
+      process.kill(pid, 'SIGKILL');
+    },
   };
 }
 
@@ -534,7 +545,7 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     contender.child.stdin.write('claim\n');
     expect(await contender.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: false });
 
-    owner.child.kill('SIGKILL');
+    owner.killFixture();
     await owner.result;
 
     const contenderAttempts = () => contender.events.filter(event => event.event === 'claim-attempt');
@@ -560,7 +571,7 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
   it('lets exactly one contender reclaim a filesystem lease from a killed holder', async () => {
     const holder = startChild('owner', resourceId, 'stale-lease-takeover');
     expect(await holder.waitFor('lease-result')).toMatchObject({ acquired: true });
-    holder.child.kill('SIGKILL');
+    holder.killFixture();
     await holder.result;
 
     const startAt = String(Date.now() + 2_000);
@@ -656,7 +667,7 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     before.child.stdin.end();
     expect(await before.result).toBe(0);
 
-    owner.child.kill('SIGKILL');
+    owner.killFixture();
     expect(await owner.result).not.toBe(0);
 
     const after = startChild('sender', resourceId, 'discovery-probe');
@@ -669,6 +680,53 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     expect(afterDiscovery).toMatchObject({ hasPeer: false });
     expect(before.stderr).toBe('');
     expect(after.stderr).toBe('');
+  }, 30_000);
+
+  it('still sees a live peer when the sender is busy for a moment right after asking', async () => {
+    // Presence is a fresh discovery probe with a 100 ms window. Peers answer in a few ms, but a
+    // sender whose event loop was busy past the window (a long tool result, a big parse) closed
+    // the window before reading any answer, so every saved peer read as absent and
+    // `agent_signal_send` refused with "saved peer is not currently advertised".
+    const owner = startChild('owner', resourceId, 'busy-presence');
+    await owner.waitFor('thread-owned');
+    const sender = startChild('sender', resourceId, 'busy-presence');
+    await sender.waitFor('ready');
+
+    const probe = async (threadId: string, busyMs: number) => {
+      const seen = sender.events.filter(event => event.event === 'probed').length;
+      sender.child.stdin.write(`probe ${threadId} ${busyMs}\n`);
+      const deadline = Date.now() + 10_000;
+      while (Date.now() < deadline) {
+        const probed = sender.events.filter(event => event.event === 'probed');
+        if (probed.length > seen) return probed[seen]!;
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      throw new Error(`No probe result. Events: ${JSON.stringify(sender.events)}. stderr: ${sender.stderr}`);
+    };
+
+    const busyLive = await probe('owner-thread', 250);
+    const idleLive = await probe('owner-thread', 0);
+    const idleAbsent = await probe('nobody-thread', 0);
+    const busyAbsent = await probe('nobody-thread', 250);
+
+    expect(busyLive).toMatchObject({ presence: 'advertised', canAttemptSend: true });
+    expect(idleLive).toMatchObject({ presence: 'advertised', canAttemptSend: true });
+    // A thread nobody owns is still reported absent promptly: about one window on an idle
+    // sender, and about one window after a busy sender is free again.
+    expect(idleAbsent).toMatchObject({ presence: 'absent', canAttemptSend: false });
+    expect(busyAbsent).toMatchObject({ presence: 'absent', canAttemptSend: false });
+    expect(idleAbsent.elapsedMs).toBeLessThan(1_000);
+    expect(busyAbsent.elapsedMs).toBeLessThan(1_500);
+
+    sender.child.stdin.write('close\n');
+    sender.child.stdin.end();
+    owner.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    const [ownerCode, senderCode] = await Promise.all([owner.result, sender.result]);
+    expect(owner.stderr).toBe('');
+    expect(sender.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(senderCode).toBe(0);
   }, 30_000);
 });
 

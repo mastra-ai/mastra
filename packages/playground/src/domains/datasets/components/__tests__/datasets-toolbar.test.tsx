@@ -4,7 +4,8 @@ import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DatasetsToolbar, type DatasetsToolbarProps } from '../datasets-toolbar';
+import { DatasetsToolbar } from '../datasets-toolbar';
+import type { DatasetsToolbarProps } from '../datasets-toolbar';
 import {
   agents,
   noProcessors,

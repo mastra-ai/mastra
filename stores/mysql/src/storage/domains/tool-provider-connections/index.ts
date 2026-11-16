@@ -103,6 +103,7 @@ export class ToolProviderConnectionsMySQL extends ToolProviderConnectionsStorage
    * Currently no default indexes are defined for tool-provider-connections.
    */
   async createDefaultIndexes(): Promise<void> {
+    // oxlint-disable-next-line no-useless-return -- Preserve the explicit skip-index guard and its property read.
     if (this.#skipDefaultIndexes) return;
     // No default indexes for tool-provider-connections domain
   }

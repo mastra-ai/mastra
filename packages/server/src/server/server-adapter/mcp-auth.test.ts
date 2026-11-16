@@ -2,7 +2,7 @@ import type { IncomingMessage } from 'node:http';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
-import { MASTRA_AUTH_TOKEN_KEY, MASTRA_USER_KEY } from '../constants';
+import { MASTRA_AUTH_TOKEN_KEY, MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { applyMcpRequestAuth } from './mcp-auth';
 
 function makeReq(): IncomingMessage & { auth?: any } {
@@ -109,6 +109,28 @@ describe('applyMcpRequestAuth', () => {
     expect(req.auth).toEqual({ token: 'custom', clientId: 'hook', scopes: ['admin'] });
   });
 
+  it("keeps a hook's auth info but still hands tools the caller Mastra server auth resolved", async () => {
+    const req = makeReq();
+    const trusted = Symbol.for('mastra.mcp.trustedRequestContext');
+
+    await applyMcpRequestAuth({
+      req,
+      requestContext: makeContext({
+        [MASTRA_USER_KEY]: { id: 'mastra-user' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['observability:read'],
+      }),
+      setRequestAuth: r => {
+        (r as any).auth = { token: 'custom', clientId: 'hook-principal', scopes: [] };
+      },
+    });
+
+    expect(req.auth.clientId).toBe('hook-principal');
+    expect(req.auth[trusted]).toEqual({
+      [MASTRA_USER_KEY]: { id: 'mastra-user' },
+      [MASTRA_USER_PERMISSIONS_KEY]: ['observability:read'],
+    });
+  });
+
   it('treats a hook that sets nothing as an explicit opt-out', async () => {
     const req = makeReq();
 
@@ -119,5 +141,37 @@ describe('applyMcpRequestAuth', () => {
     });
 
     expect(req.auth).toBeUndefined();
+  });
+
+  it('hands MCP tools the trusted request context without exposing it in the auth payload', async () => {
+    const req = makeReq();
+    const trusted = Symbol.for('mastra.mcp.trustedRequestContext');
+
+    await applyMcpRequestAuth({
+      req,
+      requestContext: makeContext({
+        [MASTRA_USER_KEY]: { id: 'user-1' },
+        [MASTRA_AUTH_TOKEN_KEY]: 'tok-123',
+        [MASTRA_USER_PERMISSIONS_KEY]: ['observability:read'],
+        organizationId: 'org-1',
+        notReserved: 'from the body',
+      }),
+    });
+
+    expect(req.auth[trusted]).toEqual({
+      [MASTRA_USER_KEY]: { id: 'user-1' },
+      [MASTRA_USER_PERMISSIONS_KEY]: ['observability:read'],
+      organizationId: 'org-1',
+    });
+    expect(JSON.parse(JSON.stringify(req.auth))).not.toHaveProperty('organizationId');
+  });
+
+  it('attaches the trusted request context to an identity set before Mastra', async () => {
+    const req = makeReq();
+    req.auth = { token: 'existing', clientId: 'existing', scopes: [] };
+
+    await applyMcpRequestAuth({ req, requestContext: makeContext({ organizationId: 'org-1' }) });
+
+    expect(req.auth[Symbol.for('mastra.mcp.trustedRequestContext')]).toEqual({ organizationId: 'org-1' });
   });
 });

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { queryKeys } from '../api/keys';
 import { createQueryClient } from '../query-client';
 import type { FactoryUserSession } from '../ui/domains/workspaces/services/user-sessions';
-import { sessionsRefetchInterval, updateCachedSessionTitle } from './useWorkspaces';
+import { addCachedSession, sessionsRefetchInterval, updateCachedSessionTitle } from './useWorkspaces';
 import type { WorkspacesData } from './useWorkspaces';
 
 function session(overrides: Partial<FactoryUserSession>): FactoryUserSession {
@@ -61,6 +61,19 @@ describe('sessionsRefetchInterval', () => {
   });
 });
 
+describe('addCachedSession', () => {
+  it('classifies Slack threads as user sessions rather than board workspaces', () => {
+    const client = createQueryClient();
+    const key = queryKeys.sessions('factory-1');
+    client.setQueryData(key, data({}));
+    const slack = session({ sessionId: 'slack-1', branch: 'slack/123.456' });
+
+    addCachedSession(client, 'factory-1', slack);
+
+    expect(client.getQueryData<WorkspacesData>(key)).toEqual(data({ userSessions: [slack] }));
+  });
+});
+
 describe('updateCachedSessionTitle', () => {
   it('updates the matching workspace without replacing unrelated rows', async () => {
     const client = createQueryClient();
@@ -112,7 +125,7 @@ describe('updateCachedSessionTitle', () => {
     client.setQueryData(queryKey, current);
 
     let resolveFetch!: (value: WorkspacesData) => void;
-    const fetch = client.fetchQuery({
+    const fetch = client.query({
       queryKey,
       queryFn: () =>
         new Promise<WorkspacesData>(resolve => {

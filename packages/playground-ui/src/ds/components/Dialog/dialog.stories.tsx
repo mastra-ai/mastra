@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { expect, waitFor, within } from 'storybook/test';
 import {
   Dialog,
   DialogAction,
@@ -429,6 +430,7 @@ export const FullPage: Story = {
                 'Up to 3 projects',
               ]}
             >
+              {/* oxlint-disable-next-line mastra/sentence-case-labels -- plan names are proper nouns */}
               <Button>Downgrade to Free</Button>
             </PlanColumn>
             <PlanColumn
@@ -466,6 +468,7 @@ export const FullPage: Story = {
                 '2× Medium included',
               ]}
             >
+              {/* oxlint-disable-next-line mastra/sentence-case-labels -- plan names are proper nouns */}
               <Button variant="primary">Upgrade to Teams</Button>
             </PlanColumn>
             <PlanColumn
@@ -524,7 +527,7 @@ function AddCreditsDialog() {
           <DialogTitle>Add credits</DialogTitle>
         </DialogHeader>
         <DialogBody>
-          <SettingsContainer variant="inset">
+          <SettingsContainer>
             <SettingsRow label="Credits to purchase" description="$1.20 went to vCPU beyond your allowance this month.">
               <InputGroup size="sm" className="w-30">
                 <InputGroupAddon>$</InputGroupAddon>
@@ -578,9 +581,37 @@ export const AddCredits: Story = {
     docs: {
       description: {
         story:
-          'A short form dialog, and the one place the inset `SettingsContainer` is meant for: title and Close in the header, stacked settings rows on an inset panel in the body (an amount field, a switch with a badge, and a sentence of two small fields), and a footer whose status sits left of Cancel and the primary action.',
+          'A short form dialog: title and Close in the header, settings rows in a `SettingsContainer` in the body (an amount field, a switch with a badge, and a sentence of two small fields), and a footer whose status sits left of Cancel and the primary action.',
       },
     },
   },
   render: () => <AddCreditsDialog />,
+};
+
+export const ResizeWhileOpen: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Open either dialog at 1440 × 1000, resize to 390 × 844, then back. It stays open and usable across 640px. The form keeps its draft in the caller while the popup changes from dialog to drawer.',
+      },
+    },
+  },
+  render: args => (
+    <div className="flex flex-wrap items-start gap-4">
+      <PlaygroundDialog {...args} size="full" />
+      <RenameForm />
+    </div>
+  ),
+  play: async ({ canvas, userEvent, canvasElement }) => {
+    const page = within(canvasElement.ownerDocument.body);
+    await userEvent.click(canvas.getByRole('button', { name: 'Open dialog' }));
+    await waitFor(() => expect(page.getByRole('dialog', { name: 'Edit agent instructions' })).toBeVisible());
+    await userEvent.click(page.getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Rename team' }));
+    await userEvent.clear(page.getByRole('textbox', { name: /Team name/ }));
+    await userEvent.type(page.getByRole('textbox', { name: /Team name/ }), 'Billing team');
+    await userEvent.click(page.getByRole('button', { name: 'Save name' }));
+    await expect(canvas.getByRole('status')).toHaveTextContent('Team renamed to Billing team.');
+  },
 };

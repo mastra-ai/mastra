@@ -36,6 +36,7 @@ const indexOmPartsByCycleId = (parts: MastraDBMessage['content']['parts'], targe
     const existing = target.get(cycleId) || {};
     // The discriminant `omPart.type` and `key` are paired in OM_TYPE_TO_KEY, so
     // the assignment is sound; TS cannot correlate the two unions on its own.
+    // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- TS intersects the indexed write's value types to undefined.
     (existing[key] as OmIndexablePart) = omPart;
     target.set(cycleId, existing);
   }
@@ -364,7 +365,7 @@ const mapAssistantParts = (
     const parts = msg.content?.parts;
     if (!Array.isArray(parts)) return msg;
 
-    const { parts: nextParts, changed } = mapParts(parts as any[]);
+    const { parts: nextParts, changed } = mapParts(parts);
     if (!changed) return msg;
 
     return {
@@ -379,10 +380,10 @@ const collectTerminalCycleIds = (messages: MastraDBMessage[]) => {
   const activatedBuffering = new Set<string>();
 
   for (const msg of messages) {
-    const parts = msg.content?.parts;
+    const parts: any[] | undefined = msg.content?.parts;
     if (!Array.isArray(parts)) continue;
 
-    for (const part of parts as any[]) {
+    for (const part of parts) {
       const cycleId = part?.data?.cycleId;
       if (!cycleId) continue;
 
@@ -470,10 +471,10 @@ export const hasInProgressBufferingMarkers = (messages: MastraDBMessage[]) => {
   const terminalCycleIds = new Set([...buffering, ...activatedBuffering]);
 
   for (const msg of messages) {
-    const parts = msg.content?.parts;
+    const parts: any[] | undefined = msg.content?.parts;
     if (!Array.isArray(parts)) continue;
 
-    for (const part of parts as any[]) {
+    for (const part of parts) {
       const cycleId = part?.data?.cycleId;
       if (
         part.type === 'data-om-buffering-start' &&
@@ -583,9 +584,9 @@ export const scanOmInitialState = (
   let lastProgress: Record<string, unknown> | null = null;
 
   for (const msg of messages) {
-    const parts = msg?.content?.parts;
+    const parts: any[] | undefined = msg?.content?.parts;
     if (!Array.isArray(parts)) continue;
-    for (const part of parts as any[]) {
+    for (const part of parts) {
       if (part?.type === 'data-om-activation' && part?.data?.cycleId) {
         activatedCycleIds.push(part.data.cycleId);
       }

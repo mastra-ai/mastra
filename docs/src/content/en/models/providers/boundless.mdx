@@ -58,18 +58,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 50
   },
   {
-    "model": "boundless/claude-opus-5",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 128000,
-    "inputCost": 5,
-    "outputCost": 25
-  },
-  {
     "model": "boundless/claude-opus-5.5",
     "imageInput": true,
     "audioInput": false,
@@ -118,18 +106,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.21
   },
   {
-    "model": "boundless/glm-5.2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 131072,
-    "inputCost": 0.34,
-    "outputCost": 2.3
-  },
-  {
     "model": "boundless/glm-5.3",
     "imageInput": false,
     "audioInput": false,
@@ -152,30 +128,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.12,
     "outputCost": 0.4
-  },
-  {
-    "model": "boundless/gpt-5.6-luna",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 128000,
-    "inputCost": 0.2,
-    "outputCost": 1.2
-  },
-  {
-    "model": "boundless/gpt-5.6-sol",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 128000,
-    "inputCost": 2,
-    "outputCost": 10
   },
   {
     "model": "boundless/gpt-6-luna",
@@ -295,6 +247,8 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -312,6 +266,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

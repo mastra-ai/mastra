@@ -89,7 +89,7 @@ describe('AgentPlayground — test chat agent version id', () => {
         renderAgentPlayground();
       });
 
-      const textarea = await screen.findByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      const textarea = await screen.findByPlaceholderText<HTMLTextAreaElement>('Enter your message');
       await act(async () => {
         fireEvent.change(textarea, { target: { value: 'what version are you?' } });
       });
@@ -132,7 +132,7 @@ describe('AgentPlayground — test chat agent version id', () => {
         renderAgentPlayground();
       });
 
-      const textarea = await screen.findByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      const textarea = await screen.findByPlaceholderText<HTMLTextAreaElement>('Enter your message');
       await act(async () => {
         fireEvent.change(textarea, { target: { value: 'hello' } });
       });

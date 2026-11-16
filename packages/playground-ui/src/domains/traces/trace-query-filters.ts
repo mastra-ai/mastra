@@ -66,7 +66,11 @@ const TRACE_FILTER_OPERATOR_TO_QUERY_OP = {
 /** Fields whose values must be sent as numbers. Non-numeric input is dropped. */
 export const TRACE_QUERY_NUMERIC_FIELD_IDS = new Set([
   'durationMs',
+  'timeToFirstChunkMs',
+  'timeToFirstTokenMs',
   'spans.durationMs',
+  'spans.timeToFirstChunkMs',
+  'spans.timeToFirstTokenMs',
   'scores.score',
   'feedback.value',
 ]);
@@ -80,11 +84,24 @@ const TRACE_QUERY_TRACE_FIELD_IDS = new Set([
   'threadId',
   'resourceId',
   'durationMs',
+  'timeToFirstChunkMs',
+  'timeToFirstTokenMs',
+  'outcome',
+  'stopReason',
 ]);
 
 /** Trace-level fields that may be unset. "is not X" on these must also keep traces
  *  where the field is missing, so the predicate is `or[ne, notExists]`. */
-export const TRACE_QUERY_OPTIONAL_TRACE_FIELD_IDS = new Set(['threadId', 'resourceId', 'environment', 'durationMs']);
+export const TRACE_QUERY_OPTIONAL_TRACE_FIELD_IDS = new Set([
+  'threadId',
+  'resourceId',
+  'environment',
+  'durationMs',
+  'timeToFirstChunkMs',
+  'timeToFirstTokenMs',
+  'outcome',
+  'stopReason',
+]);
 
 /** Negative operators are expressed as `none(<positive>)` on related collections. */
 const NEGATIVE_TO_POSITIVE = {
@@ -112,7 +129,7 @@ function resolveTraceQueryPath(fieldId: string): { scope?: TraceQueryRelatedScop
   return { path: fieldId };
 }
 
-function scalarPredicate(
+export function scalarPredicate(
   op: TraceFilterOperatorId,
   path: string,
   values: (string | number)[],
@@ -308,10 +325,19 @@ export function buildTraceQueryRequest({
   }
 
   return {
-    timeRange: {
-      from: (dateFrom ?? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)).toISOString(),
-      to: (dateTo ?? now).toISOString(),
-    },
+    timeRange: resolveTraceQueryTimeRange(dateFrom, dateTo, now),
     ...(args.length ? { where: { op: 'and' as const, args } } : {}),
+  };
+}
+
+/** The query window for a date range: open ends fall back to the last seven days up to `now`. */
+export function resolveTraceQueryTimeRange(
+  dateFrom: Date | undefined,
+  dateTo: Date | undefined,
+  now: Date,
+): QueryTracesInput['timeRange'] {
+  return {
+    from: (dateFrom ?? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)).toISOString(),
+    to: (dateTo ?? now).toISOString(),
   };
 }

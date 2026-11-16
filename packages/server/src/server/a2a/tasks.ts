@@ -1,8 +1,10 @@
 import type { Message, Task, TaskStatus, TaskContext, TaskArtifactUpdateEvent, Artifact } from '@mastra/core/a2a';
 import { MastraA2AError } from '@mastra/core/a2a';
 import type { IMastraLogger } from '@mastra/core/logger';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, type RequestContext } from '@mastra/core/request-context';
-import { TaskStoreVersionConflictError, type InMemoryTaskStore } from './store';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
+import type { RequestContext } from '@mastra/core/request-context';
+import { TaskStoreVersionConflictError } from './store';
+import type { InMemoryTaskStore } from './store';
 import { isTerminalTaskState } from './task-state';
 
 function isTaskStatusUpdate(update: TaskStatus | TaskArtifactUpdateEvent): update is Omit<TaskStatus, 'timestamp'> {

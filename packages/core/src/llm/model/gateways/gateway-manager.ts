@@ -50,6 +50,8 @@ export interface GatewayModel {
   provider: string;
   /** Model name without provider prefix */
   modelName: string;
+  /** ISO release date, when supplied by the model catalog. */
+  releaseDate?: string;
   /** Whether the provider has valid authentication */
   hasApiKey: boolean;
   /** Environment variable for the provider's API key */
@@ -193,21 +195,43 @@ export class GatewayManager {
    * is a network call for gateways like models.dev / Netlify.
    */
   async listProviders(): Promise<Record<string, ProviderConfig & { gateway: string }>> {
-    const registry: Record<string, ProviderConfig & { gateway: string }> = {};
-
+    const entries: Array<{ gateway: MastraModelGatewayInterface; providers: Record<string, ProviderConfig> }> = [];
     for (const gateway of this.gateways) {
-      try {
-        const gatewayProviders = await gateway.fetchProviders();
-        for (const [providerId, config] of Object.entries(gatewayProviders)) {
-          const key = this.getProviderKey(gateway, providerId);
-          if (key in registry) continue; // earlier (configured) gateway wins
-          registry[key] = { ...config, gateway: getGatewayId(gateway) };
-        }
-      } catch (error) {
-        console.warn(`Failed to load providers from gateway ${getGatewayId(gateway)}:`, error);
+      entries.push({ gateway, providers: (await this.fetchGatewayProviders(gateway)) ?? {} });
+    }
+    return this.mergeProviders(entries);
+  }
+
+  /**
+   * Fetch one gateway's providers. Returns `undefined` (after logging) when the
+   * gateway fails, so callers can tell a failure apart from an empty list.
+   */
+  async fetchGatewayProviders(
+    gateway: MastraModelGatewayInterface,
+  ): Promise<Record<string, ProviderConfig> | undefined> {
+    try {
+      return await gateway.fetchProviders();
+    } catch (error) {
+      console.warn(`Failed to load providers from gateway ${getGatewayId(gateway)}:`, error);
+      return undefined;
+    }
+  }
+
+  /**
+   * Flatten per-gateway providers into one registry keyed by catalog provider
+   * id. Pass entries in gateway order: the earlier (configured) gateway wins.
+   */
+  mergeProviders(
+    entries: Array<{ gateway: MastraModelGatewayInterface; providers: Record<string, ProviderConfig> }>,
+  ): Record<string, ProviderConfig & { gateway: string }> {
+    const registry: Record<string, ProviderConfig & { gateway: string }> = {};
+    for (const { gateway, providers } of entries) {
+      for (const [providerId, config] of Object.entries(providers)) {
+        const key = this.getProviderKey(gateway, providerId);
+        if (key in registry) continue; // earlier (configured) gateway wins
+        registry[key] = { ...config, gateway: getGatewayId(gateway) };
       }
     }
-
     return registry;
   }
 
@@ -216,7 +240,16 @@ export class GatewayManager {
    * provider (using the first model). Returns models without use-count.
    */
   async listAvailableModels(): Promise<GatewayModel[]> {
-    const registry = await this.listProviders();
+    return this.listModelsForProviders(await this.listProviders());
+  }
+
+  /**
+   * Build catalog entries for an already-fetched provider registry (see
+   * {@link mergeProviders}), resolving auth once per provider.
+   */
+  async listModelsForProviders(
+    registry: Record<string, ProviderConfig & { gateway: string }>,
+  ): Promise<GatewayModel[]> {
     const models: GatewayModel[] = [];
 
     for (const [provider, providerConfig] of Object.entries(registry)) {
@@ -235,6 +268,7 @@ export class GatewayManager {
           id: `${provider}/${modelName}`,
           provider,
           modelName,
+          releaseDate: providerConfig.modelReleaseDates?.[modelName],
           hasApiKey,
           apiKeyEnvVar: apiKeyEnvVar || undefined,
         });

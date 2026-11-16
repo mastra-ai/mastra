@@ -48,7 +48,7 @@ describe('BadgeWrapper', () => {
     expect(screen.getByText('tool output')).toBeTruthy();
 
     rerender(
-      <BadgeWrapper title="Ran tool" initialCollapsed={true}>
+      <BadgeWrapper title="Ran tool" initialCollapsed>
         <span>tool output</span>
       </BadgeWrapper>,
     );

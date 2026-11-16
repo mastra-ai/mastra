@@ -1,3 +1,4 @@
+import { DocumentNotFoundError } from 'couchbase';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
 import { CouchbaseVector, DISTANCE_MAPPING } from './index';
 
@@ -12,11 +13,7 @@ const mockUpsertIndexFn = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 const mockGetAllIndexesFn = vi.hoisted(() =>
   vi
     .fn()
-    .mockResolvedValue([
-      { name: `${test_indexName}` },
-      { name: `${test_indexName}_1` },
-      { name: `${test_indexName}_2` },
-    ]),
+    .mockResolvedValue([{ name: test_indexName }, { name: `${test_indexName}_1` }, { name: `${test_indexName}_2` }]),
 );
 const mockGetIndexFn = vi.hoisted(() =>
   vi.fn().mockResolvedValue({
@@ -85,10 +82,12 @@ const mockScopeSearchFn = vi.hoisted(() =>
 );
 
 const mockCollectionUpsertFn = vi.hoisted(() => vi.fn().mockResolvedValue({}));
+const mockCollectionRemoveFn = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 const getMockCollection = vi.hoisted(() =>
   vi.fn().mockReturnValue({
     collection_name: test_collectionName,
     upsert: mockCollectionUpsertFn,
+    remove: mockCollectionRemoveFn,
   }),
 );
 const getMockScope = vi.hoisted(() =>
@@ -119,8 +118,10 @@ const mockVectorQueryCreateFn = vi.hoisted(() =>
   }),
 );
 
-vi.mock('couchbase', () => {
+vi.mock('couchbase', async importOriginal => {
+  const actual = await importOriginal<typeof import('couchbase')>();
   return {
+    ...actual,
     connect: mockCouchbaseConnectFn,
     SearchRequest: {
       create: mockSearchRequestCreateFn,
@@ -136,6 +137,7 @@ vi.mock('couchbase', () => {
 
 function clearAllMocks() {
   mockCollectionUpsertFn.mockClear();
+  mockCollectionRemoveFn.mockClear();
   getMockCollection.mockClear();
   getMockScope.mockClear();
   getMockBucket.mockClear();
@@ -309,7 +311,7 @@ describe('Unit Testing CouchbaseVector', () => {
       expect(mockScopeSearchIndexesFn).toHaveBeenCalledTimes(1);
       expect(mockGetAllIndexesFn).toHaveBeenCalledTimes(1);
       expect(mockGetAllIndexesFn).toHaveResolved();
-      expect(indexes).toEqual([`${test_indexName}`, `${test_indexName}_1`, `${test_indexName}_2`]);
+      expect(indexes).toEqual([test_indexName, `${test_indexName}_1`, `${test_indexName}_2`]);
     }, 50000);
 
     it('should describe index', async () => {
@@ -496,6 +498,92 @@ describe('Unit Testing CouchbaseVector', () => {
       expect(vectorIds).toEqual(testVectorIds);
     });
 
+    it('should delete multiple vectors by ID', async () => {
+      await couchbase_client.deleteVectors({ indexName: test_indexName, ids: ['test_id_1', 'test_id_2'] });
+
+      expect(mockCollectionRemoveFn).toHaveBeenCalledTimes(2);
+      expect(mockCollectionRemoveFn).toHaveBeenCalledWith('test_id_1');
+      expect(mockCollectionRemoveFn).toHaveBeenCalledWith('test_id_2');
+    });
+
+    it('should reject an empty ID list without removing documents', async () => {
+      await expect(couchbase_client.deleteVectors({ indexName: test_indexName, ids: [] })).rejects.toThrow(
+        /empty ids array/i,
+      );
+      expect(mockCollectionRemoveFn).not.toHaveBeenCalled();
+    });
+
+    it('should ignore missing IDs while deleting existing vectors', async () => {
+      mockCollectionRemoveFn.mockRejectedValueOnce(new DocumentNotFoundError('document not found'));
+      await couchbase_client.deleteVectors({ indexName: test_indexName, ids: ['missing', 'test_id_1'] });
+
+      expect(mockCollectionRemoveFn).toHaveBeenCalledTimes(2);
+      expect(mockCollectionRemoveFn).toHaveBeenCalledWith('missing');
+      expect(mockCollectionRemoveFn).toHaveBeenCalledWith('test_id_1');
+    });
+
+    it('should reject filter-based deletion without exposing filter values in the error', async () => {
+      const error = await couchbase_client
+        .deleteVectors({ indexName: test_indexName, filter: { label: 'sensitive-user-token' } })
+        .catch(error => error);
+      expect(error.message).toContain('filter-based deletion is not supported');
+      expect(JSON.stringify(error)).not.toContain('sensitive-user-token');
+      expect(String(error)).not.toContain('sensitive-user-token');
+      expect(mockCollectionRemoveFn).not.toHaveBeenCalled();
+    });
+
+    it('should reject missing deletion criteria without removing documents', async () => {
+      await expect(couchbase_client.deleteVectors({ indexName: test_indexName })).rejects.toThrow(
+        'Provide ids or filter',
+      );
+      expect(mockCollectionRemoveFn).not.toHaveBeenCalled();
+    });
+
+    it('should reject ids and filter together without removing documents', async () => {
+      await expect(
+        couchbase_client.deleteVectors({ indexName: test_indexName, ids: ['test_id_1'], filter: { label: 'x-axis' } }),
+      ).rejects.toThrow('mutually exclusive');
+      expect(mockCollectionRemoveFn).not.toHaveBeenCalled();
+    });
+
+    it('should propagate failed KV removals', async () => {
+      mockCollectionRemoveFn.mockRejectedValueOnce(new Error('KV removal failed'));
+      await expect(couchbase_client.deleteVectors({ indexName: test_indexName, ids: ['test_id_1'] })).rejects.toThrow(
+        'KV removal failed',
+      );
+    });
+
+    it('should wait for all removals before reporting a failure', async () => {
+      let finishSecondRemoval!: () => void;
+      mockCollectionRemoveFn.mockImplementation(id => {
+        if (id === 'test_id_1') return Promise.reject(new Error('KV removal failed'));
+        return new Promise(resolve => {
+          finishSecondRemoval = () => resolve({});
+        });
+      });
+
+      let failureReported = false;
+      const deletion = couchbase_client
+        .deleteVectors({ indexName: test_indexName, ids: ['test_id_1', 'test_id_2'] })
+        .catch(error => {
+          failureReported = true;
+          return error;
+        });
+
+      try {
+        await vi.waitFor(() => expect(finishSecondRemoval).toBeDefined());
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(failureReported).toBe(false);
+      } finally {
+        finishSecondRemoval?.();
+      }
+
+      const error = await deletion;
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toContain('KV removal failed');
+      expect(mockCollectionRemoveFn).toHaveBeenCalledTimes(2);
+    });
+
     it('should throw error for invalid vector dimension', async () => {
       await couchbase_client.createIndex({ indexName: test_indexName, dimension: 4 });
       clearAllMocks();
@@ -565,6 +653,53 @@ describe('Unit Testing CouchbaseVector', () => {
           includeVector: true,
         }),
       ).rejects.toThrow('Including vectors in search results is not yet supported by the Couchbase vector store');
+    });
+
+    describe('query filters', () => {
+      let client: CouchbaseVector;
+      let warn: ReturnType<typeof vi.fn>;
+
+      beforeEach(async () => {
+        client = new CouchbaseVector({
+          connectionString: 'COUCHBASE_CONNECTION_STRING',
+          username: 'COUCHBASE_USERNAME',
+          password: 'COUCHBASE_PASSWORD',
+          bucketName: test_bucketName,
+          scopeName: test_scopeName,
+          collectionName: test_collectionName,
+          id: 'couchbase-filter-unit-test',
+        });
+        await client.getCollection();
+        warn = vi.fn();
+        client.__setLogger({
+          debug: vi.fn(),
+          info: vi.fn(),
+          warn,
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any);
+        mockScopeSearchFn.mockClear();
+      });
+
+      it('ignores a filter, still searches, and warns once without exposing filter values', async () => {
+        const filter = { resource_id: 'sensitive-resource-id' };
+        await expect(
+          client.query({ indexName: test_indexName, queryVector: [1.0, 2.0, 3.0], filter }),
+        ).resolves.toBeInstanceOf(Array);
+        await client.query({ indexName: test_indexName, queryVector: [1.0, 2.0, 3.0], filter });
+
+        expect(mockScopeSearchFn).toHaveBeenCalledTimes(2);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]![0])).toContain('metadata filters');
+        expect(JSON.stringify(warn.mock.calls)).not.toContain('sensitive-resource-id');
+      });
+
+      it('does not warn when the filter is empty or absent', async () => {
+        await client.query({ indexName: test_indexName, queryVector: [1.0, 2.0, 3.0], filter: {} });
+        await client.query({ indexName: test_indexName, queryVector: [1.0, 2.0, 3.0] });
+        expect(mockScopeSearchFn).toHaveBeenCalledTimes(2);
+        expect(warn).not.toHaveBeenCalled();
+      });
     });
 
     it('should throw error for empty vectors array in upsert', async () => {

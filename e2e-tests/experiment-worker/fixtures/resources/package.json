@@ -4,16 +4,16 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mastra/core": "experiment-worker-e2e-test",
-    "@mastra/libsql": "experiment-worker-e2e-test",
+    "@mastra/core": "e2e-test",
+    "@mastra/libsql": "e2e-test",
     "execa": "^9.6.1",
-    "typescript": "^5.9.2",
+    "typescript": "^5.9.3",
     "typescript-language-server": "^4.3.4",
     "vscode-jsonrpc": "^8.2.1",
     "vscode-languageserver-protocol": "^3.17.5",
-    "zod": "^3.25.76"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "mastra": "experiment-worker-e2e-test"
+    "mastra": "e2e-test"
   }
 }

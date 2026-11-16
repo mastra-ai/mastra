@@ -17,12 +17,12 @@ describe('optional core preview generator', () => {
     }
   });
 
-  it('generates blank previews, trims supplied text, and caps long custom previews', async () => {
+  it('generates missing previews, preserves blanks, and caps long custom previews', async () => {
     const compat = await import('./preview-compat');
     expect(compat.canGeneratePreviews).toBe(true);
     for (const preview of [undefined, null, '', ' \t\n\u00a0\ufeff ']) {
       expect(compat.needsPreview(preview)).toBe(preview == null);
-      expect(compat.storedPreview(preview, { text: 'payload' })).toBe('payload');
+      expect(compat.storedPreview(preview, { text: 'payload' })).toBe(preview == null ? 'payload' : '');
       expect(compat.readPreview(preview, '{"text":"payload"}', true)).toBe(preview == null ? 'payload' : null);
       expect(compat.readPreview(preview, '"   "', true)).toBeNull();
     }

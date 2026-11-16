@@ -152,7 +152,7 @@ function getTaskText(run: { input?: unknown }): string {
  * import { createRubricScorer } from '@mastra/evals/scorers/prebuilt';
  *
  * const rubricScorer = createRubricScorer({
- *   model: '__GATEWAY_OPENAI_MODEL_MINI__',
+ *   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
  *   criteria: [
  *     { description: 'The response includes an analysis section' },
  *     { description: 'The response includes concrete recommendations' },

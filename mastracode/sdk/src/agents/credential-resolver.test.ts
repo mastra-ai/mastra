@@ -295,7 +295,7 @@ describe('credential store provider registry', () => {
     ctx.set('user', {
       workosId: 'user_1',
       organizationId: 'org_1',
-      ['org' + 'FirstCredentials']: true,
+      orgFirstCredentials: true,
     });
     expect(resolveTenantFromRequestContext(ctx)).toEqual({
       orgId: 'org_1',

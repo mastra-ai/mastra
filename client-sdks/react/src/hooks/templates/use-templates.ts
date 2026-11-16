@@ -120,19 +120,16 @@ async function getTemplateRepoEnvVars({
 
   if (envResponse.ok) {
     const envContent = await envResponse.text();
-    const envVars = envContent.split('\n').reduce(
-      (acc, line) => {
-        if (!line || line.startsWith('#')) return acc; // Skip empty lines and comments
+    const envVars = envContent.split('\n').reduce<Record<string, string>>((acc, line) => {
+      if (!line || line.startsWith('#')) return acc; // Skip empty lines and comments
 
-        const [key, value] = line.split('=');
+      const [key, value] = line.split('=');
 
-        if (key) {
-          acc[key] = value?.split('')?.every(item => item === '*') ? '' : value?.replaceAll('"', '');
-        }
-        return acc;
-      },
-      {} as Record<string, string>,
-    );
+      if (key) {
+        acc[key] = value?.split('')?.every(item => item === '*') ? '' : value?.replaceAll('"', '');
+      }
+      return acc;
+    }, {});
 
     return envVars;
   }
@@ -264,14 +261,14 @@ const processTemplateInstallRecord = (
       ...newState.payload,
       workflowState: {
         ...newState.payload?.workflowState,
-        steps: Object.keys(workflowInfo.allSteps).reduce((acc, stepId) => {
+        steps: Object.keys(workflowInfo.allSteps).reduce<any>((acc, stepId) => {
           acc[stepId] = {
             id: stepId,
             description: workflowInfo.allSteps[stepId].description,
             status: 'pending',
           };
           return acc;
-        }, {} as any),
+        }, {}),
       },
     };
   }

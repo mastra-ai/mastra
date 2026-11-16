@@ -17,6 +17,13 @@ export interface ExecuteDurableAgentScorersParams {
   tracingContext?: Parameters<typeof createObservabilityContext>[0];
   /** Loads response messages the run pruned from its transcript (kept there by id only) from memory. */
   loadStoredMessages?: StoredMessageLoader;
+  /**
+   * Scorer instances parked in-process for this run (see `setRunScorerInstances`), keyed like
+   * `initData.scorers`. They take precedence over name resolution so a scorer
+   * passed at call time (or via `defaultOptions.scorers`) runs even when it is
+   * not registered on Mastra (#27579).
+   */
+  scorerInstances?: Record<string, MastraScorer>;
 }
 
 /**
@@ -27,9 +34,10 @@ export interface ExecuteDurableAgentScorersParams {
  * because its builder was a copy that missed a step core later added. Sharing
  * the implementation means a scorer change lands on every engine at once.
  *
- * Scoring is fire-and-forget and must never affect the run: scorers are
- * resolved by name from the Mastra instance (so this is safe on a worker in
- * another process), and anything that goes wrong is logged and skipped.
+ * Scoring is fire-and-forget and must never affect the run: scorers come from
+ * the in-process run when available, otherwise they are resolved by
+ * name from the Mastra instance (so this is safe on a worker in another
+ * process), and anything that goes wrong is logged and skipped.
  */
 export async function executeDurableAgentScorers({
   initData,
@@ -38,6 +46,7 @@ export async function executeDurableAgentScorers({
   requestContext,
   tracingContext,
   loadStoredMessages,
+  scorerInstances,
 }: ExecuteDurableAgentScorersParams): Promise<void> {
   const scorers = initData.scorers;
   if (!scorers || Object.keys(scorers).length === 0) {
@@ -80,11 +89,13 @@ export async function executeDurableAgentScorers({
       // Scorers are serialized by name. `getScorerById` searches by id-or-name
       // without throwing on the common path, so try it first, then fall back to
       // the registration-key-keyed `getScorer` for older configs.
-      let scorer: MastraScorer | undefined;
-      try {
-        scorer = mastra?.getScorerById?.(scorerName) as MastraScorer | undefined;
-      } catch {
-        scorer = undefined;
+      let scorer: MastraScorer | undefined = scorerInstances?.[scorerKey];
+      if (!scorer) {
+        try {
+          scorer = mastra?.getScorerById?.(scorerName) as MastraScorer | undefined;
+        } catch {
+          scorer = undefined;
+        }
       }
       if (!scorer) {
         try {

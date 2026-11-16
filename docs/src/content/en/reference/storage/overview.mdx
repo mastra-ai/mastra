@@ -28,6 +28,23 @@ Not every storage adapter implements every domain. Composite storage lets you mi
 | `observability` | Traces and spans used by observability exporters and Studio. |
 | `datasets` | Dataset records, versioned items, and dataset versions used by experiments. |
 | `experiments` | Experiment runs and per-item experiment results. |
+| `agents` | Stored agent definitions and their versions, used by the Mastra Editor. |
+| `promptBlocks` | Stored prompt blocks and their versions, used by the Mastra Editor. |
+| `scorerDefinitions` | Stored scorer definitions, used by the Mastra Editor. |
+| `mcpClients` | Stored MCP client configurations, used by the Mastra Editor. |
+| `mcpServers` | Stored MCP server configurations, used by the Mastra Editor. |
+| `workspaces` | Stored workspace configurations, used by the Mastra Editor. |
+| `skills` | Stored skills and their versions, used by the Mastra Editor. |
+| `favorites` | Per-user favorites on stored entities. |
+| `blobs` | Content-addressable blobs keyed by SHA-256 hash. Stores file contents for skill versioning. |
+| `backgroundTasks` | Background task state: creation, status updates, and cleanup. |
+| `schedules` | Schedules polled by the scheduler to trigger workflow and agent runs. |
+| `channels` | Channel installations and configuration for multi-platform integrations. |
+| `harness` | Harness session records. |
+| `toolProviderConnections` | User-assigned names for tool provider connections. |
+| `notifications` | Notification records. |
+| `threadState` | Durable per-thread state, such as task lists and goals. |
+| `knowledge` | Knowledge graph nodes and records (experimental). |
 
 The schema definitions below cover the built-in database-backed tables documented for `memory`, `workflows`, `scores`, and `observability`. Other domains, and non-database adapters, use implementation-specific storage structures.
 

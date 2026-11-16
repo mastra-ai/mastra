@@ -21,6 +21,7 @@ import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
+import type { ProcessOutputResultArgs } from '../../../processors';
 import { InMemoryStore } from '../../../storage';
 import { Agent } from '../../agent';
 import type { CreatedAgentSignal } from '../../signals';
@@ -403,6 +404,85 @@ describe.each([false, true])('DurableAgent signal drain (excluded: %s)', exclude
         expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('forced continuation signal');
       },
     );
+
+    it('saves output-processor data on the last reply when the predicate drain rotates the id', async () => {
+      // A signal drained on the run's last allowed step rotates the response
+      // message id, then the loop stops before any reply uses it. The
+      // finish-time writer must still land on the last real assistant reply
+      // instead of saving the data part as its own message.
+      const memory = new MockMemory();
+      const threadId = `thread-fallback-drain-${excluded}`;
+      const resourceId = 'resource-fallback-drain';
+
+      const receiptWriter = {
+        id: 'order-receipt',
+        processOutputResult: async ({ writer, messages }: ProcessOutputResultArgs) => {
+          await writer?.custom({ type: 'data-order-card', data: { orderId: 'A-1' } });
+          return messages;
+        },
+      };
+
+      const agent = new Agent({
+        id: 'fallback-drain-agent',
+        name: 'fallback-drain-agent',
+        instructions: 'You are helpful.',
+        model: makeSimpleTextModel(),
+        memory,
+        outputProcessors: [receiptWriter],
+      });
+
+      const durableAgent = createDurableAgent({ agent, pubsub });
+
+      // Drain 1 is the step-side drain before the model runs; drain 2 is the
+      // loop predicate, reached after the only allowed step.
+      const originalGet = globalRunRegistry.get.bind(globalRunRegistry);
+      let installedDrain = false;
+      let pendingDrainCount = 0;
+      let drainedAtPredicate = false;
+      vi.spyOn(globalRunRegistry, 'get').mockImplementation((runId: string) => {
+        const entry = originalGet(runId);
+        if (entry && !installedDrain) {
+          installedDrain = true;
+          const originalDrain = entry.drainPendingSignals;
+          entry.drainPendingSignals = (scope?: 'pending' | 'pre-run') => {
+            if ((scope ?? 'pending') === 'pending') {
+              pendingDrainCount++;
+              if (pendingDrainCount === 2) {
+                drainedAtPredicate = true;
+                return [createTestSignal('late signal')];
+              }
+            }
+            return originalDrain?.(scope) ?? [];
+          };
+        }
+        return entry;
+      });
+
+      const { fullStream, cleanup } = await durableAgent.stream('Hello', {
+        memory: { thread: threadId, resource: resourceId },
+        maxSteps: 1,
+      });
+      for await (const _chunk of fullStream) {
+        // drain
+      }
+      await cleanup?.();
+
+      // Guard: the signal was drained by the loop predicate after the last
+      // allowed step, so the response id rotated with no reply to carry it.
+      expect(drainedAtPredicate).toBe(true);
+
+      await vi.waitFor(async () => {
+        const { messages } = await memory.recall({ threadId, resourceId });
+        expect(messages.filter(message => message.role === 'assistant')).toHaveLength(1);
+      });
+
+      const { messages } = await memory.recall({ threadId, resourceId });
+      const [reply] = messages.filter(message => message.role === 'assistant');
+      const parts = reply?.content.parts ?? [];
+
+      expect(parts.some(part => part.type === 'text')).toBe(true);
+      expect(parts.some(part => part.type === 'data-order-card')).toBe(true);
+    });
   });
 });
 

@@ -689,7 +689,7 @@ describe('step-finish token usage extraction', () => {
         modes: [{ id: 'default', name: 'Default', default: true }],
       });
       await owner.init();
-      const first = await owner.createSession({ id: 'first', ownerId: 'shared-usage', scope: 'first' });
+      const first = await owner.createSession({ id: 'first', ownerId: 'shared-usage' });
       const threadId = first.thread.requireId();
       const memory = (await storage.getStore('memory'))!;
       const save = memory.saveThread.bind(memory);
@@ -703,7 +703,6 @@ describe('step-finish token usage extraction', () => {
       const second = await owner.createSession({
         id: 'second',
         ownerId: 'shared-usage',
-        scope: 'second',
         createInitialThread: false,
       });
       try {

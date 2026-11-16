@@ -1,7 +1,8 @@
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import type { ReactNode } from 'react';
 
-import { CommittedInput, type SaveEnvironment } from './CommittedInput';
+import { CommittedInput } from './CommittedInput';
+import type { SaveEnvironment } from './CommittedInput';
 
 /**
  * Where the repositories are cloned, the one command that runs there after
@@ -23,30 +24,23 @@ export function WorkspaceSetupBlock({
 }) {
   return (
     <SettingsContainer>
-      <SettingsRow label="Working directory" description="Absolute path the repositories are cloned under.">
-        <div className="w-full lg:max-w-96">
-          <CommittedInput
-            label="Working directory"
-            placeholder="/workspace"
-            value={workdir ?? ''}
-            disabled={disabled}
-            onCommit={raw => onSave({ sandboxWorkingDirectory: raw || null })}
-          />
-        </div>
+      <SettingsRow label="Working directory" description="Absolute path where repositories are cloned.">
+        <CommittedInput
+          label="Working directory"
+          placeholder="/workspace"
+          value={workdir ?? ''}
+          disabled={disabled}
+          onCommit={raw => onSave({ sandboxWorkingDirectory: raw || null })}
+        />
       </SettingsRow>
-      <SettingsRow
-        label="Setup command"
-        description="Runs in the working directory once every repository is cloned and its own setup command has finished, while the template builds."
-      >
-        <div className="w-full lg:max-w-96">
-          <CommittedInput
-            label="Setup command"
-            value={command ?? ''}
-            placeholder="e.g. ./scripts/bootstrap.sh"
-            disabled={disabled}
-            onCommit={next => onSave({ workspaceSetupCommand: next || null })}
-          />
-        </div>
+      <SettingsRow label="Setup command" description="Runs from the working directory once every repository is cloned.">
+        <CommittedInput
+          label="Setup command"
+          value={command ?? ''}
+          placeholder="e.g. ./scripts/bootstrap.sh"
+          disabled={disabled}
+          onCommit={next => onSave({ workspaceSetupCommand: next || null })}
+        />
       </SettingsRow>
       {children}
     </SettingsContainer>

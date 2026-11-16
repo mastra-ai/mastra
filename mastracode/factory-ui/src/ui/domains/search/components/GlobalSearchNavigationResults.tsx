@@ -1,8 +1,13 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
-import { Brain, GitPullRequest, ListChecks, ScrollText, Settings, SquareKanban, Timeline } from 'lucide-react';
+import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
+import { IconChecklist } from '@mastra/playground-ui/icons/central/IconChecklist';
+import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
+import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
+import { IconSettingsGear1 } from '@mastra/playground-ui/icons/central/IconSettingsGear1';
 
-import { everyEventPath } from '../../factory/activity';
+import { PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
 import { rememberedBoardPath } from '../../factory/services/boardViews';
 import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../../settings/settingsSections';
@@ -17,112 +22,84 @@ export function GlobalSearchNavigationResults({
   return (
     <CommandGroup heading="Navigation">
       <CommandPaletteItem
-        icon={<SquareKanban />}
+        icon={<IconKanbanView />}
         title="Work"
         subtitle="Factory navigation"
         value={`Work Factory navigation /factories/${factoryId}/work`}
-        onSelect={() => onSelect(rememberedBoardPath(factoryId, 'work'), false)}
+        onSelect={() => onSelect(rememberedBoardPath(factoryId, DEFAULT_BOARD_ID), false)}
       />
       <CommandPaletteItem
-        icon={<GitPullRequest />}
-        title="Review"
+        icon={<IconPullRequest />}
+        title="Pull requests"
         subtitle="Factory navigation"
-        value={`Review Factory navigation /factories/${factoryId}/review`}
-        onSelect={() => onSelect(rememberedBoardPath(factoryId, 'review'), false)}
+        value={`Pull requests Review Factory navigation /factories/${factoryId}/work`}
+        onSelect={() => onSelect(`/factories/${factoryId}/work?source=${PULL_REQUEST_SOURCE_FILTER}`, false)}
       />
       <CommandPaletteItem
-        icon={<Timeline />}
-        title="Activity"
-        subtitle="Factory navigation"
-        value={`Activity Factory navigation needs attention overview /factories/${factoryId}/activity`}
-        onSelect={() => onSelect(`/factories/${factoryId}/activity`, false)}
-      />
-      <CommandPaletteItem
-        icon={<ListChecks />}
+        icon={<IconChecklist />}
         title="Rules"
         subtitle="Factory navigation"
         value={`Rules Factory navigation /factories/${factoryId}/rules`}
         onSelect={() => onSelect(`/factories/${factoryId}/rules`, false)}
       />
       <CommandPaletteItem
-        icon={<ScrollText />}
-        title="Audit log"
-        subtitle="Factory navigation"
-        value={`Audit log every event Activity Factory navigation ${everyEventPath(factoryId)}`}
-        onSelect={() => onSelect(everyEventPath(factoryId), false)}
-      />
-      <CommandPaletteItem
-        icon={<Brain />}
+        icon={<IconBrain />}
         title="Knowledge"
         subtitle="Factory navigation"
         value={`Knowledge Factory navigation /factories/${factoryId}/knowledge`}
         onSelect={() => onSelect(`/factories/${factoryId}/knowledge`, false)}
       />
       <CommandPaletteItem
-        icon={<Settings />}
+        icon={<IconSettingsGear1 />}
         title={SETTINGS_SECTION_LABELS.preferences}
         subtitle="Settings"
         value={`Preferences Settings preferences ${settingsSectionPath(factoryId, 'preferences')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'preferences'), true)}
       />
       <CommandPaletteItem
-        icon={<Settings />}
+        icon={<IconSettingsGear1 />}
         title={SETTINGS_SECTION_LABELS.factory}
         subtitle="Settings"
         value={`Factory Settings factory ${settingsSectionPath(factoryId, 'factory')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'factory'), true)}
       />
       <CommandPaletteItem
-        icon={<Settings />}
+        icon={<IconSettingsGear1 />}
         title={SETTINGS_SECTION_LABELS.connections}
         subtitle="Settings"
         value={`Connections Settings connections ${settingsSectionPath(factoryId, 'connections')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'connections'), true)}
       />
       <CommandPaletteItem
-        icon={<Settings />}
+        icon={<IconSettingsGear1 />}
         title={SETTINGS_SECTION_LABELS.repositories}
         subtitle="Settings"
         value={`Repositories Settings repositories ${settingsSectionPath(factoryId, 'repositories')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'repositories'), true)}
       />
       <CommandPaletteItem
-        icon={<Settings />}
+        icon={<IconSettingsGear1 />}
         title={SETTINGS_SECTION_LABELS.intake}
         subtitle="Settings"
-        value={`Work Intake Settings intake ${settingsSectionPath(factoryId, 'intake')}`}
+        value={`Work Intake Settings intake routes new cards ${settingsSectionPath(factoryId, 'intake')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'intake'), true)}
       />
       <CommandPaletteItem
-        icon={<Settings />}
+        icon={<IconSettingsGear1 />}
         title={SETTINGS_SECTION_LABELS.models}
-        subtitle="Factory settings"
-        value={`Factory Models Settings models ${settingsSectionPath(factoryId, 'models')}`}
+        subtitle="Settings"
+        value={`Models Settings models personal factory defaults providers ${settingsSectionPath(factoryId, 'models')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'models'), true)}
       />
       <CommandPaletteItem
-        icon={<Settings />}
-        title={SETTINGS_SECTION_LABELS['personal-models']}
-        subtitle="Your settings"
-        value={`Your personal Models Settings ${settingsSectionPath(factoryId, 'personal-models')}`}
-        onSelect={() => onSelect(settingsSectionPath(factoryId, 'personal-models'), true)}
-      />
-      <CommandPaletteItem
-        icon={<Settings />}
+        icon={<IconSettingsGear1 />}
         title={SETTINGS_SECTION_LABELS.memory}
-        subtitle="Your settings"
-        value={`Your personal Memory Settings memory observational ${settingsSectionPath(factoryId, 'memory')}`}
+        subtitle="Settings"
+        value={`Memory Settings memory personal factory shared observational ${settingsSectionPath(factoryId, 'memory')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'memory'), true)}
       />
       <CommandPaletteItem
-        icon={<Settings />}
-        title={SETTINGS_SECTION_LABELS['factory-memory']}
-        subtitle="Factory settings"
-        value={`Factory Memory Settings memory observational ${settingsSectionPath(factoryId, 'factory-memory')}`}
-        onSelect={() => onSelect(settingsSectionPath(factoryId, 'factory-memory'), true)}
-      />
-      <CommandPaletteItem
-        icon={<Settings />}
+        icon={<IconSettingsGear1 />}
         title={SETTINGS_SECTION_LABELS.behavior}
         subtitle="Settings"
         value={`Behavior Settings behavior ${settingsSectionPath(factoryId, 'behavior')}`}

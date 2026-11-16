@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { builtinBoardCatalog, releaseBoard } from '../../../../../../e2e/ui/board-catalog';
+import { builtinBoardCatalog, releaseBoard, workBoardCatalog } from '../../../../../../e2e/ui/board-catalog';
 import {
   collapsedRowsKeepingActive,
   customGroupOrder,
@@ -12,7 +12,7 @@ import type { SessionGroup, SessionGroupBy, SessionGroupContext } from '../sessi
 import type { SessionListRow } from '../sessionRows';
 import { factoryRow, testSession, testWorkItem, userRow } from './fixtures/sessionRows';
 
-const [workBoard, reviewBoard] = builtinBoardCatalog.boards;
+const [workBoard] = builtinBoardCatalog.boards;
 
 const workRow = factoryRow(testSession('work-1', { branch: 'factory/issue-1' }));
 const reviewRow = factoryRow(testSession('review-1', { branch: 'factory/pr-2' }));
@@ -38,19 +38,38 @@ function ownedRow(sessionId: string, userId: string, name: string) {
 }
 
 describe('groupSessionRows by board', () => {
-  it('orders Work, Review, custom boards, then User, whatever the catalog order', () => {
+  it('orders Work, custom boards, then User, whatever the catalog order, with pull request reviews on Work', () => {
     const groups = groupRows(
       [userRow('user-1'), releaseRow, reviewRow, workRow],
       'board',
-      { boards: [reviewBoard, releaseBoard, workBoard], viewerUserId: undefined },
+      { boards: [releaseBoard, workBoard], viewerUserId: undefined },
+      [],
+    );
+
+    expect(groupSummary(groups)).toEqual([
+      { label: 'Work', sessionIds: ['review-1', 'work-1'] },
+      { label: 'Release Preview', sessionIds: ['release-1'] },
+      { label: 'User', sessionIds: ['user-1'] },
+    ]);
+  });
+
+  it('shows Slack-origin user sessions together, separate from web sessions and boards', () => {
+    const groups = groupRows(
+      [
+        userRow('web-1'),
+        userRow('slack-1', { branch: 'slack/123.456' }),
+        workRow,
+        userRow('slack-2', { branch: 'slack/789.012' }),
+      ],
+      'board',
+      builtinContext,
       [],
     );
 
     expect(groupSummary(groups)).toEqual([
       { label: 'Work', sessionIds: ['work-1'] },
-      { label: 'Review', sessionIds: ['review-1'] },
-      { label: 'Release Preview', sessionIds: ['release-1'] },
-      { label: 'User', sessionIds: ['user-1'] },
+      { label: 'User', sessionIds: ['web-1'] },
+      { label: 'Slack', sessionIds: ['slack-1', 'slack-2'] },
     ]);
   });
 
@@ -91,7 +110,8 @@ describe('groupSessionRows by board', () => {
 
     const ordered = orderGroupHeadings(defaults, ['user', 'board:gone', 'board:review']);
 
-    expect(ordered.map(heading => heading.label)).toEqual(['User', 'Review', 'Work', 'Release Preview']);
+    // The retired Review board's stored key is stale like any other gone board.
+    expect(ordered.map(heading => heading.label)).toEqual(['User', 'Work', 'Release Preview', 'Slack']);
   });
 });
 

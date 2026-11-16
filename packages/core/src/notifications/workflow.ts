@@ -3,6 +3,7 @@ import type { Schedule } from '../storage/domains/schedules/base';
 import { createStep, createWorkflow } from '../workflows/evented';
 import { computeNextFireAt } from '../workflows/scheduler';
 import { dispatchDueNotifications } from './dispatcher';
+import type { NotificationsStorage } from './storage';
 
 export const NOTIFICATION_DISPATCH_WORKFLOW_ID = '__mastra_notification_dispatcher';
 
@@ -31,6 +32,22 @@ export type NotificationDispatchConfig = {
   cron?: string;
   batchSize?: number;
 };
+
+/**
+ * Upper bound passed as `now` to find every pending record with a due time,
+ * however far ahead. Year 9999 stays inside every adapter's timestamp range.
+ */
+const FAR_FUTURE = new Date('9999-12-31T23:59:59.999Z');
+
+/**
+ * True when some pending notification has a `deliverAt` or `summaryAt`, i.e.
+ * the dispatcher still has work now or later. Records without a due time are
+ * never picked up by a dispatch pass, so they don't count.
+ */
+export async function hasPendingDeferredNotifications(storage: NotificationsStorage): Promise<boolean> {
+  const pending = await storage.listDueNotifications({ now: FAR_FUTURE, limit: 1 });
+  return pending.length > 0;
+}
 
 export function parseNotificationDispatchNow(input?: string): Date {
   const now = input ? new Date(input) : new Date();
@@ -94,6 +111,10 @@ export function createNotificationDispatchWorkflow({
         now,
         limit: inputData.limit ?? batchSize,
       });
+
+      // Stop the once-a-minute cron when nothing is left to deliver, so an
+      // idle app stops polling storage. The next deferral re-arms it.
+      await mastra.__releaseNotificationDispatchIfIdle();
 
       return { delivered: result.delivered.length, failed: result.failed.length };
     },

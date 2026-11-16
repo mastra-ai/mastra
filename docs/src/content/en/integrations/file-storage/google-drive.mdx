@@ -1,21 +1,37 @@
 ---
 title: "Google Drive | File Storage"
-description: "Store Mastra workspace files in a Google Drive folder with service-account authentication, POSIX paths, directory mapping, and read-only mode."
+description: "Give Mastra agents Google Drive tools through Mastra Connect, and store workspace files in a Drive folder with service-account authentication."
 packages:
+  - "@mastra/connect"
   - "@mastra/google-drive"
 ---
 
+import GoogleDriveConnectTools from "@site/src/components/connect/generated/google-drive.mdx";
+
 # Google Drive
 
-Stores files in a single Google Drive folder. Each directory maps to a Drive folder under the configured root, and paths use POSIX semantics (for example `/notes/todo.txt`). For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
+Use Google Drive with Mastra in two ways:
 
-## Installation
+- **Agent tools** let an agent find, upload, and organize files across a Google Drive account through [Mastra Connect](/docs/mastra-platform/connect).
+- **[Workspace filesystem](#workspace-filesystem)** stores an agent's workspace files in one Google Drive folder, using the `@mastra/google-drive` package.
+
+## Connect
+
+Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get-started) to install `@mastra/connect` and configure your platform project.
+
+<GoogleDriveConnectTools />
+
+## Workspace filesystem
+
+`GoogleDriveFilesystem` stores files in a single Google Drive folder. Each directory maps to a Drive folder under the configured root, and paths use POSIX semantics (for example `/notes/todo.txt`). For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
+
+### Installation
 
 ```bash npm2yarn
 npm install @mastra/google-drive
 ```
 
-## Usage
+### Usage
 
 Add a `GoogleDriveFilesystem` to a workspace and assign it to an agent:
 
@@ -34,12 +50,12 @@ const workspace = new Workspace({
 const agent = new Agent({
   id: 'drive-agent',
   name: 'Drive Agent',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   workspace,
 })
 ```
 
-### Authentication
+#### Authentication
 
 Supply one of the following authentication options:
 
@@ -47,11 +63,11 @@ Supply one of the following authentication options:
 - **`getAccessToken`**: A callback that returns a token. Useful when tokens are refreshed externally.
 - **`serviceAccount`**: A Google service account. Share the target folder with the service account email.
 
-#### Service account
+##### Service account
 
 Service account auth is the recommended option for backend agents. No user consent flow and no token refresh handling is required. You only need **two values** from the service account JSON key file: `client_email` and `private_key`.
 
-##### Set up the service account
+###### Set up the service account
 
 1. Open the [Google Cloud Console](https://console.cloud.google.com/) and select or create a project.
 1. Go to **APIs & Services > Library**, search for **Google Drive API**, and select **Enable**.
@@ -59,7 +75,7 @@ Service account auth is the recommended option for backend agents. No user conse
 1. Open the new service account, go to the **Keys** tab, and select **Add key > Create new key > JSON**. The browser downloads a JSON key file.
 1. Copy the `client_email` value from the JSON file. This is the address you share Drive folders with.
 
-##### Share the Drive folder with the service account
+###### Share the Drive folder with the service account
 
 The service account is its own Google identity. It can't see anything in Drive until you share with it explicitly.
 
@@ -71,7 +87,7 @@ The service account is its own Google identity. It can't see anything in Drive u
 
 :::warning
 
-Service accounts can't create files in standard "My Drive" folders. A service account has no personal Drive storage quota, so any file it creates needs to be owned by a quota-bearing entity. If you only share a personal Drive folder, read operations work but writes fail with a quota error.
+Service accounts can't create files in standard "My Drive" folders. A service account has no personal Drive storage quota. Any file it creates must be owned by a quota-bearing entity. If you only share a personal Drive folder, read operations work but writes fail with a quota error.
 
 For write access, place the folder inside a **shared drive** (formerly Team Drive) and add the service account as a member of that shared drive. Shared drives provide the storage quota that service-account-created files need.
 
@@ -79,7 +95,7 @@ Read-only workloads against a personal Drive folder don't have this restriction.
 
 :::
 
-##### Configure the filesystem
+###### Configure the filesystem
 
 Copy `client_email` and `private_key` from the JSON file into your environment:
 
@@ -106,13 +122,13 @@ You **don't** need to copy the entire JSON file or pass other fields like `proje
 
 `GoogleDriveFilesystem` automatically normalizes the `privateKey` string before signing. It strips surrounding quotes, including escaped quotes from JSON-wrapped values, and converts literal `\n` sequences to real newlines. It also normalizes `\r\n` line endings, and removes a trailing comma. The key works regardless of how your `.env` loader handles the value.
 
-##### Troubleshoot
+###### Troubleshoot
 
 - **`404 File not found: <folderId>`**: The service account doesn't have access to the folder. Confirm the folder is shared with the exact `client_email` address and that the folder ID matches the URL.
 - **`storageQuotaExceeded` on write**: The folder is in a personal "My Drive". Move the folder to a shared drive and add the service account as a member.
 - **`error:1E08010C:DECODER routines::unsupported`**: The `privateKey` value is malformed. Confirm the value contains the full PEM block and that newlines are preserved (literal `\n` is fine).
 
-### Read-only mode
+#### Read-only mode
 
 Pass `readOnly: true` to block write operations (`writeFile`, `appendFile`, `deleteFile`, `copyFile`, `moveFile`, `mkdir`, `rmdir`).
 
@@ -124,7 +140,7 @@ const filesystem = new GoogleDriveFilesystem({
 })
 ```
 
-## Constructor parameters
+### Constructor parameters
 
 <PropertiesTable
   content={[
@@ -175,7 +191,7 @@ const filesystem = new GoogleDriveFilesystem({
 ]}
 />
 
-## Properties
+### Properties
 
 <PropertiesTable
   content={[
@@ -202,7 +218,7 @@ const filesystem = new GoogleDriveFilesystem({
 ]}
 />
 
-## Methods
+### Methods
 
 GoogleDriveFilesystem implements the [WorkspaceFilesystem interface](/reference/workspace/filesystem), providing all standard filesystem methods:
 
@@ -218,7 +234,7 @@ GoogleDriveFilesystem implements the [WorkspaceFilesystem interface](/reference/
 - `stat(path)` - Return Drive metadata for a file or folder
 - `exists(path)` - Check if a file or folder exists
 
-## Notes
+### Notes
 
 - Google Drive allows multiple files with the same name in a folder. `GoogleDriveFilesystem` resolves paths by picking the first match, so keep names unique within each folder when you rely on path-based lookup.
 - `writeFile` creates parent folders automatically when `recursive` is unset (the default) or `true`. Set `recursive: false` to require the parent folder to already exist.

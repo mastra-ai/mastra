@@ -2,22 +2,24 @@ import { retryWithExponentialBackoff } from '@ai-sdk/provider-utils-v7';
 import {
   APICallError,
   Experimental_DecisionUnsupportedQuestionTypeError as DecisionUnsupportedQuestionTypeError,
-  type Experimental_DecisionModelV4 as DecisionModelV4,
-  type Experimental_DecisionModelV4Answer as DecisionModelV4Answer,
-  type Experimental_DecisionModelV4CallOptions as DecisionModelV4CallOptions,
-  type Experimental_DecisionModelV4Input as DecisionModelV4Input,
-  type Experimental_DecisionModelV4Question as DecisionModelV4Question,
-  type Experimental_DecisionModelV4Result as DecisionModelV4Result,
-  type Experimental_DecisionModelV4State as DecisionModelV4State,
-  type Experimental_EvaluationModelV4 as EvaluationModelV4,
-  type SharedV4ProviderMetadata,
-  type SharedV4ProviderOptions,
-  type SharedV4Warning,
+} from '@ai-sdk/provider-v7';
+import type {
+  Experimental_DecisionModelV4 as DecisionModelV4,
+  Experimental_DecisionModelV4Answer as DecisionModelV4Answer,
+  Experimental_DecisionModelV4CallOptions as DecisionModelV4CallOptions,
+  Experimental_DecisionModelV4Input as DecisionModelV4Input,
+  Experimental_DecisionModelV4Question as DecisionModelV4Question,
+  Experimental_DecisionModelV4Result as DecisionModelV4Result,
+  Experimental_DecisionModelV4State as DecisionModelV4State,
+  Experimental_EvaluationModelV4 as EvaluationModelV4,
+  SharedV4ProviderMetadata,
+  SharedV4ProviderOptions,
+  SharedV4Warning,
 } from '@ai-sdk/provider-v7';
 
 import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
-import { SpanType } from '../observability/types';
+import { EntityType, SpanType } from '../observability/types';
 import { getOrCreateSpan, resolveCurrentSpan } from '../observability/utils';
 
 export type ClassifierState = DecisionModelV4Input;
@@ -178,6 +180,41 @@ export type ClassifierResult<QUESTIONS extends ClassifierQuestions> = {
   };
 };
 
+/** Ids of the run a classifier decision belongs to. Each one is set only when the caller knows it. */
+export type ClassifierDecisionIds = {
+  runId?: string;
+  threadId?: string;
+  resourceId?: string;
+  messageId?: string;
+  traceId?: string;
+  spanId?: string;
+};
+
+/**
+ * A classifier call and its result, as passed to audit callbacks such as `ClassifierProcessor`'s `onDecision`.
+ * `result` is set when the classifier answered and `error` when the call failed.
+ */
+export type ClassifierDecision<QUESTIONS extends ClassifierQuestions> = {
+  classifierId: string;
+  /** The state sent to the classifier. */
+  state: ClassifierState;
+  /** Time spent in the classifier call, including retries. */
+  durationMs: number;
+  ids: ClassifierDecisionIds;
+} & (ClassifierDecisionSuccess<QUESTIONS> | ClassifierDecisionError);
+
+/** A successful classifier decision, containing the result and no error. */
+type ClassifierDecisionSuccess<QUESTIONS extends ClassifierQuestions> = {
+  result: ClassifierResult<QUESTIONS>;
+  error?: never;
+};
+
+/** A failed classifier decision, containing the error and no result. */
+type ClassifierDecisionError = {
+  result?: never;
+  error: unknown;
+};
+
 type CommonDecideOptions = {
   state: ClassifierState;
   abortSignal?: AbortSignal;
@@ -306,6 +343,9 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
     const span = getOrCreateSpan({
       type: SpanType.CLASSIFIER_EVALUATION,
       name: `classifier evaluate: '${this.id}'`,
+      entityType: EntityType.CLASSIFIER,
+      entityId: this.id,
+      entityName: this.name ?? this.id,
       tracingContext: { currentSpan: resolveCurrentSpan() },
       mastra: this.#mastra,
       input: { state: options.state, questions },

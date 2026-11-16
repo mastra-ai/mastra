@@ -2,37 +2,6 @@ import type { EntityType } from '@mastra/core/observability';
 import type { ListTracesArgs } from '@mastra/core/storage';
 import { ROOT_ENTITY_TYPES } from '@mastra/react/hooks/traces';
 import type { TraceListMode, TraceMetadataFilterField } from '@mastra/react/hooks/traces';
-import {
-  ActivityIcon,
-  BoxIcon,
-  BracesIcon,
-  BuildingIcon,
-  ClockIcon,
-  CloudIcon,
-  CpuIcon,
-  FingerprintIcon,
-  FlaskConicalIcon,
-  GaugeIcon,
-  GitBranchIcon,
-  GlobeIcon,
-  HashIcon,
-  LayersIcon,
-  MessageCircleIcon,
-  MessageSquareIcon,
-  PercentIcon,
-  PlayIcon,
-  RadioIcon,
-  ServerIcon,
-  ShapesIcon,
-  StarIcon,
-  TagIcon,
-  TagsIcon,
-  ThumbsUpIcon,
-  TimerIcon,
-  TriangleAlertIcon,
-  UserIcon,
-  WaypointsIcon,
-} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
   isTraceFilterGroup,
@@ -58,6 +27,35 @@ import type {
   FilterBarSuggestionsResolver,
 } from '@/ds/components/FilterBar/types';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
+import { IconAgents } from '@/ds/icons/central/IconAgents';
+import { IconBox } from '@/ds/icons/central/IconBox';
+import { IconBranch } from '@/ds/icons/central/IconBranch';
+import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
+import { IconBubbleWide } from '@/ds/icons/central/IconBubbleWide';
+import { IconBuildings } from '@/ds/icons/central/IconBuildings';
+import { IconChip } from '@/ds/icons/central/IconChip';
+import { IconCloud } from '@/ds/icons/central/IconCloud';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
+import { IconElectrocardiogram } from '@/ds/icons/central/IconElectrocardiogram';
+import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
+import { IconFingerPrint1 } from '@/ds/icons/central/IconFingerPrint1';
+import { IconFlag2 } from '@/ds/icons/central/IconFlag2';
+import { IconFormOctagon } from '@/ds/icons/central/IconFormOctagon';
+import { IconGauge } from '@/ds/icons/central/IconGauge';
+import { IconGlobe } from '@/ds/icons/central/IconGlobe';
+import { IconHashtag } from '@/ds/icons/central/IconHashtag';
+import { IconLab } from '@/ds/icons/central/IconLab';
+import { IconLayersTwo } from '@/ds/icons/central/IconLayersTwo';
+import { IconPercent } from '@/ds/icons/central/IconPercent';
+import { IconPlay } from '@/ds/icons/central/IconPlay';
+import { IconServer } from '@/ds/icons/central/IconServer';
+import { IconShapesPlusXSquareCircle } from '@/ds/icons/central/IconShapesPlusXSquareCircle';
+import { IconSignalTower } from '@/ds/icons/central/IconSignalTower';
+import { IconStar } from '@/ds/icons/central/IconStar';
+import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
+import { IconTag } from '@/ds/icons/central/IconTag';
+import { IconThumbsUp } from '@/ds/icons/central/IconThumbsUp';
+import { IconUser } from '@/ds/icons/central/IconUser';
 
 export type {
   TraceFilterGroup,
@@ -80,6 +78,7 @@ export const ROOT_ENTITY_TYPE_OPTIONS = [
   { label: 'Workflow', entityType: ROOT_ENTITY_TYPES.WORKFLOW },
   { label: 'Scorer', entityType: ROOT_ENTITY_TYPES.SCORER },
   { label: 'Ingest', entityType: ROOT_ENTITY_TYPES.INGEST },
+  { label: 'Classifier', entityType: ROOT_ENTITY_TYPES.CLASSIFIER },
 ] as const satisfies readonly EntityOptions[];
 
 export type TraceStatusFilter = 'running' | 'success' | 'error';
@@ -152,6 +151,8 @@ export const TRACE_PROPERTY_FILTER_PARAM_BY_FIELD = {
   entityName: 'filterEntityName',
   traceId: 'filterTraceId',
   durationMs: 'filterDurationMs',
+  timeToFirstChunkMs: 'filterTimeToFirstChunkMs',
+  timeToFirstTokenMs: 'filterTimeToFirstTokenMs',
   runId: 'filterRunId',
   threadId: 'filterThreadId',
   sessionId: 'filterSessionId',
@@ -162,11 +163,15 @@ export const TRACE_PROPERTY_FILTER_PARAM_BY_FIELD = {
   serviceName: 'filterServiceName',
   environment: 'filterEnvironment',
   experimentId: 'filterExperimentId',
+  outcome: 'filterOutcome',
+  stopReason: 'filterStopReason',
   'spans.name': 'filterSpanName',
   'spans.spanType': 'filterSpanType',
   'spans.model': 'filterSpanModel',
   'spans.provider': 'filterSpanProvider',
   'spans.durationMs': 'filterSpanDurationMs',
+  'spans.timeToFirstChunkMs': 'filterSpanTimeToFirstChunkMs',
+  'spans.timeToFirstTokenMs': 'filterSpanTimeToFirstTokenMs',
   'spans.error': 'filterSpanError',
   'scores.scorerId': 'filterScorerId',
   'scores.score': 'filterScore',
@@ -296,12 +301,12 @@ export const TRACE_FILTER_BAR_OPERATORS: (FilterBarOperator & { id: TraceFilterO
   { id: 'notMatches', label: 'does not match', freeText: true },
 ];
 
-const TRACE_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn', 'exists', 'notExists'];
+export const TRACE_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn', 'exists', 'notExists'];
 /** Human-written text fields also support case-insensitive word matching. */
-const TRACE_TEXT_OPERATORS: TraceFilterOperatorId[] = [...TRACE_STRING_OPERATORS, 'matches', 'notMatches'];
+export const TRACE_TEXT_OPERATORS: TraceFilterOperatorId[] = [...TRACE_STRING_OPERATORS, 'matches', 'notMatches'];
 /** Fields every trace carries (`traceId`, `entityName`): presence operators would never be false. */
-const TRACE_REQUIRED_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn'];
-const TRACE_NUMBER_OPERATORS: TraceFilterOperatorId[] = [
+export const TRACE_REQUIRED_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn'];
+export const TRACE_NUMBER_OPERATORS: TraceFilterOperatorId[] = [
   'is',
   'isNot',
   'gt',
@@ -313,8 +318,8 @@ const TRACE_NUMBER_OPERATORS: TraceFilterOperatorId[] = [
 ];
 /** Root duration: only ranges make sense on a millisecond value. */
 const TRACE_ROOT_DURATION_OPERATORS: TraceFilterOperatorId[] = ['gt', 'gte', 'lt', 'lte'];
-const TRACE_PRESENCE_OPERATORS: TraceFilterOperatorId[] = ['exists', 'notExists'];
-const TRACE_TAGS_OPERATORS: TraceFilterOperatorId[] = ['in', 'notIn', 'exists', 'notExists'];
+export const TRACE_PRESENCE_OPERATORS: TraceFilterOperatorId[] = ['exists', 'notExists'];
+export const TRACE_TAGS_OPERATORS: TraceFilterOperatorId[] = ['in', 'notIn', 'exists', 'notExists'];
 const TRACE_TAGS_OPERATOR_TO_QUERY_OP: Partial<Record<TraceFilterOperatorId, string>> = {
   in: 'includes',
   notIn: 'notIncludes',
@@ -329,15 +334,17 @@ export type TraceQueryCanonicalFieldDescriptor = {
   valueSuggestions: boolean;
 };
 /** Synthetic fields live in a single dedicated URL param, so they cannot carry an operator. */
-const TRACE_SYNTHETIC_OPERATORS: TraceFilterOperatorId[] = ['is', 'in'];
+export const TRACE_SYNTHETIC_OPERATORS: TraceFilterOperatorId[] = ['is', 'in'];
 // The legacy list endpoint only matches by equality.
 const TRACE_LEGACY_OPERATORS: TraceFilterOperatorId[] = ['is'];
 
-const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
+export const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
   rootEntityType: 'Primitive type',
   entityName: 'Primitive name',
   entityId: 'Primitive ID',
   status: 'Status',
+  outcome: 'Outcome',
+  stopReason: 'Stop reason',
   tags: 'Tags',
   serviceName: 'Service Name',
   environment: 'Environment',
@@ -352,10 +359,14 @@ const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
   experimentId: 'Experiment ID',
   'spans.name': 'Span name',
   'spans.spanType': 'Span type',
-  'spans.model': 'Model',
+  'spans.model': 'Span Model',
   'spans.provider': 'Provider',
   durationMs: 'Duration (ms)',
+  timeToFirstChunkMs: 'Time to first chunk (ms)',
+  timeToFirstTokenMs: 'Time to first token (ms)',
   'spans.durationMs': 'Span duration (ms)',
+  'spans.timeToFirstChunkMs': 'Span time to first chunk (ms)',
+  'spans.timeToFirstTokenMs': 'Span time to first token (ms)',
   'spans.error': 'Span error',
   'scores.scorerId': 'Scorer',
   'scores.score': 'Score',
@@ -365,36 +376,91 @@ const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
 };
 
 const TRACE_FILTER_BAR_FIELD_ICONS: Record<string, LucideIcon> = {
-  timeRange: ClockIcon,
-  rootEntityType: BoxIcon,
-  entityName: TagIcon,
-  entityId: FingerprintIcon,
-  status: ActivityIcon,
-  tags: TagsIcon,
-  serviceName: ServerIcon,
-  environment: GlobeIcon,
-  traceId: WaypointsIcon,
-  runId: PlayIcon,
-  threadId: MessageSquareIcon,
-  sessionId: LayersIcon,
-  requestId: RadioIcon,
-  resourceId: HashIcon,
-  userId: UserIcon,
-  organizationId: BuildingIcon,
-  experimentId: FlaskConicalIcon,
-  'spans.name': GitBranchIcon,
-  'spans.spanType': ShapesIcon,
-  'spans.model': CpuIcon,
-  'spans.provider': CloudIcon,
-  durationMs: TimerIcon,
-  'spans.durationMs': TimerIcon,
-  'spans.error': TriangleAlertIcon,
-  'scores.scorerId': GaugeIcon,
-  'scores.score': PercentIcon,
-  'feedback.feedbackType': ThumbsUpIcon,
-  'feedback.value': StarIcon,
-  'feedback.comment': MessageCircleIcon,
+  rootEntityType: IconBox,
+  entityName: IconTag,
+  entityId: IconFingerPrint1,
+  status: IconElectrocardiogram,
+  outcome: IconFlag2,
+  stopReason: IconFormOctagon,
+  tags: IconTag,
+  serviceName: IconServer,
+  environment: IconGlobe,
+  traceId: IconAgents,
+  runId: IconPlay,
+  threadId: IconBubbleWide,
+  sessionId: IconLayersTwo,
+  requestId: IconSignalTower,
+  resourceId: IconHashtag,
+  userId: IconUser,
+  organizationId: IconBuildings,
+  experimentId: IconLab,
+  'spans.name': IconBranch,
+  'spans.spanType': IconShapesPlusXSquareCircle,
+  'spans.model': IconChip,
+  'spans.provider': IconCloud,
+  durationMs: IconStopwatch,
+  timeToFirstChunkMs: IconStopwatch,
+  timeToFirstTokenMs: IconStopwatch,
+  'spans.durationMs': IconStopwatch,
+  'spans.timeToFirstChunkMs': IconStopwatch,
+  'spans.timeToFirstTokenMs': IconStopwatch,
+  'spans.error': IconExclamationTriangle,
+  'scores.scorerId': IconGauge,
+  'scores.score': IconPercent,
+  'feedback.feedbackType': IconThumbsUp,
+  'feedback.value': IconStar,
+  'feedback.comment': IconBubbleText,
 };
+
+/** Which optional trace query fields the server declares support for. */
+export type TraceQueryFieldSupport = {
+  /** Root `durationMs`, declared by `traceQueryRootDuration`. */
+  withRootDuration?: boolean;
+  /** Root and span `timeToFirstChunkMs`, declared by `traceQueryTimeToFirstChunk`. */
+  withTimeToFirstChunk?: boolean;
+  /** Root and span `timeToFirstTokenMs`, declared by `traceQueryTimeToFirstToken`. */
+  withTimeToFirstToken?: boolean;
+  /** Root `outcome` and `stopReason`, declared by `traceQueryOutcomeFields`. */
+  withOutcomeFields?: boolean;
+};
+
+const ROOT_DURATION_FIELD_IDS = ['durationMs'];
+const OUTCOME_FIELD_IDS = ['outcome', 'stopReason'];
+const TIME_TO_FIRST_CHUNK_FIELD_IDS = ['timeToFirstChunkMs', 'spans.timeToFirstChunkMs'];
+const TIME_TO_FIRST_TOKEN_FIELD_IDS = ['timeToFirstTokenMs', 'spans.timeToFirstTokenMs'];
+
+/** The optional fields this server can't query: each needs its capability. */
+export const traceQueryUnqueryableFieldIds = ({
+  withRootDuration = false,
+  withTimeToFirstChunk = false,
+  withTimeToFirstToken = false,
+  withOutcomeFields = false,
+}: TraceQueryFieldSupport): ReadonlySet<string> =>
+  new Set([
+    ...(withRootDuration ? [] : ROOT_DURATION_FIELD_IDS),
+    ...(withOutcomeFields ? [] : OUTCOME_FIELD_IDS),
+    ...(withTimeToFirstChunk ? [] : TIME_TO_FIRST_CHUNK_FIELD_IDS),
+    ...(withTimeToFirstToken ? [] : TIME_TO_FIRST_TOKEN_FIELD_IDS),
+  ]);
+
+/** Which streaming timings the store records. Spans and threads query them without a prefix. */
+export type StreamingTimingSupport = Required<
+  Pick<TraceQueryFieldSupport, 'withTimeToFirstChunk' | 'withTimeToFirstToken'>
+>;
+
+/** `fieldIds` without the streaming timings the store doesn't record: the query rejects a condition on one. */
+export function withoutUnrecordedStreamingTimings(
+  fieldIds: ReadonlySet<string>,
+  { withTimeToFirstChunk, withTimeToFirstToken }: StreamingTimingSupport,
+): ReadonlySet<string> {
+  if (withTimeToFirstChunk && withTimeToFirstToken) return fieldIds;
+  return new Set(
+    [...fieldIds].filter(
+      id =>
+        (withTimeToFirstChunk || id !== 'timeToFirstChunkMs') && (withTimeToFirstToken || id !== 'timeToFirstTokenMs'),
+    ),
+  );
+}
 
 export const traceFilterFieldIcon = (fieldId: string) => TRACE_FILTER_BAR_FIELD_ICONS[fieldId];
 
@@ -427,6 +493,8 @@ const TRACE_FILTER_BAR_RELATED_FIELD_IDS = [
   'spans.model',
   'spans.provider',
   'spans.durationMs',
+  'spans.timeToFirstChunkMs',
+  'spans.timeToFirstTokenMs',
   'spans.error',
   'scores.scorerId',
   'scores.score',
@@ -442,6 +510,22 @@ const TRACE_FILTER_BAR_TEXT_MATCH_FIELD_IDS = new Set<string>(['spans.name', 'fe
 const TRACE_FILTER_BAR_FREE_TEXT_RELATED_FIELD_IDS = new Set<string>(['feedback.comment']);
 
 const byLabel = (a: FilterBarField, b: FilterBarField) => a.label.localeCompare(b.label);
+
+/** Outcome and stop reason: free text (custom spans set arbitrary values) with discovered suggestions. */
+export function createOutcomeFilterBarFields(
+  base: (id: string) => Pick<FilterBarField, 'id' | 'label' | 'icon' | 'color'>,
+  valueSuggestions?: (path: string) => FilterBarSuggestionsResolver | undefined,
+): FilterBarField[] {
+  return (['outcome', 'stopReason'] as const).map(id => {
+    const suggestions = valueSuggestions?.(id);
+    return {
+      ...base(id),
+      operators: TRACE_STRING_OPERATORS,
+      ...(id === 'outcome' ? { operatorLabels: { notExists: 'is not recorded' } } : {}),
+      ...(suggestions ? { suggestions } : {}),
+    };
+  });
+}
 
 /** The Tags field, or `undefined` until the backend describes `tags`: its operators
  *  can't be inferred safely from the static catalog. Only UI operators whose query
@@ -476,10 +560,8 @@ export function createTraceFilterBarFields({
   canonicalTraceFields = [],
   valueSuggestions,
   withQueryTrace = true,
-  withRootDuration = false,
-}: {
-  /** Offer the root `durationMs` field. Only when the server declares `traceQueryRootDuration`. */
-  withRootDuration?: boolean;
+  ...support
+}: TraceQueryFieldSupport & {
   /** Trace-scope field descriptors from the query discovery endpoint. Empty when discovery is unavailable. */
   canonicalTraceFields?: readonly TraceQueryCanonicalFieldDescriptor[];
   availableRootEntityNames: string[];
@@ -561,7 +643,7 @@ export function createTraceFilterBarFields({
     .map(({ path, suggestions }) => ({
       id: path,
       label: path.slice(TRACE_METADATA_FILTER_FIELD_PREFIX.length),
-      icon: BracesIcon,
+      icon: IconCodeBrackets,
       color: traceFilterFieldColor(path),
       operators: TRACE_STRING_OPERATORS,
       suggestions,
@@ -571,6 +653,7 @@ export function createTraceFilterBarFields({
   const tagsFields = tagsField ? [tagsField] : [];
 
   const hidden = new Set(hiddenFieldIds);
+  const unqueryable = traceQueryUnqueryableFieldIds(support);
   if (!withQueryTrace) {
     return [...pickFields.sort(byLabel), ...textFields.sort(byLabel)].map(field => ({
       ...field,
@@ -582,12 +665,15 @@ export function createTraceFilterBarFields({
     ...[...pickFields, ...tagsFields].sort(byLabel),
     ...[
       ...textFields,
-      ...(withRootDuration ? [{ ...number('durationMs'), operators: TRACE_ROOT_DURATION_OPERATORS }] : []),
+      { ...number('durationMs'), operators: TRACE_ROOT_DURATION_OPERATORS },
+      number('timeToFirstChunkMs'),
+      number('timeToFirstTokenMs'),
+      ...createOutcomeFilterBarFields(traceFieldBase, path => valueSuggestions?.('trace', path)),
     ].sort(byLabel),
     ...relatedFields,
     ...metadataBarFields.sort(byLabel),
   ]
-    .filter(field => !TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(field.id))
+    .filter(field => !TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(field.id) && !unqueryable.has(field.id))
     .map(field => (hidden.has(field.id) ? { ...field, hidden: true } : field));
 }
 

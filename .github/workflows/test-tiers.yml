@@ -1,0 +1,117 @@
+name: Test tiers
+
+# Keeps tiers.json on the orphan ci/test-tiers branch current. Prebuild's affected-test
+# selection skips `out` files on PRs that don't edit them (scripts/test-tiers/select.mjs).
+#
+# - After a versioning-PR (changeset-release/*) Prebuild run fails, its failing unit test
+#   files move `in`.
+# - Daily, PR failures that the PR fixed in source (catches) restart their file's 30-day
+#   clock, deleted files leave, and files clean for 30 days move `out`.
+# - Bootstrap: run manually with seed=true to create the branch from scripts/test-tiers/seed.mjs.
+# - Rollback: delete the ci/test-tiers branch; selection then runs every file.
+on:
+  workflow_run:
+    workflows: [Prebuild]
+    types: [completed]
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: Create ci/test-tiers from the seed if it doesn't exist
+        type: boolean
+        default: false
+      scope:
+        description: Seed scope (all = every test file, core-list = the timed core Affected UNIT files)
+        type: choice
+        options: [all, core-list]
+        default: all
+
+# Every run writes the same file on the same branch, so runs go one at a time.
+concurrency:
+  group: test-tiers
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  update:
+    name: Update test tiers
+    if: >-
+      github.repository == 'mastra-ai/mastra' && (
+        github.event_name != 'workflow_run' || (
+          github.event.workflow_run.event == 'pull_request' &&
+          github.event.workflow_run.conclusion == 'failure' &&
+          github.event.workflow_run.head_repository.full_name == github.repository &&
+          startsWith(github.event.workflow_run.head_branch, 'changeset-release/')
+        )
+      )
+    runs-on: starsling-ubuntu-26.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          install-dependencies: false
+
+      - name: Check out ci/test-tiers
+        id: branch
+        env:
+          SEED: ${{ github.event_name == 'workflow_dispatch' && inputs.seed }}
+          SCOPE: ${{ inputs.scope || 'all' }}
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if git ls-remote --exit-code --heads origin ci/test-tiers > /dev/null; then
+            git fetch --depth 1 origin ci/test-tiers
+            git worktree add --detach "$RUNNER_TEMP/tiers" FETCH_HEAD
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          elif [ "$SEED" = "true" ]; then
+            git worktree add --detach "$RUNNER_TEMP/tiers"
+            git -C "$RUNNER_TEMP/tiers" switch --orphan ci/test-tiers
+            node scripts/test-tiers/seed.mjs --scope="$SCOPE" --out="$RUNNER_TEMP/tiers/tiers.json"
+            git -C "$RUNNER_TEMP/tiers" add tiers.json
+            git -C "$RUNNER_TEMP/tiers" commit --quiet -m "test tiers: seed ($SCOPE)"
+            git -C "$RUNNER_TEMP/tiers" push origin HEAD:refs/heads/ci/test-tiers
+            echo "Seeded ci/test-tiers ($SCOPE)."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "No ci/test-tiers branch; run this workflow with seed=true to create it."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Move versioning-PR failures in
+        if: steps.branch.outputs.exists == 'true' && github.event_name == 'workflow_run'
+        env:
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: node scripts/test-tiers/update.mjs versioning --tiers="$RUNNER_TEMP/tiers/tiers.json" --run-id="$RUN_ID"
+
+      - name: Record PR catches and move clean files out
+        if: steps.branch.outputs.exists == 'true' && github.event_name != 'workflow_run'
+        run: node scripts/test-tiers/update.mjs daily --tiers="$RUNNER_TEMP/tiers/tiers.json"
+
+      - name: Commit tiers.json
+        if: steps.branch.outputs.exists == 'true'
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          cd "$RUNNER_TEMP/tiers"
+          if git diff --quiet; then
+            echo "tiers.json unchanged."
+            exit 0
+          fi
+          git add tiers.json
+          git commit --quiet -m "test tiers: update ($EVENT)"
+          git push origin HEAD:refs/heads/ci/test-tiers

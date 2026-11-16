@@ -1,6 +1,6 @@
 {
   "name": "@observability/test-utils",
-  "version": "0.1.1-alpha.0",
+  "version": "0.1.1",
   "description": "Test utilities for observability exporters",
   "type": "module",
   "private": true,

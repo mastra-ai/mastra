@@ -78,6 +78,13 @@ const agent = new Agent({
     isOptional: true,
   },
   {
+    name: 'user',
+    type: 'string',
+    description:
+      "OS user to run sandbox commands as, by name. Defaults to the template's own user. Use it to run agent commands as a second, unprivileged user: mounting still runs as the default user, which needs `sudo`. Set `owner` on a mount to give the command user read and write access to it. The user must already exist in the template.",
+    isOptional: true,
+  },
+  {
     name: 'workingDirectory',
     type: 'string',
     description:
@@ -177,6 +184,12 @@ const agent = new Agent({
     description:
       'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
   },
+  {
+    name: 'filesystem',
+    type: 'E2BSandboxFilesystem',
+    description:
+      "The sandbox's disk through E2B's files API. Each operation starts the sandbox if needed and retries once when the sandbox died server-side. Paths are absolute and not confined to a root. Copies, appends, and no-overwrite writes run as one command in the VM. See [Native filesystem](/reference/workspace/sandbox#native-filesystem).",
+  },
 ]}
 />
 
@@ -214,7 +227,9 @@ await handle.sendStdin('input\n')
 await handle.kill()
 ```
 
-The E2B process manager supports reconnecting to processes that were spawned externally or before a reconnection. Call `get(pid)` with a PID to connect to an existing process:
+`list()` returns the processes running in the sandbox, including ones this manager didn't start, plus exited processes whose output hasn't been read yet.
+
+The E2B process manager supports reconnecting to processes that were spawned externally or before a reconnection. Call `get(pid)` with a PID to connect to an existing process. Output written before connecting isn't available:
 
 ```typescript
 const handle = await sandbox.processes.get(existingPid)
@@ -272,6 +287,27 @@ E2B sandboxes use FUSE (Filesystem in Userspace) to mount cloud storage:
 - **Azure Blob**: Mounted via [blobfuse2](https://github.com/Azure/azure-storage-fuse)
 
 The E2B sandbox automatically installs the required FUSE tools when mounting is used. For best performance, pre-build a custom template with the tools installed.
+
+### Running commands as another user
+
+Mounting needs `sudo`, so the template's default user is privileged: any command it runs can read the credentials staged for a mount and become root. To give agent commands less privilege, run them as a second user and set the owner of each mount to that user's uid and gid:
+
+```typescript
+const workspace = new Workspace({
+  mounts: {
+    '/s3-data': new S3Filesystem({
+      bucket: 'my-s3-bucket',
+      region: 'us-east-1',
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      owner: { uid: 1001, gid: 1001 },
+    }),
+  },
+  sandbox: new E2BSandbox({ id: 'dev-sandbox', user: 'agent' }),
+})
+```
+
+`owner` sets the uid and gid of the files inside the mount, so the `user` running commands can read and write them. Without it, the mount is owned by the user that mounted it. Create the user in the template first; E2B runs a command as that user but doesn't create it.
 
 ## Custom templates
 
@@ -559,7 +595,10 @@ setup (with runtime-injected auth) does the clone.
 Setup commands that need their own credentials — a registry token, a private
 index URL — take them through `buildEnv`, which accepts a record or an async
 resolver. Those values are part of the template's identity, so changing one
-produces a new template.
+produces a new template. To keep values out of the template name, also pass a
+`buildEnvRevision`. The values still reach the build steps like the clone
+credential, but only the revision names the template. Change the revision
+whenever the values change.
 
 `repoTemplateRef` computes the tagged ref for a spec without building
 anything — useful for pruning old sha tags with the E2B CLI.

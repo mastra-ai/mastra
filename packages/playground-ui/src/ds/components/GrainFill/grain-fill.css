@@ -1,3 +1,5 @@
+@layer properties, theme, base, components, utilities;
+
 /* Utilities can override this default with absolute/fixed positioning. */
 @layer components {
   [data-grain-tone] {

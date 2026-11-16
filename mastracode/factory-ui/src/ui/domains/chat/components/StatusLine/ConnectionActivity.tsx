@@ -1,10 +1,8 @@
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { Circle } from 'lucide-react';
-
 import { useChatConnection } from '../../context/useChatConnection';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { useChatTranscript } from '../../context/useChatTranscript';
 import { usePreparingThreadId } from '../../hooks/usePreparingThreadId';
+import { IconFormCircle } from '@mastra/playground-ui/icons/central/IconFormCircle';
 
 const statusItem = 'inline-flex items-center gap-1 text-muted-foreground [&_svg]:text-placeholder';
 
@@ -14,29 +12,13 @@ export function ConnectionActivity() {
   const { phase } = useChatTranscript();
   const preparingThreadId = usePreparingThreadId();
 
-  // A dropped stream makes every other status stale, the composer's working ring included.
-  if (status === 'reconnecting')
-    return (
-      <span className={statusItem} role="status" aria-live="polite">
-        <Circle size={10} /> Reconnecting…
-      </span>
-    );
-  if (status === 'error')
-    return (
-      <span
-        className={cn(statusItem, 'text-destructive-foreground [&_svg]:text-destructive-foreground')}
-        role="status"
-        aria-live="polite"
-        title="Check the server and reload to reconnect"
-      >
-        <Circle size={10} /> Disconnected
-      </span>
-    );
+  // The notice above the composer owns connection failures; other activity is stale until recovery.
+  if (status === 'reconnecting' || status === 'error') return null;
   // preparing message sets busy; preparation status takes precedence
   if (preparingThreadId)
     return (
       <span className={statusItem} role="status" aria-live="polite">
-        <Circle size={10} /> {workspacePending ? 'Preparing workspace…' : 'Connecting…'}
+        <IconFormCircle size={10} /> {workspacePending ? 'Preparing workspace…' : 'Connecting…'}
       </span>
     );
   // Spinning composer ring is the visible cue; this keeps the state announced.

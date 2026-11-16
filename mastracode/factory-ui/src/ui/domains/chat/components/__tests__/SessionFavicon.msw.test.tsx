@@ -59,6 +59,15 @@ describe('SessionFavicon', () => {
 
       expect(faviconHref()).toBe('/mastra.svg');
     });
+
+    it('restores the dev favicon when the page started with it', () => {
+      document.head.innerHTML = '<link rel="icon" type="image/svg+xml" href="/mastra-dev.svg">';
+      const { rerender, unmount } = renderWithProviders(<SessionFavicon state="working" />);
+      rerender(<SessionFavicon state="awaiting" />);
+      unmount();
+
+      expect(faviconHref()).toBe('/mastra-dev.svg');
+    });
   });
 
   describe('when preparation finishes on a session that was already awaiting', () => {

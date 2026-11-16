@@ -1,11 +1,11 @@
 import type { MemorySearchResult, MemorySearchResponse } from '@mastra/client-js';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { formatRelativeTime } from '@mastra/playground-ui/utils/relative-time';
-import { ExternalLink } from 'lucide-react';
 import { useState, useCallback, useRef, useEffect } from 'react';
 
 interface MemorySearchProps {
@@ -196,7 +196,7 @@ export const MemorySearch = ({
       <SearchInput
         label="Search memory"
         className="shrink-0"
-        placeholder="Search memory..."
+        placeholder="Search memory"
         value={query}
         onValueChange={handleInputChange}
         onKeyDown={handleKeyDown}
@@ -278,10 +278,10 @@ export const MemorySearch = ({
                                 )}
                                 title={result.threadTitle}
                               >
-                                • {result.threadTitle}
+                                {result.threadTitle}
                               </Txt>
                               {result.threadId !== currentThreadId && (
-                                <ExternalLink className="h-3 w-3 text-info-indicator" />
+                                <IconSquareArrowTopRight className="h-3 w-3 text-info-indicator" />
                               )}
                             </div>
                           )}

@@ -714,7 +714,9 @@ export class DockerSandbox extends MastraSandbox {
     if (signal) signal.addEventListener('abort', onAbort, { once: true });
 
     try {
-      await container.putArchive(pack, { path: '/', abortSignal: signal });
+      // tar-stream's bundled types describe a streamx Readable, which dockerode
+      // pipes fine at runtime but doesn't match NodeJS.ReadableStream structurally.
+      await container.putArchive(pack as unknown as NodeJS.ReadableStream, { path: '/', abortSignal: signal });
     } catch (error) {
       if (signal?.aborted) throw new SandboxAbortError('writeFiles');
       throw new SandboxError(

@@ -1,10 +1,11 @@
-import type { WorkItemRow } from '@mastra/factory/storage/domains/work-items/base';
+import type { Card } from '@mastra/factory/storage/domains/work-items/base';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { queryKeys } from '../../api/keys';
@@ -26,8 +27,8 @@ function deferred() {
   return { promise, resolve };
 }
 
-function stubReviewBoard(candidate = false, decision?: FactoryDecisionSummary) {
-  const items: WorkItemRow[] = candidate ? [] : [{ ...reviewItem, stages: decision ? ['review'] : ['intake'] }];
+function stubReviewBoard(decision?: FactoryDecisionSummary) {
+  const items: Card[] = [{ ...reviewItem, stages: decision ? ['pr-review'] : ['intake'] }];
   const decisions: FactoryDecisionSummary[] = decision ? [decision] : [];
   const runningSessionIds: string[] = [];
   const data = { items, decisions, runningSessionIds, transitionCommitted: false, decisionRefreshStarted: false };
@@ -42,22 +43,12 @@ function stubReviewBoard(candidate = false, decision?: FactoryDecisionSummary) {
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${projectUrl}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: 'repo-1',
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
           },
         ],
       }),
@@ -70,9 +61,7 @@ function stubReviewBoard(candidate = false, decision?: FactoryDecisionSummary) {
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/prs`, () =>
-      HttpResponse.json({ pullRequests: candidate ? [reviewCandidate] : [], nextPage: null }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
     http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/prs/42`, () =>
       HttpResponse.json({
         ...reviewCandidate,
@@ -102,7 +91,7 @@ function stubReviewBoard(candidate = false, decision?: FactoryDecisionSummary) {
     http.post(`${projectUrl}/work-items/${reviewItem.id}/transition`, async ({ request }) => {
       transitions.push(await request.json());
       await transitionGate.promise;
-      data.items = data.items.map(item => ({ ...item, stages: ['review'], revision: 2 }));
+      data.items = data.items.map(item => ({ ...item, stages: ['pr-review'], revision: 2 }));
       data.decisions = [{ ...reviewDecision }];
       data.transitionCommitted = true;
       const result: FactoryTransitionResult = {
@@ -110,7 +99,7 @@ function stubReviewBoard(candidate = false, decision?: FactoryDecisionSummary) {
         transitionId: 'transition-1',
         itemId: reviewItem.id,
         revision: 2,
-        stage: 'review',
+        stage: 'pr-review',
         decisions: [],
       };
       return HttpResponse.json({ result });
@@ -127,18 +116,20 @@ function stubReviewBoard(candidate = false, decision?: FactoryDecisionSummary) {
 }
 
 function renderReviewBoard() {
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/review`] });
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
 describe('Review card action lifecycle', () => {
-  it.each([true, false])('keeps Review busy from Intake through kickoff (candidate: %s)', async candidate => {
-    const { data, transitions, transitionGate, decisionsGate } = stubReviewBoard(candidate);
+  it('keeps Review busy from Intake through kickoff', async () => {
+    const { data, transitions, transitionGate, decisionsGate } = stubReviewBoard();
     const user = userEvent.setup();
     const { client } = renderReviewBoard();
-    await user.click(await screen.findByRole('button', { name: 'Review' }));
+    // The Review column's own header is a button of that name: press the card's.
+    const card = await screen.findByRole('article', { name: reviewItem.title });
+    await user.click(within(card).getByRole('button', { name: 'Review' }));
 
-    const reviewing = screen.getByRole('region', { name: 'Reviewing' });
+    const reviewing = screen.getByRole('region', { name: 'Review' });
     await waitFor(() => expect(within(reviewing).getByRole('button', { name: 'Moving…' })).toBeDisabled());
     expect(within(reviewing).queryByRole('button', { name: 'Review' })).toBeNull();
 
@@ -182,11 +173,11 @@ describe('Review card action lifecycle', () => {
     );
     expect(within(panel).queryByRole('button', { name: 'Review' })).toBeNull();
     await waitFor(() => expect(within(panel).queryByText('Starting an automated run…')).toBeNull());
-    expect(transitions).toEqual([expect.objectContaining({ board: 'review', stage: 'review', cause: 'card_action' })]);
+    expect(transitions).toEqual([expect.objectContaining({ board: 'work', stage: 'pr-review', cause: 'card_action' })]);
   });
 
   it('keeps automatic and manual retries busy, and offers Retry after a final failure', async () => {
-    const { data, retries, retryGate } = stubReviewBoard(false, {
+    const { data, retries, retryGate } = stubReviewBoard({
       ...reviewDecision,
       status: 'retry',
       attempts: 1,
@@ -197,7 +188,7 @@ describe('Review card action lifecycle', () => {
     await waitForMutationsIdle(client);
     const card = await screen.findByTestId('work-item-card');
     expect(within(card).getByRole('button', { name: 'Retrying…' })).toBeDisabled();
-    expect(within(card).getByText('Automated run could not start — retrying…')).toBeVisible();
+    expect(within(card).getByText('Automated run could not start. Retrying…')).toBeVisible();
     expect(within(card).queryByRole('button', { name: 'Review' })).toBeNull();
 
     data.decisions = [{ ...reviewDecision, status: 'failed', canRetry: true, attempts: 5, lastError: 'Timeout' }];

@@ -1,13 +1,13 @@
 ---
 title: "Reference: UnicodeNormalizer | Processors"
-description: "Use UnicodeNormalizer to standardize input text into a selected Unicode form and remove problematic characters before messages reach the language model."
+description: "Use UnicodeNormalizer to normalize input text to Unicode NFKC form, standardize whitespace, and optionally strip control characters before messages reach the language model."
 packages:
   - "@mastra/core"
 ---
 
 # UnicodeNormalizer
 
-The `UnicodeNormalizer` is an **input processor** that normalizes Unicode text to ensure consistent formatting and remove potentially problematic characters before messages are sent to the language model. This processor handles Unicode representations and removes control characters. It also standardizes whitespace formatting.
+The `UnicodeNormalizer` is an **input processor** that normalizes Unicode text to ensure consistent formatting and remove potentially problematic characters before messages are sent to the language model. This processor always normalizes text to Unicode NFKC form. The normalization form isn't configurable. It also standardizes whitespace formatting. Control character removal is opt-in: set `stripControlChars` to `true` to enable it.
 
 ## Usage example
 

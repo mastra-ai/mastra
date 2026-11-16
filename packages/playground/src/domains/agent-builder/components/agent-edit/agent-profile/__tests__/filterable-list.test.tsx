@@ -58,7 +58,7 @@ describe('FilterableList', () => {
 
     const input = getByTestId('list-filter-search');
     expect(input).toBeTruthy();
-    fireEvent.change(input!, { target: { value: 'bet' } });
+    fireEvent.change(input, { target: { value: 'bet' } });
 
     await waitFor(() => expect(queryByTestId('list-filter-item-alpha')).toBeNull());
     expect(queryByTestId('list-filter-item-beta')).toBeTruthy();
@@ -98,7 +98,7 @@ describe('FilterableList', () => {
     const { getByTestId, findByText } = renderList();
 
     const input = getByTestId('list-filter-search');
-    fireEvent.change(input!, { target: { value: 'zzz' } });
+    fireEvent.change(input, { target: { value: 'zzz' } });
 
     expect(await findByText('No matches')).toBeTruthy();
   });

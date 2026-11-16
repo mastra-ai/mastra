@@ -19,7 +19,7 @@ Use this when a session ends and you want a summary or structured extraction of 
 
 ```typescript
 const result = await memory.summarizeThread({
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   threadId: 'thread-123',
   instructions: 'Summarize this voicemail call for the business owner.',
 })
@@ -38,7 +38,7 @@ const result = await memory.summarizeThread({
   {
     name: 'model',
     type: 'string | LanguageModel | DynamicModel',
-    description: "Model that runs the summarization, such as a router string like '__GATEWAY_OPENAI_MODEL_MINI__'.",
+    description: "Model that runs the summarization, such as a router string like '__GATEWAY_OPENAI_MODEL_LUNA__'.",
     isOptional: false,
   },
   {
@@ -146,7 +146,7 @@ const callSummary = new Extractor({
 
 export async function onCallEnd(threadId: string, resourceId: string) {
   await memory.summarizeThread({
-    model: '__GATEWAY_OPENAI_MODEL_MINI__',
+    model: '__GATEWAY_OPENAI_MODEL_LUNA__',
     threadId,
     resourceId,
     instructions: 'Summarize this voicemail call for the business owner.',

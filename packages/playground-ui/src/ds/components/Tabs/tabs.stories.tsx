@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Activity, ChartNoAxesColumnIncreasing, Settings } from 'lucide-react';
 import { useState } from 'react';
 import type { ComponentProps, CSSProperties } from 'react';
 import { Button } from '../Button/Button';
@@ -7,6 +6,9 @@ import { TabContent } from './tabs-content';
 import { TabList } from './tabs-list';
 import { Tabs } from './tabs-root';
 import { Tab } from './tabs-tab';
+import { IconChart3 } from '@/ds/icons/central/IconChart3';
+import { IconElectrocardiogram } from '@/ds/icons/central/IconElectrocardiogram';
+import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
 
 const meta: Meta<typeof Tabs> = {
   title: 'Navigation/Tabs',
@@ -102,21 +104,21 @@ function ContainedExample({
           <TabList>
             {visibleTabs.includes('activity') && (
               <Tab value="activity" onClose={closeHandler('activity')}>
-                <Activity aria-hidden="true" className="size-4" />
+                <IconElectrocardiogram aria-hidden="true" className="size-4" />
                 Activity
                 <span className="rounded-full bg-surface-overlay-strong px-2 py-0.5 text-meta tabular-nums">12</span>
               </Tab>
             )}
             {visibleTabs.includes('traces') && (
               <Tab value="traces" attention={attention} onClose={closeHandler('traces')}>
-                <ChartNoAxesColumnIncreasing aria-hidden="true" className="size-4" />
+                <IconChart3 aria-hidden="true" className="size-4" />
                 Traces
                 <span className="rounded-full bg-surface-overlay-strong px-2 py-0.5 text-meta tabular-nums">248</span>
               </Tab>
             )}
             {visibleTabs.includes('settings') && (
               <Tab value="settings" onClose={closeHandler('settings')}>
-                <Settings aria-hidden="true" className="size-4" />
+                <IconSettingsGear1 aria-hidden="true" className="size-4" />
                 Settings
               </Tab>
             )}
@@ -210,10 +212,10 @@ export const ManyTabs: Story = {
     <Tabs defaultTab="tab1" className="w-125">
       <TabList>
         <Tab value="tab1">Overview</Tab>
-        <Tab value="tab2">Usage Metrics</Tab>
-        <Tab value="tab3">Connected Tools</Tab>
-        <Tab value="tab4">Tracing Options</Tab>
-        <Tab value="tab5">Advanced Settings</Tab>
+        <Tab value="tab2">Usage metrics</Tab>
+        <Tab value="tab3">Connected tools</Tab>
+        <Tab value="tab4">Tracing options</Tab>
+        <Tab value="tab5">Advanced settings</Tab>
       </TabList>
       <TabContent value="tab1">
         <div className="p-4 text-foreground">Content 1</div>

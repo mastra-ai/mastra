@@ -8,26 +8,30 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/components/review-status-badge';
+import { SpanPayloadToolCalls } from '@mastra/playground-ui/domains/traces/components/span-payload/span-payload-primitives';
+import { IconCalendar1 } from '@mastra/playground-ui/icons/central/IconCalendar1';
+import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
+import { IconCircleRecord } from '@mastra/playground-ui/icons/central/IconCircleRecord';
+import { IconClipboard2 } from '@mastra/playground-ui/icons/central/IconClipboard2';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconFingerPrint1 } from '@mastra/playground-ui/icons/central/IconFingerPrint1';
+import { IconLab } from '@mastra/playground-ui/icons/central/IconLab';
+import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { getShortId } from '@mastra/playground-ui/utils/id';
 import { useTraceFeedback } from '@mastra/react/hooks/traces';
-import {
-  CalendarIcon,
-  CheckCircle,
-  CircleDotIcon,
-  ClipboardPlus,
-  FingerprintIcon,
-  FlaskConical,
-  TagIcon,
-  X,
-} from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import { useExperimentResultUsage } from '../hooks/use-experiment-result-usage';
-import { getResultErrorMessage, getResultOutputText } from '../utils/result-output';
+import {
+  getMissingTextNotice,
+  getResultErrorMessage,
+  getResultOutputText,
+  getResultToolCalls,
+} from '../utils/result-output';
 import { sideDurationMs } from './comparison/build-comparison-rows';
 import { ComparisonMetricList } from './comparison/comparison-metric-list';
 import type { ComparisonMetric } from './comparison/comparison-metric-list';
@@ -160,6 +164,8 @@ function ExperimentResultPanelBody({
   const inputStr = formatValue(result.input);
   const outputStr = formatValue(result.output);
   const outputText = getResultOutputText(result);
+  const toolCalls = getResultToolCalls(result);
+  const missingTextNotice = getMissingTextNotice(result);
   const canFlag = onFlagForReview && result.status !== 'needs-review' && result.status !== 'complete';
   const tags = Array.isArray(result.tags) ? result.tags : [];
   const selectedResults = useMemo(() => [result], [result]);
@@ -190,14 +196,14 @@ function ExperimentResultPanelBody({
     ...usageMetrics,
     {
       id: 'item-id',
-      icon: <FingerprintIcon />,
+      icon: <IconFingerPrint1 />,
       label: 'Item Id',
       value: (
         <span className="flex items-center gap-1.5">
           <span className="font-mono" title={result.itemId}>
             {getShortId(result.itemId)}
           </span>
-          <CopyButton content={result.itemId} tooltip="Copy Item Id to clipboard" variant="link" />
+          <CopyButton content={result.itemId} tooltip="Copy item ID to clipboard" variant="link" />
         </span>
       ),
       delta: null,
@@ -206,7 +212,7 @@ function ExperimentResultPanelBody({
       ? [
           {
             id: 'created',
-            icon: <CalendarIcon />,
+            icon: <IconCalendar1 />,
             label: 'Created',
             value: formatDate(result.createdAt, 'date-time'),
             delta: null,
@@ -217,7 +223,7 @@ function ExperimentResultPanelBody({
       ? [
           {
             id: 'status',
-            icon: <CircleDotIcon />,
+            icon: <IconCircleRecord />,
             label: 'Status',
             value: <ReviewStatusBadge status={result.status} />,
             delta: null,
@@ -228,7 +234,7 @@ function ExperimentResultPanelBody({
       ? [
           {
             id: 'tags',
-            icon: <TagIcon />,
+            icon: <IconTag />,
             label: 'Tags',
             value: (
               <ResultTags
@@ -288,7 +294,19 @@ function ExperimentResultPanelBody({
           </ComparisonSection>
         ) : (
           <ComparisonSection title="Output" framed actions={<CopyButton content={outputStr} />}>
-            <ComparisonPayload value={outputText ?? result.output} />
+            {missingTextNotice ? (
+              <Txt tone="muted" className="p-3 break-words">
+                {missingTextNotice}
+              </Txt>
+            ) : (
+              <ComparisonPayload value={outputText ?? result.output} />
+            )}
+          </ComparisonSection>
+        )}
+
+        {toolCalls.length > 0 && (
+          <ComparisonSection title={`Tool calls (${toolCalls.length})`}>
+            <SpanPayloadToolCalls toolCalls={toolCalls} />
           </ComparisonSection>
         )}
 
@@ -301,29 +319,29 @@ function ExperimentResultPanelBody({
     <>
       <DataPanel.Header>
         {canFlag && (
-          <Button size="sm" variant="primary" onClick={() => onFlagForReview!(result.id)} icon={<ClipboardPlus />}>
+          <Button size="sm" variant="primary" onClick={() => onFlagForReview(result.id)} icon={<IconClipboard2 />}>
             Request review
           </Button>
         )}
         {onComplete && result.status === 'needs-review' && (
-          <Button size="sm" variant="primary" onClick={onComplete} icon={<CheckCircle />}>
+          <Button size="sm" variant="primary" onClick={onComplete} icon={<IconCircleCheck />}>
             Mark as reviewed
           </Button>
         )}
         <DataPanel.HeaderActions>
           {experimentLink && (
             <Button
-              size="sm"
+              size="icon-sm"
               variant="ghost"
               render={<Link href={experimentLink} />}
               tooltip="See experiment"
               aria-label="See experiment"
             >
-              <FlaskConical />
+              <IconLab />
             </Button>
           )}
           {result.traceId && onShowTrace && (
-            <Button size="sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
+            <Button size="icon-sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
               <TraceIcon />
             </Button>
           )}
@@ -401,7 +419,7 @@ function ResultTags({ tags, selectedResults, onTagsChange, tagVocabulary, isUpda
               onClick={() => onTagsChange(tags.filter(t => t !== tag))}
               className="cursor-pointer rounded-sm hover:opacity-70 disabled:opacity-50"
             >
-              <X className="size-3" />
+              <IconCrossMedium className="size-3" />
             </button>
           )}
         </ComputedTag>

@@ -244,34 +244,34 @@ export function duplicatePageTool(proxy: PlatformProxy) {
         let newTitle: string;
         if (input.title) {
           newTitle = input.title;
-        } else {
+        } else if (sourceTitle && isRecord(sourceTitle) && 'title' in sourceTitle) {
           // Extract text from title property
-          if (sourceTitle && isRecord(sourceTitle) && 'title' in sourceTitle) {
-            const titleArray = sourceTitle['title'];
-            if (Array.isArray(titleArray)) {
-              const originalTitle =
-                titleArray
-                  .map(t => {
-                    if (typeof t === 'object' && t !== null) {
-                      const text = t['text'];
-                      const plainText = t['plain_text'];
-                      if (typeof plainText === 'string') return plainText;
-                      if (typeof text === 'object' && text !== null) {
-                        const content = text['content'];
-                        if (typeof content === 'string') return content;
-                      }
+
+          const titleArray = sourceTitle['title'];
+          if (Array.isArray(titleArray)) {
+            const originalTitle =
+              titleArray
+                .map(t => {
+                  if (typeof t === 'object' && t !== null) {
+                    const text = t['text'];
+                    const plainText = t['plain_text'];
+                    if (typeof plainText === 'string') return plainText;
+                    if (typeof text === 'object' && text !== null) {
+                      const content = text['content'];
+                      if (typeof content === 'string') return content;
                     }
-                    return '';
-                  })
-                  .join('') || 'Untitled';
-              newTitle = `${originalTitle} (Copy)`;
-            } else {
-              newTitle = 'Untitled (Copy)';
-            }
+                  }
+                  return '';
+                })
+                .join('') || 'Untitled';
+            newTitle = `${originalTitle} (Copy)`;
           } else {
             newTitle = 'Untitled (Copy)';
           }
+        } else {
+          newTitle = 'Untitled (Copy)';
         }
+
         properties = {
           title: {
             title: [{ text: { content: newTitle } }],

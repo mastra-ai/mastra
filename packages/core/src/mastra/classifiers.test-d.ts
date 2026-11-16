@@ -1,6 +1,7 @@
 import type { Experimental_EvaluationModelV4 as EvaluationModelV4 } from '@ai-sdk/provider-v7';
 import { describe, expectTypeOf, it } from 'vitest';
-import { Classifier, type RefusalAnswer } from '../classifier';
+import { Classifier } from '../classifier';
+import type { RefusalAnswer } from '../classifier';
 import { Mastra } from './index';
 
 const model = null as unknown as EvaluationModelV4;

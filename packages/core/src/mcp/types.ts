@@ -375,3 +375,195 @@ export interface ServerDetailInfo extends ServerInfo {
 export type MCPToolExecutionResultV2 =
   | { status: 'completed'; output: unknown }
   | { status: 'suspended'; suspendPayload: unknown; resumeSchema?: JSONSchema7 };
+
+/**
+ * How a client can receive an MCP server event type.
+ * @experimental
+ */
+export type MCPServerEventDeliveryMode = 'push' | 'poll' | 'webhook';
+
+/**
+ * An event type a server declares, as shown in Studio. Mirrors the `events/list`
+ * descriptor plus `emittable`.
+ * @experimental
+ */
+export interface MCPServerEventInfo {
+  name: string;
+  description?: string;
+  delivery: MCPServerEventDeliveryMode[];
+  inputSchema?: Record<string, unknown>;
+  payloadSchema?: Record<string, unknown>;
+  /** Fed by `server.events.emit()` rather than a `poll` source. */
+  emittable: boolean;
+}
+
+/** @experimental */
+export interface MCPServerEventOccurrenceInfo {
+  eventId: string;
+  name: string;
+  timestamp: string;
+  data: Record<string, unknown>;
+  cursor?: string | null;
+  _meta?: Record<string, unknown>;
+}
+
+/** @experimental */
+export interface MCPServerEventPollInfo {
+  events: MCPServerEventOccurrenceInfo[];
+  cursor: string | null;
+  hasMore?: boolean;
+  truncated?: boolean;
+  nextPollMs?: number;
+}
+
+/**
+ * A frame of a local event stream. `error` is recoverable and carries a generic message.
+ * @experimental
+ */
+export type MCPServerEventStreamFrame =
+  | { type: 'active'; cursor: string | null; truncated: boolean }
+  | { type: 'event'; occurrence: MCPServerEventOccurrenceInfo }
+  | { type: 'heartbeat'; cursor: string | null }
+  | { type: 'error'; message: string }
+  | { type: 'terminated' };
+
+/**
+ * Error ids an {@link MCPServerEventsInspector} throws as `MastraError`s.
+ * @experimental
+ */
+export const MCP_SERVER_EVENT_ERROR_IDS = {
+  unknownEvent: 'MCP_SERVER_UNKNOWN_EVENT',
+  unsupportedDelivery: 'MCP_SERVER_EVENT_UNSUPPORTED_DELIVERY',
+  invalidArguments: 'MCP_SERVER_EVENT_INVALID_ARGUMENTS',
+  forbidden: 'MCP_SERVER_EVENT_FORBIDDEN',
+  notEmittable: 'MCP_SERVER_EVENT_NOT_EMITTABLE',
+  invalidPayload: 'MCP_SERVER_EVENT_INVALID_PAYLOAD',
+  tooManyStreams: 'MCP_SERVER_EVENT_TOO_MANY_STREAMS',
+} as const;
+
+/**
+ * Runs `events/poll` and `events/stream` in-process, through the same code path as
+ * the MCP protocol handlers, and sends test events. Used by Studio.
+ * @experimental
+ */
+export interface MCPServerEventsInspector {
+  poll(
+    name: string,
+    params: { arguments?: Record<string, unknown>; cursor?: string | null; maxEvents?: number },
+    options?: { requestContext?: RequestContext; signal?: AbortSignal },
+  ): Promise<MCPServerEventPollInfo>;
+  /**
+   * Validates and opens a stream. Resolves once the `active` frame is queued; `closed`
+   * settles when the stream ends (terminated, server closed) or `signal` aborts.
+   */
+  stream(
+    name: string,
+    params: { arguments?: Record<string, unknown>; cursor?: string | null },
+    options: {
+      signal: AbortSignal;
+      onFrame: (frame: MCPServerEventStreamFrame) => void;
+      requestContext?: RequestContext;
+    },
+  ): Promise<{ closed: Promise<void> }>;
+  /** Emits a test occurrence; its `eventId` is prefixed with `mastra-test-`. */
+  emit(name: string, data: Record<string, unknown>): Promise<MCPServerEventOccurrenceInfo>;
+}
+
+/**
+ * Status of an MCP task (SEP-2663 Tasks extension).
+ * @experimental
+ */
+export type MCPServerTaskStatus = 'working' | 'input_required' | 'completed' | 'failed' | 'cancelled';
+
+/**
+ * A tool, workflow or agent this server can run as an MCP task, as shown in Studio.
+ * @experimental
+ */
+export interface MCPServerTaskSurfaceInfo {
+  /** The exposed name, e.g. a tool name, `run_<workflow>` or `ask_<agent>`. */
+  name: string;
+  type: 'tool' | 'workflow' | 'agent';
+  /** `always`: every call runs as a task. `auto`: only when the client asks for one. */
+  mode: 'auto' | 'always';
+  /** Whether an interrupted task is run again after a restart. */
+  recover: boolean;
+  /** Clients that don't declare the tasks extension are refused for this surface. */
+  required: boolean;
+  /** How long a task is kept from creation; `null` until the server closes. */
+  ttlMs: number | null;
+}
+
+/**
+ * How a server runs MCP tasks, as shown in Studio.
+ * @experimental
+ */
+export interface MCPServerTasksInfo {
+  enabled: boolean;
+  /** Whether the task store can list tasks for {@link MCPServerTasksInspector}. */
+  listable: boolean;
+  surfaces: MCPServerTaskSurfaceInfo[];
+}
+
+/**
+ * A task as shown in Studio. Never carries the task id or the principal: task ids are
+ * bearer tokens and principals can identify users, so only their SHA-256 hashes appear.
+ * @experimental
+ */
+export interface MCPServerTaskSummary {
+  /** SHA-256 hash of the task id. Cannot be used on the MCP protocol. */
+  taskKey: string;
+  /** The exposed name of the tool, workflow or agent the task runs. */
+  surface: string;
+  status: MCPServerTaskStatus;
+  statusMessage?: string;
+  createdAt: string;
+  lastUpdatedAt: string;
+  /** When the task and its result are deleted, if it has a TTL. */
+  expiresAt?: string;
+  /** SHA-256 hash of the principal that created the task. */
+  principalKey: string;
+  /**
+   * Who sent the task, readable for operators: the client id with the token subject or user id,
+   * or with a short prefix of the token's hash. Never a credential. Missing for older tasks.
+   */
+  clientLabel?: string;
+  /** Open input requests, keyed as on the wire. Only while `input_required`. */
+  inputRequests?: Record<string, { method: string; params?: Record<string, unknown> }>;
+  /** The `CallToolResult` of a completed task. */
+  result?: Record<string, unknown>;
+  /** The JSON-RPC error of a failed task. */
+  error?: Record<string, unknown>;
+}
+
+/**
+ * Filters and paging for {@link MCPServerTasksInspector.list}. Every filter narrows the result.
+ * @experimental
+ */
+export interface MCPServerTasksListParams {
+  limit?: number;
+  /** `nextCursor` from the previous page. */
+  cursor?: string;
+  status?: MCPServerTaskStatus;
+  surface?: string;
+  /** Only tasks created by this principal, as its {@link MCPServerTaskSummary.principalKey}. */
+  principalKey?: string;
+  /** Only the task with this {@link MCPServerTaskSummary.taskKey}. */
+  taskKey?: string;
+}
+
+/**
+ * Lists, cancels and answers a server's MCP tasks in-process, for Studio. Cancel and answer
+ * run through the same task-store code as `tasks/cancel` and `tasks/update`.
+ * There is no MCP protocol equivalent of `list`.
+ * @experimental
+ */
+export interface MCPServerTasksInspector {
+  /** Most recently created first. `nextCursor` is set when more tasks match. */
+  list(params?: MCPServerTasksListParams): Promise<{ tasks: MCPServerTaskSummary[]; nextCursor?: string }>;
+  /** Finds a task by its MCP task id, which is hashed before the lookup and never kept. */
+  find(taskId: string): Promise<MCPServerTaskSummary | undefined>;
+  /** Resolves `false` for an unknown, expired or already finished task. */
+  cancel(taskKey: string): Promise<boolean>;
+  /** Resolves `false` for an unknown or expired task, or one not waiting for these inputs. */
+  answer(taskKey: string, inputResponses: Record<string, Record<string, unknown>>): Promise<boolean>;
+}

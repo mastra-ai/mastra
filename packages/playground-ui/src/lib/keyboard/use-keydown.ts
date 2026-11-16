@@ -1,14 +1,8 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { RefObject } from 'react';
 
-import {
-  createKeyboardDispatcher,
-  isKeyboardConsumer,
-  matchesCombo,
-  parseKeyCombo,
-  type KeyboardLayer,
-  type ParsedKeyCombo,
-  type UseKeydownArgs,
-} from './keyboard-dispatcher';
+import { createKeyboardDispatcher, isKeyboardConsumer, matchesCombo, parseKeyCombo } from './keyboard-dispatcher';
+import type { KeyboardLayer, ParsedKeyCombo, UseKeydownArgs } from './keyboard-dispatcher';
 import { useKeyboardScopeDepth, useKeyboardShortcutsContext } from './keyboard-shortcuts-context';
 
 export { parseKeyCombo, parseKeyBinding, matchesCombo } from './keyboard-dispatcher';
@@ -23,9 +17,16 @@ export type UseKeydownOptions = {
    * Called before any combo is matched. Return `false` to leave the event
    * untouched (no `preventDefault`, no handler). Runs on top of the built-in
    * rule that leaves unmodified keys to editable fields and keyboard widgets,
-   * unless the listener targets that field directly.
+   * unless the listener targets that field directly or `insideFields` is set.
    */
   shouldHandle?: (event: KeyboardEvent) => boolean;
+  /**
+   * When `true`, unmodified keys also fire while focus is inside an editable
+   * field or keyboard widget, e.g. Escape closing a panel from its comment box.
+   * Keys a widget already handled (default-prevented) are still skipped.
+   * Defaults to `false`.
+   */
+  insideFields?: boolean;
   /**
    * When `false`, holding a key runs its handler once instead of on every
    * auto-repeat (repeats are still default-prevented). Use it for toggles.
@@ -53,10 +54,12 @@ export const useKeydown = (opts: UseKeydownArgs, options: UseKeydownOptions = {}
     depth,
     bindings: opts,
     shouldHandle: options.shouldHandle,
+    insideFields: options.insideFields,
     repeat: options.repeat,
   });
   layerRef.current.bindings = opts;
   layerRef.current.shouldHandle = options.shouldHandle;
+  layerRef.current.insideFields = options.insideFields;
   layerRef.current.repeat = options.repeat;
   layerRef.current.depth = depth;
 

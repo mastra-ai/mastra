@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect } from 'storybook/test';
 import { Button } from '../Button';
 import { Input } from '../Input';
 import { Tree } from '../Tree';
@@ -75,6 +76,52 @@ export const Roles: Story = {
       <Txt variant="meta">meta · 10/500 · badges and keycaps</Txt>
     </div>
   ),
+};
+
+export const DisplayLarge: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'display-lg is the 28px role for plan prices and credit balances. The existing display role stays at 22px.',
+      },
+    },
+  },
+  render: () => (
+    <div className="grid gap-8 sm:grid-cols-2">
+      <div className="flex flex-col gap-2">
+        <Txt variant="label" tone="muted">
+          Current plan
+        </Txt>
+        <Txt variant="display-lg" tone="ink" className="tabular-nums">
+          $250
+        </Txt>
+        <Txt variant="caption" tone="muted">
+          per month
+        </Txt>
+      </div>
+      <div className="flex flex-col gap-2">
+        <Txt variant="label" tone="muted">
+          Credits
+        </Txt>
+        <Txt variant="display-lg" tone="ink" className="tabular-nums">
+          $1,284.17
+        </Txt>
+        <Txt variant="caption" tone="muted">
+          Available balance
+        </Txt>
+      </div>
+    </div>
+  ),
+  play: async ({ canvas }) => {
+    for (const value of ['$250', '$1,284.17']) {
+      const style = getComputedStyle(canvas.getByText(value));
+      await expect(style.fontSize).toBe('28px');
+      await expect(style.fontWeight).toBe('500');
+      await expect(Number.parseFloat(style.lineHeight)).toBeCloseTo(35.56, 2);
+      await expect(Number.parseFloat(style.letterSpacing)).toBeCloseTo(-0.28, 2);
+    }
+  },
 };
 
 export const Tones: Story = {

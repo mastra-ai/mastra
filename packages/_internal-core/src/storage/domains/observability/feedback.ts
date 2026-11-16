@@ -49,7 +49,7 @@ function normalizeLegacyFeedbackActor<T>(input: T): T {
   }
 
   const record = { ...(input as Record<string, unknown>) };
-  if (typeof record.userId === 'string' && record.feedbackUserId == null) {
+  if (typeof record.userId === 'string' && record.feedbackUserId === undefined) {
     record.feedbackUserId = record.userId;
     delete record.userId;
   }
@@ -161,6 +161,7 @@ export type CreateFeedbackRecord = z.infer<typeof createFeedbackRecordSchema>;
 export const createFeedbackArgsSchema = z
   .object({
     feedback: z.preprocess(normalizeLegacyFeedbackActor, createFeedbackRecordObjectSchema),
+    onConflict: z.enum(['ignore', 'replace']).optional(),
   })
   .describe('Arguments for creating feedback');
 
@@ -170,16 +171,45 @@ export type CreateFeedbackArgs = z.infer<typeof createFeedbackArgsSchema>;
 /** Schema for createFeedback operation body in client/server */
 export const createFeedbackBodySchema = z
   .object({
-    feedback: createFeedbackRecordObjectSchema.omit({ timestamp: true }),
+    contextMode: z
+      .enum(['resolve', 'provided'])
+      .optional()
+      .describe('Context handling; defaults to provided on OSS and resolve on Platform'),
+    feedback: createFeedbackRecordObjectSchema.omit({ timestamp: true }).extend({
+      timestamp: z.iso
+        .datetime({ offset: true })
+        .optional()
+        .describe('Original record timestamp; preserve across retries and replacements'),
+      traceId: traceIdField.regex(/\S/, 'traceId must not be empty or whitespace-only'),
+    }),
   })
   .describe('Arguments for creating feedback');
+
+/** Full replacement retains the original feedback identity and creation timestamp. */
+export const replaceFeedbackBodySchema = createFeedbackBodySchema.extend({
+  feedback: createFeedbackBodySchema.shape.feedback.extend({
+    feedbackId: z.string().regex(/\S/, 'feedbackId must not be empty'),
+    timestamp: z.iso.datetime({ offset: true }),
+  }),
+});
+export type ReplaceFeedbackBody = z.infer<typeof replaceFeedbackBodySchema>;
 
 /** Body for creating feedback in client/server */
 export type CreateFeedbackBody = z.infer<typeof createFeedbackBodySchema>;
 
 /** Schema for createFeedback operation response */
 export const createFeedbackResponseSchema = z
-  .object({ success: z.boolean() })
+  .object({
+    success: z.boolean(),
+    data: z
+      .object({
+        feedbackId: z.string(),
+        traceId: z.string(),
+        spanId: z.string().nullable(),
+        timestamp: z.iso.datetime(),
+      })
+      .optional(),
+  })
   .describe('Response from creating feedback');
 
 /** Response from creating feedback */
@@ -189,6 +219,7 @@ export type CreateFeedbackResponse = z.infer<typeof createFeedbackResponseSchema
 export const batchCreateFeedbackArgsSchema = z
   .object({
     feedbacks: z.array(z.preprocess(normalizeLegacyFeedbackActor, createFeedbackRecordObjectSchema)),
+    onConflict: z.enum(['ignore', 'replace']).optional(),
   })
   .describe('Arguments for batch recording feedback');
 

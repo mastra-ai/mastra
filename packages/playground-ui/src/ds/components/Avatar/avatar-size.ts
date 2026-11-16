@@ -1,9 +1,11 @@
 import { createContext } from 'react';
 
-export type AvatarSize = 'xs' | 'sm' | 'md' | 'lg' | 'control';
+// `inline` sits next to caption or body text, e.g. in a table row.
+export type AvatarSize = 'xs' | 'inline' | 'sm' | 'md' | 'lg' | 'control';
 
 export const avatarSizeClasses: Record<AvatarSize, string> = {
   xs: 'size-icon-xs',
+  inline: 'size-icon-md',
   sm: 'size-avatar-sm',
   md: 'size-avatar-md',
   lg: 'size-avatar-lg',
@@ -12,6 +14,7 @@ export const avatarSizeClasses: Record<AvatarSize, string> = {
 
 export const avatarTextClasses: Record<AvatarSize, string> = {
   xs: 'text-meta',
+  inline: 'text-meta',
   sm: 'text-caption',
   md: 'text-body-sm',
   lg: 'text-body',
@@ -20,6 +23,7 @@ export const avatarTextClasses: Record<AvatarSize, string> = {
 
 export const avatarIconClasses: Record<AvatarSize, string> = {
   xs: '[&>svg]:hidden',
+  inline: '[&>svg]:size-[11px]',
   sm: '[&>svg]:size-icon-xs',
   md: '[&>svg]:size-icon-sm',
   lg: '[&>svg]:size-icon-sm',

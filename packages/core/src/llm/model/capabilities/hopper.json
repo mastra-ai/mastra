@@ -1,0 +1,25 @@
+{
+  "attachment": ["deepseek-v4.1-flash-1017", "deepseek-v4.1-flash-1017-abliterated"],
+  "temperature": ["deepseek-v4.1-flash-1017", "deepseek-v4.1-flash-1017-abliterated"],
+  "structuredOutput": ["deepseek-v4.1-flash-1017", "deepseek-v4.1-flash-1017-abliterated"],
+  "reasoning": {
+    "deepseek-v4.1-flash-1017": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-v4.1-flash-1017-abliterated": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ]
+  }
+}

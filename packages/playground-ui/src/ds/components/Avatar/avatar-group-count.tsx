@@ -1,4 +1,5 @@
-import { useContext, type ComponentProps } from 'react';
+import { useContext } from 'react';
+import type { ComponentProps } from 'react';
 
 import { AvatarSizeContext, avatarIconClasses, avatarSizeClasses, avatarTextClasses } from './avatar-size';
 import { cn } from '@/lib/utils';

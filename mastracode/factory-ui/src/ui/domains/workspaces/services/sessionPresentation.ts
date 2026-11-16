@@ -1,6 +1,6 @@
-import type { WorkItem } from '../../factory/services/workItems';
+import type { WorkItem, WorkItemSource } from '../../factory/services/workItems';
 import { isPullRequestSource } from '../../factory/services/workItems';
-import { USER_SESSION_BRANCH_PREFIX } from './user-sessions';
+import { SLACK_SESSION_BRANCH_PREFIX, USER_SESSION_BRANCH_PREFIX } from './user-sessions';
 import type { FactoryUserSession } from './user-sessions';
 
 const GITHUB_REVIEW_BRANCH = /^factory\/pr-([1-9]\d*)$/;
@@ -18,13 +18,20 @@ export interface SessionViewerProfile {
   avatarUrl?: string;
 }
 
+/** A session the Factory itself owns: automatic work no person started. */
+export function isFactoryOwnedSession(session: Pick<FactoryUserSession, 'userId'>): boolean {
+  return session.userId.startsWith('factory-project:');
+}
+
 export function getSessionOwnerDetails(
   session: FactoryUserSession,
   viewer: SessionViewerProfile | undefined,
 ): SessionOwnerDetails {
   const isViewer = Boolean(viewer?.userId) && session.userId === viewer?.userId;
   const name =
-    (isViewer && (viewer?.name?.trim() || viewer?.email?.trim())) || session.owner?.name?.trim() || session.userId;
+    (isViewer && (viewer?.name?.trim() || viewer?.email?.trim())) ||
+    session.owner?.name?.trim() ||
+    (isFactoryOwnedSession(session) ? 'Factory' : session.userId);
   const avatarUrl = (isViewer && viewer?.avatarUrl?.trim()) || session.owner?.avatarUrl?.trim();
   return {
     name,
@@ -36,6 +43,18 @@ export function getFactorySessionKind(session: FactoryUserSession, workItem: Wor
   if (workItem && isPullRequestSource(workItem.source)) return 'review';
   if (!workItem && getReviewBranchIdentifier(session.branch)) return 'review';
   return 'work';
+}
+
+/** Where a sidebar session came from: a user's own session, or the source of the work it runs. */
+export type SessionSource = WorkItemSource | 'user';
+
+/** Falls back to the branch when the session's work item isn't loaded. */
+export function getFactorySessionSource(session: FactoryUserSession, workItem: WorkItem | undefined): WorkItemSource {
+  if (workItem) return workItem.source;
+  if (GITHUB_REVIEW_BRANCH.test(session.branch)) return 'github-pr';
+  if (GITLAB_REVIEW_BRANCH.test(session.branch)) return 'gitlab-pr';
+  if (session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX)) return 'slack-thread';
+  return 'manual';
 }
 
 export function getReviewBranchIdentifier(branch: string): string | undefined {

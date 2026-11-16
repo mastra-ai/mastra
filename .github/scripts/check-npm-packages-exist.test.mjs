@@ -33,12 +33,18 @@ function makeWorkspace(t, packages) {
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   writeFileSync(path.join(cwd, 'package.json'), JSON.stringify({ name: 'fixture', private: true }));
   writeFileSync(path.join(cwd, 'pnpm-workspace.yaml'), 'packages:\n  - packages/*\n');
-  for (const { name, private: isPrivate } of packages) {
+  for (const { name, private: isPrivate, dependencies, devDependencies } of packages) {
     const dir = path.join(cwd, 'packages', name.replaceAll('/', '-'));
     mkdirSync(dir, { recursive: true });
     writeFileSync(
       path.join(dir, 'package.json'),
-      JSON.stringify({ name, version: '1.0.0', ...(isPrivate ? { private: true } : {}) }),
+      JSON.stringify({
+        name,
+        version: '1.0.0',
+        ...(isPrivate ? { private: true } : {}),
+        dependencies,
+        devDependencies,
+      }),
     );
   }
   return cwd;
@@ -104,6 +110,49 @@ test('private packages are not checked', async t => {
   const result = await run(t, cwd, registry);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /No publishable packages to check/);
+});
+
+test('repeated --pnpm-filter checks the union of every filter and nothing else', async t => {
+  const cwd = makeWorkspace(t, [{ name: '@mastra/first' }, { name: '@mastra/second' }, { name: '@mastra/excluded' }]);
+  const filters = ['--pnpm-filter', '@mastra/first', '--pnpm-filter', '@mastra/second'];
+
+  // @mastra/excluded is missing on npm, but it is outside both filters.
+  const allSelectedExist = await startRegistry(t, { '/@mastra%2ffirst': 200, '/@mastra%2fsecond': 200 });
+  const passing = await run(t, cwd, allSelectedExist, filters);
+  assert.equal(passing.status, 0, passing.stderr);
+  assert.match(passing.stdout, /All 2 publishable package\(s\) exist on npm/);
+
+  const firstMissing = await startRegistry(t, { '/@mastra%2fsecond': 200 });
+  const failingFirst = await run(t, cwd, firstMissing, filters);
+  assert.equal(failingFirst.status, 1);
+  assert.match(failingFirst.stderr, /@mastra\/first .* has never been published to npm/);
+
+  const secondMissing = await startRegistry(t, { '/@mastra%2ffirst': 200 });
+  const failingSecond = await run(t, cwd, secondMissing, filters);
+  assert.equal(failingSecond.status, 1);
+  assert.match(failingSecond.stderr, /@mastra\/second .* has never been published to npm/);
+});
+
+test('--pnpm-filter-prod follows dependencies but not devDependencies', async t => {
+  const cwd = makeWorkspace(t, [
+    {
+      name: '@mastra/app',
+      dependencies: { '@mastra/runtime': 'workspace:*' },
+      devDependencies: { '@mastra/dev-only': 'workspace:*' },
+    },
+    { name: '@mastra/runtime' },
+    { name: '@mastra/dev-only' },
+  ]);
+
+  // @mastra/dev-only is missing on npm, but only a devDependency leads to it.
+  const registry = await startRegistry(t, { '/@mastra%2fapp': 200, '/@mastra%2fruntime': 200 });
+  const prod = await run(t, cwd, registry, ['--pnpm-filter-prod', '@mastra/app...']);
+  assert.equal(prod.status, 0, prod.stderr);
+  assert.match(prod.stdout, /All 2 publishable package\(s\) exist on npm/);
+
+  const all = await run(t, cwd, registry, ['--pnpm-filter', '@mastra/app...']);
+  assert.equal(all.status, 1);
+  assert.match(all.stderr, /@mastra\/dev-only .* has never been published to npm/);
 });
 
 test('--since only checks packages whose package.json changed vs the ref', async t => {

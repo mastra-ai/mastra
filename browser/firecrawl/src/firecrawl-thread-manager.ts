@@ -103,6 +103,7 @@ export class FirecrawlAgentBrowserThreadManager extends AgentBrowserThreadManage
       this.threadManagers.set(threadId, manager);
 
       try {
+        await this.onBrowserOpened?.(threadId);
         if (savedState && savedState.tabs.length > 0) {
           this.logger?.debug?.(`Restoring browser state for thread ${threadId}: ${savedState.tabs.length} tabs`);
           await this.restoreBrowserState(manager, savedState);

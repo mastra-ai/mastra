@@ -9,16 +9,11 @@ export const diff = (value: number | null | undefined, baseline: number | null |
 
 const currencyCodes = new Set(Intl.supportedValuesOf('currency'));
 
-/**
- * Per-item costs are usually fractions of a cent, so amounts below 1 keep three significant
- * digits instead of collapsing to `<$0.01`. Larger amounts round to two decimals.
- */
+/** Per-item costs are usually fractions of a cent, so every amount keeps three decimals. */
+const digits: Intl.NumberFormatOptions = { minimumFractionDigits: 3, maximumFractionDigits: 3 };
+
 export const formatCostValue = (value?: number, unit?: string): string => {
   if (value === undefined) return '-';
-  const digits: Intl.NumberFormatOptions =
-    value !== 0 && Math.abs(value) < 1
-      ? { maximumSignificantDigits: 3 }
-      : { minimumFractionDigits: 2, maximumFractionDigits: 2 };
   const currency = (unit ?? 'usd').toUpperCase();
   if (currencyCodes.has(currency)) {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency, ...digits }).format(value);
