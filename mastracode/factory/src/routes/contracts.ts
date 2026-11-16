@@ -15,6 +15,7 @@ import {
   SESSION_ROW_STATUSES,
   SESSION_ROW_UPDATED_WITHIN,
   SESSION_ROW_WINDOW_MAX,
+  SESSION_ROW_WINDOWS_MAX,
   sessionRowOwnerSchema,
 } from '../session/session-row-query.js';
 import { MAX_INTAKE_ROUTES } from '../storage/domains/boards/base.js';
@@ -770,7 +771,7 @@ export const sessionRowsQuerySchema = z.object({
   /** Repeatable `<group key>:<count>`: lists that group's first `count` rows instead of `SESSION_ROW_WINDOW`. */
   window: z
     .array(sessionRowWindowSchema)
-    .max(64)
+    .max(SESSION_ROW_WINDOWS_MAX)
     .default([])
     .refine(windows => new Set(windows.map(([group]) => group)).size === windows.length, {
       message: 'Send one window per group',

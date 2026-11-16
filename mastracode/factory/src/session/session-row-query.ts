@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const SESSION_ROW_WINDOW = 5;
 export const SESSION_ROW_WINDOW_MAX = 500;
 export const SESSION_ROW_PINS_MAX = 100;
+export const SESSION_ROW_WINDOWS_MAX = 64;
 
 export const SESSION_ROW_STATUSES = ['waiting', 'working', 'initializing', 'idle', 'done'] as const;
 export const SESSION_ROW_SORTS = ['activity', 'updated', 'created'] as const;

@@ -1,3 +1,4 @@
+import { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
 import { SESSION_ROW_PINS_MAX } from '@mastra/factory/session/session-row-query';
 import { describe, expect, it } from 'vitest';
 
@@ -234,6 +235,29 @@ describe('pinnedSessionsAfter', () => {
     });
 
     expect(pin).toContain('old');
+  });
+});
+
+describe('sessionRowsRequest', () => {
+  it('sends the windows of the groups opened last, as many as the server accepts', () => {
+    const opened = Array.from({ length: 65 }, (_, index) => [`board:board-${index}`, 25] as const);
+
+    const { windows } = sessionRowsRequest({
+      sort: 'activity',
+      groupBy: 'board',
+      filters: { owner: 'all', status: 'all', updated: 'all' },
+      pinned: new Set(),
+      open: undefined,
+      children: false,
+      windows: Object.fromEntries(opened),
+    });
+
+    const query = FACTORY_ROUTE_CONTRACTS.sessionRows.querySchema.safeParse({
+      window: Object.entries(windows).map(([group, count]) => `${group}:${count}`),
+    });
+    expect(query.success).toBe(true);
+    expect(windows).toHaveProperty(['board:board-64'], 25);
+    expect(windows).not.toHaveProperty(['board:board-0']);
   });
 });
 
