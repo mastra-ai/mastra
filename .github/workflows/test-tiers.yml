@@ -47,7 +47,8 @@ jobs:
         )
       )
     runs-on: starsling-ubuntu-26.04
-    timeout-minutes: 15
+    # The daily update fetches jobs for every unsuccessful PR run in 14 days, one call at a time (~700).
+    timeout-minutes: 60
     permissions:
       contents: write
       actions: read
