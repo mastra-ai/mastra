@@ -2479,8 +2479,8 @@ importers:
   integrations/tavily:
     dependencies:
       '@tavily/core':
-        specifier: ^0.7.14
-        version: 0.7.14(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
+        specifier: ^1.1.0
+        version: 1.1.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(zod@4.6.7)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -21067,8 +21067,13 @@ packages:
   '@tanstack/virtual-core@3.19.10':
     resolution: {integrity: sha512-/ltpH0qUCs5XQYE7fIhgA+aqgC5NzSfLTDQkC+N1wOOdvIYx1FH/kz2LGfSeanNbekqy3WBu6mNIbqXhxE/pew==}
 
-  '@tavily/core@0.7.14':
-    resolution: {integrity: sha512-QB6EHpWjSbTnmIAIA0GU6COYQS8VfGcD8wokfXA9TTvrOzBCTtZZJnKw/JFN0qYpO97SJ4gwmlVlnsSg8DUFcw==}
+  '@tavily/core@1.1.0':
+    resolution: {integrity: sha512-lRO580IfzxlDR/1TFQh/2te5f8jiGehgp7FuzXPmqA+x2IdK9fIT6c+oFrsNXMU+LErRHUtcazQ3p2a5gcQCVw==}
+    peerDependencies:
+      zod: 4.6.7
+    peerDependenciesMeta:
+      zod:
+        optional: true
 
   '@tediousjs/connection-string@1.1.0':
     resolution: {integrity: sha512-z9ZBWEG+8pIB5V1zYzlRPXx0oRJ5H7coPnMQK8EZOw03UTPI9Umn6viL36f5w+CuqkKsnCM50RVStpjZmR0Bng==}
@@ -44450,11 +44455,11 @@ snapshots:
 
   '@tanstack/virtual-core@3.19.10': {}
 
-  '@tavily/core@0.7.14(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)':
+  '@tavily/core@1.1.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(zod@4.6.7)':
     dependencies:
       axios: 1.20.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
-      https-proxy-agent: 7.0.6(supports-color@10.2.2)
-      js-tiktoken: 1.0.21
+    optionalDependencies:
+      zod: 4.6.7
     transitivePeerDependencies:
       - debug
       - supports-color
