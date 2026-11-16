@@ -49,12 +49,13 @@ export const useSpanFeedback = <TData = FeedbackListResponse,>({
     // `spanId` must stay in the key, otherwise React Query serves the previously
     // selected span's feedback when switching spans within the same trace.
     queryKey: ['span-feedback', traceId, spanId, pageNumber],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const data = await client.listFeedback({
         filters: { traceId, spanId },
         pagination: { page: pageNumber, perPage: 10 },
       });
-      if (pageNumber === 0) settlePendingFeedback(queryClient, { traceId, spanId }, data);
+      // A cancelled or superseded fetch must not settle pending comments its result never displays.
+      if (pageNumber === 0 && !signal.aborted) settlePendingFeedback(queryClient, { traceId, spanId }, data);
       return data;
     },
     select,

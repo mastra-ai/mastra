@@ -218,6 +218,8 @@ describe.each(scopes)('optimistic $name comments', ({ spanId, rows, visibleServe
       act(() => result.current.create.mutate({ text: 'doomed note' }));
       await waitFor(() => expect(result.current.list.data?.feedback[0]?.value).toBe('doomed note'));
 
+      // The optimistic row can render before the POST handler is holding the request.
+      await waitFor(() => expect(api.posted).toHaveLength(1));
       api.releasePost();
       await waitFor(() => expect(result.current.create.isError).toBe(true));
       await waitFor(() => expect(result.current.list.data?.feedback).toHaveLength(visibleServerRows));
