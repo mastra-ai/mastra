@@ -247,7 +247,6 @@ describe('createFactoryWorkItem under the intake order evaluator', () => {
     });
     expect(await seed.workItems.list(scope)).toEqual([]);
   });
-
 });
 
 // Set FACTORY_TEST_POSTGRES_URL to a disposable database to also run on PostgreSQL.

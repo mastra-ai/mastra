@@ -68,5 +68,4 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('a project’s i
       await storage.ops.findOne('factory_intake_route_locks', { org_id: orgId, factory_project_id: project.id }),
     ).toMatchObject({ intake_evaluator: 'intake-order' });
   });
-
 });

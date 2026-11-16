@@ -156,5 +156,4 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake order on
     ]);
     expect((await boards.readIntakeOrder(scope)).boardKeys).toEqual(['work']);
   });
-
 });
