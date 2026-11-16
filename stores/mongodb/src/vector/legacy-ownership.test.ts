@@ -709,6 +709,123 @@ describe('legacy ownership', () => {
     });
 
     // Managed deletes drop the whole collection, so they need recorded ownership and no other user.
+    // A registration that starts using a search index after a delete committed its drop set must not
+    // lose it: the delete re-checks for users right before each drop and hands the index over, and
+    // the attaching call re-checks for pending drops right after its write and refuses. Whichever
+    // reads second sees the other.
+    describe('attach during a pending drop', () => {
+      const deleting = (op: string) => createVectorErrorId('MONGODB', op, 'INDEX_DELETING');
+      /** X owns the vector index S on a BYO collection; Y will attach to S. */
+      async function shared() {
+        const ids = await fixture({ S: 'vectorSearch' }, { X: { searchIndexName: 'S', ownsVectorIndex: true } });
+        return { ...ids, Y: `${ids.coll}_Y` };
+      }
+      const attachY = (coll: string, Y: string) =>
+        b.createIndex({ indexName: Y, dimension: 4, collectionName: coll, searchIndexName: 'S' });
+
+      it('T-R1: a registration that attaches while the delete decides takes the index over, and its own delete drops it', async () => {
+        const { coll, X, Y } = await shared();
+        const del = pause();
+        (a as any).testHooks = {
+          insideDeleteTransaction: async (_: string, attempt: number) => attempt === 1 && del.hook(),
+        };
+        const deleteX = a.deleteIndex({ indexName: X });
+        // The delete has read its siblings (Y is not among them) but not yet committed its drop set,
+        // so Y's createIndex finds no pending drop and attaches to S.
+        await reached(del);
+        await attachY(coll, Y);
+        expect(await reg(Y)).toMatchObject({ searchIndexName: 'S' });
+        del.release.resolve();
+        await deleteX;
+        expect(await searchIndexNames(db, coll)).toEqual(['S']);
+        expect(await reg(X)).toBeNull();
+        expect(await reg(Y)).toMatchObject({ searchIndexName: 'S', ownsVectorIndex: true });
+        await b.deleteIndex({ indexName: Y });
+        expect(await searchIndexNames(db, coll)).toEqual([]);
+        expect(await regFor(coll)).toEqual([]);
+      });
+
+      it('T-R1 (attach check pending): a delete that sees a just-written registration hands the index over instead of dropping it', async () => {
+        const { coll, X, Y } = await shared();
+        const del = pause();
+        const att = pause();
+        (a as any).testHooks = { afterDeleteStep1: del.hook };
+        (b as any).testHooks = { beforePendingDropCheck: att.hook };
+        const deleteX = a.deleteIndex({ indexName: X });
+        await reached(del);
+        const createY = attachY(coll, Y);
+        // Y's registration is written; its pending-drop check has not run yet.
+        await reached(att);
+        del.release.resolve();
+        await deleteX;
+        // Handed over, not dropped: S is still the index X created, and Y is responsible for it.
+        expect(await searchIndexNames(db, coll)).toEqual(['S']);
+        expect(await reg(Y)).toMatchObject({ searchIndexName: 'S', ownsVectorIndex: true });
+        att.release.resolve();
+        await createY;
+        expect(await reg(X)).toBeNull();
+        expect(await reg(Y)).toMatchObject({ searchIndexName: 'S', ownsVectorIndex: true });
+      });
+
+      it('T-R1 (converse): a createIndex attaching to an index a delete is about to drop refuses with INDEX_DELETING, and the delete drops it', async () => {
+        const { coll, X, Y } = await shared();
+        const del = pause();
+        (a as any).testHooks = { afterDeleteStep1: del.hook };
+        const deleteX = a.deleteIndex({ indexName: X });
+        await reached(del);
+        const err = await attachY(coll, Y).catch(e => e);
+        expect(err.id).toBe(deleting('CREATE_INDEX'));
+        expect(err.category).toBe('USER');
+        expect(await reg(Y)).toBeNull();
+        del.release.resolve();
+        await deleteX;
+        expect(await searchIndexNames(db, coll)).toEqual([]);
+        expect(await regFor(coll)).toEqual([]);
+      });
+
+      it('T-R1 (both see each other): the attach refuses and rolls back, and the delete then finds no user and drops', async () => {
+        const { coll, X, Y } = await shared();
+        const del = pause();
+        const del2 = pause();
+        const att = pause();
+        (a as any).testHooks = { afterDeleteStep1: del.hook, beforeDeleteHandover: del2.hook };
+        (b as any).testHooks = { beforePendingDropCheck: att.hook };
+        const deleteX = a.deleteIndex({ indexName: X });
+        await reached(del);
+        const createY = attachY(coll, Y).catch(e => e);
+        await reached(att);
+        del.release.resolve();
+        // The delete has seen Y and is about to hand S over; Y now checks and still sees S pending.
+        await reached(del2);
+        att.release.resolve();
+        expect((await createY).id).toBe(deleting('CREATE_INDEX'));
+        expect(await reg(Y)).toBeNull();
+        del2.release.resolve();
+        await deleteX;
+        expect(await searchIndexNames(db, coll)).toEqual([]);
+        expect(await regFor(coll)).toEqual([]);
+      });
+
+      it('T-R1 (createSearchIndex): attaching a text index a delete is about to drop refuses and restores the entry', async () => {
+        const { coll, X, Y } = await fixture(
+          { A: 'search' },
+          { X: { textSearchIndexName: 'A', ownsTextIndex: true }, Y: { claimToken: 'y' } },
+        );
+        const del = pause();
+        (a as any).testHooks = { afterDeleteStep1: del.hook };
+        const deleteX = a.deleteIndex({ indexName: X });
+        await reached(del);
+        const before = await reg(Y);
+        const err = await b.createSearchIndex({ indexName: Y, searchIndexName: 'A' }).catch(e => e);
+        expect(err.id).toBe(deleting('CREATE_SEARCH_INDEX'));
+        expect(await reg(Y)).toEqual(before);
+        del.release.resolve();
+        await deleteX;
+        expect(await searchIndexNames(db, coll)).toEqual([]);
+        expect(await regFor(coll)).toEqual([before]);
+      });
+    });
+
     describe('managed collection deletes', () => {
       const docs = () => [{ title: 'a' }, { title: 'b' }, { title: 'c' }];
       const exists = (c: string) => db.listCollections({ name: c }).hasNext();
@@ -1045,6 +1162,53 @@ describe('legacy ownership', () => {
           expect(err.category).toBe('USER');
           expect(await entry(coll)).toBeNull();
           expect(await searchIndexNames(db, coll)).not.toContain('B');
+        });
+
+        it('T-R2: a rename that read the entry before another call renamed it refuses with CONFLICT and keeps the other rename', async () => {
+          const coll = await byo();
+          await a.createSearchIndex({ indexName: coll, searchIndexName: 'A' });
+          const p = pause();
+          (a as any).testHooks = {
+            afterCreateSearchIndexRead: p.hook,
+            beforeSearchIndexProvision: async () => {
+              throw new Error('provision failed');
+            },
+          };
+          const toC = a.createSearchIndex({ indexName: coll, searchIndexName: 'C' }).catch(e => e);
+          await reached(p);
+          await b.createSearchIndex({ indexName: coll, searchIndexName: 'B' });
+          p.release.resolve();
+          const err = await toC;
+          expect(err.id).toBe(createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'));
+          expect(err.category).toBe('USER');
+          expect(await entry(coll)).toMatchObject({
+            textSearchIndexName: 'B',
+            ownsTextIndex: true,
+            retiredTextIndexNames: ['A'],
+          });
+          expect((await searchIndexNames(db, coll)).sort()).toEqual(['A', 'B', `${coll}_vector_index`]);
+          (a as any).testHooks = undefined;
+          await a.deleteIndex({ indexName: coll });
+          expect(await searchIndexNames(db, coll)).toEqual([]);
+          expect(await entry(coll)).toBeNull();
+        });
+
+        it('T-R3: a same-name refresh whose registration is deleted after its read refuses with CONFLICT and recreates nothing', async () => {
+          const coll = await byo();
+          await a.createSearchIndex({ indexName: coll, searchIndexName: 'A' });
+          const p = pause();
+          (a as any).testHooks = { afterCreateSearchIndexRead: p.hook };
+          const refresh = a
+            .createSearchIndex({ indexName: coll, searchIndexName: 'A', fields: ['title'] })
+            .catch(e => e);
+          await reached(p);
+          await b.deleteIndex({ indexName: coll });
+          expect(await searchIndexNames(db, coll)).toEqual([]);
+          p.release.resolve();
+          const err = await refresh;
+          expect(err.id).toBe(createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'));
+          expect(await entry(coll)).toBeNull();
+          expect(await searchIndexNames(db, coll)).toEqual([]);
         });
       });
 

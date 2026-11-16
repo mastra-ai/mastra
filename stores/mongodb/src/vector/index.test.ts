@@ -129,6 +129,13 @@ const stubRegistered = (v: MongoDBVector, entries: Record<string, object>) =>
 // Mocked collections that hold no Atlas Search indexes yet.
 const noSearchIndexes = () => ({ toArray: async () => [] });
 
+// Mocked db: the target collection exists, no registration is being deleted, and every registry write matches.
+const stubDb = (v: MongoDBVector) =>
+  ((v as any).db = {
+    listCollections: () => ({ hasNext: async () => true }),
+    collection: () => ({ find: () => ({ toArray: async () => [] }), updateOne: async () => ({ matchedCount: 1 }) }),
+  });
+
 // Helper function to wait for a condition with timeout
 async function waitForCondition(
   condition: () => Promise<boolean>,
@@ -507,7 +514,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
     const stubCreateIndex = (v: MongoDBVector) => {
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
       // Collection already exists so createIndex skips db.createCollection.
-      (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
+      stubDb(v);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       // createIndex now persists to the durable registry collection; stub the registry
       // helpers so these mocked, unconnected instances don't hit a real MongoDB.
@@ -550,7 +557,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
         .fn()
         .mockRejectedValueOnce(indexExists) // vector index creation
         .mockResolvedValueOnce(undefined); // full-text index creation
-      (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
+      stubDb(v);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
       vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
@@ -597,7 +604,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
     it('throws a USER MastraError when retargeting an index to a different collection (#round3-fix4)', async () => {
       const v = makeVector();
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
-      (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
+      stubDb(v);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
       // An entry already exists pointing at a DIFFERENT collection.
@@ -631,7 +638,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
     it('allows idempotent re-createIndex against the SAME collection (#round3-fix4)', async () => {
       const v = makeVector();
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
-      (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
+      stubDb(v);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
       // Existing entry points at the SAME collection this call resolves to.
@@ -652,7 +659,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const v = makeVector();
       const indexExists = Object.assign(new Error('index already exists'), { codeName: 'IndexAlreadyExists' });
       const createSearchIndex = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(indexExists);
-      (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
+      stubDb(v);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
       vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
@@ -1312,7 +1319,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
     it('createIndex persists the write policy (allowWrites: true) to the durable registry', async () => {
       const v = makeVector();
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
-      (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
+      stubDb(v);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
       const writeRegistryEntry = vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
@@ -1326,6 +1333,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
 
     it('createSearchIndex maps nested fields as document mappings, since Atlas Search reads dotted keys literally', async () => {
       const v = makeVector();
+      stubDb(v);
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
@@ -1356,7 +1364,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
 
     it('createIndex warns that allowWrites: true is deprecated on a BYO index, and still honors it', async () => {
       const v = makeVector();
-      (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
+      stubDb(v);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({
         createSearchIndex: vi.fn().mockResolvedValue(undefined),
         listSearchIndexes: noSearchIndexes,
@@ -1419,7 +1427,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
     it('createIndex defaults BYO to read-only (allowWrites omitted → false)', async () => {
       const v = makeVector();
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
-      (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
+      stubDb(v);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
       const writeRegistryEntry = vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
@@ -1438,7 +1446,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
 
     const stubCreate = (v: MongoDBVector, existingEntry: any = null) => {
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
-      (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
+      stubDb(v);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(existingEntry);
       const writeRegistryEntry = vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
@@ -1618,6 +1626,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
     // on the same collection get distinct text indexes.
     it('FIX6: field-mapped search index name is unique per logical index', async () => {
       const v = makeVector();
+      stubDb(v);
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
@@ -1731,6 +1740,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
     // so the code must updateSearchIndex in place when the index already exists.
     it('round5: createSearchIndex updates the mapping in place when the index already exists', async () => {
       const v = makeVector();
+      stubDb(v);
       // First create succeeds; second call hits IndexAlreadyExists (returns false internally).
       const createSearchIndex = vi.fn().mockRejectedValue({ codeName: 'IndexAlreadyExists' });
       const updateSearchIndex = vi.fn().mockResolvedValue(undefined);
@@ -1740,14 +1750,15 @@ describe('MongoDBVector filterFields (#18587)', () => {
         listSearchIndexes: noSearchIndexes,
       });
       // Only a text index this registration created may be updated in place.
-      vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
-        collectionName: 'ops',
-        searchIndexName: 'ops_vec',
-        isByo: true,
-        textSearchIndexName: 'ops_idx_search_fields_index',
-        ownsTextIndex: true,
+      stubRegistered(v, {
+        idx: {
+          collectionName: 'ops',
+          searchIndexName: 'ops_vec',
+          isByo: true,
+          textSearchIndexName: 'ops_idx_search_fields_index',
+          ownsTextIndex: true,
+        },
       });
-      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
       vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
 
       await v.createSearchIndex({ indexName: 'idx', fields: ['note', 'title'] });
@@ -2330,7 +2341,7 @@ describe('MongoDBVector autoEmbed', () => {
 
   const stubCreateIndex = (v: MongoDBVector) => {
     const createSearchIndex = vi.fn().mockResolvedValue(undefined);
-    (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
+    stubDb(v);
     vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
     vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
     vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
@@ -2628,7 +2639,11 @@ describe('MongoDBVector autoEmbed', () => {
       const v = makeVector();
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
-      const registry = { findOne: vi.fn().mockResolvedValue(null), updateOne: vi.fn().mockResolvedValue({}) };
+      const registry = {
+        findOne: vi.fn().mockResolvedValue(null),
+        updateOne: vi.fn().mockResolvedValue({}),
+        find: () => ({ toArray: async () => [] }),
+      };
       (v as any).db = {
         listCollections: () => ({ hasNext: async () => true }),
         collection: () => registry,
@@ -2650,7 +2665,11 @@ describe('MongoDBVector autoEmbed', () => {
       const v = makeVector();
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
-      const registry = { findOne: vi.fn().mockResolvedValue(null), updateOne: vi.fn().mockResolvedValue({}) };
+      const registry = {
+        findOne: vi.fn().mockResolvedValue(null),
+        updateOne: vi.fn().mockResolvedValue({}),
+        find: () => ({ toArray: async () => [] }),
+      };
       (v as any).db = {
         listCollections: () => ({ hasNext: async () => true }),
         collection: () => registry,
