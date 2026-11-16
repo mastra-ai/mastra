@@ -73,7 +73,7 @@ describe('ProbedList', () => {
     expect(titles(await list.read('p', t.probe, t.load))).toEqual(['renamed', 'second']);
   });
 
-  it('reads a list whose newest row is seconds old whole every time, since that write may have raced the probe', async () => {
+  it('holds a list only once it was read seconds after its newest write, since that write may have raced the probe', async () => {
     const t = table([{ id: 'a', title: 'first', at: Date.now() }]);
     const list = new ProbedList<Row>();
     await list.read('p', t.probe, t.load);
@@ -84,9 +84,13 @@ describe('ProbedList', () => {
     expect(titles(await list.read('p', t.probe, t.load))).toEqual(['committed late']);
 
     vi.setSystemTime(Date.now() + 1_000);
+    t.rows[0] = { id: 'a', title: 'made private', at: t.rows[0]?.at ?? 0 };
+
+    expect(titles(await list.read('p', t.probe, t.load))).toEqual(['made private']);
+
     t.rows[0] = { id: 'a', title: 'unseen', at: t.rows[0]?.at ?? 0 };
 
-    expect(titles(await list.read('p', t.probe, t.load))).toEqual(['committed late']);
+    expect(titles(await list.read('p', t.probe, t.load))).toEqual(['made private']);
   });
 
   it('reads the list again once the hold is a minute old, whatever the probe says', async () => {

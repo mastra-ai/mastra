@@ -34,7 +34,7 @@ import type {
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { answerParkedCall } from '../tools/approval-tools.js';
-import { SLACK_SESSION_BRANCH_PREFIX } from '../work-item-branch.js';
+import { SLACK_SESSION_BRANCH_PREFIX, USER_SESSION_BRANCH_PREFIX } from '../work-item-branch.js';
 import { createSessionOwnerProfileResolver, withOwnerProfile } from './project-sessions.js';
 import type {
   ProjectSessionsReader,
@@ -47,7 +47,6 @@ import { canReadSessionResource, canSwitchSessionModel, canViewSourceControlSess
 
 type RouteContext = Context;
 
-export const USER_SESSION_BRANCH_PREFIX = 'user/session-';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 export interface SourceControlSessionRoutesOptions {

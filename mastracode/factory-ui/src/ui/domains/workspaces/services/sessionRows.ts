@@ -1,4 +1,5 @@
 import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
+import { SLACK_SESSION_BRANCH_PREFIX } from '@mastra/factory/work-item-branch';
 import { isSettledChangeRequest } from '@mastra/factory/work-items/change-requests';
 import type { CardChangeRequest, PullRequestStatus } from '@mastra/factory/work-items/change-requests';
 
@@ -11,7 +12,6 @@ import type { WorkItemSource } from '../../factory/services/workItems';
 import type { FactoryProject } from './github';
 import { getFactorySessionSource, getSessionOwnerDetails, getUserSessionLabel } from './sessionPresentation';
 import type { SessionOwnerDetails, SessionSource, SessionViewerProfile } from './sessionPresentation';
-import { SLACK_SESSION_BRANCH_PREFIX } from './user-sessions';
 
 export type SessionActivityStatus = SessionRowWire['status'];
 

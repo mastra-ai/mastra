@@ -27,7 +27,7 @@ export class ProbedList<T> {
     }
     const now = Date.now();
     const hit = this.#held.get(key);
-    if (hit?.stamp === found.stamp && now - hit.takenAt < TTL_MS && now - found.newestAt >= SETTLE_MS) {
+    if (hit?.stamp === found.stamp && now - hit.takenAt < TTL_MS && hit.takenAt - found.newestAt >= SETTLE_MS) {
       return hit.rows;
     }
     const entry = { stamp: found.stamp, takenAt: now, rows: load().then(rows => Object.freeze(rows)) };

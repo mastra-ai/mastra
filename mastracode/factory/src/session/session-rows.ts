@@ -237,18 +237,26 @@ function orderCardRows(cardRows: readonly BuiltRow[], boards: BoardRegistry): Se
     });
 }
 
-function oneRowPerCard(rows: readonly BuiltRow[], facts: SessionRowFacts): SessionRow[] {
-  const rowsByCard = new Map<string, BuiltRow[]>();
+function rowsByCard(rows: readonly BuiltRow[]): ReadonlyMap<string, readonly BuiltRow[]> {
+  const byCard = new Map<string, BuiltRow[]>();
   for (const built of rows) {
     const { itemId } = built.row;
     if (itemId === undefined) continue;
-    const cardRows = rowsByCard.get(itemId);
+    const cardRows = byCard.get(itemId);
     if (cardRows) cardRows.push(built);
-    else rowsByCard.set(itemId, [built]);
+    else byCard.set(itemId, [built]);
   }
+  return byCard;
+}
+
+function oneRowPerCard(
+  rows: readonly BuiltRow[],
+  byCard: ReadonlyMap<string, readonly BuiltRow[]>,
+  facts: SessionRowFacts,
+): SessionRow[] {
   return rows.flatMap(built => {
     const { itemId } = built.row;
-    const cardRows = itemId === undefined ? undefined : rowsByCard.get(itemId);
+    const cardRows = itemId === undefined ? undefined : byCard.get(itemId);
     if (!cardRows || cardRows.length === 1) return [built.row];
     const [shown, ...others] = orderCardRows(cardRows, facts.boards);
     if (shown?.session.sessionId !== built.row.session.sessionId) return [];
@@ -267,7 +275,7 @@ function oneRowPerCard(rows: readonly BuiltRow[], facts: SessionRowFacts): Sessi
 
 function linkFollowedCards(
   rows: readonly BuiltRow[],
-  cardRows: readonly BuiltRow[],
+  byCard: ReadonlyMap<string, readonly BuiltRow[]>,
   facts: SessionRowFacts,
 ): SessionRow[] {
   const viewerFollows = new Set(
@@ -276,14 +284,9 @@ function linkFollowedCards(
   const waitsOnViewer = ({ row }: BuiltRow) =>
     facts.parkedSessionIds.has(row.session.sessionId) && row.itemId !== undefined && viewerFollows.has(row.itemId);
   return rows.map(({ session, row }) => {
-    const followed = new Set(session.followedWorkItemIds);
-    if (followed.size === 0) return row;
-    const linked = cardRows.filter(
-      cardRow =>
-        cardRow.row.itemId !== undefined &&
-        followed.has(cardRow.row.itemId) &&
-        cardRow.row.session.sessionId !== session.sessionId,
-    );
+    const linked = [...new Set(session.followedWorkItemIds)]
+      .flatMap(itemId => byCard.get(itemId) ?? [])
+      .filter(cardRow => cardRow.row.session.sessionId !== session.sessionId);
     if (linked.length === 0) return row;
     const waiting = linked.find(waitsOnViewer);
     return {
@@ -311,7 +314,8 @@ export function sessionRows(facts: SessionRowFacts): SessionRow[] {
   const userRows = facts.sessions.flatMap(session =>
     isPersonSessionBranch(session.branch) ? [userRow(session, cardSessionOf.get(session.sessionId), facts)] : [],
   );
-  return [...oneRowPerCard(factoryRows, facts), ...linkFollowedCards(userRows, factoryRows, facts)];
+  const byCard = rowsByCard(factoryRows);
+  return [...oneRowPerCard(factoryRows, byCard, facts), ...linkFollowedCards(userRows, byCard, facts)];
 }
 
 // A run predating shared resources also ran under its session id as resource.
