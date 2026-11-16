@@ -471,7 +471,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
 
       // The verdict changed the card, so the session is sent the card again before its next step.
       const call = { type: 'tool-call', toolCallId: 'verdict-1', toolName: 'factory_record_review_verdict' };
-      const result = { type: 'tool-result', toolCallId: 'verdict-1', toolName: 'factory_record_review_verdict' };
+      const result = {
+        type: 'tool-result',
+        toolCallId: 'verdict-1',
+        toolName: 'factory_record_review_verdict',
+        output: { type: 'json', value: { status: 'recorded' } },
+      };
       const sameRun = await resend([{ content: [call, result], toolCalls: [call], toolResults: [result] }]);
       expect(sameRun?.contents).toContain(`Last PR review: approve on #23029 at ${NEW}`);
       expect(sameRun?.contents).toContain(`Your verdict for this review pass is recorded: "approve" on \`${NEW}\`.`);
@@ -482,10 +487,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
         'Your verdict for this review pass is recorded',
       );
       // A verdict call that failed recorded nothing, so the reviewer is still asked for one.
-      const failed = { type: 'tool-error', toolCallId: 'verdict-1', toolName: 'factory_record_review_verdict' };
-      expect((await resend([{ content: [call, failed], toolCalls: [call], toolResults: [] }]))?.contents).not.toContain(
-        'Your verdict for this review pass is recorded',
-      );
+      // This is how a failed call reads once the step's content is rebuilt from the thread.
+      const failed = { ...result, output: { type: 'error-text', value: 'The Review card changed' } };
+      expect(
+        (await resend([{ content: [call, failed], toolCalls: [call], toolResults: [failed] }]))?.contents,
+      ).not.toContain('Your verdict for this review pass is recorded');
 
       // A later run is a new pass: a re-requested review, or a person disputing a finding, on
       // the same head must still be able to end in a verdict.

@@ -163,13 +163,21 @@ export class FactoryWorkItemStateProcessor implements Processor<'factory-work-it
 
 const VERDICT_TOOL = 'factory_record_review_verdict';
 
+type ToolPart = { toolName?: unknown; type?: unknown; output?: { type?: unknown } | null };
+
+/** A failed call reaches a step as a result whose output is an error, or as a `tool-error` part. */
+function failed(part: ToolPart): boolean {
+  const output = part.output?.type;
+  return part.type === 'tool-error' || output === 'error-text' || output === 'error-json';
+}
+
 /** Whether `parts` (a step's tool calls, tool results or content) has an entry for the verdict tool. */
-function hasVerdictToolPart(parts: unknown, type?: string): boolean {
+function hasVerdictToolPart(parts: unknown, matches: (part: ToolPart) => boolean = () => true): boolean {
   return (
     Array.isArray(parts) &&
-    parts.some(part => {
-      const { toolName, type: partType } = (part ?? {}) as { toolName?: unknown; type?: unknown };
-      return toolName === VERDICT_TOOL && (type === undefined || partType === type);
+    parts.some(raw => {
+      const part = (raw ?? {}) as ToolPart;
+      return part.toolName === VERDICT_TOOL && matches(part);
     })
   );
 }
@@ -182,7 +190,7 @@ function hasVerdictToolPart(parts: unknown, type?: string): boolean {
 function recordedVerdict(steps: unknown[]): boolean {
   return steps.some(raw => {
     const step = (raw ?? {}) as { toolCalls?: unknown; toolResults?: unknown; content?: unknown };
-    if (hasVerdictToolPart(step.content, 'tool-error')) return false;
+    if (hasVerdictToolPart(step.content, failed) || hasVerdictToolPart(step.toolResults, failed)) return false;
     return hasVerdictToolPart(step.toolResults) || hasVerdictToolPart(step.toolCalls);
   });
 }
