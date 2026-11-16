@@ -1939,6 +1939,16 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect((await h.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
     });
 
+    it("keeps issue 42's card in PR review when an outsider closes their linked merge request unmerged", async () => {
+      const h = await harness(10);
+      const issue = await h.issueCard('pr-review');
+      await h.ingest(mergeRequest(17, 'Closes #42', { author: 'external-author' }));
+
+      await h.ingest(mergeRequest(17, 'Closes #42', { author: 'external-author', action: 'close', deliveryId: 'd-close-17' }));
+
+      expect(await h.cards()).toEqual([expect.objectContaining({ id: issue.id, stages: ['pr-review'] })]);
+    });
+
     it("treats an outsider's fork merge request from a card's session branch as the outsider's, not Factory's", async () => {
       const h = await harness(10);
       const issue = await h.issueCard('intake');

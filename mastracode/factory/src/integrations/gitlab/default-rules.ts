@@ -7,6 +7,7 @@ import {
   reviewedPullRequest,
   reviewsPullRequest,
   sourceExternalId,
+  trustedPullRequestSource,
 } from '../../boards/index.js';
 import {
   closedByRoutes,
@@ -61,6 +62,19 @@ function attachedMergeRequest(context: FactoryGitLabRuleContext): boolean {
   const { item, mergeRequest } = context;
   if (!item || !mergeRequest || isPullRequestCard(item)) return false;
   return pullRequestSources(item).some(source => isEventMergeRequest(context, source));
+}
+
+/**
+ * Whether the event's merge request is an outsider's linked to the card that no person picked as
+ * its working merge request: what happens to it settles nothing about the card.
+ */
+function unpickedOutsiderMergeRequest(context: FactoryGitLabRuleContext): boolean {
+  const { item } = context;
+  if (!item || !attachedMergeRequest(context) || context.mergeRequest?.factoryAuthored) return false;
+  const source = pullRequestSources(item).find(candidate => isEventMergeRequest(context, candidate))!;
+  if (trustedPullRequestSource(item, source)) return false;
+  const working = workingPullRequest(item);
+  return working === undefined || !isEventMergeRequest(context, working);
 }
 
 /**
@@ -288,6 +302,7 @@ function mergeRequestClosed(context: FactoryGitLabRuleContext) {
     // where its board's cards rest.
     const initialPhase = context.flow?.initialPhase;
     if (!initialPhase || !attachedMergeRequest(context) || !inPullRequestReview(context)) return;
+    if (unpickedOutsiderMergeRequest(context)) return;
     const other = workingPullRequest(context.item, context.mergeRequest.number);
     if (other && openPullRequestSource(other)) return;
     return pullRequestMoveByRoutes('pull_request.closed', {

@@ -7429,6 +7429,36 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect((await h.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
     });
 
+    it("keeps issue 42's card in PR review when an outsider closes their linked pull request unmerged", async () => {
+      const h = await harness('read');
+      const issue = await h.issueCard(42, 'pr-review');
+      await h.ingest(openedPullRequest(17, 'Fixes #42'));
+
+      await h.ingest(openedPullRequest(17, 'Fixes #42', 'delivery-close-17', 'closed'));
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(1);
+      expect(cards[0]).toMatchObject({ id: issue.id, stages: ['pr-review'] });
+    });
+
+    it("moves issue 42's card back to Intake once the pull request a person picked closes unmerged", async () => {
+      const h = await harness('read');
+      const issue = await h.issueCard(42, 'pr-review');
+      await h.ingest(openedPullRequest(17, 'Fixes #42'));
+      const linked = (await h.cards())[0]!;
+      await h.workItems.update({
+        orgId: 'org-1',
+        id: issue.id,
+        userId: 'user-1',
+        patch: { metadata: { ...linked.metadata, openPullRequestNumber: 17 } },
+        expectedRevision: linked.revision,
+      });
+
+      await h.ingest(openedPullRequest(17, 'Fixes #42', 'delivery-close-17', 'closed'));
+
+      expect((await h.cards())[0]).toMatchObject({ id: issue.id, stages: ['intake'] });
+    });
+
     it("leaves issue 42's card where it is for an outsider's linked pull request on a project set up before pull requests linked", async () => {
       const h = await harness('read');
       const scope = { orgId: 'org-1', factoryProjectId: h.project.id };

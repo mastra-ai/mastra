@@ -433,6 +433,8 @@ function pullRequestClosed(context: FactoryGithubRuleContext) {
     // review going.
     const initialPhase = context.flow?.initialPhase;
     if (!initialPhase || !attachedPullRequest(context) || !inPullRequestReview(context)) return;
+    // An outsider closing a pull request nobody picked for the card settles nothing about it.
+    if (unpickedOutsiderPullRequest(context)) return;
     const other = workingPullRequest(context.item, context.pullRequest.number);
     if (other && openPullRequestSource(other)) return;
     return pullRequestMoveByRoutes('pull_request.closed', {
