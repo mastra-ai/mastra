@@ -115,10 +115,29 @@ async function proposeRunFor(card: Card) {
   );
 }
 
+async function follow(card: Card, sessionId: string) {
+  await seed.workItems.subscribeToWorkItem({
+    orgId: ORG,
+    factoryProjectId: projectId,
+    workItemId: card.id,
+    sessionId,
+    threadId: sessionId,
+    resourceId: 'u1',
+    userId: 'u1',
+    reason: 'subscribed',
+  });
+}
+
 async function readRows(app: Hono, query = ''): Promise<SessionRowsResponse> {
   const res = await app.request(`/web/factory/projects/${projectId}/session-rows${query}`);
   expect(res.status).toBe(200);
   return FACTORY_ROUTE_CONTRACTS.sessionRows.responseSchema.parse(await res.json());
+}
+
+async function readActivity(app: Hono): Promise<SessionActivityResponse> {
+  const res = await app.request(`/web/factory/projects/${projectId}/session-activity`);
+  expect(res.status).toBe(200);
+  return FACTORY_ROUTE_CONTRACTS.sessionActivity.responseSchema.parse(await res.json());
 }
 
 function rowOf(body: SessionRowsResponse, sessionId: string): SessionRow | undefined {
@@ -211,6 +230,15 @@ describe('GET /web/factory/projects/:id/session-rows', () => {
     expect(rowOf(await readRows(buildApp('u2')), 'their-private')).toBeDefined();
   });
 
+  it("lists the reader's pinned session first, as deep as its window asks, and keeps its open session in view", async () => {
+    for (const sessionId of ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8']) await createSession(sessionId);
+
+    const [group] = (await readRows(buildApp('u1'), '?pin=s1&open=s2&window=all:6')).groups;
+
+    expect(group?.rows.map(row => row.session.sessionId)).toEqual(['s1', 's8', 's7', 's6', 's5', 's4', 's2']);
+    expect(group).toMatchObject({ total: 8, openIndex: 7 });
+  });
+
   it("does not mark a row working from a run on another person's resource", async () => {
     await createSession('mine');
     await createSession('also-mine');
@@ -243,16 +271,7 @@ describe('GET /web/factory/projects/:id/session-rows', () => {
   it("marks the follower's own session waiting when the card it follows parks on a person", async () => {
     const card = await createCardSession('card-run', 'Followed');
     await createSession('follower');
-    await seed.workItems.subscribeToWorkItem({
-      orgId: ORG,
-      factoryProjectId: projectId,
-      workItemId: card.id,
-      sessionId: 'follower',
-      threadId: 'follower',
-      resourceId: 'u1',
-      userId: 'u1',
-      reason: 'subscribed',
-    });
+    await follow(card, 'follower');
 
     const parked = await readRows(buildApp('u1', { parked: new Set(['card-run']) }));
     expect(rowOf(parked, 'follower')).toMatchObject({ status: 'waiting', waitingSessionId: 'card-run' });
@@ -260,6 +279,16 @@ describe('GET /web/factory/projects/:id/session-rows', () => {
     const quiet = await readRows(buildApp('u1'));
     expect(rowOf(quiet, 'follower')?.status).toBe('idle');
     expect(rowOf(quiet, 'follower')?.waitingSessionId).toBeUndefined();
+  });
+
+  it("lists a followed card's sessions under the follower only when the reader reveals them", async () => {
+    await createSession('follower');
+    await follow(await createCardSession('card-run', 'Followed'), 'follower');
+
+    const revealed = await readRows(buildApp('u1'), '?children=true');
+    expect(rowOf(revealed, 'follower')?.childRows?.map(row => row.session.sessionId)).toEqual(['card-run']);
+
+    expect(rowOf(await readRows(buildApp('u1')), 'follower')?.childRows).toBeUndefined();
   });
 });
 
@@ -270,21 +299,35 @@ describe('GET /web/factory/projects/:id/session-activity', () => {
     await createCardSession('quiet-run', 'Quiet');
     await createSession('starting', { materialized: false });
 
-    const res = await buildApp('u1', {
-      running: [{ threadId: 'working-run', resourceId: 'u1' }],
-      parked: new Set(['parked-run']),
-    }).request(`/web/factory/projects/${projectId}/session-activity`);
-
-    expect(res.status).toBe(200);
-    const body: SessionActivityResponse = FACTORY_ROUTE_CONTRACTS.sessionActivity.responseSchema.parse(
-      await res.json(),
+    const body = await readActivity(
+      buildApp('u1', {
+        running: [{ threadId: 'working-run', resourceId: 'u1' }],
+        parked: new Set(['parked-run']),
+      }),
     );
+
     expect(body).toEqual({
       runningSessionIds: ['working-run'],
       parkedSessionIds: ['parked-run'],
       initializingSessionIds: ['starting'],
       cards: { working: 1, waiting: 1 },
       settling: true,
+    });
+  });
+
+  it("leaves another person's private sessions out", async () => {
+    await createSession('their-starting', { userId: 'u2', visibility: 'private', materialized: false });
+    await createSession('their-running', { userId: 'u2', visibility: 'private' });
+    const running = [{ threadId: 'their-running', resourceId: 'their-running' }];
+
+    expect(await readActivity(buildApp('u1', { running }))).toMatchObject({
+      runningSessionIds: [],
+      initializingSessionIds: [],
+      settling: false,
+    });
+    expect(await readActivity(buildApp('u2', { running }))).toMatchObject({
+      runningSessionIds: ['their-running'],
+      initializingSessionIds: ['their-starting'],
     });
   });
 });
