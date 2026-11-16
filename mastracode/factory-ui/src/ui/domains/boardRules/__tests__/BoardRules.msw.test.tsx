@@ -150,6 +150,50 @@ describe('Board rules', () => {
     );
   });
 
+  it('finds the rule that hides one even past a kind-only rule, warning and placing a new rule above it', async () => {
+    const PRS = 'Pull request opened';
+    serveRules({
+      rules: [
+        rule({
+          id: ruleId('prs'),
+          name: 'Pull requests go to Review',
+          on: ['pull_request.opened'],
+          when: { operator: 'AND', conditions: [{ field: 'source.kind', operator: 'equals', value: 'pull_request' }] },
+        }),
+        rule({ id: ruleId('rest'), name: 'Everything else goes to Planning', on: ['pull_request.opened'] }),
+        rule({ id: ruleId('late'), name: 'Late catch-all', on: ['pull_request.opened'] }),
+      ],
+    });
+    const user = userEvent.setup();
+    const { client } = renderRules();
+
+    await screen.findByRole('region', { name: PRS });
+    const row = (name: string) => within(lane(PRS).getByRole('listitem', { name }));
+    expect(row('Everything else goes to Planning').queryByText(/Never reached/)).not.toBeInTheDocument();
+    expect(row('Late catch-all').getByText('Never reached: rule 2 above matches every item.')).toBeVisible();
+
+    await user.click(lane(PRS).getByRole('button', { name: 'Add rule' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
+    await user.click(dialog.getByRole('radio', { name: /Every item/ }));
+    await user.click(dialog.getByRole('button', { name: 'Continue' }));
+    await user.click(dialog.getByRole('radio', { name: 'Planning' }));
+    const name = dialog.getByRole('textbox', { name: 'Name' });
+    await user.clear(name);
+    await user.type(name, 'New catch-all');
+    await user.click(dialog.getByRole('button', { name: 'Create rule' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitForMutationsIdle(client);
+    await waitFor(() =>
+      expect(ruleNames(PRS)).toEqual([
+        'Pull requests go to Review',
+        'New catch-all',
+        'Everything else goes to Planning',
+        'Late catch-all',
+      ]),
+    );
+  });
+
   it('keeps the rule open now when an earlier rule’s save finishes after it was closed', async () => {
     const pending: (() => void)[] = [];
     serveRules({ rules: [bugs(), everythingElse()] });

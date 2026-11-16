@@ -103,7 +103,8 @@ export function RuleLane({
 
       <ol aria-label={`${text.label} rules`} className="flex min-w-0 flex-col">
         {rules.map((rule, index) => {
-          const unreachable = shadowedBy(rules, event, index) >= 0;
+          const hiddenBy = shadowedBy(rules, event, index);
+          const unreachable = hiddenBy >= 0;
           const skipped = !rule.enabled || unreachable;
           const dragging = drag.drag?.from === index;
           const skip = skips?.get(rule.id);
@@ -236,7 +237,7 @@ export function RuleLane({
                   {unreachable ? (
                     <>
                       <TriangleAlert className="text-warning-indicator size-3" aria-hidden />
-                      Never reached: rule {catchAll + 1} above matches every {opened ? 'item' : 'card'}.
+                      Never reached: rule {hiddenBy + 1} above matches every {opened ? 'item' : 'card'}.
                     </>
                   ) : (
                     'Off, skipped'

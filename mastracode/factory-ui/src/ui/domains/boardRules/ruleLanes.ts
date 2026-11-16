@@ -186,12 +186,15 @@ export function catchAllIndex(lane: readonly IntakeRouteInfo[], event: RuleEvent
  * links to or was opened from, so a rule testing only the kind hides just the rules that need that kind too.
  */
 export function shadowedBy(lane: readonly IntakeRouteInfo[], event: RuleEvent, index: number): number {
-  const catchAll = catchAllIndex(lane, event);
-  const [taker, rule] = [lane[catchAll], lane[index]];
-  if (!taker || !rule || index <= catchAll) return -1;
-  if (taker.when === null) return catchAll;
-  const needs = kindsTakenWhole(taker);
-  return requiredKinds(rule).some(kind => needs.includes(kind)) ? catchAll : -1;
+  const rule = lane[index];
+  if (!rule) return -1;
+  const kinds = requiredKinds(rule);
+  return lane.slice(0, index).findIndex(taker => {
+    if (catchAllIndex([taker], event) !== 0) return false;
+    if (taker.when === null) return true;
+    const needs = kindsTakenWhole(taker);
+    return kinds.some(kind => needs.includes(kind));
+  });
 }
 
 /** The kinds a rule's `when` requires outright (`source.kind equals …` among its AND conditions). */
