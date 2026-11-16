@@ -1,3 +1,9 @@
+import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
+import {
+  cardContextSessions,
+  cardThreadSession,
+  itemThreadSession,
+} from '@mastra/factory/work-items/card-context-sessions';
 import { ActivityWick } from '@mastra/playground-ui/components/Activity';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
@@ -8,11 +14,9 @@ import type { ReactElement } from 'react';
 
 import { useParams } from 'react-router';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import type { SessionRowStatus } from '../../workspaces/services/sessionStatus';
 import { boardCardState } from '../boardCardState';
 import { setDragPayload } from '../boardDrag';
 import type { DragPayload } from '../boardDrag';
-import { cardContextSessions, cardThreadSession, itemThreadSession } from '../boardItems';
 import { reworkReason } from '../reworkReason';
 import type { BoardLayout } from '../boardLayout';
 import { boardLoop } from '../boardFlow';

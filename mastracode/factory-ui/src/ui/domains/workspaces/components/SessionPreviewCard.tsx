@@ -1,3 +1,4 @@
+import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { HoverCardContent } from '@mastra/playground-ui/components/HoverCard';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -16,7 +17,6 @@ import { isPullRequestSource } from '../../factory/services/workItems';
 import { useSessionTrail } from '../hooks/useSessionTrail';
 import { layoutSessionTrack } from '../services/sessionTrack';
 import type { SessionOwnerDetails } from '../services/sessionPresentation';
-import type { SessionRowStatus } from '../services/sessionStatus';
 import type { FactoryUserSession } from '../services/user-sessions';
 import { SessionTrack } from './SessionTrack';
 import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';

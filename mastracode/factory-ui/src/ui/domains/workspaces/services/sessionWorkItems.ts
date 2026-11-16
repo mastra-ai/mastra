@@ -1,6 +1,7 @@
+import { cardChangeRequest, isSettledChangeRequest } from '@mastra/factory/work-items/change-requests';
+import type { CardChangeRequest } from '@mastra/factory/work-items/change-requests';
+
 import type { SessionPullRequestTarget } from '../../../../hooks/useSessionPullRequestSubscriptions';
-import { cardChangeRequest, isSettledChangeRequest } from '../../factory/changeRequestState';
-import type { CardChangeRequest } from '../../factory/changeRequestState';
 import { relatedWorkItemIndex } from '../../factory/services/relationships';
 import type { WorkItem } from '../../factory/services/workItems';
 import { isPullRequestSource } from '../../factory/services/workItems';

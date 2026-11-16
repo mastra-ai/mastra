@@ -1,8 +1,9 @@
+import { sessionRowStatus } from '@mastra/factory/session/session-row-status';
+import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
+
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
 import { allSessionRows, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { sessionRowStatus } from '../../workspaces/services/sessionStatus';
-import type { SessionRowStatus } from '../../workspaces/services/sessionStatus';
 import type { WorkItem } from '../services/workItems';
 
 /**

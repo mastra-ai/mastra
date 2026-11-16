@@ -1,5 +1,6 @@
+import { sessionRowStatus } from '@mastra/factory/session/session-row-status';
+
 import type { WorkItemActivity } from '../../../api/types';
-import { sessionRowStatus } from '../workspaces/services/sessionStatus';
 import type { WorkItem } from './services/workItems';
 
 export type ActivityPeriod = 'today' | 'week' | 'month';

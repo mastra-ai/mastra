@@ -82,6 +82,7 @@ import { IntakeRouteRoutes } from './intake-routes.js';
 import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
+import { createProjectSessionsReader } from './project-sessions.js';
 import type { RouteAuth } from './route.js';
 import { SkillRoutes } from './skills.js';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
@@ -819,6 +820,11 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   ];
   const sourceControls = sourceControlIntegrationIds.map(id => deps.sourceControlStorage.forIntegration(id));
   const sourceControlSessions = createSourceControlSessionLookup(sourceControls);
+  const projectSessions = createProjectSessionsReader({
+    sourceControls,
+    ...(deps.users ? { users: deps.users } : {}),
+    ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
+  });
 
   const integrationRoutes = registrations.flatMap(registration => {
     const { integration } = registration;
@@ -858,6 +864,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           sourceControls,
           projects: deps.domains.projects,
           ...(deps.users ? { users: deps.users } : {}),
+          projectSessions,
           controller: deps.controller,
           audit: deps.audit,
           memorySettings: deps.domains.memorySettings,
@@ -1038,6 +1045,8 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           startCoordinator,
           liveSessions: deps.liveSessions,
           runSlots: deps.runSlots,
+          projectSessions,
+          activeRuns: () => deps.controller.listActiveThreadRuns(),
         }).routes()
       : []),
     ...(deps.factoryReady && deps.storedBoards

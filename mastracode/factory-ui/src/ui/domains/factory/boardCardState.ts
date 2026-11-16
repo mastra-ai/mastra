@@ -1,5 +1,6 @@
+import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
+
 import type { InstalledPhaseInfo } from '../../../api/types';
-import type { SessionRowStatus } from '../workspaces/services/sessionStatus';
 import type { FactoryDecisionSummary } from './services/decisions';
 
 /** A card has one status row, so every announcement it could make resolves to one of these. */

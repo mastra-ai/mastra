@@ -24,6 +24,7 @@ import {
   recordWorkItemSplitComplete,
 } from '../../../work-items/split-migration.js';
 import type { LegacyWatermark, WorkItemSplitReport } from '../../../work-items/split-migration.js';
+import { ProbedList, probeNewest } from '../../probed-list.js';
 import {
   BoardScopes,
   bumpBoardVersions,
@@ -1338,6 +1339,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   readonly #listCache = new Map<string, { version: string; takenAt: number; readFrom: number; items: Card[] }>();
   // Joined only at the same board version: a poll after a write must not join a read begun before it.
   readonly #listInFlight = new Map<string, { version: string; startedAt: number; items: Promise<Card[]> }>();
+  readonly #projectSubscriptions = new ProbedList<WorkItemSubscription>();
   #boardChanged: (scope: FactoryBoardScope) => void = () => {};
   readonly #claimableWorkListeners = new Set<(scope: FactoryClaimableWorkScope) => void>();
   // Storage does not know boards: no card counts as finished until the host wires the predicate.
@@ -4233,18 +4235,22 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }: {
     orgId: string;
     factoryProjectId: string;
-  }): Promise<WorkItemSubscription[]> {
-    const rows = await super.ops.findMany<WorkItemSubscriptionDbRow>(
-      FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name,
-      { org_id: orgId, factory_project_id: factoryProjectId },
-      {
-        orderBy: [
-          ['created_at', 'asc'],
-          ['id', 'asc'],
-        ],
-      },
+  }): Promise<readonly WorkItemSubscription[]> {
+    const ops = super.ops;
+    const where = { org_id: orgId, factory_project_id: factoryProjectId };
+    return this.#projectSubscriptions.read(
+      `${orgId}\u0000${factoryProjectId}`,
+      () => probeNewest(ops, FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, where, 'created_at'),
+      async () =>
+        (
+          await ops.findMany<WorkItemSubscriptionDbRow>(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, where, {
+            orderBy: [
+              ['created_at', 'asc'],
+              ['id', 'asc'],
+            ],
+          })
+        ).map(toWorkItemSubscription),
     );
-    return rows.map(toWorkItemSubscription);
   }
 
   /** The work items one session follows in a Factory, earliest first. */

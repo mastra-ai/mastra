@@ -1,3 +1,4 @@
+import { cardChangeRequest } from '@mastra/factory/work-items/change-requests';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -6,7 +7,7 @@ import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { Link } from 'react-router';
 
 import { externalLinkLabel } from '../boardItems';
-import { cardChangeRequest, changeRequestStatus, changeRequestStatusLabel } from '../changeRequestState';
+import { changeRequestStatus, changeRequestStatusLabel } from '../changeRequestState';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
 import { relatedCardName, relationshipLabel, workItemReference } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';

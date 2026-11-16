@@ -1070,6 +1070,38 @@ describe('SourceControlStorage', () => {
       ).toEqual([]);
     });
 
+    it('listByProject shows a session started or renamed after the last list, and private ones only to their owner', async () => {
+      const project = await createProject();
+      const { first } = await twoLinks(project.id);
+      const listed = async (viewerUserId: string) =>
+        (await github.sessions.listByProject({ orgId: 'org-1', factoryProjectId: project.id, viewerUserId }))
+          .map(session => `${session.sessionId}:${session.title ?? ''}`)
+          .sort();
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-15T10:00:00Z') });
+      try {
+        await github.sessions.create({
+          ...sessionInput('00000000-0000-4000-8000-000000000151', first.id, 'user-1', 'a'),
+          visibility: 'private',
+        });
+        vi.setSystemTime(Date.now() + 10_000);
+        expect(await listed('user-1')).toEqual(['00000000-0000-4000-8000-000000000151:']);
+        expect(await listed('user-2')).toEqual([]);
+
+        await github.sessions.create(sessionInput('00000000-0000-4000-8000-000000000152', first.id, 'user-2', 'b'));
+        expect(await listed('user-2')).toEqual(['00000000-0000-4000-8000-000000000152:']);
+
+        vi.setSystemTime(Date.now() + 10_000);
+        await github.sessions.rename({ sessionId: '00000000-0000-4000-8000-000000000151', title: 'renamed' });
+        vi.setSystemTime(Date.now() + 10_000);
+        expect(await listed('user-1')).toEqual([
+          '00000000-0000-4000-8000-000000000151:renamed',
+          '00000000-0000-4000-8000-000000000152:',
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('session repository rows round-trip, are unique per (session, link) and go away with the session', async () => {
       const project = await createProject();
       const { first, second } = await twoLinks(project.id);
