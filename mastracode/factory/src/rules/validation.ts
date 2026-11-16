@@ -109,7 +109,7 @@ function boardEvent(value: unknown, label: string): BoardEventFacts {
   if (!isPlainObject(value)) throw new FactoryRuleValidationError(`${label} event must be an object.`);
   assertExactKeys(
     value,
-    ['type', 'reason', 'labels', 'assignees', 'pullRequestTrusted', 'closedIssue'],
+    ['type', 'reason', 'labels', 'assignees', 'pullRequest', 'pullRequestTrusted', 'closedIssue'],
     `${label} event`,
   );
   const type = enumValue(value.type, STATUS_EVENTS, `${label} event type`);
@@ -123,11 +123,15 @@ function boardEvent(value: unknown, label: string): BoardEventFacts {
   if (value.pullRequestTrusted !== undefined && typeof value.pullRequestTrusted !== 'boolean') {
     throw new FactoryRuleValidationError(`${label} event pullRequestTrusted must be a boolean.`);
   }
+  if (value.pullRequest !== undefined && (typeof value.pullRequest !== 'string' || value.pullRequest.length === 0)) {
+    throw new FactoryRuleValidationError(`${label} event pullRequest must be a non-empty string.`);
+  }
   return {
     type,
     ...(reason ? { reason } : {}),
     ...(labels ? { labels } : {}),
     ...(assignees ? { assignees } : {}),
+    ...(typeof value.pullRequest === 'string' ? { pullRequest: value.pullRequest } : {}),
     ...(typeof value.pullRequestTrusted === 'boolean' ? { pullRequestTrusted: value.pullRequestTrusted } : {}),
     ...(value.closedIssue !== undefined ? { closedIssue: closedIssueFacts(value.closedIssue, label) } : {}),
   };

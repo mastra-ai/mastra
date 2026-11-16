@@ -148,9 +148,11 @@ export function combineUpdates(events: readonly BoardEventFacts[]): BoardEventFa
     labels: combineChanges(events.flatMap(event => (event.labels ? [event.labels] : []))),
     assignees: combineChanges(events.flatMap(event => (event.assignees ? [event.assignees] : []))),
   });
+  if (!combined) return undefined;
+  const identified = first.pullRequest !== undefined ? { ...combined, pullRequest: first.pullRequest } : combined;
   // The folded change stands for every pull request in it, so it is trusted only when each one is.
-  if (!combined || events.some(event => event.pullRequestTrusted === undefined)) return combined;
-  return { ...combined, pullRequestTrusted: events.every(event => event.pullRequestTrusted === true) };
+  if (events.some(event => event.pullRequestTrusted === undefined)) return identified;
+  return { ...identified, pullRequestTrusted: events.every(event => event.pullRequestTrusted === true) };
 }
 
 /**
@@ -198,6 +200,11 @@ export interface BoardEventFacts {
   reason?: CloseReason;
   labels?: ItemChange;
   assignees?: ItemChange;
+  /**
+   * On a pull request's update: which pull request changed (its source's external id), so changes
+   * to two pull requests on one card never net out against each other.
+   */
+  pullRequest?: string;
   /** On a pull request event: whether that pull request's author has write access (or is Factory). */
   pullRequestTrusted?: boolean;
   /**

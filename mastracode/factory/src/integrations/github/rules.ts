@@ -868,7 +868,11 @@ export class GithubRules {
         repositoryName,
         project,
         item,
-        event && { ...event, pullRequestTrusted: trustedPullRequestSource(item, attached) },
+        event && {
+          ...event,
+          pullRequest: attached.externalId,
+          pullRequestTrusted: trustedPullRequestSource(item, attached),
+        },
       );
       return { status: queued === 'committed' || queued === 'replayed' ? 'committed' : 'ignored' };
     }

@@ -4345,6 +4345,67 @@ describe('GithubRules issue labels', () => {
     },
   );
 
+  it("moves an issue's card for one linked pull request's label even when another's change cancels it out", async () => {
+    const base = await setup('write');
+    const scope = { orgId: 'org-1', factoryProjectId: base.project.id };
+    await base.boards.createIntakeRoute(
+      scope,
+      {
+        name: 'Ready pull requests ship',
+        on: ['pull_request.updated'],
+        when: { operator: 'AND', conditions: [{ field: 'event.labels.added', operator: 'contains', value: 'ready' }] },
+        target: { boardKey: 'work', phaseKey: 'done' },
+      },
+      'admin',
+    );
+    const boards = new ProjectBoardCache({ codeRegistry: createTriageWorkRegistry(), storage: base.boards, recheckMs: 0 });
+    const service = new GithubRules({
+      github: base.github,
+      sourceControl: base.sourceControl,
+      integrationStorage: base.integrationStorage,
+      projects: base.projects,
+      storage: base.workItems,
+      boards,
+      configVersion: 'factory-config-v1',
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: {} as never,
+      storage: base.workItems,
+      boards,
+      transitionService: new FactoryTransitionService({ storage: base.workItems, boards, configVersion: 'factory-config-v1' }),
+      intakeRoutes: base.boards,
+      ownerId: 'pull-request-label-identity',
+    });
+    const card = await createLinkedIssue(base.workItems, base.project.id, ['intake']);
+    for (const number of [17, 18]) {
+      await base.workItems.attachSource({
+        orgId: 'org-1',
+        id: card.id,
+        source: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: `github:10:pull-request:${number}`,
+          url: `https://github.com/acme/repo/pull/${number}`,
+        },
+        metadata: { state: 'open' },
+      });
+    }
+
+    // In one burst: #17 gets `ready`, and #18 loses it.
+    await service.ingest(pullRequestChanged('labeled', 'label-17', { label: { name: 'ready' } }));
+    await service.ingest(
+      pullRequestChanged('unlabeled', 'unlabel-18', {
+        label: { name: 'ready' },
+        pull_request: { number: 18, html_url: 'https://github.com/acme/repo/pull/18' },
+      }),
+    );
+    for (const at of ['2030-01-01T00:01:00Z', '2030-01-01T00:01:01Z', '2030-01-01T00:01:02Z']) {
+      await dispatcher.runOnce(new Date(at));
+    }
+
+    expect((await base.workItems.get({ orgId: 'org-1', id: card.id }))?.stages).toEqual(['done']);
+  });
+
   async function notRoutedIssue(kind: 'issue' | 'pull_request' = 'issue') {
     const base = await setup('write');
     const scope = { orgId: 'org-1', factoryProjectId: base.project.id };

@@ -2721,7 +2721,7 @@ export class FactoryDecisionDispatcher {
   /**
    * The one update event an update decision stands for, or undefined when it has nothing to do.
    * Updates to the same card of the same kind (work item or pull request, the card's own session
-   * or anyone else) fold into the newest one: an older one gives way to it, and the newest carries
+   * or anyone else) and to the same pull request fold into the newest one: an older one gives way to it, and the newest carries
    * the net change of every one since the group last moved the card, so a label added then removed
    * nets out. The newest waits until no update has arrived for {@link UPDATE_BURST_MS}, and one
    * from the card's own session also until the session's run ends.
@@ -2737,6 +2737,7 @@ export class FactoryDecisionDispatcher {
       return (
         candidate.type === 'routeEvent' &&
         candidate.event?.type === decision.event.type &&
+        candidate.event.pullRequest === decision.event.pullRequest &&
         (candidate.fromCardSession === true) === (decision.fromCardSession === true)
       );
     };
