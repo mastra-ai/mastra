@@ -163,7 +163,8 @@ export class FactoryWorkItemStateProcessor implements Processor<'factory-work-it
 
 const VERDICT_TOOL = 'factory_record_review_verdict';
 
-function names(parts: unknown, type?: string): boolean {
+/** Whether `parts` (a step's tool calls, tool results or content) has an entry for the verdict tool. */
+function hasVerdictToolPart(parts: unknown, type?: string): boolean {
   return (
     Array.isArray(parts) &&
     parts.some(part => {
@@ -181,8 +182,8 @@ function names(parts: unknown, type?: string): boolean {
 function recordedVerdict(steps: unknown[]): boolean {
   return steps.some(raw => {
     const step = (raw ?? {}) as { toolCalls?: unknown; toolResults?: unknown; content?: unknown };
-    if (names(step.content, 'tool-error')) return false;
-    return names(step.toolResults) || names(step.toolCalls);
+    if (hasVerdictToolPart(step.content, 'tool-error')) return false;
+    return hasVerdictToolPart(step.toolResults) || hasVerdictToolPart(step.toolCalls);
   });
 }
 
