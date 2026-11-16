@@ -948,14 +948,17 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    *
    * It also re-reads this call's own entry, which a deleteIndex may have removed or started removing
    * since the write: provisioning then would leave a search index no registration records. Callers
-   * run it last before provisioning. An entry another call rewrote since is live and still records
-   * the target, so it is not refused here.
+   * run it last before provisioning. The entry must still record `collectionName` and every name in
+   * `expected`, the targets this call provisions: another call may have retargeted it since, and
+   * provisioning the old target would leave an index nothing records. A rewrite with the same
+   * targets (an identical concurrent call) passes.
    */
   private async assertNoPendingDrop(
     collectionName: string,
     indexName: string,
     names: (string | undefined)[],
     op: 'CREATE_INDEX' | 'CREATE_SEARCH_INDEX',
+    expected: Partial<Pick<RegistryDoc, 'searchIndexName' | 'textSearchIndexName'>>,
   ): Promise<void> {
     await this.testHooks?.beforePendingDropCheck?.(indexName);
     const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
@@ -970,6 +973,18 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       });
     }
     this.assertNotDeleting(own, op);
+    const changed = Object.entries({ collectionName, ...expected })
+      .filter(([field, value]) => own[field as keyof RegistryDoc] !== value)
+      .map(([field, value]) => `${field} "${String(own[field as keyof RegistryDoc])}" instead of "${value}"`);
+    if (changed.length) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', op, 'CONFLICT'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+        text: `Index "${indexName}" was changed by another call while this one ran (it now records ${changed.join(' and ')}), so nothing was provisioned. Check the index and retry.`,
+      });
+    }
     for (const other of await registry.find({ collectionName, deleting: true, _id: { $ne: indexName } }).toArray()) {
       // A managed delete drops the whole collection, so every name on it is pending.
       const name =
@@ -1543,6 +1558,11 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           indexName,
           [indexNameInternal, textSearchIndexName],
           'CREATE_INDEX',
+          {
+            searchIndexName: indexNameInternal,
+            // Only a managed index provisions the companion text index below.
+            ...(effectiveIsByo ? {} : { textSearchIndexName: textSearchIndexName ?? defaultTextSearchIndex }),
+          },
         );
         vectorIndexCreated = await this.createSearchIndexIgnoringExisting(collection, {
           definition: { fields },
@@ -1831,7 +1851,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           throw error;
         }
       }
-      await this.assertNoPendingDrop(collectionName, indexName, [name], 'CREATE_SEARCH_INDEX');
+      await this.assertNoPendingDrop(collectionName, indexName, [name], 'CREATE_SEARCH_INDEX', {
+        textSearchIndexName: name,
+      });
       await this.testHooks?.beforeSearchIndexProvision?.(indexName);
       this.indexTargets.set(indexName, { ...target, textSearchIndexName: name });
       const created = await this.createSearchIndexIgnoringExisting(collection, { definition, name, type: 'search' });

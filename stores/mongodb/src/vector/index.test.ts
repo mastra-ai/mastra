@@ -131,15 +131,28 @@ const noSearchIndexes = () => ({ toArray: async () => [] });
 
 // Mocked db: the target collection exists, the call's own registration is live, no other one is being deleted,
 // and every registry write matches.
-const stubDb = (v: MongoDBVector) =>
-  ((v as any).db = {
+const stubDb = (v: MongoDBVector) => {
+  // The pre-provision check reads the call's own entry back and expects the targets it is about
+  // to provision, so the fake registry returns the cached target plus the fields last written.
+  const written: Record<string, unknown> = {};
+  (v as any).db = {
     listCollections: () => ({ hasNext: async () => true }),
     collection: () => ({
-      findOne: async () => ({ _id: 'registered' }),
+      findOne: async ({ _id }: { _id: string }) => ({
+        _id,
+        ...(v as any).indexTargets.get(_id),
+        ...written,
+      }),
       find: () => ({ toArray: async () => [] }),
-      updateOne: async () => ({ matchedCount: 1 }),
+      updateOne: async (_filter: unknown, update: any) => {
+        // A pipeline update holds expressions; only its literal text index name is a written value.
+        if (Array.isArray(update)) written.textSearchIndexName = update[0].$set.textSearchIndexName;
+        else Object.assign(written, update.$set);
+        return { matchedCount: 1 };
+      },
     }),
-  });
+  };
+};
 
 // Helper function to wait for a condition with timeout
 async function waitForCondition(
@@ -1538,8 +1551,10 @@ describe('MongoDBVector filterFields (#18587)', () => {
         allowWrites: false,
       });
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
-      vi.spyOn(v as any, 'writeRegistryEntry').mockImplementation(async () => {
+      const write = (v as any).writeRegistryEntry.bind(v);
+      vi.spyOn(v as any, 'writeRegistryEntry').mockImplementation(async (...args: unknown[]) => {
         order.push('persist');
+        return write(...args);
       });
 
       await v.createSearchIndex({ indexName: 'idx', fields: ['note'] });
@@ -1599,7 +1614,8 @@ describe('MongoDBVector filterFields (#18587)', () => {
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       // A legacy managed index with no registry entry yet: the first write creates a full one.
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
-      const writeRegistryEntry = vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+      // Passes through to the fake registry, which the pre-provision check reads back.
+      const writeRegistryEntry = vi.spyOn(v as any, 'writeRegistryEntry');
 
       await v.createSearchIndex({ indexName: 'idx', fields: ['note'] });
 
@@ -2648,7 +2664,12 @@ describe('MongoDBVector autoEmbed', () => {
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       const registry = {
         // Nothing registered on the first read; the call's own entry on the post-write check.
-        findOne: vi.fn().mockResolvedValueOnce(null).mockResolvedValue({ _id: 'movies' }),
+        findOne: vi.fn().mockResolvedValueOnce(null).mockResolvedValue({
+          _id: 'movies',
+          collectionName: 'movies',
+          searchIndexName: 'movies_vector_index',
+          textSearchIndexName: 'movies_search_index',
+        }),
         updateOne: vi.fn().mockResolvedValue({}),
         find: () => ({ toArray: async () => [] }),
       };
@@ -2676,7 +2697,12 @@ describe('MongoDBVector autoEmbed', () => {
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       const registry = {
         // Nothing registered on the first read; the call's own entry on the post-write check.
-        findOne: vi.fn().mockResolvedValueOnce(null).mockResolvedValue({ _id: 'movies' }),
+        findOne: vi.fn().mockResolvedValueOnce(null).mockResolvedValue({
+          _id: 'movies',
+          collectionName: 'movies',
+          searchIndexName: 'movies_vector_index',
+          textSearchIndexName: 'movies_search_index',
+        }),
         updateOne: vi.fn().mockResolvedValue({}),
         find: () => ({ toArray: async () => [] }),
       };

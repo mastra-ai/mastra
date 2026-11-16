@@ -1347,6 +1347,127 @@ describe('legacy ownership', () => {
           expect(await entry(`${coll}_Y`)).toBeNull();
           expect(await searchIndexNames(db, coll)).toEqual([]);
         });
+
+        // Another call retargets the registration between this call's write and its pre-provision
+        // check. Provisioning the old target then would leave a Mastra-created search index that no
+        // registration records, so deleteIndex could never clean it up.
+        describe('target changed before the pre-provision check', () => {
+          const pauses: ReturnType<typeof pause>[] = [];
+          const held = () => {
+            const p = pause();
+            pauses.push(p);
+            return p;
+          };
+          afterEach(() => {
+            for (const p of pauses.splice(0)) p.release.resolve();
+          });
+          const seeded = async (prefix: string) => {
+            const coll = uniqueName(prefix);
+            colls.push(coll);
+            await seedCollection(db, coll, [{ title: 'a', embedding: [1, 0, 0, 0] }]);
+            return coll;
+          };
+
+          it('R1: a createIndex whose vector index name another call changed refuses with CONFLICT and creates nothing', async () => {
+            const coll = await seeded('r1');
+            const p = held();
+            (a as any).testHooks = { beforePendingDropCheck: p.hook };
+            const first = a
+              .createIndex({ indexName: coll, dimension: 4, collectionName: coll, searchIndexName: 'V1' })
+              .catch(e => e);
+            await reached(p);
+            await b.createIndex({ indexName: coll, dimension: 4, collectionName: coll, searchIndexName: 'V2' });
+            p.release.resolve();
+            const err = await first;
+            expect(await searchIndexNames(db, coll)).toEqual(['V2']);
+            expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+            expect(err.category).toBe('USER');
+            expect(err.message).toMatch(/searchIndexName "V2" instead of "V1"/);
+            expect(await entry(coll)).toMatchObject({ searchIndexName: 'V2', ownsVectorIndex: true });
+          });
+
+          it('R2: a refresh whose registration was deleted and recreated on another collection refuses with CONFLICT', async () => {
+            const coll = await byo();
+            const other = await seeded('r2y');
+            const p = held();
+            (a as any).testHooks = { beforePendingDropCheck: p.hook };
+            const refresh = a.createIndex({ indexName: coll, dimension: 4, collectionName: coll }).catch(e => e);
+            await reached(p);
+            await b.deleteIndex({ indexName: coll });
+            await b.createIndex({ indexName: coll, dimension: 4, collectionName: other });
+            p.release.resolve();
+            const err = await refresh;
+            expect(await searchIndexNames(db, coll)).toEqual([]);
+            expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+            expect(err.message).toMatch(new RegExp(`collectionName "${other}" instead of "${coll}"`));
+            expect(await entry(coll)).toMatchObject({ collectionName: other, ownsVectorIndex: true });
+          });
+
+          it('R3: a createSearchIndex whose text index another call renamed refuses with CONFLICT and creates nothing', async () => {
+            const coll = await byo();
+            const p = held();
+            (a as any).testHooks = { beforePendingDropCheck: p.hook };
+            const first = a.createSearchIndex({ indexName: coll, searchIndexName: 'N1' }).catch(e => e);
+            await reached(p);
+            await b.createSearchIndex({ indexName: coll, searchIndexName: 'N2' });
+            p.release.resolve();
+            const err = await first;
+            expect((await searchIndexNames(db, coll)).sort()).toEqual(['N2', `${coll}_vector_index`]);
+            expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'));
+            expect(err.message).toMatch(/textSearchIndexName "N2" instead of "N1"/);
+            const e = await entry(coll);
+            expect(e).toMatchObject({ textSearchIndexName: 'N2', ownsTextIndex: true });
+            expect(e?.retiredTextIndexNames ?? []).toEqual([]);
+          });
+
+          it('a managed createIndex whose companion text index was renamed refuses with CONFLICT and creates neither index', async () => {
+            const coll = uniqueName('cmp');
+            colls.push(coll);
+            const p = held();
+            (a as any).testHooks = { beforePendingDropCheck: p.hook };
+            const create = a.createIndex({ indexName: coll, dimension: 4 }).catch(e => e);
+            await reached(p);
+            await b.createSearchIndex({ indexName: coll, searchIndexName: 'T2' });
+            p.release.resolve();
+            const err = await create;
+            expect(await searchIndexNames(db, coll)).toEqual(['T2']);
+            expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+            expect(err.message).toMatch(new RegExp(`textSearchIndexName "T2" instead of "${coll}_search_index"`));
+            expect(await entry(coll)).toMatchObject({ textSearchIndexName: 'T2', ownsTextIndex: true });
+          });
+
+          // Documented limitation, not a fix: the check compares targets, and the registry has no
+          // stable registration identity, so a delete followed by a recreate with the same target looks
+          // unchanged. The stale refresh provisions the index; its ownership write misses the new
+          // registration's claimToken, and the new registration finds the index already there, so the
+          // index Mastra created stays recorded but not owned and deleteIndex leaves it behind.
+          it('known limit: a refresh racing a delete and an identical recreate leaves the index it creates recorded but not owned', async () => {
+            const coll = await byo();
+            const vector = `${coll}_vector_index`;
+            const pa = held();
+            const pb = held();
+            (a as any).testHooks = { beforePendingDropCheck: pa.hook };
+            const refresh = a.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
+            await reached(pa);
+            await b.deleteIndex({ indexName: coll });
+            expect(await searchIndexNames(db, coll)).toEqual([]);
+            (b as any).testHooks = { beforePendingDropCheck: pb.hook };
+            const recreate = b.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
+            await reached(pb);
+            pa.release.resolve();
+            await refresh;
+            pb.release.resolve();
+            await recreate;
+            expect(await searchIndexNames(db, coll)).toEqual([vector]);
+            const e = await entry(coll);
+            expect(e).toMatchObject({ collectionName: coll, searchIndexName: vector });
+            expect(e?.ownsVectorIndex).not.toBe(true);
+            (b as any).testHooks = undefined;
+            await b.deleteIndex({ indexName: coll });
+            expect(await entry(coll)).toBeNull();
+            expect(await searchIndexNames(db, coll)).toEqual([vector]);
+          });
+        });
       });
 
       it('T18: a managed createSearchIndex still provisions the dynamic default index', async () => {
