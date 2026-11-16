@@ -163,8 +163,7 @@ export async function commitCardUpdate(
     orgId: string;
     factoryProjectId: string;
     item: { id: string; revision: number };
-    ingress: { identity: string; triggerType: string };
-    configVersion: string;
+    ingress: { identity: string };
     actor: Record<string, unknown>;
     event: BoardEventFacts | undefined;
     fromCardSession: boolean;
@@ -180,7 +179,6 @@ export async function commitCardUpdate(
       factoryProjectId: input.factoryProjectId,
       workItemId: input.item.id,
       ingress: input.ingress,
-      configVersion: input.configVersion,
       expectedRevision: revision,
       actor: input.actor,
       outcome: { status: 'accepted' },
@@ -230,8 +228,6 @@ export async function commitObservedChange(
     factoryProjectId: string;
     item: Pick<Card, 'id' | 'revision' | 'metadata' | 'workItem'>;
     ingressId: string;
-    triggerType: string;
-    configVersion: string;
     actor: Record<string, unknown>;
     labels: readonly string[];
     assignee: string | null;
@@ -292,8 +288,7 @@ export async function commitObservedChange(
         orgId: input.orgId,
         factoryProjectId: input.factoryProjectId,
         workItemId: item.id,
-        ingress: { identity, triggerType: input.triggerType },
-        configVersion: input.configVersion,
+        ingress: { identity },
         expectedRevision: item.revision,
         actor: input.actor,
         outcome: { status: 'accepted' },

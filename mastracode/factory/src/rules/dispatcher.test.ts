@@ -3337,7 +3337,7 @@ describe('FactoryDecisionDispatcher', () => {
         await storage.commitRuleEvaluation({
           ...scope,
           workItemId: item.id,
-          ingress: { identity: `labeled-${deliveries}`, triggerType: 'github.issueUpdated' },
+          ingress: { identity: `labeled-${deliveries}` },
           configVersion: 'rules-v1',
           expectedRevision: current.revision,
           actor: { type: 'system', id: 'rules' },

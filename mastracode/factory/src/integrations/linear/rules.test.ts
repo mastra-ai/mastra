@@ -234,7 +234,7 @@ describe('LinearRules', () => {
     const commit = workItems.commitRuleEvaluation.bind(workItems);
     let raced = false;
     vi.spyOn(workItems, 'commitRuleEvaluation').mockImplementation(async input => {
-      if (!raced && input.ingress.triggerType === 'linear.issueUpdated') {
+      if (!raced && input.ingress.identity.endsWith(':update')) {
         raced = true;
         await sync('2026-07-03T00:00:00Z', ['bug', 'ship']);
       }
@@ -301,7 +301,7 @@ describe('LinearRules', () => {
 
     const commit = workItems.commitRuleEvaluation.bind(workItems);
     const spy = vi.spyOn(workItems, 'commitRuleEvaluation').mockImplementation(async input => {
-      if (input.ingress.triggerType === 'linear.issueUpdated') throw new Error('database unavailable');
+      if (input.ingress.identity.endsWith(':update')) throw new Error('database unavailable');
       return commit(input);
     });
     await expect(sync('2026-07-03T00:00:00Z', ['bug', 'ship'])).rejects.toThrow('database unavailable');

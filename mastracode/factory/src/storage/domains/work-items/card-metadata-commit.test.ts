@@ -33,7 +33,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         workItems.commitRuleEvaluation({
           ...scope,
           workItemId: item.id,
-          ingress: { identity, triggerType: 'test' },
+          ingress: { identity },
           configVersion: 'v1',
           expectedRevision,
           actor: { type: 'system', id: 'rules' },

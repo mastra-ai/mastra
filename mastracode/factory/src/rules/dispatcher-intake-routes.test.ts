@@ -206,7 +206,7 @@ async function setup(
     await workItems.commitRuleEvaluation({
       ...scope,
       workItemId: cardId,
-      ingress: { identity: `update-${deliveries}`, triggerType: 'github.issueUpdated' },
+      ingress: { identity: `update-${deliveries}` },
       configVersion,
       expectedRevision: card!.revision,
       actor: { type: 'system', id: 'rules' },

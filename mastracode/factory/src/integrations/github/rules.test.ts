@@ -276,6 +276,7 @@ function pullRequest(
         created_at: createdAt,
         state: merged ? 'closed' : 'open',
         merged,
+        user: { login: 'contributor' },
         head: { ref: 'feature' },
         base: { ref: 'main' },
       },
@@ -4168,6 +4169,7 @@ describe('GithubRules issue labels', () => {
           html_url: 'https://github.com/acme/repo/issues/42',
           state,
           labels: labels.map(name => ({ name })),
+          user: { login: 'maintainer' },
         },
       },
     };
@@ -4462,6 +4464,50 @@ describe('GithubRules issue labels', () => {
       { board: 'work', source: 'pull-request' },
     ]);
     expect((await base.boards.listNotRouted(scope)).notRouted).toEqual([]);
+  });
+
+  it("files an outside author's issue untrusted when a maintainer's label runs intake again", async () => {
+    const { base, scope, service, dispatcher } = await notRoutedIssue();
+    base.github.getRepositoryCollaboratorPermission.mockImplementation(async (_id: number, _repo: string, login: string) =>
+      login === 'outsider' ? 'read' : 'write',
+    );
+    const delivery = issueLabels('labeled', ['ship'], 'outsider-labelled');
+    (delivery.payload.issue as Record<string, unknown>).user = { login: 'outsider' };
+    await service.ingest(delivery);
+    await dispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
+
+    const [card] = await base.workItems.list(scope);
+    expect(card?.workItem.metadata).toMatchObject({ author: 'outsider' });
+    expect(card?.metadata).toMatchObject({ authorTrusted: false });
+  });
+
+  it("files an outside author's reopened pull request untrusted, whoever reopened it", async () => {
+    const { service, workItems, project, github } = await setupRoutes();
+    github.getRepositoryCollaboratorPermission.mockImplementation(async (_id: number, _repo: string, login: string) =>
+      login === 'contributor' ? 'read' : 'write',
+    );
+    const delivery = pullRequest('opened', 'outsider-pr-reopened');
+    const reopened = {
+      ...delivery,
+      payload: { ...delivery.payload, action: 'reopened', sender: { login: 'maintainer' } },
+    };
+    await expect(service.ingest(reopened)).resolves.toEqual({ status: 'committed' });
+    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', metadata: { authorTrusted: false } });
+  });
+
+  it("files an outside author's reopened issue with no card untrusted, whoever reopened it", async () => {
+    const { service, workItems, project, github } = await setupRoutes();
+    github.getRepositoryCollaboratorPermission.mockImplementation(async (_id: number, _repo: string, login: string) =>
+      login === 'outsider' ? 'read' : 'write',
+    );
+    const reopened = issueOpened('outsider-issue-reopened');
+    (reopened.payload as Record<string, unknown>).action = 'reopened';
+    (reopened.payload.issue as Record<string, unknown>).state = 'open';
+    (reopened.payload.issue as Record<string, unknown>).user = { login: 'outsider' };
+    await expect(service.ingest(reopened)).resolves.toEqual({ status: 'committed' });
+    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', metadata: { authorTrusted: false } });
   });
 
   it('files no card when an issue no board took is labelled after it closed', async () => {

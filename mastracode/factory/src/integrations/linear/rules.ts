@@ -265,8 +265,6 @@ export class LinearRules {
         factoryProjectId: input.factoryProjectId,
         item: relatedItem,
         ingressId,
-        triggerType: 'linear.issueUpdated',
-        configVersion: this.options.configVersion,
         actor,
         labels: issue.labels,
         assignee: issue.assignee,

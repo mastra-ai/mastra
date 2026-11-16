@@ -120,12 +120,14 @@ export class IncidentioRules {
     const statuses: IngressStatus[] = [];
     const failures: unknown[] = [];
     for (const issue of input.issues) {
-      if (recorded.has(ingressIds.get(issue)!)) {
+      // One card per follow-up per project; other projects may file their own.
+      const relatedItem = itemsBySourceKey.get(issue.id);
+      // A sighting already evaluated runs no rules again, unless it has a card: then its label or
+      // assignee change may still be waiting to be queued, if queueing it failed the first time.
+      if (recorded.has(ingressIds.get(issue)!) && !relatedItem) {
         statuses.push('replayed');
         continue;
       }
-      // One card per follow-up per project; other projects may file their own.
-      const relatedItem = itemsBySourceKey.get(issue.id);
       try {
         statuses.push(await this.#ingestIssue(input, issue, relatedItem && structuredClone(relatedItem)));
       } catch (error) {
@@ -264,8 +266,6 @@ export class IncidentioRules {
         factoryProjectId: input.factoryProjectId,
         item: relatedItem,
         ingressId,
-        triggerType: 'incidentio.followUpUpdated',
-        configVersion: this.options.configVersion,
         actor,
         labels: issue.labels,
         assignee: issue.assignee,

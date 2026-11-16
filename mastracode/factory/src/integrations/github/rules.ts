@@ -176,6 +176,28 @@ export function activitySignalFor(
   };
 }
 
+/**
+ * A label, assignee or reopen delivery filed again as its item's author opening it, so intake
+ * judges the author's trust, never that of whoever labelled or reopened it. Undefined when the
+ * delivery doesn't name the author.
+ */
+function openedByAuthor(
+  parsed: ParsedGithubWebhook,
+  item: Record<string, unknown> | undefined,
+): { arrival: ParsedGithubWebhook; login: string } | undefined {
+  const author = object(item?.user);
+  const login = string(author?.login);
+  if (!author || !login) return undefined;
+  return {
+    arrival: {
+      ...parsed,
+      deliveryId: `${parsed.deliveryId}:intake`,
+      payload: { ...parsed.payload, action: 'opened', sender: author },
+    },
+    login,
+  };
+}
+
 /** The status change a GitHub delivery reports. `not_planned` and `duplicate` closes are canceled work. */
 export function boardEventFor(context: Pick<FactoryGithubRuleContext, 'event' | 'issue'>): BoardEventFacts | undefined {
   switch (context.event) {
@@ -616,11 +638,7 @@ export class GithubRules {
       orgId: project.orgId,
       factoryProjectId: project.factoryProjectId,
       item,
-      ingress: {
-        identity: `${installationId}:${parsed.deliveryId}`,
-        triggerType: parsed.event === 'pull_request' ? 'github.pullRequestChanged' : 'github.issueUpdated',
-      },
-      configVersion: this.options.configVersion,
+      ingress: { identity: `${installationId}:${parsed.deliveryId}` },
       actor: { ...actor },
       event,
       fromCardSession,
@@ -909,9 +927,10 @@ export class GithubRules {
     ) {
       return { status: 'ignored' };
     }
-    const intake = { ...parsed, deliveryId: `${parsed.deliveryId}:intake`, payload: { ...parsed.payload, action: 'opened' } };
+    const opened = openedByAuthor(parsed, item);
+    if (!opened) return { status: 'ignored' };
     const event = kind === 'issue' ? 'issueOpened' : 'pullRequestOpened';
-    return this.#ingestProject(intake, event, installationId, repositoryId, repositoryName, login, project);
+    return this.#ingestProject(opened.arrival, event, installationId, repositoryId, repositoryName, opened.login, project);
   }
 
   async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
@@ -1084,10 +1103,21 @@ export class GithubRules {
       )
         ? undefined
         : resolvedItem;
-    // A pull request reopened with no card arrives again, as an issue reopened with no card does.
-    if (event === 'pullRequestReopened' && !resolvedItem && string(pullRequest?.state) === 'open') {
-      const arrival = { ...parsed, deliveryId: `${parsed.deliveryId}:intake`, payload: { ...parsed.payload, action: 'opened' } };
-      return this.#ingestProject(arrival, 'pullRequestOpened', installationId, repositoryId, repositoryName, login, project);
+    // An issue or pull request reopened with no card is filed as if its author had just opened it.
+    const reopenedItem =
+      event === 'issueReopened' ? issue : event === 'pullRequestReopened' ? pullRequest : undefined;
+    if (reopenedItem && !resolvedItem && string(reopenedItem.state) === 'open') {
+      const opened = openedByAuthor(parsed, reopenedItem);
+      if (!opened) return { status: 'ignored' };
+      return this.#ingestProject(
+        opened.arrival,
+        event === 'issueReopened' ? 'issueOpened' : 'pullRequestOpened',
+        installationId,
+        repositoryId,
+        repositoryName,
+        opened.login,
+        project,
+      );
     }
     const intake = intakeTarget(this.#boards(project));
     const actor = await githubActor(this.options.github, {
