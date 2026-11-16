@@ -65,6 +65,7 @@ export function SessionsSection() {
   const pinned = usePinnedSessions();
   const viewKey = JSON.stringify([factoryId, view.sort, view.groupBy, filters, children]);
   const [deepened, setDeepened] = useState({ viewKey, extraRows: NO_EXTRA_ROWS });
+  if (deepened.viewKey !== viewKey) setDeepened({ viewKey, extraRows: NO_EXTRA_ROWS });
   const extraRows = deepened.viewKey === viewKey ? deepened.extraRows : NO_EXTRA_ROWS;
   const deepen = (groupKey: string, extra: number | undefined) => {
     const { [groupKey]: _previous, ...others } = extraRows;

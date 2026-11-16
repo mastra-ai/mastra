@@ -133,7 +133,7 @@ describe('Sessions sidebar show more', () => {
     await waitFor(() => expect(links()).toHaveLength(5));
   });
 
-  it('opens another factory with its groups at their first 5 sessions', async () => {
+  it('opens another factory, then the first one again, with its groups at their first 5 sessions', async () => {
     stubSessions(Array.from({ length: 30 }, (_, index) => reviewSession(index + 1)));
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-2/work-items`, () => HttpResponse.json({ items: [] })),
@@ -143,6 +143,7 @@ describe('Sessions sidebar show more', () => {
     renderWithProviders(
       <MemoryRouter initialEntries={['/factories/fp-1']}>
         <ChatSessionContext.Provider value={testChatSession('fp-1', projectRepositoryId)}>
+          <Link to="/factories/fp-1">First factory</Link>
           <Link to="/factories/fp-2">Other factory</Link>
           <Routes>
             <Route path="/factories/:factoryId" element={<SessionsSection />} />
@@ -161,6 +162,11 @@ describe('Sessions sidebar show more', () => {
     await user.click(screen.getByRole('link', { name: 'Other factory' }));
 
     await waitFor(async () => expect(await links()).toHaveLength(5));
+
+    await user.click(screen.getByRole('link', { name: 'First factory' }));
+
+    await waitFor(async () => expect(await links()).toHaveLength(5));
+    expect(screen.getByRole('button', { name: 'Show 20 more' })).toBeInTheDocument();
   });
 
   it('asks the server for 20 more rows of the group, and lists the ones it sends', async () => {
