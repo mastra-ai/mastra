@@ -12,12 +12,10 @@ import type { WorkItem } from '../services/workItems';
  */
 export function useItemSessionStatuses({
   factoryProjectId,
-  projectRepositoryId,
   items,
   parkedSessionIds: parked,
 }: {
   factoryProjectId: string;
-  projectRepositoryId: string;
   items: readonly WorkItem[];
   /** The sessions parked on a plan or a question, read with `items` so a card and its marker agree. */
   parkedSessionIds: readonly string[];

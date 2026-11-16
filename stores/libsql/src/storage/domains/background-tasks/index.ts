@@ -12,6 +12,7 @@ import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import type { SqliteClient as Client, SqliteInValue as InValue } from '../../db/client';
 import { buildSelectColumns } from '../../db/utils';
+import { withClientWriteLock } from '../../db/write-lock';
 import { runPrune, resolveTargets } from '../../retention';
 
 function serializeJson(v: unknown): InValue {
@@ -243,10 +244,12 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
         params.push(options.expectedSuspendedAt.toISOString());
       }
     }
-    const result = await this.#client.execute({
-      sql: `UPDATE ${TABLE_BACKGROUND_TASKS} SET ${setClauses.join(', ')} WHERE ${where}`,
-      args: params,
-    });
+    const result = await withClientWriteLock(this.#client, () =>
+      this.#client.execute({
+        sql: `UPDATE ${TABLE_BACKGROUND_TASKS} SET ${setClauses.join(', ')} WHERE ${where}`,
+        args: params,
+      }),
+    );
     return result.rowsAffected > 0;
   }
 
@@ -350,10 +353,12 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
   }
 
   async deleteTask(taskId: string): Promise<void> {
-    await this.#client.execute({
-      sql: `DELETE FROM ${TABLE_BACKGROUND_TASKS} WHERE id = ?`,
-      args: [taskId],
-    });
+    await withClientWriteLock(this.#client, () =>
+      this.#client.execute({
+        sql: `DELETE FROM ${TABLE_BACKGROUND_TASKS} WHERE id = ?`,
+        args: [taskId],
+      }),
+    );
   }
 
   async deleteTasks(filter: TaskFilter): Promise<void> {
@@ -398,10 +403,12 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
 
     if (conditions.length === 0) return; // Safety: don't delete everything
 
-    await this.#client.execute({
-      sql: `DELETE FROM ${TABLE_BACKGROUND_TASKS} WHERE ${conditions.join(' AND ')}`,
-      args: params,
-    });
+    await withClientWriteLock(this.#client, () =>
+      this.#client.execute({
+        sql: `DELETE FROM ${TABLE_BACKGROUND_TASKS} WHERE ${conditions.join(' AND ')}`,
+        args: params,
+      }),
+    );
   }
 
   async getRunningCount(): Promise<number> {

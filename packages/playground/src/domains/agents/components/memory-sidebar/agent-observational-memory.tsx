@@ -10,12 +10,13 @@ import {
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useElapsedTime } from '@mastra/playground-ui/hooks/use-elapsed-time';
+import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatElapsed } from '@mastra/playground-ui/utils/duration';
 import { useObservationalMemoryWithHistory, useMemoryWithOMStatus, useMemoryConfig } from '@mastra/react/hooks/memory';
-import { Brain, ExternalLink } from 'lucide-react';
 import { useEffect } from 'react';
 import { getObservationWindowTokens } from './lib/observation-window';
 import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agents/context';
@@ -221,7 +222,7 @@ const ProgressBar = ({
 
 const ObservationalMemoryHeader = () => (
   <div className="mb-3 flex items-center gap-2">
-    <Brain className="h-4 w-4 text-badge-purple-indicator" />
+    <IconBrain className="h-4 w-4 text-badge-purple-indicator" />
     <Txt as="h3" variant="subheading" tone="ink">
       Observational Memory
     </Txt>
@@ -231,7 +232,7 @@ const ObservationalMemoryHeader = () => (
 const ObservationalMemoryDisabled = () => (
   <div className="p-4">
     <div className="mb-3 flex items-center gap-2">
-      <Brain className="h-4 w-4 text-muted-foreground" />
+      <IconBrain className="h-4 w-4 text-muted-foreground" />
       <Txt as="h3" variant="subheading" tone="ink">
         Observational Memory
       </Txt>
@@ -253,7 +254,7 @@ const ObservationalMemoryDisabled = () => (
         <Txt as="span" variant="body" className="block">
           Learn about Observational Memory
         </Txt>
-        <ExternalLink className="h-3 w-3" />
+        <IconSquareArrowTopRight className="h-3 w-3" />
       </a>
     </div>
   </div>
@@ -494,7 +495,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
         size="sm"
         className="w-full justify-center"
         onClick={() => (isDetailViewOpen ? closeDetailView() : openDetailView())}
-        icon={<Brain />}
+        icon={<IconBrain />}
       >
         Analyze observations
       </Button>

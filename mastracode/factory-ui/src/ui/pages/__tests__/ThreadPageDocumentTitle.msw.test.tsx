@@ -49,9 +49,7 @@ function stubBase({ workItems, threads }: { workItems: unknown[]; threads: unkno
           {
             id: FACTORY_ID,
             name: 'Acme Factory',
-            repositories: [
-              listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/local/acme/app' }),
-            ],
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main' })],
           },
         ],
       }),
@@ -148,7 +146,7 @@ describe('ThreadPage document title', () => {
     });
     await renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
 
-    await waitFor(() => expect(document.title).toBe('#1567 | Mastra Factory'));
+    await waitFor(() => expect(document.title).toBe('PR #1567 | Mastra Factory'));
   });
 
   it('shows the PR number while the board is still loading', async () => {
@@ -160,7 +158,7 @@ describe('ThreadPage document title', () => {
     });
     renderWithProviders(<RouterProvider router={router} />);
 
-    await waitFor(() => expect(document.title).toBe('#1567 | Mastra Factory'));
+    await waitFor(() => expect(document.title).toBe('PR #1567 | Mastra Factory'));
   });
 
   it('shows the thread title for user sessions', async () => {
@@ -209,7 +207,7 @@ describe('ThreadPage document title', () => {
     });
     await renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
 
-    await waitFor(() => expect(document.title).toBe('#42 | Mastra Factory'));
+    await waitFor(() => expect(document.title).toBe('Issue #42 | Mastra Factory'));
     expect(await screen.findByRole('link', { name: 'Fix flaky login' })).toBeInTheDocument();
   });
 

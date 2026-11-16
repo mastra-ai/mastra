@@ -1,6 +1,6 @@
 import { createHash, createHmac, randomUUID } from 'node:crypto';
 
-import { Daytona } from '@daytonaio/sdk';
+import { Daytona } from '@daytona/sdk';
 import { Workspace } from '@mastra/core/workspace';
 import { S3Filesystem } from '@mastra/s3';
 import { describe, expect, it } from 'vitest';

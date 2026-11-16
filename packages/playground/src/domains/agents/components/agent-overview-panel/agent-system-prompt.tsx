@@ -4,8 +4,9 @@ import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
+import { IconLinebreak } from '@mastra/playground-ui/icons/central/IconLinebreak';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
-import { FileText, WrapText } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { AgentMetadataSection } from '../agent-metadata/agent-metadata-section';
@@ -26,7 +27,7 @@ export function AgentSystemPrompt({ instructions, children }: { instructions: st
       <AgentMetadataSection
         title="System Prompt"
         accent="pink"
-        icon={<FileText />}
+        icon={<IconFileText />}
         actions={
           hasInstructions && (
             <div className="shrink-0">
@@ -55,7 +56,7 @@ export function AgentSystemPrompt({ instructions, children }: { instructions: st
                   className="aria-pressed:bg-fill-hover aria-pressed:text-foreground pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                   onClick={() => setWrapSource(wrapped => !wrapped)}
                 >
-                  <WrapText />
+                  <IconLinebreak />
                 </Button>
               )}
               <CopyButton

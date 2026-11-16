@@ -15,7 +15,7 @@ export const createImageInputSchema = z.object({
     .string()
     .regex(/^(gpt-image-.+|chatgpt-image-latest)$/)
     .optional()
-    .describe('A supported GPT Image model ID. Defaults to "gpt-image-1".'),
+    .describe('A supported GPT Image model ID. Defaults to "gpt-image-2.5-sunburst".'),
   n: z.number().int().min(1).max(10).optional().describe('The number of images to generate. Must be between 1 and 10.'),
   size: z
     .union([z.literal('auto'), z.string().regex(/^[1-9]\d*x[1-9]\d*$/)])
@@ -76,7 +76,7 @@ export function createImageTool(proxy: PlatformProxy) {
         endpoint: '/v1/images/generations',
         data: {
           prompt: input.prompt,
-          model: input.model ?? 'gpt-image-1',
+          model: input.model ?? 'gpt-image-2.5-sunburst',
           ...(input.n !== undefined && { n: input.n }),
           ...(input.size !== undefined && { size: input.size }),
           ...(input.quality !== undefined && { quality: input.quality }),

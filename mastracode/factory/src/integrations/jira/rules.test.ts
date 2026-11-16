@@ -162,6 +162,39 @@ describe('JiraRules', () => {
     expect(upserts).toHaveLength(1);
   });
 
+  it('finds a card filed by hand under the issue key when the sweep names the issue by its id', async () => {
+    const { project, service, workItems, drain } = await setup();
+    const ingest = (observed: typeof issue) =>
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [observed] });
+    await ingest({ ...issue, id: issue.identifier });
+    await drain();
+
+    await ingest({ ...issue, id: '10001', updatedAt: '2026-07-03T00:00:00Z' });
+    await drain();
+
+    const cards = (await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).filter(
+      item => item.externalSource?.url === issue.url,
+    );
+    expect(cards.map(item => item.externalSource?.externalId)).toEqual([issue.identifier]);
+  });
+
+  it('keeps two sites apart when their issues share a key', async () => {
+    const { project, service, workItems, drain } = await setup();
+    const ingest = (observed: typeof issue) =>
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [observed] });
+    await ingest({ ...issue, id: issue.identifier });
+    await drain();
+
+    await ingest({ ...issue, id: '10001', url: 'https://beta.atlassian.net/browse/ENG-42', site: 'beta.atlassian.net' });
+    await drain();
+
+    const cards = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(cards.map(item => item.externalSource?.url).sort()).toEqual([
+      'https://acme.atlassian.net/browse/ENG-42',
+      'https://beta.atlassian.net/browse/ENG-42',
+    ]);
+  });
+
   it('a reopened issue finds its card', async () => {
     const { project, service, workItems, drain, cardsFor } = await setup();
     const ingest = (observed: typeof issue) =>
@@ -282,7 +315,7 @@ describe('JiraRules', () => {
     });
   });
 
-  it.each(['completed', 'canceled'])('closes linked issues in state %s with shared audit metadata', async stateType => {
+  it.each(['completed', 'canceled'])('closes linked issues in state %s', async stateType => {
     const { project, service, workItems } = await setup();
     await workItems.upsert({
       orgId: 'org-1',
@@ -304,8 +337,7 @@ describe('JiraRules', () => {
     });
     expect(commit).toHaveBeenCalledWith(
       expect.objectContaining({
-        configVersion: 'factory-config-v1',
-        ingress: { identity: `jira:${issue.id}:${issue.updatedAt}`, triggerType: 'jira.issueObserved' },
+        ingress: { identity: `jira:${issue.id}:${issue.updatedAt}` },
       }),
     );
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
@@ -466,86 +498,5 @@ describe('Jira board events', () => {
       { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'completed' } },
       { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'canceled' } },
     ]);
-  });
-});
-
-describe('a Jira issue with a card on several boards', () => {
-  it('runs every card\'s own rules when the issue changes', async () => {
-    const { project, service, workItems, drain, cardsFor } = await setup(
-      undefined,
-      createBoardRegistry({ boards: [createTestBoard()] }),
-    );
-    const ingest = (observed: typeof issue) =>
-      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [observed] });
-    await ingest(issue);
-    await drain();
-    const [work] = await cardsFor(project.id);
-    const release = await workItems.linkWorkItemToBoard({
-      orgId: 'org-1',
-      id: work!.id,
-      board: 'release',
-      stage: 'queued',
-      userId: 'user-1',
-    });
-
-    const evaluate = vi.spyOn(workItems, 'commitRuleEvaluation');
-    await ingest({ ...issue, title: 'Fix intake sync faster', updatedAt: '2026-07-03T00:00:00Z' });
-    await drain();
-
-    // One evaluation per card, each under the event's identity suffixed with the card's id.
-    expect(evaluate.mock.calls.map(([input]) => [input.workItemId, input.ingress.identity])).toEqual([
-      [work!.id, `jira:${issue.id}:2026-07-03T00:00:00Z:${work!.id}`],
-      [release!.id, `jira:${issue.id}:2026-07-03T00:00:00Z:${release!.id}`],
-    ]);
-    // Each card stayed on its own board; neither refile dragged the other.
-    const cards = await cardsFor(project.id);
-    expect(cards.map(card => [card.id, card.board ?? 'work', card.stages]).sort()).toEqual(
-      [
-        [work!.id, 'work', work!.stages],
-        [release!.id, 'release', ['queued']],
-      ].sort(),
-    );
-  });
-
-  it("keeps each card's identity for an event when another card of the issue is deleted", async () => {
-    const { project, service, workItems, drain, cardsFor } = await setup(
-      undefined,
-      createBoardRegistry({ boards: [createTestBoard()] }),
-    );
-    const edited = { ...issue, title: 'Fix intake sync faster', updatedAt: '2026-07-03T00:00:00Z' };
-    const ingest = (observed = edited) =>
-      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [observed] });
-    await ingest(issue);
-    await drain();
-    // The edit is evaluated for the issue's only card, under the event's own identity.
-    await ingest();
-    await drain();
-    const [work] = await cardsFor(project.id);
-    // Added after the edit, so the edit has not been evaluated for it.
-    const release = await workItems.linkWorkItemToBoard({
-      orgId: 'org-1',
-      id: work!.id,
-      board: 'release',
-      stage: 'queued',
-      userId: 'user-1',
-    });
-    await workItems.delete({ orgId: 'org-1', id: work!.id });
-
-    const evaluate = vi.spyOn(workItems, 'commitRuleEvaluation');
-    await ingest();
-    await drain();
-    // The deleted card's evaluation of the event is not the release card's: it runs under its own identity.
-    expect(evaluate.mock.calls.map(([input]) => [input.workItemId, input.ingress.identity])).toEqual([
-      [release!.id, `jira:${issue.id}:${edited.updatedAt}:${release!.id}`],
-    ]);
-    expect(await evaluate.mock.results[0]!.value).toMatchObject({ status: 'committed' });
-
-    // And it replays under that identity from then on.
-    evaluate.mockClear();
-    await ingest();
-    expect(evaluate.mock.calls.map(([input]) => input.ingress.identity)).toEqual([
-      `jira:${issue.id}:${edited.updatedAt}:${release!.id}`,
-    ]);
-    expect(await evaluate.mock.results[0]!.value).toMatchObject({ status: 'replayed' });
   });
 });

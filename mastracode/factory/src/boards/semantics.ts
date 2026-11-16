@@ -211,12 +211,6 @@ export function hasPullRequest(item: SourcedItem & { readonly source?: string })
   );
 }
 
-/** A source row's external id without the type/workspace scope storage prefixes it with. */
-export function sourceExternalId(source: Pick<WorkItemSourceRow, 'sourceType' | 'workspaceId' | 'externalId'>): string {
-  const prefix = `${source.sourceType}:${source.workspaceId ? `${source.workspaceId}:` : ''}`;
-  return source.externalId.startsWith(prefix) ? source.externalId.slice(prefix.length) : source.externalId;
-}
-
 /** The provider number (GitHub PR number, GitLab MR IID) a pull request source names. */
 export function pullRequestSourceNumber(source: Pick<WorkItemSourceRow, 'metadata'>): number | undefined {
   const metadata = source.metadata ?? {};
@@ -536,3 +530,5 @@ export function boundChangeRequestNumber(boards: Pick<BoardRegistry, 'get'>, ite
   // A GitHub key ends in its number (`github-pr:34`); a GitLab key is encoded, so its digits mean nothing.
   return source === 'github-pr' ? /(\d+)$/.exec(item.externalSource?.externalId ?? '')?.[1] : undefined;
 }
+
+export { sourceExternalId } from '../work-items/source-external-id.js';

@@ -8268,6 +8268,7 @@ export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body = {
   format?: ('legacy' | 'vnext') | undefined;
   perStep?: boolean | undefined;
   validateInputs?: boolean | undefined;
+  storageVersion?: (1 | 2) | undefined;
 };
 
 export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Response = PostAgentsAgentIdGenerate_Response;
@@ -9320,6 +9321,32 @@ export interface GetMemoryThreadsThreadIdWorkingMemory_RouteContract {
   body: never;
   request: GetMemoryThreadsThreadIdWorkingMemory_Request;
   response: GetMemoryThreadsThreadIdWorkingMemory_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /memory/working-memory
+// ============================================================================
+export type GetMemoryWorkingMemory_QueryParams = GetMemoryThreadsThreadIdWorkingMemory_QueryParams;
+
+export type GetMemoryWorkingMemory_Response = GetMemoryThreadsThreadIdWorkingMemory_Response;
+
+export type GetMemoryWorkingMemory_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (GetMemoryWorkingMemory_QueryParams extends never
+      ? {}
+      : {} extends GetMemoryWorkingMemory_QueryParams
+        ? { query?: GetMemoryWorkingMemory_QueryParams }
+        : { query: GetMemoryWorkingMemory_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetMemoryWorkingMemory_RouteContract {
+  pathParams: never;
+  queryParams: GetMemoryWorkingMemory_QueryParams;
+  body: never;
+  request: GetMemoryWorkingMemory_Request;
+  response: GetMemoryWorkingMemory_Response;
   responseType: 'json';
 }
 
@@ -25656,6 +25683,7 @@ export interface RouteTypes {
   'GET /memory/threads/:threadId': GetMemoryThreadsThreadId_RouteContract;
   'GET /memory/threads/:threadId/messages': GetMemoryThreadsThreadIdMessages_RouteContract;
   'GET /memory/threads/:threadId/working-memory': GetMemoryThreadsThreadIdWorkingMemory_RouteContract;
+  'GET /memory/working-memory': GetMemoryWorkingMemory_RouteContract;
   'POST /memory/save-messages': PostMemorySaveMessages_RouteContract;
   'POST /memory/threads': PostMemoryThreads_RouteContract;
   'PATCH /memory/threads/:threadId': PatchMemoryThreadsThreadId_RouteContract;
@@ -26642,6 +26670,9 @@ export interface Client {
   '/memory/threads/:threadId/working-memory': {
     GET: GetMemoryThreadsThreadIdWorkingMemory_RouteContract;
     POST: PostMemoryThreadsThreadIdWorkingMemory_RouteContract;
+  };
+  '/memory/working-memory': {
+    GET: GetMemoryWorkingMemory_RouteContract;
   };
   '/observability/branches': {
     GET: GetObservabilityBranches_RouteContract;

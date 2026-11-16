@@ -189,6 +189,17 @@ async function executeCommand(input: Record<string, any>, context: any) {
     const bgAbortSignal =
       bgConfig?.abortSignal === undefined ? context?.abortSignal : bgConfig.abortSignal || undefined;
 
+    // Lets hosts route exit notices to the run and thread that started the process.
+    // Empty ids count as missing: the tool builder passes `agentId: ''` when
+    // there is no agent id. Direct `execute()` calls pass the thread and
+    // resource at the top level instead of under `agent`.
+    const owner = {
+      agentId: context?.agent?.agentId || undefined,
+      threadId: context?.agent?.threadId || context?.threadId || undefined,
+      resourceId: context?.agent?.resourceId || context?.resourceId || undefined,
+      runId: context?.runId || undefined,
+    };
+
     // Use `let` so callbacks can reference handle.pid via closure.
     // spawn() resolves before any data events fire (Node event loop guarantees this).
     let handle: Awaited<ReturnType<typeof sandbox.processes.spawn>>;
@@ -201,10 +212,10 @@ async function executeCommand(input: Record<string, any>, context: any) {
       // reads stdin and never exits.
       stdinMode: 'ignore',
       onStdout: bgConfig?.onStdout
-        ? (data: string) => bgConfig.onStdout!(data, { pid: handle.pid, toolCallId })
+        ? (data: string) => bgConfig.onStdout!(data, { pid: handle.pid, toolCallId, ...owner })
         : undefined,
       onStderr: bgConfig?.onStderr
-        ? (data: string) => bgConfig.onStderr!(data, { pid: handle.pid, toolCallId })
+        ? (data: string) => bgConfig.onStderr!(data, { pid: handle.pid, toolCallId, ...owner })
         : undefined,
     });
 
@@ -229,7 +240,9 @@ async function executeCommand(input: Record<string, any>, context: any) {
               stderrTruncated: result.stderrTruncated,
               stdoutDroppedBytes: result.stdoutDroppedBytes,
               stderrDroppedBytes: result.stderrDroppedBytes,
+              killedByAbort: handle.killedByAbort,
               toolCallId,
+              ...owner,
             });
           } catch (callbackError) {
             workspace.logger?.error('Background process onExit callback threw', {
