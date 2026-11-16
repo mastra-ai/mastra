@@ -9,7 +9,7 @@ import { renderWithProviders, waitForMutationsIdle } from '../../../../../e2e/ui
 import { BoardRules } from '../components/BoardRules';
 import { FACTORY_ID, PROJECT_URL, rule, ruleId, serveRules } from './fixtures/rulesServer';
 
-const OPENED = 'Issue or pull request opened';
+const OPENED = 'Issue opened';
 
 function renderRules(boardId = 'work') {
   return renderWithProviders(
@@ -56,11 +56,11 @@ describe('Board rules', () => {
     renderRules();
 
     const regions = await screen.findAllByRole('region');
-    expect(regions[0]).toHaveAccessibleName(OPENED);
+    expect(regions[0]).toHaveAccessibleName('Issues');
+    expect(regions[1]).toHaveAccessibleName(OPENED);
     expect(ruleNames(OPENED)).toEqual(['Bugs go to Triage', 'Everything else goes to Intake', 'Never checked']);
     expect(ruleNames('Issue closed')).toEqual(['Closed issues go to Done']);
-    expect(lane(OPENED).getByText('No card yet.', { exact: false })).toBeVisible();
-    expect(await lane(OPENED).findByRole('link', { name: 'Checked last, after Release Preview' })).toHaveAttribute(
+    expect(await lane(OPENED).findByRole('link', { name: 'checked last, after Release Preview' })).toHaveAttribute(
       'href',
       `/factories/${FACTORY_ID}/settings/intake#intake-order`,
     );
@@ -70,8 +70,87 @@ describe('Board rules', () => {
         'Never reached: rule 2 above matches every item.',
       ),
     ).toBeVisible();
-    expect(lane('Issue reopened').getByText('Also files items with no card.')).toBeVisible();
     expect(lane('Issue reopened').getByText('No rules: the card stays where it is')).toBeVisible();
+  });
+
+  it('groups lanes into issues and pull requests, with the intake note on every lane that can file an item with no card', async () => {
+    serveRules({ rules: [bugs(), closed()], order: ['release', 'work'] });
+    renderRules();
+
+    const lanesIn = (name: string) =>
+      within(screen.getByRole('region', { name }))
+        .getAllByRole('region')
+        .map(region => region.getAttribute('aria-label'));
+    await screen.findByRole('region', { name: 'Issues' });
+    expect(lanesIn('Issues')).toEqual([
+      'Issue opened',
+      'Issue reopened',
+      'Issue labels or assignees change',
+      'Issue closed',
+    ]);
+    expect(lanesIn('Pull requests')).toEqual([
+      'Pull request opened',
+      'Pull request reopened',
+      'Pull request labels or assignees change',
+      'Pull request gets new commits',
+      'Review requested',
+      'Pull request merged',
+      'Pull request closed unmerged',
+    ]);
+    expect(
+      lane('Pull request opened').getByText('Links to its issue’s card if one exists; otherwise filed as a new card.'),
+    ).toBeVisible();
+
+    const note = 'No card yet: checked last, after Release Preview; first matching rule files it on this board.';
+    const filing = [
+      'Issue opened',
+      'Issue reopened',
+      'Issue labels or assignees change',
+      'Pull request opened',
+      'Pull request reopened',
+      'Pull request labels or assignees change',
+    ];
+    for (const label of filing) {
+      expect(
+        await lane(label).findByText((_, element) => element?.tagName === 'P' && element.textContent === note),
+      ).toBeVisible();
+    }
+    for (const label of ['Issue closed', 'Pull request merged', 'Review requested']) {
+      expect(lane(label).queryByText(/No card yet/)).not.toBeInTheDocument();
+    }
+  });
+
+  it('shows a rule stored on the old opened event in the Issue opened lane, marked legacy', async () => {
+    serveRules({
+      rules: [{ ...rule({ id: ruleId('legacy'), name: 'Old intake rule' }), on: ['work_item.created' as never] }],
+    });
+    renderRules();
+
+    await screen.findByRole('region', { name: OPENED });
+    const row = within(await lane(OPENED).findByRole('listitem', { name: 'Old intake rule' }));
+    expect(row.getByText('Issue or pull request opened (legacy)')).toBeVisible();
+  });
+
+  it('groups the rule builder triggers the same way, under the same names', async () => {
+    serveRules({ rules: [closed()] });
+    const user = userEvent.setup();
+    renderRules();
+
+    await user.click(
+      within(await screen.findByRole('region', { name: 'Issue closed' })).getByRole('button', { name: 'Add rule' }),
+    );
+    const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
+    await user.click(dialog.getByRole('button', { name: /Trigger/ }));
+    const checkboxes = (group: string) =>
+      within(dialog.getByRole('group', { name: group }))
+        .getAllByRole('checkbox')
+        .map(box => box.textContent);
+    expect(checkboxes('Issues')).toHaveLength(4);
+    expect(checkboxes('Issues')[0]).toContain('Issue opened');
+    expect(checkboxes('Pull requests')).toHaveLength(7);
+    expect(checkboxes('Pull requests')[0]).toContain(
+      'Pull request openedLinks to its issue’s card if one exists; otherwise filed as a new card.',
+    );
   });
 
   it('says an item no rule here takes goes on to the next board, then Not routed', async () => {

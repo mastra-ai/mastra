@@ -23,7 +23,7 @@ import { ConditionRows } from '../../settings/components/ConditionRows';
 import { describeRule, intakeRouteFacts } from '../../settings/components/conditionFields';
 import { boardName, phaseName, phaseOptions } from '../ruleTargets';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
-import { isOpenedLane, LANE_EVENTS, laneText, placesCardless } from '../ruleLanes';
+import { isOpenedLane, LANE_SECTIONS, laneText, placesCardless } from '../ruleLanes';
 import type { RuleEvent } from '../ruleLanes';
 import { ChoiceTile } from './ChoiceTile';
 import { RuleTarget } from './RuleTarget';
@@ -414,7 +414,7 @@ function StoryLine({ label, children }: { label: string; children: ReactNode }) 
   );
 }
 
-/** Events in two groups, the item's own and its pull request's; a rule may listen for several. */
+/** Events grouped like the lanes: new items, then cards on this board; a rule may listen for several. */
 function TriggerStep({
   value,
   disabled,
@@ -424,13 +424,9 @@ function TriggerStep({
   disabled: boolean;
   onChange: (on: RuleEvent[]) => void;
 }) {
-  const groups = [
-    { title: 'Issue', events: LANE_EVENTS.filter(event => !event.startsWith('pull_request.')) },
-    { title: 'Pull request', events: LANE_EVENTS.filter(event => event.startsWith('pull_request.')) },
-  ];
   return (
     <div className="flex flex-col gap-5">
-      {groups.map(group => (
+      {LANE_SECTIONS.map(group => (
         <div key={group.title} role="group" aria-label={group.title} className="flex flex-col gap-2">
           <Txt as="span" variant="eyebrow" tone="muted">
             {group.title}

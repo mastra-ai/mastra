@@ -26,8 +26,24 @@ export const LANE_EVENTS: readonly RuleEvent[] = STATUS_EVENTS;
 /** The event an item with no card arrives on. */
 export const OPENED_EVENT: RuleEvent = 'work_item.opened';
 
-/** Events that also file an item with no card: reopened with no card, or updated while Not routed. */
-const CARDLESS_TOO = new Set(['work_item.reopened', 'work_item.updated']);
+/** Lanes in two sections, as the events split: `work_item.*` are issues, `pull_request.*` are pull requests. */
+export const LANE_SECTIONS: readonly { title: string; events: readonly RuleEvent[] }[] = [
+  { title: 'Issues', events: LANE_EVENTS.filter(event => !event.startsWith('pull_request.')) },
+  { title: 'Pull requests', events: LANE_EVENTS.filter(event => event.startsWith('pull_request.')) },
+];
+
+/** The pre-rename event: stored rules on it take issues and card-less pull requests, and show in the Issue opened lane. */
+export const LEGACY_OPENED_EVENT = 'work_item.created';
+
+/** Events that can file an item with no card yet, through intake. */
+const FILES_CARDLESS = new Set([
+  'work_item.opened',
+  'work_item.reopened',
+  'work_item.updated',
+  'pull_request.opened',
+  'pull_request.reopened',
+  'pull_request.updated',
+]);
 
 interface LaneText {
   label: string;
@@ -36,59 +52,64 @@ interface LaneText {
 }
 
 const LANE_TEXT: Record<string, LaneText> = {
+  [LEGACY_OPENED_EVENT]: {
+    label: 'Issue or pull request opened (legacy)',
+    description: 'Takes new issues and pull requests with no card yet.',
+    icon: Inbox,
+  },
   'work_item.opened': {
-    label: 'Issue or pull request opened',
-    description: 'A new issue or pull request reaches the Factory.',
+    label: 'Issue opened',
+    description: 'A new issue arrives.',
     icon: Inbox,
   },
   'work_item.reopened': {
     label: 'Issue reopened',
-    description: 'A closed issue or pull request is opened again.',
+    description: 'A closed issue is opened again.',
     icon: RotateCcw,
   },
   'work_item.updated': {
     label: 'Issue labels or assignees change',
-    description: 'Someone adds or removes a label or an assignee.',
+    description: 'Someone adds or removes a label or an assignee on an issue.',
     icon: PencilLine,
   },
   'work_item.closed': {
     label: 'Issue closed',
-    description: 'The issue or pull request behind the card is closed.',
+    description: 'The card’s issue is closed.',
     icon: CircleCheck,
   },
   'pull_request.opened': {
     label: 'Pull request opened',
-    description: 'A pull request is opened for the card or linked to it.',
+    description: 'Links to its issue’s card if one exists; otherwise filed as a new card.',
     icon: GitPullRequest,
   },
   'pull_request.reopened': {
     label: 'Pull request reopened',
-    description: 'A linked pull request is opened again.',
+    description: 'A closed pull request is opened again.',
     icon: GitPullRequestArrow,
   },
   'pull_request.updated': {
     label: 'Pull request labels or assignees change',
-    description: 'Someone adds or removes a label or an assignee on a linked pull request.',
+    description: 'Someone adds or removes a label or an assignee on a pull request.',
     icon: PencilLine,
   },
   'pull_request.synchronized': {
     label: 'Pull request gets new commits',
-    description: 'Someone pushes to a linked pull request.',
+    description: 'Someone pushes to the card’s pull request.',
     icon: GitCommitHorizontal,
   },
   'pull_request.review_requested': {
     label: 'Review requested',
-    description: 'A reviewer is requested on a linked pull request.',
+    description: 'A reviewer is requested on the card’s pull request.',
     icon: Eye,
   },
   'pull_request.merged': {
     label: 'Pull request merged',
-    description: 'A linked pull request is merged.',
+    description: 'The card’s pull request is merged.',
     icon: GitMerge,
   },
   'pull_request.closed': {
     label: 'Pull request closed unmerged',
-    description: 'A linked pull request is closed without merging.',
+    description: 'The card’s pull request is closed without merging.',
     icon: GitPullRequestClosed,
   },
 };
@@ -109,18 +130,25 @@ export function isOpenedLane(event: string): boolean {
   return event === OPENED_EVENT;
 }
 
-export function alsoFilesCardless(event: string): boolean {
-  return CARDLESS_TOO.has(event);
+/** Whether a lane can file an item with no card yet, through intake. */
+export function filesCardless(event: string): boolean {
+  return FILES_CARDLESS.has(event);
 }
 
 /** Whether a rule may place an item with no card, so it may only name its own board. */
 export function placesCardless(on: readonly string[]): boolean {
-  return on.some(event => isOpenedLane(event) || alsoFilesCardless(event));
+  return on.some(filesCardless);
+}
+
+/** Whether a stored rule still listens on the pre-rename `work_item.created`. */
+export function isLegacyOpened(rule: IntakeRouteInfo): boolean {
+  const on: readonly string[] = rule.on;
+  return on.includes(LEGACY_OPENED_EVENT);
 }
 
 /** The rules a lane checks, in order. A rule naming several events shows in each of their lanes. */
 export function laneRules(rules: readonly IntakeRouteInfo[], event: RuleEvent): IntakeRouteInfo[] {
-  return rules.filter(rule => rule.on.includes(event));
+  return rules.filter(rule => rule.on.includes(event) || (isOpenedLane(event) && isLegacyOpened(rule)));
 }
 
 /** The first rule in a lane that takes every item, so no rule below it is ever reached; -1 when none does. */

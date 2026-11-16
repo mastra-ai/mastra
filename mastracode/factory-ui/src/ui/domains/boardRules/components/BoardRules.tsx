@@ -2,7 +2,6 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Info } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
@@ -14,7 +13,7 @@ import { useBoardRulesQuery, useIntakeRouteWrites } from '../../../../hooks/useI
 import type { RouteWrite } from '../../../../hooks/useIntakeRoutes';
 import { phaseOptions, reorderWithin } from '../ruleTargets';
 import { INTAKE_ORDER_ANCHOR, settingsSectionPath } from '../../settings/settingsSections';
-import { alsoFilesCardless, catchAllIndex, intakePosition, isOpenedLane, LANE_EVENTS, laneRules } from '../ruleLanes';
+import { catchAllIndex, filesCardless, intakePosition, isOpenedLane, LANE_SECTIONS, laneRules } from '../ruleLanes';
 import type { RuleEvent } from '../ruleLanes';
 import { RuleBuilderDialog } from './RuleBuilderDialog';
 import type { RuleDraft, RuleStep } from './RuleBuilderDialog';
@@ -133,58 +132,61 @@ function BoardLanes({
   const position = order.data ? intakePosition(order.data.boards, board.id) : undefined;
 
   return (
-    <div className="flex flex-col gap-3">
-      {LANE_EVENTS.map(event => {
-        const opened = isOpenedLane(event);
-        const lane = laneRules(rules, event);
-        return (
-          <RuleLane
-            key={event}
-            event={event}
-            rules={lane}
-            board={board}
-            boards={boards}
-            phaseOptions={options}
-            canEdit={canEdit}
-            skips={skips}
-            note={
-              opened ? (
-                <>
-                  <Txt as="p" variant="caption" tone="muted">
-                    No card yet.{' '}
-                    {position && (
-                      <Link to={settingsSectionPath(factoryId, 'intake', INTAKE_ORDER_ANCHOR)} className="underline">
-                        {position}
-                      </Link>
-                    )}
-                  </Txt>
-                  <Txt as="p" variant="caption" tone="muted" className="mt-2 flex gap-1.5">
-                    <Info className="mt-0.5 size-3 shrink-0" aria-hidden />
-                    Pull requests that close an issue with a card join that card automatically. Rules below decide what
-                    runs on them.
-                  </Txt>
-                </>
-              ) : alsoFilesCardless(event) ? (
-                <Txt as="p" variant="caption" tone="muted">
-                  Also files items with no card.
-                </Txt>
-              ) : undefined
-            }
-            footer={opened ? 'Otherwise: checked by the next board, then Not routed' : undefined}
-            onEdit={(rule, focus: RuleFocus) => open({ rule, step: focus })}
-            onAdd={() => open({ event, step: 'conditions' })}
-            onMove={(from, to) => move(event, from, to)}
-            onToggle={(rule, enabled) =>
-              void run([{ kind: 'update', id: rule.id, patch: { enabled, expectedRevision: rule.revision } }])
-            }
-            onDelete={rule =>
-              void run([{ kind: 'delete', id: rule.id, expectedRevision: rule.revision }]).then(
-                done => done && toast.success(`Deleted “${rule.name}”`),
-              )
-            }
-          />
-        );
-      })}
+    <div className="flex flex-col gap-8">
+      {LANE_SECTIONS.map(section => (
+        <section key={section.title} aria-label={section.title} className="flex flex-col gap-3">
+          <Txt as="h2" variant="subheading" tone="ink">
+            {section.title}
+          </Txt>
+          {section.events.map(event => {
+            const opened = isOpenedLane(event);
+            const lane = laneRules(rules, event);
+            return (
+              <RuleLane
+                key={event}
+                event={event}
+                rules={lane}
+                board={board}
+                boards={boards}
+                phaseOptions={options}
+                canEdit={canEdit}
+                skips={skips}
+                note={
+                  filesCardless(event) ? (
+                    <Txt as="p" variant="caption" tone="muted">
+                      No card yet:{' '}
+                      {position && (
+                        <>
+                          <Link
+                            to={settingsSectionPath(factoryId, 'intake', INTAKE_ORDER_ANCHOR)}
+                            className="underline"
+                          >
+                            {position.charAt(0).toLowerCase() + position.slice(1)}
+                          </Link>
+                          ;{' '}
+                        </>
+                      )}
+                      first matching rule files it on this board.
+                    </Txt>
+                  ) : undefined
+                }
+                footer={opened ? 'Otherwise: checked by the next board, then Not routed' : undefined}
+                onEdit={(rule, focus: RuleFocus) => open({ rule, step: focus })}
+                onAdd={() => open({ event, step: 'conditions' })}
+                onMove={(from, to) => move(event, from, to)}
+                onToggle={(rule, enabled) =>
+                  void run([{ kind: 'update', id: rule.id, patch: { enabled, expectedRevision: rule.revision } }])
+                }
+                onDelete={rule =>
+                  void run([{ kind: 'delete', id: rule.id, expectedRevision: rule.revision }]).then(
+                    done => done && toast.success(`Deleted “${rule.name}”`),
+                  )
+                }
+              />
+            );
+          })}
+        </section>
+      ))}
 
       {editing && (
         <RuleBuilderDialog

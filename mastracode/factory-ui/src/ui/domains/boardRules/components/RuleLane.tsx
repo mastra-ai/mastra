@@ -19,7 +19,7 @@ import type { ReactNode } from 'react';
 
 import type { InstalledBoardInfo, IntakeRouteInfo, IntakeSkippedResponse } from '../../../../api/types';
 import { useRowDrag } from '../../settings/components/useRowDrag';
-import { catchAllIndex, isOpenedLane, laneText } from '../ruleLanes';
+import { catchAllIndex, isLegacyOpened, isOpenedLane, LEGACY_OPENED_EVENT, laneText } from '../ruleLanes';
 import type { RuleEvent } from '../ruleLanes';
 import { ConditionChips } from './ConditionChips';
 import { RuleTarget } from './RuleTarget';
@@ -89,7 +89,7 @@ export function RuleLane({
       <div className="flex flex-col gap-1 md:pt-1.5">
         <span className="flex items-center gap-1.5">
           <Icon className="text-badge-amber-indicator size-3.5 shrink-0" aria-hidden />
-          <Txt as="h2" variant="label" tone="ink">
+          <Txt as="h3" variant="label" tone="ink">
             {text.label}
           </Txt>
         </span>
@@ -256,6 +256,11 @@ export function RuleLane({
                 </Txt>
               ))}
               {skip && <SkipWarning skips={skip} />}
+              {opened && isLegacyOpened(rule) && (
+                <Txt as="span" variant="caption" tone="muted" className="mt-1 ml-3">
+                  {laneText(LEGACY_OPENED_EVENT).label}
+                </Txt>
+              )}
 
               {index !== catchAll && (
                 <div aria-hidden className="flex h-7 items-center pl-5.5">
