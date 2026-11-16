@@ -208,8 +208,15 @@ describe('MongoDBVector Integration Tests', () => {
 
     // Cleanup any existing collections
     try {
-      const cols = await vectorDB.listIndexes();
-      await Promise.all(cols.map(c => vectorDB.deleteIndex({ indexName: c })));
+      // deleteIndex refuses unregistered/unowned names, so leftovers from aborted runs are dropped with the raw driver.
+      const raw = new MongoClient(uri);
+      try {
+        const rawDb = raw.db(dbName);
+        for (const c of await rawDb.listCollections({}, { nameOnly: true }).toArray())
+          await rawDb.dropCollection(c.name);
+      } finally {
+        await raw.close();
+      }
       const deleted = await waitForCondition(async () => (await vectorDB.listIndexes()).length === 0, 30000, 500);
       if (!deleted) throw new Error('Timed out waiting for collections to be deleted');
     } catch (error) {
@@ -1202,160 +1209,6 @@ describe('MongoDBVector filterFields (#18587)', () => {
     });
   });
 
-  describe('deleteIndex BYO classification (unit)', () => {
-    const makeVector = () => new MongoDBVector({ id: 'test', uri: 'mongodb://localhost:27017', dbName: 'test_db' });
-    // BYO deletion consults the registry for sibling references to shared physical indexes;
-    // these mocked instances have no live registry, so default to "not shared".
-    const stubNotShared = (v: MongoDBVector) =>
-      vi.spyOn(v as any, 'isIndexNameReferencedElsewhere').mockResolvedValue(false);
-
-    it('drops only the search index for a BYO index even when collectionName === indexName', async () => {
-      const v = makeVector();
-      const drop = vi.fn().mockResolvedValue(undefined);
-      const dropSearchIndex = vi.fn().mockResolvedValue(undefined);
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, dropSearchIndex });
-      const deleteRegistryEntry = vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
-      stubNotShared(v);
-      // BYO index whose collectionName matches its indexName — name equality cannot
-      // distinguish it from a managed index, so the registry flag must govern.
-      stubRegistered(v, {
-        docs: {
-          collectionName: 'docs',
-          searchIndexName: 'docs_vec',
-          isByo: true,
-          ownsVectorIndex: true,
-        },
-      });
-
-      await v.deleteIndex({ indexName: 'docs' });
-
-      expect(dropSearchIndex).toHaveBeenCalledWith('docs_vec');
-      expect(drop).not.toHaveBeenCalled();
-      expect(deleteRegistryEntry).toHaveBeenCalledWith('docs');
-    });
-
-    it('also drops the companion text search index for a BYO index when present (#round3-fix1)', async () => {
-      const v = makeVector();
-      const drop = vi.fn().mockResolvedValue(undefined);
-      const dropSearchIndex = vi.fn().mockResolvedValue(undefined);
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, dropSearchIndex });
-      vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
-      stubNotShared(v);
-      // BYO index that has opted into a full-text index via createSearchIndex.
-      stubRegistered(v, {
-        docs: {
-          collectionName: 'ops',
-          searchIndexName: 'docs_vec',
-          isByo: true,
-          textSearchIndexName: 'ops_search_index',
-          ownsVectorIndex: true,
-          ownsTextIndex: true,
-        },
-      });
-
-      await v.deleteIndex({ indexName: 'docs' });
-
-      // Both the vector index AND the persisted text index are dropped; the collection is not.
-      expect(dropSearchIndex).toHaveBeenCalledWith('docs_vec');
-      expect(dropSearchIndex).toHaveBeenCalledWith('ops_search_index');
-      expect(drop).not.toHaveBeenCalled();
-    });
-
-    it('does not attempt to drop a text index for a BYO index that never opted in (#round3-fix1)', async () => {
-      const v = makeVector();
-      const drop = vi.fn().mockResolvedValue(undefined);
-      const dropSearchIndex = vi.fn().mockResolvedValue(undefined);
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, dropSearchIndex });
-      vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
-      stubNotShared(v);
-      // BYO index with no text index provisioned (textSearchIndexName unset).
-      stubRegistered(v, {
-        docs: {
-          collectionName: 'ops',
-          searchIndexName: 'docs_vec',
-          isByo: true,
-          ownsVectorIndex: true,
-        },
-      });
-
-      await v.deleteIndex({ indexName: 'docs' });
-
-      // Only the vector index is dropped — no phantom text-index drop.
-      expect(dropSearchIndex).toHaveBeenCalledTimes(1);
-      expect(dropSearchIndex).toHaveBeenCalledWith('docs_vec');
-    });
-
-    it('ignores "index not found" when dropping the companion text index (#round3-fix1)', async () => {
-      const v = makeVector();
-      const drop = vi.fn().mockResolvedValue(undefined);
-      const notFound = Object.assign(new Error('index not found'), { codeName: 'IndexNotFound' });
-      const dropSearchIndex = vi
-        .fn()
-        .mockResolvedValueOnce(undefined) // vector index drops fine
-        .mockRejectedValueOnce(notFound); // text index already gone
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, dropSearchIndex });
-      vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
-      stubNotShared(v);
-      stubRegistered(v, {
-        docs: {
-          collectionName: 'ops',
-          searchIndexName: 'docs_vec',
-          isByo: true,
-          textSearchIndexName: 'ops_search_index',
-          ownsVectorIndex: true,
-          ownsTextIndex: true,
-        },
-      });
-
-      await expect(v.deleteIndex({ indexName: 'docs' })).resolves.toBeUndefined();
-      expect(dropSearchIndex).toHaveBeenCalledTimes(2);
-    });
-
-    it('refuses to drop an unregistered collection even when it carries the legacy managed index name', async () => {
-      const v = makeVector();
-      const drop = vi.fn().mockResolvedValue(undefined);
-      const dropSearchIndex = vi.fn().mockResolvedValue(undefined);
-      const listSearchIndexes = vi.fn(() => ({ toArray: async () => [{ name: 'managed_idx_vector_index' }] }));
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, dropSearchIndex, listSearchIndexes });
-      // No in-memory target and no durable registry entry → resolves to the managed default.
-      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
-      vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
-
-      // The name is no proof of ownership: a BYO delete keeps a caller's index of that name and
-      // removes the registration, so a second delete would otherwise drop the caller's collection.
-      await expect(v.deleteIndex({ indexName: 'managed_idx' })).rejects.toThrow(/not registered/);
-
-      expect(drop).not.toHaveBeenCalled();
-      expect(dropSearchIndex).not.toHaveBeenCalled();
-    });
-
-    it('resolves a BYO target from the durable registry when the in-memory map is empty (restart durability)', async () => {
-      const v = makeVector();
-      const drop = vi.fn().mockResolvedValue(undefined);
-      const dropSearchIndex = vi.fn().mockResolvedValue(undefined);
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, dropSearchIndex });
-      const deleteRegistryEntry = vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
-      stubNotShared(v);
-      // Simulate a fresh process: nothing in the in-memory map, but the durable registry
-      // still records this index as BYO. resolveIndexTarget must hydrate from it so
-      // deleteIndex does NOT drop the caller's operational collection.
-      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue({
-        _id: 'precedents',
-        indexName: 'precedents',
-        collectionName: 'transactions',
-        searchIndexName: 'txn_vec_idx',
-        isByo: true,
-        ownsVectorIndex: true,
-      });
-
-      await v.deleteIndex({ indexName: 'precedents' });
-
-      expect(dropSearchIndex).toHaveBeenCalledWith('txn_vec_idx');
-      expect(drop).not.toHaveBeenCalled();
-      expect(deleteRegistryEntry).toHaveBeenCalledWith('precedents');
-    });
-  });
-
   // ─── BYO write guard: read-only by default, writes are opt-in ────────────────────────
   describe('BYO write guard (unit)', () => {
     const makeVector = () => new MongoDBVector({ id: 'test', uri: 'mongodb://localhost:27017', dbName: 'test_db' });
@@ -1626,22 +1479,6 @@ describe('MongoDBVector filterFields (#18587)', () => {
       expect(persisted.allowWrites).toBe(true);
     });
 
-    it('R5-2: deleteIndex refuses to drop an UNREGISTERED collection without a legacy vector index', async () => {
-      const v = makeVector();
-      const drop = vi.fn().mockResolvedValue(undefined);
-      // No legacy `${indexName}_vector_index` on the collection → cannot verify managed.
-      const listSearchIndexes = vi.fn(() => ({ toArray: async () => [{ name: 'some_other_index' }] }));
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, listSearchIndexes });
-      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null); // unregistered
-      const deleteRegistryEntry = vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
-
-      // e.g. a second deleteIndex racing a completed BYO delete whose registry entry is gone,
-      // or an arbitrary operational collection name — must never drop the collection.
-      await expect(v.deleteIndex({ indexName: 'ops_txns' })).rejects.toThrow(/not registered|DELETE_INDEX/i);
-      expect(drop).not.toHaveBeenCalled();
-      expect(deleteRegistryEntry).not.toHaveBeenCalled();
-    });
-
     it('R5-3: createIndex rejects a vector searchIndexName that collides with the companion text index name', async () => {
       const v = makeVector();
       stubCreate(v);
@@ -1689,57 +1526,6 @@ describe('MongoDBVector filterFields (#18587)', () => {
       // index, never an unregistered physical index leaked onto a caller-owned collection.
       // The final write records ownership once the index exists.
       expect(order).toEqual(['persist', 'provision', 'persist']);
-    });
-
-    it('R5-5: deleteIndex preserves a physical index still referenced by a sibling logical index', async () => {
-      const v = makeVector();
-      const drop = vi.fn().mockResolvedValue(undefined);
-      const dropSearchIndex = vi.fn().mockResolvedValue(undefined);
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, dropSearchIndex });
-      const deleteRegistryEntry = vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
-      // Two logical indexes share the collection's default dynamic text index; only the
-      // vector index is exclusive to 'a'.
-      vi.spyOn(v as any, 'isIndexNameReferencedElsewhere').mockImplementation(
-        async (...args: unknown[]) => args[2] === 'ops_search_index',
-      );
-      stubRegistered(v, {
-        a: {
-          collectionName: 'ops',
-          searchIndexName: 'a_vec',
-          isByo: true,
-          allowWrites: false,
-          textSearchIndexName: 'ops_search_index',
-          ownsVectorIndex: true,
-          ownsTextIndex: true,
-        },
-      });
-
-      await v.deleteIndex({ indexName: 'a' });
-
-      expect(dropSearchIndex).toHaveBeenCalledTimes(1);
-      expect(dropSearchIndex).toHaveBeenCalledWith('a_vec'); // exclusive vector index dropped
-      expect(dropSearchIndex).not.toHaveBeenCalledWith('ops_search_index'); // shared text index preserved
-      expect(deleteRegistryEntry).toHaveBeenCalledWith('a');
-    });
-
-    it('R5-6: deleteIndex on a BYO index whose collection was dropped externally still clears the registry', async () => {
-      const v = makeVector();
-      const nsNotFound = Object.assign(new Error('ns not found'), { codeName: 'NamespaceNotFound' });
-      const dropSearchIndex = vi.fn().mockRejectedValue(nsNotFound);
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ dropSearchIndex });
-      const deleteRegistryEntry = vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
-      vi.spyOn(v as any, 'isIndexNameReferencedElsewhere').mockResolvedValue(false);
-      stubRegistered(v, {
-        docs: {
-          collectionName: 'ops',
-          searchIndexName: 'docs_vec',
-          isByo: true,
-          allowWrites: false,
-        },
-      });
-
-      await expect(v.deleteIndex({ indexName: 'docs' })).resolves.toBeUndefined();
-      expect(deleteRegistryEntry).toHaveBeenCalledWith('docs');
     });
 
     it('R5-7: upsert matches existing ObjectId documents via dual-form _id (no duplicate insert)', async () => {
@@ -1837,52 +1623,6 @@ describe('MongoDBVector filterFields (#18587)', () => {
       expect(createSearchIndex.mock.calls[1][0].name).toBe('shared_col_logical_b_search_fields_index');
       expect(createSearchIndex.mock.calls[0][0].name).not.toBe(createSearchIndex.mock.calls[1][0].name);
     });
-
-    // FIX 4: deleteIndex is retry-safe — a stranded registry entry whose physical index is
-    // already gone must still be cleared (and listIndexes stops showing it).
-    it('FIX4: deleteIndex clears a stranded registry entry when the physical index is already gone', async () => {
-      const v = makeVector();
-      const notFound = Object.assign(new Error('index not found'), { codeName: 'IndexNotFound' });
-      const drop = vi.fn().mockResolvedValue(undefined);
-      const dropSearchIndex = vi.fn().mockRejectedValue(notFound); // physical index already gone
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, dropSearchIndex });
-      const deleteRegistryEntry = vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
-      vi.spyOn(v as any, 'isIndexNameReferencedElsewhere').mockResolvedValue(false);
-      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue({
-        _id: 'stranded',
-        indexName: 'stranded',
-        collectionName: 'ops',
-        searchIndexName: 'stranded_vec',
-        isByo: true,
-      });
-
-      // Must NOT throw despite the physical drop failing with "not found".
-      await expect(v.deleteIndex({ indexName: 'stranded' })).resolves.toBeUndefined();
-      // The stranded registry entry is still cleared so listIndexes stops showing it.
-      expect(deleteRegistryEntry).toHaveBeenCalledWith('stranded');
-    });
-
-    it('FIX4: deleteIndex on a managed index whose collection is already dropped still clears the registry', async () => {
-      const v = makeVector();
-      const nsNotFound = Object.assign(new Error('ns not found'), { codeName: 'NamespaceNotFound' });
-      const drop = vi.fn().mockRejectedValue(nsNotFound);
-      const dropSearchIndex = vi.fn().mockResolvedValue(undefined);
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, dropSearchIndex });
-      const deleteRegistryEntry = vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
-      // A REGISTERED managed entry (post-registry indexes always have one; registry cleanup
-      // is the LAST deleteIndex step, so a retry after an interrupted delete still sees it).
-      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue({
-        _id: 'managed_gone',
-        indexName: 'managed_gone',
-        collectionName: 'managed_gone',
-        searchIndexName: 'managed_gone_vector_index',
-        isByo: false,
-      });
-
-      await expect(v.deleteIndex({ indexName: 'managed_gone' })).resolves.toBeUndefined();
-      expect(deleteRegistryEntry).toHaveBeenCalledWith('managed_gone');
-    });
-
     it('hybridQuery reranks with the generally available rerank-2.5 model by default', async () => {
       const v = makeVector();
       const aggregate = vi.fn().mockReturnValue({ toArray: async () => [] });

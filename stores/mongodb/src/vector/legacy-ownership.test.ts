@@ -628,6 +628,56 @@ describe('legacy ownership', () => {
       expect(await reg(X)).toBeNull();
     });
 
+    /** A BYO registration whose id equals its collection name, with an owned vector index V and optional text index A. */
+    async function sameName(withText: boolean) {
+      const coll = uniqueName('same');
+      colls.push(coll);
+      await seedCollection(db, coll, [{ title: 'a', embedding: [1, 0, 0, 0] }]);
+      await createRawSearchIndex(db, coll, 'V', vec, 'vectorSearch');
+      if (withText) await createRawSearchIndex(db, coll, 'A', dyn, 'search');
+      await createRawSearchIndex(db, coll, 'F', dyn, 'search'); // foreign, unregistered
+      await seedRegistry(db, {
+        _id: coll,
+        indexName: coll,
+        collectionName: coll,
+        searchIndexName: 'V',
+        isByo: true,
+        allowWrites: false,
+        ownsVectorIndex: true,
+        ...(withText ? { textSearchIndexName: 'A', ownsTextIndex: true } : {}),
+      });
+      return coll;
+    }
+
+    it('a BYO delete with collectionName === indexName drops only the indexes it owns and keeps the collection', async () => {
+      const coll = await sameName(true);
+      await a.deleteIndex({ indexName: coll });
+      expect(await reg(coll)).toBeNull();
+      expect(await searchIndexNames(db, coll)).toEqual(['F']);
+      expect(await db.collection(coll).countDocuments()).toBe(1);
+    });
+
+    it('a BYO delete without a text index never drops one it does not own', async () => {
+      const coll = await sameName(false);
+      await a.deleteIndex({ indexName: coll });
+      expect(await reg(coll)).toBeNull();
+      expect(await searchIndexNames(db, coll)).toEqual(['F']);
+    });
+
+    it('restart durability: a fresh store with an empty cache deletes a BYO index from the registry', async () => {
+      const coll = await sameName(true);
+      const fresh = new MongoDBVector({ uri: ATLAS_LOCAL_URI, dbName: DB_NAME, id: 'cleanup-fresh' });
+      await fresh.connect();
+      try {
+        await fresh.deleteIndex({ indexName: coll });
+      } finally {
+        await fresh.disconnect();
+      }
+      expect(await reg(coll)).toBeNull();
+      expect(await searchIndexNames(db, coll)).toEqual(['F']);
+      expect(await db.collection(coll).countDocuments()).toBe(1);
+    });
+
     it('RF5: 50 BYO registrations on one collection delete one after another', async () => {
       const entries = Object.fromEntries(
         Array.from({ length: 50 }, (_, i) => [
@@ -685,6 +735,13 @@ describe('legacy ownership', () => {
         expect(await exists(coll)).toBe(true);
         expect(await db.collection(coll).countDocuments()).toBe(3);
         expect(await reg(coll)).toEqual(entry);
+      });
+
+      it('a managed delete whose collection was already dropped externally still clears the entry', async () => {
+        const { coll } = await managed(true);
+        await db.dropCollection(coll);
+        await a.deleteIndex({ indexName: coll });
+        expect(await reg(coll)).toBeNull();
       });
 
       it('T13a-2: after claimLegacyIndex, deleteIndex drops the flagless managed collection', async () => {
