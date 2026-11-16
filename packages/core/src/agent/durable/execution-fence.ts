@@ -1334,7 +1334,11 @@ export async function assertExecutionNotSuperseded(args: {
   }
 }
 
-/** Check a reader's generation without verifying or changing the local execution fence. */
+/**
+ * Reject a superseded claim without verifying or mutating the local fence, so a late reader
+ * can settle after its execution releases the claim. Does not require an active lease;
+ * skips the check when no ownership backend is available.
+ */
 export async function assertExecutionGenerationCurrent(args: {
   runId: string;
   agentId: string;
