@@ -23,6 +23,7 @@ import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
 import { ChannelSessionRejectedError } from '../errors';
 import { matchesDomain, extractUrls } from '../inline-media';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../output-processor';
 import type { ChannelAdapterBaseConfig, ChannelContext, ChannelHandler, ResolveResourceId } from '../types';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
@@ -1079,6 +1080,190 @@ describe('AgentChannels', () => {
         );
         ctx.onApprovalPosted('tool-call-2', { displayName: 'x', argsSummary: '', startedAt: 0 });
         expect((channels as any).pendingApprovalCards.get('tool-call-2').requesterId).toBe('alice');
+      });
+    });
+
+    describe('sub-agent approvals raised under one delegation call (#30443)', () => {
+      // A supervisor re-raises each sub-agent approval under its own delegation
+      // call, so two sub-agent approvals share `call_delegate_1` while the
+      // sub-agent's own calls (`call_delete_a`, `call_delete_b`) stay distinct.
+      const DELEGATION = 'call_delegate_1';
+
+      // Storage holding one persisted approval whose newest sub-agent call is
+      // `delegatedToolCallId` — what a click finds after a restart.
+      function makeMastraWithApproval(delegatedToolCallId: string) {
+        const messages = [
+          {
+            role: 'assistant',
+            content: {
+              metadata: {
+                pendingToolApprovals: {
+                  [DELEGATION]: {
+                    toolCallId: DELEGATION,
+                    delegatedToolCallId,
+                    runId: 'run-1',
+                    toolName: 'delete_file',
+                    args: {},
+                  },
+                },
+              },
+            },
+          },
+        ];
+        return {
+          getStorage: () => ({ getStore: async () => ({ listMessages: async () => ({ messages }) }) }),
+          getServer: () => null,
+          getLogger: () => noopLogger,
+        } as any;
+      }
+
+      async function setup(mastra = makeMastra()) {
+        const adapter = createMockAdapter('discord');
+        const channels = new AgentChannels({ adapters: { discord: { adapter } } });
+        channels.__setAgent(mockAgent);
+        const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        channels.__setLogger(logger as any);
+        await channels.initialize(mastra);
+        (channels as any).findThreadMapping = vi
+          .fn()
+          .mockResolvedValue({ thread: { id: 'mastra-thread-1', resourceId: 'resource-1' } });
+        const dispatchApproval = vi.fn().mockResolvedValue(undefined);
+        const dispatchDecline = vi.fn().mockResolvedValue(undefined);
+        (channels as any).dispatchApproval = dispatchApproval;
+        (channels as any).dispatchDecline = dispatchDecline;
+
+        // Post a card the way a driver does: by card id, carrying the resume id.
+        const { onApprovalPosted } = (channels as any)._buildRenderContext(
+          { id: 'channel-1:thread-1', channelId: 'channel-1', isDM: false },
+          'discord',
+          { requesterId: 'alice' },
+        );
+        const postCard = (cardId: string, messageId: string, delegated = true) =>
+          onApprovalPosted(cardId, {
+            messageId,
+            ...(delegated ? { toolCallId: DELEGATION, delegatedToolCallId: cardId } : {}),
+            displayName: 'delete_file',
+            argsSummary: `${cardId}.txt`,
+            startedAt: Date.now(),
+            runId: 'run-1',
+            toolName: 'delete_file',
+            args: {},
+          });
+
+        const click = (actionId: string, messageId: string) =>
+          (channels.sdk as any).processAction({
+            ...makeActionEvent(adapter, actionId),
+            messageId,
+            user: { userId: 'alice', userName: 'alice', fullName: 'alice' },
+            thread: { id: 'channel-1:thread-1', channelId: 'channel-1', isDM: false },
+          });
+        return { adapter, channels, logger, postCard, dispatchApproval, dispatchDecline, click };
+      }
+
+      it('keeps both sub-agent cards answerable under their own ids', async () => {
+        const { channels, postCard } = await setup();
+        postCard('call_delete_a', 'card-a');
+        postCard('call_delete_b', 'card-b');
+
+        const cards = (channels as any).pendingApprovalCards;
+        expect([...cards.keys()]).toEqual(['call_delete_a', 'call_delete_b']);
+        expect(cards.get('call_delete_a')).toMatchObject({
+          messageId: 'card-a',
+          toolCallId: DELEGATION,
+          delegatedToolCallId: 'call_delete_a',
+        });
+        expect(cards.get('call_delete_b')).toMatchObject({
+          messageId: 'card-b',
+          toolCallId: DELEGATION,
+          delegatedToolCallId: 'call_delete_b',
+        });
+      });
+
+      it('resumes with the delegation call id when a sub-agent card is clicked', async () => {
+        const { channels, postCard, dispatchApproval, click } = await setup();
+        postCard('call_delete_a', 'card-a');
+        postCard('call_delete_b', 'card-b');
+
+        await click('tool_approve:call_delete_b', 'card-b');
+
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+        expect(dispatchApproval).toHaveBeenCalledWith(
+          expect.objectContaining({ runId: 'run-1', toolCallId: DELEGATION }),
+        );
+
+        // The resumed run's render context seeds the stash for this card, so its
+        // `tool-result` edits the card the user answered rather than the older one.
+        const renderContext = dispatchApproval.mock.calls[0]![0].requestContext.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY);
+        expect(renderContext.approvalContext).toEqual({
+          toolCallId: DELEGATION,
+          messageId: 'card-b',
+          delegatedToolCallId: 'call_delete_b',
+        });
+      });
+
+      it('does not resume the newer sub-agent tool call from a replayed click on an older card', async () => {
+        const { logger, postCard, dispatchApproval, click } = await setup();
+        postCard('call_delete_a', 'card-a');
+        await click('tool_approve:call_delete_a', 'card-a');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+
+        // The sub-agent asked again: a second card now owns the delegation.
+        postCard('call_delete_b', 'card-b');
+        await click('tool_approve:call_delete_a', 'card-a');
+
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.stringContaining('newer sub-agent approval card is pending'),
+          expect.anything(),
+        );
+      });
+
+      it('does not resume when the clicked sub-agent card is no longer pending', async () => {
+        const { logger, postCard, dispatchApproval, click } = await setup();
+        postCard('call_delete_b', 'card-b');
+
+        await click('tool_approve:call_delete_a', 'card-a');
+
+        expect(dispatchApproval).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.stringContaining('No pending approval found'),
+          expect.anything(),
+        );
+      });
+
+      it('still resumes an ordinary approval with its own tool call id', async () => {
+        const { postCard, dispatchApproval, click } = await setup();
+        postCard('tool-call-1', 'card-1', false);
+
+        await click('tool_approve:tool-call-1', 'card-1');
+
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+        expect(dispatchApproval).toHaveBeenCalledWith(
+          expect.objectContaining({ runId: 'run-1', toolCallId: 'tool-call-1' }),
+        );
+      });
+
+      it('resumes a sub-agent card from stored messages after a restart', async () => {
+        const { dispatchApproval, click } = await setup(makeMastraWithApproval('call_delete_b'));
+
+        await click('tool_approve:call_delete_b', 'card-b');
+
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+        expect(dispatchApproval).toHaveBeenCalledWith(
+          expect.objectContaining({ runId: 'run-1', toolCallId: DELEGATION }),
+        );
+      });
+
+      it('does not resume a superseded sub-agent card from stored messages', async () => {
+        const { logger, dispatchApproval, click } = await setup(makeMastraWithApproval('call_delete_b'));
+
+        await click('tool_approve:call_delete_a', 'card-a');
+
+        expect(dispatchApproval).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.stringContaining('No pending approval found'),
+          expect.anything(),
+        );
       });
     });
 

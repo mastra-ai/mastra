@@ -2149,6 +2149,36 @@ describe('ChatChannelOutputProcessor', () => {
       });
     });
 
+    it('edits the newest sub-agent card when the resumed result arrives under the delegation id', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
+      // A second sub-agent approval replaced the first card: the resumed run
+      // reports its result under the delegation call, which must edit the card
+      // the user answered (not the first, already-decided one).
+      await drive(channels, [{ type: 'text-delta', payload: { text: 'on it' } }], chatThread, {
+        toolCallId: 'call_delegate_1',
+        messageId: 'card-a',
+        delegatedToolCallId: 'call_delete_a',
+      });
+      await drive(
+        channels,
+        [
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 'call_delegate_1', toolName: 'delete_file', args: {}, result: 'deleted b.txt' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+        { toolCallId: 'call_delegate_1', messageId: 'card-b', delegatedToolCallId: 'call_delete_b' },
+      );
+      const edits = calls.filter(c => c.kind === 'editMessage');
+      expect(edits).toHaveLength(1);
+      expect((edits[0] as Extract<Call, { kind: 'editMessage' }>).messageId).toBe('card-b');
+      expect((channels as any).pendingApprovalCards.has('call_delete_b')).toBe(false); // consumed
+      // The older card's stash is left untouched: it is refused on click instead.
+      expect((channels as any).pendingApprovalCards.has('call_delete_a')).toBe(true);
+    });
+
     it('skips channel-emitted tool reactions (add_reaction / remove_reaction)', async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(

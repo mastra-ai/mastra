@@ -157,12 +157,16 @@ type PersistedPendingApproval = {
   parentRunId?: string;
   toolName: string;
   args: Record<string, unknown>;
+  /** The sub-agent's own paused call, when a supervisor re-raised the approval. */
+  delegatedToolCallId?: string;
 };
 
 /** What the Memory fallback found for an approval click. */
 type ApprovalLookupResult =
   | {
       status: 'pending';
+      /** The tool call that resumes the run (the supervisor's delegation call for a delegated approval). */
+      toolCallId: string;
       runId: string;
       toolName: string;
       args: Record<string, unknown>;
@@ -263,9 +267,17 @@ export class AgentChannels {
    * Tool-approval cards that have been posted and are awaiting user action. When the user
    * clicks approve/decline, the `onAction` handler looks up the card's `messageId` and
    * tool metadata here so it can edit the card in place and resume the run with the right
-   * context. Entries are removed after the resume completes.
+   * context. Keyed by card id — the sub-agent's own call for a delegated approval, so two
+   * sub-agent approvals in one delegation do not collide. Entries are removed after the
+   * resume completes.
    */
   private pendingApprovalCards = new Map<string, PendingApprovalRecord>();
+  /**
+   * Newest card id per resume tool call. A delegated card is stashed under the
+   * sub-agent's own call id, but a resumed run's `tool-result` only carries the
+   * delegation id, so the drivers reach the record through this pointer.
+   */
+  private approvalCardByToolCallId = new Map<string, string>();
   /**
    * Approval state per card (thread, card message, toolCallId). A click that
    * misses `pendingApprovalCards` may have to read the whole thread, so the
@@ -819,8 +831,10 @@ export class AgentChannels {
             let inFlightKey: string | undefined;
             try {
               const approved = actionId.startsWith('tool_approve:');
-              const toolCallId = actionEventContext.toolCallId;
-              if (!toolCallId) {
+              // The action id carries the card id: the sub-agent's own call for a
+              // delegated approval, otherwise the tool call itself.
+              const cardId = actionEventContext.toolCallId;
+              if (!cardId) {
                 this.log('info', 'Missing toolCallId in action event', actionEventContext);
                 return;
               }
@@ -848,26 +862,25 @@ export class AgentChannels {
                 this.log('warn', 'No mapped channel thread found for tool approval action', actionEventContext);
                 return;
               }
-              card = { threadId: mastraThread.id, messageId, toolCallId };
+              card = { threadId: mastraThread.id, messageId, toolCallId: cardId };
               if (this.getApprovalLookup(approvalCardKey(card))?.result.status === 'answered') {
                 this.log('info', 'Tool approval already answered', actionEventContext);
                 return;
               }
 
-              // Look up the runId for this toolCallId. Prefer the in-memory
-              // `pendingApprovalCards` map (set when the approval card was posted)
-              // because it's keyed by toolCallId and survives parallel same-tool
-              // approvals. Fall back to the persisted `pendingToolApprovals`
-              // metadata for cases where the bot restarted between card post and
-              // click (the metadata path is lossy for parallel same-tool calls
-              // since core keys those by toolName — only the latest survives).
+              // Resolve the clicked card to the tool call that resumes its run.
+              // A delegated approval is stashed and clicked under the sub-agent's
+              // own call id, while the supervisor's delegation call is what
+              // resumes the run.
+              let toolCallId = cardId;
               let runId: string | undefined;
               let toolName: string | undefined;
               let toolArgs: Record<string, unknown> | undefined;
 
-              const stashed = this.pendingApprovalCards.get(toolCallId);
+              const stashed = this.pendingApprovalCards.get(cardId);
               let requesterId = stashed?.requesterId;
               if (stashed?.runId) {
+                toolCallId = stashed.toolCallId ?? cardId;
                 runId = stashed.runId;
                 toolName = stashed.toolName;
                 toolArgs = stashed.args;
@@ -878,6 +891,7 @@ export class AgentChannels {
                   return;
                 }
                 if (lookup.status === 'pending') {
+                  toolCallId = lookup.toolCallId;
                   runId = lookup.runId;
                   toolName = lookup.toolName;
                   toolArgs = lookup.args;
@@ -896,6 +910,10 @@ export class AgentChannels {
                 this.log('info', 'No pending approval found', actionEventContext);
                 return;
               }
+
+              // Set only when the clicked card belongs to a sub-agent's own call:
+              // the resolved event and the resumed render context report both ids.
+              const delegatedToolCallId = toolCallId === cardId ? undefined : cardId;
 
               // Only the user whose message triggered the tool call may answer
               // its approval card. Skip the check when either identity is unknown.
@@ -921,25 +939,42 @@ export class AgentChannels {
               inFlightKey = cardKey;
 
               // Every target can be stale: a remembered one can outlive its approval,
-              // and a fresh history scan can read pages written before another
-              // instance answered the card. Check before resuming.
+              // a fresh history scan can read pages written before another
+              // instance answered the card, and a delegation can have moved on to
+              // a newer sub-agent card. Check before resuming.
+              //
+              // The delegation check is what separates two sub-agent approvals
+              // raised under one delegation call: they share the resume
+              // `toolCallId`, so a re-delivered click on an older card would
+              // otherwise resume the newer card's tool call. Only the delegation's
+              // newest card may answer it.
+              const newerCardId = this.approvalCardByToolCallId.get(toolCallId);
+              const staleCard =
+                delegatedToolCallId !== undefined && newerCardId !== undefined && newerCardId !== cardId;
               if (
-                await this.isAnsweredElsewhere({
+                staleCard ||
+                (await this.isAnsweredElsewhere({
                   runId,
                   toolCallId,
                   memory: { thread: mastraThread.id, resource: mastraThread.resourceId },
-                })
+                }))
               ) {
                 // Resuming would answer the run's newer tool call instead.
                 this.setApprovalLookup(cardKey, {
                   result: { status: 'answered' },
                   expiresAt: Date.now() + APPROVAL_LOOKUP_TTL_MS,
                 });
-                if (stashed) this.pendingApprovalCards.delete(toolCallId);
-                this.log('info', 'Ignoring stale tool approval action (run waits on another tool call)', {
-                  ...actionEventContext,
-                  runId,
-                });
+                if (stashed) this.forgetApprovalCard(cardId);
+                this.log(
+                  'info',
+                  staleCard
+                    ? 'Ignoring stale tool approval action (a newer sub-agent approval card is pending)'
+                    : 'Ignoring stale tool approval action (run waits on another tool call)',
+                  {
+                    ...actionEventContext,
+                    runId,
+                  },
+                );
                 return;
               }
 
@@ -972,6 +1007,7 @@ export class AgentChannels {
                     {
                       ...decision,
                       toolCallId,
+                      delegatedToolCallId,
                       toolName: toolName ?? displayName,
                       displayName,
                       argsSummary,
@@ -1037,7 +1073,7 @@ export class AgentChannels {
                 } finally {
                   // Stash entry is no longer needed; the resumed decline stream
                   // won't emit a tool-result for this call.
-                  this.pendingApprovalCards.delete(toolCallId);
+                  this.forgetApprovalCard(cardId);
                 }
                 return;
               }
@@ -1068,7 +1104,7 @@ export class AgentChannels {
               requestContext.set('channel', channelContext);
 
               const renderContext = this._buildRenderContext(chatThread, platform, {
-                approvalContext: { toolCallId, messageId },
+                approvalContext: { toolCallId, messageId, delegatedToolCallId },
                 requesterId,
               });
               requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
@@ -2201,7 +2237,10 @@ export class AgentChannels {
     {
       approvalContext,
       requesterId,
-    }: { approvalContext?: { toolCallId: string; messageId: string }; requesterId?: string } = {},
+    }: {
+      approvalContext?: { toolCallId: string; messageId: string; delegatedToolCallId?: string };
+      requesterId?: string;
+    } = {},
   ): ChatChannelRenderContext {
     const adapter = this.adapters[platform]!;
     const adapterConfig = this.adapterConfigs[platform];
@@ -2216,15 +2255,14 @@ export class AgentChannels {
 
     const typingGate = { active: false };
 
-    const onApprovalPosted = (toolCallId: string, record: PendingApprovalRecord) => {
-      this.pendingApprovalCards.set(toolCallId, { ...record, requesterId: record.requesterId ?? requesterId });
+    // `cardId` identifies the card (button id + stash key); `record.toolCallId`
+    // is what resumes the run. They differ for a delegated sub-agent approval.
+    const onApprovalPosted = (cardId: string, record: PendingApprovalRecord) => {
+      this.pendingApprovalCards.set(cardId, { ...record, requesterId: record.requesterId ?? requesterId });
+      this.approvalCardByToolCallId.set(record.toolCallId ?? cardId, cardId);
     };
-    const getPendingApproval = (id: string) => this.pendingApprovalCards.get(id);
-    const takePendingApproval = (id: string) => {
-      const r = this.pendingApprovalCards.get(id);
-      if (r) this.pendingApprovalCards.delete(id);
-      return r;
-    };
+    const getPendingApproval = (id: string) => this.getApprovalCard(id);
+    const takePendingApproval = (id: string) => this.takeApprovalCard(id);
 
     return {
       adapter,
@@ -2568,6 +2606,36 @@ export class AgentChannels {
     return suspendedToolCallIds.length > 0 && !suspendedToolCallIds.includes(args.toolCallId);
   }
 
+  /**
+   * The stashed card for a card id — or, when given a resume tool call id (what a
+   * resumed run's `tool-result` carries), the newest card of that call.
+   */
+  private getApprovalCard(id: string): PendingApprovalRecord | undefined {
+    const direct = this.pendingApprovalCards.get(id);
+    if (direct) return direct;
+    const cardId = this.approvalCardByToolCallId.get(id);
+    return cardId ? this.pendingApprovalCards.get(cardId) : undefined;
+  }
+
+  /** Take the stashed card and drop its resume pointer. */
+  private takeApprovalCard(id: string): PendingApprovalRecord | undefined {
+    const cardId = this.pendingApprovalCards.has(id) ? id : this.approvalCardByToolCallId.get(id);
+    if (cardId === undefined) return undefined;
+    const record = this.pendingApprovalCards.get(cardId);
+    this.forgetApprovalCard(cardId);
+    return record;
+  }
+
+  /** Drop a card from the stash, along with the resume pointer while it names this card. */
+  private forgetApprovalCard(cardId: string): void {
+    const record = this.pendingApprovalCards.get(cardId);
+    this.pendingApprovalCards.delete(cardId);
+    const resumeId = record?.toolCallId ?? cardId;
+    if (this.approvalCardByToolCallId.get(resumeId) === cardId) {
+      this.approvalCardByToolCallId.delete(resumeId);
+    }
+  }
+
   /** The cached entry for a card, or undefined when missing or expired. */
   private getApprovalLookup(key: string): CachedApprovalLookup | undefined {
     const entry = this.approvalLookups.get(key);
@@ -2605,6 +2673,7 @@ export class AgentChannels {
   }: {
     mastra: Mastra;
     threadId: string;
+    /** The clicked id: a card id, so the sub-agent's own call for a delegated approval. */
     toolCallId: string;
     platform: string;
   }): Promise<ApprovalLookupResult> {
@@ -2637,7 +2706,11 @@ export class AgentChannels {
           const pending = msg.content?.metadata?.pendingToolApprovals as
             | Record<string, PersistedPendingApproval>
             | undefined;
-          found = pending && Object.values(pending).find(entry => entry.toolCallId === toolCallId);
+          found =
+            pending &&
+            Object.values(pending).find(
+              entry => entry.toolCallId === toolCallId || entry.delegatedToolCallId === toolCallId,
+            );
           if (found) {
             earlier = messages.slice(index + 1);
             break;
@@ -2677,6 +2750,7 @@ export class AgentChannels {
     );
     return {
       status: 'pending',
+      toolCallId: found.toolCallId,
       runId: found.parentRunId ?? found.runId,
       toolName: found.toolName,
       args: found.args,
