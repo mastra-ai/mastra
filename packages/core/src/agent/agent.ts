@@ -10105,6 +10105,25 @@ export class Agent<
     return this.resumeNetwork({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
   }
 
+  async #resolveInvocationOptions<OUTPUT>(
+    options?: AgentExecutionOptionsBase<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> },
+  ) {
+    await this.#validateRequestContext(options?.requestContext);
+    const defaultOptions = await this.getDefaultOptions({ requestContext: options?.requestContext });
+    const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
+      deepMerge(
+        withDefaultToolCallConcurrencyLimit(defaultOptions, options) as Record<string, unknown>,
+        (withDefinedToolHooks(options) ?? {}) as Record<string, unknown>,
+      ) as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> },
+      { callScopes: options?.scopes, defaultScopes: defaultOptions?.scopes },
+    );
+    validateModelTimeoutSettings(mergedOptions.modelSettings?.timeout);
+    const loopOptions = { ...mergedOptions };
+    const actor = mergedOptions.actor;
+    delete loopOptions.actor;
+    return { mergedOptions, resolvedScopes, loopOptions, actor };
+  }
+
   async generate<
     OUTPUT extends StandardSchemaWithJSON<any, any>,
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
@@ -10137,25 +10156,7 @@ export class Agent<
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
 
-    // Validate request context if schema is provided
-    await this.#validateRequestContext(options?.requestContext);
-
-    const defaultOptions = await this.getDefaultOptions({
-      requestContext: options?.requestContext,
-    });
-    const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
-      deepMerge(
-        withDefaultToolCallConcurrencyLimit(defaultOptions, options) as Record<string, unknown>,
-        (withDefinedToolHooks(options) ?? {}) as Record<string, unknown>,
-      ) as AgentExecutionOptions<any> & {
-        model?: DynamicArgument<MastraModelConfig>;
-      },
-      { callScopes: options?.scopes, defaultScopes: defaultOptions?.scopes },
-    );
-    validateModelTimeoutSettings(mergedOptions.modelSettings?.timeout);
-    const loopOptions = { ...mergedOptions };
-    const actor = mergedOptions.actor;
-    delete loopOptions.actor;
+    const { mergedOptions, resolvedScopes, loopOptions, actor } = await this.#resolveInvocationOptions<any>(options);
 
     await this.requireAgentExecutionFGA({
       requestContext: mergedOptions.requestContext,
@@ -11125,25 +11126,8 @@ export class Agent<
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
 
-    // Validate request context if schema is provided
-    await this.#validateRequestContext(streamOptions?.requestContext);
-
-    const defaultOptions = await this.getDefaultOptions({
-      requestContext: streamOptions?.requestContext,
-    });
-    const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
-      deepMerge(
-        withDefaultToolCallConcurrencyLimit(defaultOptions, streamOptions) as Record<string, unknown>,
-        (withDefinedToolHooks(streamOptions) ?? {}) as Record<string, unknown>,
-      ) as AgentExecutionOptions<OUTPUT> & {
-        model?: DynamicArgument<MastraModelConfig>;
-      },
-      { callScopes: streamOptions?.scopes, defaultScopes: defaultOptions?.scopes },
-    );
-    validateModelTimeoutSettings(mergedOptions.modelSettings?.timeout);
-    const loopOptions = { ...mergedOptions };
-    const actor = mergedOptions.actor;
-    delete loopOptions.actor;
+    const { mergedOptions, resolvedScopes, loopOptions, actor } =
+      await this.#resolveInvocationOptions<OUTPUT>(streamOptions);
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set (from
     // per-call options OR defaultOptions). Strip `untilIdle` before passing
