@@ -16,7 +16,7 @@ import {
   boardPhaseOutcomes,
   DEFAULT_BOARD_ID,
   isPullRequestCard,
-  openPullRequestSource,
+  isOpenPullRequestSource,
   pullRequestSourceNumber,
   pullRequestSources,
 } from '../boards/index.js';
@@ -960,7 +960,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             );
           }
           const closed = () => c.json({ error: 'pull_request_not_open', message: 'That pull request is closed.' }, 422);
-          if (!openPullRequestSource(source)) return closed();
+          if (!isOpenPullRequestSource(source)) return closed();
           // The recorded head belongs to the pull request being replaced; the next push records this one's.
           const patch = {
             metadata: {
@@ -982,7 +982,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 const now = pullRequestSources(current).find(
                   candidate => pullRequestSourceNumber(candidate) === body.data.pullRequest,
                 );
-                if (!now || !openPullRequestSource(now)) throw new PullRequestClosedError();
+                if (!now || !isOpenPullRequestSource(now)) throw new PullRequestClosedError();
               },
             });
             if (!updated) return c.json({ error: 'Work item not found' }, 404);

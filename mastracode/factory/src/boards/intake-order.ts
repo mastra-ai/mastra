@@ -1,5 +1,6 @@
 import type { StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
 import { arrivalKinds } from './board-events.js';
+import type { RouteArrivals } from './board-events.js';
 
 type OrderRoute = Pick<StoredIntakeRouteRecord, 'enabled' | 'when' | 'on' | 'pullRequestOpenedMovesOnly'> & {
   target: Pick<StoredIntakeRouteRecord['target'], 'boardKey' | 'joinClosedIssue'>;
@@ -15,7 +16,7 @@ export function placesArrivals(route: OrderRoute): boolean {
  * no condition, or the one kind its condition names when that is all it tests (`source.kind equals
  * pull_request` on a pull request route, so as a card move it leaves issues' cards alone).
  */
-export function kindsTakenWhole(route: Pick<OrderRoute, 'when' | 'on' | 'pullRequestOpenedMovesOnly'>): string[] {
+export function kindsTakenWhole(route: Pick<OrderRoute, 'when'> & RouteArrivals): string[] {
   const kinds = [...arrivalKinds(route)];
   if (route.when === null) return kinds;
   const { operator, conditions } = route.when;

@@ -538,7 +538,7 @@ describe('IntakeRoutesSection', () => {
       when: null,
       on: ['pull_request.opened'],
       pullRequestOpenedMovesOnly: true,
-      target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false },
+      target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false, moveToBoardKey: null },
     };
     const state = serveRoutes({
       routes: [moveOnly, ...seededRoutes()].map((route, position) => ({ ...route, position })),

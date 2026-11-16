@@ -1,15 +1,16 @@
 import type { RuleFacts } from '../rules/rule-group.js';
 import { authorTrusted } from '../rules/types.js';
 import type { Card } from '../storage/domains/work-items/base.js';
-import { pullRequestSourceNumber, pullRequestSources } from '../work-items/change-requests.js';
-import { workItemProviderAdapter } from '../work-items/providers/index.js';
-import { stringList, stringValue } from '../work-items/providers/metadata-keys.js';
 import {
-  openPullRequestSource,
+  isOpenPullRequestSource,
   pointedPullRequest,
+  pullRequestSourceNumber,
+  pullRequestSources,
   trustedPullRequestSource,
   workingPullRequest,
-} from './semantics.js';
+} from '../work-items/change-requests.js';
+import { workItemProviderAdapter } from '../work-items/providers/index.js';
+import { stringList, stringValue } from '../work-items/providers/metadata-keys.js';
 
 type WorkItemFacts = Pick<Card['workItem'], 'labels' | 'author'> &
   Partial<Pick<Card['workItem'], 'sources' | 'provider' | 'key' | 'state' | 'metadata'>>;
@@ -48,7 +49,7 @@ export function cardRuleFacts(
   const pullRequest =
     typeof pointer === 'number'
       ? pointer
-      : working && openPullRequestSource(working)
+      : working && isOpenPullRequestSource(working)
         ? (pullRequestSourceNumber(working) ?? null)
         : null;
   // A pointer the card has no source for is the pull request its session opened: Factory's own.
@@ -77,7 +78,7 @@ export function cardRuleFacts(
     (typeof pointer === 'number' && !ownPullRequest) ||
     (ownPullRequest
       ? pullRequestSources({ workItem: { sources: sources.slice(1) } }).some(
-          entry => openPullRequestSource(entry) && pullRequestSourceNumber(entry) !== undefined,
+          entry => isOpenPullRequestSource(entry) && pullRequestSourceNumber(entry) !== undefined,
         )
       : pullRequest !== null);
   // A pull request linked to an issue: the card holds both a pull request and an issue source.

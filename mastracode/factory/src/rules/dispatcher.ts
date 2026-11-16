@@ -15,7 +15,7 @@ import {
   hasPullRequest,
   isPullRequestCard,
   isTerminalWorkItem,
-  openPullRequestSource,
+  isOpenPullRequestSource,
   pullRequestSources,
   pullRequestTrustKey,
   resolvePhaseSemantics,
@@ -773,7 +773,7 @@ function linkFacts(card: Card, trusted: boolean, trustKey: string): LinkFacts {
     hasPullRequest: pullRequestSources(card).some(
       source =>
         pullRequestTrustKey(source) !== trustKey &&
-        openPullRequestSource(source) &&
+        isOpenPullRequestSource(source) &&
         trustedPullRequestSource(card, source),
     ),
   };

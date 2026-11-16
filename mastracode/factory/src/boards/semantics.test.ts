@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
 import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { workItemBranch } from '../work-item-branch.js';
-import { pullRequestSourceNumber, reviewedPullRequest } from '../work-items/change-requests.js';
+import { pullRequestSourceNumber, reviewedPullRequest, workingPullRequest } from '../work-items/change-requests.js';
 import { defineBoard } from './define-board.js';
 import { boardRegistryOf, createBoardRegistry } from './registry.js';
 import {
@@ -15,7 +15,6 @@ import {
   resolveBoardClosure,
   resolveBoardToolRule,
   resolvePhaseSemantics,
-  workingPullRequest,
   workItemPhaseSemantics,
 } from './semantics.js';
 import { createTestBoard } from './test-utils.js';

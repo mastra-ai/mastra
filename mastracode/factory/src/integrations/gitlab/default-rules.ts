@@ -1,6 +1,6 @@
 import {
   isPullRequestCard,
-  openPullRequestSource,
+  isOpenPullRequestSource,
   pullRequestSourceNumber,
   workingPullRequest,
   pullRequestSources,
@@ -258,7 +258,7 @@ function mergeRequestMerged(context: FactoryGitLabRuleContext) {
     const open =
       typeof recorded === 'number' && recorded !== context.mergeRequest.number
         ? recorded
-        : working && openPullRequestSource(working)
+        : working && isOpenPullRequestSource(working)
           ? pullRequestSourceNumber(working)
           : undefined;
     if (typeof open === 'number' && open !== context.mergeRequest.number) {
@@ -304,7 +304,7 @@ function mergeRequestClosed(context: FactoryGitLabRuleContext) {
     if (!initialPhase || !attachedMergeRequest(context) || !inPullRequestReview(context)) return;
     if (unpickedOutsiderMergeRequest(context)) return;
     const other = workingPullRequest(context.item, context.mergeRequest.number);
-    if (other && openPullRequestSource(other)) return;
+    if (other && isOpenPullRequestSource(other)) return;
     return pullRequestMoveByRoutes('pull_request.closed', {
       idempotencyKey: `${context.ingress.id}:merge-request-closed`,
       board: context.board,

@@ -1,6 +1,6 @@
 import {
   isPullRequestCard,
-  openPullRequestSource,
+  isOpenPullRequestSource,
   workingPullRequest,
   pullRequestSourceNumber,
   pullRequestSources,
@@ -297,7 +297,7 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
   const openPullRequestNumber =
     typeof recorded === 'number'
       ? recorded
-      : working && openPullRequestSource(working)
+      : working && isOpenPullRequestSource(working)
         ? pullRequestSourceNumber(working)
         : undefined;
   if (typeof openPullRequestNumber === 'number' && openPullRequestNumber !== context.pullRequest.number) {
@@ -436,7 +436,7 @@ function pullRequestClosed(context: FactoryGithubRuleContext) {
     // An outsider closing a pull request nobody picked for the card settles nothing about it.
     if (unpickedOutsiderPullRequest(context)) return;
     const other = workingPullRequest(context.item, context.pullRequest.number);
-    if (other && openPullRequestSource(other)) return;
+    if (other && isOpenPullRequestSource(other)) return;
     return pullRequestMoveByRoutes('pull_request.closed', {
       idempotencyKey: `${context.ingress.id}:pull-request-closed`,
       board: context.board,
