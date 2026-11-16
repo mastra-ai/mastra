@@ -1570,49 +1570,146 @@ export class MemoryLibSQL extends MemoryStorage {
     fence?: RunFence;
   }): Promise<StorageThreadType> {
     const check = this.#runFenceCheck(fence, 'updateThread');
-    const thread = await this.getThreadById({ threadId: id });
-    if (!thread) {
-      throw new MastraError({
-        id: createStorageErrorId('LIBSQL', 'UPDATE_THREAD', 'NOT_FOUND'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        text: `Thread ${id} not found`,
-        details: {
-          status: 404,
-          threadId: id,
-        },
-      });
-    }
-
-    const now = new Date();
-    const updatedThread = {
-      ...thread,
-      title: title ?? thread.title,
-      metadata: {
-        ...thread.metadata,
-        ...metadata,
-      },
-      updatedAt: now,
-    };
 
     try {
-      await this.#fencedWrite('updateThread', check, writer =>
-        writer.execute({
-          // COALESCE so an omitted title leaves the stored one alone.
-          sql: `UPDATE ${TABLE_THREADS} SET title = COALESCE(?, title), metadata = jsonb(?), updatedAt = ? WHERE id = ?`,
-          args: [title ?? null, JSON.stringify(updatedThread.metadata), now.toISOString(), id],
-        }),
-      );
+      // Read, merge and write in one write transaction. BEGIN IMMEDIATE holds the write lock for
+      // the whole read-modify-write, so a writer in another process cannot commit between the read
+      // and the update and have its metadata keys dropped. A retry reruns the whole transaction.
+      return await this.#db.executeWriteOperationWithRetry(
+        () =>
+          inWriteTransaction(this.#client, async tx => {
+            if (check) await assertRunFence(tx, check);
 
-      return updatedThread;
+            const result = await tx.execute({
+              // Select through `json(...)` like `getThreadById`: libsql returns a `jsonb` column as
+              // `{}`, so the raw column value would lose the stored metadata.
+              sql: `SELECT ${buildSelectColumns(TABLE_THREADS)} FROM "${TABLE_THREADS}" WHERE id = ?`,
+              args: [id],
+            });
+            const row = result.rows?.[0] as
+              | (Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string })
+              | undefined;
+
+            if (!row) {
+              throw new MastraError({
+                id: createStorageErrorId('LIBSQL', 'UPDATE_THREAD', 'NOT_FOUND'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                text: `Thread ${id} not found`,
+                details: {
+                  status: 404,
+                  threadId: id,
+                },
+              });
+            }
+
+            const storedMetadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata as any);
+            const now = new Date();
+            const updatedThread: StorageThreadType = {
+              id: row.id as string,
+              resourceId: row.resourceId as string,
+              title: title ?? (row.title as string),
+              metadata: {
+                ...storedMetadata,
+                ...metadata,
+              },
+              createdAt: new Date(row.createdAt),
+              updatedAt: now,
+            };
+
+            await tx.execute({
+              // COALESCE so an omitted title leaves the stored one alone.
+              sql: `UPDATE ${TABLE_THREADS} SET title = COALESCE(?, title), metadata = jsonb(?), updatedAt = ? WHERE id = ?`,
+              args: [title ?? null, JSON.stringify(updatedThread.metadata), now.toISOString(), id],
+            });
+
+            return updatedThread;
+          }),
+        'updateThread',
+      );
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
+      // Our own NOT_FOUND carries a 404 callers depend on; never re-wrap it.
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'UPDATE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to update thread ${id}`,
+          details: { threadId: id },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Cross-process atomic metadata read-modify-write: the thread row is held by the write
+   * transaction from the read through the write, so the caller's `update` callback sees every key
+   * a concurrent writer already committed and no key is dropped.
+   */
+  override async updateThreadMetadata({
+    id,
+    resourceId,
+    update,
+    fence,
+  }: {
+    id: string;
+    resourceId?: string;
+    update: (thread: StorageThreadType) => Record<string, unknown> | undefined;
+    fence?: RunFence;
+  }): Promise<StorageThreadType | null> {
+    const check = this.#runFenceCheck(fence, 'updateThreadMetadata');
+
+    try {
+      return await this.#db.executeWriteOperationWithRetry(
+        () =>
+          inWriteTransaction(this.#client, async tx => {
+            if (check) await assertRunFence(tx, check);
+
+            const result = await tx.execute({
+              sql: `SELECT ${buildSelectColumns(TABLE_THREADS)} FROM "${TABLE_THREADS}" WHERE id = ?${resourceId !== undefined ? ' AND "resourceId" = ?' : ''}`,
+              args: resourceId !== undefined ? [id, resourceId] : [id],
+            });
+            const row = result.rows?.[0] as
+              | (Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string })
+              | undefined;
+
+            if (!row) return null;
+
+            const storedMetadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata as any);
+            const thread: StorageThreadType = {
+              id: row.id as string,
+              resourceId: row.resourceId as string,
+              title: row.title as string,
+              metadata: storedMetadata,
+              createdAt: new Date(row.createdAt),
+              updatedAt: new Date(row.updatedAt),
+            };
+
+            const patch = update(thread);
+            if (!patch) return thread;
+
+            const now = new Date();
+            const merged = { ...storedMetadata, ...patch };
+            await tx.execute({
+              // A metadata-only write never touches the title column.
+              sql: `UPDATE ${TABLE_THREADS} SET metadata = jsonb(?), updatedAt = ? WHERE id = ?`,
+              args: [JSON.stringify(merged), now.toISOString(), id],
+            });
+
+            return { ...thread, metadata: merged, updatedAt: now };
+          }),
+        'updateThreadMetadata',
+      );
+    } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'UPDATE_THREAD_METADATA', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
           details: { threadId: id },
         },
         error,
