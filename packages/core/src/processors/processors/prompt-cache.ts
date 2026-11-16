@@ -100,7 +100,7 @@ type Ttl = '5m' | '1h';
  */
 function allowedTtl(prompt: LanguageModelV2Prompt, index: number, wanted: Ttl | undefined): Ttl | undefined | null {
   const orders = [prompt.map((_, i) => i), promotedOrder(prompt)];
-  for (const ttl of wanted === '1h' ? ['1h', '5m'] as const : [wanted]) {
+  for (const ttl of wanted === '1h' ? (['1h', '5m'] as const) : [wanted]) {
     if (orders.every(order => fitsOrder(prompt, order, index, ttl))) return ttl;
   }
   return null;
