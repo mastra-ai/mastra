@@ -313,6 +313,71 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     });
   }
 
+  it("switches off a project's join routes once it gets the linked pull request rule, and logs each one an admin had changed", async () => {
+    const { storage, boards, scope } = await setup({ seeded: true });
+    const where = { org_id: scope.orgId, factory_project_id: scope.factoryProjectId };
+    await boards.listIntakeRoutes(scope);
+    // A project from before pull requests linked on their own: no linked rule yet.
+    await storage.ops.updateMany('factory_intake_route_locks', where, {
+      seeded_defaults: DEFAULT_INTAKE_ROUTES.map(({ key }) => key).filter(key => key !== 'linked-pull-request'),
+    });
+    await storage.ops.deleteMany('factory_intake_routes', { ...where, name: LINKED_PULL_REQUEST_ROUTE.name });
+    const shippedWhen = {
+      operator: 'AND',
+      conditions: [
+        { field: 'source.kind', operator: 'equals', value: 'pull_request' },
+        { field: 'author.trusted', operator: 'equals', value: true },
+        { field: 'pullRequest.closesIssue', operator: 'equals', value: true },
+        { field: 'closedIssue.phase', operator: 'in', value: ['intake'] },
+        { field: 'closedIssue.hasPullRequest', operator: 'equals', value: false },
+      ],
+    };
+    const joinRoute = (name: string, when: unknown) => ({
+      id: randomUUID(),
+      ...where,
+      name,
+      enabled: true,
+      position: 100,
+      when_condition: when,
+      board_key: 'work',
+      phase_key: 'pr-review',
+      join_closed_issue: true,
+      on_events: ['pull_request.opened'],
+      revision: 1,
+      created_by: 'factory',
+      created_at: new Date(),
+      updated_by: 'factory',
+      updated_at: new Date(),
+    });
+    const shipped = joinRoute('Pull requests that close a waiting issue join its card', shippedWhen);
+    const widened = joinRoute('Pull requests join their issue in Intake or Planning', {
+      ...shippedWhen,
+      conditions: shippedWhen.conditions.map(condition =>
+        condition.field === 'closedIssue.phase' ? { ...condition, value: ['intake', 'planning'] } : condition,
+      ),
+    });
+    await storage.ops.insertOne('factory_intake_routes', shipped);
+    await storage.ops.insertOne('factory_intake_routes', { ...widened, position: 101 });
+
+    const routes = await boards.listIntakeRoutes(scope);
+    expect(routes.filter(route => route.target.joinClosedIssue).map(route => [route.name, route.enabled])).toEqual([
+      [shipped.name, false],
+      [widened.name, false],
+    ]);
+    // Only the route an admin had changed is named in the decision log: the linked rule doesn't do what it did.
+    const logged = await storage.ops.findMany<{ outcome: string; route_id: string; reason: string }>(
+      'factory_intake_decisions',
+      { ...where, outcome: 'rule_retired' },
+    );
+    expect(logged).toEqual([
+      expect.objectContaining({ route_id: widened.id, reason: expect.stringContaining('card-move rule') }),
+    ]);
+    await boards.listIntakeRoutes(scope);
+    expect(await storage.ops.findMany('factory_intake_decisions', { ...where, outcome: 'rule_retired' })).toHaveLength(
+      1,
+    );
+  });
+
   it('adds each route added since once: the pull request route at the end, the closing-issue route first', async () => {
     const project = await setup({ seeded: true });
     const { boards, scope } = project;

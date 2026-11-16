@@ -140,6 +140,25 @@ export const LINKED_PULL_REQUEST_ROUTE: StoredIntakeRouteInput = {
   target: { boardKey: 'work', phaseKey: 'pr-review' },
 };
 
+/**
+ * The join route projects were given before pull requests linked to their issue's card on their own
+ * (`Pull requests that close a waiting issue join its card`): `LINKED_PULL_REQUEST_ROUTE` does what it
+ * did, so retiring it needs no word to the admin, unlike a join route they changed.
+ */
+export const RETIRED_JOIN_ROUTE: Pick<StoredIntakeRouteInput, 'when' | 'target'> = {
+  when: {
+    operator: 'AND',
+    conditions: [
+      { field: 'source.kind', operator: 'equals', value: 'pull_request' },
+      { field: 'item.trusted', operator: 'equals', value: true },
+      { field: 'pullRequest.closesIssue', operator: 'equals', value: true },
+      { field: 'closedIssue.phase', operator: 'in', value: ['intake'] },
+      { field: 'closedIssue.hasPullRequest', operator: 'equals', value: false },
+    ],
+  },
+  target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: true },
+};
+
 /** The key `LINKED_PULL_REQUEST_ROUTE` is seeded under; seeding it retires the project's join routes. */
 export const LINKED_PULL_REQUEST_ROUTE_KEY = 'linked-pull-request';
 

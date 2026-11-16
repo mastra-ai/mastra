@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorageOps } from '@mastra/core/storage';
@@ -7,7 +8,11 @@ import { arrivalKinds, DEFAULT_ROUTE_EVENTS, routeEventsProblem } from '../../..
 import type { ArrivalKind, RouteArrivals, RouteEvent } from '../../../boards/board-events.js';
 import type { FactoryPhaseTool } from '../../../boards/define-board.js';
 import { deriveIntakeOrder, kindsTakenWhole, reconcileIntakeOrder } from '../../../boards/intake-order.js';
-import { DEFAULT_INTAKE_ROUTES, LINKED_PULL_REQUEST_ROUTE_KEY } from '../../../boards/work-routes.js';
+import {
+  DEFAULT_INTAKE_ROUTES,
+  LINKED_PULL_REQUEST_ROUTE_KEY,
+  RETIRED_JOIN_ROUTE,
+} from '../../../boards/work-routes.js';
 import { currentRuleGroup } from '../../../rules/rule-group.js';
 import type { RuleGroup } from '../../../rules/rule-group.js';
 import type { RetiredAutomationSettings } from '../projects/base.js';
@@ -212,8 +217,12 @@ export type StoredBoardErrorCode =
 /** A board's most intake routes. */
 export const MAX_INTAKE_ROUTES_PER_BOARD = 100;
 
-/** How an arrival was decided; `rule_skipped` warns that a card-move rule matched but its target couldn't take the card. */
-export type IntakeDecisionOutcome = 'placed' | 'not_routed' | 'rule_skipped';
+/**
+ * How an arrival was decided; `rule_skipped` warns that a card-move rule matched but its target
+ * couldn't take the card, and `rule_retired` that Factory switched off a join route an admin had
+ * changed, whose work no rule does now.
+ */
+export type IntakeDecisionOutcome = 'placed' | 'not_routed' | 'rule_skipped' | 'rule_retired';
 
 /**
  * Which evaluator decides where an arrival goes: `route-list` is the old one, which projects created
@@ -1173,11 +1182,29 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       const rows = await readIntakeRoutes(ops, scope);
       // Pull requests link to the card of the issue they close on their own now: a route that
       // joined them is switched off, and kept so its history stays readable.
+      // One an admin had changed is named in the decision log: the linked rule doesn't do all it did.
       if (missing.some(({ key }) => key === LINKED_PULL_REQUEST_ROUTE_KEY)) {
         for (const row of rows) {
-          if (row.join_closed_issue && row.enabled) {
-            await updateIntakeRouteRow(ops, row, { enabled: false, updated_by: DEFAULT_INTAKE_ROUTE_ACTOR });
-          }
+          if (!row.join_closed_issue || !row.enabled) continue;
+          await updateIntakeRouteRow(ops, row, { enabled: false, updated_by: DEFAULT_INTAKE_ROUTE_ACTOR });
+          if (isShippedJoinRoute(row)) continue;
+          await ops.upsertOne(INTAKE_DECISIONS, ['org_id', 'factory_project_id', 'idempotency_key'], {
+            ...scopeWhere(scope),
+            idempotency_key: `rule-retired:${row.id}`,
+            outcome: 'rule_retired',
+            evaluator: current.intake_evaluator ?? 'route-list',
+            board_key: row.board_key,
+            route_id: row.id,
+            reason:
+              'Switched off: pull requests now link to the card of the issue they close on their own, and only the rule `Trusted pull requests take a waiting issue to Review` moves a waiting card. Add a card-move rule on pull_request.opened to move cards the way this route did.',
+            source_key: null,
+            title: row.name,
+            url: null,
+            arrival: null,
+            decided_at: new Date(),
+            resolved_at: null,
+            resolved_by: null,
+          });
         }
       }
       let position = rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
@@ -1493,6 +1520,15 @@ function boardRouteCount(rows: readonly IntakeRouteRow[], boardKey: string): num
 }
 
 /** Whether `row` files every new issue, or pull request, that reaches it, as the seeded "Everything else" route does. */
+/** Whether a stored join route is still the one projects were given, which the linked rule replaces. */
+function isShippedJoinRoute(row: IntakeRouteRow): boolean {
+  return (
+    row.board_key === RETIRED_JOIN_ROUTE.target.boardKey &&
+    row.phase_key === RETIRED_JOIN_ROUTE.target.phaseKey &&
+    isDeepStrictEqual(currentRuleGroup(row.when_condition), RETIRED_JOIN_ROUTE.when)
+  );
+}
+
 function catchesEveryNewCard(row: IntakeRouteRow, kind: ArrivalKind): boolean {
   return (
     row.enabled &&
