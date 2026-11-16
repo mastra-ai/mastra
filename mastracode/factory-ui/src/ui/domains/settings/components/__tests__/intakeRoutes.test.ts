@@ -69,6 +69,25 @@ describe('sendNewCardsTo', () => {
     ]);
     expect(writes.filter(write => write.kind === 'create').length).toBeGreaterThan(0);
   });
+
+  it("copies the card move a trusted linked pull request makes, testing the new board's own phases", () => {
+    const writes = sendNewCardsTo(seededRoutes(), [workBoardInfo, shipBoard], 'ship');
+
+    const linked = writes.find(
+      write =>
+        write.kind === 'create' && write.route.name === 'Trusted pull requests take a waiting issue to Review on Ship',
+    );
+    expect(linked).toMatchObject({
+      kind: 'create',
+      route: {
+        on: ['pull_request.opened'],
+        target: { boardKey: 'ship', phaseKey: 'pr' },
+        when: {
+          conditions: expect.arrayContaining([{ field: 'closedIssue.phase', operator: 'in', value: ['inbox'] }]),
+        },
+      },
+    });
+  });
 });
 
 describe('describeRule on routes', () => {

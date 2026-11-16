@@ -138,14 +138,6 @@ function sameRule(a: RuleGroup | null, b: RuleGroup | null): boolean {
 }
 
 /**
- * The route changes that send the project's new cards to `boardKey`: the catch-alls (the first
- * route taking every new issue, and the first taking every new pull request) point there, new
- * issues to its first phase and pull requests to its phase playing the same part, and each
- * status-event route of the board the catch-all pointed at gets a copy on `boardKey`, since a
- * status event only moves a card through routes on the card's own board. A copy is skipped when
- * `boardKey` has no phase playing the same part, or already has such a route.
- */
-/**
  * Whether a route tests the issue a pull request closes, a fact only an issue's card has when a pull
  * request links to it: it never places a new card, only moves that one.
  */
@@ -156,6 +148,44 @@ function movesLinkedCardsOnly(route: IntakeRouteInfo): boolean {
   );
 }
 
+/**
+ * `when` for a copy on `to`: each phase a `closedIssue.phase` condition names is the linked issue
+ * card's phase, so it becomes `to`'s phase playing the same part. Undefined when one has none.
+ */
+function remapClosedIssuePhases(
+  when: RuleGroup | null,
+  from: InstalledBoardInfo,
+  to: InstalledBoardInfo,
+): RuleGroup | null | undefined {
+  if (!when) return when;
+  const conditions: RuleGroup['conditions'] = [];
+  for (const condition of when.conditions) {
+    if (!('field' in condition)) {
+      const nested = remapClosedIssuePhases(condition, from, to);
+      if (!nested) return undefined;
+      conditions.push(nested);
+      continue;
+    }
+    if (condition.field !== 'closedIssue.phase') {
+      conditions.push(condition);
+      continue;
+    }
+    const values = Array.isArray(condition.value) ? condition.value : [condition.value];
+    const mapped = values.map(value => (typeof value === 'string' ? matchingPhase(from, to, value) : undefined));
+    if (mapped.some(value => value === undefined)) return undefined;
+    conditions.push({ ...condition, value: Array.isArray(condition.value) ? mapped : mapped[0] } as typeof condition);
+  }
+  return { ...when, conditions };
+}
+
+/**
+ * The route changes that send the project's new cards to `boardKey`: the catch-alls (the first
+ * route taking every new issue, and the first taking every new pull request) point there, new
+ * issues to its first phase and pull requests to its phase playing the same part, and each
+ * status-event route of the board the catch-all pointed at gets a copy on `boardKey`, since a
+ * status event only moves a card through routes on the card's own board. A copy is skipped when
+ * `boardKey` has no phase playing the same part, or already has such a route.
+ */
 export function sendNewCardsTo(
   routes: readonly IntakeRouteInfo[],
   boards: readonly InstalledBoardInfo[],
@@ -208,10 +238,12 @@ export function sendNewCardsTo(
       if (placesNewCards(route) && !movesLinkedCardsOnly(route)) continue;
       const phaseKey = matchingPhase(from, to, route.target.phaseKey);
       if (phaseKey === undefined) continue;
+      const when = remapClosedIssuePhases(route.when, from, to);
+      if (when === undefined) continue;
       const exists = routes.some(
         other =>
           other.target.boardKey === to.id &&
-          sameRule(other.when, route.when) &&
+          sameRule(other.when, when) &&
           JSON.stringify(other.on) === JSON.stringify(route.on),
       );
       if (exists) continue;
@@ -220,7 +252,7 @@ export function sendNewCardsTo(
         route: {
           name: `${route.name} on ${boardName(to)}`.slice(0, MAX_ROUTE_NAME),
           enabled: route.enabled,
-          when: route.when,
+          when,
           target: { boardKey: to.id, phaseKey },
           on: route.on,
           // A 0.28 `pull_request.opened` route stays a card move on the copy too.
