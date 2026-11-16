@@ -70,7 +70,7 @@ importers:
         specifier: 22.20.5
         version: 22.20.5
       hono:
-        specifier: 4.13.18
+        specifier: ^4.13.18
         version: 4.13.18
       mastra:
         specifier: link:../../packages/cli
