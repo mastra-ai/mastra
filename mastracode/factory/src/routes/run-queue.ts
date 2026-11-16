@@ -1,4 +1,4 @@
-import { isRunBearingDecision } from '../rules/dispatcher.js';
+import { isRunBearingDecision } from '../rules/run-bearing.js';
 import { currentStage } from '../rules/transition-service.js';
 import type { Card, FactoryDeferredDecisionRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RunQueueResponse } from './contracts.js';

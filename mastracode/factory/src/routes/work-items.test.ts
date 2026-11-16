@@ -61,7 +61,7 @@ const audit: AuditEmitter = {
     }
   },
 };
-import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { createFactoryStorageForTests, finishQueuedRunsForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { boardCheck } from '../work-items/board-check.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
@@ -947,6 +947,7 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     expect(stayed.status).toBe(200);
     expect(await decisionCount()).toBe(1);
 
+    await finishQueuedRunsForTests(seed.workItems);
     const reentered = await transition(
       { id: item.id, revision: (await stayed.json()).result.revision },
       { stage: 'triage', reenter: true, requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3' },

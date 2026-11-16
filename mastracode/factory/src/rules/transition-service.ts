@@ -1,3 +1,4 @@
+import { BUSY_CARD_MOVE_REFUSAL, phaseMayStartRun } from '../boards/busy-card.js';
 import { DEFAULT_BOARD_ID, REVIEW_CONTEXT } from '../boards/index.js';
 import type { BoardRegistry, InstalledBoard } from '../boards/index.js';
 import { autoApprovedExitTool, exitToolSucceeded } from '../boards/phase-automation.js';
@@ -11,6 +12,7 @@ import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
 import { isAgentActor } from '../storage/domains/work-items/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { isRunBearingDecision } from './run-bearing.js';
 import type {
   FactoryCommitDecision,
   FactoryRuleActor,
@@ -128,6 +130,12 @@ export interface FactoryTransitionServiceOptions {
    * `onTerminalStage` or `onContextLeft` before returning (default 30s). The
    * cleanup continues in the background past the bound. */
   terminalCleanupTimeoutMs?: number;
+  /**
+   * Whether a run is in flight on the card's sessions. With a run queued for the card, it makes the
+   * card busy, and a person's move into a phase that may start a run is refused while it is.
+   * Without it only a queued run counts.
+   */
+  runInFlight?: (card: { orgId: string; factoryProjectId: string; workItemId: string }) => Promise<boolean>;
   /**
    * Called after a person moves a Work card from Intake or Triage into Planning or
    * Building, which approves the work. Fire-and-forget: failures are swallowed, the committed transition never
@@ -295,6 +303,7 @@ export class FactoryTransitionService {
   readonly #onAccepted: FactoryTransitionServiceOptions['onAccepted'];
   readonly #onTransitionCommitted: FactoryTransitionServiceOptions['onTransitionCommitted'];
   readonly #audit: AuditRecorder | undefined;
+  readonly #runInFlight: FactoryTransitionServiceOptions['runInFlight'];
 
   constructor(options: FactoryTransitionServiceOptions) {
     this.#configVersion = options.configVersion;
@@ -306,6 +315,7 @@ export class FactoryTransitionService {
     this.#onContextLeft = options.onContextLeft;
     this.#onAccepted = options.onAccepted;
     this.#onTransitionCommitted = options.onTransitionCommitted;
+    this.#runInFlight = options.runInFlight;
     this.#terminalCleanupTimeoutMs = options.terminalCleanupTimeoutMs ?? TERMINAL_CLEANUP_TIMEOUT_MS;
   }
 
@@ -494,6 +504,17 @@ export class FactoryTransitionService {
       );
     }
 
+    if (
+      isHumanTransition(request) &&
+      request.cause !== 'run_start' &&
+      !request.initialEntry &&
+      (fromStage !== request.stage || request.reenter === true) &&
+      phaseMayStartRun(board.phaseKind(request.stage)) &&
+      (await this.#cardBusy(request))
+    ) {
+      return this.#commitRejection(request, transitionId, 'card_busy', BUSY_CARD_MOVE_REFUSAL);
+    }
+
     // The coordinator's own self-move at run start would otherwise inject a second run's kickoff.
     const humanMove = request.actor.type === 'human' && fromStage !== request.stage && request.cause !== 'run_start';
     // The board, not the phase name, says whether a seat is engaged on either side of this move.
@@ -633,6 +654,16 @@ export class FactoryTransitionService {
       boards,
       fromStage,
     );
+  }
+
+  /** A run in flight on the card's sessions, or one queued for it: what the board shows as busy. */
+  async #cardBusy(request: FactoryTransitionRequest): Promise<boolean> {
+    const queued = await this.#storage.listDeferredDecisions(request.orgId, request.factoryProjectId, {
+      statuses: ['pending', 'retry', 'leased'],
+      workItemId: request.workItemId,
+    });
+    if (queued.some(decision => isRunBearingDecision(decision.decision))) return true;
+    return (await this.#runInFlight?.(request)) ?? false;
   }
 
   async #commitRejection(
