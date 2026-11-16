@@ -193,7 +193,8 @@ export function handleError(error: unknown, defaultMessage: string): never {
     });
   }
 
-  if (isSchemaValidationError(error)) {
+  // A Knowledge list cursor the store did not issue is a bad request, not a store fault.
+  if (isSchemaValidationError(error) || (error instanceof Error && error.name === 'KnowledgeInvalidCursorError')) {
     throw new HTTPException(400, {
       message: error.message,
       stack: error.stack,

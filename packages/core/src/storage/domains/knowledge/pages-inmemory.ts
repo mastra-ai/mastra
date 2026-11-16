@@ -8,6 +8,7 @@ import {
   assertKnowledgeNoteTextWithinBound,
   assertKnowledgePageDescriptionWithinBound,
   canonicalKnowledgeName,
+  KnowledgeInvalidCursorError,
   KnowledgeMoveTooLargeError,
   KnowledgePageDepthError,
   KnowledgePageHasChildrenError,
@@ -50,7 +51,7 @@ function pageSize(limit: number | undefined): number {
 
 function paginate<T>(items: T[], cursor: string | undefined, limit: number | undefined) {
   const start = cursor === undefined ? 0 : Number(cursor);
-  if (!Number.isInteger(start) || start < 0) throw new RangeError(`Invalid Knowledge cursor: ${cursor}`);
+  if (!Number.isInteger(start) || start < 0) throw new KnowledgeInvalidCursorError(String(cursor));
   const size = pageSize(limit);
   const slice = items.slice(start, start + size);
   return { items: slice, nextCursor: start + size < items.length ? String(start + size) : undefined };

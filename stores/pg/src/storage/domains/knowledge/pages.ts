@@ -3,6 +3,7 @@ import {
   knowledgePageKeyProblem,
   KNOWLEDGE_SEARCH_WEIGHTS,
   knowledgeSearchWords,
+  KnowledgeInvalidCursorError,
 } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
 import { createKnowledgeUlid, KnowledgeConflictError, KnowledgeNotFoundError } from '@mastra/core/storage';
@@ -302,7 +303,7 @@ function decodeCursor(cursor: string, arity: number): string[] {
   } catch {
     // fall through
   }
-  throw new Error('Invalid Knowledge cursor');
+  throw new KnowledgeInvalidCursorError(cursor);
 }
 
 function clampLimit(limit: number | undefined, max: number): number {

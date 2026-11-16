@@ -341,6 +341,8 @@ export function assertKnowledgeNoteTextWithinBound(text: string): void {
   }
 }
 
+export { KnowledgeInvalidCursorError } from '@internal/core/knowledge-compat';
+
 /** @experimental */
 export class KnowledgeMoveTooLargeError extends Error {
   constructor(
