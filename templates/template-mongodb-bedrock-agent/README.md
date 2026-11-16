@@ -14,6 +14,7 @@ One Atlas cluster handles vector search and conversation storage, while Bedrock 
 
 ## Prerequisites
 
+- **[Node.js](https://nodejs.org/) 22.15 or later**.
 - **[MongoDB Atlas account](https://www.mongodb.com/cloud/atlas/register)**: create a cluster, a database user, and an [IP access list entry](https://www.mongodb.com/docs/atlas/connect-to-database-deployment/) for your computer. Set `MONGODB_URI` to the cluster's connection string with that database user's credentials. The free cluster tier supports Atlas Vector Search. `MONGODB_DATABASE` names the database used for documents and conversations; it defaults to `mastra_docs`.
 - **[AWS account](https://signin.aws.amazon.com/signup?request_type=register)**: use an account with access to Amazon Bedrock. Bedrock charges for model calls, including local ingestion and questions.
 - **[Bedrock model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html)**: choose a region where the chat and embedding models are available. Set `AWS_REGION` to that region (default: `us-east-1`). For a first use of Claude, submit Anthropic's use case details from the Bedrock Model catalog if prompted. The IAM identity you use locally needs `bedrock:InvokeModel` and, for streamed responses, `bedrock:InvokeModelWithResponseStream`. Access to the default Claude inference profile must also cover its destination regions.
