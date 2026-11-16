@@ -6,7 +6,7 @@ export const IconArrowUpRight = createCentralIcon(
     <path
       d="M18 15V6M18 6H9M18 6L6.25 17.75"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.5"
       strokeLinecap="round"
       strokeLinejoin="round"
     />

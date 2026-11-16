@@ -84,13 +84,18 @@ try {
     const module = await import(pathToFileURL(join(packageDir, name, 'index.mjs')).href);
     const element = module[name].type.render({}, null);
     const shapes = element.props.renderShapes ? element.props.renderShapes(maskToken) : element.props.children;
-    const jsx = toJsx(shapes, Fragment);
+    const inset = opticalInset[name] ?? 0;
+    const strokeScale = (24 + 2 * inset) / 24;
+    const jsx = toJsx(shapes, Fragment).replace(
+      /strokeWidth=(?:"([\d.]+)"|\{([\d.]+)\})/g,
+      (_, quoted, braced) => `strokeWidth="${Number((Number(quoted ?? braced) * strokeScale).toFixed(4))}"`,
+    );
     const body = Array.isArray(shapes) ? `<>${jsx}</>` : jsx;
     const parameter = jsx.includes('${maskId}') ? 'maskId' : '()';
 
     writeFileSync(
       join(iconsDir, `${name}.tsx`),
-      `import { createCentralIcon } from './create-central-icon';\n\nexport const ${name} = createCentralIcon('${name}', ${parameter} => (${body})${opticalInset[name] ? `, ${opticalInset[name]}` : ''});\n`,
+      `import { createCentralIcon } from './create-central-icon';\n\nexport const ${name} = createCentralIcon('${name}', ${parameter} => (${body})${inset ? `, ${inset}` : ''});\n`,
     );
   }
 
