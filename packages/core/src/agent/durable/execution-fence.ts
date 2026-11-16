@@ -608,8 +608,8 @@ export class ExecutionFence implements RunFenceScope {
    */
   #ownRelease?: Promise<boolean>;
   /**
-   * The grace for a release seen in storage is spent: a renewal already found this claim released by a fence of this
-   * execution in another process before this one settled, or this process abandoned the claim, which nothing settles.
+   * The grace for a release of this claim is spent: a renewal already found the claim released by this execution
+   * before this fence settled, or this process abandoned the claim, which nothing settles.
    */
   #releaseSeen = false;
   #settlement?: Promise<ExecutionSettlement>;
@@ -759,17 +759,13 @@ export class ExecutionFence implements RunFenceScope {
 
   /**
    * Tell the fences of the claim at `key` that are still renewing that the execution is releasing that claim.
-   * `releasing` is the fence making the release, which records it itself.
+   * `releasing` is the fence making the release, which records it itself. The others keep renewing: one that has not
+   * settled by its next renewal never heard the run's terminal event, and that renewal reports the loss.
    */
   static #noteOwnRelease(key: string, released: Promise<boolean>, releasing?: ExecutionFence): void {
     const confirmed = released.catch(() => false);
     for (const fence of renewingFencesByClaim.get(key) ?? []) {
-      if (fence === releasing) continue;
-      fence.#noteReleaseStarted(confirmed);
-      void confirmed.then(owned => {
-        // The claim is gone: later renewals could only fail.
-        if (owned) fence.stopHeartbeat();
-      });
+      if (fence !== releasing) fence.#noteReleaseStarted(confirmed);
     }
   }
 
@@ -1232,17 +1228,18 @@ export class ExecutionFence implements RunFenceScope {
   /**
    * Keep the claim alive between write checks. A `false` renewal marks the
    * fence lost, which notifies {@link onLost} listeners. Backend errors are
-   * tolerated until the local lease deadline. A failed renewal is ignored
-   * when this execution released its claim and the backend confirmed the claim
-   * still held the run at that point: the renewal then failed because of the
-   * release. Without that confirmation another execution claimed the run first.
+   * tolerated until the local lease deadline. A failed renewal can be caused
+   * by this execution's own release: in this process, when the backend
+   * confirmed the claim still held the run as it was released (without that
+   * confirmation another execution claimed the run first); in another process,
+   * when the failed renewal finds the record still naming this claim with its
+   * lease cleared.
    *
-   * A release made in another process is seen only in storage, when a failed
-   * renewal finds the record still naming this claim with its lease cleared.
-   * It is ignored once this fence settled. An unsettled fence gets until its
-   * next renewal to settle (a released run's terminal event is on its way);
-   * a release nothing settles, such as an abandoned terminal, is then a loss.
-   * An abandoned release made in this process gets no grace.
+   * Such a release is ignored once this fence settled. An unsettled fence gets
+   * until its next renewal to settle (a released run's terminal event is on
+   * its way); a release nothing settles, such as an abandoned terminal or a
+   * terminal event that never reached this fence's caller, is then a loss. An
+   * abandoned release made in this process gets no grace.
    */
   #startHeartbeat(): void {
     const key = claimKey(this.runId, this.claim);
@@ -1266,9 +1263,10 @@ export class ExecutionFence implements RunFenceScope {
       void this.#backend
         .renew(this.claim)
         .then(async result => {
+          const ownRelease = await this.#ownRelease;
           if (result.renewed) {
             // A release that failed left the claim with this execution, so its renewal still counts.
-            if (await this.#ownRelease) return;
+            if (ownRelease) return;
             // The lease runs at least a TTL from when the renewal was sent. A queued storage renewal ran later:
             // trust the store's expiry, less a clock skew allowance, but never past a TTL from now.
             const { leaseExpiresAt } = result;
@@ -1278,8 +1276,7 @@ export class ExecutionFence implements RunFenceScope {
             this.#leaseExpiresAt = Math.max(startedAt + EXECUTION_LEASE_TTL_MS, reported);
             return;
           }
-          if (await this.#ownRelease) return;
-          if (result.released && (this.#settlement || !this.#releaseSeen)) {
+          if ((ownRelease || result.released) && (this.#settlement || !this.#releaseSeen)) {
             this.#releaseSeen = true;
             return;
           }
@@ -1287,7 +1284,7 @@ export class ExecutionFence implements RunFenceScope {
           return this.#noteTakeover();
         })
         .catch(async cause => {
-          if (await this.#ownRelease) return;
+          if (this.#settlement && (await this.#ownRelease)) return;
           if (Date.now() >= this.#leaseExpiresAt) {
             this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details(), cause));
             return;

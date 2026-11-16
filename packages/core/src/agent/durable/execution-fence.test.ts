@@ -905,6 +905,23 @@ describe('storage-backed ExecutionFence', () => {
     await successor!.settle(async () => {});
   });
 
+  // A failed renewal that reports no record can't show the run was released by this execution, so it counts as a loss,
+  // as every failed renewal did before #30206. (#30206)
+  it('still marks an execution lost when a failed renewal reports no ownership record (#30206)', async () => {
+    vi.useFakeTimers();
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    const lost = vi.fn();
+    fence.onLost(lost);
+    vi.spyOn(workflowsStore, 'renewRunOwnership').mockResolvedValueOnce({ renewed: false, record: null });
+
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+
+    expect(fence.isLost()).toBe(true);
+    expect(lost).toHaveBeenCalledWith(expect.objectContaining({ id: EXECUTION_SUPERSEDED_ERROR_ID }));
+    fence.stopHeartbeat();
+  });
+
   // Whether a failed renewal came from the execution's own release is decided by what the backend said about the
   // claim as it was released, never by when the renewal's response arrives. (#30206)
   it.each(['storage', 'lease'] as const)(

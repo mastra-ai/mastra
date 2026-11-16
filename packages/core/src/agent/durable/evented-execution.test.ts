@@ -207,7 +207,8 @@ async function startSuspendingSharedRun(args: { pubsub: UnixSocketPubSub; storag
 
   const started = await agent.stream('Look it up', { requireToolApproval: true });
   const { runId } = started;
-  void drainStream(started.fullStream);
+  const streamed = drainStream(started.fullStream);
+  streamed.catch(() => {});
   await entered.promise;
   const coordinator = ExecutionFence.getLocalActive(runId)!;
   const participant = mastra.__getRunScope(runId)?.get(DURABLE_PARTICIPANT_FENCES)?.get(coordinator.executionId);
@@ -223,6 +224,8 @@ async function startSuspendingSharedRun(args: { pubsub: UnixSocketPubSub; storag
     sharedExecution,
     lost,
     execute,
+    /** The first stream's chunks, once it closes. */
+    streamed,
     releaseModel: () => firstCall.resolve(),
   };
 }
@@ -1132,6 +1135,92 @@ it('marks a coordinator lost on its first failed renewal after this process aban
 
   expect(renewals).toEqual([false]);
   expect(coordinator.isLost()).toBe(true);
+  expect(lost).toHaveBeenCalledTimes(1);
+});
+
+// The worker in this process publishes the run's suspension, then releases the claim. If the suspension never reaches
+// the coordinator (the broker accepted it but never delivered it), the coordinator must still stop waiting: its first
+// failed renewal after the release gets one interval of grace, as a release seen from another process does, and the
+// next one reports the loss, so the caller's stream ends with an error instead of staying open. (#30206)
+it('ends the stream with an error when the suspension of a shared EventedAgent run never reaches its coordinator (#30206)', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  const pubsub = await socketPubSub('mastra-undelivered-finish-');
+  const storage = new InMemoryStore();
+  const workflows = (await storage.getStore('workflows'))!;
+  const run = await startSuspendingSharedRun({ pubsub, storage });
+  const { runId, coordinator } = run;
+  expect(run.sharedExecution).toBe(true);
+  const publish = pubsub.publish.bind(pubsub);
+  const undelivered: string[] = [];
+  vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event) => {
+    if (topic === 'workflows-finish' && event.runId === runId) {
+      undelivered.push(event.type);
+      return;
+    }
+    return publish(topic, event);
+  });
+
+  run.releaseModel();
+  await vi.waitFor(
+    async () =>
+      expect(await workflows.getRunOwnership({ runId })).toMatchObject({
+        ownerId: coordinator.executionId,
+        generation: coordinator.generation,
+        leaseExpiresAt: null,
+      }),
+    { timeout: 5_000 },
+  );
+  expect(undelivered).toContain('workflow.suspend');
+
+  await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+  expect(coordinator.isLost()).toBe(false);
+  await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+  expect(coordinator.isLost()).toBe(true);
+
+  // The caller hears of the loss a renewal interval after it, on a real timer.
+  const chunks = await Promise.race([
+    run.streamed,
+    new Promise<'still open'>(resolve =>
+      setTimeout(() => resolve('still open'), 2 * EXECUTION_LEASE_RENEW_INTERVAL_MS),
+    ),
+  ]);
+  expect(chunks).not.toBe('still open');
+  expect(chunks === 'still open' ? undefined : chunks.at(-1)?.type).toBe('error');
+}, 30_000);
+
+// Two workers in one process share a run. Settling it in one worker does not tear down the other worker's participant.
+// If that participant is still running, its first failed renewal after the release gets the same grace, and the next
+// one marks it lost, so its publishes are dropped from then on. (#30206)
+it('marks a participant in another worker of this process lost once it outlives the release of the run (#30206)', async () => {
+  vi.useFakeTimers();
+  const { workflowsStore, pubsub, mastra, coordinator, event } = await createExecution();
+  const other = new Mastra({ storage: mastra.getStorage()!, pubsub, logger: false });
+  instances.push(other);
+  await participateInDurableExecution(other, event, async () => {});
+  const participant = other.__getRunScope('run')!.get(DURABLE_PARTICIPANT_FENCES)!.get(coordinator.executionId)!;
+  const lost = vi.fn();
+  participant.onLost(lost);
+  const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+  const renewals: boolean[] = [];
+  vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementation(async args => {
+    const result = await renew(args);
+    renewals.push(result.renewed);
+    return result;
+  });
+
+  await settleEventedDurableExecution(mastra, { ...event, type: 'workflow.suspend' });
+  expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({
+    ownerId: coordinator.executionId,
+    generation: coordinator.generation,
+    leaseExpiresAt: null,
+  });
+  await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+  expect(renewals).toEqual([false]);
+  expect(participant.isLost()).toBe(false);
+
+  await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+  expect(renewals).toEqual([false, false]);
+  expect(participant.isLost()).toBe(true);
   expect(lost).toHaveBeenCalledTimes(1);
 });
 
