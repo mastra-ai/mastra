@@ -299,6 +299,8 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       );
       return entry.message.role === 'assistant' ? { ...state, entries, pending: false } : { ...state, entries };
     }
+    case 'display_state_changed':
+      return followLiveRow(state, event.displayState, viewerId);
 
     case 'tool_input_start':
       return withTool(state, event.toolCallId, t => ({ ...t, toolName: event.toolName }), {
@@ -1158,6 +1160,39 @@ function upsertMessage(
   else entries[idx] = entry;
   const next = { ...state, entries };
   return message.role === 'assistant' ? reconcileToolResults(next, [message]) : next;
+}
+
+// The stream sends no backlog: each new stream opens on the row in flight, indexed as the stream indexes its parts.
+function followLiveRow(
+  state: TranscriptState,
+  { isRunning, currentMessage }: Extract<AgentControllerEvent, { type: 'display_state_changed' }>['displayState'],
+  viewerId?: string,
+): TranscriptState {
+  if (!isRunning || currentMessage?.role !== 'assistant') return state;
+  const live = { ...currentMessage, createdAt: new Date(currentMessage.createdAt) };
+  const index = state.entries.findIndex(
+    entry => entry.kind === 'message' && (entry.id === live.id || entry.message.id === live.id),
+  );
+  const entry = state.entries[index];
+  if (entry?.kind === 'message' && followsStream(entry, live, toolCallIdsDrawnElsewhere(state.entries, index))) {
+    return state;
+  }
+  return upsertMessage(state, live, entry?.kind === 'message' && entry.streaming === true, viewerId);
+}
+
+function followsStream(entry: MessageEntry, live: MastraDBMessage, drawnElsewhere: Set<string>): boolean {
+  const drawn = entry.message.content.parts;
+  const streamIndexes = entry.sourcePartIndexes ?? drawn.map((_, at) => at);
+  const inPlace = drawn.every((part, at) => {
+    const counterpart = live.content.parts[streamIndexes[at] ?? -1];
+    if (!counterpart) return part.type === 'tool-invocation';
+    return part.type === counterpart.type && toolCallIdForPart(part) === toolCallIdForPart(counterpart);
+  });
+  const placed = new Set(streamIndexes);
+  return (
+    inPlace &&
+    live.content.parts.every((part, index) => placed.has(index) || drawnElsewhere.has(toolCallIdForPart(part) ?? ''))
+  );
 }
 
 // A composer bubble keeps its local message id until its echo signal claims it, so each send is consumed once.
