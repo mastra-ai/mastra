@@ -58,8 +58,6 @@ export interface IntakeRouteRoutesDeps extends RouteDependencies {
   intakeEvaluator?: IntakeEvaluator;
   /** What forced `intakeEvaluator`. */
   intakeEvaluatorSource?: ForcedIntakeEvaluator['source'];
-  /** The rule set a Route again commits under. */
-  configVersion?: string;
 }
 
 type LinkedDecision = Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>;
@@ -230,19 +228,13 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
    * commits the item's arrival afresh, so the dispatcher files it as a new arrival would be.
    */
   async #routeAgain(c: Context, scope: Resolved) {
-    const { storage, workItems, configVersion } = this.deps;
+    const { storage, workItems } = this.deps;
     const decision = await storage.getIntakeDecision(scope, this.#decisionId(c));
     if (!decision || decision.outcome !== 'not_routed' || !decision.arrival) {
       throw new Refusal(404, { error: 'intake_decision_not_found' });
     }
     if (decision.resolvedAt) {
       throw new Refusal(409, { error: 'intake_decision_resolved', message: 'This item has been filed since.' });
-    }
-    if (!configVersion) {
-      throw new Refusal(409, {
-        error: 'factory_rules_unavailable',
-        message: 'Factory rules are not available right now.',
-      });
     }
     const arrival = decision.arrival as unknown as LinkedDecision;
     const [registry, routes] = await Promise.all([this.#registry(scope), storage.listIntakeRoutes(scope)]);
@@ -269,8 +261,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
       orgId: scope.orgId,
       factoryProjectId: scope.factoryProjectId,
       workItemId: null,
-      ingress: { identity: attempt, triggerType: 'intake.route_again' },
-      configVersion,
+      ingress: { identity: attempt },
       expectedRevision: null,
       actor: { type: 'system', id: 'factory-intake-route-again' },
       outcome: { status: 'accepted' },

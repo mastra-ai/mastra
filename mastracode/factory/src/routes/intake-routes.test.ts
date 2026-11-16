@@ -117,7 +117,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
         workItems: domains.workItems,
         storage: domains.boards,
         boards: cache,
-        configVersion: 'intake-routes-test',
         ...(options.evaluator ? { intakeEvaluator: options.evaluator } : {}),
         ...(options.evaluatorSource ? { intakeEvaluatorSource: options.evaluatorSource } : {}),
       }).routes(),

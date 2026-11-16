@@ -1047,7 +1047,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           boards: deps.storedBoards.cache,
           intakeEvaluator: deps.intakeEvaluator,
           intakeEvaluatorSource: deps.intakeEvaluatorSource,
-          configVersion: deps.configVersion,
         }).routes()
       : []),
     ...(deps.factoryReady
