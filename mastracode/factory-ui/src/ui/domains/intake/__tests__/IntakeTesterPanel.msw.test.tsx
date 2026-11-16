@@ -4,7 +4,12 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderHookWithProviders, renderWithProviders } from '../../../../../e2e/ui/render';
+import {
+  TEST_BASE_URL,
+  renderHookWithProviders,
+  renderWithProviders,
+  waitForMutationsIdle,
+} from '../../../../../e2e/ui/render';
 import type { IntakeDryRunResponse, IntakeTestResponse } from '../../../../api/types';
 import { useIntakeDryRunQuery } from '../../../../hooks/useIntakeDryRun';
 import { useIntakeRouteWrites } from '../../../../hooks/useIntakeRoutes';
@@ -78,7 +83,7 @@ function serveTest(response: IntakeTestResponse | { status: number; error: strin
 describe('IntakeTesterPanel', () => {
   it('tests a pasted URL and shows where it goes and what every rule answered', async () => {
     const bodies = serveTest(shipped);
-    renderWithProviders(<IntakeTesterPanel factoryProjectId="fp-1" />);
+    const { rerender } = renderWithProviders(<IntakeTesterPanel factoryProjectId="fp-1" />);
 
     await userEvent.type(
       screen.getByRole('textbox', { name: 'Issue or pull request URL' }),
@@ -100,6 +105,11 @@ describe('IntakeTesterPanel', () => {
     expect(screen.getByRole('link', { name: 'Crash on start' }).getAttribute('href')).toBe(
       'https://github.com/mastra-ai/mastra/issues/12',
     );
+
+    // Another project's panel starts empty: this answer was about the first one's rules.
+    rerender(<IntakeTesterPanel factoryProjectId="fp-2" />);
+    expect(screen.queryByText('Goes to Work › intake')).toBeNull();
+    expect((screen.getByRole('textbox', { name: 'Issue or pull request URL' }) as HTMLInputElement).value).toBe('');
   });
 
   it('tests a recent item as soon as it opens, against unsaved order, and says why nothing takes it', async () => {
@@ -272,7 +282,7 @@ describe('useIntakeDryRunQuery', () => {
       http.get(`${PROJECT}/intake-routes`, () => HttpResponse.json({ intakeRoutes: [], canEdit: true })),
       http.post(`${PROJECT}/intake-routes/reorder`, () => HttpResponse.json({ intakeRoutes: [] })),
     );
-    const { result } = renderHookWithProviders(() => ({
+    const { result, client } = renderHookWithProviders(() => ({
       dryRun: useIntakeDryRunQuery('fp-1'),
       writes: useIntakeRouteWrites('fp-1'),
     }));
@@ -281,5 +291,7 @@ describe('useIntakeDryRunQuery', () => {
     expect(bodies).toEqual([{}]);
     await act(() => result.current.writes.mutateAsync([{ kind: 'reorder', ids: [] }]));
     await waitFor(() => expect(bodies).toHaveLength(2));
+    await waitForMutationsIdle(client);
+    expect(result.current.dryRun.data).toEqual(dryRun);
   });
 });

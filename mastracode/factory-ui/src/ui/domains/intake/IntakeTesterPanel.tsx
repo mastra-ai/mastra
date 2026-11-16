@@ -77,7 +77,12 @@ function CardMoves({ moves, boardName }: { moves: IntakeTestResponse['moves']; b
  * "Where would this go?": paste an issue or pull request URL, or open it on a recent item, and see
  * which board takes it and what every rule answered. Nothing is filed.
  */
-export function IntakeTesterPanel({ factoryProjectId, itemId, draft }: IntakeTesterPanelProps) {
+export function IntakeTesterPanel(props: IntakeTesterPanelProps) {
+  // A new project starts a new panel: its URL, pending test and answer belonged to the last one.
+  return <TesterBody key={props.factoryProjectId} {...props} />;
+}
+
+function TesterBody({ factoryProjectId, itemId, draft }: IntakeTesterPanelProps) {
   const [url, setUrl] = useState('');
   const test = useIntakeTest(factoryProjectId);
   const { mutate } = test;
