@@ -1835,8 +1835,18 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     if (!org) {
       return this.#legacy.mintRepositoryToken(target.installationId, repositories, REPOSITORY_TOKEN_PERMISSIONS);
     }
-    // Connect hands out installation-wide tokens only. Sandboxes never get one.
-    throw new GithubTokenScopeUnavailableError();
+    if (repositories.length === 0 || repositories.length > MAX_REPOSITORIES_PER_TOKEN) {
+      throw new Error('A repository-scoped GitHub token needs between one and ten repositories.');
+    }
+    const installation = org.record.installations?.find(
+      candidate => candidate.installationId === target.installationId,
+    );
+    if (!installation) throw new PlatformGithubInstallationNotFoundError(org.orgId, undefined);
+    await this.#requireActive(installation);
+    return this.#tokens.repositoryToken(installation.connectionId, {
+      repositories,
+      permissions: REPOSITORY_TOKEN_PERMISSIONS,
+    });
   }
 
   /** The installations an org's repositories come from: its switched installations, or the legacy app's usable ones. */
@@ -2160,21 +2170,5 @@ export class PlatformGithubConnectionInactiveError extends Error {
   constructor(accountLogin: string, providerKey: string) {
     super(`The ${providerKey} connection for ${accountLogin} is not active. Reconnect it in Factory settings.`);
     this.name = 'PlatformGithubConnectionInactiveError';
-  }
-}
-
-/**
- * Agent sandboxes only get tokens scoped to the repositories they work on.
- * Connect issues installation-wide tokens, so a switched org can't mint one.
- */
-export class GithubTokenScopeUnavailableError extends Error {
-  readonly status = 409;
-  readonly code = 'sandbox_token_scope_unavailable';
-
-  constructor() {
-    super(
-      'Repository-scoped GitHub tokens are not available for the Mastra Factory GitHub apps yet, so Factory will not hand an agent sandbox an installation-wide token.',
-    );
-    this.name = 'GithubTokenScopeUnavailableError';
   }
 }

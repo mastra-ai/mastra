@@ -9,6 +9,17 @@ const UNDATED_TOKEN_TTL_MS = 10 * 60_000;
 /** How long a user's pasted token, or their having no token, is remembered. */
 const USER_LOOKUP_TTL_MS = 60_000;
 
+/** Repository and permission narrowing for an installation token. */
+export interface GithubTokenScope {
+  repositories: readonly string[];
+  permissions: Readonly<Record<string, 'read' | 'write' | 'admin'>>;
+}
+
+interface MintedInstallationToken {
+  token: string;
+  expiresAt: string;
+}
+
 export type GithubUserToken =
   { source: 'connection'; connectionId: string; token: string } | { source: 'pat'; token: string };
 
@@ -26,8 +37,9 @@ export class GithubConnectCredentialError extends Error {
 }
 
 /**
- * GitHub tokens for the Mastra Factory apps: their installation tokens, read
- * through Connect by connection, and each Factory user's own token. A user's
+ * GitHub tokens for the Mastra Factory apps: their installation tokens, minted
+ * by the platform per connection (the apps' signing keys never leave it),
+ * optionally narrowed to named repositories, and each Factory user's own token. A user's
  * token comes from their end-user `factory-github` connection (`resourceId` =
  * their user id) when they have an active one, else from the PAT they pasted
  * into Factory. Tokens are cached
@@ -48,19 +60,38 @@ export class GithubConnectTokens {
     this.#userPat = options.userPat ?? (async () => null);
   }
 
+  /** A token with the installation's whole grant, for Factory's own server-side calls. */
   installationToken(connectionId: string): Promise<string> {
-    const cached = this.#installations.get(connectionId);
-    if (cached && cached.expiresAt > this.#now()) return Promise.resolve(cached.value);
-    return this.#once(`installation:${connectionId}`, async () => {
-      const credential = await this.#connect.getCredential(connectionId);
-      const { token, expiresAt } = this.#oauth(connectionId, credential);
-      this.#installations.set(connectionId, { value: token, expiresAt });
-      return token;
-    });
+    return this.#mint(connectionId, connectionId, {});
   }
 
+  /** A token for only `scope.repositories`, with only `scope.permissions`. Agent sandboxes get these. */
+  repositoryToken(connectionId: string, scope: GithubTokenScope): Promise<string> {
+    const repositories = [...new Set(scope.repositories)].sort();
+    const permissions = Object.fromEntries(Object.entries(scope.permissions).sort(([a], [b]) => a.localeCompare(b)));
+    const key = `${connectionId}\u0000${repositories.join(',')}\u0000${JSON.stringify(permissions)}`;
+    return this.#mint(connectionId, key, { repositories, permissions });
+  }
+
+  /** Drops every cached token of the connection, scoped or not. */
   invalidateInstallation(connectionId: string): void {
-    this.#installations.delete(connectionId);
+    for (const key of this.#installations.keys()) {
+      if (key === connectionId || key.startsWith(`${connectionId}\u0000`)) this.#installations.delete(key);
+    }
+  }
+
+  #mint(connectionId: string, key: string, body: Partial<GithubTokenScope>): Promise<string> {
+    const cached = this.#installations.get(key);
+    if (cached && cached.expiresAt > this.#now()) return Promise.resolve(cached.value);
+    return this.#once(`installation:${key}`, async () => {
+      const minted = await this.#connect.request<MintedInstallationToken>(
+        'POST',
+        `/v2/connections/${encodeURIComponent(connectionId)}/github/installation-token`,
+        { body },
+      );
+      this.#installations.set(key, { value: minted.token, expiresAt: this.#expiry(minted.expiresAt) });
+      return minted.token;
+    });
   }
 
   /** The user's own GitHub token in `orgId`, or null when they have neither a connection nor a PAT. */
@@ -92,11 +123,12 @@ export class GithubConnectTokens {
 
   #oauth(connectionId: string, credential: ConnectionCredential): { token: string; expiresAt: number } {
     if (credential.type !== 'oauth2') throw new GithubConnectCredentialError(connectionId, credential.type);
-    const expires = credential.expiresAt ? Date.parse(credential.expiresAt) : Number.NaN;
-    return {
-      token: credential.accessToken,
-      expiresAt: Number.isFinite(expires) ? expires - EXPIRY_SKEW_MS : this.#now() + UNDATED_TOKEN_TTL_MS,
-    };
+    return { token: credential.accessToken, expiresAt: this.#expiry(credential.expiresAt) };
+  }
+
+  #expiry(expiresAt: string | null | undefined): number {
+    const expires = expiresAt ? Date.parse(expiresAt) : Number.NaN;
+    return Number.isFinite(expires) ? expires - EXPIRY_SKEW_MS : this.#now() + UNDATED_TOKEN_TTL_MS;
   }
 
   #once<T>(key: string, load: () => Promise<T>): Promise<T> {
