@@ -207,7 +207,7 @@ export function assertObservabilitySpanAggregateSupported(observabilityStore: Ob
 /** Reject unsupported search instead of silently returning unfiltered results. */
 export function assertObservabilityTextSearchSupported(
   observabilityStore: ObservabilityStorage,
-  predicate: unknown,
+  predicate: TrustedTraceQueryPredicate | undefined,
   kind: 'span' | 'trace',
   operation: 'query' | 'aggregate' = 'query',
 ) {
@@ -230,7 +230,12 @@ export function assertObservabilitySpanQueryFieldsSupported(
   observabilityStore: ObservabilityStorage,
   predicate: TrustedTraceQueryScalarPredicate | undefined,
 ) {
-  if (!predicate || getFeatures(observabilityStore)?.includes('span-query-context-fields')) return;
+  if (
+    !predicate ||
+    predicate.type === 'tokens' ||
+    getFeatures(observabilityStore)?.includes('span-query-context-fields')
+  )
+    return;
   if (predicate.type === 'boolean') {
     for (const arg of predicate.args) assertObservabilitySpanQueryFieldsSupported(observabilityStore, arg);
   } else if (predicate.type === 'not') {
@@ -379,7 +384,7 @@ export function assertObservabilityTraceQueryOutcomeFieldsSupported(
 }
 
 function usesRootDuration(predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined): boolean {
-  if (!predicate) return false;
+  if (!predicate || predicate.type === 'tokens') return false;
   if (predicate.type === 'boolean') return predicate.args.some(usesRootDuration);
   if (predicate.type === 'not') return usesRootDuration(predicate.arg);
   if (predicate.type === 'relation') {
@@ -408,7 +413,7 @@ function usesField(
   predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined,
   fields: ReadonlySet<string>,
 ): boolean {
-  if (!predicate) return false;
+  if (!predicate || predicate.type === 'tokens') return false;
   if (predicate.type === 'boolean') return predicate.args.some(arg => usesField(arg, fields));
   if (predicate.type === 'not') return usesField(predicate.arg, fields);
   if (predicate.type === 'relation') return usesField(predicate.predicate, fields);
@@ -486,7 +491,7 @@ function rootSpanFieldIssues(
   observabilityStore: ObservabilityStorage,
   predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined,
 ): TraceQueryIssue[] {
-  if (!predicate) return [];
+  if (!predicate || predicate.type === 'tokens') return [];
   if (predicate.type === 'boolean') return predicate.args.flatMap(arg => rootSpanFieldIssues(observabilityStore, arg));
   if (predicate.type === 'not') return rootSpanFieldIssues(observabilityStore, predicate.arg);
   // Only trace-scope root span fields read the root; inside `spans.some` they are long-supported span fields.
@@ -1375,12 +1380,15 @@ export function createObservabilityListQuerySchema<
   });
 }
 
-/** Inspect only the bounded, parsed predicate tree. */
-export function hasTokenPredicate(predicate: unknown): boolean {
-  if (!predicate || typeof predicate !== 'object') return false;
-  if ('type' in predicate && predicate.type === 'tokens') return true;
-  if ('op' in predicate && predicate.op === 'hasAllTokens') return true;
-  return Object.values(predicate).some(value =>
-    Array.isArray(value) ? value.some(hasTokenPredicate) : hasTokenPredicate(value),
-  );
+/**
+ * Keep this walker local: a named runtime import of Core's newer helper would break loading
+ * Server with older Core versions. Callers supply only bounded, trusted predicate plans.
+ */
+export function hasTokenPredicate(predicate: TrustedTraceQueryPredicate | undefined): boolean {
+  if (!predicate) return false;
+  if (predicate.type === 'tokens') return true;
+  if (predicate.type === 'boolean') return predicate.args.some(hasTokenPredicate);
+  if (predicate.type === 'not') return hasTokenPredicate(predicate.arg);
+  if (predicate.type === 'relation') return hasTokenPredicate(predicate.predicate);
+  return false;
 }
