@@ -41,6 +41,31 @@ async function fixture() {
   return { database, billing, account, observer };
 }
 
+it('explicit database URLs reject shared-write directories before opening SQLite', async () => {
+  const database = await temporaryDatabase();
+  cleanups.push(database.cleanup);
+  const environment = { BILLING_MODE: 'local', BILLING_PROVIDER: 'local', BILLING_DATABASE_URL: database.url };
+  await filesystem.chmod(database.directory, 0o770);
+  await expect(
+    configuredOrganizations(environment).then(organizations => {
+      cleanups.push(() => organizations.close());
+      return organizations;
+    }),
+  ).rejects.toMatchObject({ code: 'storage_unavailable' });
+  await expect(stat(database.filename)).rejects.toMatchObject({ code: 'ENOENT' });
+  await filesystem.chmod(database.directory, 0o700);
+  const organizations = await configuredOrganizations(environment);
+  cleanups.push(() => organizations.close());
+  const owner = await organizations.provisionLocal({ profileId: 'private-directory', displayName: 'Owner' });
+  expect(await organizations.context({ credential: owner.credential! })).toMatchObject({ actorId: owner.identity.id });
+  await filesystem.chmod(database.directory, 0o770);
+  await expect(organizations.context({ credential: owner.credential! })).rejects.toMatchObject({
+    code: 'storage_unavailable',
+  });
+  await filesystem.chmod(database.directory, 0o700);
+  expect(await organizations.context({ credential: owner.credential! })).toMatchObject({ actorId: owner.identity.id });
+});
+
 describe('local billing storage', () => {
   it('private storage rejects Windows with an explicit platform error', async () => {
     const database = await temporaryDatabase();

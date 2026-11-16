@@ -159,6 +159,8 @@ See the official [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client
 
 ## State and storage
 
+The parent directory of a local billing database, including an explicit `BILLING_DATABASE_URL`, must belong to the current user and must not be writable by the group or other users. A dedicated owner-only directory (`0700`) is recommended. The template verifies directory ownership and write permissions before opening SQLite and on every transaction; database files and sidecars remain owner-only (`0600`).
+
 `integration.storage` is the shared durable Mastra store for workflow snapshots and conversation memory. Pass an application-owned store to `createBilling({ storage })` if needed; billing initializes but does not close it. The separate `billing.db` keeps financial, identity, execution and ownership records.
 
 Existing schemas/checksums are validated without automatic resets. The retained local meter migrations move an idle historical `weather-credits` / `image-credits` balance into `credits` without refilling or creating a second balance. Active reservations and uncertain work must settle first. Autumn balances are never migrated locally; preserve original provider/customer/feature bindings for pending settlement.

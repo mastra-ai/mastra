@@ -1,4 +1,5 @@
 import { constants } from 'node:fs';
+import { dirname } from 'node:path';
 import { open, lstat, mkdir } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { BillingError } from '../contracts/core.js';
@@ -36,6 +37,7 @@ async function restrictFile(filename: string, create: boolean): Promise<void> {
 
 export async function privateWorkflowFiles(filename: string): Promise<void> {
   requirePrivateFilePlatform();
+  await verifyDatabaseDirectory(dirname(filename));
   // SQLite inherits the existing database's mode for new WAL/SHM files. Create
   // the main file privately before the adapter can open SQLite; also repair
   // legacy sidecars before initialization can write any additional content.
@@ -46,6 +48,7 @@ export async function privateWorkflowFiles(filename: string): Promise<void> {
 
 export async function verifyPrivateFiles(filename: string): Promise<void> {
   requirePrivateFilePlatform();
+  await verifyDatabaseDirectory(dirname(filename));
   for (const [index, path] of [filename, `${filename}-wal`, `${filename}-shm`].entries()) {
     try {
       const info = await lstat(path);
@@ -55,6 +58,17 @@ export async function verifyPrivateFiles(filename: string): Promise<void> {
       if (index > 0 && error instanceof Error && 'code' in error && error.code === 'ENOENT') continue;
       throw error instanceof BillingError ? error : new BillingError('storage_unavailable');
     }
+  }
+}
+
+export async function verifyDatabaseDirectory(directory: string) {
+  requirePrivateFilePlatform();
+  try {
+    const info = await lstat(directory);
+    if (!info.isDirectory() || info.uid !== process.getuid?.() || (info.mode & 0o022) !== 0)
+      throw new BillingError('storage_unavailable');
+  } catch (error) {
+    throw error instanceof BillingError ? error : new BillingError('storage_unavailable');
   }
 }
 
