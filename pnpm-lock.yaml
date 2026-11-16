@@ -9620,6 +9620,9 @@ importers:
       '@mastra/observability':
         specifier: workspace:*
         version: link:../../observability/mastra
+      '@mastra/pg':
+        specifier: workspace:*
+        version: link:../../stores/pg
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6

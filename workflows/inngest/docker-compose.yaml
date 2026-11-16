@@ -11,3 +11,20 @@ services:
       - '4000:4000'
     extra_hosts:
       - 'host.docker.internal:host-gateway'
+
+  postgres:
+    # Native PostgreSQL for the OM replacement-worker tests (#28059). PGlite and
+    # libsql do not exercise the real @mastra/pg storage path.
+    image: pgvector/pgvector:0.8.7-pg16
+    container_name: mastra-inngest-pg-test
+    ports:
+      - '5436:5432'
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mastra
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 2s
+      timeout: 5s
+      retries: 10
