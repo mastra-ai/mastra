@@ -400,7 +400,7 @@ export class Cards {
       const patch = await updater(current);
       if (!patch) return null;
       const columns = boardColumns(patch);
-      if (columns.board !== undefined && (columns.board ?? DEFAULT_BOARD_ID) !== (row.board ?? DEFAULT_BOARD_ID)) {
+      if (columns.board !== undefined && (columns.board ?? DEFAULT_BOARD_ID) !== (current.board ?? DEFAULT_BOARD_ID)) {
         // A record holds one card per board; the group locks above keep a sibling from moving in meanwhile.
         const destination = columns.board ?? DEFAULT_BOARD_ID;
         const origins = (current.work_item_sources ?? []).filter(source => source.role !== 'attached');
@@ -408,10 +408,13 @@ export class Cards {
           .flat()
           .map(link => link.workItemId)
           .filter(id => id !== row.work_item_id);
+        // Compare where siblings read, not where they are stored: a retired Review row reads as Work.
         const taken = holders.length
-          ? (await this.ops.findMany<BoardItemDbRecord>(BOARD_ITEMS, { work_item_id: { in: holders } })).find(
-              sibling => (sibling.board ?? DEFAULT_BOARD_ID) === destination,
-            )
+          ? (
+              await this.#join(
+                await this.ops.findMany<BoardItemDbRecord>(BOARD_ITEMS, { work_item_id: { in: holders } }),
+              )
+            ).find(sibling => (sibling.board ?? DEFAULT_BOARD_ID) === destination)
           : undefined;
         if (taken) throw new WorkItemAlreadyOnBoardError(destination, taken.id);
       }

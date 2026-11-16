@@ -7,6 +7,7 @@ import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } f
 import { WorkItemAlreadyOnBoardError } from './base.js';
 import type { ExternalWorkItemSource } from './base.js';
 import {
+  FACTORY_BOARD_ITEMS_SCHEMA,
   FACTORY_WORK_ITEM_SOURCE_LINKS_SCHEMA,
   FACTORY_WORK_ITEM_SOURCES_SCHEMA,
   FACTORY_WORK_ITEMS_SCHEMA,
@@ -89,6 +90,23 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('an issue on sev
 
     await expect(addTo(first.id, 'work')).rejects.toBeInstanceOf(WorkItemAlreadyOnBoardError);
     await expect(addTo(second.id, 'security')).rejects.toBeInstanceOf(WorkItemAlreadyOnBoardError);
+  });
+
+  it("refuses moving a card onto Work when the record's other card is stored on retired Review but reads as Work", async () => {
+    const { storage, workItems, scope, file, addTo } = await setup();
+    const first = await file(issue12, { state: 'open' });
+    const second = await addTo(first.id, 'security');
+    // Stored on Review in a finished phase: the project no longer uses Review, so it reads as Work.
+    await storage.ops.updateMany(
+      FACTORY_BOARD_ITEMS_SCHEMA.name,
+      { id: first.id },
+      { board: 'review', stages: ['done'] },
+    );
+    expect((await workItems.get({ orgId: scope.orgId, id: first.id }))?.board).toBe('work');
+
+    await expect(
+      workItems.update({ ...scope, id: second.id, userId: 'user-1', patch: { board: 'work', stages: ['intake'] } }),
+    ).rejects.toBeInstanceOf(WorkItemAlreadyOnBoardError);
   });
 
   it('lets only one of two cards for one issue move onto the same board at once', async () => {
