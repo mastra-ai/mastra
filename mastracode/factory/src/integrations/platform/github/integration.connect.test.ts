@@ -7,7 +7,6 @@ import type { FakePlatform } from '../foundation/test-utils.js';
 import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js';
 import { FACTORY_GITHUB_PROVIDER_KEY, FACTORY_REVIEWS_GITHUB_PROVIDER_KEY } from './connect-events.js';
 import {
-  GithubTokenScopeUnavailableError,
   PlatformGithubConnectionInactiveError,
   PlatformGithubInstallationNotFoundError,
   PlatformGithubIntegration,
@@ -187,7 +186,7 @@ describe('PlatformGithubIntegration in connect mode', () => {
     expect(platform.requests.filter(request => request.path.startsWith('/v1/server'))).toEqual([]);
   });
 
-  it('never hands an agent sandbox an installation-wide token', async () => {
+  it('hands an agent sandbox a token scoped to its repository, never an installation-wide one', async () => {
     const { platform, integration, storage } = await setup();
     const installation = await integration.versionControl.registerInstallation({
       orgId: 'org-1',
@@ -201,11 +200,49 @@ describe('PlatformGithubIntegration in connect mode', () => {
     });
     expect(await storage.repositories.get({ orgId: 'org-1', id: repository!.id })).not.toBeNull();
 
+    const access = await integration.versionControl.getRepositoryAccess({
+      orgId: 'org-1',
+      repositoryId: repository!.id,
+    });
+
+    expect(access?.authorization).toEqual({ scheme: 'bearer', token: 'tok-github@app' });
+    expect(platform.requests.filter(request => request.path.includes('token'))).toEqual([
+      {
+        method: 'POST',
+        path: '/v2/connections/conn-github/github/installation-token',
+        body: {
+          repositories: ['app'],
+          permissions: {
+            actions: 'read',
+            checks: 'read',
+            contents: 'write',
+            issues: 'write',
+            pull_requests: 'write',
+            statuses: 'read',
+          },
+        },
+      },
+    ]);
+    expect(platform.requests.filter(request => request.path.endsWith('/credentials'))).toEqual([]);
+  });
+
+  it("won't mint a sandbox token through an app connection that is no longer active", async () => {
+    const { platform, integration } = await setup({ reviewsActive: false });
+    const installation = await integration.versionControl.registerInstallation({
+      orgId: 'org-1',
+      userId: 'user-1',
+      installation: { externalId: '900', accountName: 'acme', accountType: 'Organization' },
+    });
+    const [repository] = await integration.versionControl.registerRepositories({
+      orgId: 'org-1',
+      installationId: installation.id,
+      repositories: [{ externalId: '101', slug: 'acme/app', defaultBranch: 'main' }],
+    });
+
     await expect(
       integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: repository!.id }),
-    ).rejects.toBeInstanceOf(GithubTokenScopeUnavailableError);
-    expect(platform.requests.filter(request => request.path.includes('/token'))).toEqual([]);
-    expect(platform.requests.filter(request => request.path.endsWith('/credentials'))).toEqual([]);
+    ).rejects.toBeInstanceOf(PlatformGithubConnectionInactiveError);
+    expect(platform.requests.filter(request => request.path.includes('token'))).toEqual([]);
   });
 
   it('opens a pull request as the acting user and assigns it to them with their own token', async () => {

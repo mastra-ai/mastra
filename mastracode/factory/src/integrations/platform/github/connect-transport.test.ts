@@ -378,17 +378,46 @@ describe('ConnectGithubTransport', () => {
         expiresAt: '2026-11-13T13:00:00.000Z',
       });
       answer(github, 'GET', `/repos/${REPO}/pulls`, () => ({ status: 200, body: [] }));
-      const credentialReads = () =>
-        platform.requests.filter(request => request.path === '/v2/connections/conn-github/credentials').length;
+      const mints = () =>
+        platform.requests.filter(request => request.path === '/v2/connections/conn-github/github/installation-token')
+          .length;
 
       await transport.listPullRequests({ repository: REPO }, { state: 'open', page: 1, perPage: 30 });
       await transport.listPullRequests({ repository: REPO }, { state: 'open', page: 1, perPage: 30 });
-      expect(credentialReads()).toBe(1);
+      expect(mints()).toBe(1);
 
       // Within a minute of expiry the token is refreshed.
       now.value = Date.parse('2026-11-13T12:59:30Z');
       await transport.listPullRequests({ repository: REPO }, { state: 'open', page: 1, perPage: 30 });
-      expect(credentialReads()).toBe(2);
+      expect(mints()).toBe(2);
+    });
+
+    it('mints a scoped token per repository set, reuses it, and drops it with the installation', async () => {
+      const { platform, tokens } = await harness();
+      const mints = () =>
+        platform.requests.filter(request => request.path === '/v2/connections/conn-github/github/installation-token');
+      const scope = { repositories: ['web', 'api'], permissions: { contents: 'write', issues: 'write' } } as const;
+
+      expect(await tokens.repositoryToken('conn-github', scope)).toBe('tok-github@api,web');
+      // Same set in another order, same permissions in another order: one token.
+      expect(
+        await tokens.repositoryToken('conn-github', {
+          repositories: ['api', 'web'],
+          permissions: { issues: 'write', contents: 'write' },
+        }),
+      ).toBe('tok-github@api,web');
+      expect(await tokens.repositoryToken('conn-github', { ...scope, repositories: ['web'] })).toBe('tok-github@web');
+      expect(await tokens.installationToken('conn-github')).toBe('tok-github');
+      expect(mints().map(request => request.body)).toEqual([
+        { repositories: ['api', 'web'], permissions: { contents: 'write', issues: 'write' } },
+        { repositories: ['web'], permissions: { contents: 'write', issues: 'write' } },
+        {},
+      ]);
+
+      tokens.invalidateInstallation('conn-github');
+      await tokens.repositoryToken('conn-github', scope);
+      await tokens.installationToken('conn-github');
+      expect(mints()).toHaveLength(5);
     });
 
     it('drops a token GitHub rejects and retries once with a fresh one', async () => {
