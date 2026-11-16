@@ -609,12 +609,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'databases/surrealdb-agent-memory',
-          label: 'SurrealDB Agent Memory',
-          customProps: { icon: 'https://cdn.simpleicons.org/surrealdb?viewbox=auto&size=28' },
-        },
-        {
-          type: 'doc',
           id: 'databases/valkey',
           label: 'Valkey',
           customProps: { icon: '/img/integrations/valkey.svg' },
