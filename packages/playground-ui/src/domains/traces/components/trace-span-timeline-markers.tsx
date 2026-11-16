@@ -53,7 +53,7 @@ function TimingRow({ name, bar }: { name: string; bar: TimelineTimingBar }) {
       <div className="flex min-w-0 items-center pl-1" style={{ paddingBlock: SPAN_TREE_PAD_Y }}>
         <span
           aria-hidden
-          className="flex shrink-0 items-center justify-center text-muted-foreground [&>svg]:size-3.5"
+          className="flex shrink-0 items-center justify-center text-muted-foreground [&>svg]:size-icon-sm"
           style={{ width: SPAN_TREE_INDENT, height: SPAN_TREE_LINE }}
         >
           <IconStopwatch />
