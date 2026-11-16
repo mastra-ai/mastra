@@ -328,33 +328,53 @@ describe('local billing storage', () => {
   });
 
   it('failed migration rolls back schema changes and migration history together', async () => {
-    const { billing, observer, database } = await fixture();
-    billing.close();
-    await observer.execute('PRAGMA foreign_keys = OFF');
-    const objects = await observer.execute(
-      "SELECT name, type FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' AND name != 'billing_migrations' AND type IN ('table', 'trigger') ORDER BY type DESC",
-    );
-    for (const row of objects.rows)
-      await observer.execute(
-        `DROP ${row.type === 'trigger' ? 'TRIGGER' : 'TABLE'} "${String(row.name).replaceAll('"', '""')}"`,
+    const database = await temporaryDatabase();
+    cleanups.push(database.cleanup);
+    const write = BillingDatabase.prototype.write;
+    let injected = false;
+    const failure = vi.spyOn(BillingDatabase.prototype, 'write');
+    failure.mockImplementation(async function (this: BillingDatabase, operation, validateSchema) {
+      return write.call(
+        this,
+        async tx => {
+          const execute = tx.execute.bind(tx);
+          tx.execute = async statement => {
+            const sql = typeof statement === 'string' ? statement : statement.sql;
+            if (sql.startsWith('INSERT INTO billing_migrations')) {
+              expect((await execute("SELECT name FROM sqlite_schema WHERE name = 'billing_accounts'")).rows).toEqual([
+                { name: 'billing_accounts' },
+              ]);
+              injected = true;
+              throw new Error('Migration write failed');
+            }
+            return execute(statement);
+          };
+          try {
+            return await operation(tx);
+          } finally {
+            tx.execute = execute;
+          }
+        },
+        validateSchema,
       );
-    await observer.execute('DELETE FROM billing_migrations');
-    await observer.execute('PRAGMA user_version = 0');
-    await observer.execute(
-      "CREATE TRIGGER refuse_migration BEFORE INSERT ON billing_migrations BEGIN SELECT RAISE(ABORT, 'Migration write failed'); END",
-    );
-    await observer.execute('PRAGMA foreign_keys = ON');
-    await expect(LocalBillingStorage.open({ url: database.url })).rejects.toMatchObject({
-      code: 'storage_incompatible',
     });
-    expect((await observer.execute('SELECT version FROM billing_migrations')).rows).toEqual([]);
+    try {
+      await expect(LocalBillingStorage.open({ url: database.url })).rejects.toMatchObject({
+        code: 'storage_unavailable',
+      });
+    } finally {
+      failure.mockRestore();
+    }
+    expect(injected).toBe(true);
+    const observer = await independentClient(database.url);
+    cleanups.push(() => observer.close());
     expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(0n);
-    expect(
-      (await observer.execute("SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")).rows,
-    ).toEqual([{ name: 'billing_migrations' }]);
-    expect((await observer.execute("SELECT name FROM sqlite_schema WHERE type = 'trigger'")).rows).toEqual([
-      { name: 'refuse_migration' },
-    ]);
+    expect((await observer.execute("SELECT name FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'")).rows).toEqual([]);
+    const retried = await LocalBillingStorage.open({ url: database.url });
+    retried.close();
+    expect((await observer.execute('SELECT version FROM billing_migrations ORDER BY version')).rows).toEqual(
+      [1n, 2n, 3n, 4n, 5n, 6n].map(version => ({ version })),
+    );
   });
 
   it('independent processes claim replayed events once and cannot overspend shared credit', async () => {
