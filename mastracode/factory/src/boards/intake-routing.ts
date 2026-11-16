@@ -563,13 +563,10 @@ export function traceEventRoute(
       rules.push({ ...named, outcome: 'no_match', failed });
       continue;
     }
-    if (move) {
-      rules.push({ ...named, outcome: 'lost', to: { boardKey: move.board, routeId: move.routeId } });
-      continue;
-    }
     const targetKey = route.target.moveToBoardKey ?? board.id;
     const skip = (reason: string) => {
-      options.onSkip?.({ routeId: route.id, boardKey: targetKey, reason });
+      // Filing never reaches a rule past the winner, so only those before it are logged.
+      if (!move) options.onSkip?.({ routeId: route.id, boardKey: targetKey, reason });
       rules.push({ ...named, outcome: 'skipped', reason });
     };
     const target = targetKey === board.id ? board : options.registry.get(targetKey);
@@ -584,6 +581,11 @@ export function traceEventRoute(
     }
     if (!placementTakesCard(target, phase, facts, options.carriesPullRequest ?? false)) {
       skip(`phase "${phase}" on board "${target.id}" can't hold this card`);
+      continue;
+    }
+    // A rule that could have taken the card, had an earlier one not.
+    if (move) {
+      rules.push({ ...named, outcome: 'lost', to: { boardKey: move.board, routeId: move.routeId } });
       continue;
     }
     move = { board: target.id, phase, routeId: route.id };
