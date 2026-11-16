@@ -358,6 +358,11 @@ export const intakeDryRunBodySchema = z.object(intakeDraftFields).strict();
 const intakePlacementSchema = z.object({ boardKey: z.string(), routeId: z.string(), phase: z.string() });
 const intakeKeysByBoardSchema = z.array(z.object({ boardKey: z.string(), keys: z.array(z.string()) }));
 const intakeDryRunResponseSchema = z.object({
+  /**
+   * The evaluator that files this project's items. Both endpoints always answer as `intake-order`;
+   * under `route-list` filing can land items elsewhere, such as on the default board.
+   */
+  evaluator: z.enum(['route-list', 'intake-order']),
   /** How many of the project's newest items (at most 200) were decided, from their stored facts. */
   sampled: z.number().int(),
   /** Every board in intake order, with what it and each of its rules would take. */
@@ -459,6 +464,13 @@ const intakeTestResponseSchema = z.object({
   placement: intakePlacementSchema.nullable(),
   /** Why no board takes it. */
   reason: z.string().nullable(),
+  /** What this answer leaves out, such as a fetched pull request joining an existing card instead. */
+  note: z.string().nullable(),
+  /**
+   * The evaluator that files this project's items. Both endpoints always answer as `intake-order`;
+   * under `route-list` filing can land items elsewhere, such as on the default board.
+   */
+  evaluator: z.enum(['route-list', 'intake-order']),
   /** Every board in intake order and every placing rule on it, with what it answered. */
   boards: z.array(
     z.object({

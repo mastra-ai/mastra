@@ -1,7 +1,8 @@
 /**
  * The intake dry run: today's rules, or edits not saved yet, run over the project's recent items
  * from their stored facts. Nothing is fetched and nothing is written. Each item is decided by
- * {@link traceIntakeOrder}, the evaluator filing uses, so the dry run shows what filing would do.
+ * {@link traceIntakeOrder}, the intake order evaluator's own code, so the dry run shows what filing
+ * under `intake-order` would do. A project still on `route-list` files differently.
  */
 
 import type { RuleFacts } from '../rules/rule-group.js';

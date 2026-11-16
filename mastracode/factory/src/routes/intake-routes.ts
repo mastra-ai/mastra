@@ -379,12 +379,16 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
     return [
       this.#route(contracts.intakeDryRun, async c => {
         const { scope, body, check, registry } = await this.#check(c, contracts.intakeDryRun.bodySchema);
-        return c.json({ ...(await check.dryRun(scope, registry, body)), canEdit: await this.#canEdit(c, scope) });
+        return c.json({
+          ...(await check.dryRun(scope, registry, body)),
+          evaluator: await this.#evaluator(scope),
+          canEdit: await this.#canEdit(c, scope),
+        });
       }),
 
       this.#route(contracts.intakeTest, async c => {
         const { scope, body, check, registry } = await this.#check(c, contracts.intakeTest.bodySchema);
-        return c.json(await check.test(scope, registry, body));
+        return c.json({ ...(await check.test(scope, registry, body)), evaluator: await this.#evaluator(scope) });
       }),
 
       this.#route(contracts.intakeRouteList, async c => {

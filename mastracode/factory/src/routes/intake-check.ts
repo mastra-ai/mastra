@@ -1,7 +1,9 @@
 /**
  * The intake dry run and "Where would this go?" tester behind the intake routes. Both decide with
- * the evaluator filing uses, over saved rules or a draft of them, and write nothing: no decision
- * rows, no cards, no audit events, and no provider writes.
+ * the intake order evaluator's own code ({@link traceIntakeOrder}), so they answer what filing
+ * does under `intake-order`; a project still on `route-list` files differently, and the responses
+ * say which evaluator it runs. Both use saved rules or a draft of them, and write nothing: no
+ * decision rows, no cards, no audit events, and no provider writes.
  */
 
 import type { z } from 'zod';
@@ -112,6 +114,21 @@ export class IntakeCheck {
       routes = routes.filter(route => route.target.boardKey !== board.boardKey);
       routes.push(...drafts);
     }
+    if (new Set(routes.map(route => route.id)).size !== routes.length) {
+      throw new IntakeCheckRefusal(
+        422,
+        'intake_draft_rule_id_repeated',
+        'Two rules share an id; give each drafted rule its own id, or none.',
+      );
+    }
+    // The same check saving the order faces, so a preview never shows an order that can't be saved.
+    if (body.order && (body.order.length !== registry.size || body.order.some(key => !registry.has(key)))) {
+      throw new IntakeCheckRefusal(
+        422,
+        'intake_order_set_mismatch',
+        'The intake order must list every board of the project exactly once; reload the boards and try again.',
+      );
+    }
     return { routes, order: body.order ?? saved.order };
   }
 
@@ -174,6 +191,10 @@ export class IntakeCheck {
           ? { boardKey: resolution.board, routeId: resolution.routeId, phase: resolution.phase }
           : null,
       reason: resolution.outcome === 'not_routed' ? resolution.reason : null,
+      note:
+        item.kind === 'fetched' && item.facts['source.kind'] === 'pull_request'
+          ? "A pull request that closes an issue with a card, or comes from a card's branch, joins that card instead; this test doesn't check for that."
+          : null,
       boards,
     };
   }
@@ -306,7 +327,8 @@ export class IntakeCheck {
     }
     const url = body.url!;
     const card = (await this.deps.workItems.listShared(scope)).find(
-      entry => entry.externalSource?.url !== undefined && sameUrl(entry.externalSource.url, url),
+      // The card's own source or any it holds since, such as a pull request linked to an issue card.
+      entry => entry.workItem.sources.some(source => source.url !== null && sameUrl(source.url, url)),
     );
     if (card) return fromCard(card);
     needsCard();

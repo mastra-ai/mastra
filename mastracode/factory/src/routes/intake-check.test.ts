@@ -34,7 +34,7 @@ const docsBoard = {
 };
 
 describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake dry run and tester on %s', backend => {
-  async function setup() {
+  async function setup(options: { evaluator?: 'route-list' | 'intake-order' } = {}) {
     const storage =
       backend === 'postgres'
         ? new PgFactoryStorage({ id: `intake-check-${randomUUID()}`, connectionString: postgresUrl! })
@@ -74,11 +74,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake dry run 
         lookups.push({ url });
         if (url.includes('/elsewhere/')) return { status: 'not_linked' };
         if (url.endsWith('/404')) return { status: 'not_found' };
+        const pullRequest = url.includes('/pull/');
         return {
           status: 'found',
-          title: 'Fresh issue',
+          title: pullRequest ? 'Fresh pull request' : 'Fresh issue',
           url,
-          facts: { 'item.labels': ['docs'], 'source.kind': 'issue' },
+          facts: { 'item.labels': ['docs'], 'source.kind': pullRequest ? 'pull_request' : 'issue' },
         };
       },
     };
@@ -106,7 +107,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake dry run 
         workItems: domains.workItems,
         storage: domains.boards,
         boards: cache,
-        intakeEvaluator: 'intake-order',
+        intakeEvaluator: options.evaluator ?? 'intake-order',
         intakeLookups: [lookup],
       }).routes(),
     );
@@ -205,6 +206,45 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake dry run 
       ],
     });
     expect(response.body.changed).toBeUndefined();
+    expect(response.body.evaluator).toBe('intake-order');
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it('says which evaluator files the project, so a route-list project knows these answers are intake order', async () => {
+    const { send, docsCard } = await setup({ evaluator: 'route-list' });
+    expect((await send('/intake/dry-run', {}, MEMBER)).body.evaluator).toBe('route-list');
+    expect((await send('/intake/test', { itemId: docsCard.id }, MEMBER)).body.evaluator).toBe('route-list');
+  });
+
+  it('refuses a draft that saving would refuse: an order missing, repeating or inventing a board, or two rules on one id', async () => {
+    const { send, docsRule, snapshot } = await setup();
+    const before = await snapshot();
+    // A repeat fails the same schema the save uses; a missing or unknown board fails the save's membership check.
+    for (const [order, error] of [
+      [['work'], 'intake_order_set_mismatch'],
+      [['work', 'docs', 'ship'], 'intake_order_set_mismatch'],
+      [['work', 'docs', 'docs'], 'invalid_intake_route'],
+    ] as const) {
+      expect(await send('/intake/dry-run', { order })).toMatchObject({ status: 422, body: { error } });
+      expect(await send('/intake/test', { order, url: 'https://github.com/acme/app/issues/1' })).toMatchObject({
+        status: 422,
+        body: { error },
+      });
+    }
+    const id = randomUUID();
+    const twice = {
+      boards: [
+        { boardKey: 'work', routes: [{ id, name: 'A', target: {} }] },
+        { boardKey: 'docs', routes: [{ id, name: 'B', target: {} }] },
+      ],
+    };
+    const clash = { boards: [{ boardKey: 'work', routes: [{ id: docsRule.id, name: 'Copied', target: {} }] }] };
+    for (const draft of [twice, clash]) {
+      expect(await send('/intake/dry-run', draft)).toMatchObject({
+        status: 422,
+        body: { error: 'intake_draft_rule_id_repeated' },
+      });
+    }
     expect(await snapshot()).toEqual(before);
   });
 
@@ -290,6 +330,31 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake dry run 
     expect(await snapshot()).toEqual(before);
   });
 
+  it('resolves a pull request attached to a card to that card, by URL, without asking its provider', async () => {
+    const { send, docsCard, lookups, snapshot, domains } = await setup();
+    await domains.workItems.attachSource({
+      orgId: docsCard.orgId,
+      id: docsCard.id,
+      source: {
+        integrationId: 'github',
+        type: 'pull-request',
+        externalId: 'github:1:pull-request:8',
+        url: 'https://github.com/acme/app/pull/8',
+      },
+      metadata: { githubPullRequestNumber: 8, state: 'open' },
+    });
+    const before = await snapshot();
+    const event = { type: 'work_item.updated', labels: { added: ['docs'], removed: [] } };
+    const tested = await send('/intake/test', { url: 'https://github.com/acme/app/pull/8', event });
+    expect(tested).toMatchObject({
+      status: 200,
+      body: { item: { kind: 'card', id: docsCard.id }, current: { boardKey: 'work' }, note: null },
+    });
+    expect(tested.body.moves).toHaveLength(1);
+    expect(lookups).toEqual([]);
+    expect(await snapshot()).toEqual(before);
+  });
+
   it('reads an unseen URL once from its provider, and refuses URLs it may not or cannot read', async () => {
     const { send, docsRule, lookups, snapshot } = await setup();
     const before = await snapshot();
@@ -299,6 +364,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake dry run 
       placement: { boardKey: 'docs', routeId: docsRule.id },
     });
     expect(lookups).toEqual([{ url: 'https://github.com/acme/app/issues/99' }]);
+    expect(fresh.body.note).toBeNull();
+    // A fetched pull request may instead join a card (a closed issue's, or one whose branch it's on); that isn't checked.
+    const pull = await send('/intake/test', { url: 'https://github.com/acme/app/pull/98' });
+    expect(pull.body).toMatchObject({ item: { kind: 'fetched' }, note: expect.stringMatching(/joins? .*card/) });
 
     expect(await send('/intake/test', { url: 'https://github.com/elsewhere/app/issues/1' })).toMatchObject({
       status: 422,
