@@ -28,6 +28,8 @@ const rowClassName = 'min-w-0 gap-3';
 /** Side by side: label left, control pushed right. A control below its label fills the row instead. */
 const sideRowClassName = 'sm:justify-between sm:gap-6';
 const headingClassName = 'flex min-w-0 flex-col gap-px';
+/** Beside its control, the label column is as tall as a label with a one-line description, so rows with and without one match. */
+const sideHeadingClassName = 'sm:min-h-[calc(var(--text-label)*1.5+1px+var(--text-caption)*1.5)] sm:justify-center';
 /**
  * The control column on the right. Inputs fill it (at least 13.75rem); selects and other field triggers hug
  * their value (`--field-width: auto`, see `fieldTriggerWidthStyle`) up to that same width.
@@ -72,7 +74,7 @@ export function SettingsRow({
       className={cn(rowClassName, !controlBelow && sideRowClassName, className)}
       {...props}
     >
-      <div className={headingClassName}>
+      <div className={cn(headingClassName, !controlBelow && sideHeadingClassName)}>
         <FieldLabel
           {...(htmlFor ? { htmlFor } : {})}
           required={required}
@@ -135,7 +137,7 @@ export function SettingsFieldsetRow({
       )}
       {...props}
     >
-      <div className={headingClassName}>
+      <div className={cn(headingClassName, !controlBelow && sideHeadingClassName)}>
         <FieldsetLegend>{label}</FieldsetLegend>
         {description != null && (
           <div id={descriptionId} className="flex flex-col gap-0.5 text-caption text-pretty text-muted-foreground">
