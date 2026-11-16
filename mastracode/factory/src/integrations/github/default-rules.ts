@@ -334,6 +334,7 @@ function addressReviewFeedback(context: FactoryGithubRuleContext) {
     type: 'sendMessage',
     idempotencyKey: `${context.ingress.id}:address-review-feedback`,
     role,
+    prepareBinding: true,
     priority: 'high',
     message:
       `Changes were requested on pull request #${context.pullRequest.number} (${context.review.url}). ` +
@@ -397,6 +398,11 @@ function addressPullRequestComment(context: FactoryGithubRuleContext) {
     type: 'sendMessage',
     idempotencyKey: `${context.ingress.id}:address-pull-request-comment`,
     role,
+    ...(context.actor.type === 'github' &&
+    context.actor.factoryAuthored &&
+    requestsChangesVerdict(context.issueComment.body)
+      ? { prepareBinding: true }
+      : {}),
     priority: 'high',
     message:
       `${context.issueComment.author ?? 'Someone'} commented on pull request #${context.pullRequest.number} ` +

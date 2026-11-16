@@ -59,7 +59,10 @@ function waitFor(check: () => boolean, label: string, timeoutMs = 10_000) {
   });
 }
 
-async function mountFactory({ bound = true }: { bound?: boolean } = {}) {
+async function mountFactory({
+  bound = true,
+  prepareMissingBinding = false,
+}: { bound?: boolean; prepareMissingBinding?: boolean } = {}) {
   let releaseBusyRun!: () => void;
   const busyRun = new Promise<void>(resolve => {
     releaseBusyRun = resolve;
@@ -131,6 +134,26 @@ async function mountFactory({ bound = true }: { bound?: boolean } = {}) {
     transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards }),
     storage,
     ownerId: 'worker-1',
+    ...(prepareMissingBinding
+      ? {
+          prepareBinding: async () => {
+            await storage.prepareRunStart({
+              orgId: 'org-1',
+              userId: 'user-1',
+              factoryProjectId: PROJECT_ID,
+              workItem: {
+                id: item.id,
+                input: { externalSource: source, title: 'Issue 42', stages: ['execute'], sessions: {}, metadata: {} },
+              },
+              role: 'work',
+              session: { sessionId: session.identity.getId(), branch: 'factory/issue-42', threadId },
+              resourceId: PROJECT_ID,
+              kickoffKey: 'feedback-binding',
+              kickoffMessage: null,
+            });
+          },
+        }
+      : {}),
   });
 
   const events: { type: string }[] = [];
@@ -176,7 +199,7 @@ async function mountFactory({ bound = true }: { bound?: boolean } = {}) {
     return store!.listNotifications({ threadId, source: 'factory' });
   };
   const decisions = () => storage.listDeferredDecisions('org-1', PROJECT_ID);
-  const reviewFeedback = async () => {
+  const reviewFeedback = async (prepareBinding = false) => {
     const card = await storage.get({ orgId: 'org-1', id: item.id });
     await storage.commitRuleEvaluation({
       orgId: 'org-1',
@@ -191,6 +214,7 @@ async function mountFactory({ bound = true }: { bound?: boolean } = {}) {
         {
           type: 'sendMessage',
           role: 'work',
+          ...(prepareBinding ? { prepareBinding: true } : {}),
           priority: 'high',
           message: 'Review requested changes: read the PR comments, fix and push.',
           idempotencyKey: 'github:review-99:address-review-feedback',
@@ -240,6 +264,22 @@ async function mountFactory({ bound = true }: { bound?: boolean } = {}) {
 }
 
 describe('scenario: review feedback with no author session binding', () => {
+  it('prepares the author binding and delivers requested changes instead of dropping them', async () => {
+    const factory = await mountFactory({ bound: false, prepareMissingBinding: true });
+
+    await factory.reviewFeedback(true);
+    await waitFor(() => factory.prompts.length > 0, 'review feedback to wake the author');
+
+    expect((await factory.decisions())[0]).toMatchObject({
+      status: 'succeeded',
+      decision: { type: 'sendMessage', role: 'work', prepareBinding: true },
+    });
+    expect(factory.prompts.at(-1)).toContain('Review requested changes');
+    expect((await factory.currentCard())?.sessions.work?.sessionId).toBe(factory.session.identity.getId());
+    expect((await factory.currentCard())?.stages).toEqual(['execute']);
+    expect(await factory.notifications()).toHaveLength(1);
+  });
+
   it('marks the handoff succeeded without waking an author or advancing the card', async () => {
     const factory = await mountFactory({ bound: false });
 

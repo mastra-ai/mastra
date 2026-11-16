@@ -655,6 +655,7 @@ describe('built-in board and integration handlers', () => {
         type: 'sendMessage',
         idempotencyKey: 'delivery-1:address-review-feedback',
         role: 'work',
+        prepareBinding: true,
         priority: 'high',
       });
       // The message has to carry the review URL: the agent reads the individual
@@ -769,6 +770,7 @@ describe('built-in board and integration handlers', () => {
         priority: 'high',
       });
       expect((decision as { message: string }).message).toContain('#issuecomment-555');
+      expect(decision).not.toHaveProperty('prepareBinding');
     });
 
     it('ignores Factory-authored comments so the Work agent cannot wake itself', async () => {
@@ -812,7 +814,7 @@ describe('built-in board and integration handlers', () => {
           },
         }),
       );
-      expect(decision).toMatchObject({ type: 'sendMessage', role: 'work', priority: 'high' });
+      expect(decision).toMatchObject({ type: 'sendMessage', role: 'work', prepareBinding: true, priority: 'high' });
     });
 
     it('ignores a Factory verdict that approves, and a verdict only quoted in the body', async () => {
