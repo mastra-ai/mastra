@@ -177,6 +177,9 @@ export default action;
 // `version` and `scopes` are never emitted, so their values are placeholders.
 // Formatting follows the upstream repository (4-space indent, no trailing
 // commas); the generator reformats it with the package's prettier config.
+// The byte-for-byte checks below prove this fixture generates main's tool, not
+// that it equals the upstream source. Replace it with the real template once
+// the pinned commit can be fetched again.
 const posthogRunQueryTemplate = `import { z } from 'zod';
 import { createAction } from 'nango';
 import type { ProxyConfiguration } from 'nango';
@@ -1494,6 +1497,11 @@ describe('posthog run-query generator override', () => {
       what: 'output types description',
       drift: (template: string) =>
         template.replace('Column types for the result rows.', 'ClickHouse types for each column.'),
+    },
+    {
+      what: 'output types pass-through',
+      drift: (template: string) =>
+        template.replace('types: providerResponse.types,', 'types: providerResponse.columns,'),
     },
   ])('refuses to regenerate posthog run-query when the template drifts at the $what', async ({ what, drift }) => {
     const templatePath = resolve(templatesDir, 'integrations', 'posthog', 'actions', 'run-query.ts');

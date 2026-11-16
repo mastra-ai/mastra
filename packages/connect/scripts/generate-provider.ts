@@ -743,10 +743,12 @@ function adaptFirefliesGetTranscript(action: ExtractedAction): ExtractedAction {
 /**
  * PostHog's query API returns `types` as `[columnName, clickhouseType]` pairs
  * (ClickHouse `with_column_types`, and `list[tuple[str, str]]` on its direct
- * SQL adapters), while the template declares `string[]`, so every
- * `posthog_run_query` call failed validation (#30528). Accept the pairs in the
- * provider response and the tool output. Drop this once the upstream template
- * does.
+ * SQL adapters), while the template declares `string[]`, so every query
+ * response carrying column types failed validation (#30528). Accept the pairs
+ * in the provider response and the tool output, and check that the exec body
+ * still returns `types`. The tuple is strict on purpose: if PostHog changes the
+ * shape again, the call fails loudly instead of passing bad metadata through.
+ * Drop this once the upstream template does.
  */
 function adaptPosthogRunQuery(action: ExtractedAction): ExtractedAction {
   const stringTypes = /types: z\.array\(z\.string\(\)\)/;
@@ -783,7 +785,17 @@ function adaptPosthogRunQuery(action: ExtractedAction): ExtractedAction {
     }
   }
 
-  return { ...action, moduleStatements };
+  // Identity rewrite used as an assertion: the fixed schemas are useless if the
+  // exec body stops returning the parsed `types`.
+  const execBody = replaceOnce(
+    action.execBody,
+    /types: providerResponse\.types,/,
+    'types: providerResponse.types,',
+    action,
+    'output types pass-through',
+  );
+
+  return { ...action, moduleStatements, execBody };
 }
 
 /**
