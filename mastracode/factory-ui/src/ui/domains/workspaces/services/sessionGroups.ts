@@ -30,8 +30,6 @@ export interface SessionGroupHeading {
   icon: SessionGroupIcon;
 }
 
-/** How many rows the server lists of a group it is asked no window for (its `SESSION_ROW_WINDOW`). */
-export const SESSION_GROUP_WINDOW = 5;
 export const SESSION_GROUP_INCREMENT = 20;
 
 export interface SessionGroup extends SessionGroupHeading {

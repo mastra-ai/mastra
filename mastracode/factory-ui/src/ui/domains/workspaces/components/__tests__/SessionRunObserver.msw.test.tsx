@@ -108,19 +108,22 @@ describe('SessionRunObserver', () => {
     expect(oscillatorStart).not.toHaveBeenCalled();
   });
 
-  it('does not ring again for a run it already rang for when the sidebar mounts again', async () => {
+  it('rings once when the sidebar comes back after a run it watched ended while it was away', async () => {
     let running = true;
     stubProject(() => (running ? [SESSION_ID] : []));
     const first = renderWithProviders(<SidebarWithObserver />);
     await waitForMutationsIdle(first.client);
-    running = false;
-    await refetchActivity(first.client);
-    expect(oscillatorStart).toHaveBeenCalled();
-    oscillatorStart.mockClear();
     first.unmount();
 
+    running = false;
     const second = renderWithProviders(<SidebarWithObserver />);
     await waitForMutationsIdle(second.client);
+    expect(oscillatorStart).toHaveBeenCalled();
+    oscillatorStart.mockClear();
+    second.unmount();
+
+    const third = renderWithProviders(<SidebarWithObserver />);
+    await waitForMutationsIdle(third.client);
     expect(oscillatorStart).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,3 @@
-import { SESSION_ROW_WINDOW } from '../routes/contracts.js';
 import type {
   SessionActivityResponse,
   SessionRow,
@@ -8,6 +7,7 @@ import type {
 import type { Card } from '../storage/domains/work-items/base.js';
 import { SLACK_SESSION_BRANCH_PREFIX } from '../work-item-branch.js';
 import { sessionRowStatus } from './session-row-status.js';
+import { SESSION_ROW_WINDOW } from './session-row-window.js';
 import type { RowSession } from './session-rows.js';
 
 export type SessionRowsView = Omit<SessionRowsQuery, 'pin' | 'children'>;

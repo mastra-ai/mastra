@@ -1,3 +1,4 @@
+import { SESSION_ROW_WINDOW } from '@mastra/factory/session/session-row-window';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar, useMaybeSidebarState } from '@mastra/playground-ui/components/Sidebar';
@@ -20,12 +21,7 @@ import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import { useSessionDeletion } from '../hooks/useSessionDeletion';
 import { useSessionFilters } from '../hooks/useSessionFilters';
 import { useSessionListView } from '../hooks/useSessionListView';
-import {
-  SESSION_GROUP_INCREMENT,
-  SESSION_GROUP_WINDOW,
-  orderGroupHeadings,
-  sessionGroupHeadings,
-} from '../services/sessionGroups';
+import { SESSION_GROUP_INCREMENT, orderGroupHeadings, sessionGroupHeadings } from '../services/sessionGroups';
 import type { SessionGroup } from '../services/sessionGroups';
 import { sessionRowsRequest } from '../services/sessionRowReads';
 import { presentSessionRow, sessionOwners, sessionPullRequestTargets } from '../services/sessionRows';
@@ -85,7 +81,7 @@ export function SessionsSection() {
       open: openSessionId,
       children,
       windows: Object.fromEntries(
-        Object.entries(extraRows).map(([groupKey, extra]) => [groupKey, SESSION_GROUP_WINDOW + extra]),
+        Object.entries(extraRows).map(([groupKey, extra]) => [groupKey, SESSION_ROW_WINDOW + extra]),
       ),
     }),
   );

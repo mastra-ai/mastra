@@ -724,8 +724,6 @@ export const SESSION_ROW_STATUSES = ['waiting', 'working', 'initializing', 'idle
 export const SESSION_ROW_SORTS = ['activity', 'updated', 'created'] as const;
 export const SESSION_ROW_GROUP_BYS = ['board', 'status', 'owner', 'none'] as const;
 export const SESSION_ROW_UPDATED_WITHIN = ['24h', '7d', '30d'] as const;
-/** How many rows a session group lists until the reader asks for more. */
-export const SESSION_ROW_WINDOW = 5;
 
 /** `<group key>:<count>`: how many rows of one group to list. Group keys hold colons, so the count follows the last. */
 const sessionRowWindowSchema = z

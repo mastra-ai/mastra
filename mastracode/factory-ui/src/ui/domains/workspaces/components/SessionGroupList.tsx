@@ -1,8 +1,9 @@
+import { SESSION_ROW_WINDOW } from '@mastra/factory/session/session-row-window';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import type { ReactNode } from 'react';
 import { Fragment, useEffect, useRef } from 'react';
 
-import { SESSION_GROUP_INCREMENT, SESSION_GROUP_WINDOW } from '../services/sessionGroups';
+import { SESSION_GROUP_INCREMENT } from '../services/sessionGroups';
 import type { SessionGroup, SessionGroupIcon } from '../services/sessionGroups';
 import type { SessionListRow } from '../services/sessionRows';
 import { IconCircleDashed } from '@mastra/playground-ui/icons/central/IconCircleDashed';
@@ -38,9 +39,9 @@ export function SessionGroupList({
 }) {
   const sectionRef = useRef<HTMLElement>(null);
   const focusOnAnswer = useRef<ToggleName | undefined>(undefined);
-  const openBelowFold = group.openIndex !== undefined && group.openIndex >= SESSION_GROUP_WINDOW;
+  const openBelowFold = group.openIndex !== undefined && group.openIndex >= SESSION_ROW_WINDOW;
   const remainingCount = group.total - group.rows.length;
-  const collapsibleCount = group.rows.length - Math.min(group.total, SESSION_GROUP_WINDOW + Number(openBelowFold));
+  const collapsibleCount = group.rows.length - Math.min(group.total, SESSION_ROW_WINDOW + Number(openBelowFold));
 
   // The pressed toggle unmounts once the answer leaves it nothing to count, so hand focus to the one that remains.
   useEffect(() => {
