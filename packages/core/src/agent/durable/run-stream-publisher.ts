@@ -19,7 +19,9 @@ export function getRunStreamPublisher(runId: string, entry: RunRegistryEntry, ma
       try {
         previousCleanup?.();
       } finally {
-        void attached.detach();
+        void attached.detach().catch(error => {
+          mastra?.getLogger().warn(`[AgentStream:${runId}] failed to detach publisher`, { error });
+        });
       }
     };
   }

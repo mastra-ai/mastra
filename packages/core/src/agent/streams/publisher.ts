@@ -41,7 +41,11 @@ export interface AgentStreamPublisher {
    */
   publish(chunk: ChunkType<any>, messageList?: MessageList): void;
   /** Publish an event whose durable payload and response-message diff are already shaped. */
-  publishEvent(event: Omit<Event, 'id' | 'createdAt'>, transport?: PubSub): Promise<void>;
+  publishEvent(
+    event: Omit<Event, 'id' | 'createdAt'>,
+    transport?: PubSub,
+    options?: Parameters<PubSub['publish']>[2],
+  ): Promise<void>;
   /** Resolves once the abort subscription is installed; rejects if installation fails. */
   readonly ready: Promise<void>;
   /** Settle an accepted terminal in the owning reader without republishing it or scheduling cleanup. */
@@ -91,7 +95,11 @@ export interface CreateAgentStreamPublisherOptions {
 }
 
 export interface AgentStreamProducer {
-  publishEvent(event: Omit<Event, 'id' | 'createdAt'>, transport?: PubSub): Promise<void>;
+  publishEvent(
+    event: Omit<Event, 'id' | 'createdAt'>,
+    transport?: PubSub,
+    options?: Parameters<PubSub['publish']>[2],
+  ): Promise<void>;
   /** Release this producer handle, not the run owner's handle or abort listener. */
   detach(): Promise<void>;
 }
@@ -103,6 +111,7 @@ interface PublicationQueue {
     event: Omit<Event, 'id' | 'createdAt'>,
     transport: PubSub,
     assertOwnership?: () => Promise<void>,
+    options?: Parameters<PubSub['publish']>[2],
   ): Promise<void>;
   flush(): Promise<void>;
 }
@@ -148,10 +157,10 @@ export function createAgentStreamPublisherCoordinator(
         pending = initial;
       },
       enqueue,
-      publish(event, transport, assertOwnership) {
+      publish(event, transport, assertOwnership, options) {
         return enqueue(async () => {
           await assertOwnership?.();
-          await transport.publish(AGENT_STREAM_TOPIC(runId), event);
+          await transport.publish(AGENT_STREAM_TOPIC(runId), event, options);
         }, true);
       },
       flush: () => pending,
@@ -165,8 +174,8 @@ export function createAgentStreamPublisherCoordinator(
       const publications = createPublicationQueue();
       let released = false;
       const producer: AgentStreamProducer = {
-        async publishEvent(event, transport = pubsub) {
-          if (!released) await publications.publish(event, transport, assertOwnership);
+        async publishEvent(event, transport = pubsub, options) {
+          if (!released) await publications.publish(event, transport, assertOwnership, options);
         },
         async detach() {
           released = true;
@@ -440,9 +449,9 @@ function createOwnerHandle(
     },
     cleanup,
     detach: detachPublisher,
-    async publishEvent(event, transport = pubsub) {
+    async publishEvent(event, transport = pubsub, options) {
       if (ended) return;
-      await publications.publish(event, transport, assertOwnership);
+      await publications.publish(event, transport, assertOwnership, options);
     },
     publish(chunk, messageList) {
       if (ended) return;

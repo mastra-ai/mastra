@@ -175,7 +175,7 @@ export function withExecutionStreamProducer(
             if (producer) {
               try {
                 // Keep each step's fence and cache policy without chaining publishers or splitting their queue.
-                return await producer.publishEvent(event, transport);
+                return await producer.publishEvent(event, transport, publishOptions);
               } catch (error) {
                 // Like fencePubSub, a worker that lost ownership stops publishing without failing the run.
                 if (isExecutionFenceError(error)) return;

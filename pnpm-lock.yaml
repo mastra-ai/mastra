@@ -6649,6 +6649,9 @@ importers:
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../stores/pg
+      '@mastra/redis':
+        specifier: workspace:*
+        version: link:../../stores/redis
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15

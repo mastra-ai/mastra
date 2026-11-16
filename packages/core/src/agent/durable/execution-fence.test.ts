@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { InMemoryServerCache } from '../../cache/inmemory';
+import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { NoopLeaseProvider } from '../../events/pubsub';
 import type { LeaseProvider } from '../../events/pubsub';
@@ -8,6 +10,7 @@ import { RequestContext } from '../../request-context';
 import { isRunFenceConflictError } from '../../storage';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
 import { InMemoryStore } from '../../storage/mock';
+import { PUBSUB_SYMBOL } from '../../workflows/constants';
 import { Agent } from '../agent';
 import { AGENT_STREAM_TOPIC } from '../streams/constants';
 import { ensureRemoteAbortListener, publishAbortRequest } from './abort-transport';
@@ -27,6 +30,7 @@ import {
   executionLeaseKey,
   fencePubSub,
   getExecutionClaim,
+  getExecutionOwnershipGuard,
   getRunFence,
   isExecutionFenceError,
   setExecutionClaim,
@@ -39,6 +43,7 @@ import {
   withExecutionStreamProducer,
 } from './execution-stream-publisher';
 import { deleteRunRegistryEntry, setRunRegistryEntry } from './run-registry';
+import { getRunStreamPublisher } from './run-stream-publisher';
 import type { RunRegistryEntry } from './types';
 
 const agentId = 'agent-1';
@@ -183,6 +188,120 @@ describe('execution publisher transport boundaries (COR-1560)', () => {
       guard.dispose();
       await publisher.detach();
       deleteRunRegistryEntry(runId, mastra);
+    }
+  });
+
+  it('handles publisher detachment failure during registry cleanup', async () => {
+    const runId = crypto.randomUUID();
+    const pubsub = new EventEmitterPubSub();
+    const mastra = new Mastra({ pubsub, logger: false });
+    const warn = vi.spyOn(mastra.getLogger(), 'warn');
+    const entry = { isPlaceholder: true } as RunRegistryEntry;
+    setRunRegistryEntry(runId, entry, mastra);
+    const coordinator = getRunStreamPublisher(runId, entry, mastra);
+    const error = new Error('Execution superseded');
+    const owner = coordinator.attachOwner({
+      pubsub,
+      cleanupTimeoutMs: 0,
+      listenForAbort: false,
+      record: { cache: new InMemoryServerCache(), agentId },
+      assertOwnership: async () => {
+        throw error;
+      },
+    });
+    await expect(owner.ready).rejects.toBe(error);
+    deleteRunRegistryEntry(runId, mastra);
+    await vi.waitFor(() => {
+      expect(warn).toHaveBeenCalledWith(`[AgentStream:${runId}] failed to detach publisher`, { error });
+    });
+    warn.mockRestore();
+    await pubsub.close();
+  });
+
+  it('drops queued direct-step events after their step guard is lost', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const runId = crypto.randomUUID();
+    const fence = await claim(pubsub, runId);
+    const agent = new Agent({
+      id: agentId,
+      name: agentId,
+      instructions: 'Answer.',
+      model: 'openai/gpt-4o-mini',
+      durable: true,
+    });
+    const mastra = new Mastra({ agents: { agent }, pubsub, logger: false });
+    const requestContext = new RequestContext();
+    setExecutionClaim(requestContext, runId, fence.claim);
+    const received: string[] = [];
+    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
+      received.push(event.type);
+    });
+    const blocked = Promise.withResolvers<void>();
+    const entered = Promise.withResolvers<void>();
+    const transport = new Proxy(pubsub, {
+      get(target, property) {
+        if (property === 'publish')
+          return async (...args: Parameters<EventEmitterPubSub['publish']>) => {
+            if (args[1].type === 'blocker') {
+              entered.resolve();
+              await blocked.promise;
+            }
+            return target.publish(...args);
+          };
+        const value = Reflect.get(target, property, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    const step = withExecutionFence({
+      id: 'queued-publication',
+      execute: async (params: object & { [PUBSUB_SYMBOL]: EventEmitterPubSub }) => {
+        const bus = params[PUBSUB_SYMBOL];
+        const first = bus.publish(AGENT_STREAM_TOPIC(runId), { type: 'blocker', runId, data: {} });
+        await entered.promise;
+        const stale = bus.publish(AGENT_STREAM_TOPIC(runId), { type: 'stale-step', runId, data: {} });
+        // Isolate step-observer loss from generation loss: the driver's claim remains current.
+        vi.spyOn(getExecutionOwnershipGuard(params)!, 'isLost').mockReturnValue(true);
+        blocked.resolve();
+        await Promise.all([first, stale]);
+      },
+    });
+    try {
+      await step.execute({
+        requestContext,
+        mastra,
+        getInitData: () => ({ runId, agentId }),
+        [PUBSUB_SYMBOL]: transport,
+      });
+      await pubsub.flush();
+      expect(received).toEqual(['blocker']);
+    } finally {
+      blocked.resolve();
+      deleteRunRegistryEntry(runId, mastra);
+    }
+  });
+
+  it('keeps local-only step events out of replay while recording ordinary events', async () => {
+    const source = new EventEmitterPubSub();
+    const pubsub = new CachingPubSub(source, new InMemoryServerCache());
+    const runId = crypto.randomUUID();
+    const fence = await claim(source, runId);
+    const agent = new Agent({
+      id: agentId,
+      name: agentId,
+      instructions: 'Answer.',
+      model: 'openai/gpt-4o-mini',
+      durable: true,
+    });
+    const mastra = new Mastra({ agents: { agent }, pubsub: source, logger: false });
+    const bus = withExecutionStreamProducer(pubsub, { runId, agentId, mastra, claim: fence.claim });
+    try {
+      await bus.publish(AGENT_STREAM_TOPIC(runId), { type: 'local', runId, data: {} }, { localOnly: true });
+      await bus.publish(AGENT_STREAM_TOPIC(runId), { type: 'shared', runId, data: {} });
+      const history = await pubsub.getHistory(AGENT_STREAM_TOPIC(runId));
+      expect(history.map(event => event.type)).toEqual(['shared']);
+    } finally {
+      deleteRunRegistryEntry(runId, mastra);
+      await source.close();
     }
   });
 

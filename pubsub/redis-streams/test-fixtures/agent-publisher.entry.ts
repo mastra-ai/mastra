@@ -5,9 +5,9 @@ import { createDurableAgent, EventedAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
 import { PostgresStore } from '@mastra/pg';
+import { RedisServerCache } from '@mastra/redis';
 import { createClient } from 'redis';
 import { z } from 'zod';
-import { RedisServerCache } from '../../../stores/redis/src/cache';
 import { RedisStreamsPubSub } from '../src/index';
 
 const runId = process.env.PUBLISHER_RUN_ID!;

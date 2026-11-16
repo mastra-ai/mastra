@@ -1441,10 +1441,12 @@ export function withExecutionFence<TStep extends FenceableStep>(step: TStep): TS
                 enumerable: true,
                 value:
                   pubsub &&
-                  fencePubSub(
-                    withExecutionStreamProducer(pubsub, { runId, agentId, mastra: params.mastra, claim }),
-                    guard,
-                  ),
+                  withExecutionStreamProducer(fencePubSub(pubsub, guard), {
+                    runId,
+                    agentId,
+                    mastra: params.mastra,
+                    claim,
+                  }),
               },
               writer: {
                 enumerable: true,
