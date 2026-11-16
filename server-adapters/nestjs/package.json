@@ -32,7 +32,7 @@
     "hono": "^4.13.13"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.139",
+    "@ai-sdk/openai": "^2.0.143",
     "@copilotkit/aimock": "^1.46.0",
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",

@@ -55,8 +55,8 @@ importers:
         version: link:../../pubsub/redis-streams
     devDependencies:
       '@ai-sdk/openai':
-        specifier: ^3.0.135
-        version: 3.0.136(zod@4.6.7)
+        specifier: ^3.0.142
+        version: 3.0.143(zod@4.6.7)
       '@copilotkit/aimock':
         specifier: ^1.29.0
         version: 1.47.0(vitest@5.1.0(@types/node@22.20.5)(vite@8.3.5(@types/node@22.20.5)))
@@ -93,14 +93,14 @@ importers:
 
 packages:
 
-  '@ai-sdk/openai@3.0.136':
-    resolution: {integrity: sha512-oo81jtVqw/B7CDVa9h2iXQCFKLb9KoswjNeN8vkBoAyiRlb+mDrkVnTMI6FBKgGCzP9YYxnelnsjANMAOwC4bg==}
+  '@ai-sdk/openai@3.0.143':
+    resolution: {integrity: sha512-Z6Ps7nE5gyG9wH/mN7/T5EXB6p4yhqw9mrIdqPTlQov/vW1QB7DEFTXRZNyB7bnAluJpcS/QTWJv/N6XCSL/VA==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/provider-utils@4.0.64':
-    resolution: {integrity: sha512-NQp/xAFHZbnWLHNjm8EjwUILgEpURsQnE416aO/PS3XrZ/PGfghEcXEcHXkXmIvB5Jem/9SPQxXnm/0wu7Emsg==}
+  '@ai-sdk/provider-utils@4.0.66':
+    resolution: {integrity: sha512-tITCIYBJlxD4PmDIAI2VXb67yEbWRepvJBJrv2pIY5vMRUta51AFRxLlxm0IexRGdIBGuQ10+ClClZMXtawkbA==}
     engines: {node: '>=18.17'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -700,13 +700,13 @@ packages:
 
 snapshots:
 
-  '@ai-sdk/openai@3.0.136(zod@4.6.7)':
+  '@ai-sdk/openai@3.0.143(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 3.0.19
-      '@ai-sdk/provider-utils': 4.0.64(zod@4.6.7)
+      '@ai-sdk/provider-utils': 4.0.66(zod@4.6.7)
       zod: 4.6.7
 
-  '@ai-sdk/provider-utils@4.0.64(zod@4.6.7)':
+  '@ai-sdk/provider-utils@4.0.66(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 3.0.19
       '@standard-schema/spec': 1.1.0
