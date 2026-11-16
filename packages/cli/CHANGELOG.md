@@ -1,5 +1,128 @@
 # mastra
 
+## 1.40.0-alpha.4
+
+### Minor Changes
+
+- Added a Rules page to every Factory board. It replaces the board's Card moves page and the Factory-wide "Where new cards go" list in Settings, so everything that decides where a board's issues and pull requests go is in one place. ([#30507](https://github.com/mastra-ai/mastra/pull/30507))
+
+  **Rules page**
+
+  Each event gets its own lane, grouped under Issues and Pull requests, such as "Issue opened", "Issue closed" or "Pull request merged". In each lane, rules are checked top to bottom and the first match wins. The two lanes that file items with no card yet, Issue opened and Pull request opened, show where the board sits in the intake order; an item no rule here takes goes to the next board, and ends up in Not routed if no board takes it. Rules still stored on the old opened event show in both of those lanes, marked "Issue or pull request opened (legacy)". Rules are added and edited in a step-by-step dialog: pick the event, choose which items it applies to, then choose where they go. A card-move rule, on any event other than an item opening, can send cards to another board: pick the board, then the phase. Condition filters include the pull request author's trust, and on label or assignee changes, which label or assignee was added or removed. Rules can be reordered, switched off or deleted. A rule that can never be reached, because a rule above it matches everything, is marked as such. A card-move rule that matched but couldn't move the card, for example because the target phase doesn't take cards, shows how often that happened in the last 30 days, with a link to the latest item. "Test an item" opens the intake tester, which shows where an issue or pull request would go and what every rule answered. Old `/moves` links now open the Rules page.
+
+  **Settings → Intake**
+
+  - **Intake order**: set the order in which boards are offered a new item. Drag rows or use the up and down buttons to try an order, then save or discard it. The page shows whether the order was worked out from your rules or saved, and how many recent cards would land on a different board than they do now.
+  - **Not routed**: a list of items no board took, loaded a page at a time. Click "Why?" to open the tester on an item and see what each rule answered. Once a rule takes it, click "Route again" to file it.
+
+  The board config page now sums this up in one line, for example "2 rules for new items · Checked 2nd", with a link to the board's rules. The "Send new cards to" control is removed.
+
+### Patch Changes
+
+- Central icons now draw at the size Lucide icons did. The icon sizes grow by 2px (`xs` 14px, `sm` 16px, `md` 18px, `lg` 22px) because Central leaves more room around each drawing, so an icon in the same slot keeps the size people are used to. Product icons, the remaining Lucide icons, brand logos and product marks keep their drawn size. Avatars no longer borrow the icon sizes: the `xs` and `inline` avatars use their own `--spacing-avatar-xs` (12px) and `--spacing-avatar-inline` (16px). ([#30555](https://github.com/mastra-ai/mastra/pull/30555))
+
+  A few Central shapes that run edge to edge, such as plain arrows and the `•••` dots, get an optical inset so they match the rest of the set, with their stroke thickened by the same factor so every icon keeps the same line weight. The inset lives in `central-icons.json` and the icon generator applies it.
+
+- Added `mastra api` commands for Factory intake order and Not routed items: read and set a project's intake order or evaluator, list items no board took, and route one again. ([#30370](https://github.com/mastra-ai/mastra/pull/30370))
+
+  ```sh
+  mastra api factory intake-order get <project-id>
+  mastra api factory intake-order set <project-id> '{"boardKeys":["docs","work"]}'
+  mastra api factory intake-order set <project-id> '{"evaluator":"intake-order"}'
+  mastra api factory not-routed list <project-id> '{"limit":50}'
+  mastra api factory not-routed route-again <project-id> <decision-id>
+  ```
+
+- Added `GET /web/factory/projects/:id/intake/skipped`. For each card-move rule that matched an event but was skipped because its target couldn't take the card, it returns how often that happened in the last 30 days and the newest skip. ([#30507](https://github.com/mastra-ai/mastra/pull/30507))
+
+  Also added `mastra api factory intake skipped <project-id>` to read the same counts from the CLI.
+
+- `mastra api factory decision queue` now returns each run's `lane`, `queuedByLane`, and the reply reserve in `slots.interactive`. A waiting reply from a person is listed before the automated runs, and `position` counts within the run's lane: ([#30307](https://github.com/mastra-ai/mastra/pull/30307))
+
+  ```bash
+  mastra api factory decision queue <project-id>
+  ```
+
+  ```json
+  {
+    "slots": { "scope": "server", "inUse": 10, "cap": 10, "interactive": { "inUse": 2, "cap": 2 } },
+    "queuedCount": 2,
+    "queuedByLane": { "automated": 1, "interactive": 1 },
+    "queued": [
+      { "lane": "interactive", "position": 1, "type": "sendMessage" },
+      { "lane": "automated", "position": 1, "type": "invokeSkill" }
+    ]
+  }
+  ```
+
+  The board's run queue lists waiting replies from people first, under their own heading, and shows how many reply slots are in use.
+
+- Added `mastra api factory work-item working-pull-request` to pick which of a card's linked pull requests its sessions work on. ([#30491](https://github.com/mastra-ai/mastra/pull/30491))
+
+  ```sh
+  mastra api factory work-item working-pull-request <project-id> <work-item-id> '{"pullRequest":42,"expectedRevision":3}'
+  ```
+
+- Added `mastra api factory intake dry-run` and `mastra api factory intake test` to check a Factory project's intake rules against real items without filing anything. ([#30380](https://github.com/mastra-ai/mastra/pull/30380))
+
+  ```sh
+  mastra api factory intake dry-run <project-id> '{"order":["docs","work"]}'
+  mastra api factory intake test <project-id> '{"url":"https://github.com/acme/app/issues/12"}'
+  ```
+
+- Interface icons now use Central's Medium chevrons, which match the size of the icons around them, and one consistent shape for speech bubbles (Chat Bubble 7), thumbs up and down, and the settings gear. Central Icons are updated to 1.2.44. ([#30523](https://github.com/mastra-ai/mastra/pull/30523))
+
+- Added the `playground-ui/icon-size-from-parent` lint rule. It flags an icon that sets its own size with `size`, `width`, `height` or a size class, so icons take their size from the component they sit in, an `<Icon size>` wrapper, or a `size-icon-*` token. Sizes relative to the text (`h-[1em]`) and sizes computed from data are allowed. ([#30542](https://github.com/mastra-ai/mastra/pull/30542))
+
+  ```tsx
+  // Before
+  <IconPlusMedium className="size-3.5" />
+
+  // After
+  <IconPlusMedium className="size-icon-sm" />
+  ```
+
+  Icons now sit on the four icon sizes everywhere, and the skill and prompt block pickers use `EmptyState` and `Spinner` for their empty and loading states.
+
+- Improved how fast the Factory sidebar opens on projects with many sessions. The sidebar now asks the server for the sessions it shows, five per group with **Show more** for the rest, instead of downloading every session and every card that holds one. Sorting, grouping and filters run on the server, and reopening the sidebar when nothing changed downloads almost nothing. ([#30475](https://github.com/mastra-ai/mastra/pull/30475))
+
+- Fixed a `.foreach()` run staying stuck as running when the first failed item's failure could not be sent. The run now fails with the first item's error once that failure is delivered again. ([#29370](https://github.com/mastra-ai/mastra/pull/29370))
+
+- Fixed `create-mastra` leaving an unused Gateway organization key in your organization when project setup is cancelled after the key was created. ([#30457](https://github.com/mastra-ai/mastra/pull/30457))
+
+- Hardened how the CLI opens your browser (login, `mastra connect`, add credits). Only `http://` and `https://` URLs are opened now, and on Windows the URL is no longer passed through `cmd.exe`, which could interpret characters like `&` as extra commands and also truncated login URLs with multiple query parameters. ([#30573](https://github.com/mastra-ai/mastra/pull/30573))
+
+- Added a dry run and a "Where would this go?" tester for intake rules. A rule that never fires because an earlier board takes everything it would match now shows up with evidence, before it files anything. ([#30380](https://github.com/mastra-ai/mastra/pull/30380))
+
+  **Dry run**
+
+  `POST /web/factory/projects/:id/intake/dry-run` runs the intake rules over the project's newest 200 items, from what Factory already stored about them, and reports per board and per rule what it would take, what it would lose to an earlier board, and how many cards it actually filed in the last 30 days. Pass unsaved `boards` rules or an unsaved `order` to preview an edit: the response also says how many items would land somewhere else.
+
+  **Tester**
+
+  `POST /web/factory/projects/:id/intake/test` takes one item, by `url` or by the `itemId` of a recent card or Not routed item, and shows which board takes it and what every rule answered, including the condition each rule failed on and the item's value. A URL Factory hasn't seen is read once from a GitHub repository or GitLab project linked to the project; others are refused with `not_linked`.
+
+  On a card, the tester also replays its recent status events, and one `event` passed in the request, through its board's card-move rules, and says for each whether the card moves, stays or is left to the integration, with every rule's answer. The dispatcher moves cards with the same code.
+
+  ```json
+  { "itemId": "<card-id>", "event": { "type": "work_item.updated", "labels": { "added": ["ship"], "removed": [] } } }
+  ```
+
+  Neither request files a card, records a decision or writes to a provider. Both run the intake order evaluator's own code, so they answer exactly what filing under intake order would.
+
+- Added `mastra api factory session rows` and `mastra api factory session activity`, which read a Factory project's sessions as the sidebar lists them, and which of them are running or waiting on a person. ([#30473](https://github.com/mastra-ai/mastra/pull/30473))
+
+  ```bash
+  mastra api factory session rows <project-id> '{"owner":"mine","groupBy":"board","window":["board:work:25"]}'
+  mastra api factory session activity <project-id>
+  ```
+
+- Fixed a `.foreach()` over a nested workflow on a run stored with the experimental `storageVersion: 2` option only keeping the last item's run. Restarting the run could give an item another item's result. Every item's run is kept again. ([#29370](https://github.com/mastra-ai/mastra/pull/29370))
+
+- Updated dependencies [[`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`88f94f2`](https://github.com/mastra-ai/mastra/commit/88f94f237acc406efb774367f5ba7bdeaac8e88d), [`7517474`](https://github.com/mastra-ai/mastra/commit/7517474b395a44ca6b7573a16d307ca7964ab3a8), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`d929736`](https://github.com/mastra-ai/mastra/commit/d9297364354b6a9c5dc0b870c2cea1e305f5faa1), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`037b9b7`](https://github.com/mastra-ai/mastra/commit/037b9b75a89388b5ecd7ca72799d29107180f211), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913)]:
+  - @mastra/core@1.84.0-alpha.4
+  - @mastra/deployer@1.84.0-alpha.4
+
 ## 1.39.1-alpha.3
 
 ### Patch Changes
