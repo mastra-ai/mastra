@@ -19,7 +19,7 @@ import { boardRegistryOf, defineBoard } from '../boards/index.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import { createSourceControlSessionLookup } from '../session/factory-session.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
-import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { createFactoryStorageForTests, finishQueuedRunsForTests } from '../storage/test-utils.js';
 import { controllerRunInFlight, createContextSandboxStops, createTerminalSandboxStops } from './context-sandboxes.js';
 import { LocalFactorySandbox } from './local-factory-sandbox.js';
 import { SessionRetirementCoordinator } from './session-retirement.js';
@@ -154,10 +154,7 @@ async function cardWithSessions(seed: Awaited<ReturnType<typeof createFactorySto
     orgId,
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'user-1',
     branch: null,
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/workspace/ship',
   });
   const rows = {} as Record<Context, SourceControlSession>;
   for (const context of CONTEXTS) {
@@ -259,14 +256,18 @@ describe.each(backends)('card sandboxes as a card moves between contexts, on %s'
   });
 
   it('resumes the same triage sandbox, files and all, when the card comes back to Triage', async () => {
-    const { service, card, local, root } = await setup('triage');
+    const { service, card, local, root, seed } = await setup('triage');
     const triage = await startSandbox(local, card.rows.triage);
     await triage.executeCommand!('sh', ['-c', 'echo kept > notes.txt']);
 
+    // Each phase's run finishes before the next move: a person cannot move a card whose run is queued.
     const left = await move(service, card, 'planning', card.item.revision);
     expect(triage.status).toBe('stopped');
+    await finishQueuedRunsForTests(seed.workItems);
     const built = await move(service, card, 'execute', left.status === 'accepted' ? left.revision : -1);
+    await finishQueuedRunsForTests(seed.workItems);
     const reviewing = await move(service, card, 'pr-review', built.status === 'accepted' ? built.revision : -1);
+    await finishQueuedRunsForTests(seed.workItems);
     const back = await move(service, card, 'triage', reviewing.status === 'accepted' ? reviewing.revision : -1);
     expect(back).toMatchObject({ status: 'accepted', stage: 'triage' });
 

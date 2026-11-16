@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ActivityIcon, CircleAlertIcon, SnowflakeIcon, TimerIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { MetricsCardGroup } from '../MetricsCardGroup';
@@ -22,6 +21,10 @@ import {
   routeStats,
 } from './metrics-story-data';
 import type { RouteStat } from './metrics-story-data';
+import { IconElectrocardiogram } from '@/ds/icons/central/IconElectrocardiogram';
+import { IconExclamationCircle } from '@/ds/icons/central/IconExclamationCircle';
+import { IconSnowFlakes } from '@/ds/icons/central/IconSnowFlakes';
+import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
 
 const meta: Meta = {
   title: 'Metrics/Examples/Requests Overview',
@@ -47,7 +50,7 @@ const totals = {
 const kpis = [
   {
     label: 'Requests',
-    icon: <ActivityIcon />,
+    icon: <IconElectrocardiogram />,
     value: count(totals.requests),
     changePct: change(totals.requests, totals.prevRequests),
     detail: `${(totals.requests / (24 * 60)).toFixed(1)} per minute`,
@@ -55,7 +58,7 @@ const kpis = [
   },
   {
     label: 'Error rate',
-    icon: <CircleAlertIcon />,
+    icon: <IconExclamationCircle />,
     value: percent(totals.errorRate),
     changePct: 364,
     lowerIsBetter: true,
@@ -64,7 +67,7 @@ const kpis = [
   },
   {
     label: 'P95 latency',
-    icon: <TimerIcon />,
+    icon: <IconStopwatch />,
     value: ms(mean('p95')),
     changePct: 8.1,
     lowerIsBetter: true,
@@ -73,7 +76,7 @@ const kpis = [
   },
   {
     label: 'Cold starts',
-    icon: <SnowflakeIcon />,
+    icon: <IconSnowFlakes />,
     value: String(totals.coldStarts),
     changePct: -13,
     lowerIsBetter: true,

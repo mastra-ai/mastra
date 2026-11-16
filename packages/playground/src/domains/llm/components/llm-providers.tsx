@@ -2,10 +2,10 @@ import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption, ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { ProviderLogo, cleanProviderId } from '@mastra/playground-ui/domains/llm';
+import { IconCircleInfo } from '@mastra/playground-ui/icons/central/IconCircleInfo';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useLLMProviders } from '@mastra/react/hooks/llm';
-import { Info } from 'lucide-react';
 import type { MouseEvent } from 'react';
 import { useMemo } from 'react';
 import { useFilteredProviders } from '../hooks/use-filtered-providers';
@@ -63,7 +63,7 @@ export const LLMProviders = ({
         </div>
       ),
       end: provider.docUrl ? (
-        <Info
+        <IconCircleInfo
           className={cn(
             'size-3.5 cursor-pointer opacity-0 transition-opacity duration-100',
             quietTextHover,

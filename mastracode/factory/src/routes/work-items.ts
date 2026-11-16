@@ -97,7 +97,7 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   /** Materialized sessions, read to report which of the listed cards are being worked or wait on someone. */
   liveSessions: Pick<LiveSessions, 'isRunning' | 'parked' | 'parkedIn'>;
   /** This process's dispatcher run slots; absent or `undefined` while it runs no dispatcher. */
-  runSlots?: () => { inUse: number; cap: number } | undefined;
+  runSlots?: () => { inUse: number; cap: number; interactive: { inUse: number; cap: number } } | undefined;
 }
 
 /** The card as clients see it, without the dispatcher's internal bookkeeping. */
@@ -946,7 +946,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               return c.json({ result: error.result }, error.result.code === 'stale' ? 409 : 422);
             }
             if (error instanceof WorkItemRepositoryError) {
-              return c.json({ error: error.code, message: error.message, candidates: error.candidates }, 409);
+              return c.json({ error: error.code, message: error.message }, 409);
             }
             throw error;
           }

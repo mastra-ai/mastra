@@ -1,7 +1,7 @@
 import type { DashboardWidget } from '@mastra/core/storage/dashboards';
 import { MetricsCard, onCardHover } from '@mastra/playground-ui/components/MetricsCard';
+import { IconSettingsGear1 } from '@mastra/playground-ui/icons/central/IconSettingsGear1';
 import type { App } from '@modelcontextprotocol/ext-apps';
-import { SettingsIcon } from 'lucide-react';
 import { useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import { OBSERVABILITY_WIDGET_CONFIGURABLE_CONTEXT_KEY, OBSERVABILITY_WIDGET_CONFIGURE_CONTEXT_KEY } from './tool';
@@ -49,7 +49,7 @@ export function useConfigure(
   };
   return (
     <MetricsCard.Action label={`Configure ${name}`} onClick={onConfigure} className={onCardHover}>
-      <SettingsIcon />
+      <IconSettingsGear1 />
     </MetricsCard.Action>
   );
 }

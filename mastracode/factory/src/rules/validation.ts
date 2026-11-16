@@ -49,6 +49,7 @@ const WORK_ITEM_SOURCES: readonly WorkItemSource[] = [
   'incidentio-follow-up',
   'github-dependabot-alert',
   'vanta-vulnerability',
+  'detail-finding',
   'manual',
 ];
 const REJECTION_CODES: readonly FactoryRuleRejectionCode[] = [

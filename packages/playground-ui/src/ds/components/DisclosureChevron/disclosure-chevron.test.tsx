@@ -19,21 +19,21 @@ describe('DisclosureChevron', () => {
   it('points down and flips 180° while its trigger is expanded by default', () => {
     const svg = renderChevron(<DisclosureChevron />);
 
-    expect(svg.classList.contains('lucide-chevron-down')).toBe(true);
+    expect(svg.dataset.centralIcon).toBe('IconChevronBottom');
     expect(svg.classList.contains('in-aria-expanded:rotate-180')).toBe(true);
   });
 
   it('points up and flips 180° while its trigger is expanded', () => {
     const svg = renderChevron(<DisclosureChevron direction="up" />);
 
-    expect(svg.classList.contains('lucide-chevron-up')).toBe(true);
+    expect(svg.dataset.centralIcon).toBe('IconChevronTop');
     expect(svg.classList.contains('in-aria-expanded:rotate-180')).toBe(true);
   });
 
   it('points right and turns 90° while its trigger is expanded', () => {
     const svg = renderChevron(<DisclosureChevron direction="right" />);
 
-    expect(svg.classList.contains('lucide-chevron-right')).toBe(true);
+    expect(svg.dataset.centralIcon).toBe('IconChevronRight');
     expect(svg.classList.contains('in-aria-expanded:rotate-90')).toBe(true);
   });
 

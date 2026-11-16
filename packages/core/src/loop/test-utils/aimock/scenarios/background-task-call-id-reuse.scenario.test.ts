@@ -87,6 +87,14 @@ describeForAllEngines(
             llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: `Turn ${turn} dispatched.` });
           },
         });
+
+        // A turn's background result lands after its run returns. Let it land before the next
+        // turn: arriving during that turn's first request would cancel the request (queued input
+        // interrupts it) after it used the scripted tool call, so that turn would never dispatch.
+        await vi.waitFor(async () => {
+          const { messages } = await memory.recall({ threadId, resourceId });
+          expect(JSON.stringify(messages)).toContain(`turn-${turn} done`);
+        });
       }
 
       // The tool ran once per turn — turn 2+ did not hang or get dropped.

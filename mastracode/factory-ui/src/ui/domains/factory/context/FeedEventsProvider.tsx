@@ -8,6 +8,7 @@ import { cardMoveMutationKey, queryKeys } from '../../../../api/keys';
 import { useRecentlyVisible } from '../../../lib/hooks/useDocumentVisible';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { streamFeedEvents } from '../services/feedEvents';
+import type { PullRequestSubscription } from '../services/githubSubscriptions';
 import { RequestError } from '../services/request';
 
 const RETRY_MS = 3_000;
@@ -41,11 +42,14 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
     let streaming = false;
     const cardsKey = queryKeys.workItems(factoryProjectId);
     const factsKey = queryKeys.boardFacts(factoryProjectId);
+    // The server settles a pull request's subscription on the event that settles its card.
+    const subscriptionsKey = queryKeys.sidebarPullRequestSubscriptionsAll();
     const boardKeys = [
       cardsKey,
       factsKey,
       queryKeys.factoryDecisionsRoot(factoryProjectId),
       queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, baseUrl),
+      subscriptionsKey,
     ];
     // One read per query at a time, with at most one more queued behind it: a frame cancelling a slow
     // read for the next would starve a busy board, and a read that never ends holds up only its own query.
@@ -58,6 +62,12 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
       // A server that predates these reads answers 404 for good: asking again on every frame cannot change it.
       if (boardKey === factsKey && query.state.error instanceof RequestError && query.state.error.status === 404) {
         return;
+      }
+      // Only an open subscription moves: a busy board must not re-read a settled or unfollowed pull request on every frame.
+      // A read that failed holds nothing yet, so it is read again.
+      if (boardKey === subscriptionsKey) {
+        const subscriptions = queryClient.getQueryData<readonly PullRequestSubscription[]>(query.queryKey);
+        if (subscriptions && !subscriptions.some(subscription => subscription.status === 'open')) return;
       }
       const inFlight = reading.get(query.queryHash);
       if (inFlight) {

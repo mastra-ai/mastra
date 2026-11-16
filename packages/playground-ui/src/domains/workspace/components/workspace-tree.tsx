@@ -1,7 +1,6 @@
 import type { WorkspaceFsListResponse } from '@mastra/client-js';
 import { useWorkspaceDirectory } from '@mastra/react/hooks/workspace';
 import { useQueryClient } from '@tanstack/react-query';
-import { CircleAlertIcon, FolderPlusIcon, LockIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ROOT_PATH, joinPath, parentOf } from '../path';
@@ -17,6 +16,9 @@ import { Spinner } from '@/ds/components/Spinner';
 import { Tree } from '@/ds/components/Tree';
 import { Txt } from '@/ds/components/Txt';
 import { FileIcon, FolderIcon, TrashIcon } from '@/ds/icons';
+import { IconExclamationCircle } from '@/ds/icons/central/IconExclamationCircle';
+import { IconFolderAddRight } from '@/ds/icons/central/IconFolderAddRight';
+import { IconLock } from '@/ds/icons/central/IconLock';
 
 const formatBytes = (bytes: number) => {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -133,7 +135,7 @@ function FolderNode({ name, path, mount, onRequestDelete }: NodeProps & { mount?
                   }}
                   onKeyDown={event => event.stopPropagation()}
                 >
-                  <FolderPlusIcon />
+                  <IconFolderAddRight />
                 </Button>
               ) : null}
               {canDelete ? (
@@ -165,12 +167,12 @@ function FolderNode({ name, path, mount, onRequestDelete }: NodeProps & { mount?
             title={mount.error}
             className="flex shrink-0"
           >
-            <CircleAlertIcon className="size-3 text-destructive-foreground" />
+            <IconExclamationCircle className="size-3 text-destructive-foreground" />
           </span>
         ) : null}
         {mount && isReadOnly(path) ? (
           <span role="img" aria-label="Read-only" title="Read-only" className="flex shrink-0">
-            <LockIcon className="size-3 text-muted-foreground" />
+            <IconLock className="size-3 text-muted-foreground" />
           </span>
         ) : null}
         {open && isLoading ? (

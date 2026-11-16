@@ -1,9 +1,10 @@
-import { SearchIcon, XIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { Ref } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
 import type { InputGroupInputProps, InputGroupProps } from '@/ds/components/InputGroup';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { useKeydown } from '@/lib/keyboard';
 import { mergeRefs } from '@/lib/merge-refs';
 
@@ -122,7 +123,7 @@ export function SearchInput({
   return (
     <InputGroup size={size} className={className}>
       <InputGroupAddon>
-        <SearchIcon />
+        <IconMagnifyingGlass />
       </InputGroupAddon>
       <InputGroupInput
         {...inputProps}
@@ -146,7 +147,7 @@ export function SearchInput({
             else inputRef.current?.focus();
           }}
         >
-          <XIcon />
+          <IconCrossMedium />
         </InputGroupButton>
       </InputGroupAddon>
     </InputGroup>

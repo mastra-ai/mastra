@@ -1,8 +1,7 @@
-import { PlusIcon } from 'lucide-react';
-
 import { useEnvironmentVariablesEditorContext } from './environment-variables-editor-context';
 import type { EnvironmentVariablesEditorAddButtonProps } from './environment-variables-editor.types';
 import { Button } from '@/ds/components/Button';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { cn } from '@/lib/utils';
 
 export function EnvironmentVariablesEditorAddButton({
@@ -23,7 +22,7 @@ export function EnvironmentVariablesEditorAddButton({
         size="sm"
         disabled={disabled}
         onClick={() => editor.appendRow()}
-        icon={<PlusIcon />}
+        icon={<IconPlusMedium />}
       >
         {children ?? 'Add variable'}
       </Button>
