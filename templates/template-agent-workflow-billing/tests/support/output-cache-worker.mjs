@@ -35,7 +35,7 @@ try {
     await new Promise(resolve => setImmediate(resolve));
     global.gc();
   }
-  process.send({ type: 'result', code, retained: !!output?.deref() });
+  process.send({ type: 'result', code, observed: output !== undefined, retained: !!output?.deref() });
 } finally {
   observer.close();
   await runtime.close();

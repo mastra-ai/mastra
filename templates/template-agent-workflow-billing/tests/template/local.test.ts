@@ -5,7 +5,7 @@ import { temporaryDatabase } from '../support/billing.js';
 import { billingSocket } from '../support/http.js';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { readFile, writeFile, rename, stat } from 'node:fs/promises';
+import { readFile, writeFile, rename, stat, mkdir, unlink, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   command,
@@ -589,4 +589,98 @@ setTimeout(() => process.exit(0), 5000);`,
     await new Promise(resolve => setTimeout(resolve, 10));
   }
   expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }));
+});
+
+async function runNodeScript(root: string, script: string, args: string[] = [], env = sanitizedEnvironment()) {
+  const child = spawn(process.execPath, [join(root, 'scripts', script), ...args], {
+    cwd: root,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const closed = once(child, 'close');
+  cleanups.push(async () => {
+    if (child.exitCode === null && child.signalCode === null && child.pid) process.kill(-child.pid, 'SIGKILL');
+    await closed;
+  });
+  let stdout = '',
+    stderr = '';
+  child.stdout.on('data', chunk => {
+    stdout += chunk;
+  });
+  child.stderr.on('data', chunk => {
+    stderr += chunk;
+  });
+  const [code] = await closed;
+  return { code, stdout, stderr };
+}
+
+it.each(['dev', 'build', 'start'] as const)(
+  'the %s launcher resolves a hoisted package and its declared CLI path',
+  async action => {
+    const database = await temporaryDatabase();
+    cleanups.push(database.cleanup);
+    const root = join(database.directory, 'workspace/template');
+    const installed = join(database.directory, 'node_modules/mastra');
+    await mkdir(join(root, 'scripts'), { recursive: true });
+    await mkdir(join(installed, 'cli'), { recursive: true });
+    await writeFile(
+      join(root, 'scripts/mastra.mjs'),
+      await readFile(fileURLToPath(new URL('../../scripts/mastra.mjs', import.meta.url))),
+    );
+    for (const bin of [{ mastra: './cli/entry.mjs' }, './cli/entry.mjs']) {
+      await writeFile(
+        join(installed, 'package.json'),
+        JSON.stringify({ name: 'mastra', type: 'module', exports: { './package.json': './package.json' }, bin }),
+      );
+      await writeFile(
+        join(installed, 'cli/entry.mjs'),
+        'console.log(JSON.stringify({ args: process.argv.slice(2), root: process.env.BILLING_PROJECT_ROOT }));',
+      );
+      const result = await runNodeScript(root, 'mastra.mjs', [action], {
+        ...sanitizedEnvironment(),
+        BILLING_STUDIO_ENABLED: 'true',
+      });
+      expect(result.code, result.stderr).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({
+        args: action === 'build' ? ['build', '--studio'] : [action],
+        root: (await realpath(root)) + '/',
+      });
+    }
+  },
+);
+
+it.each([
+  'missing environment template',
+  'invalid environment file',
+  'invalid private profiles',
+  'installation failure',
+] as const)('setup reports a safe cause for %s', async failure => {
+  const copy = await templateCopy(failure === 'installation failure');
+  cleanups.push(copy.cleanup);
+  const env = { ...sanitizedEnvironment(), OPENAI_API_KEY: 'controlled' };
+  if (failure === 'missing environment template') await unlink(join(copy.root, '.env.example'));
+  if (failure === 'invalid environment file') await mkdir(join(copy.root, '.env'));
+  if (failure === 'invalid private profiles') {
+    expect((await runNodeScript(copy.root, 'setup.mjs', [], env)).code).toBe(0);
+    await writeFile(
+      join(copy.root, 'data/local-profiles.json'),
+      JSON.stringify({ secret: 'private-profile-secret-must-not-be-logged' }),
+      { mode: 0o600 },
+    );
+  }
+  if (failure === 'installation failure') {
+    const npm = join(copy.root, 'reject-install.mjs');
+    await writeFile(npm, 'process.exit(3);');
+    Object.assign(env, { npm_execpath: npm });
+  }
+  const result = await runNodeScript(copy.root, 'setup.mjs', [], env);
+  expect(result.code).toBe(1);
+  expect(result.stderr).toContain('Setup failed');
+  expect(result.stderr).not.toContain('Existing state was preserved');
+  expect(result.stderr).not.toContain('private-profile-secret-must-not-be-logged');
+  expect(result.stderr).not.toContain('\n    at ');
+  if (failure === 'missing environment template') expect(result.stderr).toContain('ENOENT');
+  if (failure === 'invalid environment file') expect(result.stderr).toContain('InvalidEnvironmentFileError');
+  if (failure === 'invalid private profiles') expect(result.stderr).toMatch(/BillingError.*state_unavailable/);
+  if (failure === 'installation failure') expect(result.stderr).toMatch(/DependencyInstallError.*EXIT_3/);
 });

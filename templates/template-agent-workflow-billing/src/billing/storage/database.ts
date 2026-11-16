@@ -1,4 +1,6 @@
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { realpath, lstat } from 'node:fs/promises';
+import { dirname, basename, join } from 'node:path';
 import { privateWorkflowFiles, verifyPrivateFiles } from './private-files.js';
 import { setTimeout } from 'node:timers/promises';
 import { createClient } from '@libsql/client/node';
@@ -44,7 +46,21 @@ export class BillingDatabase {
   static async open(options: { url: string }): Promise<BillingDatabase> {
     const parsed = storageOptionsSchema.safeParse(options);
     if (!parsed.success) throw new BillingError('invalid_configuration');
-    const filename = fileURLToPath(parsed.data.url);
+    const requested = fileURLToPath(parsed.data.url);
+    let filename: string;
+    try {
+      const candidate = join(await realpath(dirname(requested)), basename(requested));
+      const info = await lstat(candidate).catch(error => {
+        if (error.code === 'ENOENT') return undefined;
+        throw error;
+      });
+      // Reject final links before resolving an existing file's canonical name.
+      // Neither metadata lookup opens/closes a descriptor for the locked inode.
+      if (info && (!info.isFile() || info.nlink !== 1)) throw new BillingError('storage_unavailable');
+      filename = info ? await realpath(candidate) : candidate;
+    } catch {
+      throw new BillingError('storage_unavailable');
+    }
     if (!preparedFiles.has(filename)) preparedFiles.set(filename, privateWorkflowFiles(filename));
     try {
       await preparedFiles.get(filename);
@@ -52,7 +68,7 @@ export class BillingDatabase {
       preparedFiles.delete(filename);
       throw error;
     }
-    const database = new BillingDatabase(parsed.data.url);
+    const database = new BillingDatabase(pathToFileURL(filename).href);
     await database.write(migrateStorage, true);
     return database;
   }

@@ -133,7 +133,9 @@ export class AgentResource<Output, Native extends AnyAgent = AnyAgent> {
   }
   async complete(scope: ExecutionScope, result: FullOutput<Output>) {
     if (!this.completion) return result;
-    const projection = await this.completion(scope);
+    const { object: candidate, ...fields } = await this.completion(scope);
+    const object = this.outputSchema ? parseInput(this.outputSchema, candidate) : candidate;
+    const projection = { ...fields, ...(object === undefined ? {} : { object }) };
     this.envelope(projection);
     const completed = { ...result, ...projection } as FullOutput<Output>;
     this.projections.set(completed, projection);

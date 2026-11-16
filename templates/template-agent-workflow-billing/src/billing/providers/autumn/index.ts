@@ -477,7 +477,8 @@ export class AutumnBillingProvider implements BillingProvider {
   }
 
   async prepareCheckout(request: CheckoutRequest): Promise<PreparedHostedSession> {
-    const customer = this.hostedCustomer(request);
+    const returnUrl = request.returnUrl;
+    const customer = this.hostedCustomer({ account: request.account, returnUrl });
     const plan = this.checkoutPlan(request.product);
     await this.verifiedCustomer(request.account);
     return {
@@ -486,7 +487,7 @@ export class AutumnBillingProvider implements BillingProvider {
         const result = await this.client.billing.attach({
           customerId: customer.customerId,
           planId: plan.planId,
-          successUrl: request.returnUrl,
+          successUrl: returnUrl,
           redirectMode: 'always',
         });
         if (
@@ -500,14 +501,15 @@ export class AutumnBillingProvider implements BillingProvider {
     };
   }
   async preparePortalSession(request: PortalRequest): Promise<PreparedHostedSession> {
-    const customer = this.hostedCustomer(request);
+    const returnUrl = request.returnUrl;
+    const customer = this.hostedCustomer({ account: request.account, returnUrl });
     await this.verifiedCustomer(request.account);
     return {
       status: 'prepared',
       dispatch: async () => {
         const result = await this.client.billing.openCustomerPortal({
           customerId: customer.customerId,
-          returnUrl: request.returnUrl,
+          returnUrl,
         });
         if (result.customerId !== customer.customerId || !result.url.startsWith('https://'))
           throw new BillingError('state_unavailable');

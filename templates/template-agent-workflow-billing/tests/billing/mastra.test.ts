@@ -2765,10 +2765,66 @@ it.each([false, true])(
       await exited;
     });
     const [message] = await once(child, 'message');
-    expect(message).toMatchObject({ type: 'result', code: 'storage_unavailable', retained: false });
+    expect(message).toMatchObject({ type: 'result', code: 'storage_unavailable', observed: true, retained: false });
     const [code] = await exited;
     expect(code).toBe(0);
     expect(model.requests).toHaveLength(1);
   },
   30000,
+);
+
+it.each(['invalid', 'missing', 'transform'] as const)(
+  'completion objects use outputSchema exactly once: %s',
+  async scenario => {
+    const f = await catalogFixture();
+    const definition = f.catalog.definitions[1];
+    const application = await createBillingApplication({
+      environment: f.environment,
+      catalog: {
+        configuration: f.catalog.configuration,
+        definitions: [
+          {
+            ...definition,
+            adapter: {
+              ...definition.adapter,
+              outputSchema: z.object({
+                count: z
+                  .number()
+                  .min(1)
+                  .transform(value => value + 1),
+              }),
+              completion: async () => ({
+                text: 'done',
+                finishReason: 'stop',
+                ...(scenario === 'missing' ? {} : { object: { count: scenario === 'invalid' ? 0 : 1 } }),
+              }),
+            },
+          },
+        ],
+      },
+    });
+    cleanups.push(application.close);
+    const billing = await application.organizations.context({ credential: f.first.credential! });
+    const first = await application.runtime.billing
+      .agent('catalog-extra')
+      .generate('[success]', { billing, idempotencyKey: 'validated-completion' });
+    if (first.kind === 'nested') throw new Error('Expected root execution');
+    expect(first.billing).toMatchObject({
+      executionStatus: scenario === 'transform' ? 'completed' : 'failed',
+      billedUnits: scenario === 'transform' ? 5 : 0,
+    });
+    if (scenario === 'transform' && first.kind === 'immediate') {
+      expect(first.result.object).toEqual({ count: 2 });
+      expect(first.projection.object).toEqual({ count: 2 });
+    }
+    const replay = await application.runtime.billing
+      .agent('catalog-extra')
+      .generate('[success]', { billing, idempotencyKey: 'validated-completion' });
+    expect(replay).toMatchObject({
+      kind: 'replay',
+      result: scenario === 'transform' ? { object: { count: 2 } } : null,
+      billing: { replayed: true, billedUnits: scenario === 'transform' ? 5 : 0 },
+    });
+    expect(f.model.requests).toHaveLength(1);
+  },
 );

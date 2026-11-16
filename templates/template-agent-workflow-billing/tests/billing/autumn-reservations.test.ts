@@ -1968,3 +1968,22 @@ it('cached checkout and portal URLs stay private when permission is revoked afte
     }
   }
 });
+
+it.each(['checkout', 'portal'] as const)(
+  'prepared %s dispatch keeps the validated return URL after caller mutation',
+  async operation => {
+    const f = await fixture();
+    const account = await f.provider().ensureAccount({ workspaceId: f.context.workspaceId });
+    const request = { account, product: 'credit-pack', returnUrl: 'https://app.example.test/billing' };
+    const prepared = await (operation === 'checkout'
+      ? f.provider().prepareCheckout(request)
+      : f.provider().preparePortalSession(request));
+    if (prepared.status !== 'prepared') throw new Error('Expected a prepared session');
+    request.returnUrl = 'https://untrusted.example/steal-session';
+    expect(await prepared.dispatch()).toMatchObject({ status: 'created' });
+    const sent = f.requests.findLast(
+      value => value.path === (operation === 'checkout' ? '/v1/billing.attach' : '/v1/billing.open_customer_portal'),
+    )!;
+    expect(sent.body[operation === 'checkout' ? 'success_url' : 'return_url']).toBe('https://app.example.test/billing');
+  },
+);

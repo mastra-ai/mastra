@@ -490,13 +490,18 @@ it('Studio forged identity native routes and private image bypasses are denied',
 }, 600000);
 
 const chatAgent = '/api/agents/studio-assistant';
-async function chatHistory(server: Server, threadId: string) {
-  return server.call(`/api/memory/threads/${threadId}/messages?agentId=studio-assistant`);
+async function chatHistory(server: Server, threadId: string, profile: 'owner' | 'member' | 'outsider' = 'owner') {
+  return server.call(`/api/memory/threads/${threadId}/messages?agentId=studio-assistant`, undefined, profile);
 }
-async function waitForHistory(server: Server, threadId: string, expected: string) {
+async function waitForHistory(
+  server: Server,
+  threadId: string,
+  expected: string,
+  profile: 'owner' | 'member' | 'outsider' = 'owner',
+) {
   let history: any;
   for (let attempt = 0; attempt < 200; attempt++) {
-    history = await chatHistory(server, threadId);
+    history = await chatHistory(server, threadId, profile);
     if (history.status === 200 && JSON.stringify(history.body).includes(expected)) return history.body;
     await new Promise(resolve => setTimeout(resolve, 50));
   }
@@ -595,12 +600,22 @@ const toolResults = (history: any) =>
     .flatMap((message: any) => message.content.parts ?? [])
     .map((part: any) => part.toolInvocation?.result)
     .filter(Boolean);
-async function sendTool(server: Server, threadId: string, name: string, input: unknown) {
-  const response = await server.call(`${chatAgent}/send-message`, {
-    threadId,
-    resourceId: 'default',
-    message: `CALL ${name} ${JSON.stringify(input)}`,
-  });
+async function sendTool(
+  server: Server,
+  threadId: string,
+  name: string,
+  input: unknown,
+  profile: 'owner' | 'member' | 'outsider' = 'owner',
+) {
+  const response = await server.call(
+    `${chatAgent}/send-message`,
+    {
+      threadId,
+      resourceId: 'default',
+      message: `CALL ${name} ${JSON.stringify(input)}`,
+    },
+    profile,
+  );
   expect(response.status, JSON.stringify(response.body)).toBe(200);
 }
 async function waitQuery(
@@ -1179,6 +1194,19 @@ it('Studio chat ownership revocation and forged context close native and operati
   await sendTool(server, 'member-own-thread', 'image-kit-query', { operationId: operation.operationId });
   const deniedQuery = await waitForHistory(server, 'member-own-thread', 'forbidden');
   expect(JSON.stringify(deniedQuery)).not.toContain('Private saved business prompts');
+  await sendTool(
+    server,
+    'member-private-operation-query',
+    'image-kit-query',
+    { operationId: operation.operationId },
+    'member',
+  );
+  const memberQuery = await waitForHistory(server, 'member-private-operation-query', 'forbidden', 'member');
+  expect(JSON.stringify(memberQuery)).not.toContain('Private saved business prompts');
+  for (const result of toolResults(memberQuery)) {
+    expect(result).not.toHaveProperty('executionId');
+    expect(result).not.toHaveProperty('result.pending');
+  }
   await query(f.root, 'DELETE FROM memberships WHERE workspace_id = ? AND identity_id = ?', [
     owner!.workspaceId,
     owner!.actorId,

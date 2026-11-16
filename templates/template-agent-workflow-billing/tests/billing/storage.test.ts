@@ -1,3 +1,5 @@
+import * as privateFiles from '../../src/billing/storage/private-files.js';
+import { BillingDatabase } from '../../src/billing/storage/database.js';
 import { ipcWorker } from '../support/ipc-worker.js';
 import { lossyProxy } from '../support/lossy-proxy.js';
 import { configuredOrganizations } from '../../src/billing/configuration/environment.js';
@@ -5,7 +7,7 @@ import { ConversationStorage } from '../../src/billing/storage/conversations.js'
 import { removeConversationMigration } from '../support/billing.js';
 import { LocalBillingProvider } from '../../src/billing/providers/local/index.js';
 import { createImageApplication } from '../support/image-application.js';
-import { readFile, stat, writeFile, unlink, link, symlink } from 'node:fs/promises';
+import { readFile, stat, writeFile, unlink, link, symlink, realpath } from 'node:fs/promises';
 import { unlinkSync } from 'node:fs';
 import filesystem from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
@@ -712,5 +714,73 @@ it.each(['success', 'request failure', 'body failure'] as const)(
     await expect(fetch(proxy.url, { signal: AbortSignal.timeout(1000) })).rejects.toThrow('fetch failed');
     if (scenario === 'success') await proxy.completed();
     else await expect(proxy.completed()).rejects.toThrow();
+  },
+);
+
+it.each(['separators', 'parent symlink'] as const)(
+  'database preparation resolves %s aliases without closing locked file descriptors',
+  async alias => {
+    const { database, account } = await fixture();
+    const primary = await BillingDatabase.open({ url: database.url });
+    cleanups.push(() => primary.close());
+    const aliasDirectory = join(database.directory, 'parent-alias');
+    if (alias === 'parent symlink') await symlink(await realpath(database.directory), aliasDirectory, 'dir');
+    const filename = alias === 'separators' ? `${database.directory}//billing.db` : `${aliasDirectory}/billing.db`;
+    const aliasUrl = `file://${filename}`;
+    const prepare = privateFiles.privateWorkflowFiles;
+    let held = false;
+    const unsafeOpens: string[] = [];
+    const opening = vi.spyOn(privateFiles, 'privateWorkflowFiles').mockImplementation(async filename => {
+      if (held) unsafeOpens.push(filename);
+      return prepare(filename);
+    });
+    try {
+      for (let round = 0; round < 20; round++) {
+        let enter!: () => void, release!: () => void;
+        const entered = new Promise<void>(resolve => {
+          enter = resolve;
+        });
+        const released = new Promise<void>(resolve => {
+          release = resolve;
+        });
+        const transaction = primary
+          .write(async tx => {
+            await tx.execute({
+              sql: 'UPDATE commercial_state SET version = version + 1 WHERE account_id = ?',
+              args: [account.id],
+            });
+            held = true;
+            enter();
+            await released;
+            held = false;
+          })
+          .then(
+            () => undefined,
+            error => {
+              enter();
+              return error;
+            },
+          );
+        await entered;
+        const other = BillingDatabase.open({ url: aliasUrl }).then(
+          value => ({ value }),
+          error => ({ error }),
+        );
+        try {
+          await setTimeout(30);
+        } finally {
+          release();
+        }
+        const transactionError = await transaction;
+        const result = await other;
+        if ('value' in result) result.value.close();
+        expect(unsafeOpens).toEqual([]);
+        expect(transactionError).toBeUndefined();
+        expect(result).not.toHaveProperty('error');
+      }
+    } finally {
+      held = false;
+      opening.mockRestore();
+    }
   },
 );
