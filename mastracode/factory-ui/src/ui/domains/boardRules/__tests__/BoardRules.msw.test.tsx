@@ -73,6 +73,42 @@ describe('Board rules', () => {
     expect(lane('Issue reopened').getByText('No rules: the card stays where it is')).toBeVisible();
   });
 
+  it('ends the pull request lane at a rule testing only the kind, except for rules moving a linked issue’s card', async () => {
+    const PRS = 'Pull request opened';
+    const kind = (value: string) => ({ field: 'source.kind', operator: 'equals' as const, value });
+    serveRules({
+      rules: [
+        rule({
+          id: ruleId('prs'),
+          name: 'Pull requests go to Review',
+          on: ['pull_request.opened'],
+          when: { operator: 'AND', conditions: [kind('pull_request')] },
+        }),
+        rule({
+          id: ruleId('linked'),
+          name: 'Trusted pull requests take a waiting issue to Review',
+          on: ['pull_request.opened'],
+          when: { operator: 'AND', conditions: [{ field: 'closedIssue.phase', operator: 'in', value: ['intake'] }] },
+        }),
+        rule({
+          id: ruleId('drafts'),
+          name: 'Drafts wait',
+          on: ['pull_request.opened'],
+          when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'draft' }] },
+        }),
+      ],
+    });
+    renderRules();
+
+    await screen.findByRole('region', { name: PRS });
+    const row = (name: string) => within(lane(PRS).getByRole('listitem', { name }));
+    // An issue's card moving when a pull request links to it isn't a pull request, so rule 1 doesn't take it.
+    expect(
+      row('Trusted pull requests take a waiting issue to Review').queryByText(/Never reached/),
+    ).not.toBeInTheDocument();
+    expect(row('Drafts wait').getByText('Never reached: rule 1 above matches every item.')).toBeVisible();
+  });
+
   it('groups lanes into issues and pull requests, with the intake note on the two lanes new items arrive on', async () => {
     serveRules({ rules: [bugs(), closed()], order: ['release', 'work'] });
     renderRules();

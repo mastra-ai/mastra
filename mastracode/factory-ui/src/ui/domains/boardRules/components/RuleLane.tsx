@@ -19,7 +19,7 @@ import type { ReactNode } from 'react';
 
 import type { InstalledBoardInfo, IntakeRouteInfo, IntakeSkippedResponse } from '../../../../api/types';
 import { useRowDrag } from '../../settings/components/useRowDrag';
-import { catchAllIndex, isLegacyOpened, isOpenedLane, LEGACY_OPENED_EVENT, laneText } from '../ruleLanes';
+import { catchAllIndex, isLegacyOpened, shadowedBy, isOpenedLane, LEGACY_OPENED_EVENT, laneText } from '../ruleLanes';
 import type { RuleEvent } from '../ruleLanes';
 import { ConditionChips } from './ConditionChips';
 import { RuleTarget } from './RuleTarget';
@@ -103,7 +103,7 @@ export function RuleLane({
 
       <ol aria-label={`${text.label} rules`} className="flex min-w-0 flex-col">
         {rules.map((rule, index) => {
-          const unreachable = catchAll >= 0 && index > catchAll;
+          const unreachable = shadowedBy(rules, event, index) >= 0;
           const skipped = !rule.enabled || unreachable;
           const dragging = drag.drag?.from === index;
           const skip = skips?.get(rule.id);

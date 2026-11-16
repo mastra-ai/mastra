@@ -179,6 +179,25 @@ export function catchAllIndex(lane: readonly IntakeRouteInfo[], event: RuleEvent
   );
 }
 
+/**
+ * The rule above `index` in a lane that keeps it from ever being reached; -1 when none does. A rule testing only the
+ * item's kind takes every new item, but not an issue's card moving when a pull request links to it, so it doesn't
+ * shadow a rule testing that issue (`closedIssue.*`).
+ */
+export function shadowedBy(lane: readonly IntakeRouteInfo[], event: RuleEvent, index: number): number {
+  const catchAll = catchAllIndex(lane, event);
+  const [taker, rule] = [lane[catchAll], lane[index]];
+  if (!taker || !rule || index <= catchAll) return -1;
+  return taker.when === null || !testsLinkedIssue(rule) ? catchAll : -1;
+}
+
+function testsLinkedIssue(rule: IntakeRouteInfo): boolean {
+  return (
+    rule.when?.operator === 'AND' &&
+    rule.when.conditions.some(condition => 'field' in condition && condition.field.startsWith('closedIssue.'))
+  );
+}
+
 /** Where a board sits in intake order, in words: "Checked after Ship, before Work". */
 export function intakePosition(order: readonly { boardKey: string; name: string }[], boardKey: string): string {
   const at = order.findIndex(board => board.boardKey === boardKey);
