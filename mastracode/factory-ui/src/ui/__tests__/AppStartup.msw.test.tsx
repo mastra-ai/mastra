@@ -48,17 +48,14 @@ const REREAD_ONCE_THE_FEED_CONNECTS = [
   /^GET \/web\/(github|gitlab)\/subscriptions\b/,
 ];
 const CARDS_URL = 'GET /web/factory/projects/factory-1/work-items';
-// Any page asks for the cards holding a session, which its sidebar marks.
-const WITH_SESSIONS = [`${CARDS_URL}?scope=sessions`];
 const PROJECT_URL = 'GET /web/factory/projects/factory-1';
 // A board asks for its own phases, with the cards they list, and for what its filters offer: never for every card.
 const boardOf = (board: string, view: string) => [
-  ...WITH_SESSIONS,
   `${PROJECT_URL}/boards/${board}/phases?${view}&cards=true`,
   `${CARDS_URL}/filter-options`,
 ];
-// A draft also asks the server for what its starters count and when cards came in and shipped, from a week back.
-const WITH_SESSIONS_AND_COUNTS = [...WITH_SESSIONS, `${CARDS_URL}/starters`, `${CARDS_URL}/activity?since=`];
+// A draft asks the server for what its starters count and when cards came in and shipped, from a week back.
+const STARTER_COUNTS = [`${CARDS_URL}/starters`, `${CARDS_URL}/activity?since=`];
 
 // A draft offers starters and activity only once it has a model to start a session with.
 const USABLE_MODEL = [{ id: 'openai/gpt-4o-mini', provider: 'openai', modelName: 'gpt-4o-mini', hasApiKey: true }];
@@ -86,7 +83,18 @@ function renderApp(
     ),
     // No ambient handler: the sidebar's sessions, the chat's permissions, the
     // composer's model defaults and the board's intake.
-    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions: [] })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/session-rows`, () =>
+      HttpResponse.json({ total: 0, matching: 0, groups: [], boards: [], owners: [], settling: false }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/session-activity`, () =>
+      HttpResponse.json({
+        runningSessionIds: [],
+        parkedSessionIds: [],
+        initializingSessionIds: [],
+        cards: { working: 0, waiting: 0 },
+        settling: false,
+      }),
+    ),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId/permissions`, () => HttpResponse.json({})),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId`, () => HttpResponse.json({ project: listed })),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
@@ -155,13 +163,13 @@ describe('Opening Factory', () => {
       path: '/factories/factory-1/boards/release',
       cards: boardOf('release', 'sort=recent'),
     },
-    { page: 'Rules', path: '/factories/factory-1/rules?group=failed', cards: WITH_SESSIONS },
-    { page: 'a new session', path: '/factories/factory-1/new', cards: WITH_SESSIONS },
+    { page: 'Rules', path: '/factories/factory-1/rules?group=failed', cards: [] },
+    { page: 'a new session', path: '/factories/factory-1/new', cards: [] },
     {
       page: 'a draft session',
       path: '/factories/factory-1/user/new/draft-1',
       models: USABLE_MODEL,
-      cards: WITH_SESSIONS_AND_COUNTS,
+      cards: STARTER_COUNTS,
     },
     { page: 'Settings', path: '/factories/factory-1/settings/preferences', cards: [] },
     {
@@ -216,7 +224,7 @@ describe('Opening Factory', () => {
     // with the Factory list, before anything could say so, rather than a round trip later on every board.
     const boardHidden = listed === emptyFactory;
     expect(
-      unread.filter(hash => !(boardHidden && /"phases"|"filter-options"/.test(hash))),
+      unread.filter(hash => !(boardHidden && /"phases"|"filter-options"|"decisions"/.test(hash))),
       'queries started for the page but never read by it',
     ).toEqual([]);
   });
