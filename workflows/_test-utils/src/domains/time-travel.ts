@@ -2116,6 +2116,15 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
         expect(replayed.state).toEqual({ order: 42 });
         if (replayed.status === 'success') {
           expect(replayed.result).toEqual({ order: 42 });
+        } else {
+          // A second recovery reads the snapshot the first time-travel run wrote.
+          const replayedAgain = await timeTravel!(workflow, {
+            step: 'charge',
+            runId,
+            outputOptions: { includeState: true },
+          });
+          expect(mocks.chargeSawOrder.mock.calls).toEqual([[42], [42], [42]]);
+          expect(replayedAgain.state).toEqual({ order: 42 });
         }
       },
     );
