@@ -98,7 +98,7 @@ await store.connect()
 
 ### `createIndex()`
 
-Creates a new vector index (collection) in MongoDB.
+Creates a new vector index (collection) in MongoDB. Two concurrent calls for the same new name both succeed when they ask for the same collection and embedding. If they ask for different ones, the later call throws `CONFLICT` naming what differs.
 
 <PropertiesTable
   content={[
@@ -792,9 +792,10 @@ Mastra keeps any search index that existed before `createIndex()` or `createSear
 - `NOT_REGISTERED`: the name has no registration, and nothing is dropped. If the collection predates `@mastra/mongodb@1.15.0`, call `claimLegacyIndex()` first.
 - `OWNERSHIP_UNKNOWN`: a managed index registered by 1.15 through 1.27 has no ownership record. Call `claimLegacyIndex()` first.
 - `IN_USE`: another registration still uses the managed collection. Mastra checks this again when you retry a stalled delete.
-- `INDEX_DELETING`: a previous delete was left half-finished. Retry `deleteIndex()`. `createIndex()`, `createSearchIndex()` and `claimLegacyIndex()` raise this error too while a delete is half-finished.
 - `CAPABILITY_CHECK_FAILED`: the check for transaction support failed. Nothing changed, so retry.
 - `OUTCOME_UNKNOWN`: MongoDB couldn't confirm whether the delete committed. Retry. If the retry throws `NOT_REGISTERED`, the delete completed.
+
+`createIndex()`, `createSearchIndex()` and `claimLegacyIndex()` throw `INDEX_DELETING` while a delete is half-finished. Retrying `deleteIndex()` resumes and finishes a half-finished delete.
 
 Concurrent deletes of indexes that share a collection are coordinated with transactions on Atlas, Atlas Local and replica sets. On a standalone server they aren't, so don't delete sibling indexes at the same time there.
 
@@ -818,7 +819,7 @@ Records that Mastra created a managed index's collection and its recorded search
 
 :::warning
 
-After a claim, `deleteIndex()` drops the collection and all its data. Claim an index only when Mastra did create the collection. The claim itself drops nothing.
+After a claim, `deleteIndex()` drops the collection and all its data. A claim also overrides an explicit "not owned" record, such as a collection an earlier version adopted, so claim an index only when Mastra really created the collection. The claim itself drops nothing.
 
 :::
 
@@ -843,7 +844,7 @@ Calling it again for a claimed index does nothing. It never overwrites another r
 - `BYO`: the index is bring-your-own. Mastra keeps those collections, so there's nothing to claim.
 - `CONFLICT`: another registration already uses the name for something else.
 - `IN_USE`: another registration uses the same collection.
-- `NOT_FOUND`: the collection or its search indexes don't exist.
+- `NOT_FOUND`: the name has no registration, and its collection or `<name>_vector_index` doesn't exist.
 - `INDEX_DELETING`: a delete of this index is half-finished. Retry `deleteIndex()`.
 - `FAILED`: any other failure.
 
