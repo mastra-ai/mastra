@@ -4,7 +4,7 @@
 
 Hardened `MongoDBVector` for collections you bring yourself (`collectionName`).
 
-- `deleteIndex()` drops only the search indexes and collections Mastra created. Indexes that already existed, or that earlier versions registered, are kept. A name with no registration now throws `NOT_REGISTERED` instead of dropping a collection.
+- `deleteIndex()` drops only the search indexes and collections Mastra created. Indexes that already existed are kept, and indexes that earlier versions registered aren't dropped without a claim (`claimLegacyIndex()`). A name with no registration now throws `NOT_REGISTERED` instead of dropping a collection.
 - Added `claimLegacyIndex({ indexName })` for managed indexes Mastra can't prove it created: collections made before `@mastra/mongodb@1.15.0`, and 1.15 through 1.27 indexes without ownership records. Claim one only if you want `deleteIndex()` to drop its collection and all its data later, or want to change its text mappings. The claim itself drops nothing.
 
 ```typescript

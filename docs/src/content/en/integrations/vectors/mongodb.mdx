@@ -797,7 +797,7 @@ Mastra keeps any search index that existed before `createIndex()` or `createSear
 
 `createIndex()`, `createSearchIndex()` and `claimLegacyIndex()` throw `INDEX_DELETING` while a delete is half-finished. Retrying `deleteIndex()` resumes and finishes a half-finished delete.
 
-Concurrent deletes of indexes that share a collection are coordinated with transactions on Atlas, Atlas Local and replica sets. On a standalone server they aren't, so don't delete sibling indexes at the same time there.
+Concurrent deletes of indexes that share a collection are coordinated with transactions on Atlas, Atlas Local and replica sets. On a standalone server they aren't, so don't delete sibling indexes at the same time there. When two `createIndex()` or `createSearchIndex()` calls for the same index run at once, a search index one of them created may not be recorded as Mastra's. On a bring-your-own or adopted collection, `deleteIndex()` then keeps that index, so drop it yourself if you no longer need it.
 
 If `createIndex()` fails to create the vector index, or `createSearchIndex()` the full-text index, Mastra removes or restores the registration that call wrote.
 
