@@ -114,6 +114,34 @@ describe('Knowledge scope declarations a store supplies', () => {
     expect(getScopeDeclarations).toHaveBeenCalledTimes(2);
   });
 
+  it("doesn't let a read the TTL replaced publish its expired answer after the newer one", async () => {
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    let finishOld!: (declarations: KnowledgeScopeDeclarations) => void;
+    const reads: Array<Promise<KnowledgeScopeDeclarations>> = [
+      new Promise(resolve => (finishOld = resolve)),
+      Promise.resolve({}),
+    ];
+    const getScopeDeclarations = vi.fn(() => reads.shift()!);
+    const storage = { getScopeDeclarations } as unknown as KnowledgeStorage;
+    const runtime = new KnowledgeScopeRuntime(
+      knowledgeMemoryScopes(),
+      async () => storage,
+      () => {},
+    );
+    // The first read hangs past the window; the next call starts a fresh read that revokes Linear.
+    const old = runtime.resolve();
+    await vi.waitFor(() => expect(getScopeDeclarations).toHaveBeenCalledTimes(1));
+    vi.advanceTimersByTime(KNOWLEDGE_STORE_DECLARATIONS_TTL_MS);
+    await runtime.resolve();
+    expect(getScopeDeclarations).toHaveBeenCalledTimes(2);
+    finishOld(LINEAR);
+    await old;
+    expect(runtime.compiled.match('linear:acme:conn_1')).toBeFalsy();
+  });
+
   it('reads the store again after a failed read', async () => {
     const { knowledge, declaring } = await setup();
     declaring.mockRejectedValueOnce(new Error('service down'));
