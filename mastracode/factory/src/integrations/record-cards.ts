@@ -1,15 +1,19 @@
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 /**
- * A provider record's cards, keyed by external id: one per board it is on, first filed first.
- * Cards filed without a record are left out.
+ * One integration's records' cards, keyed by external id: one per board a record is on, first
+ * filed first. Cards filed without a record, or from another integration or source type, are left
+ * out: they are not the record's cards even when they carry the same external id.
  */
-export function cardsByExternalId(items: readonly Card[]): Map<string, Card[]> {
+export function cardsByExternalId(
+  items: readonly Card[],
+  { integrationId, type }: { integrationId: string; type: string },
+): Map<string, Card[]> {
   const byId = new Map<string, Card[]>();
   for (const item of items) {
-    const key = item.externalSource?.externalId;
-    // Cards without a record share no record with each other.
-    if (key === undefined) continue;
+    const source = item.externalSource;
+    if (source?.integrationId !== integrationId || source.type !== type) continue;
+    const key = source.externalId;
     const cards = byId.get(key);
     if (cards) cards.push(item);
     else byId.set(key, [item]);

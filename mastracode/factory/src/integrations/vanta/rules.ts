@@ -87,11 +87,7 @@ export class VantaRules {
     await toBoardSource(this.options.boards).load(input);
 
     const items = await this.options.storage.listShared({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
-    const itemsBySourceKey = cardsByExternalId(
-      items.filter(
-        item => item.externalSource?.integrationId === 'vanta' && item.externalSource.type === 'vulnerability',
-      ),
-    );
+    const itemsBySourceKey = cardsByExternalId(items, { integrationId: 'vanta', type: 'vulnerability' });
     const statuses: IngressStatus[] = [];
     const active = new Set(input.vulnerabilities.map(vulnerability => vulnerability.id));
     for (const vulnerability of input.vulnerabilities) {

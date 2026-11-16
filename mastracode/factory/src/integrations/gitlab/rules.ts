@@ -36,6 +36,7 @@ import type {
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
 import {
+  externalSourceKey,
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
   WorkItemUpdateConflictError,
 } from '../../storage/domains/work-items/base.js';
@@ -629,14 +630,9 @@ export class GitLabRules {
     const firstSibling = candidates.length;
     for (const item of [...candidates]) {
       if (!item?.externalSource) continue;
+      const key = externalSourceKey(item.externalSource);
       for (const sibling of items) {
-        if (
-          evaluated.has(sibling.id) ||
-          sibling.externalSource?.integrationId !== item.externalSource.integrationId ||
-          sibling.externalSource.externalId !== item.externalSource.externalId
-        ) {
-          continue;
-        }
+        if (evaluated.has(sibling.id) || externalSourceKey(sibling.externalSource) !== key) continue;
         evaluated.add(sibling.id);
         candidates.push(structuredClone(sibling));
       }

@@ -1010,6 +1010,14 @@ function decisionSourceKey(decision: unknown): string | null {
   return record.sourceKey;
 }
 
+/** The key a decision files its card under, which the card keeps in `FACTORY_RULE_MATERIALIZATION_KEY`. */
+function decisionMaterializationKey(decision: unknown): string | null {
+  if (typeof decision !== 'object' || decision === null) return null;
+  const record = decision as Record<string, unknown>;
+  if (record.type !== 'upsertLinkedWorkItem' || typeof record.idempotencyKey !== 'string') return null;
+  return record.idempotencyKey;
+}
+
 function decisionRowPayload(decision: unknown): Record<string, unknown> {
   const parsed = typeof decision === 'string' ? safeJsonParse(decision) : decision;
   return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
@@ -2517,7 +2525,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * once an evaluation is stored: a card keeps an identity it already evaluated under, and the
    * event's own identity stays with the card that stored it, so deleting that card does not hand
    * its evaluation to another. An evaluation stored before the record had a card belongs to the
-   * record's first card, which the event filed; cards added later evaluate under their own.
+   * card it filed, which keeps the filing decision's key; a card filed otherwise belongs to the
+   * record's first card. Cards added later evaluate under their own.
    */
   async cardIngressIdentity({
     orgId,
@@ -2537,6 +2546,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     if (await this.getTransitionResultByIngress(orgId, factoryProjectId, own)) return own;
     if (typeof stored?.itemId === 'string') return own;
     const card = await this.get({ orgId, id: cardId });
+    // An evaluation stored before the record had a card names the card it filed by its decision's key.
+    const filed = new Set(
+      (Array.isArray(stored?.decisions) ? stored.decisions : []).flatMap(decision => {
+        const key = decisionMaterializationKey(decision);
+        return key ? [key] : [];
+      }),
+    );
+    if (filed.size) {
+      const key = card?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY];
+      return typeof key === 'string' && filed.has(key) ? base : own;
+    }
     if (!card?.externalSource) return base;
     const cards = await this.listByProjectSource({ orgId, factoryProjectId, source: card.externalSource });
     if (cards.length <= 1) return base;

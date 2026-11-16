@@ -111,18 +111,25 @@ export class JiraRules {
     });
     // The shared list is the cache itself: only the card handed on to rules is cloned.
     const items = await this.options.storage.listShared({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
-    const itemsBySourceKey = cardsByExternalId(items);
+    const itemsBySourceKey = cardsByExternalId(items, { integrationId: 'jira', type: 'issue' });
     // A card filed by hand from Settings › Intake holds the issue key, while the
-    // sweep names the issue by its id. Its browse URL names both the site and the key.
+    // sweep names the issue by its id. Its browse URL names both the site and the key,
+    // so an issue's cards are the ones under its id and every one under its URL.
     const itemsByUrl = new Map<string, Card[]>();
     for (const cards of itemsBySourceKey.values()) {
-      const url = cards[0]!.externalSource?.url;
-      if (url && !itemsByUrl.has(url)) itemsByUrl.set(url, cards);
+      for (const card of cards) {
+        const url = card.externalSource?.url;
+        if (url) itemsByUrl.set(url, [...(itemsByUrl.get(url) ?? []), card]);
+      }
     }
     const statuses: IngressStatus[] = [];
     for (const issue of input.issues) {
       // One card per Jira issue per board; other projects may file their own.
-      const cards = itemsBySourceKey.get(issue.id) ?? itemsByUrl.get(issue.url) ?? [];
+      const cards = [
+        ...new Map(
+          [...(itemsBySourceKey.get(issue.id) ?? []), ...(itemsByUrl.get(issue.url) ?? [])].map(card => [card.id, card]),
+        ).values(),
+      ];
       if (!cards.length) statuses.push(await this.#ingestIssue(input, issue, undefined));
       // Each board's card runs its own rules for the record.
       for (const card of cards) {

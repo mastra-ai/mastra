@@ -122,7 +122,7 @@ export class LinearRules {
     });
     // The shared list is the cache itself: only the card handed on to rules is cloned.
     const items = await this.options.storage.listShared({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
-    const itemsBySourceKey = cardsByExternalId(items);
+    const itemsBySourceKey = cardsByExternalId(items, { integrationId: 'linear', type: 'issue' });
     const statuses: IngressStatus[] = [];
     for (const issue of input.issues) {
       // One card per Linear issue per project; other projects may file their own.

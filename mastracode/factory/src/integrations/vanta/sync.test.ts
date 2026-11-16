@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
+import { FACTORY_RULE_MATERIALIZATION_KEY } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { VantaRules } from './rules.js';
 import { createVantaSync } from './sync.js';
@@ -133,6 +134,9 @@ describe('createVantaSync', () => {
     const { project, sync, workItems } = await setup({ enabled: true });
     // The first sync sees the vulnerability before any card exists, and files one.
     await sync();
+    // Filed the way the dispatcher files it: under the stored decision's key.
+    const stored = await workItems.getTransitionResultByIngress('org-1', project.id, 'vanta:vuln-1:open');
+    const [filing] = stored!.decisions as Array<{ idempotencyKey: string }>;
     const { item: filed } = await workItems.upsert({
       orgId: 'org-1',
       userId: 'user-1',
@@ -142,7 +146,7 @@ describe('createVantaSync', () => {
         title: 'lodash: CVE-2026-1',
         stages: ['intake'],
         sessions: {},
-        metadata: { state: 'open' },
+        metadata: { state: 'open', [FACTORY_RULE_MATERIALIZATION_KEY]: filing!.idempotencyKey },
       },
     });
     const security = await workItems.linkWorkItemToBoard({

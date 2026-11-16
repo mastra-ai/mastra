@@ -111,7 +111,7 @@ export class IncidentioRules {
     });
     // The shared list is the cache itself: only the card handed on to rules is cloned.
     const items = await this.options.storage.listShared({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
-    const itemsBySourceKey = cardsByExternalId(items);
+    const itemsBySourceKey = cardsByExternalId(items, { integrationId: 'incidentio', type: 'issue' });
     // Each board's card runs its own rules for the record, under its own identity.
     const targets = await Promise.all(
       input.issues.flatMap(issue =>

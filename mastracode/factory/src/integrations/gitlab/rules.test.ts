@@ -546,6 +546,55 @@ describe('GitLabRules', () => {
     );
   });
 
+  it("runs no other workspace's card that shares the authoring Slack card's external id", async () => {
+    const opened = (board: string) =>
+      defineBoard({
+        id: board,
+        title: board,
+        initialPhase: 'queued',
+        phases: {
+          queued: { title: 'Queued', kind: 'resting', next: 'building' },
+          building: { title: 'Building', kind: 'working', role: 'work', next: 'shipped' },
+          shipped: { title: 'Shipped', kind: 'terminal' },
+        },
+        events: {
+          gitlab: {
+            mergeRequestOpened: (context: FactoryGitLabRuleContext) => ({
+              type: 'sendMessage' as const,
+              idempotencyKey: `${context.ingress.id}:${board}`,
+              role: 'work',
+              message: 'out',
+            }),
+          },
+        },
+      });
+    const { seeded, project, service } = await setup({
+      boards: createBoardRegistry({ boards: [opened('delivery'), opened('audit')] }),
+    });
+    const thread = (workspaceId: string, board: string, sessions: Record<string, unknown>) =>
+      seeded.workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: { integrationId: 'slack', type: 'slack-thread', workspaceId, externalId: 'C1:1.000' },
+          title: `Thread in ${workspaceId}`,
+          board,
+          stages: ['building'],
+          sessions,
+        },
+      });
+    await thread('T1', 'delivery', { work: { sessionId: 'work-session', threadId: 'work-thread', branch: 'feature-17' } });
+    await thread('T2', 'audit', {});
+
+    await expect(service.ingest(mergeRequestOpened())).resolves.toMatchObject({ status: 'committed' });
+
+    const deferred = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+    expect(deferred.map(entry => entry.decision)).not.toContainEqual(
+      expect.objectContaining({ type: 'sendMessage', idempotencyKey: expect.stringContaining(':audit') }),
+    );
+  });
+
   it('routes an MR note only to the Work card authoring its head branch', async () => {
     const { seeded, project, service } = await setup();
     const work = (

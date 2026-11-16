@@ -178,6 +178,40 @@ describe('JiraRules', () => {
     expect(cards.map(item => item.externalSource?.externalId)).toEqual([issue.identifier]);
   });
 
+  it('runs rules for a card filed by hand under the issue key on another board, next to the card filed by id', async () => {
+    const { project, service, workItems, drain } = await setup(
+      undefined,
+      createBoardRegistry({ boards: [createTestBoard()] }),
+    );
+    const byId = { ...issue, id: '10001' };
+    await service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [byId] });
+    await drain();
+    const [filed] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    const { item: byHand } = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'jira', type: 'issue', externalId: issue.identifier, url: issue.url },
+        title: issue.title,
+        board: 'release',
+        stages: ['queued'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const evaluate = vi.spyOn(workItems, 'commitRuleEvaluation');
+
+    await service.ingest({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      issues: [{ ...byId, updatedAt: '2026-07-03T00:00:00Z' }],
+    });
+
+    expect(evaluate.mock.calls.map(([input]) => input.workItemId).sort()).toEqual([filed!.id, byHand.id].sort());
+  });
+
   it('keeps two sites apart when their issues share a key', async () => {
     const { project, service, workItems, drain } = await setup();
     const ingest = (observed: typeof issue) =>
@@ -579,5 +613,34 @@ describe('a Jira issue with a card on several boards', () => {
       `jira:${issue.id}:${edited.updatedAt}:${release!.id}`,
     ]);
     expect(await evaluate.mock.results[0]!.value).toMatchObject({ status: 'replayed' });
+  });
+
+  it('does not hand the evaluation that filed a card to its other card once the filed card is deleted', async () => {
+    const { project, service, workItems, drain, cardsFor } = await setup(
+      undefined,
+      createBoardRegistry({ boards: [createTestBoard()] }),
+    );
+    const ingest = () =>
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] });
+    // Seen before any card exists: the evaluation is stored without a card, and files one.
+    await ingest();
+    await drain();
+    const [work] = await cardsFor(project.id);
+    const release = await workItems.linkWorkItemToBoard({
+      orgId: 'org-1',
+      id: work!.id,
+      board: 'release',
+      stage: 'queued',
+      userId: 'user-1',
+    });
+    await workItems.delete({ orgId: 'org-1', id: work!.id });
+
+    const evaluate = vi.spyOn(workItems, 'commitRuleEvaluation');
+    await ingest();
+    // The release card never evaluated the event; the filed card's evaluation is not its own.
+    expect(evaluate.mock.calls.map(([input]) => [input.workItemId, input.ingress.identity])).toEqual([
+      [release!.id, `jira:${issue.id}:${issue.updatedAt}:${release!.id}`],
+    ]);
+    expect(await evaluate.mock.results[0]!.value).toMatchObject({ status: 'committed' });
   });
 });
