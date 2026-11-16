@@ -162,8 +162,9 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
 
   /**
    * The scope declarations the instance supplies, such as the ones its importers write to, with their
-   * access rules. A service that doesn't have the operation yet (404 for the operation, not the
-   * instance) supplies none. Anything else but a declaration record is a broken response, not "none".
+   * access rules. A service that doesn't have the operation yet answers 404 "Knowledge operation not
+   * found" and supplies none. Any other failure, including another 404 (a missing instance, a wrong
+   * URL), and anything but a declaration record is a broken response, not "none".
    */
   override async getScopeDeclarations(): Promise<KnowledgeScopeDeclarations> {
     let result: unknown;
@@ -171,7 +172,7 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
       result = await this.request('getScopeDeclarations');
     } catch (error) {
       const status = (error as { status?: unknown }).status;
-      if (status === 404 && (error as Error).message !== 'Knowledge instance not found') return {};
+      if (status === 404 && (error as Error).message === 'Knowledge operation not found') return {};
       throw error;
     }
     if (!result || typeof result !== 'object' || Array.isArray(result)) {

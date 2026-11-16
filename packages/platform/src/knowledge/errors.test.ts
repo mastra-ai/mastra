@@ -111,9 +111,11 @@ it('reads no scope declarations from a service without the getScopeDeclarations 
   await expect(storage.getScopeDeclarations()).resolves.toEqual({});
 });
 
-it('still fails getScopeDeclarations for a missing instance or a server error', async () => {
+it('still fails getScopeDeclarations for a missing instance, any other 404, or a server error', async () => {
   const missing = await storageAnswering(404, { title: 'Not Found', detail: 'Knowledge instance not found' });
   await expect(missing.getScopeDeclarations()).rejects.toThrow('Knowledge instance not found');
+  const elsewhere = await storageAnswering(404, { title: 'Not Found' });
+  await expect(elsewhere.getScopeDeclarations()).rejects.toThrow('Not Found');
   const broken = await storageAnswering(500, { title: 'Internal Server Error' });
   await expect(broken.getScopeDeclarations()).rejects.toThrow('Internal Server Error');
 });
