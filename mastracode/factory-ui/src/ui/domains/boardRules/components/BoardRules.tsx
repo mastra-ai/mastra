@@ -101,7 +101,10 @@ function BoardLanes({
         const [created] = await writes.mutateAsync([
           { kind: 'create', route: { ...draft, target: { boardKey: board.id, ...draft.target } } },
         ]);
-        if (created) await keepAboveCatchAll(created, draft.on[0]);
+        // The rule exists from here on: a failed move must not leave the dialog open to create it twice.
+        setEditing(undefined);
+        if (created) await keepAboveCatchAll(created, draft.on[0]).catch(error => toast.error(failureMessage(error)));
+        return;
       }
       setEditing(undefined);
     } catch (error) {

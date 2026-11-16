@@ -113,6 +113,37 @@ describe('Board rules', () => {
     );
   });
 
+  it('keeps a new rule it created once, even when moving it above the lane’s catch-all fails', async () => {
+    const closedAll = rule({
+      id: ruleId('closed-all'),
+      name: 'Every closed card goes to Done',
+      on: ['work_item.closed'],
+      target: { boardKey: 'work', phaseKey: 'done', joinClosedIssue: false, moveToBoardKey: null },
+    });
+    const { sent } = serveRules({ rules: [everythingElse(), closedAll] });
+    server.use(
+      http.post(`${PROJECT_URL}/intake-routes/reorder`, () =>
+        HttpResponse.json({ error: 'internal', message: 'The database is busy.' }, { status: 500 }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { client } = renderRules();
+
+    const closedLane = within(await screen.findByRole('region', { name: 'Issue closed' }));
+    await user.click(closedLane.getByRole('button', { name: 'Add rule' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
+    await user.click(dialog.getByRole('radio', { name: /Every card/ }));
+    await user.click(dialog.getByRole('button', { name: 'Continue' }));
+    await user.click(dialog.getByRole('radio', { name: 'Planning' }));
+    await user.click(dialog.getByRole('button', { name: 'Create rule' }));
+
+    // The rule exists now, so the dialog closes rather than inviting a second Create.
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitForMutationsIdle(client);
+    expect(sent.filter(request => request.method === 'POST' && request.path === '')).toHaveLength(1);
+    await waitFor(() => expect(ruleNames('Issue closed')).toHaveLength(2));
+  });
+
   it('moves a card-move rule earlier among this board’s rules only', async () => {
     const pushes = rule({
       id: ruleId('pushes'),
