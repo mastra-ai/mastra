@@ -29,6 +29,7 @@ import packageJson from '../../package.json';
 import { MongoDBFilterTranslator } from './filter';
 import type { MongoDBFieldCondition, MongoDBVectorFilter } from './filter';
 import { planDeleteCleanup } from './ownership';
+import type { DeleteCleanupPlan } from './ownership';
 import {
   CREATE_TIMEOUT_MS,
   ID_TIMESTAMP_MARGIN_MS,
@@ -371,6 +372,16 @@ interface RegistryDoc extends IndexTarget {
   deleting?: boolean;
   /** Identifies the delete attempt that set `deleting`, so a stale call never finalizes a newer one. */
   deleteToken?: string;
+}
+
+/** Pipeline expression: `indexIds` with the entry for `name` set to `id` (I11b callers decide when). */
+function indexIdsWith(name: string, id: string): Document {
+  return {
+    $concatArrays: [
+      { $filter: { input: { $ifNull: ['$indexIds', []] }, cond: { $ne: ['$$this.name', { $literal: name }] } } },
+      { $literal: [{ name, id }] },
+    ],
+  };
 }
 
 /** Pipeline `$set` fields every mutating registry write carries: backfilled generation, `rev + 1`, a fresh token. */
@@ -858,17 +869,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         {
           $set: {
             [role === 'vector' ? 'ownsVectorIndex' : 'ownsTextIndex']: { $literal: true },
-            indexIds: {
-              $concatArrays: [
-                {
-                  $filter: {
-                    input: { $ifNull: ['$indexIds', []] },
-                    cond: { $ne: ['$$this.name', { $literal: name }] },
-                  },
-                },
-                { $literal: [{ name, id: keep }] },
-              ],
-            },
+            indexIds: indexIdsWith(name, keep),
             ...mutationFields(),
           },
         },
@@ -1123,6 +1124,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     if (entry.deleting && entry.deleteToken) {
       work = { drop: recordedDropSet(entry), deleteToken: entry.deleteToken };
     } else {
+      // Evidence for I11b only (Atlas can't be read inside the transaction): each candidate's listed id.
+      const observed: Record<string, string | undefined> = {};
+      for (const name of collection ? recordedDropSet(entry) : [])
+        observed[name] = (await this.listSearchIndexRows(collection!, name, 'delete'))[0]?.id;
       let attempt = 0;
       work = await this.runDeleteTransaction(indexName, async session => {
         attempt++;
@@ -1136,11 +1141,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         const live = { collectionName: own.collectionName, _id: { $ne: indexName }, deleting: { $ne: true } };
         const siblings = await registry.find(live, { session }).toArray();
         await this.testHooks?.insideDeleteTransaction?.(indexName, attempt);
-        const { drop, transfers } = planDeleteCleanup(own, siblings);
-        for (const t of transfers) {
-          const nameField = t.field === 'ownsTextIndex' ? 'textSearchIndexName' : 'searchIndexName';
-          await registry.updateOne({ _id: t.toId, [nameField]: t.name }, { $set: { [t.field]: true } }, { session });
-        }
+        const plan = planDeleteCleanup(own, siblings, observed);
+        const { drop } = plan;
+        await this.applyCleanupWrites(indexName, own.collectionName, plan, session);
         // Every concurrent delete transaction on this collection writes these documents, so they conflict.
         await registry.updateMany(live, { $inc: { rev: 1 } }, { session });
         if (!drop.length) {
@@ -1156,6 +1159,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
               ownsTextIndex:
                 own.ownsTextIndex === true && !!own.textSearchIndexName && drop.includes(own.textSearchIndexName),
               retiredTextIndexNames: (own.retiredTextIndexNames ?? []).filter(n => drop.includes(n)),
+              indexIds: (own.indexIds ?? []).filter(e => drop.includes(e.name)),
               deleting: true,
               deleteToken,
             },
@@ -1184,6 +1188,38 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   }
 
   /**
+   * Write a delete plan's transfers (the owns flag, plus the id when the plan carries one) and id
+   * rewrites, and log its kept names. False when a recipient no longer uses the name it was planned
+   * for, which only a deployment without transactions can see.
+   */
+  private async applyCleanupWrites(
+    indexName: string,
+    collectionName: string,
+    plan: DeleteCleanupPlan,
+    session?: ClientSession,
+  ): Promise<boolean> {
+    const registry = this.registry();
+    for (const t of plan.transfers) {
+      const nameField = t.field === 'ownsTextIndex' ? 'textSearchIndexName' : 'searchIndexName';
+      const moved = await registry.updateOne(
+        { _id: t.toId, [nameField]: t.name, deleting: { $ne: true } },
+        [{ $set: { [t.field]: { $literal: true }, ...(t.id ? { indexIds: indexIdsWith(t.name, t.id) } : {}) } }],
+        { session },
+      );
+      if (moved.matchedCount === 0) return false;
+    }
+    for (const r of plan.rewrites) {
+      await registry.updateOne({ _id: r.toId }, [{ $set: { indexIds: indexIdsWith(r.name, r.id) } }], { session });
+    }
+    for (const name of plan.kept) {
+      this.logger.warn(
+        `search index "${name}" on "${collectionName}": the incarnation index "${indexName}" recorded is gone or was replaced, and other registrations still reference the name; neither dropped nor handed over. Drop it manually if unused`,
+      );
+    }
+    return true;
+  }
+
+  /**
    * Last check before a delete drops `name`: a registration that started using it after the delete
    * committed its drop set takes over the cleanup responsibility instead (or keeps it, if it
    * already owns the index), and the name leaves this delete's drop set. This is the delete half
@@ -1203,28 +1239,33 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     const live = { collectionName, _id: { $ne: indexName }, deleting: { $ne: true } };
     const users = {
       ...live,
-      $or: [{ searchIndexName: name }, { textSearchIndexName: name }, { retiredTextIndexNames: name }],
+      $or: [
+        { searchIndexName: name },
+        { textSearchIndexName: name },
+        { retiredTextIndexNames: name },
+        { retiredVectorIndexNames: name },
+      ],
     };
     // Further rounds cover a user that changes between the read and the transfer on a deployment
     // without transactions; inside a transaction a concurrent change is a write conflict and retries.
     for (let round = 0; round < 3; round++) {
       if (!(await registry.findOne(users))) return 'drop';
       await this.testHooks?.beforeDeleteHandover?.(indexName, name);
+      // A fresh listing right before the transfer, evidence for I11b only.
+      const observed = {
+        [name]: (await this.listSearchIndexRows(this.db.collection(collectionName), name, 'delete'))[0]?.id,
+      };
       const outcome = await this.runDeleteTransaction(indexName, async session => {
         const own = await registry.findOne({ _id: indexName, deleting: true, deleteToken }, { session });
         if (!own) return 'gone' as const;
         const current = await registry.find(users, { session }).toArray();
-        const plan = planDeleteCleanup({ _id: indexName, searchIndexName: name, ownsVectorIndex: true }, current);
+        const plan = planDeleteCleanup(
+          { _id: indexName, searchIndexName: name, ownsVectorIndex: true, indexIds: own.indexIds },
+          current,
+          observed,
+        );
         if (plan.drop.length) return 'drop' as const;
-        for (const t of plan.transfers) {
-          const nameField = t.field === 'ownsTextIndex' ? 'textSearchIndexName' : 'searchIndexName';
-          const moved = await registry.updateOne(
-            { _id: t.toId, [nameField]: t.name, deleting: { $ne: true } },
-            { $set: { [t.field]: true } },
-            { session },
-          );
-          if (moved.matchedCount === 0) return 'recheck' as const;
-        }
+        if (!(await this.applyCleanupWrites(indexName, collectionName, plan, session))) return 'recheck' as const;
         // Same conflict rule as the delete decision: concurrent delete transactions on the collection serialize.
         await registry.updateMany(live, { $inc: { rev: 1 } }, { session });
         await registry.updateOne(
@@ -1234,7 +1275,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
               ownsVectorIndex: own.ownsVectorIndex === true && own.searchIndexName !== name,
               ownsTextIndex: own.ownsTextIndex === true && own.textSearchIndexName !== name,
             },
-            $pull: { retiredTextIndexNames: name },
+            $pull: { retiredTextIndexNames: name, indexIds: { name } },
             $inc: { rev: 1 },
           },
           { session },

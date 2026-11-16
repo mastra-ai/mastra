@@ -20,6 +20,7 @@ import {
   seedRegistry,
   uniqueName,
   unknownCreateMode,
+  waitFor,
   dropCollectionWithSearchIndexes,
 } from './__fixtures__/atlas-local';
 import { MongoDBVector } from './';
@@ -159,7 +160,7 @@ describe('provisioning protocol', () => {
 
     afterAll(async () => {
       for (const c of colls) {
-        await db.collection(REGISTRY).deleteOne({ _id: c as any });
+        await db.collection(REGISTRY).deleteMany({ $or: [{ _id: c as any }, { collectionName: c }] });
         await dropCollectionWithSearchIndexes(db, c).catch(() => {});
       }
       await a.disconnect();
@@ -476,7 +477,7 @@ describe('provisioning protocol', () => {
 
     afterAll(async () => {
       for (const c of colls) {
-        await db.collection(REGISTRY).deleteOne({ _id: c as any });
+        await db.collection(REGISTRY).deleteMany({ $or: [{ _id: c as any }, { collectionName: c }] });
         await dropCollectionWithSearchIndexes(db, c).catch(() => {});
       }
       await a.disconnect();
@@ -697,6 +698,70 @@ describe('provisioning protocol', () => {
       const coll = await byoColl('rfnames');
       await createByo(a, coll, { searchIndexName: 'v.1' });
       expect((await entry(coll))?.indexIds).toEqual([{ name: 'v.1', id: await listedId(db, coll, 'v.1') }]);
+    });
+
+    describe('I11 in delete', () => {
+      const STALE = '000000000000000000000000';
+      const textDefinition = { mappings: { dynamic: true } };
+      /** Seed a BYO registration `<coll>_<key>` on `coll`. */
+      const seedUser = (coll: string, key: string, extra: Document) =>
+        seedRegistry(db, {
+          _id: `${coll}_${key}`,
+          indexName: `${coll}_${key}`,
+          collectionName: coll,
+          searchIndexName: `${coll}_${key}_vec`,
+          isByo: true,
+          allowWrites: false,
+          ownsVectorIndex: false,
+          ...extra,
+        });
+
+      it('P-STALEID-T1: a sibling owning under a stale id blocks the drop and its id is rewritten to the listed one', async () => {
+        const coll = await byoColl('staleid_t1');
+        await createRawSearchIndex(db, coll, 'A', textDefinition, 'search');
+        const id = await listedId(db, coll, 'A');
+        expect(id).toBeDefined();
+        await seedUser(coll, 'x', { textSearchIndexName: 'A', ownsTextIndex: true, indexIds: [{ name: 'A', id }] });
+        await seedUser(coll, 'y', {
+          textSearchIndexName: 'A',
+          ownsTextIndex: true,
+          indexIds: [{ name: 'A', id: STALE }],
+        });
+        await seedUser(coll, 'z', { textSearchIndexName: 'A', indexIds: [{ name: 'A', id: STALE }] });
+
+        await a.deleteIndex({ indexName: `${coll}_x` });
+
+        expect(await listedId(db, coll, 'A')).toBe(id);
+        expect(await entry(`${coll}_x`)).toBeNull();
+        const y = await entry(`${coll}_y`);
+        expect(y?.ownsTextIndex).toBe(true);
+        expect(y?.indexIds).toEqual([{ name: 'A', id }]);
+        const z = await entry(`${coll}_z`);
+        expect(z?.ownsTextIndex).toBeUndefined();
+        expect(z?.indexIds).toEqual([{ name: 'A', id: STALE }]);
+      });
+
+      it('P-STALEID-T1b: a replaced incarnation is never transferred, and the stranger survives both deletes', async () => {
+        const coll = await byoColl('staleid_t1b');
+        await createRawSearchIndex(db, coll, 'N', textDefinition, 'search');
+        const r = await listedId(db, coll, 'N');
+        expect(r).toBeDefined();
+        await seedUser(coll, 'a', { textSearchIndexName: 'N', ownsTextIndex: true, indexIds: [{ name: 'N', id: r }] });
+        await seedUser(coll, 'b', { textSearchIndexName: 'N' });
+        // An external drop of R, then an external create of X under the same name.
+        await db.command({ dropSearchIndex: coll, id: r }, { readPreference: 'primary' });
+        await waitFor(async () => (await listedId(db, coll, 'N')) === undefined);
+        await createRawSearchIndex(db, coll, 'N', textDefinition, 'search');
+        const x = await listedId(db, coll, 'N');
+        expect(x).toBeDefined();
+        expect(x).not.toBe(r);
+
+        await a.deleteIndex({ indexName: `${coll}_a` });
+        expect((await entry(`${coll}_b`))?.ownsTextIndex).not.toBe(true);
+        await a.deleteIndex({ indexName: `${coll}_b` });
+
+        expect(await listedId(db, coll, 'N')).toBe(x);
+      });
     });
   });
 });
