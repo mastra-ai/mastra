@@ -36,7 +36,6 @@ const daysBefore = (date, days) => {
   d.setUTCDate(d.getUTCDate() - days);
   return d.toISOString().slice(0, 10);
 };
-const daysAfter = (date, days) => daysBefore(date, -days);
 const later = (a, b) => (!a ? b : !b ? a : a > b ? a : b);
 
 /** Files that failed on a versioning PR run on every PR again, from today. */
@@ -301,8 +300,8 @@ export function runsToInspect(runs) {
  * Fetches each run's failures, newest first, until the deadline (a backlog then drains from its
  * newest end while each new day is covered at once). A run whose current attempt is in
  * `tiers.inspected_runs` is skipped: either every failure it held was settled, or it is `waiting`
- * on something that hasn't happened yet (a later green head, or a job failure old enough to call)
- * and `ready` says nothing could settle it today. So runs that stay unresolved are not fetched
+ * on something that hasn't happened yet (a later green head, or a failed job reaching
+ * `recheck_after`, when it is old enough to call) and `ready` says nothing could settle it now. So runs that stay unresolved are not fetched
  * again every day, and cannot use up the budget ahead of runs never looked at. A rerun keeps the
  * run id but bumps the attempt, so it is inspected again. A transient GitHub error that outlasts
  * the retries ends the day early the same way as the deadline.
@@ -331,8 +330,17 @@ export function inspectRuns(tiers, runs, inspectRun, { deadline, now = Date.now,
       return { failures, settled, waiting, left: pending.length - i };
     }
     failures.push(...found);
-    if (found.every(f => (f.verdict ?? classifyPrFailure(f)) !== 'unresolved')) settled.push(run);
-    else waiting.push(run);
+    const open = found.filter(f => (f.verdict ?? classifyPrFailure(f)) === 'unresolved');
+    if (!open.length) settled.push(run);
+    else
+      waiting.push({
+        run,
+        recheckAfter: open
+          .map(f => f.settlesAt)
+          .filter(Boolean)
+          .sort()
+          .at(-1),
+      });
   }
   return { failures, settled, waiting, left: 0 };
 }
@@ -346,8 +354,13 @@ export function settleDay(tiers, { failures, settled, waiting = [], left }, date
   const { tally, caught } = recordPrFailures(tiers, failures, date, days);
   const remembered = { ...tiers.inspected_runs };
   for (const run of settled) remembered[run.id] = { day: run.created_at.slice(0, 10), attempt: run.run_attempt };
-  for (const run of waiting)
-    remembered[run.id] = { day: run.created_at.slice(0, 10), attempt: run.run_attempt, waiting: true, checked: date };
+  for (const { run, recheckAfter } of waiting)
+    remembered[run.id] = {
+      day: run.created_at.slice(0, 10),
+      attempt: run.run_attempt,
+      waiting: true,
+      ...(recheckAfter && { recheck_after: recheckAfter }),
+    };
   for (const [id, seen] of Object.entries(remembered)) if (!seen.day || seen.day < windowStart) delete remembered[id];
   tiers.inspected_runs = remembered;
   const { removed, added } = syncFiles(tiers, testFiles, date);
@@ -369,13 +382,13 @@ export function nextGreenRun(runs, run) {
 }
 
 /**
- * Whether a run left `waiting` could settle today: its branch has a later green run (a fix to
- * diff against, or a pass that makes it a flake), or it was last checked within three days of
- * starting, while its job failures were still too young to call.
+ * Whether a run left `waiting` could settle now: its branch has a later green run (a fix to
+ * diff against, or a pass that makes it a flake), or a failed job it held has reached
+ * `recheck_after` (24 hours after the job finished), when it is old enough to call.
  */
-export function waitingRunReady(runs, run, seen) {
+export function waitingRunReady(runs, run, seen, nowIso = new Date().toISOString()) {
   return (
-    seen.checked < daysAfter(seen.day, 3) ||
+    (seen.recheck_after !== undefined && seen.recheck_after <= nowIso) ||
     runs.some(
       r =>
         r.workflow_id === run.workflow_id &&
@@ -449,20 +462,25 @@ export function retryTransient(
  * whole, so a retry never mixes pages from two attempts.
  */
 export function boundedGh(args, { stopAt = Infinity, now = Date.now, exec = execFileSync, delays, sleep } = {}) {
-  return retryTransient(
-    () => {
-      const remaining = stopAt - now();
-      if (remaining <= 0) throw new Error('gh api not started: the daily time limit has passed (ETIMEDOUT)');
-      return exec('gh', ['api', ...args], {
-        encoding: 'utf8',
-        maxBuffer: 1 << 28,
-        ...(Number.isFinite(remaining) && { timeout: remaining }),
-      });
-    },
-    delays,
-    sleep,
-    { stopAt, now },
-  );
+  return retryTransient(() => boundedExec('gh', ['api', ...args], { stopAt, now, exec }), delays, sleep, {
+    stopAt,
+    now,
+  });
+}
+
+/**
+ * Runs a command that must not start or keep running past `stopAt`; past it, or killed at it,
+ * it throws an error `isTransientGhError` accepts, so the day ends early instead of timing out.
+ */
+function boundedExec(cmd, args, { cwd, stopAt = Infinity, now = Date.now, exec = execFileSync } = {}) {
+  const remaining = stopAt - now();
+  if (remaining <= 0) throw new Error(`${cmd} not started: the daily time limit has passed (ETIMEDOUT)`);
+  return exec(cmd, args, {
+    cwd,
+    encoding: 'utf8',
+    maxBuffer: 1 << 28,
+    ...(Number.isFinite(remaining) && { timeout: remaining }),
+  });
 }
 
 const repo = process.env.GITHUB_REPOSITORY ?? 'mastra-ai/mastra';
@@ -480,8 +498,8 @@ const ghJson = (...args) =>
  * checks out at depth 1, and a head rebased onto that checkout stops fetching at its boundary while
  * the merge base lies below it, so a shallow clone is unshallowed first. -z keeps paths literal.
  */
-export const gitDiffFiles = (base, head, cwd) => {
-  const git = args => execFileSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 1 << 28 });
+export const gitDiffFiles = (base, head, cwd, { stopAt = Infinity, now = Date.now, exec = execFileSync } = {}) => {
+  const git = args => boundedExec('git', args, { cwd, stopAt, now, exec });
   const shallow = git(['rev-parse', '--is-shallow-repository']).trim() === 'true';
   git([
     'fetch',
@@ -707,7 +725,9 @@ function dailyCommand(tiers, { days, date, budgetMinutes }) {
         const { failed } = jobKeysFor(job.workflow_name, job.name, () => jobLog(job.id));
         const settled = Date.now() - Date.parse(job.completed_at ?? run.created_at) >= JOB_SETTLE_MS;
         const verdict = passedLater(job) ? 'flake' : settled ? 'fail' : 'unresolved';
-        for (const key of failed) failures.push({ file: key, jobId: String(job.id), date: failedOn, verdict });
+        const settlesAt = new Date(Date.parse(job.completed_at ?? run.created_at) + JOB_SETTLE_MS).toISOString();
+        for (const key of failed)
+          failures.push({ file: key, jobId: String(job.id), date: failedOn, verdict, settlesAt });
         continue;
       }
       const rerunPassed = passedLater(job);
@@ -717,7 +737,10 @@ function dailyCommand(tiers, { days, date, budgetMinutes }) {
         const key = `${run.head_sha}...${next.head_sha}`;
         if (!compareCache.has(key)) {
           const pages = ghJson(`repos/${repo}/compare/${key}?per_page=100`, '-q', '{files}|@json');
-          compareCache.set(key, compareFiles(pages) ?? gitDiffFiles(run.head_sha, next.head_sha));
+          compareCache.set(
+            key,
+            compareFiles(pages) ?? gitDiffFiles(run.head_sha, next.head_sha, undefined, { stopAt: ghStopAt }),
+          );
         }
         diffFiles = compareCache.get(key);
       }

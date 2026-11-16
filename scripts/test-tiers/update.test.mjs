@@ -499,13 +499,13 @@ test('a run whose failures are all settled is remembered; one with an open failu
   assert.equal(result.left, 0);
   assert.equal(result.failures.length, 2);
   assert.deepEqual(
-    result.waiting.map(r => r.id),
+    result.waiting.map(w => w.run.id),
     [2],
   );
   settleDay(t, result, '2026-11-16', 14, []);
   assert.deepEqual(t.inspected_runs, {
     1: { day: '2026-11-10', attempt: 1 },
-    2: { day: '2026-11-10', attempt: 1, waiting: true, checked: '2026-11-16' },
+    2: { day: '2026-11-10', attempt: 1, waiting: true },
     3: { day: '2026-11-11', attempt: 1 },
   });
 });
@@ -513,8 +513,8 @@ test('a run whose failures are all settled is remembered; one with an open failu
 test('a run still waiting for a green head is not fetched again until one could settle it', () => {
   const t = tiers({});
   t.inspected_runs = {
-    1: { day: '2026-11-10', attempt: 1, waiting: true, checked: '2026-11-15' },
-    2: { day: '2026-11-10', attempt: 1, waiting: true, checked: '2026-11-15' },
+    1: { day: '2026-11-10', attempt: 1, waiting: true },
+    2: { day: '2026-11-10', attempt: 1, waiting: true },
   };
   const fetched = [];
   const result = inspectRuns(t, [run(1, 10), run(2, 10), run(3, '09')], r => (fetched.push(r.id), []), {
@@ -524,7 +524,7 @@ test('a run still waiting for a green head is not fetched again until one could 
   assert.deepEqual(fetched, [2, 3]);
   settleDay(t, result, '2026-11-16', 14, []);
   assert.deepEqual(t.inspected_runs, {
-    1: { day: '2026-11-10', attempt: 1, waiting: true, checked: '2026-11-15' },
+    1: { day: '2026-11-10', attempt: 1, waiting: true },
     2: { day: '2026-11-10', attempt: 1 },
     3: { day: '2026-11-09', attempt: 1 },
   });
@@ -564,7 +564,7 @@ test('newer runs that stay unresolved cannot starve an older catch out of the wi
   assert.equal(t.inspected_runs[1].attempt, 1);
 });
 
-test('a waiting run is ready once its branch has a later green run, or for three days while job failures settle', () => {
+test('a waiting run is ready once its branch has a later green run, or its failed job is old enough to call', () => {
   const failed = {
     id: 1,
     workflow_id: 7,
@@ -581,13 +581,50 @@ test('a waiting run is ready once its branch has a later green run, or for three
     conclusion: 'success',
     ...over,
   });
-  const seen = checked => ({ day: '2026-11-10', attempt: 1, waiting: true, checked });
-  assert.equal(waitingRunReady([failed, green()], failed, seen('2026-11-20')), true);
-  assert.equal(waitingRunReady([failed, green({ head_sha: 'a' })], failed, seen('2026-11-20')), true);
-  assert.equal(waitingRunReady([failed, green({ head_branch: 'y' })], failed, seen('2026-11-20')), false);
-  assert.equal(waitingRunReady([failed, green({ conclusion: 'failure' })], failed, seen('2026-11-20')), false);
-  assert.equal(waitingRunReady([failed], failed, seen('2026-11-12')), true);
-  assert.equal(waitingRunReady([failed], failed, seen('2026-11-13')), false);
+  const seen = { day: '2026-11-10', attempt: 1, waiting: true };
+  const now = '2026-11-20T06:17:00Z';
+  assert.equal(waitingRunReady([failed, green()], failed, seen, now), true);
+  assert.equal(waitingRunReady([failed, green({ head_sha: 'a' })], failed, seen, now), true);
+  assert.equal(waitingRunReady([failed, green({ head_branch: 'y' })], failed, seen, now), false);
+  assert.equal(waitingRunReady([failed, green({ conclusion: 'failure' })], failed, seen, now), false);
+  // A failed job waits 24 hours from when it finished, however old the run is.
+  const job = { ...seen, recheck_after: '2026-11-20T08:00:00Z' };
+  assert.equal(waitingRunReady([failed], failed, job, now), false);
+  assert.equal(waitingRunReady([failed], failed, job, '2026-11-21T06:17:00Z'), true);
+});
+
+test('a rerun whose failed job is too young to call is checked again once it is 24 hours old', () => {
+  const t = tiers({});
+  // Attempt 2 of a Nov 5 run failed a job on Nov 16 at 08:00.
+  const young = {
+    file: 'job:e2e/x',
+    jobId: '9',
+    date: '2026-11-16',
+    verdict: 'unresolved',
+    settlesAt: '2026-11-17T08:00:00Z',
+  };
+  settleDay(
+    t,
+    inspectRuns(t, [run(1, '05', 2)], () => [young], { deadline: Infinity }),
+    '2026-11-16',
+    14,
+    [],
+  );
+  assert.deepEqual(t.inspected_runs, {
+    1: { day: '2026-11-05', attempt: 2, waiting: true, recheck_after: '2026-11-17T08:00:00Z' },
+  });
+  const fetched = [];
+  const on = nowIso =>
+    inspectRuns(t, [run(1, '05', 2)], r => (fetched.push(r.id), [{ ...young, verdict: 'fail' }]), {
+      deadline: Infinity,
+      ready: (r, seen) => waitingRunReady([], r, seen, nowIso),
+    });
+  on('2026-11-17T06:17:00Z');
+  assert.deepEqual(fetched, []);
+  settleDay(t, on('2026-11-18T06:17:00Z'), '2026-11-18', 14, []);
+  assert.deepEqual(fetched, [1]);
+  assert.equal(t.files['job:e2e/x'].tier, 'in');
+  assert.deepEqual(t.inspected_runs, { 1: { day: '2026-11-05', attempt: 2 } });
 });
 
 test('a remembered run is never fetched again; remembered runs leave with the window', () => {
@@ -926,4 +963,23 @@ test('gh retry: never waits past the hard limit', () => {
     down,
   );
   assert.deepEqual(waits, [5, 20]);
+});
+
+test('the git fallback diff stops at the hard limit too', () => {
+  const calls = [];
+  const exec = (cmd, args, opts) => (
+    calls.push([args[0], opts.timeout]),
+    args[0] === 'rev-parse' ? 'false\n' : 'a.ts\0'
+  );
+  assert.deepEqual(gitDiffFiles('a', 'b', '/x', { stopAt: 1_000, now: () => 400, exec }), ['a.ts']);
+  assert.deepEqual(calls, [
+    ['rev-parse', 600],
+    ['fetch', 600],
+    ['diff', 600],
+  ]);
+  assert.throws(
+    () => gitDiffFiles('a', 'b', '/x', { stopAt: 1_000, now: () => 1_000, exec }),
+    e => isTransientGhError(e),
+  );
+  assert.equal(calls.length, 3);
 });
