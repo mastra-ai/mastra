@@ -605,6 +605,9 @@ test('gh retry: which GitHub errors are transient', () => {
     'Get "https://api.github.com/x": net/http: TLS handshake timeout',
     'Get "https://api.github.com/x": unexpected EOF',
     'Get "https://api.github.com/x": EOF',
+    // An HTTP/2 stream GitHub reset mid-response, seen paging run lists on Nov 16.
+    'stream error: stream ID 3; CANCEL; received from peer',
+    'stream error: stream ID 7; INTERNAL_ERROR; received from peer',
   ];
   const permanent = [
     'gh: Not Found (HTTP 404)',
