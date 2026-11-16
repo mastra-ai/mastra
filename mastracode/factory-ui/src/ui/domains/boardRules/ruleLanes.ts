@@ -1,4 +1,5 @@
 import { STATUS_EVENTS } from '@mastra/factory/boards/board-events';
+import { kindsTakenWhole } from '@mastra/factory/boards/intake-order';
 import {
   CircleCheck,
   CircleDot,
@@ -155,7 +156,7 @@ export function newItemRules(rules: readonly IntakeRouteInfo[]): { count: number
   let catchesAll = true;
   for (const event of ARRIVAL_LANES) {
     const lane = laneRules(rules, event).filter(rule => rule.enabled);
-    const catchAll = catchAllIndex(lane);
+    const catchAll = catchAllIndex(lane, event);
     if (catchAll === -1) catchesAll = false;
     for (const rule of catchAll === -1 ? lane : lane.slice(0, catchAll + 1)) reached.add(rule.id);
   }
@@ -164,11 +165,17 @@ export function newItemRules(rules: readonly IntakeRouteInfo[]): { count: number
 
 /**
  * The first rule in a lane that takes every item, so no rule below it is ever reached; -1 when none does. A rule
- * whose target can't take cards (its `problems`, such as a deleted board) is skipped, so it stops nothing.
+ * whose target can't take cards (its `problems`, such as a deleted board) is skipped, so it stops nothing. In an
+ * arrival lane, a rule testing nothing but the item's kind takes every item of that kind, as intake order reads it.
  */
-export function catchAllIndex(lane: readonly IntakeRouteInfo[]): number {
+export function catchAllIndex(lane: readonly IntakeRouteInfo[], event: RuleEvent): number {
+  const kind = event === 'pull_request.opened' ? 'pull_request' : event === 'work_item.opened' ? 'issue' : undefined;
   return lane.findIndex(
-    rule => rule.enabled && rule.when === null && !rule.target.joinClosedIssue && rule.problems.length === 0,
+    rule =>
+      rule.enabled &&
+      !rule.target.joinClosedIssue &&
+      rule.problems.length === 0 &&
+      (rule.when === null || (kind !== undefined && kindsTakenWhole(rule).includes(kind))),
   );
 }
 

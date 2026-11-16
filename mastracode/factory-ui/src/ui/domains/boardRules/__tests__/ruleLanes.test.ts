@@ -44,12 +44,36 @@ describe('newItemRules', () => {
   const prs = rule({ id: 'prs', name: 'All pull requests', on: ['pull_request.opened'] });
   const off = rule({ id: 'off', name: 'Off', on: ['pull_request.opened'], enabled: false });
   const closed = rule({ id: 'closed', name: 'Closed', on: ['work_item.closed'] });
+  const prKind = rule({
+    id: 'pr-kind',
+    name: 'Pull requests go to Review',
+    on: ['pull_request.opened'],
+    when: { operator: 'AND', conditions: [{ field: 'source.kind', operator: 'equals', value: 'pull_request' }] },
+  });
+  const issueKindOnPrs = {
+    ...prKind,
+    id: 'issue-kind',
+    when: {
+      operator: 'AND' as const,
+      conditions: [{ field: 'source.kind', operator: 'equals' as const, value: 'issue' }],
+    },
+  };
 
   it.each([
     ['both lanes end in a catch-all; legacy counts once', [issues, prs, legacy, off], { count: 3, catchesAll: true }],
     ['a legacy catch-all shadows the pull request lane', [legacy, prs], { count: 1, catchesAll: true }],
     ['only the pull request lane ends in a catch-all', [issues, prs], { count: 2, catchesAll: false }],
     ['rules after an issue catch-all are never reached', [allIssues, issues], { count: 1, catchesAll: false }],
+    [
+      'a rule testing only the pull request kind takes every pull request',
+      [allIssues, prKind, prs],
+      { count: 2, catchesAll: true },
+    ],
+    [
+      'a rule testing another kind takes nothing whole',
+      [allIssues, issueKindOnPrs, prs],
+      { count: 3, catchesAll: true },
+    ],
     ['card moves and rules that are off are not for new items', [closed, off], { count: 0, catchesAll: false }],
   ])('%s', (_case, rules, expected) => expect(newItemRules(rules)).toEqual(expected));
 });

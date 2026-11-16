@@ -72,7 +72,7 @@ export function RuleLane({
 }) {
   const text = laneText(event);
   const Icon = text.icon;
-  const catchAll = catchAllIndex(rules);
+  const catchAll = catchAllIndex(rules, event);
   const opened = isOpenedLane(event);
   const drag = useRowDrag({ min: 0, max: rules.length - 1, onDrop: onMove });
   const fallback =

@@ -139,7 +139,7 @@ function BoardLanes({
     const at = ids.indexOf(created.id);
     const catchAlls = on.flatMap(event => {
       const lane = laneRules(fresh, event).filter(rule => rule.id !== created.id);
-      const catchAll = lane[catchAllIndex(lane)];
+      const catchAll = lane[catchAllIndex(lane, event)];
       return catchAll ? [ids.indexOf(catchAll.id)] : [];
     });
     const above = Math.min(...catchAlls);
