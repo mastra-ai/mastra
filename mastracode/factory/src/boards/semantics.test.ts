@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { workItemBranch } from '../work-item-branch.js';
+import { pullRequestSourceNumber, reviewedPullRequest } from '../work-items/change-requests.js';
 import { defineBoard } from './define-board.js';
 import { boardRegistryOf, createBoardRegistry } from './registry.js';
 import {
@@ -10,11 +11,9 @@ import {
   boardForWorkItem,
   cardOwnsBranch,
   isTerminalWorkItem,
-  pullRequestSourceNumber,
   resolveBoardClosure,
   resolveBoardToolRule,
   resolvePhaseSemantics,
-  reviewedPullRequest,
   workItemPhaseSemantics,
 } from './semantics.js';
 import { createTestBoard } from './test-utils.js';

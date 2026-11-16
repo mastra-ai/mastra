@@ -1,6 +1,6 @@
 import { DEFAULT_BOARD_ID } from '../boards/default-board.js';
 import type { BoardRegistry } from '../boards/registry.js';
-import { boardForWorkItem, isPullRequestCard } from '../boards/semantics.js';
+import { boardForWorkItem } from '../boards/semantics.js';
 import type { SessionRow } from '../routes/contracts.js';
 import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
 import type { Card } from '../storage/domains/work-items/base.js';
@@ -8,7 +8,7 @@ import { isPersonSessionBranch } from '../work-item-branch.js';
 import { cardContextSessions, cardThreadSession } from '../work-items/card-context-sessions.js';
 import type { ContextPhase } from '../work-items/card-context-sessions.js';
 import { cardFacts } from '../work-items/card-facts.js';
-import { cardChangeRequest, isSettledChangeRequest } from '../work-items/change-requests.js';
+import { cardChangeRequest, isPullRequestCard, isSettledChangeRequest } from '../work-items/change-requests.js';
 import type { CardChangeRequest } from '../work-items/change-requests.js';
 import { relatedCardsIn } from '../work-items/list-related-cards.js';
 import { sessionRowStatus } from './session-row-status.js';
