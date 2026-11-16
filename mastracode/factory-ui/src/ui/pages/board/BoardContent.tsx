@@ -250,6 +250,7 @@ export function BoardContent({
             showEmptyStateActions && (
               <BoardEmptyStateActions
                 factoryId={factoryProjectId}
+                boardId={definition.id}
                 intakeSetup={stageIntakeSetup}
                 onCreate={canCreate ? () => composer.open(stage.id) : undefined}
                 onClearFilters={filtersExcludeAll ? boardView.clearFilters : undefined}
