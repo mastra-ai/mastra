@@ -5,6 +5,7 @@ import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
 import type { TestAuthUser } from '../../../routes/test-utils.js';
 import { PlatformApiClient } from '../api-client.js';
 import { buildConnectToolsRoute, buildPlatformConnectRoutes } from './routes.js';
+import type { ConnectToolsSetupMissing } from './routes.js';
 
 const SESSION = {
   connectionId: 'conn-new',
@@ -25,7 +26,12 @@ function connection(id: string, integrationId: string, status: 'active' | 'needs
 function buildApp(
   user: TestAuthUser | null,
   fetchImpl: typeof fetch,
-  options: { authEnabled?: boolean; connectToolsProjectId?: string } = {},
+  options: {
+    authEnabled?: boolean;
+    connectToolsProjectId?: string;
+    toolsSource?: 'default' | 'custom';
+    missing?: ConnectToolsSetupMissing;
+  } = {},
 ): Hono {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -41,7 +47,12 @@ function buildApp(
   const projectId = options.connectToolsProjectId;
   mountApiRoutes(app, [
     ...buildPlatformConnectRoutes({ auth, client }),
-    buildConnectToolsRoute(auth, projectId ? { client, projectId } : undefined),
+    buildConnectToolsRoute(
+      auth,
+      projectId
+        ? { client, projectId, toolsSource: options.toolsSource ?? 'default' }
+        : { missing: options.missing ?? 'no_credentials' },
+    ),
   ]);
   return app;
 }
@@ -78,6 +89,7 @@ describe('platform connect routes', () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       projectId: 'proj_1',
+      toolsSource: 'default',
       connections: [
         {
           id: 'conn-linear',
@@ -102,29 +114,66 @@ describe('platform connect routes', () => {
   it('still lists the attached connections on a local Factory without auth when the catalog is down', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     onTestFinished(() => warn.mockRestore());
-    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async input =>
-      String(input).endsWith('/v2/projects/proj_1/connections')
-        ? json({ connections: [connection('conn-linear', 'linear')] })
-        : json({ detail: 'catalog unavailable' }, 503),
-    );
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async input =>
+        String(input).endsWith('/v2/projects/proj_1/connections')
+          ? json({ connections: [connection('conn-linear', 'linear')] })
+          : json({ detail: 'catalog unavailable' }, 503),
+      );
     const app = buildApp(null, fetchImpl, { authEnabled: false, connectToolsProjectId: 'proj_1' });
 
     const response = await app.request('/web/integrations/platform/connect-tools');
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       projectId: 'proj_1',
+      toolsSource: 'default',
       connections: [expect.objectContaining({ id: 'conn-linear', providerName: 'linear', logoUrl: null })],
     });
   });
 
-  it("answers JSON the settings page can read when this Factory's sessions get no Connect tools", async () => {
+  // #30579: a Factory whose `tools` option narrows Connect tools still uses the project's connections.
+  it('lists the connections and says session tools come from code when the Factory sets tools', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async input =>
+        String(input).endsWith('/v2/projects/proj_1/connections')
+          ? json({ connections: [connection('conn-posthog', 'posthog')] })
+          : json({ integrations: [{ id: 'posthog', displayName: 'PostHog', logoUrl: null }] }),
+      );
+    const app = buildApp(org1(), fetchImpl, { connectToolsProjectId: 'proj_1', toolsSource: 'custom' });
+
+    const response = await app.request('/web/integrations/platform/connect-tools');
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      projectId: 'proj_1',
+      toolsSource: 'custom',
+      connections: [expect.objectContaining({ id: 'conn-posthog', providerName: 'PostHog' })],
+    });
+  });
+
+  it.each([
+    ['no_credentials', /MASTRA_PLATFORM_SECRET_KEY or MASTRA_PLATFORM_ACCESS_TOKEN/],
+    ['no_project_id', /no MASTRA_PROJECT_ID/],
+  ] as const)('names the one missing setup piece (%s) without calling the Platform', async (missing, message) => {
     const fetchImpl = vi.fn<typeof fetch>();
-    const app = buildApp(org1(), fetchImpl);
+    const app = buildApp(org1(), fetchImpl, { missing });
 
     const response = await app.request('/web/integrations/platform/connect-tools');
     expect(response.status).toBe(404);
-    await expect(response.json()).resolves.toMatchObject({ error: 'connect_tools_off' });
+    await expect(response.json()).resolves.toEqual({
+      error: 'connect_tools_off',
+      reason: missing,
+      message: expect.stringMatching(message),
+    });
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("doesn't tell signed-out callers how the Factory is set up", async () => {
+    const app = buildApp(null, vi.fn<typeof fetch>(), { missing: 'no_project_id' });
+
+    const response = await app.request('/web/integrations/platform/connect-tools');
+    expect(response.status).toBe(401);
   });
 
   it('lists Jira connections and hides other providers', async () => {

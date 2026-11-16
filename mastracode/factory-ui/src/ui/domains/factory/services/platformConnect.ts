@@ -66,9 +66,11 @@ async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit)
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     let code: string | undefined;
+    let reason: string | undefined;
     try {
-      const body = (await res.json()) as { error?: string; message?: string };
+      const body = (await res.json()) as { error?: string; reason?: string; message?: string };
       code = body.error;
+      reason = body.reason;
       if (body.message) message = body.message;
       else if (body.error) message = body.error;
     } catch {
@@ -76,6 +78,7 @@ async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit)
     }
     const err = new Error(message);
     (err as { code?: string }).code = code;
+    (err as { reason?: string }).reason = reason;
     (err as { status?: number }).status = res.status;
     throw err;
   }
@@ -126,13 +129,27 @@ export interface ConnectToolConnection {
   status: string;
 }
 
-export function isConnectToolsOffError(error: unknown): boolean {
-  return error instanceof Error && 'code' in error && error.code === 'connect_tools_off';
+/** The one piece of setup a Factory lacks to list its project's connections. */
+export type ConnectToolsSetupMissing = 'no_credentials' | 'no_project_id';
+
+/**
+ * Why the server can't list Connect tools: the missing setup piece, `unknown` from servers that predate the reason,
+ * or `undefined` when the error isn't the "off" answer at all.
+ */
+export function connectToolsOffReason(error: unknown): ConnectToolsSetupMissing | 'unknown' | undefined {
+  if (!(error instanceof Error) || !('code' in error) || error.code !== 'connect_tools_off') return undefined;
+  const reason = 'reason' in error ? error.reason : undefined;
+  return reason === 'no_credentials' || reason === 'no_project_id' ? reason : 'unknown';
 }
 
 export interface ConnectTools {
   /** The Platform project whose connections sessions get as tools. */
   projectId: string;
+  /**
+   * `default`: sessions get Factory's own Connect tools. `custom`: the Factory's `tools` option sets session tools.
+   * Servers that predate this field omit it.
+   */
+  toolsSource?: 'default' | 'custom';
   connections: ConnectToolConnection[];
 }
 

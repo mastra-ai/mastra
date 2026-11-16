@@ -1470,6 +1470,8 @@ const factory = new MastraFactory({
 });
 ```
 
+With `tools` set, **Settings → Tools** still lists the project's connections, and says sessions get tools from code: a connection reaches sessions only if your `tools` includes it, with the tools it narrows to. Without Platform credentials or `MASTRA_PROJECT_ID`, the page names whichever of the two is missing.
+
 A tool named like one Factory already gives the session, such as `linear_get_issue` from a connected Linear integration, is not offered, and Factory logs that once per name. When resolving the tools you pass throws, the run fails with that error.
 
 Factory doesn't read MCP servers from the host's `mcp.json` files, and logs a warning at startup when `~/.mastracode/mcp.json` exists. Pass MCP tools through `tools` instead:
