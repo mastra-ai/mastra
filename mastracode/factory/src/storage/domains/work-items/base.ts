@@ -2452,13 +2452,22 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               ...(classified ? { triageType } : {}),
               ...(changesBoard ? { board: input.destinationBoard } : {}),
               stages: [input.destinationStage],
-              stageHistory: applyStageTransition(
-                existing.stageHistory,
-                existing.stages,
-                [input.destinationStage],
-                input.actorId,
-                now,
-              ),
+              // On another board, a phase of the same name is a new one: leave every phase, then enter it.
+              stageHistory: changesBoard
+                ? applyStageTransition(
+                    applyStageTransition(existing.stageHistory, existing.stages, [], input.actorId, now),
+                    [],
+                    [input.destinationStage],
+                    input.actorId,
+                    now,
+                  )
+                : applyStageTransition(
+                    existing.stageHistory,
+                    existing.stages,
+                    [input.destinationStage],
+                    input.actorId,
+                    now,
+                  ),
               revision: existing.revision + 1,
               updatedAt: now,
             });

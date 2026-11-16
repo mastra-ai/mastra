@@ -1267,13 +1267,13 @@ describe('intake routes moving existing cards on status events', () => {
       await boards.create(scope, shipBoard, 'admin');
       const ship = await route({
         name: 'Opened pull requests ship',
-        on: ['pull_request.opened'],
+        on: ['pull_request.synchronized'],
         target: { boardKey: 'work', moveToBoardKey: 'ship', phaseKey: 'ready' },
       });
       const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
       await putAt(card.id, 'execute');
 
-      const moved = (await deliverEvent(card.id, { type: 'pull_request.opened' })).card!;
+      const moved = (await deliverEvent(card.id, { type: 'pull_request.synchronized' })).card!;
 
       expect(moved.id).toBe(card.id);
       expect(placed(moved)).toEqual({ board: 'ship', stages: ['ready'] });
@@ -1283,6 +1283,39 @@ describe('intake routes moving existing cards on status events', () => {
       const started = await runs(card.id);
       expect(started).toHaveLength(1);
       expect(started).not.toContain('proposed');
+    });
+
+    it("records a new phase entry when the card moves to another board's phase of the same name", async () => {
+      const { boards, scope, route, deliver, deliverEvent, putAt } = await setup();
+      await boards.create(
+        scope,
+        {
+          key: 'release',
+          name: 'Release',
+          phases: [
+            { key: 'queued', name: 'Queued', kind: 'resting' as const, nextPhases: ['pr-review'] },
+            { key: 'pr-review', name: 'Review', kind: 'resting' as const, nextPhases: [] },
+          ],
+        },
+        'admin',
+      );
+      const release = await route({
+        name: 'Pushed reviews go to Release',
+        on: ['pull_request.synchronized'],
+        target: { boardKey: 'work', moveToBoardKey: 'release', phaseKey: 'pr-review' },
+      });
+      const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
+      await putAt(card.id, 'pr-review');
+
+      const moved = (await deliverEvent(card.id, { type: 'pull_request.synchronized' })).card!;
+
+      expect(placed(moved)).toEqual({ board: 'release', stages: ['pr-review'] });
+      const reviews = moved.stageHistory.filter(entry => entry.stage === 'pr-review');
+      expect(reviews).toEqual([
+        expect.objectContaining({ by: 'user-1', exitedBy: `intake-route:${release.id}` }),
+        expect.objectContaining({ by: `intake-route:${release.id}` }),
+      ]);
+      expect(reviews[1]).not.toHaveProperty('exitedAt');
     });
 
     it('moves a card once per event when two boards send cards to each other', async () => {
