@@ -875,11 +875,11 @@ importers:
         specifier: workspace:*
         version: link:../../packages/auth
       '@workos-inc/node':
-        specifier: 8.13.0
-        version: 8.13.0
+        specifier: 12.2.0
+        version: 12.2.0
       '@workos/authkit-session':
         specifier: ^0.7.1
-        version: 0.7.1(@workos-inc/node@8.13.0)(typescript@7.0.2)
+        version: 0.7.1(@workos-inc/node@12.2.0)(typescript@7.0.2)
       hono:
         specifier: 4.13.18
         version: 4.13.18
@@ -22455,9 +22455,9 @@ packages:
   '@workflow/serde@4.1.0-beta.2':
     resolution: {integrity: sha512-8kkeoQKLDaKXefjV5dbhBj2aErfKp1Mc4pb6tj8144cF+Em5SPbyMbyLCHp+BVrFfFVCBluCtMx+jjvaFVZGww==}
 
-  '@workos-inc/node@8.13.0':
-    resolution: {integrity: sha512-NgQKHpwh8AbT4KvAsW91Y+4f4jja2IvFPQ5atcy5NUxUMVRgXzRFEee3erawfXrTmiCVqJjd9PljHySKBXmHKQ==}
-    engines: {node: '>=20.15.0'}
+  '@workos-inc/node@12.2.0':
+    resolution: {integrity: sha512-uWzWtPieLqn+juXcIm8YQxh0qokZg0dnjzGm5AHeemiG6VeqzGYc6nlqQ2zw/OI80aYuaPo/ZOURACyQuqYgnA==}
+    engines: {node: '>=22.11.0'}
 
   '@workos/authkit-session@0.7.1':
     resolution: {integrity: sha512-3C8anDS67ITE6tvtlTo0sjOzNRhRXvzRHmrQ11kPBAKdLyxIspTBt+BzU/r2vUHJgCAeMlc2wNwqytkAexQhfw==}
@@ -46519,13 +46519,11 @@ snapshots:
 
   '@workflow/serde@4.1.0-beta.2': {}
 
-  '@workos-inc/node@8.13.0':
-    dependencies:
-      eventemitter3: 5.0.4
+  '@workos-inc/node@12.2.0': {}
 
-  '@workos/authkit-session@0.7.1(@workos-inc/node@8.13.0)(typescript@7.0.2)':
+  '@workos/authkit-session@0.7.1(@workos-inc/node@12.2.0)(typescript@7.0.2)':
     dependencies:
-      '@workos-inc/node': 8.13.0
+      '@workos-inc/node': 12.2.0
       iron-webcrypto: 2.0.0
       jose: 6.2.12
       valibot: 1.4.2(typescript@7.0.2)
