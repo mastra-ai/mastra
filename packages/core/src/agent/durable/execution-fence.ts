@@ -353,6 +353,11 @@ interface OwnershipBackend {
   renew(claim: DurableExecutionClaim): Promise<{ renewed: boolean; leaseExpiresAt?: Date | null }>;
   /** Whether another execution claimed the run after `claim`. Throws on backend errors. */
   isSuperseded(claim: DurableExecutionClaim): Promise<boolean>;
+  /**
+   * Whether the store still holds `claim` and shows it released on purpose, not lapsed or replaced.
+   * `false` when the backend can't tell. Throws on backend errors.
+   */
+  isReleased(claim: DurableExecutionClaim, details: ExecutionDetails): Promise<boolean>;
   release(claim: DurableExecutionClaim): Promise<void>;
   /**
    * Release `claim` so the run can be recovered at once, and make storage
@@ -413,6 +418,8 @@ function leaseBackend(provider: LeaseProvider, agentId: string, runId: string): 
       const owner = await provider.getLeaseOwner(key);
       return owner !== undefined && owner !== claim.executionId;
     },
+    // A missing lease may have been released or may have lapsed.
+    isReleased: async () => false,
     async release(claim) {
       await provider.releaseLease(key, claim.executionId);
     },
@@ -500,6 +507,11 @@ function storageBackend(store: WorkflowsStorage, runId: string): OwnershipBacken
     async isSuperseded(claim) {
       const record = await store.getRunOwnership({ runId });
       return !record || record.generation !== claim.generation;
+    },
+    // A release clears the lease of the claim's own record; a lapsed lease keeps its expiry.
+    async isReleased(claim, details) {
+      const record = await retryOnce(() => store.getRunOwnership({ runId }), details);
+      return record?.leaseExpiresAt === null && matchesRunFence(record, fence(claim));
     },
     async release(claim) {
       await store.releaseRunOwnership(fence(claim));
@@ -926,20 +938,20 @@ export class ExecutionFence implements RunFenceScope {
   }
 
   /**
-   * {@link verify}. With `yieldToRelease`, a check that fails once settlement
-   * has started releasing the claim returns `false` instead of marking the
-   * execution lost: the check may have read that release, not a successor.
+   * {@link verify}. With `yieldToRelease`, a failed check returns `false`
+   * instead of marking the execution lost: it may have read a release of the
+   * claim, not a successor.
    */
   async #verify(yieldToRelease: boolean): Promise<boolean> {
     if (this.#lossError) {
-      if (yieldToRelease && this.#releasing) return false;
+      if (yieldToRelease) return false;
       throw this.#lossError;
     }
     const startedAt = Date.now();
     try {
       await this.#backend.verify(this.claim, this.#details());
     } catch (error) {
-      if (yieldToRelease && this.#releasing) return false;
+      if (yieldToRelease) return false;
       this.#markLost(error as DurableExecutionFenceError);
       if ((error as DurableExecutionFenceError).id === EXECUTION_SUPERSEDED_ERROR_ID) await this.#noteTakeover();
       throw error;
@@ -950,15 +962,18 @@ export class ExecutionFence implements RunFenceScope {
   }
 
   /**
-   * {@link verify} for writes that may land after settlement. Once settlement
-   * released the claim, the write is accepted until another execution claims
-   * the run, as it is after this fence is unregistered. A check that fails
-   * while the release is in flight waits for it, then applies the same rule.
+   * {@link verify} for writes that may land after settlement. Once the claim
+   * was released, the write is accepted until another execution claims the
+   * run, as it is after this fence is unregistered. A check that fails while
+   * a release is in flight waits for it, then applies the same rule.
+   * Otherwise a failed check asks the store whether the claim was released:
+   * by another process, such as the evented worker that settled the run, or
+   * by a release here whose response failed. A lapsed claim stays strict.
    */
   async verifyNotSuperseded(): Promise<void> {
     if (!this.#released && (await this.#verify(true))) return;
-    // Settlement released the claim, or is releasing it. A release that failed left the claim held: stay strict.
-    if (!(await this.#releasing)) return this.verify();
+    // Only a release excuses a failed check: one confirmed here, or one the store shows for this exact claim.
+    if (!(await this.#releasing) && !(await this.#confirmRelease())) return this.verify();
     const details = this.#details();
     if (this.#takenOver || (await retryOnce(() => this.#backend.isSuperseded(this.claim), details))) {
       throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, details);
@@ -1097,7 +1112,9 @@ export class ExecutionFence implements RunFenceScope {
 
   /**
    * Record a release of this claim for {@link verifyNotSuperseded}. A failed
-   * release keeps the outcome of an earlier one.
+   * release keeps the outcome of an earlier one. It may still have been
+   * applied, with only its response lost: {@link verifyNotSuperseded} asks the
+   * store before staying strict.
    */
   #trackRelease(release: Promise<void>): Promise<boolean> {
     const previous = this.#releasing;
@@ -1109,6 +1126,21 @@ export class ExecutionFence implements RunFenceScope {
       async () => (await previous) ?? false,
     );
     return this.#releasing;
+  }
+
+  /**
+   * Whether the store shows this exact claim released on purpose. From then
+   * on the claim counts as released. A lapsed or replaced claim, a lease
+   * backend, or a failed read: `false`.
+   */
+  async #confirmRelease(): Promise<boolean> {
+    try {
+      if (!(await this.#backend.isReleased(this.claim, this.#details()))) return false;
+    } catch {
+      return false;
+    }
+    this.#released = true;
+    return true;
   }
 
   /** Mark a settled fence retired in memory so `memory.runFences` retention can prune it. */
