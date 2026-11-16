@@ -14,8 +14,8 @@ import { IconFilter1 } from '@mastra/playground-ui/icons/central/IconFilter1';
 import { IconFilterAsc } from '@mastra/playground-ui/icons/central/IconFilterAsc';
 import { IconFilterDesc } from '@mastra/playground-ui/icons/central/IconFilterDesc';
 import { IconUserEdit } from '@mastra/playground-ui/icons/central/IconUserEdit';
-import { IconArrowTopBottom } from '@mastra/playground-ui/icons/central/IconArrowTopBottom';
 import { IconLayersThree } from '@mastra/playground-ui/icons/central/IconLayersThree';
+import { IconArrowsUpDown } from '@mastra/playground-ui/icons/central/IconArrowsUpDown';
 
 const SORT_ICONS: Record<BoardSort, LucideIcon> = {
   recent: IconHistory,
@@ -52,7 +52,7 @@ export function BoardPropertiesMenu({
     >
       <DropdownMenu.RadioSub
         label="Sort"
-        icon={<IconArrowTopBottom aria-hidden />}
+        icon={<IconArrowsUpDown aria-hidden />}
         options={boardSortOptions(currentUserId).map(option => {
           const Icon = SORT_ICONS[option.value];
           return { ...option, icon: <Icon aria-hidden /> };

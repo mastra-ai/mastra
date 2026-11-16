@@ -6,15 +6,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SkillSimpleForm } from '@mastra/playground-ui/domains/skills/skill-simple-form';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
-import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
-import { IconChevronRight } from '@mastra/playground-ui/icons/central/IconChevronRight';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
+import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
 import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
 import { IconGlobe } from '@mastra/playground-ui/icons/central/IconGlobe';
 import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
 import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+
 import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 import { IconSquareBehindSquare1 } from '@mastra/playground-ui/icons/central/IconSquareBehindSquare1';
-
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
@@ -372,7 +372,7 @@ export function SkillEditDialog({
                   onClick={() => setShowForm(false)}
                   className={cn('mb-3 flex items-center gap-1.5', quietTextHover, controlStateColorTransition)}
                 >
-                  <IconChevronBottom className="h-3 w-3" />
+                  <IconChevronDownMedium className="h-3 w-3" />
                   <Txt as="span" variant="caption" className="block">
                     Hide skill details
                   </Txt>
@@ -424,7 +424,7 @@ export function SkillEditDialog({
                         <Txt as="span" variant="caption" className="block">
                           Advanced mode
                         </Txt>
-                        <IconChevronRight className="h-3 w-3" />
+                        <IconChevronRightMedium className="h-3 w-3" />
                       </button>
                     )}
                   </>
@@ -446,7 +446,7 @@ export function SkillEditDialog({
                         <Txt as="span" variant="caption" className="block">
                           Simple mode
                         </Txt>
-                        <IconChevronRight className="h-3 w-3" />
+                        <IconChevronRightMedium className="h-3 w-3" />
                       </button>
                     )}
                     <SkillFolder
@@ -466,7 +466,7 @@ export function SkillEditDialog({
                   onClick={() => setShowForm(true)}
                   className={cn('flex items-center gap-1.5', quietTextHover, controlStateColorTransition)}
                 >
-                  <IconChevronRight className="h-3 w-3" />
+                  <IconChevronRightMedium className="h-3 w-3" />
                   <Txt as="span" variant="caption" className="block">
                     {hasFields ? 'Show skill details' : 'or fill in manually'}
                   </Txt>

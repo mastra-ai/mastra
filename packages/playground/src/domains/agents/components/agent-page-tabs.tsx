@@ -3,7 +3,7 @@ import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { TRACE_PROPERTY_FILTER_PARAM_BY_FIELD } from '@mastra/playground-ui/domains/traces/trace-filters';
 import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
-import { IconBubbleWide } from '@mastra/playground-ui/icons/central/IconBubbleWide';
+import { IconChatBubble7 } from '@mastra/playground-ui/icons/central/IconChatBubble7';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
@@ -58,7 +58,7 @@ export function AgentPageTabs({
     <div className="flex min-w-0 items-center justify-between gap-2 p-1.5">
       <Tabs value={activeTab} defaultTab={activeTab} onValueChange={handleTabChange} className="min-w-0">
         <TabList variant="pill-ghost">
-          <AgentTab value="chat" icon={<IconBubbleWide />} label="Chat" />
+          <AgentTab value="chat" icon={<IconChatBubble7 />} label="Chat" />
           {showObservability && <AgentTab value="traces" icon={<TraceIcon />} label="Traces" />}
           {showPlayground && <AgentTab value="versions" icon={<IconBranch />} label="Editor" />}
         </TabList>

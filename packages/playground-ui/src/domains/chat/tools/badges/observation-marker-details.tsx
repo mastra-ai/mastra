@@ -10,7 +10,7 @@ import { Code } from '@/ds/components/Code';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
-import { IconBubbleSparkle } from '@/ds/icons/central/IconBubbleSparkle';
+import { IconChatBubble7Plus } from '@/ds/icons/central/IconChatBubble7Plus';
 import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
 import { IconScript } from '@/ds/icons/central/IconScript';
 import { IconTodos } from '@/ds/icons/central/IconTodos';
@@ -78,7 +78,7 @@ export const ObservationSections = ({
         </ActivityItem>
       )}
       {suggestedResponse && (
-        <ActivityItem icon={<IconBubbleSparkle />} label="Suggested response" aria-label="Suggested response">
+        <ActivityItem icon={<IconChatBubble7Plus />} label="Suggested response" aria-label="Suggested response">
           <MarkdownRenderer className="text-caption text-foreground/80 italic">{suggestedResponse}</MarkdownRenderer>
         </ActivityItem>
       )}

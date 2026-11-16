@@ -3,7 +3,7 @@ import type { TraceQueryScalarPredicate } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 import type { TraceFilterGroup, TraceFilterToken } from '../traces/trace-query-filters';
 import { buildThreadQueryWhere, createThreadFilterBarFields, THREAD_FILTER_FIELD_IDS } from './thread-filters';
-import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
+import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
 
 const eq = (path: string, literal: string | number): TraceQueryScalarPredicate => ({
   op: 'eq',
@@ -98,7 +98,7 @@ describe('thread filter fields', () => {
     });
 
     it('labels the trace count as Messages with the Threads message icon', () => {
-      expect(byId('traceCount')).toMatchObject({ label: 'Messages', icon: IconBubbleText });
+      expect(byId('traceCount')).toMatchObject({ label: 'Messages', icon: IconChatBubbles });
     });
 
     it('treats time to first chunk and time to first token as numbers', () => {
