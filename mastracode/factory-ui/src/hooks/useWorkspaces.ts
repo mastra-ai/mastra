@@ -122,8 +122,7 @@ export async function updateCachedSessionTitle(
   const listKey = queryKeys.sessions(factoryId);
   const rowsKey = queryKeys.sessionRowsRoot(factoryId);
   const sessionKey = queryKeys.userSession(sessionId);
-  // An in-flight read can still carry the branch-only title and overwrite this one. A first read is left
-  // alone: cancelling it would leave its query empty with nothing asking again.
+  // An in-flight read can overwrite this title; a first read is spared, since cancelling it leaves its query empty.
   await Promise.all(
     [listKey, rowsKey, sessionKey].map(queryKey =>
       queryClient.cancelQueries({ queryKey, predicate: query => query.state.data !== undefined }),

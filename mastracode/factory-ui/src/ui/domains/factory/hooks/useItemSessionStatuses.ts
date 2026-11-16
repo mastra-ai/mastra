@@ -4,10 +4,7 @@ import type { SessionRowStatus } from '@mastra/factory/session/session-row-statu
 import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
 import type { WorkItem } from '../services/workItems';
 
-/**
- * Live status per board card, from the sessions the server sees run or start and the board's
- * parked sessions. A parked rule speaks through the card's own status row, not through the wick.
- */
+/** A parked rule speaks through the card's own status row, not through the wick. */
 export function useItemSessionStatuses({
   factoryProjectId,
   items,
