@@ -8126,6 +8126,33 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(card!.workItem.sources.map(source => source.state)).toEqual(['open', 'open', 'closed']);
       expect(card!.metadata.openPullRequestNumber ?? null).toBeNull();
     });
+
+    it("never makes an outsider's linked pull request on the builder's branch name the card's own once the builder's merges", async () => {
+      const h = await harness('write');
+      const issue = await h.issueCard(42, 'intake');
+      // An outsider can name their branch after the builder's: only its name matches.
+      await h.ingest(openedPullRequest(17, 'Fixes #42', undefined, 'opened', false, builderSession.branch));
+      const linked = (await h.cards())[0]!;
+      await h.workItems.update({
+        orgId: 'org-1',
+        id: issue.id,
+        userId: 'user-1',
+        patch: {
+          stages: ['execute'],
+          sessions: { work: builderSession } as never,
+          // How linking records an outside author's pull request on the card.
+          metadata: { ...linked.metadata, [UNTRUSTED_PULL_REQUESTS_KEY]: ['github:pull-request:github:10:pull-request:17'] },
+        },
+      });
+      await h.ingest(openedPullRequest(18, 'Implements #42.', undefined, 'opened', false, builderSession.branch));
+      expect((await h.cards())[0]!.metadata.openPullRequestNumber).toBe(18);
+
+      await h.ingest(openedPullRequest(18, '', 'delivery-merge-18', 'closed', true, builderSession.branch));
+
+      const [card] = await h.cards();
+      expect(card!.metadata.untrustedPullRequests).toHaveLength(1);
+      expect(card!.metadata.openPullRequestNumber ?? null).toBeNull();
+    });
   },
 );
 

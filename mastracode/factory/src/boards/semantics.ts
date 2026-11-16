@@ -295,15 +295,19 @@ export function cardOwnsBranch(item: SessionedItem & BranchedItem, headBranch: s
   return buildBranch === headBranch || Object.values(item.sessions).some(session => session?.branch === headBranch);
 }
 
-/** The newest open pull request the card's own sessions opened, other than `except`. */
+/**
+ * The newest open pull request the card's own sessions opened, other than `except`. A branch name
+ * is anyone's to pick, so an outsider's pull request on the card's branch name never counts.
+ */
 export function newestOwnedOpenPullRequestNumber(
-  item: SourcedItem & SessionedItem & BranchedItem,
+  item: SourcedItem & SessionedItem & BranchedItem & { readonly metadata?: Record<string, unknown> | null },
   except?: number,
 ): number | null {
   const open = pullRequestSources(item).filter(
     source =>
       isOpenPullRequestSource(source) &&
       pullRequestSourceNumber(source) !== except &&
+      trustedPullRequestSource(item, source) &&
       typeof source.metadata?.headBranch === 'string' &&
       cardOwnsBranch(item, source.metadata.headBranch),
   );
