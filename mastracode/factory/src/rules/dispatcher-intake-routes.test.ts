@@ -1275,7 +1275,8 @@ describe('intake routes moving existing cards on status events', () => {
       const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
       await putAt(card.id, 'execute');
 
-      const moved = (await deliverEvent(card.id, { type: 'pull_request.synchronized' })).card!;
+      const moved = (await deliverEvent(card.id, { type: 'pull_request.synchronized', pullRequestTrusted: true }))
+        .card!;
 
       expect(moved.id).toBe(card.id);
       expect(placed(moved)).toEqual({ board: 'ship', stages: ['ready'] });
@@ -1311,7 +1312,8 @@ describe('intake routes moving existing cards on status events', () => {
         return supersede(input);
       });
 
-      const moved = (await deliverEvent(card.id, { type: 'pull_request.synchronized' })).card!;
+      const moved = (await deliverEvent(card.id, { type: 'pull_request.synchronized', pullRequestTrusted: true }))
+        .card!;
 
       expect(placed(moved)).toEqual({ board: 'ship', stages: ['ready'] });
       expect(await runs(card.id)).toContain('proposed');
@@ -1339,7 +1341,8 @@ describe('intake routes moving existing cards on status events', () => {
       const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
       await putAt(card.id, 'pr-review');
 
-      const moved = (await deliverEvent(card.id, { type: 'pull_request.synchronized' })).card!;
+      const moved = (await deliverEvent(card.id, { type: 'pull_request.synchronized', pullRequestTrusted: true }))
+        .card!;
 
       expect(placed(moved)).toEqual({ board: 'release', stages: ['pr-review'] });
       const reviews = moved.stageHistory.filter(entry => entry.stage === 'pr-review');
@@ -1366,16 +1369,24 @@ describe('intake routes moving existing cards on status events', () => {
       const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
       await putAt(card.id, 'execute');
 
-      expect(placed((await deliverEvent(card.id, { type: 'pull_request.synchronized' }, 'push-1')).card)).toEqual({
+      expect(
+        placed(
+          (await deliverEvent(card.id, { type: 'pull_request.synchronized', pullRequestTrusted: true }, 'push-1')).card,
+        ),
+      ).toEqual({
         board: 'ship',
         stages: ['ready'],
       });
-      await deliverEvent(card.id, { type: 'pull_request.synchronized' }, 'push-1');
+      await deliverEvent(card.id, { type: 'pull_request.synchronized', pullRequestTrusted: true }, 'push-1');
       await retry();
       const replayed = await workItems.get({ orgId: 'org-1', id: card.id });
       expect(placed(replayed!)).toEqual({ board: 'ship', stages: ['ready'] });
 
-      expect(placed((await deliverEvent(card.id, { type: 'pull_request.synchronized' }, 'push-2')).card)).toEqual({
+      expect(
+        placed(
+          (await deliverEvent(card.id, { type: 'pull_request.synchronized', pullRequestTrusted: true }, 'push-2')).card,
+        ),
+      ).toEqual({
         board: 'work',
         stages: ['execute'],
       });
@@ -1401,7 +1412,9 @@ describe('intake routes moving existing cards on status events', () => {
       await putAt(card.id, 'execute');
       recorded.mockClear();
 
-      expect(placed((await deliverEvent(card.id, { type: 'pull_request.synchronized' })).card)).toEqual({
+      expect(
+        placed((await deliverEvent(card.id, { type: 'pull_request.synchronized', pullRequestTrusted: true })).card),
+      ).toEqual({
         board: 'work',
         stages: ['planning'],
       });

@@ -7564,32 +7564,52 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect((await h.cards())[0]).toMatchObject({ id: issue.id, stages: ['intake'] });
     });
 
-    it("leaves issue 42's card where it is for an outsider's linked pull request on a project set up before pull requests linked", async () => {
-      const h = await harness('read');
-      const scope = { orgId: 'org-1', factoryProjectId: h.project.id };
-      const where = { org_id: scope.orgId, factory_project_id: scope.factoryProjectId };
-      await h.boards.listIntakeRoutes(scope);
-      // What such a project holds: "Pull requests go to Review" as it was given, testing nothing,
-      // and no linked pull request rule yet.
-      await h.storage.ops.updateMany('factory_intake_route_locks', where, {
-        seeded_defaults: DEFAULT_INTAKE_ROUTES.map(({ key }) => key).filter(key => key !== 'linked-pull-request'),
-      });
-      await h.storage.ops.deleteMany('factory_intake_routes', { ...where, name: LINKED_PULL_REQUEST_ROUTE.name });
-      await h.storage.ops.updateMany(
-        'factory_intake_routes',
-        { ...where, name: PULL_REQUEST_INTAKE_ROUTE.name },
-        { when_condition: null },
-      );
-      const issue = await h.issueCard(42, 'intake');
+    const repositoryIsAcme: RuleGroup = {
+      operator: 'AND',
+      conditions: [{ field: 'source.repository', operator: 'equals', value: 'acme/repo' }],
+    };
+    const outsidersOnly: RuleGroup = {
+      operator: 'AND',
+      conditions: [{ field: 'pullRequest.trusted', operator: 'equals', value: false }],
+    };
+    // A project set up before pull requests linked keeps "Pull requests go to Review" as it stored
+    // it. For an outsider's linked pull request a card-move rule counts only if it tests the pull
+    // request's trust; one that doesn't never moves the issue's card.
+    it.each([
+      ['an outsider', 'read', 'testing nothing', null, ['intake']],
+      ['an outsider', 'read', 'testing the repository', repositoryIsAcme, ['intake']],
+      ['a maintainer', 'write', 'testing nothing', null, ['pr-review']],
+      ['a maintainer', 'write', 'testing the repository', repositoryIsAcme, ['pr-review']],
+      ['an outsider', 'read', "testing for an outsider's pull request", outsidersOnly, ['pr-review']],
+    ] as const)(
+      "puts issue 42's card for %s's (%s) linked pull request, by a stored Review rule %s (%j), in %j",
+      async (_author, permission, _rule, when, stages) => {
+        const h = await harness(permission);
+        const scope = { orgId: 'org-1', factoryProjectId: h.project.id };
+        const where = { org_id: scope.orgId, factory_project_id: scope.factoryProjectId };
+        await h.boards.listIntakeRoutes(scope);
+        await h.storage.ops.updateMany('factory_intake_route_locks', where, {
+          seeded_defaults: DEFAULT_INTAKE_ROUTES.map(({ key }) => key).filter(key => key !== 'linked-pull-request'),
+        });
+        await h.storage.ops.deleteMany('factory_intake_routes', { ...where, name: LINKED_PULL_REQUEST_ROUTE.name });
+        await h.storage.ops.updateMany(
+          'factory_intake_routes',
+          { ...where, name: PULL_REQUEST_INTAKE_ROUTE.name },
+          { when_condition: when },
+        );
+        const issue = await h.issueCard(42, 'intake');
 
-      await h.ingest(openedPullRequest(17, 'Fixes #42'));
+        await h.ingest(openedPullRequest(17, 'Fixes #42'));
 
-      const cards = await h.cards();
-      expect(cards).toHaveLength(1);
-      expect(cards[0]).toMatchObject({ id: issue.id, stages: ['intake'] });
-      expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
-      expect((await h.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
-    });
+        const cards = await h.cards();
+        expect(cards).toHaveLength(1);
+        expect(cards[0]).toMatchObject({ id: issue.id, stages });
+        expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
+        // Factory leaves the stored rule as the project has it.
+        const stored = (await h.boards.listIntakeRoutes(scope)).find(route => route.name === PULL_REQUEST_INTAKE_ROUTE.name);
+        expect(stored?.when).toEqual(when);
+      },
+    );
 
     it.each([
       ['an outsider', 'read', undefined],

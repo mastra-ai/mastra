@@ -1,5 +1,5 @@
 import { evaluateRuleGroup } from '../rules/rule-group.js';
-import type { RuleFacts } from '../rules/rule-group.js';
+import type { RuleFacts, RuleGroup } from '../rules/rule-group.js';
 import { externalSourceForWorkItem } from '../rules/types.js';
 import type { FactoryCommitDecision } from '../rules/types.js';
 import type { IntakeEvaluator, StoredBoardsStorage, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
@@ -374,6 +374,14 @@ export function routesHandleEvent(
   return routes.some(route => route.target.boardKey === board.id && route.on.includes(event.type));
 }
 
+const SETTLING_PULL_REQUEST_EVENTS = new Set<string>(['pull_request.merged', 'pull_request.closed']);
+
+function testsField(group: RuleGroup | null, field: string): boolean {
+  return (
+    group?.conditions.some(member => ('field' in member ? member.field === field : testsField(member, field))) ?? false
+  );
+}
+
 /** A card-move route that matched but can't take the card where it points, and why. */
 export interface SkippedEventRoute {
   routeId: string;
@@ -413,8 +421,17 @@ export function resolveEventRoute(
         }
       : {}),
   };
+  // An outsider's pull request linked to an issue's card moves the card only by a rule that asks
+  // about the pull request's trust; one that doesn't was never written with outsiders in mind.
+  // Merging and closing settle the pull request either way, so those still move the card.
+  const untrustedLinkedPullRequest =
+    isPullRequestEvent(event.type) &&
+    !SETTLING_PULL_REQUEST_EVENTS.has(event.type) &&
+    cardFacts['source.kind'] !== 'pull_request' &&
+    pullRequestTrusted !== true;
   for (const route of routes) {
     if (!route.enabled || !route.on.includes(event.type) || route.target.boardKey !== board.id) continue;
+    if (untrustedLinkedPullRequest && !testsField(route.when, 'pullRequest.trusted')) continue;
     if (!evaluateRuleGroup(route.when, facts)) continue;
     const targetKey = route.target.moveToBoardKey ?? board.id;
     const skip = (reason: string) => options.onSkip?.({ routeId: route.id, boardKey: targetKey, reason });

@@ -11,7 +11,6 @@ import { deriveIntakeOrder, kindsTakenWhole, reconcileIntakeOrder } from '../../
 import {
   DEFAULT_INTAKE_ROUTES,
   LINKED_PULL_REQUEST_ROUTE_KEY,
-  PULL_REQUEST_INTAKE_ROUTE,
   RETIRED_JOIN_ROUTE,
 } from '../../../boards/work-routes.js';
 import { currentRuleGroup } from '../../../rules/rule-group.js';
@@ -1209,16 +1208,6 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
             resolved_by: null,
           });
         }
-        // Linked pull requests reach an issue's card as `pull_request.opened`: the "Pull requests go
-        // to Review" route projects were given tested nothing, so it would send that card to Review
-        // ahead of the linked rule. It now takes only pull requests' own cards, as it always meant to.
-        for (const row of rows) {
-          if (!isShippedPullRequestRoute(row)) continue;
-          await updateIntakeRouteRow(ops, row, {
-            when_condition: PULL_REQUEST_INTAKE_ROUTE.when,
-            updated_by: DEFAULT_INTAKE_ROUTE_ACTOR,
-          });
-        }
       }
       let position = rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
       const first: string[] = [];
@@ -1544,18 +1533,6 @@ function isShippedJoinRoute(row: IntakeRouteRow): boolean {
     row.board_key === RETIRED_JOIN_ROUTE.target.boardKey &&
     row.phase_key === RETIRED_JOIN_ROUTE.target.phaseKey &&
     isDeepStrictEqual(currentRuleGroup(row.when_condition), RETIRED_JOIN_ROUTE.when)
-  );
-}
-
-/** Whether a stored route is still the "Pull requests go to Review" route projects were given, testing nothing. */
-function isShippedPullRequestRoute(row: IntakeRouteRow): boolean {
-  return (
-    row.when_condition === null &&
-    !row.join_closed_issue &&
-    !row.move_to_board_key &&
-    row.board_key === PULL_REQUEST_INTAKE_ROUTE.target.boardKey &&
-    row.phase_key === PULL_REQUEST_INTAKE_ROUTE.target.phaseKey &&
-    sameKeys(routeEvents(row), PULL_REQUEST_INTAKE_ROUTE.on ?? [])
   );
 }
 
