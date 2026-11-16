@@ -2972,3 +2972,77 @@ it.each(['configuration', 'snapshot initialization'] as const)(
     }
   },
 );
+
+it.each(['bound thread', 'request context'] as const)(
+  'a decorated targeted abort preserves the newer run and its approvals through %s',
+  async entrypoint => {
+    const f = await conversationFixture();
+    const memory = { thread: f.owner.threadId, resource: f.owner.resourceId };
+    await f.runtime.request.run(f.conversation, () =>
+      f.agent.generate('Finished run', { runId: 'finished-run', memory }),
+    );
+    const stream = await f.runtime.request.run(f.conversation, () =>
+      f.agent.streamUntilIdle('[abort] active newer run', { runId: 'current-run', memory }),
+    );
+    const output = stream.getFullOutput().catch(() => {});
+    try {
+      await f.model.stallStarted;
+      await f.memory.saveMessages({
+        messages: [
+          {
+            id: 'pending-runs',
+            role: 'assistant',
+            threadId: f.owner.threadId,
+            resourceId: f.owner.resourceId,
+            createdAt: new Date(),
+            content: {
+              format: 2,
+              parts: ['finished', 'current'].map(id => ({
+                type: 'tool-invocation' as const,
+                toolInvocation: { toolCallId: `${id}-call`, toolName: 'business', state: 'call' as const, args: {} },
+              })),
+              metadata: {
+                pendingToolApprovals: {
+                  'finished-call': { runId: 'finished-run' },
+                  'current-call': { runId: 'current-run' },
+                },
+              },
+            },
+          },
+        ],
+      });
+      const pendingMessage = async () =>
+        (await f.memory.recall({ threadId: f.owner.threadId, resourceId: f.owner.resourceId })).messages.find(
+          message => message.id === 'pending-runs',
+        )!;
+      const before = await pendingMessage();
+      const abort = (expectedRunId: string) => {
+        const invoke = () =>
+          f.agent.abortThreadStream({ threadId: f.owner.threadId, resourceId: f.owner.resourceId, expectedRunId });
+        return entrypoint === 'request context' ? f.runtime.request.run(f.conversation, invoke) : invoke();
+      };
+      expect(abort('finished-run')).toBe(false);
+      expect(f.conversation.controller.signal.aborted).toBe(false);
+      await f.runtime.settled(f.owner.threadId);
+      expect(await pendingMessage()).toEqual(before);
+      expect(f.agent.getActiveThreadRunId({ threadId: f.owner.threadId, resourceId: f.owner.resourceId })).toBe(
+        'current-run',
+      );
+      expect(f.runtime.bind({ ...f.conversation, controller: new AbortController() }).controller).toBe(
+        f.conversation.controller,
+      );
+      expect(abort('current-run')).toBe(true);
+      expect(f.conversation.controller.signal.aborted).toBe(true);
+      await f.runtime.settled(f.owner.threadId);
+      const after = await pendingMessage();
+      expect(after.content.metadata?.pendingToolApprovals).toEqual({ 'finished-call': { runId: 'finished-run' } });
+      expect(after.content.parts).toMatchObject([
+        { toolInvocation: { toolCallId: 'finished-call', state: 'call' } },
+        { toolInvocation: { toolCallId: 'current-call', state: 'output-error' } },
+      ]);
+    } finally {
+      f.model.release();
+      await output;
+    }
+  },
+);

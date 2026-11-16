@@ -40,7 +40,10 @@ export async function imageBoundary() {
     models: Record<string, any>[] = [];
   let mode: 'success' | 'fake' | 'duplicate' | 'lost' | 'malformed' | 'partial' | 'stall' | 'oversized' | 'refusal' =
     'success';
-  let release: (() => void) | undefined;
+  const pendingImages: (() => void)[] = [];
+  const release = () => {
+    for (const resolve of pendingImages.splice(0)) resolve();
+  };
   let started: (() => void) | undefined;
   let imageStarted = new Promise<void>(resolve => {
     started = resolve;
@@ -141,7 +144,7 @@ export async function imageBoundary() {
       started?.();
       if (mode === 'stall')
         await new Promise<void>(resolve => {
-          release = resolve;
+          pendingImages.push(resolve);
         });
       if (mode === 'lost') {
         response.destroy();
@@ -228,9 +231,9 @@ export async function imageBoundary() {
       });
     },
     started: () => imageStarted,
-    release: () => release?.(),
+    release,
     close: async () => {
-      release?.();
+      release();
       const closed = new Promise<void>(resolve => server.close(() => resolve()));
       server.closeAllConnections();
       await closed;

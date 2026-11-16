@@ -766,3 +766,36 @@ it('a lost artifact registration acknowledgement retains the committed PNG witho
   await f.generate('lost-artifact-registration');
   expect(f.boundary.images).toHaveLength(1);
 });
+
+it('one release resumes every simultaneous stalled image request and leaves the next gate reusable', async () => {
+  const boundary = await imageBoundary();
+  const requests: Promise<unknown>[] = [];
+  boundary.mode('stall');
+  try {
+    for (let round = 0; round < 2; round++) {
+      const pending = [0, 1].map(index =>
+        fetch(`${boundary.url}/images/generations`, {
+          method: 'POST',
+          signal: AbortSignal.timeout(2000),
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ size: '1024x1024', prompt: `round-${round}-image-${index}` }),
+        }).then(async response => ({
+          status: response.status,
+          body: (await response.json()) as { data: { b64_json: string }[] },
+        })),
+      );
+      requests.push(...pending);
+      for (let attempt = 0; attempt < 100 && boundary.images.length !== (round + 1) * 2; attempt++) await setTimeout(5);
+      expect(boundary.images).toHaveLength((round + 1) * 2);
+      boundary.release();
+      const responses = await Promise.all(pending);
+      expect(responses.map(response => response.status)).toEqual([200, 200]);
+      for (const response of responses)
+        expect(Buffer.from(response.body.data[0].b64_json, 'base64')).toEqual(boundary.png);
+      boundary.release();
+    }
+  } finally {
+    await boundary.close();
+    await Promise.allSettled(requests);
+  }
+});

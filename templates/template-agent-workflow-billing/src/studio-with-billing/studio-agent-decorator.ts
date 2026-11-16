@@ -265,9 +265,13 @@ export class StudioAgentRuntime {
                     threadId: conversation.owner.threadId,
                     resourceId: conversation.owner.resourceId,
                   });
+            if (name === 'abortThreadStream' && options?.expectedRunId && options.expectedRunId !== runId) return false;
             conversation.controller.abort();
             const result = runtime.request.run(conversation, invoke);
-            runtime.finalizeStopped(conversation, runId);
+            runtime.finalizeStopped(
+              conversation,
+              name === 'abortThreadStream' ? (options?.expectedRunId ?? runId) : runId,
+            );
             return result;
           }
           conversation.controller.signal.throwIfAborted();
