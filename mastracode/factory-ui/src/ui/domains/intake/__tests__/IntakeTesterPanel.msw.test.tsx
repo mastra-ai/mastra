@@ -186,6 +186,12 @@ describe('IntakeTesterPanel', () => {
               outcome: 'skipped',
               reason: 'board "platform" is not installed',
             },
+            {
+              routeId: 'review',
+              name: 'Pull requests to Review',
+              outcome: 'skipped',
+              reason: "the pull request's author is an outsider, and this rule doesn't test pullRequest.trusted",
+            },
           ],
         },
         {
@@ -241,7 +247,8 @@ describe('IntakeTesterPanel', () => {
       'Docs added: no, event.labels.added is ship, wanted contains docs',
       'Ship added: yes',
       'Unnamed rule: matched, but Ship added took it first',
-      'To Platform: matched, but board "platform" is not installed',
+      'To Platform: skipped, board "platform" is not installed',
+      "Pull requests to Review: skipped, the pull request's author is an outsider, and this rule doesn't test “Pull request author trust”",
     ]);
   });
 

@@ -226,6 +226,11 @@ const FIELD_SHAPES: Record<string, FieldShape> = {
  * The facts a rule can test, as condition editor fields: one per leaf fact, with its values to
  * pick from when they are known. `options` adds values per field, such as a board's phases.
  */
+/** The name the rule builder gives a fact, such as `Pull request author trust` for `pullRequest.trusted`. */
+export function fieldLabel(field: string): string | undefined {
+  return FIELD_SHAPES[field]?.label;
+}
+
 export function conditionFields(facts: Facts, options: Record<string, FilterBarOption[]> = {}): FilterBarField[] {
   return Object.entries(facts.properties ?? {}).flatMap(([group, groupFact]) =>
     Object.entries(groupFact.properties ?? {}).map(([property, fact]): FilterBarField => {
