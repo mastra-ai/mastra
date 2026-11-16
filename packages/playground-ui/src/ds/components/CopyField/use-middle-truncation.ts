@@ -38,13 +38,16 @@ export function useMiddleTruncation<TElement extends HTMLElement = HTMLElement>(
       };
       try {
         const room = element.getBoundingClientRect().width + 0.5;
-        if (widthOf(value) <= room || value.length <= tail + 1) {
+        if (widthOf(value) <= room) {
           setText(value);
           return;
         }
-        const end = value.slice(-tail);
+        // In a box too narrow for `…` and the whole tail, keep less of the tail (down to just `…`).
+        let tailLength = Math.min(tail, value.length - 1);
+        while (tailLength > 0 && widthOf(`…${value.slice(-tailLength)}`) > room) tailLength--;
+        const end = tailLength > 0 ? value.slice(-tailLength) : '';
         let keep = 0;
-        let over = value.length - tail;
+        let over = value.length - tailLength - 1;
         // Binary search for the longest start that still fits beside `…` and the tail.
         while (keep < over) {
           const mid = Math.ceil((keep + over) / 2);

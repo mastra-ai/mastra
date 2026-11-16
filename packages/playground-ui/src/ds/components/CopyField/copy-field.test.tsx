@@ -57,7 +57,15 @@ describe('CopyField', () => {
       layoutWith(20 * CHAR_WIDTH);
       renderField();
 
-      expect(screen.getByRole('group', { name: 'organization ID' }).textContent).toContain(ORG_ID);
+      // The sizing copy of the value is aria-hidden; only a readable node counts.
+      expect(screen.getByText(ORG_ID, { selector: 'span:not([aria-hidden])' })).toBeTruthy();
+    });
+
+    it('keeps less of the end when the field is too narrow for the whole tail', () => {
+      layoutWith(5 * CHAR_WIDTH);
+      renderField();
+
+      expect(screen.getByText('…7PGS')).toBeTruthy();
     });
 
     it('copies the whole value, not the ellipsis, when someone selects the text and copies it', () => {
