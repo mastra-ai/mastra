@@ -27,10 +27,24 @@ describe('getFeedbackRefetchInterval', () => {
   });
 
   describe('when the feedback query has no error', () => {
-    it('keeps polling', () => {
+    it('polls every 30 seconds', () => {
       const query = { state: { error: undefined } };
 
-      expect(getFeedbackRefetchInterval(query)).toBe(3_000);
+      expect(getFeedbackRefetchInterval(query)).toBe(30_000);
+    });
+
+    it('polls every 3 seconds while a submitted comment is pending', () => {
+      const query = { state: { error: undefined } };
+
+      expect(getFeedbackRefetchInterval(query, true)).toBe(3_000);
+    });
+  });
+
+  describe('when the storage is unavailable and a comment is pending', () => {
+    it('still disables polling', () => {
+      const query = { state: { error: new Error('This storage provider does not support listing feedback') } };
+
+      expect(getFeedbackRefetchInterval(query, true)).toBe(false);
     });
   });
 });

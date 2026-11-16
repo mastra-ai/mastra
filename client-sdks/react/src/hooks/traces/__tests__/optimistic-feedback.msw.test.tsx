@@ -47,9 +47,13 @@ function eventuallyConsistentFeedbackServer(initialRows: ReturnType<typeof feedb
   let releasePost: (() => void) | undefined;
   let holdPost = false;
   let failPost = false;
+  let listRequests = 0;
 
   server.use(
-    http.get(FEEDBACK_URL, () => HttpResponse.json(listFeedbackResponse(rows))),
+    http.get(FEEDBACK_URL, () => {
+      listRequests++;
+      return HttpResponse.json(listFeedbackResponse(rows));
+    }),
     http.post(FEEDBACK_URL, async ({ request }) => {
       const body = (await request.json()) as { feedback: PostedFeedback };
       posted.push(body.feedback);
@@ -61,6 +65,7 @@ function eventuallyConsistentFeedbackServer(initialRows: ReturnType<typeof feedb
 
   return {
     posted,
+    listRequests: () => listRequests,
     holdPost: () => (holdPost = true),
     releasePost: () => releasePost?.(),
     failPost: () => (failPost = true),
@@ -215,6 +220,33 @@ describe.each(scopes)('optimistic $name comments', ({ spanId, rows, visibleServe
       await act(() => vi.advanceTimersByTimeAsync(OPTIMISTIC_FEEDBACK_TTL_MS + 1));
 
       await waitFor(() => expect(result.current.list.data?.feedback).toHaveLength(visibleServerRows));
+    });
+  });
+
+  describe('when polling the list', () => {
+    it('polls every 3 seconds while a comment is pending, then falls back to 30 seconds', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const api = eventuallyConsistentFeedbackServer([...rows]);
+      const { result } = renderPanel();
+      await waitFor(() => expect(result.current.list.data?.feedback).toHaveLength(visibleServerRows));
+
+      // Nothing pending: no poll within 3 seconds.
+      let before = api.listRequests();
+      await act(() => vi.advanceTimersByTimeAsync(3_100));
+      expect(api.listRequests()).toBe(before);
+
+      await act(() => result.current.create.mutateAsync({ text: 'new note' }));
+      before = api.listRequests();
+      await act(() => vi.advanceTimersByTimeAsync(3_100));
+      await waitFor(() => expect(api.listRequests()).toBeGreaterThan(before));
+
+      // Once the stored row is returned, the pending entry settles and polling slows down again.
+      api.flush();
+      await act(() => vi.advanceTimersByTimeAsync(3_100));
+      await waitFor(() => expect(result.current.list.data?.feedback[0]?.isPending).toBeUndefined());
+      before = api.listRequests();
+      await act(() => vi.advanceTimersByTimeAsync(6_200));
+      expect(api.listRequests()).toBe(before);
     });
   });
 

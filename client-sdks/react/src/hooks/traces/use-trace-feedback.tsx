@@ -58,7 +58,7 @@ export const useTraceFeedback = <TData = FeedbackListResponse,>({
       return data;
     },
     select,
-    refetchInterval: getFeedbackRefetchInterval,
+    refetchInterval: query => getFeedbackRefetchInterval(query, pending.length > 0),
     gcTime: 0,
     staleTime: 0,
     ...restQueryOptions,
