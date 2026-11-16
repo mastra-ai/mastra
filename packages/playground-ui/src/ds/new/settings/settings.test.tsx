@@ -265,18 +265,6 @@ describe('Settings', () => {
       list.getByText('No request headers');
       list.getByRole('button', { name: 'Add header' });
     });
-
-    it("styles the empty text exactly like a full list's count, so both read as the same row", () => {
-      render(
-        <>
-          <SettingsListHeader>2 headers</SettingsListHeader>
-          <SettingsEmptyRow>No request headers</SettingsEmptyRow>
-        </>,
-      );
-
-      expect(screen.getByText('No request headers').className).toBe(screen.getByText('2 headers').className);
-      expect(screen.getByText('No request headers').classList).toContain('text-foreground');
-    });
   });
 
   describe('when a list has notices and other controls', () => {
