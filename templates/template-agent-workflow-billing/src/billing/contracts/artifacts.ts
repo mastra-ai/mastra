@@ -4,7 +4,11 @@ import type { ExecutionScope } from '../runtime/execution-scope.js';
 
 /** Private downloads are authorized by billing before any bytes are returned. */
 export interface ArtifactReader {
-  /** Return verified file bytes for the authenticated creator of a settled execution. */
+  /**
+   * Return verified file bytes for the authenticated creator of a settled execution.
+   * Throw BillingError('forbidden') for missing, unowned or unsettled artifacts.
+   * Return null only for an authorized artifact whose stored bytes are no longer available.
+   */
   read(
     identity: AdmissionIdentity,
     artifactId: string,
