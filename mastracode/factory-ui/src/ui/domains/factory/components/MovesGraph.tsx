@@ -72,7 +72,7 @@ export function MovesGraph({
     <div className="flex flex-col gap-1">
       <div className="flex min-w-0 items-center justify-between gap-3 pr-2">
         <PanelHeading detail={moved}>Moves</PanelHeading>
-        <div aria-hidden className="flex min-w-0 items-center gap-1.5 [&>svg]:size-3.5">
+        <div aria-hidden className="[&>svg]:size-icon-sm flex min-w-0 items-center gap-1.5">
           {shown ? (
             <>
               <BoardStageIcon stage={shown.entry.stage} kind={shown.kind} decorative />
