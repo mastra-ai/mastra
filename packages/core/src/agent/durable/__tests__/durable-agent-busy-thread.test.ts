@@ -120,6 +120,8 @@ type StartOptions = {
   sharedTransport?: boolean;
   failThreadControlSubscribe?: boolean;
   suspendingTool?: boolean;
+  /** Also register a second agent on the same memory, answering immediately. */
+  otherAgent?: boolean;
 };
 
 async function startProcess({
@@ -128,6 +130,7 @@ async function startProcess({
   sharedTransport = false,
   failThreadControlSubscribe = false,
   suspendingTool = false,
+  otherAgent = false,
 }: StartOptions) {
   vi.resetModules();
   const [
@@ -141,8 +144,10 @@ async function startProcess({
     { PubSub },
     { agentThreadStreamTopic },
     { agentThreadStreamRuntime },
-    { ExtendedRunRegistry },
+    { ExtendedRunRegistry, globalRunRegistry },
     { createTool },
+    streamAdapter,
+    preparation,
   ] = await Promise.all([
     import('../../../mastra'),
     import('../../../storage'),
@@ -156,6 +161,8 @@ async function startProcess({
     import('../../thread-stream-runtime'),
     import('../run-registry'),
     import('../../../tools'),
+    import('../stream-adapter'),
+    import('../preparation'),
   ]);
 
   const storage = new InMemoryStore();
@@ -301,8 +308,25 @@ async function startProcess({
       : createDurableAgent({ agent, ...(pubsub ? { pubsub } : {}) }),
     false,
   );
+  const other = otherAgent ? createGatedModel() : undefined;
+  if (other) other.releaseFirst();
+  const otherDurableAgent = other
+    ? storeRunsInV2(
+        (engine === 'evented' ? createEventedAgent : createDurableAgent)({
+          agent: new Agent({
+            id: `other-agent-${engine}`,
+            name: `other-agent-${engine}`,
+            instructions: 'Answer with a single word.',
+            model: other.model,
+            memory,
+          }),
+          ...(pubsub ? { pubsub } : {}),
+        }),
+        false,
+      )
+    : undefined;
   const mastra = new Mastra({
-    agents: { durableAgent },
+    agents: { durableAgent, ...(otherDurableAgent ? { otherDurableAgent } : {}) },
     storage,
     ...(pubsub ? { pubsub } : {}),
     logger: false,
@@ -318,6 +342,11 @@ async function startProcess({
     pubsub,
     agentThreadStreamRuntime,
     ExtendedRunRegistry,
+    globalRunRegistry,
+    streamAdapter,
+    preparation,
+    otherDurableAgent,
+    otherModelCalls: () => other?.calls() ?? 0,
     options: { memory: { thread: threadId, resource: resourceId } },
     modelCalls: () => gated.calls(),
     releaseFirstModelCall: () => gated.releaseFirst(),
@@ -574,6 +603,46 @@ describe('run ownership around the initial input write', () => {
     }
   }, 30_000);
 
+  it.each(['stream', 'generate'] as const)(
+    'undoes run setup when the run stream cannot be created (%s)',
+    async method => {
+      const proc = await startProcess({ engine: 'durable' });
+      try {
+        const { durableAgent, memory, options, streamAdapter, globalRunRegistry } = proc;
+        const runId = `stream-creation-fails-${method}`;
+        const run = (input: string) =>
+          method === 'stream'
+            ? durableAgent.stream(input, { ...options, runId }).then(collectText)
+            : durableAgent.generate(input, { ...options, runId }).then(result => result.text);
+
+        // Fails after the run registered its state in both run registries and
+        // before the workflow starts.
+        const createStream = vi.spyOn(streamAdapter, 'createDurableAgentStream').mockImplementationOnce(() => {
+          throw new Error('stream adapter unavailable');
+        });
+        await expect(run('first message')).rejects.toThrow('stream adapter unavailable');
+        expect(createStream).toHaveBeenCalledTimes(1);
+        createStream.mockRestore();
+
+        expect(durableAgent.runRegistry.has(runId)).toBe(false);
+        expect(globalRunRegistry.has(runId)).toBe(false);
+        expect((await memory.recall({ threadId: proc.threadId, resourceId: proc.resourceId })).messages).toEqual([]);
+
+        // The same run id is not refused as an execution conflict, and the
+        // thread is not held by the failed run.
+        proc.releaseFirstModelCall();
+        expect(await run('second message')).toBe('done');
+        await vi.waitFor(async () => {
+          const recalled = await memory.recall({ threadId: proc.threadId, resourceId: proc.resourceId });
+          expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant']);
+        });
+      } finally {
+        await proc.stop();
+      }
+    },
+    30_000,
+  );
+
   it('gives the thread lease back when the input write fails', async () => {
     vi.stubEnv('MASTRA_AGENT_THREAD_LEASE_TTL_MS', '300');
     vi.stubEnv('MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS', '50');
@@ -733,6 +802,145 @@ describe('thread lease of a suspended run', () => {
       expect((await durableAgent.generate('second message', options)).text).toBe('done');
     } finally {
       vi.unstubAllEnvs();
+      await proc.stop();
+    }
+  }, 30_000);
+});
+
+function messageText(message: { content: unknown }) {
+  const content = message.content as { parts?: Array<{ type: string; text?: string }>; content?: string } | string;
+  if (typeof content === 'string') return content;
+  return (
+    content.parts
+      ?.filter(part => part.type === 'text')
+      .map(part => part.text)
+      .join('') ??
+    content.content ??
+    ''
+  );
+}
+
+/**
+ * A message sent to a thread while a run holds its reservation, before the run
+ * registered, waits as that run's pre-run input. When the run was stopped and
+ * then fails, nothing registered would pick that input up, so releasing the
+ * reservation has to start a run for it.
+ */
+describe('a stopped run that ends before it registers', () => {
+  async function startWithMessageQueuedForRun(runId: string) {
+    const proc = await startProcess({ engine: 'durable' });
+    const { durableAgent, agentThreadStreamRuntime, threadId, resourceId } = proc;
+    const pubsub = durableAgent.getPubSub();
+    const queued: { accepted?: Promise<unknown> } = {};
+    const stopAndQueue = () => {
+      agentThreadStreamRuntime.abortRun(runId, pubsub);
+      queued.accepted = agentThreadStreamRuntime.sendSignal(
+        durableAgent as any,
+        { type: 'user-message', contents: 'queued message' },
+        { resourceId, threadId },
+        pubsub,
+      ).accepted;
+    };
+    return { proc, pubsub, queued, stopAndQueue };
+  }
+
+  async function expectQueuedMessageToRun(
+    proc: Awaited<ReturnType<typeof startProcess>>,
+    queued: { accepted?: Promise<unknown> },
+    runId: string,
+  ) {
+    expect(await queued.accepted).toMatchObject({ action: 'deliver', runId });
+    await vi.waitFor(
+      async () => {
+        const recalled = await proc.memory.recall({ threadId: proc.threadId, resourceId: proc.resourceId });
+        const queuedIndex = recalled.messages.findIndex(message => messageText(message) === 'queued message');
+        expect(queuedIndex).toBeGreaterThanOrEqual(0);
+        expect(recalled.messages[queuedIndex + 1]?.role).toBe('assistant');
+      },
+      { timeout: 10_000 },
+    );
+  }
+
+  it.each([
+    ['stream', 'preparation'],
+    ['stream', 'setup'],
+    ['generate', 'preparation'],
+    ['generate', 'setup'],
+  ] as const)(
+    '%s(): runs the message queued for it when %s fails',
+    async (method, phase) => {
+      const runId = `stopped-${method}-${phase}`;
+      const { proc, queued, stopAndQueue } = await startWithMessageQueuedForRun(runId);
+      try {
+        const { durableAgent, options, agentThreadStreamRuntime } = proc;
+        const wait = agentThreadStreamRuntime.waitForCrossAgentThreadRun.bind(agentThreadStreamRuntime);
+        vi.spyOn(agentThreadStreamRuntime, 'waitForCrossAgentThreadRun').mockImplementation(async (...args: any[]) => {
+          const outcome = await wait(...(args as Parameters<typeof wait>));
+          // The run now holds the thread reservation and has not registered.
+          if ((args[1] as { runId?: string } | undefined)?.runId === runId) stopAndQueue();
+          return outcome;
+        });
+        if (phase === 'preparation') {
+          vi.spyOn(proc.preparation, 'prepareForDurableExecution').mockRejectedValueOnce(new Error(`${phase} failed`));
+        } else {
+          vi.spyOn(proc.ExtendedRunRegistry.prototype, 'registerWithMessageList').mockImplementationOnce(() => {
+            throw new Error(`${phase} failed`);
+          });
+        }
+        proc.releaseFirstModelCall();
+
+        const run =
+          method === 'stream'
+            ? durableAgent.stream('first message', { ...options, runId })
+            : durableAgent.generate('first message', { ...options, runId });
+        await expect(run).rejects.toThrow(`${phase} failed`);
+
+        await expectQueuedMessageToRun(proc, queued, runId);
+      } finally {
+        await proc.stop();
+      }
+    },
+    30_000,
+  );
+
+  it('generate(): runs the message queued for it when the stopped run settles', async () => {
+    const runId = 'stopped-generate-settled';
+    const { proc, queued, stopAndQueue } = await startWithMessageQueuedForRun(runId);
+    try {
+      const { durableAgent, options } = proc;
+      // generate() never registers a thread run, so its reservation is held until
+      // the call settles.
+      const run = durableAgent.generate('first message', { ...options, runId });
+      await vi.waitFor(() => expect(proc.modelCalls()).toBeGreaterThanOrEqual(1));
+      stopAndQueue();
+      proc.releaseFirstModelCall();
+      await run.catch(() => {});
+
+      await expectQueuedMessageToRun(proc, queued, runId);
+    } finally {
+      await proc.stop();
+    }
+  }, 30_000);
+});
+
+describe('suspended generate() and the thread', () => {
+  it('lets another agent run on the thread while a generate() run is suspended', async () => {
+    const proc = await startProcess({ engine: 'durable', suspendingTool: true, otherAgent: true });
+    try {
+      const { durableAgent, otherDurableAgent, options, agentThreadStreamRuntime, threadId, resourceId } = proc;
+      const parked = await durableAgent.generate('please approve', options);
+      expect(parked.finishReason).toBe('suspended');
+
+      // Unlike a suspended stream(), whose registered run keeps the thread busy until
+      // it is resumed, a suspended generate() holds nothing on the thread.
+      expect(agentThreadStreamRuntime.getActiveThreadRunId({ resourceId, threadId }, durableAgent.getPubSub())).toBe(
+        undefined,
+      );
+
+      const other = await otherDurableAgent!.generate('other message', options);
+      expect(other.text).toBe('done');
+      expect(proc.otherModelCalls()).toBe(1);
+    } finally {
       await proc.stop();
     }
   }, 30_000);
