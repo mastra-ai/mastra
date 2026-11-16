@@ -1,3 +1,4 @@
+import { MongoServerError } from 'mongodb';
 import type { Document } from 'mongodb';
 
 /** The driver types listSearchIndexes() rows as `{ name }`; these are the fields this store reads. */
@@ -25,4 +26,57 @@ export function rollbackRestore(previous: Document, written: Document): { $set: 
     else $set[key] = previous[key];
   }
   return { $set, $unset };
+}
+
+export const LEASE_MS = 300_000;
+export const CREATE_TIMEOUT_MS = 60_000;
+/** ObjectId timestamps are second-truncated; an id is foreign by timestamp only when MORE than this before creatingAt. */
+export const ID_TIMESTAMP_MARGIN_MS = 30_000;
+export const RECONCILE_BATCH = 20;
+
+export type P4Outcome =
+  | { kind: 'ok'; id: string }
+  | { kind: 'refused'; error: unknown }
+  | { kind: 'unknown'; error: unknown };
+
+export type Verdict =
+  | { kind: 'proven'; id: string }
+  | { kind: 'foreign'; byTimestamp: boolean }
+  | { kind: 'not-created' }
+  | { kind: 'pending' }
+  | { kind: 'uncertain'; candidateId: string };
+
+/** A listing row that is present and not on its way out. */
+export function isLiveRow(row: SearchIndexRow | undefined): boolean {
+  return !!row && row.status !== 'DELETING' && row.status !== 'DOES_NOT_EXIST';
+}
+
+const HEX24 = /^[0-9a-f]{24}$/i;
+
+/** Creation time embedded in an ObjectId-shaped id; undefined for anything else (Atlas Local ids may not be ObjectIds). */
+export function idTimestampMs(id: string): number | undefined {
+  return HEX24.test(id) ? parseInt(id.slice(0, 8), 16) * 1000 : undefined;
+}
+
+/** True only when both ids are 24-hex and `a` sorts after `b`; false otherwise. */
+export function isNewerId(a: string, b: string): boolean {
+  return HEX24.test(a) && HEX24.test(b) && a.toLowerCase() > b.toLowerCase();
+}
+
+export function p4OutcomeOf(error: unknown): P4Outcome {
+  return error instanceof MongoServerError && typeof error.code === 'number'
+    ? { kind: 'refused', error }
+    : { kind: 'unknown', error };
+}
+
+/** The §3.1 P5 table plus the id-timestamp rule. */
+export function classify(p4: P4Outcome, row: SearchIndexRow | undefined, creatingAt: Date): Verdict {
+  const live = isLiveRow(row) ? row : undefined;
+  if (p4.kind === 'refused') return { kind: 'not-created' };
+  if (p4.kind === 'unknown') return live ? { kind: 'uncertain', candidateId: live.id ?? '' } : { kind: 'pending' };
+  if (live && live.id !== p4.id) return { kind: 'foreign', byTimestamp: false };
+  const ts = idTimestampMs(p4.id);
+  if (ts !== undefined && ts < creatingAt.getTime() - ID_TIMESTAMP_MARGIN_MS)
+    return { kind: 'foreign', byTimestamp: true };
+  return { kind: 'proven', id: p4.id };
 }
