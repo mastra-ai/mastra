@@ -9,9 +9,3 @@ Added `mastra api factory intake dry-run` and `mastra api factory intake test` t
 mastra api factory intake dry-run <project-id> '{"order":["docs","work"]}'
 mastra api factory intake test <project-id> '{"url":"https://github.com/acme/app/issues/12"}'
 ```
-
-Added `mastra api factory work-item working-pull-request` to pick which of a card's linked pull requests its sessions work on.
-
-```sh
-mastra api factory work-item working-pull-request <project-id> <work-item-id> '{"pullRequest":42,"expectedRevision":3}'
-```
