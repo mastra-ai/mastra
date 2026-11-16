@@ -189,13 +189,17 @@ export class ObservationStep {
     // admit only the safe prefix before it — the same policy idle buffering
     // applies at turn end (see selectSafeBufferPrefix).
     const initialHistoryEnd = getObservationHistoryState(statusSnapshot.record)?.end;
+    // Only a fresh record needs to look at stored history. Messages added during the turn are in
+    // context, so once this turn found the stored history within budget, later steps skip the reload.
     const historyWindow =
-      initialHistoryEnd ||
-      (!statusSnapshot.record.lastObservedAt &&
-        !statusSnapshot.record.bufferedObservationChunks?.length &&
-        !statusSnapshot.record.isBufferingObservation)
+      !initialHistoryEnd &&
+      !this.turn.storedHistoryWithinBudget &&
+      !statusSnapshot.record.lastObservedAt &&
+      !statusSnapshot.record.bufferedObservationChunks?.length &&
+      !statusSnapshot.record.isBufferingObservation
         ? await om.loadHistoryWindow(threadId, resourceId, statusSnapshot.record)
         : undefined;
+    if (historyWindow && !historyWindow.hasMore) this.turn.storedHistoryWithinBudget = true;
     const drainsStoredHistory = historyWindow?.hasMore || Boolean(initialHistoryEnd);
     if (statusSnapshot.shouldBuffer && !activateBeforeBuffering && !drainsStoredHistory) {
       const allMessages = getObservableMessages(messageList);

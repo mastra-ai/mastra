@@ -49,6 +49,9 @@ export class ObservationTurn {
   /** Generation count at turn start — used to detect if reflection happened during the turn. */
   private _generationCountAtStart = -1;
 
+  /** Set once a step found the fresh record's stored history within budget; stored-only history can't grow mid-turn. */
+  storedHistoryWithinBudget = false;
+
   /**
    * Fingerprints of the non-marker parts each message had when a step last drained it. A message
    * is unread step output only if it gained a part the model has not seen — including a tool result
