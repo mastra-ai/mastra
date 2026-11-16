@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': patch
+'@mastra/playground-ui': minor
 ---
 
-Send the experimental search chip as a token predicate and require token-search capabilities.
+Update experimental search requests and capability checks for token predicates.

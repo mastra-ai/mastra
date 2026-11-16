@@ -1,7 +1,5 @@
 ---
-'@mastra/server': patch
-'@mastra/client-js': patch
-'mastra': patch
+'@mastra/server': minor
 ---
 
-Expose token-search predicates and capability flags in server, client, and CLI contracts.
+Update experimental search contracts and capability flags for token predicates.

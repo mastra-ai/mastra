@@ -1,7 +1,5 @@
 ---
-'@mastra/pg': patch
-'@mastra/clickhouse': patch
-'@mastra/duckdb': patch
+'@mastra/pg': minor
 ---
 
-Reject unsupported indexed token predicates explicitly.
+Reject unsupported experimental token predicates.
