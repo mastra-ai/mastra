@@ -1127,7 +1127,8 @@ describe('legacy ownership', () => {
           expect(await entry(coll)).toMatchObject({
             deleting: true,
             deleteToken: 't',
-            rev: rev + 1,
+            // The rename's own write bumps rev too (I5), then the delete's.
+            rev: rev + 2,
             textSearchIndexName: 'B',
           });
         });
@@ -1288,7 +1289,8 @@ describe('legacy ownership', () => {
           await create;
           expect((await entry(coll))?.ownsVectorIndex).toBe(true);
           pa.release.resolve();
-          expect((await search).message).toMatch(/provision failed/);
+          // The concurrent ownership write rotates the claimToken, so the search call's compare-and-set misses.
+          expect((await search).id).toBe(createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'));
           expect((await entry(coll))?.ownsVectorIndex).toBe(true);
           (a as any).testHooks = undefined;
           await a.deleteIndex({ indexName: coll });

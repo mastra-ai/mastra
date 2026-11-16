@@ -354,14 +354,42 @@ interface RegistryDoc extends IndexTarget {
   metric?: string;
   /** Random id of the call that last wrote the entry, so a failed call rolls back only its own write. */
   claimToken?: string;
+  /** The registration lifetime (UUID): set by the first write and never changed while the doc exists. */
+  generation?: string;
   /** Text-index names this registration owned and has since replaced; dropped by deleteIndex. */
   retiredTextIndexNames?: string[];
-  /** Bumped by every delete transaction on the collection, so concurrent ones conflict and serialize. */
+  /** Bumped by every registry mutation (I5), so concurrent writers and delete transactions conflict. */
   rev?: number;
   /** Set once a delete committed its decision; the entry then holds only its own drop set. */
   deleting?: boolean;
   /** Identifies the delete attempt that set `deleting`, so a stale call never finalizes a newer one. */
   deleteToken?: string;
+}
+
+/** What a call's P0 registry write left: the registration's lifetime and the call's rollback pin (I4). */
+interface P0Pin {
+  generation: string;
+  claimToken: string;
+  rev: number;
+}
+
+/** Pipeline `$set` fields every mutating registry write carries: backfilled generation, `rev + 1`, a fresh token. */
+function mutationFields(claimToken: string = uuidv4()): Document {
+  return {
+    generation: { $ifNull: ['$generation', { $literal: uuidv4() }] },
+    rev: { $add: [{ $ifNull: ['$rev', 0] }, 1] },
+    claimToken: { $literal: claimToken },
+  };
+}
+
+/** Wrap each value in `$literal`, so a value starting with `$` is never read as an expression. */
+function literals(fields: Document): Document {
+  return Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, { $literal: v }]));
+}
+
+/** The pin a pipeline write returned, or null when it matched nothing. */
+function pinOf(doc: Document | null): P0Pin | null {
+  return doc ? { generation: doc.generation, claimToken: doc.claimToken, rev: doc.rev } : null;
 }
 
 /** Names a `deleting` entry is still responsible for dropping (its drop set, as rewritten by T1). */
@@ -721,57 +749,80 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * still pins `_id`, an incompatible entry matches nothing, the upsert attempts an insert, and
    * the duplicate `_id` surfaces as a duplicate-key error (code 11000) instead of overwriting
    * the entry someone else registered. Callers that only refresh part of an entry omit it.
+   *
+   * Every write backfills `generation`, bumps `rev` and sets the `claimToken` in `entry` (a fresh
+   * one if absent). Returns what it left, or null when nothing matched without upsert.
    */
   private async writeRegistryEntry(
     indexName: string,
     entry: Partial<RegistryDoc>,
     claim?: Document,
     upsert = true,
-    bumpRev = false,
-  ): Promise<void> {
-    const registry = this.registry();
-    await registry.updateOne(
+  ): Promise<P0Pin | null> {
+    const { claimToken, ...fields } = entry;
+    const doc = await this.registry().findOneAndUpdate(
       { _id: indexName, ...claim },
-      { $set: { indexName, ...entry }, ...(bumpRev ? { $inc: { rev: 1 } } : {}) },
-      { upsert },
+      [{ $set: { ...literals({ indexName, ...fields }), ...mutationFields(claimToken) } }],
+      { upsert, returnDocument: 'after' },
     );
+    return pinOf(doc);
   }
 
   /**
-   * Record that this store created a search index. `claim` pins the entry to this call's
-   * `claimToken` and the index name, so the flag never lands on an entry another process
-   * rewrote or re-registered in the meantime. No upsert, so a deleted entry stays deleted. Bumps
-   * `rev`, so a concurrent call's rollback never restores a snapshot from before this flag.
+   * P7: record that this store created search index `name` for `role`. Pinned on the
+   * registration's `generation` and on `name` still being its current name for the role, not on
+   * the call's `claimToken`, so an identical concurrent refresh never makes the flag miss. No
+   * upsert, so a deleted entry stays deleted. Bumps `rev` and sets a fresh `claimToken`, so a
+   * concurrent call's rollback never restores a snapshot from before this flag.
    */
-  private async markOwned(
+  private async recordOwnership(
     indexName: string,
-    owned: Pick<IndexTarget, 'ownsVectorIndex'> | Pick<IndexTarget, 'ownsTextIndex'>,
-    claim: Document,
-  ): Promise<void> {
-    await this.writeRegistryEntry(indexName, owned, claim, false, true);
+    role: 'vector' | 'text',
+    name: string,
+    generation: string,
+    _id?: string,
+  ): Promise<boolean> {
+    const written = await this.registry().updateOne(
+      {
+        _id: indexName,
+        generation,
+        deleting: { $ne: true },
+        [role === 'vector' ? 'searchIndexName' : 'textSearchIndexName']: name,
+      },
+      [
+        {
+          $set: { [role === 'vector' ? 'ownsVectorIndex' : 'ownsTextIndex']: { $literal: true }, ...mutationFields() },
+        },
+      ],
+    );
+    return written.matchedCount === 1;
   }
 
   /**
    * Undo a registry write after provisioning failed: remove the entry this call inserted, or
-   * restore the one it overwrote. Matching on `claimToken` leaves alone an entry another
-   * process rewrote since; matching on `rev` and `deleting` leaves alone one a delete
-   * transaction changed since (it never touches `claimToken`). Best effort, so the caller
-   * still sees the provisioning error. Returns true when the inserted entry was removed.
+   * restore the one it overwrote. Matching on the `claimToken` and `rev` this call's write left
+   * (`pin`) leaves alone an entry another process rewrote since, and one a delete transaction
+   * changed since (it never touches `claimToken`). Best effort, so the caller still sees the
+   * provisioning error. Returns true when the inserted entry was removed. A null `pin` means
+   * this call wrote nothing, so there is nothing to undo.
    */
   private async rollbackRegistryEntry(
     indexName: string,
     previous: RegistryDoc | null,
-    claimToken: string,
+    pin: P0Pin | null,
   ): Promise<boolean> {
     this.indexTargets.delete(indexName);
     this.declaredFilterPaths.delete(indexName);
+    // shortcut: restoring the whole `previous` would erase a write that landed between this call's
+    // read and its P0 (a claim or delete bumps `rev` without rotating the token), so skip then;
+    // Task 3 replaces this with a restore of only the fields P0 wrote.
+    if (!pin || pin.rev !== (previous?.rev ?? 0) + 1) return false;
     try {
       const registry = this.registry();
-      // The rolled-back write never changes `rev`, so it still holds the value read before it.
       const filter = {
         _id: indexName,
-        claimToken,
-        rev: previous?.rev ?? { $exists: false },
+        claimToken: pin.claimToken,
+        rev: pin.rev,
         deleting: { $ne: true },
       };
       if (!previous) return (await registry.deleteOne(filter)).deletedCount === 1;
@@ -1377,7 +1428,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       this.assertNotDeleting(existingEntry, 'CREATE_INDEX');
       await this.testHooks?.afterCreateIndexRead?.(indexName);
       // Check if collection exists
-      const collectionExists = await this.db.listCollections({ name: targetCollection }).hasNext();
+      const collectionExists = await this.db
+        .listCollections({ name: targetCollection }, { readPreference: ReadPreference.primary })
+        .hasNext();
       if (!collectionExists) {
         if (isByo) {
           throw new MastraError({
@@ -1505,8 +1558,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const ownsCollection = existingEntry ? existingEntry.ownsCollection : collectionCreated;
       // Ownership belongs to the index name it was recorded for; a new name starts out not owned.
       const sameVectorIndex = existingEntry?.searchIndexName === targetSearchIndex;
+      let pin: P0Pin;
       try {
-        await this.writeRegistryEntry(
+        // Upsert, so a pin always comes back.
+        pin = (await this.writeRegistryEntry(
           indexName,
           {
             collectionName: targetCollection,
@@ -1525,7 +1580,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
             claimToken,
           },
           registryClaim,
-        );
+        ))!;
       } catch (error: any) {
         if (error?.code !== 11000) throw error;
         const winner = await this.readRegistryEntry(indexName);
@@ -1640,14 +1695,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       } catch (error) {
         // Nothing usable was provisioned, so the target must not keep resolving. Drop the
         // collection only if this call created it and no other process claimed the entry since.
-        if ((await this.rollbackRegistryEntry(indexName, existingEntry, claimToken)) && collectionCreated) {
+        if ((await this.rollbackRegistryEntry(indexName, existingEntry, pin)) && collectionCreated) {
           this.collections.delete(targetCollection);
           await collection.drop().catch(() => {});
         }
         throw error;
       }
       if (vectorIndexCreated) {
-        await this.markOwned(indexName, { ownsVectorIndex: true }, { claimToken, searchIndexName: indexNameInternal });
+        await this.recordOwnership(indexName, 'vector', indexNameInternal, pin.generation);
       }
 
       // Cache the declared filter paths only when this call actually created
@@ -1679,11 +1734,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           type: 'search',
         });
         if (textIndexCreated) {
-          await this.markOwned(
-            indexName,
-            { ownsTextIndex: true },
-            { claimToken, textSearchIndexName: textSearchIndexName ?? defaultTextSearchIndex },
-          );
+          await this.recordOwnership(indexName, 'text', textSearchIndexName ?? defaultTextSearchIndex, pin.generation);
         }
       }
     } catch (error: any) {
@@ -1721,6 +1772,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     } catch (error: any) {
       if (error?.codeName === 'IndexAlreadyExists') {
         return false;
+      }
+      // A server refusal with the name now listed means a concurrent create won (Atlas Local
+      // answers a racing identical create with BadValue "duplicate index names"): not ours, attach (§3.1 P5).
+      if (typeof error?.code === 'number') {
+        const rows = await this.listSearchIndexRows(collection, description.name, 'P5');
+        if (rows.some(idx => idx.status !== 'DELETING' && idx.status !== 'DOES_NOT_EXIST')) return false;
       }
       throw error;
     }
@@ -1824,6 +1881,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     await this.testHooks?.afterCreateSearchIndexRead?.(indexName);
     const claimToken = uuidv4();
     let provisioned = false;
+    let pin: P0Pin | null = null;
     try {
       const collection = await this.getCollection(collectionName);
       const definition = fields?.length
@@ -1836,7 +1894,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // If provisioning fails, the write is rolled back below.
       // An existing entry gets only the text-index fields and no upsert, so this call never
       // overwrites another process's policy or brings back an entry deleted in the meantime.
-      const textFields = { textSearchIndexName: name, ...(sameName ? {} : { ownsTextIndex: false }), claimToken };
+      const textFields = { textSearchIndexName: name, ...(sameName ? {} : { ownsTextIndex: false }) };
       // Raised when the entry this call read was removed, registered or rewritten by someone else meanwhile.
       const concurrentConflict = (what: 'removed' | 'registered' | 'changed') =>
         new MastraError({
@@ -1872,12 +1930,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
                       },
                     ],
                   },
-                  [name],
+                  { $literal: [name] },
                 ],
               },
-              ownsTextIndex: { $cond: [{ $in: [name, retired] }, true, false] },
-              textSearchIndexName: name,
-              claimToken,
+              ownsTextIndex: { $cond: [{ $in: [{ $literal: name }, retired] }, true, false] },
+              textSearchIndexName: { $literal: name },
+              ...mutationFields(claimToken),
             },
           },
         ];
@@ -1891,15 +1949,21 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           textSearchIndexName: previous.textSearchIndexName ?? null,
           deleting: { $ne: true },
         };
-        const written = await this.registry().updateOne(observed, sameName ? { $set: textFields } : rename);
-        if (written.matchedCount === 0) {
+        pin = pinOf(
+          await this.registry().findOneAndUpdate(
+            observed,
+            sameName ? [{ $set: { ...literals(textFields), ...mutationFields(claimToken) } }] : rename,
+            { returnDocument: 'after' },
+          ),
+        );
+        if (!pin) {
           const current = await this.readRegistryEntry(indexName);
           this.assertNotDeleting(current, 'CREATE_SEARCH_INDEX');
           throw concurrentConflict(current ? 'changed' : 'removed');
         }
       } else {
         try {
-          await this.writeRegistryEntry(
+          pin = await this.writeRegistryEntry(
             indexName,
             {
               collectionName: target.collectionName,
@@ -1907,6 +1971,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
               isByo: target.isByo,
               allowWrites: target.allowWrites,
               ...textFields,
+              claimToken,
             },
             // Nothing was registered when this call read the entry: one written since (a claim,
             // a createIndex) carries a claimToken, so the insert hits 11000 instead of overwriting it.
@@ -1924,7 +1989,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       this.indexTargets.set(indexName, { ...target, textSearchIndexName: name });
       const created = await this.createSearchIndexIgnoringExisting(collection, { definition, name, type: 'search' });
       if (created) {
-        await this.markOwned(indexName, { ownsTextIndex: true }, { claimToken, textSearchIndexName: name });
+        await this.recordOwnership(indexName, 'text', name, pin!.generation);
       } else if ((sameName && previous?.ownsTextIndex) || previous?.retiredTextIndexNames?.includes(name)) {
         // Ours already: either unchanged, or a retired name this rename just reactivated.
         // Recreating our own index with a different `fields` mapping must change the mapping.
@@ -1951,7 +2016,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         await this.waitForSearchIndexReady({ indexName });
       }
     } catch (error: any) {
-      if (!provisioned) await this.rollbackRegistryEntry(indexName, previous, claimToken);
+      if (!provisioned) await this.rollbackRegistryEntry(indexName, previous, pin);
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
@@ -2967,7 +3032,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const entry = await this.readRegistryEntry(indexName);
       // A managed index that adopted an existing collection is handled like BYO: the collection stays.
       if (entry && (entry.isByo || entry.ownsCollection === false)) {
-        const exists = await this.db.listCollections({ name: entry.collectionName }).hasNext();
+        // A lagging secondary could report the collection missing and leak the indexes Mastra created.
+        const exists = await this.db
+          .listCollections({ name: entry.collectionName }, { readPreference: ReadPreference.primary })
+          .hasNext();
         await this.deleteKeepCollection(
           entry,
           exists ? this.db.collection<MongoDBDocument>(entry.collectionName) : null,

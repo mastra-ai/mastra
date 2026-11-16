@@ -3,10 +3,14 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   ATLAS_LOCAL_URI,
   DB_NAME,
+  REGISTRY,
   captureCommands,
   createRawSearchIndex,
+  deferred,
   rawClient,
+  searchIndexNames,
   seedCollection,
+  seedRegistry,
   uniqueName,
 } from './__fixtures__/atlas-local';
 import { MongoDBVector } from './';
@@ -73,11 +77,23 @@ describe('provisioning protocol', () => {
         const events = captureCommands(store);
         const indexName = `${byo}_idx`;
         await store.createIndex({ indexName, dimension: 4, collectionName: byo });
+        const afterCreate = events.length;
         await store.createSearchIndex({ indexName, searchIndexName: 'N1' });
         await store.createSearchIndex({ indexName, searchIndexName: 'N2' });
         await store.claimLegacyIndex({ indexName: legacy });
+        const beforeDelete = events.length;
         await store.deleteIndex({ indexName });
+        const afterDelete = events.length;
         await store.deleteIndex({ indexName: legacy });
+
+        // The existence checks createIndex and deleteIndex base ownership decisions on read the primary.
+        // createIndex's is its first listCollections; deleteIndex's collection handle is cached by then.
+        const strictPrimary = (e?: CommandStartedEvent) =>
+          ['primary', 'primaryPreferred'].includes(e?.command.$readPreference?.mode);
+        const createChecks = events.slice(0, afterCreate).filter(e => e.commandName === 'listCollections');
+        const deleteChecks = events.slice(beforeDelete, afterDelete).filter(e => e.commandName === 'listCollections');
+        expect(deleteChecks.length).toBeGreaterThan(0);
+        for (const e of [createChecks[0], ...deleteChecks]) expect(strictPrimary(e)).toBe(true);
 
         const registryAndJournal = events.filter(touchesMastra);
         expect(registryAndJournal.length).toBeGreaterThan(0);
@@ -116,6 +132,87 @@ describe('provisioning protocol', () => {
         await db.dropCollection(byo).catch(() => {});
         await db.dropCollection(legacy).catch(() => {});
       }
+    });
+  });
+
+  describe('generation', () => {
+    let a: MongoDBVector;
+    let b: MongoDBVector;
+    const colls: string[] = [];
+    const entry = (name: string) => db.collection(REGISTRY).findOne({ _id: name as any });
+
+    beforeAll(async () => {
+      a = new MongoDBVector({ uri: ATLAS_LOCAL_URI, dbName: DB_NAME, id: 'gen-a' });
+      b = new MongoDBVector({ uri: ATLAS_LOCAL_URI, dbName: DB_NAME, id: 'gen-b' });
+      await a.connect();
+      await b.connect();
+    });
+
+    afterAll(async () => {
+      for (const c of colls) {
+        await db.collection(REGISTRY).deleteOne({ _id: c as any });
+        await db.dropCollection(c).catch(() => {});
+      }
+      await a.disconnect();
+      await b.disconnect();
+    });
+
+    async function byoColl(prefix: string) {
+      const coll = uniqueName(prefix);
+      colls.push(coll);
+      await seedCollection(db, coll, [{ title: 'a', embedding: [1, 0, 0, 0] }]);
+      return coll;
+    }
+
+    it('P-BACKFILL-gen: concurrent refreshes of a legacy entry backfill one stable generation', async () => {
+      const coll = await byoColl('pbf');
+      await seedRegistry(db, {
+        _id: coll,
+        indexName: coll,
+        collectionName: coll,
+        searchIndexName: `${coll}_vector_index`,
+        isByo: true,
+        allowWrites: false,
+        dimension: 4,
+        metric: 'cosine',
+      });
+      const refresh = (s: MongoDBVector) => s.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
+      await Promise.all([refresh(a), refresh(b), refresh(a), refresh(b), refresh(a)]);
+      // Sequenced after the refreshes: run concurrently, its compare-and-set would lose to them by design.
+      await a.createSearchIndex({ indexName: coll, searchIndexName: 'N' });
+      const e = await entry(coll);
+      expect(typeof e?.generation).toBe('string');
+      expect(e?.rev).toBeGreaterThanOrEqual(6);
+      expect(e?.ownsTextIndex).toBe(true);
+      await refresh(b);
+      expect((await entry(coll))?.generation).toBe(e?.generation);
+    });
+
+    it('P-ID-pre: identical concurrent BYO createIndex calls all succeed and record ownership on one generation', async () => {
+      const coll = await byoColl('pid');
+      const all = deferred();
+      let arrived = 0;
+      const hook = async () => {
+        if (++arrived === 5) all.resolve();
+        await all.promise;
+      };
+      (a as any).testHooks = { beforePendingDropCheck: hook };
+      (b as any).testHooks = { beforePendingDropCheck: hook };
+      try {
+        const create = (s: MongoDBVector) => s.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
+        await Promise.all([create(a), create(b), create(a), create(b), create(a)]);
+      } finally {
+        (a as any).testHooks = undefined;
+        (b as any).testHooks = undefined;
+      }
+      const docs = await db
+        .collection(REGISTRY)
+        .find({ _id: coll as any })
+        .toArray();
+      expect(docs).toHaveLength(1);
+      expect(typeof docs[0]?.generation).toBe('string');
+      expect(docs[0]?.ownsVectorIndex).toBe(true);
+      expect(await searchIndexNames(db, coll)).toEqual([`${coll}_vector_index`]);
     });
   });
 });

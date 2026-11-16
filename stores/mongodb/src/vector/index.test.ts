@@ -126,11 +126,24 @@ const stubRegistered = (v: MongoDBVector, entries: Record<string, object>) =>
     .spyOn(v as any, 'readRegistryEntry')
     .mockImplementation(async (name: any) => (entries[name] ? { _id: name, indexName: name, ...entries[name] } : null));
 
+// What a mocked P0 registry write returns.
+const P0 = { generation: 'g0', claimToken: 'c0', rev: 1 };
+
 // Mocked collections that hold no Atlas Search indexes yet.
 const noSearchIndexes = () => ({ toArray: async () => [] });
 
 // Mocked db: the target collection exists, the call's own registration is live, no other one is being deleted,
 // and every registry write matches.
+/** The literal values a pipeline (or classic `$set`) update writes. */
+const literalsOf = (update: any): Record<string, unknown> =>
+  Array.isArray(update)
+    ? Object.fromEntries(
+        Object.entries(update[0].$set as Record<string, any>)
+          .filter(([, v]) => v && typeof v === 'object' && '$literal' in v)
+          .map(([k, v]) => [k, v.$literal]),
+      )
+    : update.$set;
+
 const stubDb = (v: MongoDBVector) => {
   // The pre-provision check reads the call's own entry back and expects the targets it is about
   // to provision, so the fake registry returns the cached target plus the fields last written.
@@ -154,13 +167,17 @@ const stubDb = (v: MongoDBVector) => {
         _id,
         ...(v as any).indexTargets.get(_id),
         ...written,
+        generation: 'g0',
       }),
       find: () => ({ toArray: async () => [] }),
+      // Pipeline updates wrap written values in $literal; anything else is an expression.
       updateOne: async (_filter: unknown, update: any) => {
-        // A pipeline update holds expressions; only its literal text index name is a written value.
-        if (Array.isArray(update)) written.textSearchIndexName = update[0].$set.textSearchIndexName;
-        else Object.assign(written, update.$set);
+        Object.assign(written, literalsOf(update));
         return { matchedCount: 1 };
+      },
+      findOneAndUpdate: async ({ _id }: { _id: string }, update: any) => {
+        Object.assign(written, literalsOf(update));
+        return { _id, ...written, generation: 'g0', rev: 1, claimToken: 'c0' };
       },
     }),
   };
@@ -557,7 +574,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       // createIndex now persists to the durable registry collection; stub the registry
       // helpers so these mocked, unconnected instances don't hit a real MongoDB.
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
-      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(P0);
       return v;
     };
     const filterPathsOf = (v: MongoDBVector) =>
@@ -595,7 +612,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       commandOf(v).mockRejectedValueOnce(indexExists); // vector index creation
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
-      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(P0);
 
       await v.createIndex({ indexName: 'idx', dimension: 4, filterFields: ['category'] });
 
@@ -640,7 +657,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const v = makeVector();
       stubDb(v);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ listSearchIndexes: noSearchIndexes });
-      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(P0);
       // An entry already exists pointing at a DIFFERENT collection.
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue({
         _id: 'idx',
@@ -673,7 +690,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const v = makeVector();
       stubDb(v);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ listSearchIndexes: noSearchIndexes });
-      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(P0);
       // Existing entry points at the SAME collection this call resolves to.
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue({
         _id: 'idx',
@@ -697,7 +714,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
         .mockRejectedValueOnce(indexExists);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
-      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(P0);
 
       await expect(
         v.createIndex({ indexName: 'idx', dimension: 4, filterFields: ['category'] }),
@@ -1356,7 +1373,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       stubDb(v);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
-      const writeRegistryEntry = vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+      const writeRegistryEntry = vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(P0);
 
       await v.createIndex({ indexName: 'idx', dimension: 4, collectionName: 'ops_col', allowWrites: true });
 
@@ -1369,8 +1386,8 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const v = makeVector();
       stubDb(v);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ listSearchIndexes: noSearchIndexes });
-      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
-      vi.spyOn(v as any, 'markOwned').mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(P0);
+      vi.spyOn(v as any, 'recordOwnership').mockResolvedValue(true);
       // Already registered under the default field-mapped name, so no rename touches the (unstubbed) registry.
       stubRegistered(v, {
         cat: {
@@ -1400,7 +1417,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       stubDb(v);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
-      const writeRegistryEntry = vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+      const writeRegistryEntry = vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(P0);
       const warn = vi.spyOn((v as any).logger, 'warn');
 
       await v.createIndex({ indexName: 'ro', dimension: 4, collectionName: 'ops_col' });
@@ -1459,7 +1476,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       stubDb(v);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
-      const writeRegistryEntry = vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+      const writeRegistryEntry = vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(P0);
 
       await v.createIndex({ indexName: 'idx', dimension: 4, collectionName: 'ops_col' });
 
@@ -1477,7 +1494,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       stubDb(v);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(existingEntry);
-      const writeRegistryEntry = vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+      const writeRegistryEntry = vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(P0);
       return { writeRegistryEntry };
     };
 
@@ -1566,6 +1583,11 @@ describe('MongoDBVector filterFields (#18587)', () => {
       vi.spyOn(v as any, 'writeRegistryEntry').mockImplementation(async (...args: unknown[]) => {
         order.push('persist');
         return write(...args);
+      });
+      const record = (v as any).recordOwnership.bind(v);
+      vi.spyOn(v as any, 'recordOwnership').mockImplementation(async (...args: unknown[]) => {
+        order.push('persist');
+        return record(...args);
       });
 
       await v.createSearchIndex({ indexName: 'idx', fields: ['note'] });
@@ -1661,7 +1683,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const v = makeVector();
       stubDb(v);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ listSearchIndexes: noSearchIndexes });
-      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(P0);
       const target = { collectionName: 'shared_col', searchIndexName: 'a_vec', isByo: true };
       // Already registered under the default field-mapped names, so no rename touches the (unstubbed) registry.
       stubRegistered(v, {
@@ -1789,7 +1811,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
           ownsTextIndex: true,
         },
       });
-      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(P0);
 
       await v.createSearchIndex({ indexName: 'idx', fields: ['note', 'title'] });
 
@@ -2350,7 +2372,7 @@ describe('MongoDBVector registry claim', () => {
     await registry.deleteOne({ _id: claimIdx });
     await registry.insertOne({ _id: claimIdx, indexName: claimIdx, collectionName: claimIdx, dimension: 4 });
 
-    await expect(write({ collectionName: claimIdx, dimension: 4 }, claimFor())).resolves.toBeUndefined();
+    await expect(write({ collectionName: claimIdx, dimension: 4 }, claimFor())).resolves.toMatchObject({ rev: 1 });
   });
 
   it('rejects an autoEmbed claim over a client-side entry', async () => {
@@ -2374,7 +2396,7 @@ describe('MongoDBVector autoEmbed', () => {
     stubDb(v);
     vi.spyOn(v as any, 'getCollection').mockResolvedValue({ listSearchIndexes: noSearchIndexes });
     vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
-    vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+    vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(P0);
     return v;
   };
   const vectorDefOf = (v: MongoDBVector) => createdIndexes(v)[0].definition.fields;
@@ -2639,7 +2661,7 @@ describe('MongoDBVector autoEmbed', () => {
       const registry = {
         // Empty on the guard's read, populated by the time this call writes.
         findOne: vi.fn().mockResolvedValueOnce(null).mockResolvedValue(winner),
-        updateOne: vi.fn().mockRejectedValue(duplicateKey),
+        findOneAndUpdate: vi.fn().mockRejectedValue(duplicateKey),
       };
       (v as any).db = {
         listCollections: () => ({ hasNext: async () => true }),
@@ -2675,7 +2697,8 @@ describe('MongoDBVector autoEmbed', () => {
           searchIndexName: 'movies_vector_index',
           textSearchIndexName: 'movies_search_index',
         }),
-        updateOne: vi.fn().mockResolvedValue({}),
+        findOneAndUpdate: vi.fn().mockResolvedValue({ _id: 'movies', generation: 'g0', rev: 1, claimToken: 'c0' }),
+        updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
         find: () => ({ toArray: async () => [] }),
       };
       (v as any).db = {
@@ -2686,7 +2709,7 @@ describe('MongoDBVector autoEmbed', () => {
 
       await v.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4', path: 'fullplot' } });
 
-      expect(registry.updateOne.mock.calls[0][0]).toEqual({
+      expect(registry.findOneAndUpdate.mock.calls[0][0]).toEqual({
         _id: 'movies',
         collectionName: 'movies',
         deleting: { $ne: true },
@@ -2708,7 +2731,8 @@ describe('MongoDBVector autoEmbed', () => {
           searchIndexName: 'movies_vector_index',
           textSearchIndexName: 'movies_search_index',
         }),
-        updateOne: vi.fn().mockResolvedValue({}),
+        findOneAndUpdate: vi.fn().mockResolvedValue({ _id: 'movies', generation: 'g0', rev: 1, claimToken: 'c0' }),
+        updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
         find: () => ({ toArray: async () => [] }),
       };
       (v as any).db = {
@@ -2722,7 +2746,7 @@ describe('MongoDBVector autoEmbed', () => {
       // `autoEmbed: null` rather than `$exists: false`: the driver stores an undefined
       // autoEmbed as null, and an equality-to-null also matches entries written before
       // autoEmbed existed, which carry no such key at all.
-      expect(registry.updateOne.mock.calls[0][0]).toEqual({
+      expect(registry.findOneAndUpdate.mock.calls[0][0]).toEqual({
         _id: 'movies',
         collectionName: 'movies',
         deleting: { $ne: true },
