@@ -1,19 +1,18 @@
 import { Agent } from '@mastra/core/agent';
 import { JsonRenderProcessor } from '@mastra/json-render';
-import { studioCatalog } from '@mastra/json-render/studio';
 import { Memory } from '@mastra/memory';
+import { genUICatalog } from './gen-ui-catalog';
 
-const jsonRender = new JsonRenderProcessor({ catalog: studioCatalog });
+const jsonRender = new JsonRenderProcessor({ catalog: genUICatalog });
 
 /**
- * Answers with interfaces built from Studio's design-system components.
- * Studio renders the `data-spec` parts this agent streams next to its prose.
+ * Answers with json-render interfaces, streamed as `data-spec` parts next to its prose.
  */
 export const genUIAgent = new Agent({
   id: 'gen-ui-agent',
   name: 'Generative UI Agent',
-  description: 'Answers with interfaces made of Studio components: cards, metrics, badges and notices.',
-  instructions: studioCatalog.prompt({
+  description: 'Answers with json-render interfaces: cards, metrics, badges and notices.',
+  instructions: genUICatalog.prompt({
     mode: 'inline',
     editModes: ['patch'],
     system:

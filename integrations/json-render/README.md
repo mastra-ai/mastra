@@ -57,19 +57,6 @@ function Reply({ message }) {
 }
 ```
 
-### Show interfaces in Mastra Studio
-
-Studio renders interfaces built from `studioCatalog` with its own cards, metrics, badges and notices. Use it as the agent's catalog. It needs `@json-render/react` installed, but loads only its schema, not React:
-
-```typescript
-import { JsonRenderProcessor } from '@mastra/json-render';
-import { studioCatalog } from '@mastra/json-render/studio';
-
-const ui = new JsonRenderProcessor({ catalog: studioCatalog });
-```
-
-Studio skips interfaces that use components outside `studioCatalog`.
-
 ## Documentation
 
 - [Processors](https://mastra.ai/docs/agents/processors)

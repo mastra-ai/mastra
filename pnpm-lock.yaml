@@ -6129,12 +6129,6 @@ importers:
       '@hello-pangea/dnd':
         specifier: ^18.0.1
         version: 18.0.1(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      '@json-render/core':
-        specifier: 0.22.0
-        version: 0.22.0(zod@4.6.7)
-      '@json-render/react':
-        specifier: 0.22.0
-        version: 0.22.0(react@19.3.1)(zod@4.6.7)
       '@lezer/common':
         specifier: ^1.5.4
         version: 1.5.5
@@ -6144,9 +6138,6 @@ importers:
       '@lukeed/uuid':
         specifier: ^2.0.1
         version: 2.0.1
-      '@mastra/json-render':
-        specifier: workspace:^
-        version: link:../../integrations/json-render
       '@mcp-ui/client':
         specifier: ^7.1.1
         version: 7.1.1(@cfworker/json-schema@4.1.4)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(supports-color@10.2.2)

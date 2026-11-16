@@ -3,11 +3,10 @@ import { schema } from '@json-render/react/schema';
 import { z } from 'zod';
 
 /**
- * The components Mastra Studio can render in json-render interfaces.
- * Pass it to `JsonRenderProcessor` and `catalog.prompt()` so an agent's interfaces show in Studio.
+ * The components the gen UI agent can compose its interfaces from.
  * `@json-render/react/schema` only describes the spec format; it does not load React.
  */
-export const studioCatalog = defineCatalog(schema, {
+export const genUICatalog = defineCatalog(schema, {
   components: {
     Stack: {
       description: 'Lays child nodes out in a column, or a wrapping row.',
