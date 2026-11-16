@@ -1,3 +1,4 @@
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { useApiConfig } from '../../../../api/config';
@@ -15,6 +16,7 @@ import {
   unlinkRepository,
   updateFactoryDefaultModel,
 } from '../services/github';
+import { applyCodeHostIntake } from '../services/onboardingIntake';
 import {
   clearOnboardingFlow,
   completeOnboardingSchema,
@@ -35,6 +37,15 @@ async function findPendingFactory(baseUrl: string, pendingId: string) {
   }
 }
 
+/**
+ * The Factory exists and its repository is linked by now, so an intake failure must not strand the
+ * user in onboarding: warn, and leave them to pick sources in Settings › Work Intake. GitHub and
+ * GitLab both land here. Only a switch that is on reaches here; with it off, setup writes no intake.
+ */
+function warnIntakeNotApplied() {
+  toast.warning("Issues won't sync yet", { description: 'Choose sources in Settings › Work Intake.' });
+}
+
 export function useCompleteFactorySetup({ local }: { local: boolean }) {
   const { baseUrl, client } = useApiConfig();
   const queryClient = useQueryClient();
@@ -48,6 +59,9 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
       const setup = parsed.data;
       const repo = setup.repository;
       const modelScope = setup.modelScope;
+      // Read from the raw draft: the completion schema strips fields it doesn't know. Only an
+      // explicit `false` turns the switch off, so the repository is selected by default.
+      const codeHostSync = draft.codeHostSync !== false;
       const plan = onboardingModelPlan(setup);
       const [providers, catalogs] = await Promise.all([
         queryClient.query({ ...providersQueryOptions(client), staleTime: 0 }),
@@ -88,6 +102,8 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
       await link.mutateAsync({
         factoryProjectId: factory.id,
         repo,
+        // Setup selects the repository itself after the link, so GitHub and GitLab fail the same way.
+        selectIntake: false,
         onLinked: async linked => {
           const onboardingLinks = [...new Set([...previouslyLinked, linked.projectRepositoryId])];
           // Record the new link before cleanup can fail, including across a reload and another repo choice.
@@ -101,11 +117,17 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
       await Promise.all([
         updateFactoryDefaultModel(baseUrl, factory.id, plan.factoryModelId),
         plan.personalModelId ? setPersonalDefault.mutateAsync(plan.personalModelId) : undefined,
+        codeHostSync
+          ? applyCodeHostIntake(baseUrl, { factoryProjectId: factory.id, repository: repo }).catch(warnIntakeNotApplied)
+          : undefined,
       ]);
       return factory.id;
     },
     onSuccess: async factoryId => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.factories() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.intakeConfig() }),
+      ]);
       clearOnboardingFlow();
       void navigate(`/factories/${factoryId}`);
     },

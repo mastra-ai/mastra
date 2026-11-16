@@ -4,10 +4,11 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useLLMProviders } from '@mastra/react/hooks/llm';
-import { Lock, RotateCcw } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useModelReset } from '../../context/model-reset-context';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
@@ -189,7 +190,7 @@ export const AgentMetadataModelSwitcher = ({
         className={cn(raisedSurfaceStyle, 'flex items-center gap-2 rounded-md px-3 py-2')}
         data-testid="agent-metadata-model-locked"
       >
-        <Lock className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <IconLock className="h-4 w-4 shrink-0 text-muted-foreground" />
         <Txt as="span" variant="caption" tone="ink" className="truncate">
           {lockedLabel}
         </Txt>
@@ -235,7 +236,7 @@ export const AgentMetadataModelSwitcher = ({
           disabled={loading}
           tooltip="Reset to original model"
         >
-          <RotateCcw />
+          <IconArrowRotateCounterClockwise />
         </Button>
       </div>
 

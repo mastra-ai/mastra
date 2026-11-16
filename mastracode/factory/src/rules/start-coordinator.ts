@@ -29,6 +29,7 @@ export interface FactoryStartRequest {
    */
   startedBy?: FactoryRuleActor;
   sessionId: string;
+  expectedBindingId?: string;
   threadTitle: string;
   kickoffKey: string;
   /** Where the arrival path lands the card; a session opened on an existing card names none. */
@@ -353,6 +354,7 @@ export class FactoryStartCoordinator {
       factoryProjectId: request.factoryProjectId,
       workItem: { id: request.workItem.id, input: request.workItem.input },
       role: request.workItem.role,
+      expectedBindingId: request.expectedBindingId,
       session: { sessionId: sourceSession.sessionId, branch: sourceSession.branch, threadId },
       resourceId: memoryResourceId,
       kickoffKey: request.kickoffKey,

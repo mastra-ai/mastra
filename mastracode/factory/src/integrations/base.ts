@@ -45,6 +45,7 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { CardSource } from './kept-cards.js';
 
 /** A push to a repository linked to a project, as a version-control integration reports it. */
 export interface RepositoryPushEvent {
@@ -166,6 +167,12 @@ export interface IntegrationContext {
      * per-project source serves each project its stored boards.
      */
     boards: BoardRegistry | ProjectBoardSource;
+    /**
+     * Every project's provider-backed cards, kept in memory between background
+     * sweeps so a sweep with nothing to change reads nothing from storage.
+     * Absent where no sweep runs (route contexts, tests).
+     */
+    keptCards?: CardSource;
   };
   /** System hooks integrations may invoke. */
   hooks?: IntegrationHooks;
@@ -218,6 +225,8 @@ export interface FactoryIntegration {
   readonly additionalIntakes?: ReadonlyArray<{ id: string; intake: Pick<Intake, 'listSources' | 'listItems'> }>;
   /** Repository, installation, and pull-request capability. */
   readonly versionControl?: VersionControl;
+  /** Whether at least one account is connected, for the dev-server startup summary. */
+  hasActiveConnections?(): Promise<boolean>;
   /**
    * Bind the integration's generic persistence handle. Called once by the
    * factory during `prepare()` (before routes/tools/workers are collected),

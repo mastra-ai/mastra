@@ -29,6 +29,10 @@ export const server = setupServer(
   // Ambient activity poll (sidebar running dots); activity tests override it with `server.use(...)`.
   http.get('*/api/agent-controller/:controllerId/active-runs', () => HttpResponse.json({ runs: [] })),
   http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json(builtinBoardCatalog)),
+  // Ambient run queue: no automated run waits for a slot. Run-queue tests override it with `server.use(...)`.
+  http.get('*/web/factory/projects/:id/run-queue', () =>
+    HttpResponse.json({ slots: null, running: 0, claimed: [], queuedCount: 0, queued: [] }),
+  ),
   // The sidebar and the board page read the intake routes to learn whether the caller may change
   // boards. The ambient caller is a member who may not; board tests override it with `server.use(...)`.
   http.get('*/web/factory/projects/:id/intake-routes', () => HttpResponse.json({ intakeRoutes: [], canEdit: false })),
@@ -39,7 +43,6 @@ export const server = setupServer(
   // Jira-specific tests override these with `server.use(...)`.
   http.get('*/web/jira/status', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   http.get('*/web/jira/projects', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
-  http.get('*/web/jira/issues', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   // incident.io intake is optional; feature tests override this ambient 404.
   http.get('*/web/incidentio/status', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   // A server without Platform machine credentials mounts no platform connect

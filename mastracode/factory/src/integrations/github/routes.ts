@@ -516,6 +516,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             repoFullName: subscription.data.repositorySlug,
             pullRequestNumber: Number(subscription.data.changeRequestId),
             status: subscription.status,
+            updatedAt: subscription.updatedAt.toISOString(),
             url: `https://github.com/${subscription.data.repositorySlug}/pull/${subscription.data.changeRequestId}`,
           })),
         });

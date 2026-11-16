@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { IconArrowBoxRight } from '@mastra/playground-ui/icons/central/IconArrowBoxRight';
 import { useSSOLogin } from '@mastra/react/hooks/auth';
 import type { LoginConfig, SSOConfig } from '@mastra/react/hooks/auth';
-import { LogIn } from 'lucide-react';
 import { withStudioBasePath } from '@/lib/studio-base-path';
 
 export type LoginButtonProps = {
@@ -77,7 +77,7 @@ export function LoginButton({ config, redirectUri, className, loginUrl = '/login
   };
 
   return (
-    <Button icon={<LogIn />} onClick={handleCredentialsLogin} className={className}>
+    <Button icon={<IconArrowBoxRight />} onClick={handleCredentialsLogin} className={className}>
       Sign in
     </Button>
   );

@@ -382,6 +382,22 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /web/factory/projects/:id/run-queue": {
+    "contractKey": "runQueue",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/run-queue",
+    "description": "List the project's automated runs waiting for a run slot, oldest first, and the runs holding one. The cap is per server process; manual starts are claimed ahead of this queue.",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /web/factory/projects/:id/sandbox-envs": {
     "contractKey": "projectSandboxEnvsList",
     "method": "GET",
@@ -3820,6 +3836,235 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "required": [
         "metrics"
       ]
+    }
+  },
+  "GET /web/factory/projects/:id/run-queue": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "slots": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "scope": {
+                  "type": "string",
+                  "const": "server"
+                },
+                "inUse": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "cap": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "scope",
+                "inUse",
+                "cap"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "running": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "claimed": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "decisionId": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "state": {
+                "$ref": "#/$defs/__schema1"
+              },
+              "type": {
+                "$ref": "#/$defs/__schema2"
+              },
+              "role": {
+                "$ref": "#/$defs/__schema3"
+              },
+              "skillName": {
+                "$ref": "#/$defs/__schema4"
+              },
+              "queuedSince": {
+                "$ref": "#/$defs/__schema5"
+              },
+              "workItem": {
+                "$ref": "#/$defs/__schema6"
+              }
+            },
+            "required": [
+              "decisionId",
+              "state",
+              "type",
+              "role",
+              "skillName",
+              "queuedSince",
+              "workItem"
+            ]
+          }
+        },
+        "queuedCount": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "queued": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "decisionId": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "state": {
+                "$ref": "#/$defs/__schema1"
+              },
+              "type": {
+                "$ref": "#/$defs/__schema2"
+              },
+              "role": {
+                "$ref": "#/$defs/__schema3"
+              },
+              "skillName": {
+                "$ref": "#/$defs/__schema4"
+              },
+              "queuedSince": {
+                "$ref": "#/$defs/__schema5"
+              },
+              "workItem": {
+                "$ref": "#/$defs/__schema6"
+              },
+              "position": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "decisionId",
+              "state",
+              "type",
+              "role",
+              "skillName",
+              "queuedSince",
+              "workItem",
+              "position"
+            ]
+          }
+        }
+      },
+      "required": [
+        "slots",
+        "running",
+        "claimed",
+        "queuedCount",
+        "queued"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "string"
+        },
+        "__schema1": {
+          "type": "string",
+          "enum": [
+            "waiting",
+            "claimed"
+          ]
+        },
+        "__schema2": {
+          "type": "string",
+          "enum": [
+            "invokeSkill",
+            "sendMessage",
+            "signalActivity"
+          ]
+        },
+        "__schema3": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "__schema4": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "__schema5": {
+          "type": "string"
+        },
+        "__schema6": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "key": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "board": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "phase": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "key",
+                "title",
+                "board",
+                "phase"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
     }
   },
   "GET /web/factory/projects/:id/sandbox-envs": {
@@ -9887,6 +10132,7 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "intakeRouteGet": "GET /web/factory/projects/:id/intake-routes/:routeId",
   "intakeRouteReroutePreview": "GET /web/factory/projects/:id/intake-routes/reroute",
   "metricsGet": "GET /web/factory/projects/:id/metrics",
+  "runQueue": "GET /web/factory/projects/:id/run-queue",
   "projectSandboxEnvsList": "GET /web/factory/projects/:id/sandbox-envs",
   "workItemList": "GET /web/factory/projects/:id/work-items",
   "workItemActivity": "GET /web/factory/projects/:id/work-items/activity",

@@ -1087,6 +1087,7 @@ describe('subscriptions route', () => {
         repoFullName: 'octo/hello',
         pullRequestNumber: 42,
         status: 'open',
+        updatedAt: new Date('2026-11-01T10:00:00.000Z'),
       },
       {
         id: 'subscription-b',
@@ -1110,6 +1111,7 @@ describe('subscriptions route', () => {
           repoFullName: 'octo/hello',
           pullRequestNumber: 42,
           status: 'open',
+          updatedAt: '2026-11-01T10:00:00.000Z',
           url: 'https://github.com/octo/hello/pull/42',
         },
       ],
@@ -1130,6 +1132,7 @@ describe('subscriptions route', () => {
       repoFullName: 'octo/hello',
       pullRequestNumber: 42,
       status: 'open',
+      updatedAt: new Date('2026-11-02T10:00:00.000Z'),
     });
 
     const res = await buildApp({ workosId: 'u1' }).request(
@@ -1144,6 +1147,7 @@ describe('subscriptions route', () => {
           repoFullName: 'octo/hello',
           pullRequestNumber: 42,
           status: 'open',
+          updatedAt: '2026-11-02T10:00:00.000Z',
           url: 'https://github.com/octo/hello/pull/42',
         },
       ],
@@ -2485,8 +2489,11 @@ describe('Factory session routes', () => {
 
   it('explains that a session with no conversation cannot be named', async () => {
     seedMaterializedProject();
-    const controller = { queryThreadById: vi.fn(async () => null),
-      queryThreads: vi.fn(async () => []), generateThreadTitle: vi.fn() } as any;
+    const controller = {
+      queryThreadById: vi.fn(async () => null),
+      queryThreads: vi.fn(async () => []),
+      generateThreadTitle: vi.fn(),
+    } as any;
     const app = buildApp({ workosId: 'u1' }, { controller });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;
@@ -2500,8 +2507,11 @@ describe('Factory session routes', () => {
 
   it('does not name a session belonging to another user', async () => {
     seedMaterializedProject();
-    const controller = { queryThreadById: vi.fn(async () => null),
-      queryThreads: vi.fn(), generateThreadTitle: vi.fn() } as any;
+    const controller = {
+      queryThreadById: vi.fn(async () => null),
+      queryThreads: vi.fn(),
+      generateThreadTitle: vi.fn(),
+    } as any;
     const ownerApp = buildApp({ workosId: 'u1' }, { controller });
     const created = await postJson(ownerApp, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;

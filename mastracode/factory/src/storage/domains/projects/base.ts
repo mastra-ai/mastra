@@ -240,8 +240,16 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
 }
 
 export class FactoryProjectsStorage extends FactoryStorageDomain {
+  readonly #deletedListeners = new Set<(project: FactoryProject) => void>();
+
   constructor() {
     super('projects');
+  }
+
+  /** Fires after a project's deletion committed. Returns a function that removes the listener. */
+  onDeleted(listener: (project: FactoryProject) => void): () => void {
+    this.#deletedListeners.add(listener);
+    return () => this.#deletedListeners.delete(listener);
   }
 
   async init(): Promise<void> {
@@ -560,7 +568,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
     { orgId, id }: { orgId: string; id: string },
     release?: (ops: FactoryStorageOps) => Promise<void>,
   ): Promise<FactoryProject | null> {
-    return this.storage.withTransaction(
+    const deleted = await this.storage.withTransaction(
       async ops => {
         const row = await ops.findOne<FactoryProjectDbRow>('factory_projects', { org_id: orgId, id });
         if (!row) return null;
@@ -570,5 +578,15 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       },
       { isolationLevel: 'serializable' },
     );
+    if (deleted) {
+      for (const listener of this.#deletedListeners) {
+        try {
+          listener(deleted);
+        } catch (error) {
+          console.error('[factory] project deletion listener failed', error instanceof Error ? error.message : error);
+        }
+      }
+    }
+    return deleted;
   }
 }

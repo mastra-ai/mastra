@@ -12,6 +12,7 @@ export type WorkItemSource =
   | 'incidentio-follow-up'
   | 'github-dependabot-alert'
   | 'vanta-vulnerability'
+  | 'detail-finding'
   | 'manual';
 
 export function externalSourceForWorkItem(
@@ -38,7 +39,9 @@ export function externalSourceForWorkItem(
                     ? ['github', 'dependabot-alert']
                     : source === 'vanta-vulnerability'
                       ? ['vanta', 'vulnerability']
-                      : ['factory', 'manual'];
+                      : source === 'detail-finding'
+                        ? ['detail', 'finding']
+                        : ['factory', 'manual'];
   return { integrationId, type, externalId: sourceKey, ...(url ? { url } : {}) };
 }
 
@@ -71,6 +74,7 @@ export function workItemSource(source: ExternalWorkItemSource | null): WorkItemS
   if (source.integrationId === 'jira') return 'jira-issue';
   if (source.integrationId === 'incidentio') return 'incidentio-follow-up';
   if (source.integrationId === 'vanta') return 'vanta-vulnerability';
+  if (source.integrationId === 'detail') return 'detail-finding';
   // Only GitHub, GitLab, Linear, Jira, and incident.io have provider-specific
   // rules; anything else (a Slack thread, say) is a plain work item, not a
   // mislabeled GitHub issue.
@@ -133,6 +137,7 @@ export const FACTORY_RULE_SOURCES = [
   'incidentioFollowUp',
   'dependabotAlert',
   'vantaVulnerability',
+  'detailFinding',
   'manual',
 ] as const;
 export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
@@ -895,6 +900,8 @@ export function factoryRuleSourceForWorkItem(source: WorkItemSource): FactoryRul
       return 'dependabotAlert';
     case 'vanta-vulnerability':
       return 'vantaVulnerability';
+    case 'detail-finding':
+      return 'detailFinding';
     case 'manual':
       return 'manual';
   }

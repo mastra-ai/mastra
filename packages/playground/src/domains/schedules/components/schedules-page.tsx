@@ -1,5 +1,5 @@
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { useSchedules } from '@mastra/react/hooks/schedules';
 import { useState } from 'react';
 import { SchedulesList } from './schedules-list';
@@ -17,7 +17,12 @@ export function SchedulesPage({ workflowId }: { workflowId?: string } = {}) {
   return (
     <div className="grid h-full grid-rows-[auto_1fr] gap-4 overflow-hidden">
       <div className="max-w-120">
-        <ListSearch onSearch={setSearch} label="Filter schedules" placeholder="Filter by id or workflow" />
+        <SearchInput
+          {...listSearchProps}
+          onValueChange={setSearch}
+          label="Search schedules"
+          placeholder="Search by id or workflow"
+        />
       </div>
       <div className="overflow-y-auto">
         <SchedulesList

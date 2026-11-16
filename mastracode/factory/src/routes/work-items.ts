@@ -67,6 +67,7 @@ import type { BoardSnapshot } from './board-snapshot.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { loose, Route } from './route.js';
+import { readRunQueue } from './run-queue.js';
 import { workItemActivity } from './work-item-activity.js';
 import { cardsFiledFrom, cardsWithIds, unstartedCards } from './work-item-selection.js';
 import {
@@ -95,6 +96,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
   /** Materialized sessions, read to report which of the listed cards are being worked or wait on someone. */
   liveSessions: Pick<LiveSessions, 'isRunning' | 'parked' | 'parkedIn'>;
+  /** This process's dispatcher run slots; absent or `undefined` while it runs no dispatcher. */
+  runSlots?: () => { inUse: number; cap: number } | undefined;
 }
 
 /** The card as clients see it, without the dispatcher's internal bookkeeping. */
@@ -762,6 +765,26 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             decisions: page.decisions.map(decision => decisionSummary(boards, decision, overtaken.has(decision.id))),
             ...(page.hasMore && last ? { nextCursor: encodeDecisionCursor(last) } : {}),
           });
+        },
+      }),
+
+      // ── Automated runs waiting for a run slot ───────────────────────────────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.runQueue.path, {
+        method: FACTORY_ROUTE_CONTRACTS.runQueue.method,
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveProject(loose(c));
+          if ('response' in resolved) return resolved.response;
+          await workItems.ensureReady();
+          return c.json(
+            await readRunQueue({
+              workItems,
+              orgId: resolved.orgId,
+              factoryProjectId: resolved.factoryProjectId,
+              slots: this.deps.runSlots?.(),
+              now: new Date(),
+            }),
+          );
         },
       }),
 

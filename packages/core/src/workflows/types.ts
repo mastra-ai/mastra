@@ -435,6 +435,19 @@ export interface WorkflowRunState {
    * @internal
    */
   resumeLeasedClaimAt?: number;
+  /**
+   * What the agent resume that claimed this run resumes it with, written in the same update as
+   * `resumeClaimedAt`. A later process replays it to finish a resume whose claimant died. Only
+   * describes the current claim while `claimedAt === resumeClaimedAt`.
+   * @internal
+   */
+  resumeClaimIntent?: {
+    claimedAt: number;
+    /** The suspended tool call the resume targets. Absent when the resume targeted none. */
+    toolCallId?: string;
+    /** The approval decision or `resumeSchema` data the resume passes to the suspended tool call. */
+    resumeData?: unknown;
+  };
   /** @internal Snapshot created only to guard evented step deliveries. */
   guardedOnlySnapshot?: boolean;
   /** Tripwire data when status is 'tripwire' */

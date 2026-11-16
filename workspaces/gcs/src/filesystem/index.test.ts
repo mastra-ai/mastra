@@ -229,6 +229,61 @@ describe('GCSFilesystem', () => {
 
       expect(config.prefix).toBeUndefined();
     });
+
+    it('includes owner if set', () => {
+      const fs = new GCSFilesystem({
+        bucket: 'test',
+        owner: { uid: 3001, gid: 3002 },
+      });
+
+      const config = fs.getMountConfig();
+
+      expect(config.owner).toEqual({ uid: 3001, gid: 3002 });
+    });
+
+    it('copies owner so later mutation cannot rewrite the mount config', () => {
+      const owner = { uid: 3001, gid: 3002 };
+      const fs = new GCSFilesystem({ bucket: 'test', owner });
+
+      const config = fs.getMountConfig();
+      owner.uid = 9999;
+
+      expect(config.owner).toEqual({ uid: 3001, gid: 3002 });
+    });
+
+    it('copies the owner ids from an owner backed by prototype getters', () => {
+      class OwnerWithGetters {
+        #uid: number;
+        #gid: number;
+
+        constructor(uid: number, gid: number) {
+          this.#uid = uid;
+          this.#gid = gid;
+        }
+
+        get uid() {
+          return this.#uid;
+        }
+
+        get gid() {
+          return this.#gid;
+        }
+      }
+
+      const fs = new GCSFilesystem({ bucket: 'test', owner: new OwnerWithGetters(3001, 3002) });
+
+      const config = fs.getMountConfig();
+
+      expect(config.owner).toEqual({ uid: 3001, gid: 3002 });
+    });
+
+    it('excludes owner if not set', () => {
+      const fs = new GCSFilesystem({ bucket: 'test' });
+
+      const config = fs.getMountConfig();
+
+      expect(config.owner).toBeUndefined();
+    });
   });
 
   describe('getInfo()', () => {

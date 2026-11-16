@@ -6,6 +6,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { createSignal } from '@mastra/core/signals';
 import { readObjective, resolveGoalStore, writeObjective } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
+import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { boardRegistryOf, createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
@@ -23,6 +24,8 @@ import { BUILD_OBJECTIVE } from '../boards/work.js';
 import { publishReviewStatus } from '../integrations/github/review-status.js';
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
 import { prepareFactoryRuleBinding } from '../routes/surface.js';
+import { fakeRouteAuth, mountApiRoutes } from '../routes/test-utils.js';
+import { WorkItemRoutes } from '../routes/work-items.js';
 import { resolveFactoryCredentialTenant } from '../session/credential-policy.js';
 import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd, waitForSessionRunAudit } from '../session/run-audit.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
@@ -1172,6 +1175,282 @@ describe('FactoryDecisionDispatcher', () => {
     expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
   });
 
+  it('recovers a stale notification binding before delivering as the replacement session owner', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'notify',
+      title: 'Review feedback',
+      body: 'Please address the review.',
+      level: 'warning',
+      idempotencyKey: 'notify-stale-binding',
+    });
+    const stale = await bindWorkRun(storage, item.id);
+    const { controller, session, sendNotificationSignal } = createSession();
+    session.identity.getId.mockReturnValue('session-2');
+    session.identity.getOwnerId.mockReturnValue('user-2');
+    controller.getSession.mockImplementation(async (sessionId: string) =>
+      sessionId === 'session-2' ? session : undefined,
+    );
+    const prepareBinding = vi.fn(async ({ role, expectedBindingId }: FactoryBindingPreparationInput) => {
+      expect(role).toBe('work');
+      expect(expectedBindingId).toBe(stale.id);
+      const prepared = await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-2',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: item.externalSource,
+            title: item.title,
+            stages: ['execute'],
+            sessions: {},
+            metadata: item.metadata,
+          },
+        },
+        role,
+        expectedBindingId,
+        session: { sessionId: 'session-2', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'recovered-notify',
+        kickoffMessage: null,
+      });
+      await storage.markPendingStart(prepared.binding.id, 'sent');
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      prepareBinding,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(prepareBinding).toHaveBeenCalledOnce();
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'rule-notification', summary: 'Review feedback' }),
+      { requestContext: expect.anything() },
+    );
+    expect(sendNotificationSignal.mock.calls[0]?.[1]?.requestContext?.get('user')).toEqual({
+      workosId: 'user-2',
+      organizationId: 'org-1',
+    });
+    expect(sendNotificationSignal.mock.calls[0]?.[1]?.requestContext?.get('controller')).toMatchObject({
+      sessionId: 'session-2',
+      session: { id: 'session-2', ownerId: 'user-2' },
+    });
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+    expect(
+      (await storage.listRunBindings('org-1', PROJECT_ID, item.id)).find(binding => binding.status === 'active'),
+    ).toMatchObject({
+      sessionId: 'session-2',
+      role: 'work',
+    });
+    expect(stale.sessionId).toBe('session-1');
+  });
+
+  it('delivers both notifications when concurrent recovery replaces their shared stale binding', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'notify',
+      title: 'First feedback',
+      body: 'Address the first review.',
+      level: 'warning',
+      idempotencyKey: 'notify-race-first',
+    });
+    expect(
+      await commitDecisions(storage, {
+        factoryProjectId: PROJECT_ID,
+        workItemId: item.id,
+        stage: 'execute',
+        decisions: [
+          {
+            type: 'notify',
+            title: 'Second feedback',
+            body: 'Address the second review.',
+            level: 'warning',
+            idempotencyKey: 'notify-race-second',
+          },
+        ],
+        ingress: 'move-2',
+        configVersion: 'rules-v1',
+      }),
+    ).toMatchObject({ status: 'committed' });
+    const stale = await bindWorkRun(storage, item.id);
+    const { controller, session, sendNotificationSignal } = createSession();
+    session.identity.getId.mockReturnValue('session-2');
+    session.identity.getOwnerId.mockReturnValue('user-2');
+    let waiting = 0;
+    let release!: () => void;
+    const bothSelected = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    controller.getSession.mockImplementation(async (sessionId: string) => {
+      if (sessionId === 'session-1') {
+        if (++waiting === 2) release();
+        await bothSelected;
+        return undefined;
+      }
+      return sessionId === 'session-2' ? session : undefined;
+    });
+    const prepareBinding = vi.fn(async ({ role, expectedBindingId }: FactoryBindingPreparationInput) => {
+      const prepared = await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-2',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: item.externalSource,
+            title: item.title,
+            stages: ['execute'],
+            sessions: {},
+            metadata: item.metadata,
+          },
+        },
+        role,
+        expectedBindingId,
+        session: { sessionId: 'session-2', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'recovered-notify-race',
+        kickoffMessage: null,
+      });
+      await storage.markPendingStart(prepared.binding.id, 'sent');
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      prepareBinding,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(waiting).toBe(2);
+    expect(prepareBinding).toHaveBeenCalled();
+    expect(sendNotificationSignal.mock.calls.map(([signal]) => signal.summary).sort()).toEqual([
+      'First feedback',
+      'Second feedback',
+    ]);
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID)).map(decision => decision.status)).toEqual([
+      'succeeded',
+      'succeeded',
+    ]);
+    expect(stale.sessionId).toBe('session-1');
+  });
+
+  it('does not restore a superseded notification binding after a successor takes its session', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'notify',
+      title: 'Review feedback',
+      body: 'Please address the review.',
+      level: 'warning',
+      idempotencyKey: 'notify-superseded-binding',
+    });
+    const stale = await bindWorkRun(storage, item.id);
+    const { controller, sendNotificationSignal } = createSession();
+    controller.getSession.mockResolvedValue(undefined);
+    const prepareBinding = vi.fn(async ({ expectedBindingId }: FactoryBindingPreparationInput) => {
+      expect(expectedBindingId).toBe(stale.id);
+      const successor = await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: item.externalSource,
+            title: item.title,
+            stages: ['execute'],
+            sessions: {},
+            metadata: item.metadata,
+          },
+        },
+        role: 'review',
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'successor-review',
+        kickoffMessage: null,
+      });
+      await storage.markPendingStart(successor.binding.id, 'sent');
+      await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: item.externalSource,
+            title: item.title,
+            stages: ['execute'],
+            sessions: {},
+            metadata: item.metadata,
+          },
+        },
+        role: 'work',
+        expectedBindingId,
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'recovered-after-handoff',
+        kickoffMessage: null,
+      });
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      prepareBinding,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(prepareBinding).toHaveBeenCalledOnce();
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'superseded' });
+    expect(
+      (await storage.listRunBindings('org-1', PROJECT_ID, item.id)).filter(binding => binding.status === 'active'),
+    ).toMatchObject([{ id: expect.any(String), role: 'review', sessionId: 'session-1' }]);
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.sessions.review).toMatchObject({
+      sessionId: 'session-1',
+    });
+  });
+
+  it('does not create an unrelated session for a stale notification binding without a preparer', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'notify',
+      title: 'Review feedback',
+      body: 'Please address the review.',
+      level: 'warning',
+      idempotencyKey: 'notify-no-preparer',
+    });
+    const binding = await bindWorkRun(storage, item.id);
+    const { controller, sendNotificationSignal } = createSession();
+    controller.getSession.mockResolvedValue(undefined);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      failureCode: 'session_unavailable',
+    });
+    expect(
+      (await storage.listRunBindings('org-1', PROJECT_ID, item.id)).find(candidate => candidate.status === 'active')
+        ?.id,
+    ).toBe(binding.id);
+  });
+
   it('renews the lease while an external delivery remains in flight', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
@@ -1407,6 +1686,175 @@ describe('FactoryDecisionDispatcher', () => {
       accept({ action: 'wake', output: { consumeStream: vi.fn(async () => {}) } });
       await vi.advanceTimersByTimeAsync(2_000);
       expect(await find('run-2')).not.toMatchObject({ status: 'pending' });
+      await dispatcher.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('holds ten runs per server unless configured otherwise', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      boards: autoStartingBoards(),
+      transitionService: new FactoryTransitionService({
+        storage,
+        configVersion: 'rules-v1',
+        boards: autoStartingBoards(),
+      }),
+      storage,
+    });
+    expect(dispatcher.runSlots()).toEqual({ inUse: 0, cap: 10 });
+  });
+
+  it('lists the runs waiting for a slot on the run queue, oldest first, beside the run holding it', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+    try {
+      const seed = await createFactoryStorageForTests();
+      const storage = seed.workItems;
+      const now = new Date();
+      await seed.storage.ops.insertOne('factory_projects', {
+        id: PROJECT_ID,
+        org_id: 'org-1',
+        created_by: 'user-1',
+        name: 'Queue project',
+        description: null,
+        default_model_id: null,
+        model_scope: 'hybrid',
+        created_at: now,
+        updated_at: now,
+      });
+      const { item: holding, transitionService } = await queueDecision(storage, {
+        type: 'sendMessage',
+        role: 'work',
+        message: 'Holds the only slot.',
+        idempotencyKey: 'holding',
+      });
+      let accept!: (value: unknown) => void;
+      const { controller } = createSession(
+        new Promise<unknown>(resolve => {
+          accept = resolve;
+        }),
+      );
+      await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: holding.id,
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+            title: 'Fix issue',
+            stages: ['execute'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'work',
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'kickoff-holding',
+        kickoffMessage: null,
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        boards: autoStartingBoards(),
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        maxInFlight: 1,
+      });
+      dispatcher.start();
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.setSystemTime(new Date('2030-01-01T00:00:01Z'));
+      const { item: first } = await queueDecision(
+        storage,
+        { type: 'invokeSkill', role: 'work', skillName: 'factory-plan', idempotencyKey: 'first' },
+        { sourceKey: 'github-issue:2', ingress: 'queue-2' },
+      );
+      vi.setSystemTime(new Date('2030-01-01T00:00:02Z'));
+      const { item: second } = await queueDecision(
+        storage,
+        { type: 'sendMessage', role: 'work', message: 'Behind it.', idempotencyKey: 'second' },
+        { sourceKey: 'github-issue:3', ingress: 'queue-3' },
+      );
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      const app = new Hono();
+      app.use('*', async (c, next) => {
+        c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+        await next();
+      });
+      mountApiRoutes(
+        app as never,
+        new WorkItemRoutes({
+          auth: fakeRouteAuth(),
+          audit: { emit: async () => {} },
+          projects: seed.projects,
+          workItems: storage,
+          boardRegistry: autoStartingBoards(),
+          queueHealth: seed.queueHealth,
+          liveSessions: { isRunning: () => false, parked: () => undefined, parkedIn: () => [] },
+          runSlots: () => dispatcher.runSlots(),
+        }).routes(),
+      );
+      const response = await app.request(`/web/factory/projects/${PROJECT_ID}/run-queue`);
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.slots).toEqual({ scope: 'server', inUse: 1, cap: 1 });
+      expect(body.running).toBe(1);
+      expect(body.claimed).toEqual([
+        expect.objectContaining({
+          state: 'claimed',
+          type: 'sendMessage',
+          workItem: expect.objectContaining({ id: holding.id }),
+        }),
+      ]);
+      expect(body.queuedCount).toBe(2);
+      expect(body.queued).toEqual([
+        expect.objectContaining({
+          state: 'waiting',
+          position: 1,
+          type: 'invokeSkill',
+          skillName: 'factory-plan',
+          role: 'work',
+          queuedSince: '2030-01-01T00:00:01.000Z',
+          workItem: { id: first.id, key: first.workItem.key, title: 'Fix issue', board: first.board, phase: 'execute' },
+        }),
+        expect.objectContaining({
+          state: 'waiting',
+          position: 2,
+          type: 'sendMessage',
+          skillName: null,
+          queuedSince: '2030-01-01T00:00:02.000Z',
+          workItem: expect.objectContaining({ id: second.id }),
+        }),
+      ]);
+
+      const elsewhere = new Hono();
+      elsewhere.use('*', async (c, next) => {
+        c.set('factoryAuthUser' as never, { workosId: 'user-2', organizationId: 'org-2' } as never);
+        await next();
+      });
+      mountApiRoutes(
+        elsewhere as never,
+        new WorkItemRoutes({
+          auth: fakeRouteAuth(),
+          audit: { emit: async () => {} },
+          projects: seed.projects,
+          workItems: storage,
+          boardRegistry: autoStartingBoards(),
+          queueHealth: seed.queueHealth,
+          liveSessions: { isRunning: () => false, parked: () => undefined, parkedIn: () => [] },
+          runSlots: () => dispatcher.runSlots(),
+        }).routes(),
+      );
+      expect((await elsewhere.request(`/web/factory/projects/${PROJECT_ID}/run-queue`)).status).toBe(404);
+
+      accept({ action: 'wake', output: { consumeStream: vi.fn(async () => {}) } });
       await dispatcher.stop();
     } finally {
       vi.useRealTimers();

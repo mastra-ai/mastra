@@ -5,7 +5,6 @@ import type { ModelPickerProvider } from '@mastra/playground-ui/domains/llm';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
-import { KeyRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 
@@ -18,14 +17,14 @@ import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { ProviderBrandIcon } from '../../../workspaces/components/ProviderBrandIcon';
 import { sessionDefaultsAnchor, settingsSectionPath } from '../../../settings/settingsSections';
-import { LockedModelButton } from './LockedModelButton';
 import { ModelCredential } from './ModelCredential';
 import { ModelCredentialSummary } from './ModelCredentialSummary';
 import { ModelProviderMark } from './ModelProviderMark';
 import { useOrganizationScopedFactory } from './useOrganizationScopedFactory';
-import { ModelThinkingGroup } from './ModelThinkingGroup';
 import { SessionThinkingIcon } from './SessionThinkingIcon';
 import { SessionThinkingSettings } from './SessionThinkingSettings';
+import { useSessionThinking } from './useSessionThinking';
+import { IconKey2 } from '@mastra/playground-ui/icons/central/IconKey2';
 
 function groupByProvider(models: AvailableModelOption[]): [string, AvailableModelOption[]][] {
   const groups = new Map<string, AvailableModelOption[]>();
@@ -97,11 +96,13 @@ interface ModelMenuProps {
   align?: 'start' | 'end';
   /** Controls under the model list, e.g. the thinking level. */
   settings?: ReactNode;
+  /** Keeps the trigger's look but disables it, explaining why in its tooltip. */
+  unavailableReason?: string;
   children: ReactNode;
 }
 
 const renderProviderIcon = (provider: string) => (
-  <ProviderBrandIcon provider={provider} fallback={<KeyRound className="size-3.5" />} />
+  <ProviderBrandIcon provider={provider} fallback={<IconKey2 className="size-3.5" />} />
 );
 
 function ModelMenu({
@@ -111,6 +112,7 @@ function ModelMenu({
   side,
   align,
   settings,
+  unavailableReason,
   children,
 }: ModelMenuProps) {
   const { modelsQuery, selectedModelId, defaultModelId, canReset, locked, pickModel } = modelSwitch;
@@ -168,6 +170,7 @@ function ModelMenu({
           : undefined
       }
       busy={locked}
+      unavailableReason={unavailableReason}
       side={side}
       align={align}
       triggerClassName={triggerClassName}
@@ -175,6 +178,32 @@ function ModelMenu({
     >
       {children}
     </SharedModelPicker>
+  );
+}
+
+function LockedModelMenu({
+  modelSwitch,
+  lockedReason,
+  modelAriaLabel,
+  triggerClassName,
+  children,
+}: Pick<ModelMenuProps, 'modelSwitch' | 'triggerClassName' | 'children'> & {
+  lockedReason: string;
+  modelAriaLabel: string;
+}) {
+  const { summary } = useSessionThinking(modelSwitch.activeModelId, modelSwitch.busy);
+  return (
+    <>
+      <ModelCredential />
+      <ModelMenu
+        modelSwitch={modelSwitch}
+        triggerAriaLabel={`${modelAriaLabel}. Thinking: ${summary}`}
+        triggerClassName={triggerClassName}
+        unavailableReason={lockedReason}
+      >
+        {children}
+      </ModelMenu>
+    </>
   );
 }
 
@@ -198,23 +227,35 @@ export function ModelPicker() {
     );
   }
 
-  if (modelLockedReason && activeModelId) {
-    return (
-      <>
-        <ModelCredential />
-        <ModelThinkingGroup modelId={activeModelId} lockedReason={modelLockedReason}>
-          <LockedModelButton modelId={activeModelId} reason={modelLockedReason} />
-        </ModelThinkingGroup>
-      </>
-    );
-  }
-
   const label = selectedModelId ? formatModelName(selectedModelId) : 'No model';
   const notConfigured =
     !scopeLoading &&
     Boolean(selectedModelId) &&
     modelsQuery.isSuccess &&
     !modelsQuery.data.some(model => model.id === selectedModelId);
+  const trigger = (
+    <>
+      <ModelProviderMark modelId={selectedModelId} provider={selectedModelId?.split('/')[0]} />
+      <Metadata singleLine className="max-w-48 max-sm:max-w-28">
+        <Metadata.Item>{label}</Metadata.Item>
+        {notConfigured && <Metadata.Item className="shrink-0">not configured</Metadata.Item>}
+      </Metadata>
+      <SessionThinkingIcon modelId={activeModelId} switchingModel={busy} />
+    </>
+  );
+
+  if (modelLockedReason && selectedModelId) {
+    return (
+      <LockedModelMenu
+        modelSwitch={modelSwitch}
+        lockedReason={modelLockedReason}
+        modelAriaLabel={notConfigured ? `Session model, ${label} is not configured` : `Session model: ${label}`}
+        triggerClassName={notConfigured ? 'text-destructive-foreground' : undefined}
+      >
+        {trigger}
+      </LockedModelMenu>
+    );
+  }
 
   const noModelsToOffer = !modelsQuery.isPending && !modelsQuery.data?.length;
   if (modelsQuery.isError && noModelsToOffer) {
@@ -267,12 +308,7 @@ export function ModelPicker() {
       triggerClassName={notConfigured ? 'text-destructive-foreground' : undefined}
       settings={<SessionThinkingSettings modelId={activeModelId} switchingModel={busy} />}
     >
-      <ModelProviderMark modelId={selectedModelId} provider={selectedModelId?.split('/')[0]} />
-      <Metadata singleLine className="max-w-48 max-sm:max-w-28">
-        <Metadata.Item>{label}</Metadata.Item>
-        {notConfigured && <Metadata.Item className="shrink-0">not configured</Metadata.Item>}
-      </Metadata>
-      <SessionThinkingIcon modelId={activeModelId} switchingModel={busy} />
+      {trigger}
     </ModelMenu>
   );
 }

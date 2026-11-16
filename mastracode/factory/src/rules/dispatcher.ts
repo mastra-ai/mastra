@@ -52,6 +52,7 @@ import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import {
   externalSourceKey,
   FACTORY_RULE_MATERIALIZATION_KEY,
+  FactoryRunBindingSupersededError,
   WorkItemSourceConflictError,
   WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
@@ -108,14 +109,14 @@ const SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS = 6 * 60 * 60_000;
 // Dispatches can legitimately run for minutes. Woken skill invocations hold
 // capacity until their agent run reaches a terminal state; binding preparation
 // also runs detached from the poll loop under this concurrency cap.
-const MAX_IN_FLIGHT = 25;
+const MAX_IN_FLIGHT = 10;
 /**
  * Decisions that may start or wake an agent run, or wait for one to end, and so
  * hold a run slot. A transition's message is queued as a separate sendMessage,
  * so a transition stays bookkeeping, and so does a status event's route move:
  * it never waits for a run inline, it hands itself back until the run ends.
  */
-const isRunBearingDecision = (decision: Record<string, unknown>): boolean =>
+export const isRunBearingDecision = (decision: Record<string, unknown>): boolean =>
   decision.type === 'invokeSkill' || decision.type === 'sendMessage' || decision.type === 'signalActivity';
 const isBookkeepingDecision = (decision: Record<string, unknown>): boolean => !isRunBearingDecision(decision);
 const BOOKKEEPING_MAX_IN_FLIGHT = 4;
@@ -462,6 +463,7 @@ export interface FactoryBindingPreparationInput {
   record: FactoryDeferredDecisionRecord;
   item: Card;
   role: string;
+  expectedBindingId?: string;
 }
 
 export type FactoryReviewStatusPhase = 'queued' | 'reviewing' | 'retrying' | 'completed' | 'failed' | 'cancelled';
@@ -839,6 +841,11 @@ export class FactoryDecisionDispatcher {
     if (this.#reconcileOwed) return;
     this.#reconcileOwed = true;
     this.wake();
+  }
+
+  /** Run slots this process holds now, out of its cap. Per process: other replicas keep their own. */
+  runSlots(): { inUse: number; cap: number } {
+    return { inUse: this.#runInFlight.size, cap: this.#maxInFlight };
   }
 
   async runOnce(now = new Date()): Promise<void> {
@@ -1752,7 +1759,14 @@ export class FactoryDecisionDispatcher {
         return;
       }
       case 'notify': {
-        const binding = await this.#requireBinding(record);
+        const selected = await this.#requireBinding(record);
+        if (
+          (await this.#roleSuperseded(record, selected.role)) ||
+          (await this.#decisionOvertaken(record, selected.role))
+        ) {
+          throw new FactoryDecisionSuperseded();
+        }
+        const binding = await this.#requireOrPrepareBinding(record, selected.role, selected.id);
         // A notification can wake the idle session, so it runs as the session's
         // owner like any other Factory-started run, never as nobody.
         const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
@@ -2575,8 +2589,12 @@ export class FactoryDecisionDispatcher {
   async #requireOrPrepareBinding(
     record: FactoryDeferredDecisionRecord,
     role: string,
+    expectedBindingId?: string,
   ): Promise<FactoryRunBindingRecord> {
     const binding = await this.#findBinding(record, role);
+    if (expectedBindingId && binding?.id !== expectedBindingId) {
+      return this.#sameRoleReplacement(record, role, expectedBindingId);
+    }
     if (binding) {
       const session = await this.#controller.getSession(binding.sessionId);
       if (session) return binding;
@@ -2588,8 +2606,36 @@ export class FactoryDecisionDispatcher {
       );
     }
     const item = await this.#requireItem(record);
-    await this.#prepareBinding({ record, item, role });
+    try {
+      await this.#prepareBinding({ record, item, role, expectedBindingId });
+    } catch (error) {
+      if (error instanceof FactoryRunBindingSupersededError) {
+        if (expectedBindingId) return this.#sameRoleReplacement(record, role, expectedBindingId);
+        throw new FactoryDecisionSuperseded();
+      }
+      throw error;
+    }
     return this.#requireBinding(record, role);
+  }
+
+  async #sameRoleReplacement(
+    record: FactoryDeferredDecisionRecord,
+    role: string,
+    expectedBindingId: string,
+  ): Promise<FactoryRunBindingRecord> {
+    const replacement = await this.#findBinding(record, role);
+    if (
+      !replacement ||
+      replacement.id === expectedBindingId ||
+      (await this.#roleSuperseded(record, role)) ||
+      (await this.#decisionOvertaken(record, role))
+    ) {
+      throw new FactoryDecisionSuperseded();
+    }
+    if (!(await this.#controller.getSession(replacement.sessionId))) {
+      throw new FactoryDispatchError('session_unavailable', 'Bound Factory session not found.');
+    }
+    return replacement;
   }
 
   async #findSession(

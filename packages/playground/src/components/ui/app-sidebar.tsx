@@ -3,10 +3,10 @@ import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import type { SidebarLink } from '@mastra/playground-ui/components/Sidebar';
 import { useConnectSurface } from '@mastra/playground-ui/domains/connect';
 import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
+import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import { useMCPServers } from '@mastra/react/hooks/mcps';
 import { useWorkspaces } from '@mastra/react/hooks/workspace';
-import { Wrench } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { useAgentBuilderSidebarVisibility } from '@/domains/agent-builder/hooks/use-agent-builder-sidebar-visibility';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
@@ -131,7 +131,7 @@ export function AppSidebar() {
             link={{
               name: 'Agent Builder',
               url: '/agent-builder',
-              icon: <Wrench />,
+              icon: <IconMaintenance />,
             }}
             isActive={isAgentBuilderActive}
           />

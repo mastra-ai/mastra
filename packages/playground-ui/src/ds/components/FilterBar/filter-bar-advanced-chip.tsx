@@ -1,4 +1,3 @@
-import { BracesIcon, XIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { chipClass, editableSegmentClass, removeSegmentClass } from './filter-bar-chip';
@@ -10,6 +9,8 @@ import { useSettleOnLeave } from './use-settle-on-leave';
 import { Button } from '@/ds/components/Button/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { Txt } from '@/ds/components/Txt';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { cn } from '@/lib/utils';
 
 export type FilterBarAdvancedChipProps = {
@@ -91,7 +92,7 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
           className={editableSegmentClass}
           title="Edit advanced filter"
         >
-          <BracesIcon aria-hidden />
+          <IconCodeBrackets aria-hidden />
           <span className="truncate">Advanced filter</span>
           {count > 0 && (
             <Txt as="span" variant="column" tone="muted" aria-hidden>
@@ -101,7 +102,7 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
         </PopoverTrigger>
         {leaving ? (
           <span aria-hidden className={removeSegmentClass}>
-            <XIcon />
+            <IconCrossMedium />
           </span>
         ) : (
           <button
@@ -113,7 +114,7 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
             className={removeSegmentClass}
             onClick={remove}
           >
-            <XIcon />
+            <IconCrossMedium />
           </button>
         )}
       </div>
@@ -124,7 +125,7 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
         finalFocus={triggerRef}
       >
         <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-          <BracesIcon className="size-3.5 text-muted-foreground" />
+          <IconCodeBrackets className="size-3.5 text-muted-foreground" />
           <Txt as="span" variant="label" tone="ink">
             Advanced filter
           </Txt>
@@ -138,7 +139,7 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
             tooltip="Close"
             onClick={() => ctx.setOpenGroup(null)}
           >
-            <XIcon />
+            <IconCrossMedium />
           </Button>
         </div>
         <FilterBarGroupEditor

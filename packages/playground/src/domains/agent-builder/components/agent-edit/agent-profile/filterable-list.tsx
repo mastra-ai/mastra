@@ -58,11 +58,11 @@ export const FilterableList = ({
       data-testid={`${testIdPrefix}-filter`}
     >
       <SearchInput
-        label={`Filter ${title.toLowerCase()}`}
+        label={`Search ${title.toLowerCase()}`}
         size="md"
         className="flex-none"
         data-testid={`${testIdPrefix}-filter-search`}
-        placeholder={`Filter ${title.toLowerCase()}`}
+        placeholder={`Search ${title.toLowerCase()}`}
         value={search}
         onValueChange={setSearch}
       />

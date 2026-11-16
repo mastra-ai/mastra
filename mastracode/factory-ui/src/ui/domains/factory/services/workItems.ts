@@ -40,9 +40,9 @@ export function cardPullRequestSources(item: Pick<WorkItem, 'workItem'>): NonNul
   return (item.workItem?.sources ?? []).filter(source => source.sourceType === 'pull-request');
 }
 
-type CardPullRequestSource = NonNullable<WorkItemRow['sources']>[number];
+export type CardPullRequestSource = NonNullable<WorkItemRow['sources']>[number];
 
-function sourcePullRequestNumber(source: CardPullRequestSource): number | undefined {
+export function sourcePullRequestNumber(source: CardPullRequestSource): number | undefined {
   const metadata = source.metadata ?? {};
   const value = metadata.githubPullRequestNumber ?? metadata.gitlabMergeRequestIid ?? metadata.number;
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
@@ -68,30 +68,6 @@ export function attachedPullRequestSource(
     sources.filter(openPullRequestSource).at(-1) ??
     sources.at(-1)
   );
-}
-
-export interface CardPullRequestLink {
-  url: string;
-  provider: 'github' | 'gitlab';
-  number: number | undefined;
-  state: 'open' | 'merged' | 'closed';
-}
-
-/** The pull and merge requests attached to the card that have a URL, open ones first, newest first within each. */
-export function cardPullRequestLinks(item: Pick<WorkItem, 'workItem'>): CardPullRequestLink[] {
-  const links = cardPullRequestSources(item).flatMap((source): CardPullRequestLink[] => {
-    if (!source.url) return [];
-    const merged = source.metadata?.merged === true || (source.state ?? source.metadata?.state) === 'merged';
-    return [
-      {
-        url: source.url,
-        provider: source.provider === 'gitlab' ? 'gitlab' : 'github',
-        number: sourcePullRequestNumber(source),
-        state: openPullRequestSource(source) ? 'open' : merged ? 'merged' : 'closed',
-      },
-    ];
-  });
-  return links.toReversed().toSorted((a, b) => Number(b.state === 'open') - Number(a.state === 'open'));
 }
 
 /** Whether the card carries a pull or merge request, as its own source or one attached to its issue. */

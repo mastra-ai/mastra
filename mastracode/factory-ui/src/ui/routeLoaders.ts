@@ -11,7 +11,7 @@ import { intakeRoutesQueryOptions } from '../hooks/useIntakeRoutes';
 import { defaultModelQueryOptions } from '../hooks/use-default-model';
 import { providersQueryOptions } from '../hooks/use-providers';
 import { factoriesQueryOptions } from '../hooks/useFactories';
-import { factoryDecisionHistoryQueryOptions } from '../hooks/useFactoryDecisions';
+import { factoryDecisionHistoryQueryOptions, runQueueQueryOptions } from '../hooks/useFactoryDecisions';
 import { factoryProjectQueryOptions } from '../hooks/useFactoryDefaultModel';
 import { gitLabStatusQueryOptions } from '../hooks/useGitLabData';
 import { githubStatusQueryOptions } from '../hooks/useGithubStatus';
@@ -128,6 +128,7 @@ export const prefetchBoard: Prefetch = (services, { params, request }) => {
   void queryClient.query(workItemFilterOptionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
   whenFactoryListed(services, factoryId, factory => {
     if (!hasLinkedRepository(factory)) return;
+    void queryClient.query(runQueueQueryOptions(api.baseUrl, factoryId)).catch(noop);
     void queryClient.query(intakeConfigQueryOptions(api.baseUrl)).catch(noop);
     void queryClient.query(intakeBindingsQueryOptions(api.baseUrl)).catch(noop);
     void queryClient.query(githubStatusQueryOptions(api.baseUrl)).catch(noop);
