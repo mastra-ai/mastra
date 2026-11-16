@@ -3299,12 +3299,12 @@ describe('GithubRules', () => {
     const feedback = (await workItems.listDeferredDecisions('org-1', project.id)).find(
       record => record.workItemId === itemId && record.decision.type === 'sendMessage',
     );
-    expect(feedback?.decision).toMatchObject({ type: 'sendMessage', role: 'work', priority: 'high' });
+    expect(feedback?.decision).toMatchObject({ type: 'sendMessage', role: 'work', prepareBinding: true, priority: 'high' });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:02Z'));
     expect(
       (await workItems.listDeferredDecisions('org-1', project.id)).find(record => record.id === feedback?.id),
-    ).toMatchObject({ status: 'succeeded' });
-    // Dispatch considers the wake successful even though this item has no author binding to receive it.
+    ).toMatchObject({ status: 'retry' });
+    // Without a binding preparer this isolated webhook test retries feedback rather than silently dropping it.
     expect((await current())?.stages).toEqual(['pr-review']);
     expect((await current())?.metadata?.openPullRequestNumber).toBe(17);
 
@@ -3333,11 +3333,11 @@ describe('GithubRules', () => {
         record.id !== feedback?.id &&
         record.decision.idempotencyKey?.includes('address-review-feedback'),
     );
-    expect(secondFeedback?.decision).toMatchObject({ type: 'sendMessage', role: 'work', priority: 'high' });
+    expect(secondFeedback?.decision).toMatchObject({ type: 'sendMessage', role: 'work', prepareBinding: true, priority: 'high' });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:04Z'));
     expect(
       (await workItems.listDeferredDecisions('org-1', project.id)).find(record => record.id === secondFeedback?.id),
-    ).toMatchObject({ status: 'succeeded' });
+    ).toMatchObject({ status: 'retry' });
     expect((await current())?.stages).toEqual(['pr-review']);
     await move('execute', 'agent');
     await move('pr-review', 'agent');

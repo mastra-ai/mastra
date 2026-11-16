@@ -655,12 +655,24 @@ describe('built-in board and integration handlers', () => {
         type: 'sendMessage',
         idempotencyKey: 'delivery-1:address-review-feedback',
         role: 'work',
+        prepareBinding: true,
         priority: 'high',
       });
       // The message has to carry the review URL: the agent reads the individual
       // line comments from its own PR subscription, not from this message.
       expect((decision as { message: string }).message).toContain('#pullrequestreview-99');
     });
+
+    it.each(['done', 'canceled'])(
+      'does not prepare a Work binding for a %s card when changes are requested',
+      async stage => {
+        const terminal = bind(reviewContext(), ruleItem({ ...item, stages: [stage] }));
+        for (const context of [terminal, { ...terminal, boardClosure: undefined }]) {
+          const decision = await defaultGithubRules.pullRequestReviewSubmitted?.(context);
+          expect(decision).toMatchObject({ type: 'sendMessage', role: 'work', prepareBinding: false });
+        }
+      },
+    );
 
     it('stays quiet for reviews that are not asking for changes', async () => {
       const rule = defaultGithubRules.pullRequestReviewSubmitted;
@@ -769,6 +781,7 @@ describe('built-in board and integration handlers', () => {
         priority: 'high',
       });
       expect((decision as { message: string }).message).toContain('#issuecomment-555');
+      expect(decision).not.toHaveProperty('prepareBinding');
     });
 
     it('ignores Factory-authored comments so the Work agent cannot wake itself', async () => {
@@ -812,8 +825,26 @@ describe('built-in board and integration handlers', () => {
           },
         }),
       );
-      expect(decision).toMatchObject({ type: 'sendMessage', role: 'work', priority: 'high' });
+      expect(decision).toMatchObject({ type: 'sendMessage', role: 'work', prepareBinding: true, priority: 'high' });
     });
+
+    it.each(['done', 'canceled'])(
+      'does not prepare a Work binding for a %s card after a Factory verdict comment',
+      async stage => {
+        const terminal = bind(
+          commentContext({
+            actor: { type: 'github', login: 'factory[bot]', trusted: true, factoryAuthored: true },
+            issueComment: { id: 556, body: '**Verdict: Request changes**', author: 'factory[bot]' },
+          }),
+          ruleItem({ ...item, stages: [stage] }),
+        );
+        for (const context of [terminal, { ...terminal, boardClosure: undefined }]) {
+          const decision = await defaultGithubRules.pullRequestCommentCreated?.(context);
+          expect(decision).toMatchObject({ type: 'sendMessage', role: 'work' });
+          expect(decision).not.toHaveProperty('prepareBinding');
+        }
+      },
+    );
 
     it('ignores a Factory verdict that approves, and a verdict only quoted in the body', async () => {
       const rule = defaultGithubRules.pullRequestCommentCreated;
