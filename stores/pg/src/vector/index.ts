@@ -147,9 +147,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
    * (cache warmup, query, upsert, updateVector, setupIndex). Also memoizes the promise.
    */
   private indexMetadataCache: Map<string, Promise<PGIndexMetadata>> = new Map();
-  /** Incremented by {@link invalidateIndexCaches}; the value of the last invalidation is kept per index. */
-  private cacheInvalidations = 0;
-  private indexInvalidatedAt = new Map<string, number>();
+  /** Indexes invalidated while the startup cache warmup runs; `null` once it has settled. */
+  private warmupInvalidations: Set<string> | null = null;
   private createdIndexes = new Map<string, number>();
   private namespaceReadyIndexes = new Set<string>();
   /** In-flight lazy namespace migrations, keyed by index name (see {@link ensureNamespaceReady}). */
@@ -227,16 +226,18 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       // Warm the created indexes cache in background so we don't need to check if indexes exist every time
       // Store the promise so we can wait for it during disconnect to avoid "pool already closed" errors
+      // deleteIndex() or an index rebuild can run while the warmup's listing or metadata reads are in
+      // flight; caching what the warmup read for an index invalidated since then would hand later
+      // calls the old table's metadata.
+      const invalidated = new Set<string>();
+      this.warmupInvalidations = invalidated;
       this.cacheWarmupPromise = (async () => {
+        const reads: Promise<void>[] = [];
         try {
-          const startedAt = this.cacheInvalidations;
-          // The listing can predate a deleteIndex() or index rebuild that ran meanwhile; caching
-          // what it saw for that index would serve the dropped table to later calls.
-          const isStale = (indexName: string) => (this.indexInvalidatedAt.get(indexName) ?? 0) > startedAt;
           const existingIndexes = await this.listIndexes();
-          await Promise.all(
-            existingIndexes.map(async indexName => {
-              if (isStale(indexName)) return;
+          reads.push(
+            ...existingIndexes.map(async indexName => {
+              if (invalidated.has(indexName)) return;
               const info = await this.getIndexMetadata({ indexName });
               const key = await this.getIndexCacheKey({
                 indexName,
@@ -245,14 +246,20 @@ export class PgVector extends MastraVector<PGVectorFilter> {
                 type: info.type,
                 vectorType: info.vectorType,
               });
+              if (invalidated.has(indexName)) return;
               this.createdIndexes.set(indexName, key);
               this.indexVectorTypes.set(indexName, info.vectorType);
             }),
           );
+          await Promise.all(reads);
         } catch (error) {
           // Don't throw - cache warming is optional optimization
           // If it fails (e.g., pool closed early), just log and continue
           this.logger?.debug('Cache warming skipped or failed', { error });
+        } finally {
+          // One rejected read ends Promise.all early; keep recording until every read has settled.
+          await Promise.allSettled(reads);
+          this.warmupInvalidations = null;
         }
       })();
     } catch (error) {
@@ -712,7 +719,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   private invalidateIndexCaches(indexName: string) {
     this.describeIndexCache.delete(indexName);
     this.indexMetadataCache.delete(indexName);
-    this.indexInvalidatedAt.set(indexName, ++this.cacheInvalidations);
+    this.warmupInvalidations?.add(indexName);
   }
 
   async query({
