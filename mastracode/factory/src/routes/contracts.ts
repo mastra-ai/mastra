@@ -296,7 +296,6 @@ export const projectListRepositorySchema = z.object({
   defaultBranch: z.string().nullable(),
   /** The branch set on the link; null means the repository's default branch. */
   branch: z.string().nullable(),
-  sandboxWorkdir: z.string(),
 });
 export type ProjectListRepository = z.infer<typeof projectListRepositorySchema>;
 
@@ -390,7 +389,6 @@ const environmentRepositorySchema = z.object({
   teardownCommand: z.string().nullable(),
   lastBuildStatus: z.enum(['unbuilt', 'configured', 'failed']),
   lastBuildError: z.string().nullable(),
-  lastBuiltAt: z.string().nullable(),
 });
 
 /** The configured FactorySandbox as factory describes it: provider id, JSON Schema of its settings, capabilities. */

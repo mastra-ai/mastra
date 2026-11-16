@@ -20,6 +20,7 @@ import {
   prRuns,
   recordPrFailures,
   retryTransient,
+  runsToInspect,
   syncFiles,
 } from './update.mjs';
 
@@ -413,6 +414,21 @@ test("keeps PR runs from a fork's main branch, drops runs on this repo's main", 
   assert.deepEqual(
     prRuns(runs, 'mastra-ai/mastra').map(r => r.id),
     [2, 3],
+  );
+});
+
+test('only finished runs that may hold a failed job get their jobs fetched', () => {
+  const runs = [
+    { id: 1, conclusion: 'success' },
+    { id: 2, conclusion: 'failure' },
+    { id: 3, conclusion: 'skipped' },
+    { id: 4, conclusion: 'cancelled' },
+    { id: 5, conclusion: null },
+    { id: 6, conclusion: 'timed_out' },
+  ];
+  assert.deepEqual(
+    runsToInspect(runs).map(r => r.id),
+    [2, 4, 6],
   );
 });
 

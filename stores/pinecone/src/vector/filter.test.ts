@@ -122,6 +122,60 @@ describe('PineconeFilterTranslator', () => {
           $and: [{ field: { $in: [date1.toISOString()] } }, { field: { $in: [date2.toISOString()] } }],
         });
       });
+
+      it('keeps sibling conditions next to $all', () => {
+        expect(translator.translate({ resource_id: 'alice', topic: { $all: ['x', 'y'] } })).toEqual({
+          $and: [{ resource_id: 'alice' }, { topic: { $in: ['x'] } }, { topic: { $in: ['y'] } }],
+        });
+      });
+
+      it('keeps sibling conditions when $all comes first', () => {
+        expect(translator.translate({ topic: { $all: ['x', 'y'] }, resource_id: 'alice', thread_id: 't1' })).toEqual({
+          $and: [{ resource_id: 'alice', thread_id: 't1' }, { topic: { $in: ['x'] } }, { topic: { $in: ['y'] } }],
+        });
+      });
+
+      it('keeps every $all when several fields use it', () => {
+        expect(
+          translator.translate({ resource_id: 'alice', tags: { $all: ['a'] }, topic: { $all: ['x', 'y'] } }),
+        ).toEqual({
+          $and: [
+            { resource_id: 'alice' },
+            { tags: { $in: ['a'] } },
+            { topic: { $in: ['x'] } },
+            { topic: { $in: ['y'] } },
+          ],
+        });
+      });
+
+      it('uses the full dotted path for $all on a nested field', () => {
+        expect(translator.translate({ resource_id: 'alice', meta: { topic: { $all: ['x', 'y'] } } })).toEqual({
+          $and: [{ resource_id: 'alice' }, { 'meta.topic': { $in: ['x'] } }, { 'meta.topic': { $in: ['y'] } }],
+        });
+      });
+
+      it('keeps $all next to an explicit $and', () => {
+        expect(
+          translator.translate({
+            $and: [{ resource_id: 'alice' }],
+            topic: { $all: ['x', 'y'] },
+          } as PineconeVectorFilter),
+        ).toEqual({
+          $and: [{ $and: [{ resource_id: 'alice' }] }, { topic: { $in: ['x'] } }, { topic: { $in: ['y'] } }],
+        });
+      });
+
+      it('expands $all on the field path when it shares a field with other operators', () => {
+        expect(translator.translate({ tags: { $all: ['a', 'b'], $nin: ['c'] } })).toEqual({
+          $and: [{ tags: { $nin: ['c'] } }, { tags: { $in: ['a'] } }, { tags: { $in: ['b'] } }],
+        });
+      });
+
+      it('keeps sibling conditions when $all shares a field with other operators', () => {
+        expect(translator.translate({ resource_id: 'alice', tags: { $all: ['a'], $nin: ['c'] } })).toEqual({
+          $and: [{ resource_id: 'alice', tags: { $nin: ['c'] } }, { tags: { $in: ['a'] } }],
+        });
+      });
     });
   });
 

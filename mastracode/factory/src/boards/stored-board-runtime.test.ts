@@ -528,8 +528,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           orgId,
           factoryProjectId: projectId,
           workItemId: card.id,
-          ingress: { identity, triggerType: 'test' },
-          configVersion: 'factory-config-v1',
+          ingress: { identity },
           expectedRevision: current.revision,
           actor: { type: 'system', id: 'rules' },
           outcome: { status: 'accepted' },
@@ -588,9 +587,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           orgId,
           connectionId: connection.id,
           repositoryId: repository.id,
-          createdByUserId: 'admin-user',
-          sandboxProvider: 'local',
-          sandboxWorkdir: '/tmp/shipyard',
         });
         return projectId;
       }
@@ -1264,9 +1260,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             orgId,
             connectionId: connection.id,
             repositoryId: repository.id,
-            createdByUserId: 'admin-user',
-            sandboxProvider: 'local',
-            sandboxWorkdir: '/workspace',
           });
 
           // The GitHub rules and dispatcher Factory runs, over the project's stored boards.

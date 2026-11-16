@@ -1,5 +1,31 @@
 # @mastra/mcp
 
+## 2.10.0-alpha.0
+
+### Minor Changes
+
+- `MCPServer` accepts a `maxRequestBodySize` option, so HTTP requests larger than the 4 MiB default are no longer answered with a `413` before the tool runs. ([#30411](https://github.com/mastra-ai/mastra/pull/30411))
+
+  ```typescript
+  // Before: a tools/call body over 4 MiB was rejected
+  // { "code": -32000, "message": "Payload Too Large: Request body must not exceed 4194304 bytes" }
+
+  // After: raise the limit for the servers that need it
+  const server = new MCPServer({
+    name: 'intake',
+    version: '1.0.0',
+    maxRequestBodySize: 16 * 1024 * 1024,
+    tools: { submitIntake },
+  });
+  ```
+
+  The bound is in bytes and must be positive. Leaving it unset keeps the SDK default of `4194304` (4 MiB), and a body over the limit is still rejected with a `413` JSON-RPC error before it is parsed. It covers only a body the server reads itself: if body-parsing middleware supplies the parsed body, the bound does not apply, so raise the size limit on that parser too. It applies to `startHTTP` requests only; `stdio` has no request bodies.
+
+### Patch Changes
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b)]:
+  - @mastra/core@1.84.0-alpha.3
+
 ## 2.9.0
 
 ### Minor Changes

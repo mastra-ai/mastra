@@ -156,7 +156,6 @@ import { hydrateSessionDefaultModel } from './session/default-model-hydration.js
 import { environmentSlugs, resolveSessionRepositories } from './session/environment-repositories.js';
 import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
 import { createSourceControlSessionLookup } from './session/factory-session.js';
-import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { liveSessionsTouchingTheFeed } from './session/live-sessions.js';
@@ -166,7 +165,7 @@ import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import { migrateSessionResources, privatizeOwnerResourceSessions } from './session/resource-migration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
-import { selfReviewApprovedHead } from './session/self-review-gate.js';
+import { recordRunRepositoryChoice, selfReviewApprovedHead } from './session/self-review-gate.js';
 import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
 import type { ReviewedChangeRequest } from './session/source-control-tools.js';
 import { createSourceControlTools, resolveReviewedChangeRequest } from './session/source-control-tools.js';
@@ -190,7 +189,6 @@ import type {
 import { ChannelIdentityStorage } from './storage/domains/channel-identity/base.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
-import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
 import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
@@ -985,7 +983,6 @@ export class MastraFactory {
         return undefined;
       },
     );
-    const filesystemStorage = storage.registerDomain(new FilesystemStorage());
     const sourceControlStorage = storage.registerDomain(new SourceControlStorage());
     // Event polling keeps its repository list in memory; the bus tells the
     // polling replica about links made on another one.
@@ -1004,7 +1001,6 @@ export class MastraFactory {
       memorySettings: memorySettingsStorage,
       customProviders: customProvidersStorage,
       sandboxEnvs: sandboxEnvsStorage,
-      filesystem: filesystemStorage,
       projects: factoryProjectsStorage,
       queueHealth: queueHealthStorage,
       workItems: workItemsStorage,
@@ -2021,12 +2017,18 @@ export class MastraFactory {
                 audit: auditDomain,
                 ...(workItemsStorage
                   ? {
-                      selfReviewApprovedHead: () =>
-                        selfReviewApprovedHead({
-                          requestContext,
-                          workItems: workItemsStorage,
-                          boards,
-                        }),
+                      workItem: {
+                        selfReviewApprovedHead: target =>
+                          selfReviewApprovedHead({ requestContext, workItems: workItemsStorage, boards, target }),
+                        recordRepository: (sourceControl, target) =>
+                          recordRunRepositoryChoice({
+                            requestContext,
+                            workItems: workItemsStorage,
+                            intake: intakeStorage,
+                            sourceControl,
+                            target,
+                          }),
+                      },
                     }
                   : {}),
               }),
@@ -2424,10 +2426,6 @@ export class MastraFactory {
 
     const notifyApprovalRequested = createSessionApprovalNotifier(sessionReports);
     prepared.base.controller.onSessionCreated(session => {
-      observeSessionFilesystem(session, {
-        filesystem: filesystemStorage,
-        sourceControl: { sessions: sourceControlSessions },
-      });
       observeSessionFirstMessage(session, {
         sourceControl: { sessions: sourceControlSessions },
       });

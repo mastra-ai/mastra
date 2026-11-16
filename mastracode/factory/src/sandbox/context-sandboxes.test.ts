@@ -154,10 +154,7 @@ async function cardWithSessions(seed: Awaited<ReturnType<typeof createFactorySto
     orgId,
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'user-1',
     branch: null,
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/workspace/ship',
   });
   const rows = {} as Record<Context, SourceControlSession>;
   for (const context of CONTEXTS) {

@@ -1375,9 +1375,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                             "string",
                             "null"
                           ]
-                        },
-                        "sandboxWorkdir": {
-                          "type": "string"
                         }
                       },
                       "required": [
@@ -1388,8 +1385,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "externalId",
                         "slug",
                         "defaultBranch",
-                        "branch",
-                        "sandboxWorkdir"
+                        "branch"
                       ]
                     }
                   }
@@ -2906,12 +2902,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       "string",
                       "null"
                     ]
-                  },
-                  "lastBuiltAt": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
                   }
                 },
                 "required": [
@@ -2925,8 +2915,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "setupCommand",
                   "teardownCommand",
                   "lastBuildStatus",
-                  "lastBuildError",
-                  "lastBuiltAt"
+                  "lastBuildError"
                 ]
               }
             },
@@ -6108,12 +6097,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       "string",
                       "null"
                     ]
-                  },
-                  "lastBuiltAt": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
                   }
                 },
                 "required": [
@@ -6127,8 +6110,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "setupCommand",
                   "teardownCommand",
                   "lastBuildStatus",
-                  "lastBuildError",
-                  "lastBuiltAt"
+                  "lastBuildError"
                 ]
               }
             },

@@ -5,6 +5,8 @@ import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ComponentType, SVGProps } from 'react';
 
+import { phaseKindOf } from '../boardFlow';
+import type { BoardInfo } from '../boardFlow';
 import type { WorkItemSource } from '../services/workItems';
 import { boardStage, stageTone } from '../stages';
 import type { BuiltinStageId, StageTone } from '../stages';
@@ -24,7 +26,7 @@ import { IconClipboard2 } from '@mastra/playground-ui/icons/central/IconClipboar
 // GitHub keeps issue vs PR distinct — card meta shows #N for both
 const SOURCE_ICONS: Record<WorkItemSource, { icon: ComponentType<SVGProps<SVGSVGElement>>; className: string }> = {
   'github-issue': { icon: GithubIcon, className: 'text-foreground' },
-  'github-pr': { icon: IconPullRequest, className: 'text-badge-green-indicator' },
+  'github-pr': { icon: IconPullRequest, className: 'text-muted-foreground' },
   'gitlab-issue': { icon: GitLabIcon, className: 'text-badge-red-indicator' },
   'gitlab-pr': { icon: GitLabIcon, className: 'text-badge-red-indicator' },
   'linear-issue': { icon: LinearIcon, className: 'text-badge-blue-indicator' },
@@ -151,6 +153,11 @@ export function phaseIconKind(boardId: string, kind: BoardPhaseKind): BoardPhase
   return boardId === 'work' || boardId === 'review' ? undefined : kind;
 }
 
+export function boardPhaseIconKind(board: BoardInfo | undefined, stage: string): BoardPhaseKind | undefined {
+  const kind = phaseKindOf(board, stage);
+  return board && kind ? phaseIconKind(board.id, kind) : undefined;
+}
+
 function stageToneFor(stage: string, kind?: BoardPhaseKind): BoardTone {
   const builtin = builtinStageFor(stage, kind);
   return builtin ? stageTone(builtin) : PHASE_KIND_TONES[kind ?? 'resting'];
@@ -196,6 +203,12 @@ export function stageHeaderTintClass(stage: string, kind?: BoardPhaseKind): stri
 export function stageStrongTintClass(stage: string, kind?: BoardPhaseKind): string {
   return TONE_CLASSES[stageToneFor(stage, kind)].strongTint;
 }
+
+export function stageColorClass(stage: string, kind?: BoardPhaseKind): string {
+  return TONE_CLASSES[stageToneFor(stage, kind)].icon;
+}
+
+export const unfocusedStageClass = 'opacity-30';
 
 export function BoardStageIcon({
   stage,

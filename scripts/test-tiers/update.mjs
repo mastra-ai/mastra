@@ -251,6 +251,14 @@ export function prRuns(runs, repo) {
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
 
+/**
+ * Finished runs that did not pass. A skipped run never started a job, so fetching its jobs
+ * (one serial API call each, hundreds a day) cannot find a failure.
+ */
+export function runsToInspect(runs) {
+  return runs.filter(r => r.conclusion && r.conclusion !== 'success' && r.conclusion !== 'skipped');
+}
+
 /** The first later green run of the same workflow on the same branch of the same repository, at a new head. */
 export function nextGreenRun(runs, run) {
   return runs.find(
@@ -527,7 +535,10 @@ function dailyCommand(tiers, { days, date }) {
 
   const failures = [];
   const compareCache = new Map();
-  for (const run of runs.filter(r => r.conclusion && r.conclusion !== 'success')) {
+  const toInspect = runsToInspect(runs);
+  console.error(`inspecting ${toInspect.length} of ${runs.length} PR runs since ${since}`);
+  for (const [i, run] of toInspect.entries()) {
+    if (i % 50 === 0) console.error(`  run ${i + 1}/${toInspect.length}`);
     const jobs = runJobs(run.id);
     const passedLater = job =>
       jobs.some(j => j.name === job.name && j.run_attempt > job.run_attempt && j.conclusion === 'success') ||

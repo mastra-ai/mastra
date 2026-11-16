@@ -66,9 +66,6 @@ async function setup(permission: string | undefined, rules?: GithubRuleOverrides
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'user-1',
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/workspace',
   });
   const github = {
     rules: resolveGithubRules(rules),
@@ -675,7 +672,7 @@ describe('GithubRules', () => {
     expect(await workItems.get({ orgId: 'org-1', id: item.id })).toEqual(item);
   });
 
-  it('persists only replacement decisions with the shared audit version', async () => {
+  it('persists only replacement decisions', async () => {
     const handler = vi.fn<NonNullable<GithubRuleOverrides['issueClosed']>>(context => ({
       type: 'transition',
       board: 'work',
@@ -686,7 +683,6 @@ describe('GithubRules', () => {
       issueClosed: handler,
     });
     await createLinkedIssue(workItems, project.id);
-    const commitEvaluation = vi.spyOn(workItems, 'commitRuleEvaluation');
     const service = new GithubRules({
       github,
       sourceControl,
@@ -703,7 +699,6 @@ describe('GithubRules', () => {
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions).toHaveLength(1);
     expect(decisions[0]?.decision).toMatchObject({ type: 'transition', board: 'work', stage: 'canceled' });
-    expect(commitEvaluation).toHaveBeenCalledWith(expect.objectContaining({ configVersion: 'custom-github-v2' }));
   });
 
   it('records disabled ingress without decisions and still evaluates unrelated events', async () => {
@@ -3897,9 +3892,6 @@ describe('GithubRules', () => {
       orgId: 'org-2',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-2',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/workspace',
     });
     const service = new GithubRules({
       github,
@@ -4748,8 +4740,7 @@ describe('createGithubPullRequestReconciler', () => {
       orgId: 'org-1',
       factoryProjectId: context.project.id,
       workItemId: card.item.id,
-      ingress: { identity: 'settled-proposal', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'settled-proposal'},
       expectedRevision: card.item.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -4820,8 +4811,7 @@ describe('createGithubPullRequestReconciler', () => {
       orgId: 'org-1',
       factoryProjectId: context.project.id,
       workItemId: card.item.id,
-      ingress: { identity: 'failed-before-settlement', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'failed-before-settlement'},
       expectedRevision: card.item.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -4883,8 +4873,7 @@ describe('createGithubPullRequestReconciler', () => {
       orgId: 'org-1',
       factoryProjectId: context.project.id,
       workItemId: card.item.id,
-      ingress: { identity: 'failed-on-unknown-board', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'failed-on-unknown-board'},
       expectedRevision: card.item.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -5299,6 +5288,71 @@ describe('createGithubPullRequestReconciler', () => {
     // A second sweep replays through the ingress dedupe without new decisions.
     await reconcile([repositoryTarget]);
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(1);
+  });
+
+  it('reads a closed pull request open again when it is reopened, and a later missed close still reaches its card', async () => {
+    const context = await setup('write');
+    const card = await createCard(context, {
+      number: 21,
+      stages: ['canceled'],
+      metadata: {
+        author: 'pr-author',
+        state: 'closed',
+        draft: false,
+        merged: false,
+        assignees: ['assignee'],
+        requestedReviewers: ['reviewer'],
+        labels: ['bug'],
+        [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'closed',
+      },
+    });
+    const reconcile = createReconciler(
+      context,
+      vi.fn(async () => ({ ...mergedState(21), merged: false, mergedBy: undefined })),
+    );
+    const rules = new GithubRules({
+      github: context.github,
+      sourceControl: context.sourceControl,
+      integrationStorage: context.integrationStorage,
+      projects: context.projects,
+      storage: context.workItems,
+      configVersion: 'factory-config-v1',
+      boards: createTriageWorkRegistry(),
+    });
+    await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ checked: 0 });
+
+    await expect(
+      rules.ingest({
+        event: 'pull_request',
+        deliveryId: 'delivery-reopen-21',
+        payload: {
+          action: 'reopened',
+          installation: { id: 7 },
+          repository: { id: 10, full_name: 'acme/repo' },
+          sender: { login: 'maintainer' },
+          pull_request: {
+            number: 21,
+            title: 'PR 21',
+            html_url: 'https://github.com/acme/repo/pull/21',
+            state: 'open',
+            draft: false,
+            merged: false,
+            user: { login: 'pr-author' },
+            head: { ref: 'feature' },
+            base: { ref: 'main' },
+          },
+        },
+      }),
+    ).resolves.toEqual({ status: 'committed' });
+    expect(await context.workItems.get({ orgId: 'org-1', id: card.item.id })).toMatchObject({
+      stages: ['canceled'],
+      workItem: { state: 'open' },
+    });
+
+    await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ checked: 1, closed: 1 });
+    expect(await context.workItems.get({ orgId: 'org-1', id: card.item.id })).toMatchObject({
+      workItem: { state: 'closed' },
+    });
   });
 
   it('continues closed reconciliation when terminal decision cleanup fails', async () => {
@@ -6808,7 +6862,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       number: number,
       body: string | null,
       deliveryId = `delivery-open-${number}`,
-      action: 'opened' | 'closed' | 'edited' = 'opened',
+      action: 'opened' | 'closed' | 'reopened' | 'edited' = 'opened',
       merged = false,
       headBranch = `feature-${number}`,
     ) {
@@ -6955,9 +7009,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         orgId: 'org-1',
         connectionId: h.projectRepository.connectionId,
         repositoryId: other.id,
-        createdByUserId: 'user-1',
-        sandboxProvider: 'local',
-        sandboxWorkdir: '/workspace',
       });
       await h.integrationStorage.subscriptions.create({
         orgId: 'org-1',
@@ -7177,6 +7228,56 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       const [card] = await h.cards();
       expect(card).toMatchObject({ id: issue.id, stages: ['intake'] });
       expect(card!.workItem.state).toBe('open');
+    });
+
+    it("reads a pull request on its issue's card open again when it is reopened", async () => {
+      const h = await harness('write');
+      await h.issueCard(42, 'intake');
+      await h.ingest(openedPullRequest(17, 'Fixes #42'));
+      await h.ingest(openedPullRequest(17, 'Fixes #42', 'delivery-close-17', 'closed'));
+      const pullRequestSources = async () =>
+        (await h.cards()).flatMap(card => card.workItem.sources.filter(source => source.sourceType === 'pull-request'));
+      expect(await pullRequestSources()).toEqual([expect.objectContaining({ state: 'closed' })]);
+
+      await h.ingest(openedPullRequest(17, 'Fixes #42', 'delivery-reopen-17', 'reopened'));
+
+      expect(await pullRequestSources()).toEqual([
+        expect.objectContaining({ state: 'open', metadata: expect.objectContaining({ state: 'open', merged: false }) }),
+      ]);
+    });
+
+    it('reads a reopened pull request open again on its Review card and on the Work card that wrote it', async () => {
+      const h = await harness('write');
+      const work = await h.issueCard(42, 'intake');
+      await h.ingest(openedPullRequest(17, 'Fixes #42'));
+      await h.workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: h.project.id,
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'pull-request',
+            externalId: 'github-pr:17',
+            url: 'https://github.com/acme/repo/pull/17',
+          },
+          parentWorkItemId: work.id,
+          title: 'PR 17',
+          stages: ['review'],
+          sessions: {},
+          metadata: { state: 'open', merged: false },
+        },
+      });
+      const pullRequestStates = async () =>
+        (await h.cards()).flatMap(card =>
+          card.workItem.sources.filter(source => source.sourceType === 'pull-request').map(source => source.state),
+        );
+      await h.ingest(openedPullRequest(17, 'Fixes #42', 'delivery-close-17', 'closed'));
+      expect(await pullRequestStates()).toEqual(['closed', 'closed']);
+
+      await h.ingest(openedPullRequest(17, 'Fixes #42', 'delivery-reopen-17', 'reopened'));
+
+      expect(await pullRequestStates()).toEqual(['open', 'open']);
     });
 
     const builderSession = { threadId: 'thread-work', sessionId: 'session-work', branch: 'factory/issue-42-build', startedBy: 'user-1' };

@@ -720,13 +720,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       const boards = storage.registerDomain(new StoredBoardsStorage());
       await storage.init();
       onTestFinished(() => storage.close());
-      // The table as it was: without the columns this release adds.
+      // The table as it was: without the column this release adds.
       const database = storage.authDatabase!()!;
-      for (const column of ['on_events', 'allow_working_phase']) {
-        const sql = `ALTER TABLE factory_intake_routes DROP COLUMN ${column}`;
-        if (database.dialect === 'postgres') await database.pool.query(sql);
-        else await database.client.execute(sql);
-      }
+      const sql = 'ALTER TABLE factory_intake_routes DROP COLUMN on_events';
+      if (database.dialect === 'postgres') await database.pool.query(sql);
+      else await database.client.execute(sql);
       const scope = { orgId: 'org-1', factoryProjectId: 'project-1' };
       const id = randomUUID();
       await storage.ops.insertOne('factory_intake_routes', {

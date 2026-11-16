@@ -27,6 +27,7 @@ import {
   sessionLink,
 } from '../cardPrimaryAction';
 import { useCardMorph } from '../hooks/useCardMorph';
+import { useBoardRepository } from '../hooks/useBoardRepository';
 import type { AuditEventPage } from '../services/audit';
 import type { FactoryDecisionSummary } from '../services/decisions';
 import { relationshipPath } from '../services/relationships';
@@ -104,6 +105,7 @@ export function WorkItemCard({
   const { factoryId = '' } = useParams<{ factoryId: string }>();
   const morph = useCardMorph();
   const catalog = useBoardCatalog(item.githubProjectId);
+  const repository = useBoardRepository(item.githubProjectId);
   const boardId = itemBoard(item);
   const definition = catalog.data?.find(board => board.id === boardId);
   // A board without a pull request loop advances cards through its own phases instead.
@@ -127,7 +129,7 @@ export function WorkItemCard({
   const activity = workItemActivity(item, activityPage);
   const state = boardCardState({
     proposal: proposedRun,
-    moving: movingCardStatus(evaluatingStage, definition, item),
+    moving: movingCardStatus(evaluatingStage, definition),
     preparing: startingLabel,
     retryRequested: decision !== undefined && retryingDecisionId === decision.id,
     decision,
@@ -191,12 +193,13 @@ export function WorkItemCard({
 
   const relatedLink = (related: WorkItem): ReactElement => {
     const relatedSession = itemThreadSession(related.sessions);
+    const link = { item: related, contextRepository: repository };
 
     if (relatedSession !== undefined) {
       return (
         <RelatedWorkItemLink
           key={related.id}
-          item={related}
+          {...link}
           href={`/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`}
           kind="session"
         />
@@ -204,12 +207,10 @@ export function WorkItemCard({
     }
 
     if (related.url !== null) {
-      return <RelatedWorkItemLink key={related.id} item={related} href={related.url} kind="external" />;
+      return <RelatedWorkItemLink key={related.id} {...link} href={related.url} kind="external" />;
     }
 
-    return (
-      <RelatedWorkItemLink key={related.id} item={related} href={relationshipPath(related, factoryId)} kind="board" />
-    );
+    return <RelatedWorkItemLink key={related.id} {...link} href={relationshipPath(related, factoryId)} kind="board" />;
   };
   const relatedLinks = relatedItems.map(relatedLink);
 

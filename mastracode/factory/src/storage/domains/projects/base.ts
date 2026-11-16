@@ -139,15 +139,9 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     default_model_id: { type: 'text', nullable: true },
     model_scope: { type: 'text', default: 'hybrid' },
     default_thinking_level: { type: 'text', default: DEFAULT_THINKING_LEVEL },
-    // Deprecated: no longer read or written. Kept so existing databases need no
-    // migration. Old rows may still hold `true`, so never read it to bring Slack
-    // work items back. Drop it in a later migration.
-    slack_work_items_enabled: { type: 'boolean', default: false },
     // Retired project switch: no longer written. A phase starts on its own with `autoStart`; the
     // `auto-run-switch-v1` board migration reads it once to carry it into the project's boards.
     auto_run_enabled: { type: 'boolean', default: false },
-    // Retired project switch: no longer read or written. Plans are approved per board (`exitTool.autoApprove`).
-    auto_approve_plans: { type: 'boolean', default: false },
     sandbox_working_directory: { type: 'text', nullable: true },
     sandbox_settings: { type: 'json', nullable: true },
     workspace_setup_command: { type: 'text', nullable: true },
@@ -164,8 +158,6 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     build_start_claim_expires_at: { type: 'timestamp', nullable: true },
     build_on_push_enabled: { type: 'boolean', default: false },
     build_push_debounce_minutes: { type: 'integer', default: DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES },
-    // Retired project switch: no longer read or written. The review skill decides whether to publish its test check.
-    review_test_checks_enabled: { type: 'boolean', default: false },
     // Retired project switch: no longer written. A board self-reviews when it has a self-review
     // phase; the `self-review-switch-v1` board migration reads it once to carry it into its boards.
     self_review_enabled: { type: 'boolean', default: false },
@@ -187,7 +179,6 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   model_scope: string;
   default_thinking_level: string | null;
   auto_run_enabled: boolean;
-  auto_approve_plans: boolean;
   sandbox_working_directory: string | null;
   sandbox_settings: Record<string, unknown> | null;
   workspace_setup_command: string | null;

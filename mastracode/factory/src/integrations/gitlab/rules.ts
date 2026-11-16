@@ -35,7 +35,10 @@ import type {
   ExternalRepositoryProjectTarget,
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
-import { WorkItemUpdateConflictError } from '../../storage/domains/work-items/base.js';
+import {
+  FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
+  WorkItemUpdateConflictError,
+} from '../../storage/domains/work-items/base.js';
 import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import { closingIssueNumbers } from '../closing-references.js';
@@ -45,6 +48,7 @@ import { decodeIssueReference, encodeIssueReference, encodeSourceId, GITLAB_TRUS
 import type { ParsedGitLabWebhook } from './webhook.js';
 
 const RULE_TIMEOUT_MS = 5_000;
+const CARD_SYNC_USER_ID = 'factory-rule-dispatcher';
 
 type IngressStatus = 'ignored' | 'committed' | 'replayed' | 'missing';
 
@@ -535,6 +539,26 @@ export class GitLabRules {
         patch: { state: merged ? 'merged' : 'closed', metadata: { state: 'closed', merged } },
       });
     }
+    // The sweep settles a closed merge request on its own card and never checks that card again, so a reopen opens it here.
+    if (event === 'mergeRequestOpened' && string(attributes?.action)?.toLowerCase() === 'reopen' && reviewItem) {
+      const metadata = { ...reviewItem.workItem.metadata, ...reviewItem.metadata };
+      if (metadata.state === 'closed') {
+        await this.options.storage.syncCard({
+          orgId: reviewItem.orgId,
+          id: reviewItem.id,
+          userId: CARD_SYNC_USER_ID,
+          patch: {
+            metadata: {
+              state: 'open',
+              merged: false,
+              ...(metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY] === undefined
+                ? {}
+                : { [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: null }),
+            },
+          },
+        });
+      }
+    }
 
     // A push moves the head a recorded review verdict was given on. Recording
     // the new head lets the verdict badge show that it is outdated, while the
@@ -718,7 +742,7 @@ export class GitLabRules {
         await this.options.storage.update({
           orgId: item.orgId,
           id: item.id,
-          userId: 'factory-rule-dispatcher',
+          userId: CARD_SYNC_USER_ID,
           expectedRevision: item.revision,
           patch: { metadata: patch },
         });
@@ -944,8 +968,7 @@ export class GitLabRules {
       orgId: input.orgId,
       factoryProjectId: input.factoryProjectId,
       workItemId: input.item?.id ?? null,
-      ingress: { identity: input.ingressIdentity, triggerType: `gitlab.${input.event}` },
-      configVersion: this.options.configVersion,
+      ingress: { identity: input.ingressIdentity },
       expectedRevision: input.item?.revision ?? null,
       actor: { ...input.actor },
       outcome,
