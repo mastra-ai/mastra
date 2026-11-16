@@ -1,10 +1,14 @@
 import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
+import { sessionRowStatus } from '@mastra/factory/session/session-row-status';
+import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
+import { SLACK_SESSION_BRANCH_PREFIX } from '@mastra/factory/work-item-branch';
+import { cardContextSessions, cardThreadSession } from '@mastra/factory/work-items/card-context-sessions';
+import { isSettledChangeRequest } from '@mastra/factory/work-items/change-requests';
+import type { CardChangeRequest, PullRequestStatus } from '@mastra/factory/work-items/change-requests';
 import type { InstalledBoardInfo } from '../../../../api/types';
-import { cardContextSessions, cardThreadSession, externalLinkLabel } from '../../factory/boardItems';
-import type { PullRequestStatus } from '../../factory/boardItems';
+import { externalLinkLabel } from '../../factory/boardItems';
 import { itemBoard } from '../../factory/boardStages';
-import { CHANGE_REQUEST_TERMS, changeRequestStatus, isSettledChangeRequest } from '../../factory/changeRequestState';
-import type { CardChangeRequest } from '../../factory/changeRequestState';
+import { CHANGE_REQUEST_TERMS, changeRequestStatus } from '../../factory/changeRequestState';
 import type { WorkItem, WorkItemSource } from '../../factory/services/workItems';
 import {
   getFactorySessionSource,
@@ -13,9 +17,6 @@ import {
   isFactoryOwnedSession,
 } from './sessionPresentation';
 import type { SessionOwnerDetails, SessionSource, SessionViewerProfile } from './sessionPresentation';
-import { sessionRowStatus } from './sessionStatus';
-import type { SessionRowStatus } from './sessionStatus';
-import { SLACK_SESSION_BRANCH_PREFIX } from './user-sessions';
 import type { FactoryUserSession } from './user-sessions';
 
 export type SessionActivityStatus = 'waiting' | 'working' | 'initializing' | 'idle' | 'done';

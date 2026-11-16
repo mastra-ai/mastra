@@ -1,8 +1,8 @@
+import { cardChangeRequest } from '@mastra/factory/work-items/change-requests';
 import { describe, expect, it } from 'vitest';
 
 import { releaseBoard, workBoardCatalog } from '../../../../../../e2e/ui/board-catalog';
 import { providerFactsCard } from '../../../../__tests__/fixtures/providerFactsCard';
-import { cardChangeRequest } from '../../../factory/changeRequestState';
 import { EMPTY_SESSION_FILTERS, filterSessionRows } from '../sessionFilters';
 import { groupSessionRows, sessionGroupHeadings } from '../sessionGroups';
 import { oneRowPerCard, pinnedSessionsAfter, sessionActivityStatus, sessionBoard } from '../sessionRows';

@@ -10,7 +10,6 @@ import type { BoardRegistry } from '../boards/registry.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { factorySessionUrl, factoryWorkItemUrl } from '../links.js';
 import { buildModelCatalog, listSessionScopedCredentials } from '../routes/config.js';
-import { USER_SESSION_BRANCH_PREFIX } from '../routes/source-control-sessions.js';
 import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.js';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.js';
@@ -33,6 +32,7 @@ import { effectiveModelScope, factoryPrincipalId } from '../storage/domains/proj
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { USER_SESSION_BRANCH_PREFIX } from '../work-item-branch.js';
 import { workItemNumber } from '../work-items/card-number.js';
 import { deliverFactorySessionNotification, resolveSessionThread } from './deliver.js';
 import type { FactoryMessaging } from './messaging-tools.js';

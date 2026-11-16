@@ -1,3 +1,4 @@
+import { cardChangeRequest } from '@mastra/factory/work-items/change-requests';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
@@ -12,7 +13,7 @@ import { Link } from 'react-router';
 import type { BoardCardStatus } from '../boardCardState';
 import { SOURCE_LABELS, cardLabels, metadataLabelColors } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
-import { cardChangeRequest, changeRequestStatus } from '../changeRequestState';
+import { changeRequestStatus } from '../changeRequestState';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
 import { workItemReference } from '../services/relationships';
 import { isPullRequestSource } from '../services/workItems';

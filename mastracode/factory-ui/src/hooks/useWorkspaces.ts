@@ -1,3 +1,4 @@
+import { isPersonSessionBranch } from '@mastra/factory/work-item-branch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { queryOptions, skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient, UseQueryResult } from '@tanstack/react-query';
@@ -13,8 +14,6 @@ import {
   getUserSession,
   isSessionNotFound,
   listUserSessions,
-  USER_SESSION_BRANCH_PREFIX,
-  SLACK_SESSION_BRANCH_PREFIX,
 } from '../ui/domains/workspaces/services/user-sessions';
 import type { FactoryUserSession } from '../ui/domains/workspaces/services/user-sessions';
 
@@ -23,16 +22,10 @@ export interface WorkspacesData {
   userSessions: FactoryUserSession[];
 }
 
-function isUserSession(session: FactoryUserSession): boolean {
-  return (
-    session.branch.startsWith(USER_SESSION_BRANCH_PREFIX) || session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX)
-  );
-}
-
 function splitSessions(sessions: FactoryUserSession[]): WorkspacesData {
   return {
-    workspaces: sessions.filter(session => !isUserSession(session)),
-    userSessions: sessions.filter(isUserSession),
+    workspaces: sessions.filter(session => !isPersonSessionBranch(session.branch)),
+    userSessions: sessions.filter(session => isPersonSessionBranch(session.branch)),
   };
 }
 

@@ -1,12 +1,12 @@
+import type { CardContextSession } from '@mastra/factory/work-items/card-context-sessions';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { boardOf } from '../boardFlow';
-import type { CardContextSession } from '../boardItems';
 import type { ReworkReason } from '../reworkReason';
 import type { AuditActorProfile, AuditEvent } from '../services/audit';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 import { CardSourceDescription } from './BoardCardDetails';
 import { CardSessions } from './CardSessions';
 import { ActivityEvent } from './WorkItemActivity';
@@ -28,7 +28,7 @@ export function WorkItemTray({
   projectRepositoryId: string;
   events: AuditEvent[];
   actors: Record<string, AuditActorProfile>;
-  contextSessions: readonly CardContextSession[];
+  contextSessions: readonly CardContextSession<WorkItemSessionRef>[];
   rework?: ReworkReason;
 }) {
   const factoryProjectId = factoryId || undefined;
