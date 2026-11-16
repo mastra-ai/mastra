@@ -207,10 +207,11 @@ it('image kit cancellation partial failure expiry and restart preserve one billi
   const f = await fixture({ ttl: 1000 });
   for (const action of ['cancel', 'reject'] as const) {
     const { id } = await f.start(action);
-    const response =
-      action === 'cancel'
-        ? await f.call(`${f.base}/workflows/image-kit/runs/${id}/cancel`, {}, 'cancel-once')
-        : await f.resume(id, false, 'reject-once');
+    if (action === 'reject') {
+      expect((await f.resume(id, false, 'reject-once')).status).toBe(400);
+      expect((await f.call(`${f.base}/workflows/image-kit/runs/${id}`)).body.result.status).toBe('suspended');
+    }
+    const response = await f.call(`${f.base}/workflows/image-kit/runs/${id}/cancel`, {}, `${action}-cancel`);
     expect(response.body.billing).toMatchObject({ billedUnits: 0, settlementStatus: 'released' });
     expect(f.boundary.images).toHaveLength(0);
   }
@@ -335,7 +336,7 @@ it('recognized v1 image migration preserves financial workflow and request ident
   expect(await snapshot()).toEqual(before);
   await f.database.execute('DROP TABLE unexpected_data');
   await f.restart();
-  expect((await f.database.execute('PRAGMA user_version')).rows[0].user_version).toBe(5n);
+  expect((await f.database.execute('PRAGMA user_version')).rows[0].user_version).toBe(6n);
   expect(await snapshot()).toEqual(before);
   expect((await f.call(`${f.base}/workflows/image-kit/runs`, {}, 'pre-migration-kit')).body.executionId).toBe(id);
   expect(f.boundary.images).toHaveLength(0);
@@ -666,6 +667,22 @@ it('an uncertain image slot cannot publish metadata or charge', async () => {
   expect((await f.database.execute('SELECT id FROM image_artifacts')).rows).toEqual([]);
   expect(result.body.billing).toMatchObject({
     executionStatus: 'failed',
+    billedUnits: 0,
+    settlementStatus: 'released',
+  });
+});
+
+it('approval contracts reject a negative resume before changing a suspended image kit', async () => {
+  const f = await fixture();
+  const { id } = await f.start('negative-approval');
+  const before = (await f.database.execute('SELECT status, version FROM billing_workflow_runs')).rows;
+  expect((await f.resume(id, false, 'negative-resume')).status).toBe(400);
+  expect((await f.database.execute('SELECT status, version FROM billing_workflow_runs')).rows).toEqual(before);
+  expect((await f.database.execute('SELECT units FROM billing_ledger')).rows).toEqual([]);
+  expect(f.boundary.images).toHaveLength(0);
+  const canceled = await f.call(`${f.base}/workflows/image-kit/runs/${id}/cancel`, {}, 'explicit-decline');
+  expect(canceled.body.billing).toMatchObject({
+    executionStatus: 'canceled',
     billedUnits: 0,
     settlementStatus: 'released',
   });

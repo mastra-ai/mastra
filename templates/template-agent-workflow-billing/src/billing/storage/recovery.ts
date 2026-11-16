@@ -6,6 +6,9 @@ import type { UsageDelivery } from '../contracts/core.js';
 import { BillingDatabase } from './database.js';
 import { finishUnstartedReservation } from './accounting.js';
 
+export const deliveryQueueQuery =
+  "SELECT d.*, o.payload FROM billing_delivery d JOIN billing_outbox o ON o.id = d.event_id WHERE d.status IN ('pending', 'retrying', 'uncertain') AND d.next_attempt <= ? AND (d.lease_until IS NULL OR d.lease_until <= ?) ORDER BY d.created_at, d.event_id LIMIT ?";
+
 const bounds = z.strictObject({
   batchSize: z.number().int().min(1).max(100),
   leaseMs: z.number().int().min(100).max(300000),
@@ -45,7 +48,7 @@ export class RecoveryStorage {
       const now = Date.now();
       const rows = (
         await tx.execute({
-          sql: "SELECT d.*, o.payload FROM billing_delivery d JOIN billing_outbox o ON o.id = d.event_id WHERE d.status IN ('pending', 'retrying', 'uncertain') AND d.next_attempt <= ? AND (d.lease_until IS NULL OR d.lease_until <= ?) ORDER BY d.created_at, d.event_id LIMIT ?",
+          sql: deliveryQueueQuery,
           args: [now, now, batchSize],
         })
       ).rows;

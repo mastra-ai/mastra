@@ -6,7 +6,7 @@ export interface IpcMessage {
 }
 /** Route worker replies by operation/round and release the process before its database. */
 export function ipcWorker<Message extends IpcMessage>(script: string | URL, args: string[]) {
-  const child = fork(script, args, { execArgv: [], stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
+  const child = fork(script, args, { execArgv: [], stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
   const inbox: Message[] = [];
   const waiters: {
     type: string;

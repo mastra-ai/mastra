@@ -273,9 +273,9 @@ describe('local billing storage', () => {
     cleanups.push(() => reopened.close());
     const history = await observer.execute('SELECT version, checksum FROM billing_migrations');
     expect(history.rows).toEqual(
-      [1n, 2n, 3n, 4n, 5n].map(version => ({ version, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) })),
+      [1n, 2n, 3n, 4n, 5n, 6n].map(version => ({ version, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) })),
     );
-    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(5n);
+    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(6n);
     const foreignDatabase = await temporaryDatabase();
     cleanups.push(foreignDatabase.cleanup);
     const foreignClient = await independentClient(foreignDatabase.url);
@@ -784,3 +784,20 @@ it.each(['separators', 'parent symlink'] as const)(
     }
   },
 );
+
+it('IPC replies continue after a worker writes more stdout than a pipe can buffer', async () => {
+  const worker = ipcWorker<{ type: string; round?: number }>(
+    new URL('../support/ipc-lifecycle-worker.mjs', import.meta.url),
+    [],
+  );
+  cleanups.push(worker.close);
+  await worker.wait('ready');
+  worker.send({ type: 'flood', round: 1 });
+  const reply = await Promise.race([
+    worker.wait('flushed', 1),
+    setTimeout(2000).then(() => {
+      throw new Error('Worker stdout blocked the IPC reply');
+    }),
+  ]);
+  expect(reply).toMatchObject({ type: 'flushed', round: 1 });
+});

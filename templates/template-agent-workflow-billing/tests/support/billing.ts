@@ -78,7 +78,14 @@ export async function independentClient(url: string) {
   return client;
 }
 
+export async function removeDeliveryQueueMigration(client: { execute: import('@libsql/client').Client['execute'] }) {
+  await client.execute('DROP INDEX IF EXISTS billing_delivery_retryable');
+  await client.execute('DELETE FROM billing_migrations WHERE version = 6');
+  await client.execute('PRAGMA user_version = 5');
+}
+
 export async function removeUnreflectedMigration(client: { execute: import('@libsql/client').Client['execute'] }) {
+  await removeDeliveryQueueMigration(client);
   for (const trigger of [
     'billing_unreflected_debits_valid_insert',
     'billing_unreflected_debits_no_update',

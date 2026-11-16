@@ -2828,3 +2828,89 @@ it.each(['invalid', 'missing', 'transform'] as const)(
     expect(f.model.requests).toHaveLength(1);
   },
 );
+
+it.each(['nestedAgent', 'agent'] as const)(
+  'transitive dependencies follow the executing agent across facades via %s',
+  async entrypoint => {
+    const f = await catalogFixture();
+    const outcomes: string[] = [];
+    let invoke!: (owner: string, target: string) => Promise<unknown>;
+    const dependencies: Record<string, string[]> = { A: ['B', 'D'], B: ['C'], C: [], D: [] };
+    const definitions = Object.keys(dependencies).map(id => ({
+      id,
+      kind: 'agent' as const,
+      agentDependencies: dependencies[id],
+      operations: ['generate'] as const,
+      measurements: [],
+      policy: { version: 'v1', charge: { type: 'credits' as const, meter: 'credits', units: 1 } },
+      adapter: { version: 'v1', maxSteps: 2 },
+      create: () =>
+        new Agent({
+          id,
+          name: id,
+          instructions: 'Use echo once, then answer.',
+          maxRetries: 0,
+          model: { id: 'billing-test/model', api: 'chat', url: f.model.url, apiKey: 'controlled' },
+          ...(['A', 'B'].includes(id)
+            ? {
+                tools: {
+                  echo: createTool({
+                    id: 'echo',
+                    description: 'Execute declared children.',
+                    inputSchema: z.object({ fail: z.boolean() }),
+                    outputSchema: z.object({ done: z.literal(true) }),
+                    execute: async () => {
+                      for (const target of id === 'A' ? ['B', 'C', 'D'] : ['C', 'D']) {
+                        try {
+                          await invoke(id, target);
+                          outcomes.push(`${id}->${target}:allowed`);
+                        } catch (error) {
+                          outcomes.push(`${id}->${target}:${(error as { code: string }).code}`);
+                        }
+                      }
+                      return { done: true as const };
+                    },
+                  }),
+                },
+              }
+            : {}),
+        }),
+    }));
+    const application = await createBillingApplication({
+      environment: f.environment,
+      catalog: { configuration: f.catalog.configuration, definitions },
+    });
+    cleanups.push(application.close);
+    const other = await createBillingApplication({
+      environment: f.environment,
+      catalog: { configuration: f.catalog.configuration, definitions },
+    });
+    cleanups.push(other.close);
+    const contexts = await Promise.all(
+      [application, other].map(current => current.organizations.context({ credential: f.first.credential! })),
+    );
+    invoke = (owner, target) => {
+      const current = owner === 'A' && target !== 'B' ? application : other;
+      const billing = current === application ? contexts[0] : contexts[1];
+      const prompt = ['A', 'B'].includes(target) ? `[multi] ${target}` : `[success] ${target}`;
+      return entrypoint === 'nestedAgent'
+        ? current.runtime.billing.nestedAgent(target).generate(prompt)
+        : current.runtime.billing.agent(target).generate(prompt, { billing, idempotencyKey: `nested-${target}` });
+    };
+    const result = await application.runtime.billing
+      .agent('A')
+      .generate('[multi] A', { billing: contexts[0], idempotencyKey: 'transitive' });
+    expect(outcomes).toEqual(['B->C:allowed', 'B->D:unsupported', 'A->B:allowed', 'A->C:unsupported', 'A->D:allowed']);
+    expect(result).toMatchObject({ billing: { billedUnits: 1, settlementStatus: 'settled' } });
+    expect(f.model.requests).toHaveLength(6);
+    const observer = await independentClient(f.database.url);
+    try {
+      expect((await observer.execute('SELECT resource_id FROM billing_executions')).rows).toEqual([
+        { resource_id: 'A' },
+      ]);
+      expect((await observer.execute('SELECT units FROM billing_ledger')).rows).toEqual([{ units: 1n }]);
+    } finally {
+      observer.close();
+    }
+  },
+);

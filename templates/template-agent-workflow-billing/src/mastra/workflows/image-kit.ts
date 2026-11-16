@@ -38,7 +38,6 @@ export function createImageKit(dependencies: ImageKitDependencies) {
     suspendSchema: kitStateSchema,
     execute: async ({ inputData, resumeData, suspend }) => {
       if (!resumeData) return suspend(inputData);
-      if (!resumeData.approved) throw new Error('Image kit approval was declined.');
       return inputData;
     },
   });

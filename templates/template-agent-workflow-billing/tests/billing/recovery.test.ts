@@ -1,9 +1,10 @@
+import { removeDeliveryQueueMigration } from '../support/billing.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { once } from 'node:events';
 import { fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { setTimeout } from 'node:timers/promises';
-import { RecoveryStorage } from '../../src/billing/storage/recovery.js';
+import { RecoveryStorage, deliveryQueueQuery } from '../../src/billing/storage/recovery.js';
 import { BillingRecovery } from '../../src/billing/runtime/recovery.js';
 import { BillingDatabase } from '../../src/billing/storage/database.js';
 import { modelBoundary, runtimeFixture, operationBarrier } from '../support/mastra.js';
@@ -710,3 +711,92 @@ describe('durable billing recovery', () => {
     expect(queueModel.requests).toHaveLength(101);
   }, 120000);
 });
+
+it('migration indexes due retries without scanning accepted delivery history', async () => {
+  const database = await temporaryDatabase();
+  cleanups.push(database.cleanup);
+  const model = await modelBoundary();
+  cleanups.push(model.close);
+  const runtime = await runtimeFixture({
+    databaseUrl: database.url,
+    directory: database.directory,
+    modelUrl: model.url,
+  });
+  cleanups.push(runtime.close);
+  const source = await runtime.billing.http.generate(
+    'assistant',
+    '[success] queue source',
+    runtime.billingContext,
+    'queue-source',
+  );
+  const observer = await independentClient(database.url);
+  cleanups.push(() => observer.close());
+  const original = (await observer.execute('SELECT id, payload FROM billing_outbox')).rows[0];
+  const payload = JSON.parse(String(original.payload));
+  const future = Date.now() + 3600000;
+  const statements: { sql: string; args: (string | number | bigint | null)[] }[] = [];
+  for (let index = 0; index < 1005; index++) {
+    const id = `queue-${index}`;
+    const event = { ...payload, id: `usage:${id}`, executionId: id };
+    const status =
+      index < 1000
+        ? 'accepted'
+        : index === 1001 || index === 1004
+          ? 'retrying'
+          : index === 1002
+            ? 'uncertain'
+            : 'pending';
+    statements.push(
+      {
+        sql: 'INSERT INTO billing_executions (id, actor_id, workspace_id, account_id, resource_id, operation, configuration, runtime_id, status, settlement, observed_units, billed_units, result, created_at, terminal_at) SELECT ?, actor_id, workspace_id, account_id, resource_id, operation, configuration, runtime_id, status, settlement, observed_units, billed_units, result, created_at, terminal_at FROM billing_executions WHERE id = ?',
+        args: [id, source.billing.executionId],
+      },
+      {
+        sql: 'INSERT INTO billing_ledger SELECT ?, account_id, meter, units, outcome, occurred_at FROM billing_ledger WHERE execution_id = ?',
+        args: [id, source.billing.executionId],
+      },
+      {
+        sql: 'INSERT INTO billing_outbox (id, execution_id, payload) VALUES (?, ?, ?)',
+        args: [event.id, id, JSON.stringify(event)],
+      },
+      {
+        sql: 'INSERT INTO billing_delivery (event_id, status, next_attempt, lease_until, created_at) VALUES (?, ?, ?, ?, ?)',
+        args: [event.id, status, index === 1003 ? future : 0, index === 1004 ? future : null, index + 1],
+      },
+    );
+  }
+  await observer.batch(statements, 'write');
+  await removeDeliveryQueueMigration(observer);
+  const history = async () =>
+    Promise.all(
+      ['billing_ledger', 'billing_outbox', 'billing_delivery'].map(
+        async table => (await observer.execute(`SELECT * FROM ${table} ORDER BY rowid`)).rows,
+      ),
+    );
+  const before = await history();
+  const migrations = (await observer.execute('SELECT version, checksum FROM billing_migrations ORDER BY version')).rows;
+  const args = [Date.now(), Date.now(), 100];
+  const oldPlan = (await observer.execute({ sql: 'EXPLAIN QUERY PLAN ' + deliveryQueueQuery, args })).rows;
+  expect(oldPlan.some(row => /SCAN d\b/.test(String(row.detail)))).toBe(true);
+  const recovery = await RecoveryStorage.open({ url: database.url });
+  cleanups.push(() => recovery.close());
+  expect(await history()).toEqual(before);
+  expect(
+    (await observer.execute('SELECT version, checksum FROM billing_migrations WHERE version < 6 ORDER BY version'))
+      .rows,
+  ).toEqual(migrations);
+  const indexedPlan = (await observer.execute({ sql: 'EXPLAIN QUERY PLAN ' + deliveryQueueQuery, args })).rows;
+  expect(
+    indexedPlan.some(
+      row => /SEARCH d\b/.test(String(row.detail)) && String(row.detail).includes('billing_delivery_retryable'),
+    ),
+  ).toBe(true);
+  const claimed = await recovery.claimDeliveries({ batchSize: 100, leaseMs: 60000 });
+  expect(claimed.map(row => row.id)).toEqual([
+    'usage:queue-1000',
+    'usage:queue-1001',
+    'usage:queue-1002',
+    String(original.id),
+  ]);
+  expect(await recovery.claimDeliveries({ batchSize: 100, leaseMs: 60000 })).toEqual([]);
+}, 30000);

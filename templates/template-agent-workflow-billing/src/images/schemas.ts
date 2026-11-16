@@ -40,4 +40,4 @@ export const kitStateSchema = z.strictObject({ brief: briefSchema, prompts: prom
 export const kitOutputSchema = kitStateSchema.extend({
   artifacts: z.tuple([artifactSchema, artifactSchema, artifactSchema]),
 });
-export const approvalSchema = z.strictObject({ approved: z.boolean() });
+export const approvalSchema = z.strictObject({ approved: z.literal(true) });

@@ -45,7 +45,8 @@ export class AgentExecution<Agents extends AgentRegistry> {
         const safe = parseInput(safeGenerateOptionsSchema, options);
         const parent = this.context.parent.getStore();
         if (parent) {
-          if (parent.agentDependencies && !parent.agentDependencies.includes(id)) throw new BillingError('unsupported');
+          const dependencies = this.context.agentDependencies.getStore() ?? parent.agentDependencies;
+          if (dependencies && !dependencies.includes(id)) throw new BillingError('unsupported');
           const identity = await this.options.organizations.accountingIdentity(billing);
           if (identity.actorId !== parent.identity.actorId || identity.workspaceId !== parent.identity.workspaceId)
             throw new BillingError('forbidden');
@@ -114,8 +115,8 @@ export class AgentExecution<Agents extends AgentRegistry> {
         options: SafeGenerateOptions & { slot?: number } = {},
       ): Promise<FullOutput<AgentResult<Agents[K]>>> => {
         const parent = this.context.parent.getStore();
-        if (!parent || (parent.agentDependencies && !parent.agentDependencies.includes(id)))
-          throw new BillingError('unsupported');
+        const dependencies = this.context.agentDependencies.getStore() ?? parent?.agentDependencies;
+        if (!parent || (dependencies && !dependencies.includes(id))) throw new BillingError('unsupported');
         const parsedPrompt = resource.validatePrompt(parseInput(z.string().min(1).max(8192), prompt));
         const { slot, ...behavior } = options;
         const safe = parseInput(safeGenerateOptionsSchema, behavior);
@@ -176,16 +177,18 @@ export class AgentExecution<Agents extends AgentRegistry> {
           if (deadline !== null && Date.now() >= deadline) throw new BillingError('state_unavailable');
         },
       };
-      return await withinExecution(scope, async () =>
-        resource.complete(
-          scope,
-          await resource.generate(prompt, {
-            abortSignal: signal,
-            onStepFinish: async value => {
-              await collector.capture(call, ++step, value.usage);
-              if (!collector.deadlineExpired) await options.onStepFinish?.(value);
-            },
-          }),
+      return await this.context.agentDependencies.run(resource.agentDependencies, () =>
+        withinExecution(scope, async () =>
+          resource.complete(
+            scope,
+            await resource.generate(prompt, {
+              abortSignal: signal,
+              onStepFinish: async value => {
+                await collector.capture(call, ++step, value.usage);
+                if (!collector.deadlineExpired) await options.onStepFinish?.(value);
+              },
+            }),
+          ),
         ),
       );
     } catch (error) {

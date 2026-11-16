@@ -595,11 +595,18 @@ async function runNodeScript(root: string, script: string, args: string[] = [], 
   const child = spawn(process.execPath, [join(root, 'scripts', script), ...args], {
     cwd: root,
     env,
+    detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const closed = once(child, 'close');
   cleanups.push(async () => {
-    if (child.exitCode === null && child.signalCode === null && child.pid) process.kill(-child.pid, 'SIGKILL');
+    if (child.exitCode === null && child.signalCode === null && child.pid) {
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+      }
+    }
     await closed;
   });
   let stdout = '',
@@ -683,4 +690,41 @@ it.each([
   if (failure === 'invalid environment file') expect(result.stderr).toContain('InvalidEnvironmentFileError');
   if (failure === 'invalid private profiles') expect(result.stderr).toMatch(/BillingError.*state_unavailable/);
   if (failure === 'installation failure') expect(result.stderr).toMatch(/DependencyInstallError.*EXIT_3/);
+});
+
+it('script teardown terminates an active owned process group and tolerates repeated cleanup', async () => {
+  const database = await temporaryDatabase();
+  cleanups.push(database.cleanup);
+  await mkdir(join(database.directory, 'scripts'));
+  await writeFile(
+    join(database.directory, 'scripts/linger.mjs'),
+    "import { writeFileSync } from 'node:fs'; writeFileSync('active-pid', String(process.pid)); setTimeout(() => process.exit(0), 5000);",
+  );
+  const running = runNodeScript(database.directory, 'linger.mjs');
+  const cleanup = cleanups.pop()!;
+  let pid: number | undefined;
+  try {
+    for (let attempt = 0; attempt < 200; attempt++) {
+      try {
+        pid = Number(await readFile(join(database.directory, 'active-pid'), 'utf8'));
+        break;
+      } catch {
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+    }
+    if (!pid) throw new Error('Script did not start');
+    await cleanup();
+    expect((await running).code).toBeNull();
+    expect(() => process.kill(pid!, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }));
+    await cleanup();
+  } finally {
+    if (pid) {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+      }
+    }
+    await running;
+  }
 });

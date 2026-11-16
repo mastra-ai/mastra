@@ -433,6 +433,10 @@ const unreflectedStatements = [
     BEGIN DELETE FROM billing_unreflected_debits WHERE event_id = NEW.id AND account_id = NEW.account_id
       AND EXISTS (SELECT 1 FROM billing_outbox o WHERE o.id = NEW.id AND o.payload = NEW.payload); END`,
 ];
+const deliveryQueueStatements = [
+  `CREATE INDEX billing_delivery_retryable ON billing_delivery(next_attempt, created_at, event_id)
+    WHERE status IN ('pending', 'retrying', 'uncertain')`,
+];
 const checksum = (statements: readonly string[]) => createHash('sha256').update(statements.join('\n')).digest('hex');
 const normalizedSql = (sql: string) => sql.replace(/\s+/g, ' ').trim();
 async function validateCatalog(transaction: Transaction, statements: readonly string[]) {
@@ -459,7 +463,7 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
     });
   } else {
     if (
-      ![1n, 2n, 3n, 4n, 5n].includes(version as bigint) ||
+      ![1n, 2n, 3n, 4n, 5n, 6n].includes(version as bigint) ||
       !catalog.rows.some(row => row.name === 'billing_migrations')
     )
       throw new BillingError('storage_incompatible');
@@ -472,7 +476,9 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
       (Number(version) >= 2 && (history[1].version !== 2n || history[1].checksum !== checksum(imageStatements))) ||
       (Number(version) >= 3 && (history[2].version !== 3n || history[2].checksum !== checksum(creditStatements))) ||
       (Number(version) >= 4 && (history[3].version !== 4n || history[3].checksum !== checksum(studioStatements))) ||
-      (version === 5n && (history[4].version !== 5n || history[4].checksum !== checksum(unreflectedStatements)))
+      (Number(version) >= 5 &&
+        (history[4].version !== 5n || history[4].checksum !== checksum(unreflectedStatements))) ||
+      (version === 6n && (history[5].version !== 6n || history[5].checksum !== checksum(deliveryQueueStatements)))
     )
       throw new BillingError('storage_incompatible');
     // Validate the complete recognized old schema before the first migration write.
@@ -487,7 +493,8 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
               ...imageStatements,
               ...creditStatements,
               ...(Number(version) >= 4 ? studioStatements : []),
-              ...(version === 5n ? unreflectedStatements : []),
+              ...(Number(version) >= 5 ? unreflectedStatements : []),
+              ...(version === 6n ? deliveryQueueStatements : []),
             ],
     );
   }
@@ -528,11 +535,20 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
     });
     await transaction.execute('PRAGMA user_version = 5');
   }
+  if (Number(version) < 6) {
+    for (const sql of deliveryQueueStatements) await transaction.execute(sql);
+    await transaction.execute({
+      sql: 'INSERT INTO billing_migrations VALUES (6, ?, ?)',
+      args: [checksum(deliveryQueueStatements), new Date().toISOString()],
+    });
+    await transaction.execute('PRAGMA user_version = 6');
+  }
   await validateCatalog(transaction, [
     ...schemaStatements,
     ...imageStatements,
     ...creditStatements,
     ...studioStatements,
     ...unreflectedStatements,
+    ...deliveryQueueStatements,
   ]);
 }
