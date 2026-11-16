@@ -29,8 +29,10 @@ import {
   settleEventedDurableExecution,
   stopDurableExecutionParticipants,
 } from './evented-execution';
+import { EventedExecutionEngine as DurableEventedExecutionEngine } from './evented-execution-engine';
 import {
   __resetExecutionFencesForTests,
+  DurableExecutionFenceError,
   EXECUTION_LEASE_TTL_MS,
   EXECUTION_SUPERSEDED_ERROR_ID,
   EXECUTION_UNVERIFIED_ERROR_ID,
@@ -49,6 +51,94 @@ import {
   getRunRegistryEntry,
   setRunRegistryEntry,
 } from './run-registry';
+
+it.each([false, true])(
+  'leaves a rejected shared observer claim live for workers (unverified: %s)',
+  async unverified => {
+    const storage = new InMemoryStore();
+    const mastra = new Mastra({ storage, logger: false });
+    const workflowsStore = (await storage.getStore('workflows'))!;
+    const fence = await ExecutionFence.claim({
+      workflowsStore,
+      leaseProvider: new EventEmitterPubSub(),
+      agentId: 'agent',
+      runId: 'observer-run',
+      mode: 'acquire',
+    });
+    const engine = new DurableEventedExecutionEngine('agent', mastra);
+    const error = unverified
+      ? new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, {
+          agentId: 'agent',
+          runId: fence.runId,
+          executionId: fence.executionId,
+        })
+      : new Error('observer connection closed');
+    try {
+      const outcome = engine.finishExecution(fence.runId, fence, true, { error });
+      expect(outcome).toEqual(unverified ? { owner: 'workers', error } : { owner: 'workers' });
+      expect(await workflowsStore.getRunOwnership({ runId: fence.runId })).toMatchObject({
+        live: true,
+        ownerId: fence.executionId,
+        generation: fence.generation,
+      });
+      // A detached API observer must not be able to release its worker's claim later.
+      let finalized = false;
+      await fence.settle(async () => {
+        finalized = true;
+      });
+      expect(finalized).toBe(false);
+      expect(await workflowsStore.getRunOwnership({ runId: fence.runId })).toMatchObject({ live: true });
+    } finally {
+      fence.stopHeartbeat();
+      await mastra.shutdown();
+    }
+  },
+);
+
+it('settles a failed evented setup after claiming the thread lease without starting workers', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'mastra-setup-fail-'));
+  const pubsub = new UnixSocketPubSub(join(directory, 'bus.sock'));
+  const storage = new InMemoryStore();
+  const workflows = (await storage.getStore('workflows'))!;
+  const { model } = deliveryModel('must not run');
+  const memory = new MockMemory({ storage });
+  const agent = createEventedAgent({
+    agent: new Agent({ id: 'agent', name: 'agent', instructions: 'Answer.', model, memory }),
+    pubsub,
+  });
+  const mastra = new Mastra({ agents: { agent }, storage, pubsub, workers: false, logger: false });
+  const workflow = agent.getWorkflow();
+  let leaseOwner: string | undefined;
+  const failure = new Error('run creation failed after leasing the thread');
+  const createRun = vi.spyOn(workflow, 'createRun').mockImplementation(async () => {
+    leaseOwner = await pubsub.getLeaseOwner('resource\u0000thread');
+    throw failure;
+  });
+  try {
+    const { runId, output, cleanup } = await agent.stream('Answer.', {
+      runId: 'setup-failure-run',
+      memory: { resource: 'resource', thread: 'thread' },
+    });
+    try {
+      const errors = [];
+      for await (const chunk of output.fullStream) {
+        if (chunk.type === 'error') errors.push(chunk.payload.error);
+      }
+      expect(errors).toEqual([expect.objectContaining({ message: failure.message })]);
+      expect(leaseOwner).toContain('mastra:thread-lease:');
+      await expect.poll(async () => (await workflows.getRunOwnership({ runId }))?.live).toBe(false);
+      expect(await workflows.loadWorkflowRunStatus({ workflowName: DurableStepIds.AGENTIC_LOOP, runId })).toBeNull();
+      await expect.poll(() => pubsub.getLeaseOwner('resource\u0000thread')).toBeUndefined();
+    } finally {
+      await cleanup();
+    }
+  } finally {
+    createRun.mockRestore();
+    await mastra.shutdown();
+    await pubsub.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 it('detaches a registered shared coordinator on API shutdown without releasing its live claim', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'mastra-shutdown-'));

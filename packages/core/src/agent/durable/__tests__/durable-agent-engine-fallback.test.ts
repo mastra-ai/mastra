@@ -68,6 +68,7 @@ describe('Durable workflow subclass dispatch', () => {
   ] as const)(
     'preserves %s subclass super calls and late workflow patches',
     async (kind, Base, strategy, expectedStatus) => {
+      let constructed = false;
       class CustomAgent extends Base {
         executionStatuses: (string | undefined)[] = [];
         settledRuns: string[] = [];
@@ -98,7 +99,28 @@ describe('Durable workflow subclass dispatch', () => {
         }
 
         protected override get workflowEngine(): 'default' | 'evented' {
+          if (!constructed) throw new Error('Execution policy read during construction');
           return strategy;
+        }
+
+        protected override createWorkflow(): never {
+          throw new Error('Run reached the Agent compatibility workflow factory');
+        }
+
+        protected override resolveWorkflowEngine(): never {
+          throw new Error('Run reached the Agent compatibility engine resolver');
+        }
+
+        protected override resolveShouldPersistSnapshot(): never {
+          throw new Error('Run reached the Agent compatibility persistence policy');
+        }
+
+        protected override warnOnRiskyPersistencePolicy(): never {
+          throw new Error('Run reached the Agent compatibility persistence warning');
+        }
+
+        protected override async ensureEngineWorkersStarted(): Promise<never> {
+          throw new Error('Run reached the Agent compatibility worker startup');
         }
 
         protected override async executeWorkflow(runId: string, input: DurableAgenticWorkflowInput) {
@@ -116,6 +138,7 @@ describe('Durable workflow subclass dispatch', () => {
           model: createTextStreamModel('hello'),
         }),
       });
+      constructed = true;
       const storage = new MockStore();
       vi.spyOn(storage.stores.workflows, 'supportsConcurrentUpdates').mockReturnValue(false);
       const mastra = new Mastra({ storage, agents: { agent }, logger: false });

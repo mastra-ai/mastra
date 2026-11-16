@@ -94,7 +94,6 @@ import {
 } from './constants';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable-stream-until-idle';
 import { DurableExecutionEngine } from './execution-engine';
-import type { DurableExecutionHost } from './execution-engine';
 import {
   EXECUTION_ABANDONED_ERROR_ID,
   EXECUTION_UNVERIFIED_ERROR_ID,
@@ -134,6 +133,7 @@ import {
   emitChunkEvent,
   emitErrorEvent,
   emitFinishEvent,
+  emitAbortEvent,
   emitOwnershipClaimedEvent,
 } from './stream-adapter';
 import type {
@@ -876,61 +876,12 @@ export class DurableAgent<
 
   /** @internal One execution owner per Agent, initialized without starting a workflow. */
   protected get executionEngine(): DurableExecutionEngine {
-    if (!this.#executionEngine) {
-      const agent = this;
-      this.#executionEngine = this.createExecutionEngine({
-        get id() {
-          return agent.id;
-        },
-        get mastra() {
-          return agent.#mastra;
-        },
-        get maxSteps() {
-          return agent.#maxSteps;
-        },
-        get logger() {
-          return agent.logger;
-        },
-        get guardrailLogger() {
-          return agent.guardrailLogger;
-        },
-        get workflowEngine() {
-          return agent.workflowEngine;
-        },
-        get storesRunsInJournal() {
-          return agent.storesRunsInJournal;
-        },
-        get suspendPersistedOnReturn() {
-          return agent.suspendPersistedOnReturn;
-        },
-        get userShouldPersistSnapshot() {
-          return agent.userShouldPersistSnapshot;
-        },
-        get pubsub() {
-          return agent.pubsub;
-        },
-        getMastraInstance: () => agent.getMastraInstance(),
-        getPubSub: () => agent.getPubSub(),
-        getWorkflow: () => agent.getWorkflow(),
-        createWorkflow: () => agent.createWorkflow(),
-        resolveWorkflowEngine: () => agent.resolveWorkflowEngine(),
-        resolveShouldPersistSnapshot: () => agent.resolveShouldPersistSnapshot(),
-        warnOnRiskyPersistencePolicy: () => agent.warnOnRiskyPersistencePolicy(),
-        ensureEngineWorkersStarted: () => agent.ensureEngineWorkersStarted(),
-        fenceRunPubSub: (fence, abortController) => agent.fenceRunPubSub(fence, abortController),
-        settleExecution: (runId, fence, outcome) => agent.settleExecution(runId, fence, outcome),
-        workflowFailureError: (error, fallback) => agent.workflowFailureError(error, fallback),
-        workflowExecutionError: (error, fallback) => agent.workflowExecutionError(error, fallback),
-        deleteRunSnapshots: runId => agent.deleteRunSnapshots(runId),
-        emitError: (runId, error, generation) => agent.emitError(runId, error, generation),
-      });
-    }
-    return this.#executionEngine;
+    return (this.#executionEngine ??= this.createExecutionEngine(this.#mastra));
   }
 
   /** @internal Subclasses supply their default engine without changing workflow fallback policy. */
-  protected createExecutionEngine(host: DurableExecutionHost): DurableExecutionEngine {
-    return new DurableExecutionEngine(host);
+  protected createExecutionEngine(mastra?: Mastra): DurableExecutionEngine {
+    return new DurableExecutionEngine(this.id, mastra);
   }
 
   /** The wrapped agent */
@@ -1061,7 +1012,7 @@ export class DurableAgent<
   }
 
   override __usesSharedRunLog(): boolean {
-    return !!this.#mastra && this.resolveWorkflowEngine() === 'evented';
+    return !!this.#mastra && this.executionEngine.resolveWorkflowEngine(this.workflowEngine, this.logger) === 'evented';
   }
 
   /** Kept `false`, the value this getter has always reported for durable agents. */
@@ -2526,7 +2477,7 @@ export class DurableAgent<
    * @internal
    */
   protected resolveWorkflowEngine(): 'default' | 'evented' {
-    return this.executionEngine.resolveWorkflowEngine();
+    return this.executionEngine.resolveWorkflowEngine(this.workflowEngine, this.logger);
   }
 
   /**
@@ -2537,7 +2488,7 @@ export class DurableAgent<
    * @internal
    */
   protected async ensureEngineWorkersStarted(): Promise<void> {
-    return this.executionEngine.ensureEngineWorkersStarted();
+    return this.executionEngine.ensureEngineWorkersStarted(this.workflowEngine, this.logger);
   }
 
   private async persistInitialInput(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
@@ -2560,7 +2511,42 @@ export class DurableAgent<
     runId: string,
     workflowInput: DurableAgenticWorkflowInput,
   ): Promise<{ status?: string } | void> {
-    return this.executionEngine.executeDefault(runId, workflowInput);
+    const workflow = this.getWorkflow();
+    const entry = getRunRegistryEntry(runId, this.#mastra);
+    const requestContext = entry?.requestContext;
+    // Captured now: a later resume() replaces the registry's fence.
+    const executionFence = entry?.executionFence;
+
+    // Populate the run row's resourceId column so storage-level resource
+    // filters (listSuspendedRuns / listActiveRuns) can narrow the query,
+    // mirroring the non-durable agentic loop (loop/workflows/stream.ts).
+    const memoryInfo = (
+      workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
+    )?.memoryInfo;
+    const resourceId = workflowInput.state?.resourceId ?? memoryInfo?.resourceId;
+
+    const run = await this.executionEngine.createRun(workflow, {
+      runId,
+      resourceId,
+      pubsub: this.fenceRunPubSub(executionFence, entry?.abortController),
+    });
+    // Parent the workflow run under the AGENT_RUN span so the trace exports under it.
+    let result;
+    try {
+      result = await this.withSuspensionAfterPersist(runId, () =>
+        this.executionEngine.startRun(
+          run,
+          workflowInput,
+          requestContext,
+          createObservabilityContext({ currentSpan: entry?.agentSpan }),
+        ),
+      );
+      const outcome = this.executionEngine.finishExecution(runId, executionFence, false, { result });
+      if (outcome.owner === 'agent') await this.settleExecution(runId, executionFence, outcome);
+      return result;
+    } finally {
+      this.executionEngine.releaseRun(workflow, runId, result?.status);
+    }
   }
 
   /**
@@ -2570,7 +2556,28 @@ export class DurableAgent<
    * leaves a run that `resume()` rejects (#26435).
    */
   private async withSuspensionAfterPersist<T>(runId: string, execute: () => Promise<T>): Promise<T> {
-    return this.executionEngine.withSuspensionAfterPersist(runId, execute);
+    const entry = this.suspendPersistedOnReturn ? getRunRegistryEntry(runId, this.#mastra) : undefined;
+    if (!entry) return execute();
+    const pending: Array<() => Promise<void>> = [];
+    entry.pendingSuspensionEvents = pending;
+    let result: T;
+    try {
+      result = await execute();
+    } finally {
+      if (entry.pendingSuspensionEvents === pending) delete entry.pendingSuspensionEvents;
+    }
+    // Only announce a suspension the engine actually persisted; if persisting failed,
+    // the run isn't resumable and the queued events would advertise a dead question.
+    if ((result as { status?: string } | undefined)?.status === 'suspended') {
+      for (const publish of pending) {
+        try {
+          await publish();
+        } catch (error) {
+          this.logger.warn('Failed to publish deferred suspension event', { runId, error });
+        }
+      }
+    }
+    return result;
   }
 
   /**
@@ -2588,55 +2595,40 @@ export class DurableAgent<
   /**
    * Create the durable workflow for this agent.
    *
-   * Subclasses can override this method to use a different workflow implementation:
-   * - DurableAgent (this): Uses createDurableAgenticWorkflow()
-   * - InngestAgent: Uses createInngestDurableAgenticWorkflow()
+   * Retained for direct calls and subclass super calls. Run execution creates
+   * workflows through the execution engine, not through overrides of this method.
    *
    * @internal
    */
   protected createWorkflow(): ReturnType<typeof createDurableAgenticWorkflow> {
-    return this.executionEngine.createWorkflow();
+    return this.executionEngine.createWorkflow({
+      maxSteps: this.#maxSteps,
+      workflowEngine: this.workflowEngine,
+      storesRunsInJournal: this.storesRunsInJournal,
+      shouldPersistSnapshot: this.userShouldPersistSnapshot,
+      logger: this.logger,
+      guardrailLogger: this.guardrailLogger,
+    });
   }
 
   /**
    * Resolve the effective snapshot-persistence policy for this agent's
    * workflows: the user-supplied predicate when set, otherwise the
-   * recovery-aware default. Subclasses that own their persistence policy
-   * (EventedAgent) override this to pin their required policy.
+   * recovery-aware default. Engine variants own this policy during execution;
+   * overriding this compatibility method does not change running workflows.
    *
    * @internal
    */
   protected resolveShouldPersistSnapshot(): ShouldPersistSnapshotFn {
-    return this.userShouldPersistSnapshot ?? this.executionEngine.recoveryAwarePersistencePolicy;
+    return this.executionEngine.resolveShouldPersistSnapshot(this.userShouldPersistSnapshot);
   }
 
   protected workflowFailureError(workflowError: unknown, fallbackMessage: string): Error {
-    const serialized = (workflowError ?? {}) as {
-      code?: unknown;
-      id?: unknown;
-      message?: unknown;
-      details?: { name?: unknown; message?: unknown };
-    };
-    if (serialized.code === DURABLE_STOP_WHEN_ERROR_ID || serialized.id === DURABLE_STOP_WHEN_ERROR_ID) {
-      const error = new Error(
-        typeof serialized.details?.message === 'string'
-          ? serialized.details.message
-          : typeof serialized.message === 'string'
-            ? serialized.message
-            : fallbackMessage,
-      );
-      error.name = typeof serialized.details?.name === 'string' ? serialized.details.name : 'Error';
-      return markErrorForStreamRejection(error);
-    }
-    return new Error(typeof serialized.message === 'string' ? serialized.message : fallbackMessage);
+    return this.executionEngine.workflowFailureError(workflowError, fallbackMessage);
   }
 
   protected workflowExecutionError(workflowError: unknown, fallbackMessage: string): Error {
-    const serialized = (workflowError ?? {}) as { code?: unknown; id?: unknown };
-    if (serialized.code === DURABLE_STOP_WHEN_ERROR_ID || serialized.id === DURABLE_STOP_WHEN_ERROR_ID) {
-      return this.workflowFailureError(workflowError, fallbackMessage);
-    }
-    return getErrorFromUnknown(workflowError, { fallbackMessage });
+    return this.executionEngine.workflowExecutionError(workflowError, fallbackMessage);
   }
 
   /**
@@ -2667,7 +2659,7 @@ export class DurableAgent<
     requestContext?: RequestContext,
     untrackedRun?: UntrackedRunLiveness,
   ): Promise<ExecutionFence> {
-    const fence = await this.executionEngine.claimExecution(runId, mode, untrackedRun);
+    const fence = await this.executionEngine.claimExecution(runId, mode, this.pubsub, this.logger, untrackedRun);
     if (requestContext) await this.#coverMemory(fence, requestContext);
     return fence;
   }
@@ -2711,7 +2703,7 @@ export class DurableAgent<
     store: WorkflowsStorage | MemoryStorage | undefined,
     domain: 'workflows' | 'memory',
   ): Promise<boolean> {
-    return this.executionEngine.warnIfUnfenced(store, domain);
+    return this.executionEngine.warnIfUnfenced(store, domain, this.guardrailLogger);
   }
 
   /**
@@ -2735,7 +2727,13 @@ export class DurableAgent<
     abortController: AbortController | undefined,
     pubsub: PubSub = this.pubsub,
   ): PubSub {
-    return this.executionEngine.fenceRunPubSub(executionFence, abortController, pubsub);
+    return this.executionEngine.fenceRunPubSub(
+      executionFence,
+      abortController,
+      pubsub,
+      this.workflowEngine,
+      this.logger,
+    );
   }
 
   /**
@@ -2935,7 +2933,11 @@ export class DurableAgent<
     this.#abortLocalController(runId);
     // An evented run's registry entry can belong to a caller, not its executor.
     // Let the base path send the request to the workers in that case.
-    return aborted || (this.resolveWorkflowEngine() === 'default' && controller !== undefined);
+    return (
+      aborted ||
+      (this.executionEngine.resolveWorkflowEngine(this.workflowEngine, this.logger) === 'default' &&
+        controller !== undefined)
+    );
   }
 
   /**
@@ -2996,7 +2998,7 @@ export class DurableAgent<
    * server retries the publish.
    */
   async #announceCanceledRun(runId: string): Promise<void> {
-    return this.executionEngine.announceCanceledRun(runId);
+    return this.executionEngine.announceCanceledRun(runId, this.pubsub);
   }
 
   async #isRunCanceledInStorage(runId: string): Promise<boolean> {
@@ -3016,7 +3018,21 @@ export class DurableAgent<
    * abort, and is published here only if that publish failed.
    */
   async #deleteFencedSuspendedRun(runId: string): Promise<void> {
-    return this.executionEngine.deleteFencedSuspendedRun(runId);
+    try {
+      const snapshot = await this.executionEngine.loadRunSnapshot(runId);
+      if (snapshot?.status === 'canceled') {
+        await this.executionEngine.publishCanceledRunTerminal(runId, this.pubsub);
+        return;
+      }
+      if (snapshot?.status !== 'suspended') return;
+      await this.deleteRunSnapshots(runId);
+      await emitAbortEvent(this.pubsub, runId, { steps: [], text: '' });
+    } catch (error) {
+      this.#mastra?.getLogger?.()?.warn?.(`Failed to delete snapshot of aborted suspended run ${runId}`, {
+        runId,
+        error,
+      });
+    }
   }
 
   /** Flip the controller this process holds for `runId`, if it holds one. */
@@ -3099,7 +3115,13 @@ export class DurableAgent<
    * @internal
    */
   protected async deleteRunSnapshots(runId: string): Promise<void> {
-    return this.executionEngine.deleteRunSnapshots(runId);
+    try {
+      await this.executionEngine.deleteRunSnapshots(runId, this.getWorkflow());
+    } catch (error) {
+      this.#mastra
+        ?.getLogger?.()
+        ?.warn?.('[DurableAgent] Failed to delete workflow snapshot rows after terminal state', { runId, error });
+    }
   }
 
   // ===========================================================================
@@ -3355,7 +3377,7 @@ export class DurableAgent<
         })
         .catch(error =>
           this.settleExecution(runId, executionFence, {
-            error: this.workflowExecutionError(error, 'Workflow execution failed'),
+            error: this.executionEngine.workflowExecutionError(error, 'Workflow execution failed'),
           }),
         ),
     );
@@ -4123,7 +4145,7 @@ export class DurableAgent<
           // Evented engine: make sure the workflow event workers are running
           // before resume — a resume in a fresh process (or after shutdown())
           // would otherwise publish events nobody consumes and hang.
-          await this.ensureEngineWorkersStarted();
+          await this.executionEngine.ensureEngineWorkersStarted(this.workflowEngine, this.logger);
           const run = await workflow.createRun({
             runId,
             resourceId: memoryInfo?.resourceId,
@@ -4184,7 +4206,7 @@ export class DurableAgent<
             status: result?.status,
             error:
               result?.status === 'failed'
-                ? this.workflowFailureError((result as any).error, 'Workflow resume failed')
+                ? this.executionEngine.workflowFailureError((result as any).error, 'Workflow resume failed')
                 : undefined,
           });
           if (result?.status === 'suspended' && closeOnSuspend) {
@@ -4201,7 +4223,7 @@ export class DurableAgent<
         })
         .catch(error =>
           this.settleExecution(runId, executionFence, {
-            error: this.workflowExecutionError(error, 'Workflow resume failed'),
+            error: this.executionEngine.workflowExecutionError(error, 'Workflow resume failed'),
           }),
         )
         .finally(detachExternalAbort),
@@ -4549,7 +4571,7 @@ export class DurableAgent<
         .then(async () => {
           executionFence.throwIfLost();
           this.#assertRecoveryActive();
-          await this.ensureEngineWorkersStarted();
+          await this.executionEngine.ensureEngineWorkersStarted(this.workflowEngine, this.logger);
           executionFence.throwIfLost();
           this.#assertRecoveryActive();
           const run = await this.#raceFenceLoss(
@@ -4593,14 +4615,14 @@ export class DurableAgent<
             if (finished) await this.deleteRunSnapshots(runId);
           });
           if (result?.status === 'failed') {
-            throw this.workflowFailureError((result as any).error, 'Workflow recover failed');
+            throw this.executionEngine.workflowFailureError((result as any).error, 'Workflow recover failed');
           }
         })
         .catch(async error => {
           if (error?.id === RECOVER_SHUTDOWN_ERROR_ID) {
             await executionFence.abandon();
           }
-          const executionError = this.workflowExecutionError(error, 'Workflow recover failed');
+          const executionError = this.executionEngine.workflowExecutionError(error, 'Workflow recover failed');
           // Settles a recovery that failed before the run finished; otherwise
           // returns the settlement reached above.
           const settlement = await executionFence.settle(async () => {});
@@ -4954,7 +4976,7 @@ export class DurableAgent<
         })
         .catch(error =>
           this.settleExecution(runId, executionFence, {
-            error: this.workflowExecutionError(error, 'Workflow execution failed'),
+            error: this.executionEngine.workflowExecutionError(error, 'Workflow execution failed'),
           }),
         ),
     );
@@ -6145,7 +6167,17 @@ export class DurableAgent<
    * getAgentById in execution steps).
    */
   getWorkflow(): ReturnType<typeof createDurableAgenticWorkflow> {
-    return this.executionEngine.getWorkflow();
+    return (
+      this.executionEngine.workflow ??
+      this.executionEngine.getWorkflow({
+        maxSteps: this.#maxSteps,
+        workflowEngine: this.workflowEngine,
+        storesRunsInJournal: this.storesRunsInJournal,
+        shouldPersistSnapshot: this.userShouldPersistSnapshot,
+        logger: this.logger,
+        guardrailLogger: this.guardrailLogger,
+      })
+    );
   }
 
   /**
@@ -6154,13 +6186,13 @@ export class DurableAgent<
    * that read `stepResults` may probe inaccurately — the warnings are
    * best-effort and never block execution.
    *
-   * Subclasses that ignore the user predicate (EventedAgent) override this
-   * with their own warning.
+   * Engine variants own their warnings during workflow creation. This method
+   * remains available for direct calls and subclass super calls.
    *
    * @internal
    */
   protected warnOnRiskyPersistencePolicy(): void {
-    this.executionEngine.warnOnRiskyPersistencePolicy();
+    this.executionEngine.warnOnRiskyPersistencePolicy(this.userShouldPersistSnapshot, this.guardrailLogger);
   }
 
   /**
@@ -6274,6 +6306,7 @@ export class DurableAgent<
   __registerMastra(mastra: Mastra): void {
     super.__registerMastra(mastra);
     this.#mastra = mastra;
+    this.#executionEngine?.registerMastra(mastra);
     // Also set on wrapped agent
     this.#wrappedAgent.__registerMastra(mastra);
     this.#wrapperStreamBus?.registerMastra(mastra.pubsub);
