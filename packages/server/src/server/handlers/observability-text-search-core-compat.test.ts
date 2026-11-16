@@ -12,6 +12,8 @@ vi.mock('@mastra/core/storage', async importOriginal => {
   return {
     ...actual,
     observabilityTextSearchSchema: undefined,
+    traceAggregateQueryObjectSchema: actual.traceAggregateQueryObjectSchema.omit({ textSearch: true }),
+    spanAggregateQueryObjectSchema: actual.spanAggregateQueryObjectSchema.omit({ textSearch: true }),
     planSpanQuery: (input: unknown, options: Parameters<typeof actual.planSpanQuery>[1]) =>
       actual.planSpanQuery(legacyRequestSchema.parse(input), options),
   };
@@ -39,13 +41,24 @@ describe('text search with pre-search Core', () => {
 
   it('does not advertise search when Core cannot parse it, even if the store declares it', () => {
     const capabilities = getObservabilityStorageCapabilities({
-      getFeatures: () => ['span-query', 'trace-query', 'span-query-text-search', 'trace-query-text-search'],
+      getFeatures: () => [
+        'span-query',
+        'trace-query',
+        'span-query-text-search',
+        'trace-query-text-search',
+        'trace-aggregate',
+        'span-aggregate',
+        'trace-aggregate-text-search',
+        'span-aggregate-text-search',
+      ],
     } as Parameters<typeof getObservabilityStorageCapabilities>[0]);
     expect(capabilities).toMatchObject({
       spanQuery: true,
       traceQuery: true,
       spanQueryTextSearch: false,
       traceQueryTextSearch: false,
+      traceAggregateTextSearch: false,
+      spanAggregateTextSearch: false,
     });
   });
 });

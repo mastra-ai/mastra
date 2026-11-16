@@ -124,6 +124,8 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `span-query-text-search`: literal substring search in `querySpans`
  * - `trace-query-text-search`: literal substring search across any span in `queryTraces`
  * - `span-query-model-fields`: `model` and `provider` predicates in `querySpans` and `aggregateSpans`
+ * - `trace-aggregate-text-search`: text search in `aggregateTraces`
+ * - `span-aggregate-text-search`: text search in `aggregateSpans`
  * - `span-aggregate`: `aggregateSpans`, including every `querySpans` predicate field
  * - `span-aggregate-model-dimensions`: `model` and `provider` in `aggregateSpans` `groupBy` and `countDistinct`
  * - `trace-query`: `queryTraces`
@@ -166,6 +168,8 @@ export type ObservabilityStorageFeature =
   | 'span-query-context-fields'
   | 'span-query-text-search'
   | 'trace-query-text-search'
+  | 'trace-aggregate-text-search'
+  | 'span-aggregate-text-search'
   | 'span-query-model-fields'
   | 'span-aggregate'
   | 'span-aggregate-model-dimensions'

@@ -2137,6 +2137,7 @@ export const API_ROUTE_METADATA = {
       "limit",
       "measures",
       "orderBy",
+      "textSearch",
       "timeRange",
       "where"
     ],
@@ -2159,6 +2160,7 @@ export const API_ROUTE_METADATA = {
       "limit",
       "measures",
       "orderBy",
+      "textSearch",
       "timeRange",
       "where"
     ],

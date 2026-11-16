@@ -1,3 +1,4 @@
+import { z } from 'zod/v4';
 /**
  * Storage contract for `aggregateSpans()`: grouped measures over individual current spans.
  *
@@ -7,7 +8,7 @@
  * attributed per span rather than per trace. Trace-level questions ("traces containing a failing
  * tool call") remain `aggregateTraces()` with `spans.some`.
  */
-import { z } from 'zod/v4';
+import { observabilityTextSearchSchema } from './text-search';
 import {
   getTraceAggregateCountDistinctField,
   TRACE_AGGREGATE_DEFAULT_LIMIT,
@@ -137,6 +138,7 @@ const hasDistinctValues = (values: readonly string[]) => new Set(values).size ==
 const spanAggregateRequestObjectSchema = z
   .object({
     timeRange: traceAggregateTimeRangeSchema,
+    textSearch: observabilityTextSearchSchema.optional(),
     where: traceQueryScalarPredicateSchema.optional(),
     groupBy: z
       .array(traceAggregateDimensionSchema)
@@ -219,6 +221,7 @@ export type TrustedSpanAggregateOrderBy = TrustedTraceAggregateOrderBy<
  */
 export interface TrustedSpanAggregatePlan {
   result: 'spanAggregate';
+  textSearch?: string;
   timeRange: { from: string; to: string };
   where?: TrustedTraceQueryScalarPredicate;
   scope?: TraceQueryTenantScope;
@@ -250,5 +253,11 @@ export function planSpanAggregate(
     isDimension: isSpanAggregateDimension,
     parseMeasure: parseSpanAggregateMeasure,
   });
-  return { result: 'spanAggregate', ...plan, where, scope: normalizeTraceQueryTenantScope(options.scope) };
+  return {
+    result: 'spanAggregate',
+    textSearch: request.textSearch,
+    ...plan,
+    where,
+    scope: normalizeTraceQueryTenantScope(options.scope),
+  };
 }

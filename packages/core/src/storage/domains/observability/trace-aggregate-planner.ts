@@ -174,6 +174,7 @@ export type TrustedTraceAggregateOrderBy<
  */
 export interface TrustedTraceAggregatePlan {
   result: 'aggregate';
+  textSearch?: string;
   timeRange: { from: string; to: string };
   where?: TrustedTraceQueryPredicate;
   scope?: TraceQueryTenantScope;
@@ -221,7 +222,13 @@ export function planTraceAggregate(
     isDimension: isTraceAggregateDimension,
     parseMeasure: parseTraceAggregateMeasure,
   });
-  return { result: 'aggregate', ...plan, where, scope: normalizeTraceQueryTenantScope(options.scope) };
+  return {
+    result: 'aggregate',
+    textSearch: request.textSearch,
+    ...plan,
+    where,
+    scope: normalizeTraceQueryTenantScope(options.scope),
+  };
 }
 
 /** @internal The parts of an aggregate request that trace and span scopes share. */

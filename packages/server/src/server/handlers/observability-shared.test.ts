@@ -93,3 +93,19 @@ describe('text search capabilities', () => {
     },
   );
 });
+
+describe.each(['trace', 'span'] as const)('%s aggregate search capability', kind => {
+  it('does not treat list search support as aggregate search support', () => {
+    const store = { getFeatures: () => [`${kind}-query-text-search`, `${kind}-aggregate`] } as Parameters<
+      typeof assertObservabilityTextSearchSupported
+    >[0];
+    expect(() => assertObservabilityTextSearchSupported(store, 'error', kind, 'aggregate')).toThrow(HTTPException);
+    expect(getObservabilityStorageCapabilities(store)[`${kind}AggregateTextSearch`]).toBe(false);
+  });
+  it('requires the explicit aggregate search feature', () => {
+    const store = { getFeatures: () => [`${kind}-aggregate`, `${kind}-aggregate-text-search`] } as Parameters<
+      typeof assertObservabilityTextSearchSupported
+    >[0];
+    expect(getObservabilityStorageCapabilities(store)[`${kind}AggregateTextSearch`]).toBe(true);
+  });
+});

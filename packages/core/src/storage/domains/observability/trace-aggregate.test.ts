@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { planSpanAggregate } from './span-aggregate';
 import {
   getTraceAggregateCountDistinctField,
   isTraceAggregateCountDistinctMeasure,
@@ -9,6 +10,7 @@ import {
   TRACE_AGGREGATE_MAX_LIMIT,
   traceAggregateResponseSchema,
 } from './trace-aggregate';
+import { planTraceAggregate } from './trace-aggregate-planner';
 import { TRACE_QUERY_MAX_NODES, TRACE_QUERY_MAX_PATH_BYTES, TraceQueryValidationError } from './trace-query';
 import type { TraceQueryScalarPredicate } from './trace-query';
 
@@ -393,5 +395,22 @@ describe('countDistinct helpers', () => {
     expect(getTraceAggregateCountDistinctField('count')).toBeUndefined();
     expect(isTraceAggregateCountDistinctMeasure('countDistinct.')).toBe(false);
     expect(getTraceAggregateCountDistinctField('countDistinct')).toBeUndefined();
+  });
+});
+
+// A filtered list must not become an unfiltered histogram at the contract boundary.
+describe.each([
+  ['traces', (input: unknown) => planTraceAggregate(parseTraceAggregateRequest(input))],
+  ['spans', planSpanAggregate],
+] as const)('%s aggregate text search', (_, plan) => {
+  it('preserves the normalized search alongside grouping and structured filters', () => {
+    const where = { op: 'eq', left: { path: 'name' }, right: { literal: 'agent' } };
+    expect(plan({ ...baseRequest, textSearch: '  ERROR timeout  ', where, interval: '1d' })).toMatchObject({
+      textSearch: 'error timeout',
+      interval: '1d',
+    });
+  });
+  it.each(['', 'ab', 'x'.repeat(257), null, 42])('rejects invalid search input: %j', textSearch => {
+    expect(() => plan({ ...baseRequest, textSearch })).toThrow(TraceQueryValidationError);
   });
 });

@@ -10919,6 +10919,7 @@ export type PostObservabilityTracesAggregate_Body = {
     from: string;
     to: string;
   };
+  textSearch?: string | undefined;
   where?: InputShared_Auxiliary_208 | undefined;
   groupBy?: string[];
   interval?: ('1m' | '5m' | '15m' | '1h' | '1d') | undefined;
@@ -11020,6 +11021,7 @@ export type PostObservabilitySpansAggregate_Body = {
     from: string;
     to: string;
   };
+  textSearch?: string | undefined;
   where?: InputShared_Auxiliary_231 | undefined;
   groupBy?: string[];
   interval?: ('1m' | '5m' | '15m' | '1h' | '1d') | undefined;

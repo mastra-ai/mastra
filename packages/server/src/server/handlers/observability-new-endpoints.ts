@@ -532,6 +532,7 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
     mastra,
     requestContext,
     timeRange,
+    textSearch,
     where,
     groupBy,
     interval,
@@ -543,7 +544,17 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
     let plan;
     try {
       plan = coreStorage.planTraceAggregate(
-        { timeRange, where, groupBy, interval, measures, having, orderBy, limit },
+        {
+          timeRange,
+          where,
+          ...(textSearch === undefined ? {} : { textSearch }),
+          groupBy,
+          interval,
+          measures,
+          having,
+          orderBy,
+          limit,
+        },
         { scope: resolveTraceQueryScope(requestContext, 'TRACE_AGGREGATE_UNSUPPORTED') },
       );
     } catch (error) {
@@ -557,6 +568,7 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
     try {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilityTraceAggregateSupported(observabilityStore);
+      assertObservabilityTextSearchSupported(observabilityStore, plan.textSearch, 'trace', 'aggregate');
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryContextFieldsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
@@ -669,6 +681,7 @@ export const AGGREGATE_SPANS = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_SPANS, {
     mastra,
     requestContext,
     timeRange,
+    textSearch,
     where,
     groupBy,
     interval,
@@ -680,7 +693,17 @@ export const AGGREGATE_SPANS = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_SPANS, {
     let plan;
     try {
       plan = coreStorage.planSpanAggregate(
-        { timeRange, where, groupBy, interval, measures, having, orderBy, limit },
+        {
+          timeRange,
+          where,
+          ...(textSearch === undefined ? {} : { textSearch }),
+          groupBy,
+          interval,
+          measures,
+          having,
+          orderBy,
+          limit,
+        },
         { scope: resolveTraceQueryScope(requestContext, 'SPAN_AGGREGATE_UNSUPPORTED') },
       );
     } catch (error) {
@@ -697,6 +720,7 @@ export const AGGREGATE_SPANS = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_SPANS, {
       // chunk included, so only time to first token and model/provider (as predicates, and as
       // dimensions or countDistinct fields) need a gate.
       assertObservabilitySpanAggregateSupported(observabilityStore);
+      assertObservabilityTextSearchSupported(observabilityStore, plan.textSearch, 'span', 'aggregate');
       assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
       assertObservabilitySpanQueryModelFieldsSupported(observabilityStore, plan.where);
       assertObservabilitySpanAggregateModelDimensionsSupported(observabilityStore, plan);

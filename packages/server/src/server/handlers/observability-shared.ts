@@ -209,8 +209,9 @@ export function assertObservabilityTextSearchSupported(
   observabilityStore: ObservabilityStorage,
   textSearch: string | undefined,
   kind: 'span' | 'trace',
+  operation: 'query' | 'aggregate' = 'query',
 ) {
-  if (textSearch !== undefined && !getFeatures(observabilityStore)?.includes(`${kind}-query-text-search`)) {
+  if (textSearch !== undefined && !getFeatures(observabilityStore)?.includes(`${kind}-${operation}-text-search`)) {
     throw new HTTPException(501, {
       message: 'Text search is not supported by the configured observability store',
     });
@@ -708,6 +709,7 @@ export type ObservabilityStorageCapabilities = {
   traceQueryDiscovery: boolean;
   traceQueryTenantScope: boolean;
   traceAggregate: boolean;
+  traceAggregateTextSearch: boolean;
   threadQuery: boolean;
   threadQueryRows: boolean;
   spanQuery: boolean;
@@ -719,6 +721,7 @@ export type ObservabilityStorageCapabilities = {
   spanQueryOutcomeFields: boolean;
   traceQueryOutcomeFields: boolean;
   spanAggregate: boolean;
+  spanAggregateTextSearch: boolean;
   spanAggregateModelDimensions: boolean;
   aggregateTimeToFirstMeasures: boolean;
   /** Days of traces the store keeps. Omitted when the store does not report a limit. */
@@ -754,11 +757,13 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
   traceAggregate: false,
+  traceAggregateTextSearch: false,
   threadQuery: false,
   threadQueryRows: false,
   spanQuery: false,
   spanQueryTextSearch: false,
   spanAggregate: false,
+  spanAggregateTextSearch: false,
   spanQueryDurationSort: false,
   spanQueryModelProviderSort: false,
   spanQueryContextFields: false,
@@ -835,6 +840,12 @@ export function getObservabilityStorageCapabilities(
       coreFeatures.has(OBSERVABILITY_DELTA_POLLING_FEATURE) && declares(OBSERVABILITY_DELTA_POLLING_STORAGE_FEATURE),
     traceQuery,
     traceQueryAggregatedRoots: false,
+    traceAggregateTextSearch:
+      newApiCore &&
+      supportsTraceAggregateCore() &&
+      coreStorage.traceAggregateQueryObjectSchema?.shape.textSearch !== undefined &&
+      declares('trace-aggregate') &&
+      declares('trace-aggregate-text-search'),
     traceQueryTextSearch:
       traceQuery && coreStorage.observabilityTextSearchSchema !== undefined && declares('trace-query-text-search'),
     traceQueryRootDuration:
@@ -869,6 +880,12 @@ export function getObservabilityStorageCapabilities(
     threadQueryRows:
       threadQuery && typeof coreStorage.planThreadRowsQuery === 'function' && declares('thread-query-rows'),
     spanQuery,
+    spanAggregateTextSearch:
+      newApiCore &&
+      supportsSpanAggregateCore() &&
+      coreStorage.spanAggregateQueryObjectSchema?.shape.textSearch !== undefined &&
+      declares('span-aggregate') &&
+      declares('span-aggregate-text-search'),
     spanQueryTextSearch:
       spanQuery && coreStorage.observabilityTextSearchSchema !== undefined && declares('span-query-text-search'),
     spanQueryDurationSort:

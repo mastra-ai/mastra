@@ -44,6 +44,8 @@ The configured observability store must support each API. Call `getObservability
 | `spanQueryContextFields` | `span-query-context-fields` | Additional identity, context, and parent/root entity predicates in span queries and aggregates |
 | `spanQueryModelFields` | `span-query-model-fields` | `model` and `provider` predicates in span queries and aggregates |
 | `traceAggregate` | `trace-aggregate` | `aggregateTraces()` |
+| `traceAggregateTextSearch` | `trace-aggregate-text-search` | `textSearch` in trace aggregates |
+| `spanAggregateTextSearch` | `span-aggregate-text-search` | `textSearch` in span aggregates |
 | `spanAggregate` | `span-aggregate` | `aggregateSpans()` |
 | `traceQueryRootDuration` | `trace-query-root-duration` | Trace-scope `durationMs` predicates |
 | `traceQueryTimeToFirstChunk` | `trace-query-time-to-first-chunk` | `timeToFirstChunkMs` predicates and results |
@@ -780,6 +782,7 @@ curl --request POST \
 | - | - | - |
 | `timeRange` | Yes | Trace start-time boundary, as in [Select traces](#select-traces). The range can span up to 365 days. |
 | `where` | No | Trace predicate, as in [Select traces](#select-traces). |
+| `textSearch` | No | Text filter applied before aggregation. Requires `traceAggregateTextSearch` for traces or `spanAggregateTextSearch` for spans. Accepts 3 to 256 characters after trimming and case normalization. Matching follows the supporting store. Built-in OSS stores don't implement aggregate text search. |
 | `measures` | Yes | One or more distinct [measure names](#measures). |
 | `groupBy` | No | Up to two distinct [dimensions](#dimensions). Defaults to `[]`, which treats all selected traces as one group. With `interval`, that group has one row per non-empty bucket. No matching traces returns no rows. |
 | `interval` | No | Bucket width: `'1m'`, `'5m'`, `'15m'`, `'1h'`, or `'1d'`. See [Time buckets](#time-buckets). |
