@@ -1773,10 +1773,11 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       if (error?.codeName === 'IndexAlreadyExists') {
         return false;
       }
-      // A server refusal with the name now listed means a concurrent create won (Atlas Local
-      // answers a racing identical create with BadValue "duplicate index names"): not ours, attach (§3.1 P5).
-      if (typeof error?.code === 'number') {
-        const rows = await this.listSearchIndexRows(collection, description.name, 'P5');
+      // Atlas Local refuses a create racing an identical one with BadValue "duplicate index names":
+      // with the name now listed, a concurrent create won, so attach (§3.1 P5). Any other error may
+      // mean this call's own create landed, so it propagates; Task 4/5's classify takes over.
+      if (error?.code === 2 && /duplicate index name/i.test(String(error?.message))) {
+        const rows = await this.listSearchIndexRows(collection, description.name, 'P5').catch(() => []);
         if (rows.some(idx => idx.status !== 'DELETING' && idx.status !== 'DOES_NOT_EXIST')) return false;
       }
       throw error;

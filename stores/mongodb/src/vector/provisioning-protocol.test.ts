@@ -1,3 +1,5 @@
+import { createVectorErrorId } from '@mastra/core/storage';
+import { MongoServerError } from 'mongodb';
 import type { CommandStartedEvent, Db, Document, MongoClient, MongoClientOptions } from 'mongodb';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
@@ -213,6 +215,45 @@ describe('provisioning protocol', () => {
       expect(typeof docs[0]?.generation).toBe('string');
       expect(docs[0]?.ownsVectorIndex).toBe(true);
       expect(await searchIndexNames(db, coll)).toEqual([`${coll}_vector_index`]);
+    });
+
+    // The seam sends the real create, so a live row exists, then reports `error` instead of the reply.
+    async function createWithRefusal(error: MongoServerError) {
+      const coll = await byoColl('refuse');
+      (a as any).testHooks = {
+        createSearchIndexesCommand: async (_cmd: Document, run: () => Promise<Document>) => {
+          await run();
+          throw error;
+        },
+      };
+      try {
+        const result = await a.createIndex({ indexName: coll, dimension: 4, collectionName: coll }).catch(e => e);
+        return { coll, result };
+      } finally {
+        (a as any).testHooks = undefined;
+      }
+    }
+
+    it('attaches, without recording ownership, when Atlas Local refuses a racing identical create', async () => {
+      const { coll, result } = await createWithRefusal(
+        new MongoServerError({
+          code: 2,
+          codeName: 'BadValue',
+          errmsg: 'duplicate index names for the same collection: x',
+        }),
+      );
+      expect(result).toBeUndefined();
+      expect((await entry(coll))?.ownsVectorIndex).not.toBe(true);
+      expect(await searchIndexNames(db, coll)).toEqual([`${coll}_vector_index`]);
+    });
+
+    it('fails, never attaching, when a create errors in a way its own create may have landed', async () => {
+      const { coll, result } = await createWithRefusal(
+        new MongoServerError({ code: 50, codeName: 'MaxTimeMSExpired', errmsg: 'operation exceeded time limit' }),
+      );
+      expect(result?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'FAILED'));
+      expect(result?.cause?.code).toBe(50);
+      expect((await entry(coll))?.ownsVectorIndex).not.toBe(true);
     });
   });
 });
