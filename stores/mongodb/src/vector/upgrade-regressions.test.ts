@@ -7,6 +7,7 @@ import {
   REGISTRY,
   createRawSearchIndex,
   rawClient,
+  searchIndexNames,
   seedCollection,
   uniqueName,
   waitFor,
@@ -91,5 +92,31 @@ describe('upgrade regressions: foreign full-text index reuse', () => {
     };
     const { coll, indexName, stored } = await setup(seeded);
     await expectConflict(coll, indexName, ['metadata.author'], stored);
+  });
+});
+
+describe('upgrade regressions: renamed full-text index cleanup', () => {
+  it('T4: a renamed text index is not orphaned by deleteIndex', async () => {
+    const client = await rawClient();
+    const db = client.db(DB_NAME);
+    const store = new MongoDBVector({ uri: ATLAS_LOCAL_URI, dbName: DB_NAME, id: 'upgrade-rename' });
+    await store.connect();
+    const coll = uniqueName('upgren');
+    const indexName = `${coll}_idx`;
+    try {
+      await seedCollection(db, coll, [{ metadata: { title: 'a' }, embedding: [1, 0, 0, 0] }]);
+      await store.createIndex({ indexName, dimension: 4, collectionName: coll });
+      await store.createSearchIndex({ indexName, searchIndexName: 'a_fts' });
+      await store.createSearchIndex({ indexName, searchIndexName: 'b_fts' });
+      await store.deleteIndex({ indexName });
+      const names = await searchIndexNames(db, coll);
+      expect(names).not.toContain('a_fts');
+      expect(names).not.toContain('b_fts');
+    } finally {
+      await db.collection(REGISTRY).deleteOne({ _id: indexName as any });
+      await db.dropCollection(coll).catch(() => {});
+      await store.disconnect();
+      await client.close();
+    }
   });
 });

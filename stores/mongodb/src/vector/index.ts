@@ -1573,25 +1573,64 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // An existing entry gets only the text-index fields and no upsert, so this call never
       // overwrites another process's policy or brings back an entry deleted in the meantime.
       const textFields = { textSearchIndexName: name, ...(sameName ? {} : { ownsTextIndex: false }), claimToken };
-      await this.writeRegistryEntry(
-        indexName,
-        previous
-          ? textFields
-          : {
-              collectionName: target.collectionName,
-              searchIndexName: target.searchIndexName,
-              isByo: target.isByo,
-              allowWrites: target.allowWrites,
-              ...textFields,
+      if (previous && !sameName) {
+        // One $set stage: every expression reads the pre-write document, so retiring the old
+        // name, reactivating a retired one and the ownership flag change atomically.
+        const retired = { $ifNull: ['$retiredTextIndexNames', []] };
+        await this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION).updateOne({ _id: indexName }, [
+          {
+            $set: {
+              retiredTextIndexNames: {
+                $setDifference: [
+                  {
+                    $setUnion: [
+                      retired,
+                      {
+                        $cond: [
+                          {
+                            $and: [
+                              { $eq: ['$ownsTextIndex', true] },
+                              { $eq: [{ $type: '$textSearchIndexName' }, 'string'] },
+                            ],
+                          },
+                          ['$textSearchIndexName'],
+                          [],
+                        ],
+                      },
+                    ],
+                  },
+                  [name],
+                ],
+              },
+              ownsTextIndex: { $cond: [{ $in: [name, retired] }, true, false] },
+              textSearchIndexName: name,
+              claimToken,
             },
-        undefined,
-        !previous,
-      );
+          },
+        ]);
+      } else {
+        await this.writeRegistryEntry(
+          indexName,
+          previous
+            ? textFields
+            : {
+                collectionName: target.collectionName,
+                searchIndexName: target.searchIndexName,
+                isByo: target.isByo,
+                allowWrites: target.allowWrites,
+                ...textFields,
+              },
+          undefined,
+          !previous,
+        );
+      }
+      await this.testHooks?.beforeSearchIndexProvision?.(indexName);
       this.indexTargets.set(indexName, { ...target, textSearchIndexName: name });
       const created = await this.createSearchIndexIgnoringExisting(collection, { definition, name, type: 'search' });
       if (created) {
         await this.markOwned(indexName, { ownsTextIndex: true }, { claimToken, textSearchIndexName: name });
-      } else if (sameName && target.ownsTextIndex) {
+      } else if ((sameName && target.ownsTextIndex) || previous?.retiredTextIndexNames?.includes(name)) {
+        // Ours already: either unchanged, or a retired name this rename just reactivated.
         // Recreating our own index with a different `fields` mapping must change the mapping.
         await collection.updateSearchIndex(name, definition);
       } else {

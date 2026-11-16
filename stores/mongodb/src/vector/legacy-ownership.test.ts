@@ -859,6 +859,50 @@ describe('legacy ownership', () => {
         expect(await exists(coll)).toBe(false);
       });
 
+      describe('text index rename (T13)', () => {
+        async function byo() {
+          const coll = uniqueName('ren');
+          colls.push(coll);
+          await seedCollection(db, coll, [{ title: 'a', embedding: [1, 0, 0, 0] }]);
+          await a.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
+          return coll;
+        }
+        const entry = (coll: string) => db.collection(REGISTRY).findOne({ _id: coll as any });
+
+        it('T13: A -> B -> A reactivates A as owned, then deleteIndex removes A and B', async () => {
+          const coll = await byo();
+          await a.createSearchIndex({ indexName: coll, searchIndexName: 'A' });
+          await a.createSearchIndex({ indexName: coll, searchIndexName: 'B' });
+          expect(await entry(coll)).toMatchObject({ textSearchIndexName: 'B', retiredTextIndexNames: ['A'] });
+          await a.createSearchIndex({ indexName: coll, searchIndexName: 'A' });
+          expect(await entry(coll)).toMatchObject({
+            ownsTextIndex: true,
+            textSearchIndexName: 'A',
+            retiredTextIndexNames: ['B'],
+          });
+          await a.createSearchIndex({ indexName: coll, searchIndexName: 'A', fields: ['title'] });
+          const [idx] = await db.collection(coll).listSearchIndexes('A').toArray();
+          expect(idx!.latestDefinition.mappings.dynamic).toBe(false);
+          await a.deleteIndex({ indexName: coll });
+          const names = await searchIndexNames(db, coll);
+          expect(names).not.toContain('A');
+          expect(names).not.toContain('B');
+        });
+
+        it('T13-rollback: a failed rename restores the registry doc exactly', async () => {
+          const coll = await byo();
+          await a.createSearchIndex({ indexName: coll, searchIndexName: 'A' });
+          const before = await entry(coll);
+          (a as any).testHooks = {
+            beforeSearchIndexProvision: async () => {
+              throw new Error('provision failed');
+            },
+          };
+          await expect(a.createSearchIndex({ indexName: coll, searchIndexName: 'B' })).rejects.toThrow();
+          expect(await entry(coll)).toEqual(before);
+        });
+      });
+
       it('T18: a managed createSearchIndex still provisions the dynamic default index', async () => {
         const coll = uniqueName('mgd');
         colls.push(coll);
