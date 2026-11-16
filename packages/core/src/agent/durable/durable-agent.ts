@@ -860,18 +860,6 @@ export class DurableAgent<
     return attempt;
   }
 
-  readonly #runRegistry = new ExtendedRunRegistry();
-
-  readonly #segmentOwner = new Map<string, symbol>();
-
-  readonly #recoveryAttempts = new Map<string, Promise<unknown>>();
-
-  #timedOutExecutions = new WeakSet<ExecutionFence>();
-
-  #runInputs = new WeakMap<ExecutionFence, DurableAgenticWorkflowInput>();
-
-  #recoveredEntries = new WeakMap<ExecutionFence, RunRegistryEntry>();
-
   #executionEngine?: DurableExecutionEngine;
 
   /** @internal One execution owner per Agent, initialized without starting a workflow. */
@@ -889,6 +877,10 @@ export class DurableAgent<
   readonly #streamConfig: AgentStreamsConfig;
   #wrapperStreamBus?: AgentStreamBus;
 
+  /** Registry for per-run non-serializable state */
+  readonly #runRegistry: ExtendedRunRegistry;
+  readonly #recoveryAttempts = new Map<string, Promise<unknown>>();
+
   /** Maximum steps for the agentic loop */
   readonly #maxSteps?: number;
 
@@ -897,6 +889,19 @@ export class DurableAgent<
 
   /** Active streamUntilIdle wrappers keyed by scope (threadId|resourceId) */
   #activeStreamUntilIdle = new Map<string, () => void>();
+  /** The stream segment (stream() or resume()) that currently owns each run id's shared state. */
+  readonly #segmentOwner = new Map<string, symbol>();
+  #timedOutExecutions = new WeakSet<ExecutionFence>();
+  /**
+   * Accepted input of stream()/generate() executions. A total deadline that
+   * settles the execution saves the turn from it as a terminal write.
+   */
+  #runInputs = new WeakMap<ExecutionFence, DurableAgenticWorkflowInput>();
+  /**
+   * Registry entries of recovered executions whose memory is fenced but which are not registered yet,
+   * so a total deadline in that window still saves the turn.
+   */
+  #recoveredEntries = new WeakMap<ExecutionFence, RunRegistryEntry>();
 
   /**
    * User-supplied snapshot-persistence policy
@@ -937,6 +942,7 @@ export class DurableAgent<
     });
 
     this.#wrappedAgent = agent;
+    this.#runRegistry = new ExtendedRunRegistry();
     this.#maxSteps = maxSteps;
     this.#streamConfig = { pubsub, cache, cleanupTimeoutMs, shouldCache };
     this.userShouldPersistSnapshot = shouldPersistSnapshot;
