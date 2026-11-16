@@ -645,7 +645,7 @@ describe('Postgres evented occurrence replay', () => {
           await driver.redeliverEvent(terminalEnd);
           expect(driver.events.filter(event => event.type === 'workflow.end')).toHaveLength(terminalEnds);
           const completed = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
-          expect(completed?.result).toMatchObject({ status: 'success', output: [{ n: 3 }] });
+          expect(completed?.result).toEqual([{ n: 3 }]);
         }
       } finally {
         failedPrune?.mockRestore();
@@ -715,7 +715,7 @@ describe('Postgres evented occurrence replay', () => {
       const completed = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
       expect(completed).toMatchObject({
         status: 'success',
-        result: { output: { n: 1 } },
+        result: { n: 1 },
         context: { finish: { output: {}, metadata: { __continuationStarted: true } } },
       });
       const stale = await readPool.query(

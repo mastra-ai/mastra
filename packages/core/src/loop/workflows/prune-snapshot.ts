@@ -324,8 +324,9 @@ function stripStreamState(suspendPayload: unknown): unknown {
 }
 
 /**
- * `snapshot.result` on a suspended run is a status mirror of the suspended
- * step's result (the evented engine persists `prevResult` there). Resume reads
+ * `snapshot.result` on a suspended run can be a status mirror of the suspended
+ * step's result. Only evented runs stored before the engine stopped persisting
+ * `prevResult` there have this shape. Resume reads
  * the authoritative copy from `snapshot.context`, so the mirror keeps its
  * routing/approval fields but not more `__streamState` conversation copies.
  */

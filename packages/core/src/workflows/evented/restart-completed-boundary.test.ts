@@ -401,7 +401,7 @@ async function assertRecovered(
     workflowName: recovered.graph.workflow.id,
     runId,
   });
-  expect(snapshot).toMatchObject({ status: 'success', result: { status: 'success', output: spec.expected } });
+  expect(snapshot).toMatchObject({ status: 'success', result: spec.expected });
   expect(snapshot.context.input).toEqual(spec.input ?? { n: 1 });
   expect(JSON.stringify(recovered.result)).not.toContain('__restartConditional');
   expect(JSON.stringify(snapshot)).not.toContain('__restartConditional');
