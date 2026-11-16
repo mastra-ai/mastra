@@ -8,6 +8,7 @@ import {
   isTerminalWorkItem,
   pullRequestSourceNumber,
   pullRequestSources,
+  resolveBoardRef,
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -138,12 +139,15 @@ function workItemUrl(item: Card) {
   );
 }
 
-function summarizeItem(item: Card, bindings: FactoryRunBindingRecord[]) {
+function summarizeItem(item: Card, bindings: FactoryRunBindingRecord[], boards: BoardRegistry) {
+  const board = boardForWorkItem(item);
   return {
     id: item.id,
     number: workItemNumber(item),
     title: truncate(item.title, MAX_TEXT),
-    board: boardForWorkItem(item),
+    board,
+    // What the UI and the work-item header show for the board, so either half can be named back.
+    boardName: boards.get(board)?.name ?? board,
     stage: workItemStage(item),
     url: workItemUrl(item),
     activeWorker: activeWorker(bindings, item.id),
@@ -197,7 +201,12 @@ const listInputSchema = z
       .optional()
       .describe('Case-insensitive text in the title, or an exact card number like "#123".'),
     stage: z.string().min(1).max(64).optional().describe('Only items in this stage, e.g. "triage" or "review".'),
-    board: z.string().min(1).max(64).optional().describe('Only items on this board, e.g. "work" or "review".'),
+    board: z
+      .string()
+      .min(1)
+      .max(128)
+      .optional()
+      .describe('Only items on this board: its id or the name shown for it, e.g. "work" or "Open source".'),
     role: z.string().min(1).max(64).optional().describe('Only items that have a session for this role.'),
     active: z.boolean().optional().describe('true: only items with an agent working now; false: only idle items.'),
     requestedBy: z.literal('me').optional().describe('"me": only items you filed.'),
@@ -238,13 +247,16 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
         "List this Factory's work items, newest activity first, with counts per stage for the whole Factory. Filter by text or #number, stage, board, role, whether an agent is working on it, items you filed, or items this session follows. Check here for an existing item before filing a new one.",
       inputSchema: listInputSchema,
       execute: async input => {
-        const [items, bindings, followed] = await Promise.all([
+        const [items, bindings, followed, boards] = await Promise.all([
           deps.workItems.listShared(project),
           deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId),
           input.subscribed === undefined
             ? undefined
             : deps.workItems.listSessionSubscriptions({ ...project, sessionId: scope.sessionId }),
+          toBoardSource(deps.boards).load(project),
         ]);
+        // A board is named by its id or by the name the UI shows for it; resolve once, not per card.
+        const board = input.board === undefined ? undefined : resolveBoardRef(boards, input.board);
         const followedIds = new Set(followed?.map(subscription => subscription.workItemId));
         const byStage: Record<string, number> = {};
         for (const item of items) {
@@ -259,7 +271,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
               if (workItemNumber(item) !== Number(numberQuery)) return false;
             } else if (text && !item.title.toLowerCase().includes(text)) return false;
             if (input.stage && !item.stages.includes(input.stage)) return false;
-            if (input.board && boardForWorkItem(item) !== input.board) return false;
+            if (board && boardForWorkItem(item) !== board.id) return false;
             if (input.role && !item.sessions[input.role]) return false;
             if (input.active !== undefined && (activeWorker(bindings, item.id) !== null) !== input.active) return false;
             if (input.requestedBy === 'me' && item.createdBy !== scope.userId) return false;
@@ -270,7 +282,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
         const limit = input.limit ?? DEFAULT_LIST;
         return {
           counts: { total: items.length, byStage },
-          items: matches.slice(0, limit).map(item => summarizeItem(item, bindings)),
+          items: matches.slice(0, limit).map(item => summarizeItem(item, bindings, boards)),
           truncated: matches.length > limit,
         };
       },
@@ -292,9 +304,10 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
           deps.workItems.listWorkItemSubscribers({ orgId: scope.orgId, workItemId: item.id }),
         ]);
         const itemDecisions = decisions.slice(-MAX_LIST);
+        const boards = await toBoardSource(deps.boards).load(project);
         const overtaken = await overtakenDecisionIds(
           deps.workItems,
-          await toBoardSource(deps.boards).load(project),
+          boards,
           project,
           itemDecisions.filter(decision => decision.status === 'failed'),
         );
@@ -329,7 +342,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
         );
         return {
           item: {
-            ...summarizeItem(item, bindings),
+            ...summarizeItem(item, bindings, boards),
             description: item.description,
             source: item.externalSource ? `${item.externalSource.integrationId}:${item.externalSource.type}` : 'manual',
             sourceUrl: typeof item.workItem.url === 'string' ? item.workItem.url : null,
@@ -353,8 +366,8 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
               actorType: event.actorType,
               occurredAt: iso(event.occurredAt),
             })),
-          parent: parent ? summarizeItem(parent, bindings) : null,
-          children: children.slice(0, MAX_LIST).map(child => summarizeItem(child, bindings)),
+          parent: parent ? summarizeItem(parent, bindings, boards) : null,
+          children: children.slice(0, MAX_LIST).map(child => summarizeItem(child, bindings, boards)),
           subscribers: subscribers.slice(0, MAX_LIST).map(subscription => ({
             sessionId: subscription.sessionId,
             reason: subscription.reason,

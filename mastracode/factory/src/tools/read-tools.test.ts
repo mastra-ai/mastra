@@ -1,6 +1,9 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
-import { createTriageWorkRegistry } from '../boards/test-utils.js';
+import { boardRegistryOf } from '../boards/registry.js';
+import type { BoardRegistry, InstalledBoard } from '../boards/registry.js';
+import { boardDefinitionOf, compileStoredBoard } from '../boards/stored-board.js';
+import { createTestBoard, createTriageWorkRegistry, triageWorkBoard } from '../boards/test-utils.js';
 
 import { LiveSessions } from '../session/live-sessions.js';
 import type { LiveSession } from '../session/live-sessions.js';
@@ -121,6 +124,7 @@ function setup({
   decisions = [],
   audit = [],
   subscriptions = [],
+  boards = createTriageWorkRegistry(createTestBoard()),
   sessions,
 }: {
   items?: Card[];
@@ -128,6 +132,7 @@ function setup({
   decisions?: FactoryDeferredDecisionRecord[];
   audit?: AuditEventRow[];
   subscriptions?: WorkItemSubscription[];
+  boards?: BoardRegistry;
   sessions?: FactoryReadToolDependencies['sessions'];
 }) {
   const deps: FactoryReadToolDependencies = {
@@ -157,7 +162,7 @@ function setup({
       ),
     },
     audit: { list: vi.fn(async () => ({ events: audit })) },
-    boards: createTriageWorkRegistry(),
+    boards,
     ...(sessions ? { sessions } : {}),
   };
   const tools = createFactoryReadTools(scope, deps) as Record<
@@ -187,6 +192,16 @@ function follow(workItemId: string, sessionId: string, reason: WorkItemSubscript
     reason,
     createdAt: new Date('2026-10-01T00:00:00Z'),
   };
+}
+
+/** A stored board renamed the way `factory.upsertBoard` renames one: the name changes, the id does not. */
+function renamed(board: InstalledBoard, name: string): InstalledBoard {
+  return compileStoredBoard({ ...boardDefinitionOf(board), name }, board);
+}
+
+/** The reported project: its Work board is stored under `work` but shown as "Open source". */
+function openSourceWorkRegistry(...boards: InstalledBoard[]): BoardRegistry {
+  return boardRegistryOf([renamed(triageWorkBoard, 'Open source'), ...boards]);
 }
 
 describe('factory_list_work_items', () => {
@@ -222,6 +237,41 @@ describe('factory_list_work_items', () => {
     expect(await ids({ active: true })).toEqual(['b']);
     expect(await ids({ active: false })).toEqual(['c', 'a']);
     expect(await ids({ requestedBy: 'me' })).toEqual(['b']);
+  });
+
+  it('finds a board by the name the UI shows for it, not only its id', async () => {
+    const { run } = setup({ items: rows, boards: openSourceWorkRegistry(createTestBoard()) });
+    const ids = async (input: object) => (await run<ListResult>('factory_list_work_items', input)).items.map(r => r.id);
+    expect(await ids({ board: 'Open source' })).toEqual(['b', 'a']);
+    expect(await ids({ board: 'open source' })).toEqual(['b', 'a']);
+    expect(await ids({ board: 'work' })).toEqual(['b', 'a']);
+  });
+
+  it("reports each card's board name beside its id", async () => {
+    const { run } = setup({ items: rows, boards: openSourceWorkRegistry(createTestBoard()) });
+    const result = await run<{ items: Array<{ id: string; board: string; boardName: string }> }>(
+      'factory_list_work_items',
+      {},
+    );
+    expect(result.items.map(({ id, board, boardName }) => ({ id, board, boardName }))).toEqual([
+      { id: 'c', board: 'release', boardName: 'Release' },
+      { id: 'b', board: 'work', boardName: 'Open source' },
+      { id: 'a', board: 'work', boardName: 'Open source' },
+    ]);
+  });
+
+  it('refuses a board name no board carries, naming the boards it has', async () => {
+    const { run } = setup({ items: rows, boards: openSourceWorkRegistry(createTestBoard()) });
+    await expect(run('factory_list_work_items', { board: 'Nope' })).rejects.toThrow(
+      'No board is named "Nope" in this Factory. It has: Open source (work), Release (release).',
+    );
+  });
+
+  it('refuses a board name two boards share, naming both', async () => {
+    const { run } = setup({ items: rows, boards: openSourceWorkRegistry(renamed(createTestBoard(), 'Open source')) });
+    await expect(run('factory_list_work_items', { board: 'Open source' })).rejects.toThrow(
+      '"Open source" matches more than one board; use its id instead: Open source (work), Open source (release).',
+    );
   });
 
   it('numbers a card filed by hand and finds it by that #number', async () => {
