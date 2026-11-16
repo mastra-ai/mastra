@@ -4,12 +4,12 @@ Use `createBilling` to select a provider and declare commercial keys, then opt i
 
 ## Configure the application
 
-The following example assumes existing native `publicAgent`, `paidAgent` and `reportWorkflow` definitions:
+Configure billing in [src/mastra/index.ts](../src/mastra/index.ts). The following example belongs in that file and assumes existing native `publicAgent`, `paidAgent` and `reportWorkflow` definitions:
 
 ```ts
 import { Mastra } from '@mastra/core/mastra';
-import { createBilling } from './src/billing/integration.js';
-import { registerApplicationShutdown } from './src/billing/lifecycle.js';
+import { createBilling } from '../billing/integration.js';
+import { registerApplicationShutdown } from '../billing/lifecycle.js';
 
 const billing = createBilling({
   environment: process.env,
@@ -49,6 +49,8 @@ registerApplicationShutdown(billing.close);
 2. `billing.agent` / `billing.workflow` pair native resources with a policy. `prepare` initializes identity, provider, accounting and storage, returning native registrations plus a separate execution facade.
 3. Construct your own `Mastra`, keeping your logger, tools, vectors, scorers and other options. Merge application routes/middleware through `integration.server`.
 4. `attach` verifies registrations and shared workflow storage, installs the early server boundary and starts recovery. It does not patch native agent methods. Close billing on shutdown and on failed application construction.
+
+The bundled example keeps image-specific adapters and Playground actions in [src/images/image-adapters.ts](../src/images/image-adapters.ts). Its `completion` hooks verify durable image outputs before billing confirms success; the charge amounts remain in the policies in `src/mastra/index.ts`. Native conversation integration is composed separately through [src/studio-billing/index.ts](../src/studio-billing/index.ts), as shown in the [Studio guide](studio.md#compose-your-own-conversation-agent).
 
 An unwrapped resource stays native and uses the application's ordinary authentication. `charge: { type: 'none' }` still uses billing identity, access and idempotency. Raw server-side calls to a native agent bypass the billing facade; use `integration.billing` for protected execution. The bundled image tool additionally requires an admitted execution scope, so invoking its raw agent is not a supported free image service. OpenAI still charges the operator for any actual model calls.
 

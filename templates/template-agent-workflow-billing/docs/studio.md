@@ -64,7 +64,9 @@ The command saves an owner-only PNG, never overwrites an existing file and does 
 
 ## Compose your own conversation agent
 
-This complete example uses one Mastra instance, a prepared billing integration, explicit plans/meters/policies, a free conversation agent and registered business resources. It uses existing local setup profiles. Replace the example agents/workflow with your application's definitions without importing Studio into them.
+Use this complete example in [src/mastra/index.ts](../src/mastra/index.ts). It uses one Mastra instance, a prepared billing integration, explicit plans/meters/policies, a free conversation agent and registered business resources. It uses existing local setup profiles. Replace the example agents/workflow with your application's definitions without importing Studio into them.
+
+The wrapper's entry point is [src/studio-billing/index.ts](../src/studio-billing/index.ts). Its neighboring modules provide the contracts, HTTP middleware, conversation-agent decoration and business-operation tools. The image example's resource adapters and Playground actions live in [src/images/image-adapters.ts](../src/images/image-adapters.ts); this generic example defines its own resources below.
 
 ```ts
 import { Agent } from '@mastra/core/agent';
