@@ -600,8 +600,10 @@ export class ExecutionFence implements RunFenceScope {
   #renewalInFlight = false;
   /**
    * Set when this execution starts releasing its claim, here or in another fence of the same execution. Resolves true
-   * once the backend confirmed the claim still held the run as it was released. A renewal sent before the release can
-   * reach the backend after it and come back unrenewed; only that confirmation shows nobody took the run over first.
+   * once the backend confirmed, for any of those releases, that the claim still held the run as it was released, and
+   * false while none did. A renewal sent before the release can reach the backend after it and come back unrenewed;
+   * only that confirmation shows nobody took the run over first. A renewal that succeeded still counts when no
+   * release was confirmed: a release that failed left the claim with this execution.
    */
   #ownRelease?: Promise<boolean>;
   /**
@@ -758,7 +760,7 @@ export class ExecutionFence implements RunFenceScope {
   static #noteOwnRelease(key: string, released: Promise<boolean>): void {
     const confirmed = released.catch(() => false);
     for (const fence of renewingFencesByClaim.get(key) ?? []) {
-      fence.#ownRelease ??= confirmed;
+      fence.#noteReleaseStarted(confirmed);
       void confirmed.then(owned => {
         // The claim is gone: later renewals could only fail.
         if (owned) fence.stopHeartbeat();
@@ -1125,9 +1127,15 @@ export class ExecutionFence implements RunFenceScope {
     }
   }
 
+  /** Record a release of this claim. A failed release left the claim held, so a later one can still confirm it. */
+  #noteReleaseStarted(confirmed: Promise<boolean>): void {
+    const earlier = this.#ownRelease;
+    this.#ownRelease = earlier ? earlier.then(owned => owned || confirmed) : confirmed;
+  }
+
   async #release(): Promise<void> {
     const released = this.#backend.release(this.claim);
-    this.#ownRelease ??= released.catch(() => false);
+    this.#noteReleaseStarted(released.catch(() => false));
     ExecutionFence.#noteOwnRelease(claimKey(this.runId, this.claim), released);
     try {
       await released;
@@ -1254,7 +1262,8 @@ export class ExecutionFence implements RunFenceScope {
         .renew(this.claim)
         .then(async result => {
           if (result.renewed) {
-            if (this.#ownRelease) return;
+            // A release that failed left the claim with this execution, so its renewal still counts.
+            if (await this.#ownRelease) return;
             // The lease runs at least a TTL from when the renewal was sent. A queued storage renewal ran later:
             // trust the store's expiry, less a clock skew allowance, but never past a TTL from now.
             const { leaseExpiresAt } = result;
