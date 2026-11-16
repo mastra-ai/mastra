@@ -31,12 +31,14 @@ const ACTIVITY_RANK: Record<SessionRow['status'], number> = {
   done: 2,
 };
 
+const newestFirst = (a: string, b: string) => (a < b ? 1 : a > b ? -1 : 0);
+
 const SESSION_ROW_ORDER: Record<SessionRowsView['sort'], (a: SessionRow, b: SessionRow) => number> = {
   activity: (a, b) =>
     ACTIVITY_RANK[a.cardStatus ?? a.status] - ACTIVITY_RANK[b.cardStatus ?? b.status] ||
-    b.session.createdAt.localeCompare(a.session.createdAt),
-  updated: (a, b) => b.updatedAt.localeCompare(a.updatedAt),
-  created: (a, b) => b.session.createdAt.localeCompare(a.session.createdAt),
+    newestFirst(a.session.createdAt, b.session.createdAt),
+  updated: (a, b) => newestFirst(a.updatedAt, b.updatedAt),
+  created: (a, b) => newestFirst(a.session.createdAt, b.session.createdAt),
 };
 
 const UPDATED_WINDOW_HOURS: Record<NonNullable<SessionRowsView['updated']>, number> = {
