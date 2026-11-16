@@ -32,18 +32,6 @@ tests create and remove uniquely named test databases; use a disposable instance
 Documentation and Bedrock responses come from a local HTTP server, so no AWS credentials
 or paid model calls are needed.
 
-## The one patched dependency
-
-`@ai-sdk/amazon-bedrock` is pinned to an exact version and patched, via `patches/` and
-`patch-package`. Bedrock can stream a tool-use block before its `input` arrives, which the
-provider's schema rejected; the patch makes that field optional. Upstream fixed it, but only
-in provider majors that require `ai` v6+ — this template is on `ai` v5 — so the patch stays
-until that migration happens.
-
-Two things follow. The version must stay exact, because `patch-package` matches the patch file
-to it by name and a bump silently stops applying it. And `patch-package` is a runtime
-dependency rather than a dev one, so `npm ci --omit=dev` still runs the `postinstall`.
-
 ## Working with Mastra APIs
 
 Mastra's APIs change between versions. Load the [Mastra docs](https://mastra.ai/llms.txt) or the [published skills](https://mastra.ai/.well-known/skills/index.json) before making changes rather than relying on remembered APIs, and match the version pinned in `package.json`.
