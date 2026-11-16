@@ -541,8 +541,10 @@ export class Memory extends MastraMemory {
     }
   }
 
-  // False while the base constructor merges the instance options into threadConfig.
-  private readonly instanceConfigured = true;
+  // Undefined while the base constructor runs getMergedThreadConfig to build threadConfig;
+  // true once this class's field initializers have run.
+  private readonly derivedFieldsInitialized = true;
+  private warnedIgnoredCallObservationalMemory = false;
 
   public override getMergedThreadConfig(config?: MemoryConfigInternal): MemoryConfigInternal {
     const merged = super.getMergedThreadConfig(config);
@@ -550,11 +552,16 @@ export class Memory extends MastraMemory {
     // opt-in on an instance without OM has nothing to observe or save the turn. Treat it as off
     // so message history keeps saving instead of every engine skipping persistence.
     if (
-      this.instanceConfigured &&
+      this.derivedFieldsInitialized &&
       !normalizeObservationalMemoryConfig(this.threadConfig.observationalMemory) &&
-      merged.observationalMemory !== undefined &&
-      merged.observationalMemory !== false
+      normalizeObservationalMemoryConfig(merged.observationalMemory)
     ) {
+      if (!this.warnedIgnoredCallObservationalMemory) {
+        this.warnedIgnoredCallObservationalMemory = true;
+        this.logger.warn(
+          'observationalMemory is enabled in call options but not on the Memory instance; it is ignored and message history is used instead. Configure observationalMemory on new Memory({ options }).',
+        );
+      }
       return this.applyManagedWorkingMemoryDefaults({ ...merged, observationalMemory: false });
     }
     return this.applyManagedWorkingMemoryDefaults(merged);

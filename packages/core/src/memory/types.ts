@@ -1111,6 +1111,10 @@ type BaseMemoryConfig = {
    *
    * Set to `true` to enable with defaults, `false` to disable, or an object to customize.
    *
+   * Observational memory must be configured on the `Memory` instance. A per-call value in
+   * `memory.options` can tune it or turn it off for that call, but cannot turn it on for an
+   * instance that does not configure it; such a call falls back to message history.
+   *
    * @example
    * ```typescript
    * // Enable with defaults
