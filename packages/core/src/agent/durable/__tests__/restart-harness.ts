@@ -184,8 +184,7 @@ export function createGate() {
 
 export type Gate = ReturnType<typeof createGate>;
 
-/** `storage` is the graph's store: a memory built on it keeps its data across the restart. */
-type BuildContext = { core: CoreGraph; generation: number; storage: any };
+type BuildContext = { core: CoreGraph; generation: number };
 
 type AgentBuild = (ctx: BuildContext) => Agent<any, any, any>;
 type WorkflowBuild = (ctx: BuildContext) => any;
@@ -244,7 +243,7 @@ async function buildGraph<K extends RestartKind>(options: ScenarioOptions<K>, ge
     options.storageMode === 'serializing'
       ? (await import('../../../storage/domains/workflows/serializing-store.test-utils')).createSerializingStore().store
       : new core.InMemoryStore();
-  const built = options.build({ core, generation, storage } as BuildContext);
+  const built = options.build({ core, generation } as BuildContext);
   let mastra: any;
   try {
     if (options.kind === 'workflow') {
@@ -467,7 +466,8 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
        * Agent kinds: close the recovered stream when the run suspends again; it stays open by
        * default, so a test that expects the run to suspend sets this.
        */
-      { closeOnSuspend }: { closeOnSuspend?: boolean } = {},
+      /** Workflow kind: `watch` sees the restarted run's events. */
+      { closeOnSuspend, watch }: { closeOnSuspend?: boolean; watch?: (event: any) => void } = {},
     ): Promise<RestartResult> {
       const graph = await buildGraph(options, ++generation);
       graphs.push(graph);
@@ -490,6 +490,7 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
 
       if (options.kind === 'workflow') {
         const run = await graph.workflow.createRun({ runId: options.runId });
+        if (watch) run.watch(watch);
         const result = await withTimeout(run.restart(), timeoutMs, `restart(${options.runId})`);
         return { result, graph };
       }

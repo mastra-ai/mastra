@@ -1,32 +1,72 @@
 /**
- * Recovering a durable agent run that crashed while an approved tool call ran.
- *
- * The model asks for three approval-gated tool calls in one step. The first is approved through
- * the same agent instance that suspended the run, and the process crashes while it runs. The
- * recovered run must run only that call again: the other two still wait for their own approval.
+ * Recovering a durable agent run that crashed while an approval was being applied. The recovered
+ * run must run only the approved tool call: every other call still waits for its own approval.
  */
 
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { DurableStepIds } from '../constants';
-import type { Gate } from './restart-harness';
+import type { Checkpoint, Gate, HoldWrite } from './restart-harness';
 import { createGate, createRestartScenario } from './restart-harness';
 
 let llm: LLMock;
 const gates: Gate[] = [];
 const scenarios: { stop(): Promise<void> }[] = [];
 
+/**
+ * Picks requests by the agent's instructions (the start of the system prompt: a sub-agent's also
+ * carries its supervisor's), the agent's own task (the last user message), and whether the text
+ * already holds `done`.
+ */
+const request =
+  (instructions: string, { task, done }: { task?: string; done?: string[] } = {}) =>
+  (body: any) => {
+    const messages: any[] = body?.messages ?? [];
+    const text = JSON.stringify(messages);
+    return (
+      String(messages[0]?.content).startsWith(instructions) &&
+      (task === undefined || messages.findLast(m => m.role === 'user')?.content === task) &&
+      (done ?? []).every(part => text.includes(part))
+    );
+  };
+const pending = (predicate: (body: any) => boolean, done: (body: any) => boolean) => (body: any) =>
+  predicate(body) && !done(body);
+
 beforeAll(async () => {
   llm = new LLMock({ port: 0 });
   await llm.start();
+  // An agent with three approval-gated tool calls in one step.
   llm.on(
-    { endpoint: 'chat', hasToolResult: false },
+    { endpoint: 'chat', hasToolResult: false, predicate: request('Charge every card') },
     { toolCalls: [0, 1, 2].map(index => ({ id: `call_${index}`, name: 'charge', arguments: { index } })) },
   );
-  llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'all charged' });
+  llm.on(
+    { endpoint: 'chat', hasToolResult: true, predicate: request('Charge every card') },
+    { content: 'all charged' },
+  );
+  // A supervisor that delegates to two sub-agents in one step; each calls its gated tool once.
+  const supervisorDone = request('Delegate to both', { done: ['alpha finished', 'beta finished'] });
+  llm.on({ endpoint: 'chat', predicate: supervisorDone }, { content: 'Both delegations complete.' });
+  llm.on(
+    { endpoint: 'chat', predicate: pending(request('Delegate to both'), supervisorDone) },
+    {
+      toolCalls: ['Alpha', 'Beta'].map(name => ({
+        id: `sup-tc-${name[0]}`,
+        name: `agent-sub${name}`,
+        arguments: { prompt: `do ${name.toLowerCase()}` },
+      })),
+    },
+  );
+  for (const label of ['alpha', 'beta']) {
+    const done = request('Use your tool', { task: `do ${label}`, done: [`${label} done`] });
+    llm.on({ endpoint: 'chat', predicate: done }, { content: `${label} finished.` });
+    llm.on(
+      { endpoint: 'chat', predicate: pending(request('Use your tool', { task: `do ${label}` }), done) },
+      { toolCalls: [{ id: `inner-${label}`, name: 'gatedTool', arguments: { query: label } }] },
+    );
+  }
 });
 
 afterAll(async () => {
@@ -37,6 +77,16 @@ afterEach(async () => {
   for (const gate of gates.splice(0)) gate.release();
   for (const scenario of scenarios.splice(0)) await scenario.stop();
 });
+
+const model = () => createOpenAI({ apiKey: 'test-key', baseURL: `${llm.url}/v1` }).chat('gpt-4o-mini');
+
+/** Recovers the run from `checkpoint`; the recovered run reports no error. */
+async function recover(scenario: ReturnType<typeof createRestartScenario>, checkpoint: Checkpoint) {
+  const recovered = await scenario.restart(checkpoint, { closeOnSuspend: true });
+  expect(recovered.streamErrors).toEqual([]);
+  expect(recovered.executionError).toBeUndefined();
+  return recovered;
+}
 
 describe('durable agent: restart while an approved tool call runs', () => {
   it('runs only the approved tool call, not the calls still waiting for approval', async () => {
@@ -52,7 +102,7 @@ describe('durable agent: restart while an approved tool call runs', () => {
           id: 'approval-agent',
           name: 'approval-agent',
           instructions: 'Charge every card.',
-          model: createOpenAI({ apiKey: 'test-key', baseURL: `${llm.url}/v1` }).chat('gpt-4o-mini'),
+          model: model(),
           tools: {
             charge: core.createTool({
               id: 'charge',
@@ -86,96 +136,19 @@ describe('durable agent: restart while an approved tool call runs', () => {
     expect(approvedId).toBe('call_0');
     expect(charges).toEqual([{ generation: 1, index: 0 }]);
 
-    const recovered = await scenario.restart(await original.checkpoint(), { closeOnSuspend: true });
+    const recovered = await recover(scenario, await original.checkpoint());
 
-    expect(recovered.streamErrors).toEqual([]);
-    expect(recovered.executionError).toBeUndefined();
     expect(charges.filter(c => c.generation === 2)).toEqual([{ generation: 2, index: 0 }]);
     // The next call asks for its own approval.
     expect(recovered.chunkTypes).toContain('tool-call-approval');
   }, 30_000);
 });
 
-/** A sub-agent that calls its approval-gated tool once, then answers. */
-function subAgentModel(label: string) {
-  return new MockLanguageModelV2({
-    doStream: async ({ prompt }) => {
-      const done = JSON.stringify(prompt).includes(`${label} done`);
-      return {
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-        stream: convertArrayToReadableStream<any>([
-          { type: 'stream-start', warnings: [] },
-          { type: 'response-metadata', id: `${label}-${done ? 1 : 0}`, modelId: 'mock-model', timestamp: new Date(0) },
-          ...(done
-            ? [
-                { type: 'text-start', id: `${label}-text` },
-                { type: 'text-delta', id: `${label}-text`, delta: `${label} finished.` },
-                { type: 'text-end', id: `${label}-text` },
-              ]
-            : [
-                {
-                  type: 'tool-call',
-                  toolCallType: 'function',
-                  toolCallId: `inner-${label}`,
-                  toolName: 'gatedTool',
-                  input: JSON.stringify({ query: label }),
-                  providerExecuted: false,
-                },
-              ]),
-          {
-            type: 'finish',
-            finishReason: done ? 'stop' : 'tool-calls',
-            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-          },
-        ]),
-      };
-    },
-  });
-}
-
-/** A supervisor that delegates to both sub-agents in one step, then answers. */
-function supervisorModel() {
-  return new MockLanguageModelV2({
-    doStream: async ({ prompt }) => {
-      const text = JSON.stringify(prompt);
-      const done = text.includes('alpha finished') && text.includes('beta finished');
-      return {
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-        stream: convertArrayToReadableStream<any>([
-          { type: 'stream-start', warnings: [] },
-          { type: 'response-metadata', id: `sup-${done ? 1 : 0}`, modelId: 'mock-model', timestamp: new Date(0) },
-          ...(done
-            ? [
-                { type: 'text-start', id: 'sup-text' },
-                { type: 'text-delta', id: 'sup-text', delta: 'Both delegations complete.' },
-                { type: 'text-end', id: 'sup-text' },
-              ]
-            : ['Alpha', 'Beta'].map(name => ({
-                type: 'tool-call',
-                toolCallType: 'function',
-                toolCallId: `sup-tc-${name[0]}`,
-                toolName: `agent-sub${name}`,
-                input: JSON.stringify({ prompt: `do ${name.toLowerCase()}` }),
-                providerExecuted: false,
-              }))),
-          {
-            type: 'finish',
-            finishReason: done ? 'stop' : 'tool-calls',
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          },
-        ]),
-      };
-    },
-  });
-}
-
 describe('durable agent: restart while an approved delegation is being resumed', () => {
   // Delegations to sub-agents run concurrently, so both suspend at once when each sub-agent's tool
   // needs approval. The approval of one goes through the instance that suspended the run, and the
   // process crashes before the loop's iteration workflow stores its resumed tool calls.
-  const crashPoints = [
+  const crashPoints: { point: string; hold: HoldWrite }[] = [
     {
       point: 'before the iteration workflow claims its resume',
       hold: {
@@ -195,7 +168,7 @@ describe('durable agent: restart while an approved delegation is being resumed',
   ];
 
   /** Both delegations suspended, `sup-tc-A` approved, and a copy of the rows at the crash. */
-  async function crashWhileApproving(hold: (typeof crashPoints)[number]['hold']) {
+  async function crashWhileApproving(hold: HoldWrite) {
     const runId = 'delegation-approval-restart';
     const memory = { thread: 'delegation-thread', resource: 'delegation-resource' };
     const executions: { generation: number; query: string }[] = [];
@@ -209,31 +182,31 @@ describe('durable agent: restart while an approved delegation is being resumed',
       // persistent store drops when it serializes the row.
       storageMode: 'serializing',
       build: ({ core, generation }) => {
-        const gatedTool = () =>
-          core.createTool({
-            id: 'gatedTool',
-            description: 'Approval-gated tool',
-            inputSchema: z.object({ query: z.string() }),
-            requireApproval: true,
-            execute: async ({ query }: { query: string }) => {
-              executions.push({ generation, query });
-              return { result: `${query} done` };
-            },
-          });
         const subAgent = (name: string) =>
           new core.Agent({
             id: `sub${name}`,
             name: `sub${name}`,
             description: `Does ${name.toLowerCase()}`,
             instructions: 'Use your tool.',
-            model: subAgentModel(name.toLowerCase()) as any,
-            tools: { gatedTool: gatedTool() },
+            model: model(),
+            tools: {
+              gatedTool: core.createTool({
+                id: 'gatedTool',
+                description: 'Approval-gated tool',
+                inputSchema: z.object({ query: z.string() }),
+                requireApproval: true,
+                execute: async ({ query }: { query: string }) => {
+                  executions.push({ generation, query });
+                  return { result: `${query} done` };
+                },
+              }),
+            },
           });
         return new core.Agent({
           id: 'supervisor',
           name: 'Supervisor',
           instructions: 'Delegate to both sub-agents.',
-          model: supervisorModel() as any,
+          model: model(),
           agents: { subAlpha: subAgent('Alpha'), subBeta: subAgent('Beta') },
           memory: new core.MockMemory({ storage: (memoryStore ??= new core.InMemoryStore()) }),
         });
@@ -259,35 +232,29 @@ describe('durable agent: restart while an approved delegation is being resumed',
     await original.held;
     const checkpoint = await original.checkpoint();
     expect(executions).toEqual([]);
-    return { scenario, checkpoint, executions, runId, memory };
+    /** Approves `toolCallId` on the recovered graph and returns the reply's text. */
+    const approve = async (recovered: { graph: any }, toolCallId: string) => {
+      const resumed = await recovered.graph.agent.approveToolCall({ runId, toolCallId, memory, closeOnSuspend: true });
+      let text = '';
+      for await (const chunk of resumed.fullStream) {
+        if (chunk.type === 'text-delta') text += chunk.payload.text;
+      }
+      return text;
+    };
+    return { scenario, checkpoint, executions, approve };
   }
-
-  const approve = async (agent: any, runId: string, toolCallId: string, memory: object) => {
-    const resumed = await agent.approveToolCall({ runId, toolCallId, memory, closeOnSuspend: true });
-    let text = '';
-    for await (const chunk of resumed.fullStream) {
-      if (chunk.type === 'text-delta') text += chunk.payload.text;
-    }
-    return text;
-  };
 
   it.each(crashPoints)(
     'runs only the approved delegation after a crash $point',
     async ({ hold }) => {
-      const { scenario, checkpoint, executions, runId, memory } = await crashWhileApproving(hold);
+      const { scenario, checkpoint, executions, approve } = await crashWhileApproving(hold);
 
-      const recovered = await scenario.restart(checkpoint, { closeOnSuspend: true });
+      const recovered = await recover(scenario, checkpoint);
 
-      expect(recovered.streamErrors).toEqual([]);
-      expect(recovered.executionError).toBeUndefined();
       expect(executions).toEqual([{ generation: 2, query: 'alpha' }]);
-
       // Beta's own approval is still pending, and still works.
-      expect(await approve(recovered.graph.agent, runId, 'sup-tc-B', memory)).toBe('Both delegations complete.');
-      expect(executions).toEqual([
-        { generation: 2, query: 'alpha' },
-        { generation: 2, query: 'beta' },
-      ]);
+      expect(await approve(recovered, 'sup-tc-B')).toBe('Both delegations complete.');
+      expect(executions.map(e => e.query)).toEqual(['alpha', 'beta']);
     },
     60_000,
   );
@@ -296,26 +263,20 @@ describe('durable agent: restart while an approved delegation is being resumed',
     'runs no delegation when the stored resume recorded no target, after a crash $point',
     async ({ hold }) => {
       // Runs stored before the target was recorded carry the approval but not which call it is for.
-      const { scenario, checkpoint, executions, runId, memory } = await crashWhileApproving(hold);
+      const { scenario, checkpoint, executions, approve } = await crashWhileApproving(hold);
       const loop = checkpoint.rows.find(row => row.workflowName === DurableStepIds.AGENTIC_LOOP)!;
       const record = loop.snapshot.context[DurableStepIds.AGENTIC_EXECUTION] as any;
       expect(record.metadata.nestedResumeTarget).toEqual({ steps: [], label: 'sup-tc-A' });
       delete record.metadata.nestedResumeTarget;
 
-      const recovered = await scenario.restart(checkpoint, { closeOnSuspend: true });
+      const recovered = await recover(scenario, checkpoint);
 
-      expect(recovered.streamErrors).toEqual([]);
-      expect(recovered.executionError).toBeUndefined();
       expect(executions).toEqual([]);
-
       // Both approvals are still pending: approving each again runs it.
-      await approve(recovered.graph.agent, runId, 'sup-tc-A', memory);
+      await approve(recovered, 'sup-tc-A');
       expect(executions).toEqual([{ generation: 2, query: 'alpha' }]);
-      expect(await approve(recovered.graph.agent, runId, 'sup-tc-B', memory)).toBe('Both delegations complete.');
-      expect(executions).toEqual([
-        { generation: 2, query: 'alpha' },
-        { generation: 2, query: 'beta' },
-      ]);
+      expect(await approve(recovered, 'sup-tc-B')).toBe('Both delegations complete.');
+      expect(executions.map(e => e.query)).toEqual(['alpha', 'beta']);
     },
     60_000,
   );
