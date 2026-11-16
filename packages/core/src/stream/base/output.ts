@@ -1398,15 +1398,24 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 const callIndex = new Map(
                   self.#bufferedByStep.toolCalls.map((call, index) => [call.payload.toolCallId, index]),
                 );
-                const position = (result: (typeof stepToolResults)[number]) =>
-                  callIndex.get(result.payload.toolCallId) ?? Number.MAX_SAFE_INTEGER;
-                const sorted = [...stepToolResults].sort((a, b) => position(a) - position(b));
-                // The step's results are the tail of the run's results; reorder both in place.
-                const runTail = self.#toolResults.length - stepToolResults.length;
-                if (stepToolResults.every((result, index) => self.#toolResults[runTail + index] === result)) {
-                  self.#toolResults.splice(runTail, sorted.length, ...sorted);
+                // A result emitted at this step-finish for a call from an earlier step (a held or
+                // deferred processor part flushed here) has no index to be ordered by, so it keeps
+                // the place it holds and only the results of this step's calls are reordered.
+                const ordered = [...stepToolResults]
+                  .filter(result => callIndex.has(result.payload.toolCallId))
+                  .sort((a, b) => callIndex.get(a.payload.toolCallId)! - callIndex.get(b.payload.toolCallId)!);
+                if (ordered.length > 1) {
+                  let next = 0;
+                  const reordered = stepToolResults.map(result =>
+                    callIndex.has(result.payload.toolCallId) ? ordered[next++]! : result,
+                  );
+                  // The step's results are the tail of the run's results; reorder both in place.
+                  const runTail = self.#toolResults.length - stepToolResults.length;
+                  if (stepToolResults.every((result, index) => self.#toolResults[runTail + index] === result)) {
+                    self.#toolResults.splice(runTail, reordered.length, ...reordered);
+                  }
+                  stepToolResults.splice(0, stepToolResults.length, ...reordered);
                 }
-                stepToolResults.splice(0, stepToolResults.length, ...sorted);
               }
 
               if (chunk.payload.metadata.request) {

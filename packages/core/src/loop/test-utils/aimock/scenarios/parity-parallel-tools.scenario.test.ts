@@ -36,17 +36,22 @@ describeParity('parallel-tools parity', target => {
             textOnlyTape('got 3 results'),
           ],
         },
+        // Parallel results stream as each call finishes on every engine now, so plain and the
+        // wrapped engines agree on the order of the successful results in a parallel step
+        // (#21902). Results are emitted early; a failed call's `tool-error` still leaves the
+        // mapping step at the end of the batch, so the wrapped engines' completion-order error
+        // is the one remaining positional difference in this variant.
         ...(variant === 'one-throws'
           ? {
               differences: {
                 [target]: {
                   reason:
-                    'COR-1390: wrapped tool-error chunks serialize the error instead of exposing the plain MastraError; T31 explicitly excludes ordering inside a parallel step.',
+                    'COR-1390: wrapped tool-error chunks serialize the error instead of exposing the plain MastraError, and they emit it in completion order while plain emits it at the end of the batch; T31 explicitly excludes ordering inside a parallel step.',
                   expect: plain => {
                     const expected = structuredClone(plain);
                     const turn = expected.turns[0]!;
                     for (const values of [turn.chunkPayloads, turn.chunkTypes, turn.chunks]) {
-                      [values[5], values[6]] = [values[6]!, values[5]!];
+                      [values[6], values[7]] = [values[7]!, values[6]!];
                     }
                     turn.chunkPayloads[6]!.error = { name: 'Error', message: 'T31 tool failure' };
                     return expected;
