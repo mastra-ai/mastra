@@ -3231,6 +3231,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     factoryProjectId: string;
     workItemId: string;
     role?: string;
+    /** Idempotency keys of decisions to keep: what a move just queued for the card. */
+    except?: readonly string[];
     supersededAt: Date;
   }): Promise<FactoryDeferredDecisionRecord[]> {
     const rows = await this.#db.findMany<GovernanceDbRow>('factory_deferred_decisions', {
@@ -3243,6 +3245,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     for (const row of rows) {
       const decision = toDeferredDecision(row);
       if (input.role !== undefined && decision.decision.role !== input.role) continue;
+      if (input.except?.includes(decision.idempotencyKey)) continue;
       const record =
         decision.status === 'proposed'
           ? await this.#settleProposedDecision(

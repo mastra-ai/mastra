@@ -2694,12 +2694,14 @@ export class FactoryDecisionDispatcher {
     });
     // A refusal is the card's answer (recorded on it); only a lost revision race is worth a retry.
     if (result.status === 'rejected' && result.code === 'stale') throw new Error(`${result.code}: ${result.reason}`);
-    // Work the old board proposed for the card is not the new board's to run.
+    // Work the old board proposed for the card is not the new board's to run; what the move queued
+    // for the new board stays, even once another worker has parked it as a proposal.
     if (result.status === 'accepted' && crossesBoards) {
       await this.#storage.supersedeDecisionsForWorkItem({
         orgId: record.orgId,
         factoryProjectId: record.factoryProjectId,
         workItemId: item.id,
+        except: result.decisions.map(decision => String(decision.idempotencyKey)),
         supersededAt: new Date(),
       });
     }

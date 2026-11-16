@@ -236,6 +236,8 @@ async function setup(
     deliverDecision,
     putAt,
     recover,
+    /** Another replica's dispatcher, working the same queue. */
+    otherWorker: () => dispatcherWith(true),
     routeDecisions,
     stageAudits,
     runs,
@@ -1283,6 +1285,36 @@ describe('intake routes moving existing cards on status events', () => {
       const started = await runs(card.id);
       expect(started).toHaveLength(1);
       expect(started).not.toContain('proposed');
+    });
+
+    it("keeps the run the new board asks for, even when another worker parks it before the old board's work is dropped", async () => {
+      const { boards, scope, route, deliver, deliverEvent, putAt, runs, workItems, otherWorker } = await setup();
+      // Ship's run waits for a person's approval: a worker parks it as a proposal.
+      await boards.create(
+        scope,
+        {
+          ...shipBoard,
+          phases: shipBoard.phases.map(phase => (phase.key === 'ready' ? { ...phase, autoStart: false } : phase)),
+        },
+        'admin',
+      );
+      await route({
+        name: 'Pushed pull requests ship',
+        on: ['pull_request.synchronized'],
+        target: { boardKey: 'work', moveToBoardKey: 'ship', phaseKey: 'ready' },
+      });
+      const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
+      await putAt(card.id, 'execute');
+      const supersede = workItems.supersedeDecisionsForWorkItem.bind(workItems);
+      vi.spyOn(workItems, 'supersedeDecisionsForWorkItem').mockImplementationOnce(async input => {
+        await otherWorker().runOnce(new Date('2030-01-01T00:02:30Z'));
+        return supersede(input);
+      });
+
+      const moved = (await deliverEvent(card.id, { type: 'pull_request.synchronized' })).card!;
+
+      expect(placed(moved)).toEqual({ board: 'ship', stages: ['ready'] });
+      expect(await runs(card.id)).toContain('proposed');
     });
 
     it("records a new phase entry when the card moves to another board's phase of the same name", async () => {
