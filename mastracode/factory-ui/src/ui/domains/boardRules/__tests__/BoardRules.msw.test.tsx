@@ -120,15 +120,35 @@ describe('Board rules', () => {
     }
   });
 
-  it('shows a rule stored on the old opened event in the Issue opened lane, marked legacy', async () => {
-    serveRules({
+  it('shows a rule on the old opened event in both arrival lanes, marked legacy, and keeps its event on edit', async () => {
+    const { sent } = serveRules({
       rules: [{ ...rule({ id: ruleId('legacy'), name: 'Old intake rule' }), on: ['work_item.created' as never] }],
     });
-    renderRules();
+    const user = userEvent.setup();
+    const { client } = renderRules();
 
     await screen.findByRole('region', { name: OPENED });
-    const row = within(await lane(OPENED).findByRole('listitem', { name: 'Old intake rule' }));
-    expect(row.getByText('Issue or pull request opened (legacy)')).toBeVisible();
+    for (const label of [OPENED, 'Pull request opened']) {
+      const row = within(await lane(label).findByRole('listitem', { name: 'Old intake rule' }));
+      expect(row.getByText('Issue or pull request opened (legacy)')).toBeVisible();
+    }
+
+    await user.click(lane(OPENED).getByRole('button', { name: 'Edit conditions of Old intake rule' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Edit rule' }));
+    await user.click(dialog.getByRole('button', { name: /Trigger/ }));
+    expect(dialog.getByText(/Also listens on “Issue or pull request opened \(legacy\)”/)).toBeVisible();
+    await user.click(dialog.getByRole('button', { name: /Review/ }));
+    const name = dialog.getByRole('textbox', { name: 'Name' });
+    await user.clear(name);
+    await user.type(name, 'Old intake rule, renamed');
+    await user.click(dialog.getByRole('button', { name: 'Save rule' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitForMutationsIdle(client);
+    expect(sent.find(request => request.method === 'PATCH')?.body).toMatchObject({
+      name: 'Old intake rule, renamed',
+      on: ['work_item.created'],
+    });
   });
 
   it('groups the rule builder triggers the same way, under the same names', async () => {
@@ -157,7 +177,11 @@ describe('Board rules', () => {
     serveRules({ rules: [bugs()] });
     renderRules();
 
-    expect(await screen.findByText('Otherwise: checked by the next board, then Not routed')).toBeVisible();
+    const footer = 'Otherwise: checked by the next board, then Not routed';
+    await screen.findByRole('region', { name: OPENED });
+    expect(lane(OPENED).getByText(footer)).toBeVisible();
+    expect(lane('Pull request opened').getByText(footer)).toBeVisible();
+    expect(lane('Issue reopened').queryByText(footer)).not.toBeInTheDocument();
   });
 
   it('adds a rule for new items on this board, above the rule taking everything else', async () => {

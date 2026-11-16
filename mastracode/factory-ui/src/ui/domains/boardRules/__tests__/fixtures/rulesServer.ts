@@ -97,8 +97,9 @@ export function serveRules({
     }),
     http.get(`${PROJECT_URL}/intake/skipped`, () => HttpResponse.json({ skipped } satisfies IntakeSkippedResponse)),
     http.post(`${PROJECT_URL}/intake-routes`, async ({ request }) => {
-      const body = FACTORY_ROUTE_CONTRACTS.intakeRouteCreate.bodySchema.parse(await request.json());
-      sent.push({ method: 'POST', path: '', body });
+      const raw: unknown = await request.json();
+      const body = FACTORY_ROUTE_CONTRACTS.intakeRouteCreate.bodySchema.parse(raw);
+      sent.push({ method: 'POST', path: '', body: raw });
       if (body.target.moveToBoardKey && (body.on ?? ['work_item.opened']).includes('work_item.opened')) {
         return HttpResponse.json(
           { error: 'move_on_arrival', message: 'Only a card-move rule can move cards to another board.' },
@@ -124,8 +125,9 @@ export function serveRules({
       return HttpResponse.json({ intakeRoute: state.rules.find(entry => entry.id === created.id) }, { status: 201 });
     }),
     http.post(`${PROJECT_URL}/intake-routes/reorder`, async ({ request }) => {
-      const body = FACTORY_ROUTE_CONTRACTS.intakeRouteReorder.bodySchema.parse(await request.json());
-      sent.push({ method: 'POST', path: '/reorder', body });
+      const raw: unknown = await request.json();
+      const body = FACTORY_ROUTE_CONTRACTS.intakeRouteReorder.bodySchema.parse(raw);
+      sent.push({ method: 'POST', path: '/reorder', body: raw });
       const own = state.rules.filter(entry => entry.target.boardKey === body.boardKey);
       if (body.boardKey && (own.length !== body.ids.length || own.some(entry => !body.ids.includes(entry.id)))) {
         return HttpResponse.json(
@@ -145,8 +147,9 @@ export function serveRules({
       return HttpResponse.json({ intakeRoutes: state.rules, canEdit });
     }),
     http.patch(`${PROJECT_URL}/intake-routes/:routeId`, async ({ request, params }) => {
-      const body = FACTORY_ROUTE_CONTRACTS.intakeRouteUpdate.bodySchema.parse(await request.json());
-      sent.push({ method: 'PATCH', path: `/${String(params.routeId)}`, body });
+      const raw: unknown = await request.json();
+      const body = FACTORY_ROUTE_CONTRACTS.intakeRouteUpdate.bodySchema.parse(raw);
+      sent.push({ method: 'PATCH', path: `/${String(params.routeId)}`, body: raw });
       const at = state.rules.findIndex(entry => entry.id === params.routeId);
       const current = state.rules[at];
       if (!current) return HttpResponse.json({ error: 'intake_route_not_found' }, { status: 404 });

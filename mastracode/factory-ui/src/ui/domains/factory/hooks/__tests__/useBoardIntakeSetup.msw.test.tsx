@@ -6,7 +6,7 @@ import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
-import { builtinBoardCatalog } from '../../../../../../e2e/ui/board-catalog';
+import { builtinBoardCatalog, releaseBoard } from '../../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { LinkedRepositoryPayload } from '../../../workspaces/services/github';
@@ -86,6 +86,41 @@ describe('useBoardIntakeSetup with sources the server files from', () => {
     await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(result.current.fed).toBe(true);
     expect(asked).toEqual([]);
+  });
+
+  it.each([
+    ['pull_request.opened', true],
+    ['work_item.created', true],
+    ['pull_request.merged', false],
+  ])('counts another board as fed by a rule on %s only when that event files new items', async (event, fed) => {
+    stubFiledSources();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:id/intake-routes`, () =>
+        HttpResponse.json({
+          canEdit: true,
+          intakeRoutes: [
+            {
+              id: 'r-1',
+              name: 'Pull requests go to Release',
+              enabled: true,
+              position: 0,
+              on: [event],
+              when: null,
+              target: { boardKey: 'release', phaseKey: null, joinClosedIssue: false, moveToBoardKey: null },
+              revision: 1,
+              createdBy: 'ada',
+              problems: [],
+            },
+          ],
+        }),
+      ),
+    );
+
+    const { result } = renderSetup('factory-1', releaseBoard);
+
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    await waitFor(() => expect(result.current.unrouted).toBe(!fed));
+    expect(result.current.fed).toBe(fed);
   });
 
   it('keeps the board pending until the bindings of a connected source have loaded', async () => {

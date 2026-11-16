@@ -83,6 +83,7 @@ describe('Intake order', () => {
           when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'bug' }] },
         }),
         rule({ name: 'Everything else' }),
+        rule({ name: 'Pull requests', on: ['pull_request.opened'] }),
         rule({ name: 'Releases', target: { boardKey: 'release', phaseKey: null, joinClosedIssue: false } }),
       ],
     });
@@ -97,13 +98,15 @@ describe('Intake order', () => {
     const [work, release] = list.getAllByRole('listitem');
     expect(work).toBeDefined();
     expect(within(work).getByText('Work')).toBeVisible();
-    expect(await within(work).findByText('2 rules')).toBeVisible();
+    expect(await within(work).findByText('3 rules')).toBeVisible();
     expect(within(work).getByText('Ends in catch-all')).toBeVisible();
     expect(within(work).getByRole('link', { name: 'Edit rules' })).toHaveAttribute(
       'href',
       `/factories/${FACTORY_ID}/work/rules`,
     );
     expect(within(release).getByText('1 rule')).toBeVisible();
+    // Release takes every new issue but no pull request, so it doesn't end in a catch-all.
+    expect(within(release).queryByText('Ends in catch-all')).not.toBeInTheDocument();
   });
 
   it('shows a reorder before saving it, and puts it back on Discard', async () => {

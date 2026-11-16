@@ -5,20 +5,18 @@ import { Link } from 'react-router';
 import type { InstalledBoardInfo } from '../../../../api/types';
 import { useBoardRulesQuery } from '../../../../hooks/useIntakeRoutes';
 import { useIntakeOrderQuery } from '../../../../hooks/useIntakeOrder';
-import { catchAllIndex, laneRules, OPENED_EVENT, ordinal } from '../../boardRules/ruleLanes';
+import { newItemRules, ordinal } from '../../boardRules/ruleLanes';
 import { SettingsSubsection } from '../../settings/components/SettingsSubsection';
 import { boardRulesPath } from '../boardConfigPaths';
 
 /**
  * What this board takes when a new item arrives: how many of its rules can file one, and where it sits in the intake
- * order. Rules below the lane's first rule taking every item are never reached, so they aren't counted.
+ * order. Rules below an arrival lane's first rule taking every item are never reached, so they aren't counted.
  */
 export function NewCardsHere({ factoryId, board }: { factoryId: string; board: InstalledBoardInfo }) {
   const rulesQuery = useBoardRulesQuery(factoryId, board.id);
   const orderQuery = useIntakeOrderQuery(factoryId);
-  const lane = laneRules(rulesQuery.data?.intakeRoutes ?? [], OPENED_EVENT).filter(rule => rule.enabled);
-  const catchAll = catchAllIndex(lane);
-  const count = (catchAll === -1 ? lane : lane.slice(0, catchAll + 1)).length;
+  const { count } = newItemRules(rulesQuery.data?.intakeRoutes ?? []);
   const at = (orderQuery.data?.boards ?? []).findIndex(entry => entry.boardKey === board.id);
   const failed = rulesQuery.isError || orderQuery.isError;
 

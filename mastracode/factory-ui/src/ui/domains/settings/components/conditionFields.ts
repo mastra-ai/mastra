@@ -74,16 +74,18 @@ const CHANGE_FACTS = {
   'assignees.removed': { type: 'string', title: 'Assignee removed' },
 };
 
+/** Events that only file a new issue, so they carry no event facts. */
+const ISSUE_ARRIVAL = new Set(['work_item.opened', 'work_item.created']);
+
 /**
- * The facts an intake route handling `on` can test. As the route API requires, event facts
- * apply only to a route handling an event besides a bare arrival (`work_item.opened` or the older
- * `work_item.created`), and `event.reason` only to one handling `work_item.closed`, the one event
- * that carries a reason. What changed (`event.labels.added` and the like) applies only to one
- * handling an update event.
+ * The facts an intake route handling `on` can test. As the route API requires, event facts apply only to a route
+ * handling an event besides an issue arriving (`work_item.opened`, or the legacy `work_item.created`);
+ * `pull_request.opened` also moves cards, so it keeps them. `event.reason` applies only to a route handling
+ * `work_item.closed`, the one event that carries a reason. What changed (`event.labels.added` and the like) applies only
+ * to one handling an update event.
  */
 export function intakeRouteFacts(on: readonly string[]): Facts {
-  if (on.every(type => type === 'work_item.opened' || type === 'work_item.created'))
-    return { type: 'object', properties: ROUTE_FACT_PROPERTIES };
+  if (on.every(type => ISSUE_ARRIVAL.has(type))) return { type: 'object', properties: ROUTE_FACT_PROPERTIES };
   const event = {
     type: { type: 'string', title: 'Type' },
     ...(on.includes('work_item.closed') ? { reason: { type: 'string', title: 'Reason' } } : {}),
@@ -197,7 +199,7 @@ const FIELD_SHAPES: Record<string, FieldShape> = {
     label: 'Event',
     strict: true,
     options: [
-      { value: 'work_item.opened', label: 'New issue' },
+      { value: 'work_item.opened', label: 'Issue opened' },
       { value: 'work_item.closed', label: 'Closed' },
       { value: 'work_item.reopened', label: 'Reopened' },
       { value: 'work_item.updated', label: 'Labels or assignees changed' },

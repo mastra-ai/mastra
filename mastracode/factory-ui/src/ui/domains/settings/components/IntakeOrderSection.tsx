@@ -18,7 +18,7 @@ import type { IntakeOrderResponse, IntakeRouteInfo } from '../../../../api/types
 import { useIntakeOrderQuery, useSaveIntakeOrder } from '../../../../hooks/useIntakeOrder';
 import { useIntakeRoutesQuery } from '../../../../hooks/useIntakeRoutes';
 import { boardRulesPath } from '../../boardConfig/boardConfigPaths';
-import { catchAllIndex, laneRules, OPENED_EVENT } from '../../boardRules/ruleLanes';
+import { newItemRules } from '../../boardRules/ruleLanes';
 import { INTAKE_ORDER_ANCHOR } from '../settingsSections';
 import { SettingsSubsection } from './SettingsSubsection';
 import { useRowDrag } from './useRowDrag';
@@ -163,16 +163,11 @@ function OrderEditor({ factoryId, order }: { factoryId: string; order: IntakeOrd
 /** How many rules a board has for new items, and whether the last one takes everything left. */
 function RuleSummary({ routes, boardKey }: { routes: IntakeRouteInfo[] | undefined; boardKey: string }) {
   if (!routes) return null;
-  const lane = laneRules(
-    routes.filter(route => route.target.boardKey === boardKey),
-    OPENED_EVENT,
-  ).filter(rule => rule.enabled);
-  const catchAll = catchAllIndex(lane);
-  const count = catchAll === -1 ? lane.length : catchAll + 1;
+  const { count, catchesAll } = newItemRules(routes.filter(route => route.target.boardKey === boardKey));
   return (
     <span className="flex flex-wrap items-center gap-2">
       <span>{count === 0 ? 'No rules for new items' : count === 1 ? '1 rule' : `${count} rules`}</span>
-      {catchAll !== -1 && <Badge>Ends in catch-all</Badge>}
+      {catchesAll && <Badge>Ends in catch-all</Badge>}
     </span>
   );
 }

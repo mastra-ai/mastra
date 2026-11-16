@@ -27,6 +27,15 @@ const selfReviewRule: RuleGroup = {
   ],
 };
 
+describe('arrival facts', () => {
+  it('give no event facts to a rule only filing new issues, legacy included, but keep them on a pull request opening', () => {
+    const eventFacts = (on: string[]) => Object.keys(intakeRouteFacts(on).properties?.event?.properties ?? {});
+    expect(eventFacts(['work_item.opened'])).toEqual([]);
+    expect(eventFacts(['work_item.created'])).toEqual([]);
+    expect(eventFacts(['pull_request.opened'])).toContain('type');
+  });
+});
+
 describe('condition rows', () => {
   it('edit every default route condition, and a three-level start rule, without changing them', () => {
     for (const { route } of DEFAULT_INTAKE_ROUTES) {

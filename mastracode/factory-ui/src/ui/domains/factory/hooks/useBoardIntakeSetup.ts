@@ -5,8 +5,8 @@ import { useIntakeRoutesQuery } from '../../../../hooks/useIntakeRoutes';
 import { useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
 import { useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
+import { placesArrival } from '../../boardRules/ruleLanes';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
-import { placesNewCards } from '../../settings/components/intakeRoutes';
 import type { InstalledBoardInfo } from '../../../../api/types';
 
 /**
@@ -83,7 +83,8 @@ export function useBoardIntakeSetup({
   const intakeRoutesQuery = useIntakeRoutesQuery(readsIntakeRoutes ? factoryProjectId : undefined);
   const intakeRoutesPending = readsIntakeRoutes && intakeRoutesQuery.isPending;
   const routePlacesCardsHere = (intakeRoutesQuery.data?.intakeRoutes ?? []).some(
-    route => route.enabled && placesNewCards(route) && !route.target.joinClosedIssue && route.target.boardKey === kind,
+    route =>
+      route.enabled && placesArrival(route.on) && !route.target.joinClosedIssue && route.target.boardKey === kind,
   );
   // Sources are connected and the routes loaded, but none places new cards on this board.
   const unrouted = readsIntakeRoutes && intakeRoutesQuery.isSuccess && !routePlacesCardsHere;

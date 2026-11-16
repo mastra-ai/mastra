@@ -23,7 +23,7 @@ import { ConditionRows } from '../../settings/components/ConditionRows';
 import { describeRule, intakeRouteFacts } from '../../settings/components/conditionFields';
 import { boardName, phaseName, phaseOptions } from '../ruleTargets';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
-import { isOpenedLane, LANE_SECTIONS, laneText, placesCardless } from '../ruleLanes';
+import { LANE_SECTIONS, LEGACY_OPENED_EVENT, laneText, placesArrival, placesCardless } from '../ruleLanes';
 import type { RuleEvent } from '../ruleLanes';
 import { ChoiceTile } from './ChoiceTile';
 import { RuleTarget } from './RuleTarget';
@@ -115,7 +115,7 @@ export function RuleBuilderDialog({
   const [step, setStep] = useState<RuleStep>(initialStep);
 
   const cardless = placesCardless(on);
-  const placesNew = on.some(isOpenedLane);
+  const placesNew = placesArrival(on);
   const targetBoard = boards.find(candidate => candidate.id === boardKey);
   const phases = targetPhases(targetBoard, placesNew);
   const phase = phases.find(candidate => candidate.id === (phaseKey ?? targetBoard?.initialPhase));
@@ -414,7 +414,7 @@ function StoryLine({ label, children }: { label: string; children: ReactNode }) 
   );
 }
 
-/** Events grouped like the lanes: new items, then cards on this board; a rule may listen for several. */
+/** Events grouped like the lanes, issues then pull requests; a rule may listen for several. */
 function TriggerStep({
   value,
   disabled,
@@ -424,8 +424,15 @@ function TriggerStep({
   disabled: boolean;
   onChange: (on: RuleEvent[]) => void;
 }) {
+  const on: readonly string[] = value;
   return (
     <div className="flex flex-col gap-5">
+      {on.includes(LEGACY_OPENED_EVENT) && (
+        <Notice variant="info">
+          Also listens on “{laneText(LEGACY_OPENED_EVENT).label}”, which takes new issues and pull requests. Saving
+          keeps it.
+        </Notice>
+      )}
       {LANE_SECTIONS.map(group => (
         <div key={group.title} role="group" aria-label={group.title} className="flex flex-col gap-2">
           <Txt as="span" variant="eyebrow" tone="muted">

@@ -23,8 +23,8 @@ export type RuleEvent = IntakeRouteInfo['on'][number];
 /** The events a rule can trigger on, as the route contract lists them: one lane each, in this order. */
 export const LANE_EVENTS: readonly RuleEvent[] = STATUS_EVENTS;
 
-/** The event an item with no card arrives on. */
-export const OPENED_EVENT: RuleEvent = 'work_item.opened';
+/** The events a new item arrives on: an issue on `work_item.opened`, a pull request with no issue card on `pull_request.opened`. */
+const ARRIVAL_LANES: readonly RuleEvent[] = ['work_item.opened', 'pull_request.opened'];
 
 /** Lanes in two sections, as the events split: `work_item.*` are issues, `pull_request.*` are pull requests. */
 export const LANE_SECTIONS: readonly { title: string; events: readonly RuleEvent[] }[] = [
@@ -32,11 +32,15 @@ export const LANE_SECTIONS: readonly { title: string; events: readonly RuleEvent
   { title: 'Pull requests', events: LANE_EVENTS.filter(event => event.startsWith('pull_request.')) },
 ];
 
-/** The pre-rename event: stored rules on it take issues and card-less pull requests, and show in the Issue opened lane. */
+/** The pre-rename event: stored rules on it take new issues and card-less pull requests, so they show in both arrival lanes. */
 export const LEGACY_OPENED_EVENT = 'work_item.created';
+
+/** Every event a rule filing new items listens on, legacy included. */
+const ARRIVAL_EVENTS = new Set<string>([...ARRIVAL_LANES, LEGACY_OPENED_EVENT]);
 
 /** Events that can file an item with no card yet, through intake. */
 const FILES_CARDLESS = new Set([
+  LEGACY_OPENED_EVENT,
   'work_item.opened',
   'work_item.reopened',
   'work_item.updated',
@@ -126,8 +130,14 @@ export function laneText(event: string): LaneText {
   };
 }
 
+/** Whether a lane is where new items arrive, so its rules file items with no card. */
 export function isOpenedLane(event: string): boolean {
-  return event === OPENED_EVENT;
+  return ARRIVAL_LANES.some(lane => lane === event);
+}
+
+/** Whether a rule files new items: it listens on an arrival event, legacy `work_item.created` included. */
+export function placesArrival(on: readonly string[]): boolean {
+  return on.some(event => ARRIVAL_EVENTS.has(event));
 }
 
 /** Whether a lane can file an item with no card yet, through intake. */
@@ -149,6 +159,22 @@ export function isLegacyOpened(rule: IntakeRouteInfo): boolean {
 /** The rules a lane checks, in order. A rule naming several events shows in each of their lanes. */
 export function laneRules(rules: readonly IntakeRouteInfo[], event: RuleEvent): IntakeRouteInfo[] {
   return rules.filter(rule => rule.on.includes(event) || (isOpenedLane(event) && isLegacyOpened(rule)));
+}
+
+/**
+ * What a board takes when new items arrive: how many of its enabled rules can file one (rules below a lane's catch-all
+ * are never reached, so they don't count), and whether both arrival lanes end in a rule taking everything left.
+ */
+export function newItemRules(rules: readonly IntakeRouteInfo[]): { count: number; catchesAll: boolean } {
+  const reached = new Set<string>();
+  let catchesAll = true;
+  for (const event of ARRIVAL_LANES) {
+    const lane = laneRules(rules, event).filter(rule => rule.enabled);
+    const catchAll = catchAllIndex(lane);
+    if (catchAll === -1) catchesAll = false;
+    for (const rule of catchAll === -1 ? lane : lane.slice(0, catchAll + 1)) reached.add(rule.id);
+  }
+  return { count: reached.size, catchesAll };
 }
 
 /** The first rule in a lane that takes every item, so no rule below it is ever reached; -1 when none does. */
