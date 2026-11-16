@@ -155,8 +155,11 @@ function declaresUiExtension(capabilities: ClientCapabilities | undefined): bool
 
 /** Whether the request is a 2025-era `initialize` whose client declares the UI extension. */
 async function initializesWithUi(request: Request, parsedBody: unknown): Promise<boolean> {
-  // 2026-07-28 requests name their method in a header and never initialize.
-  if (request.method !== 'POST' || request.headers.has('mcp-method')) return false;
+  // 2026-07-28 requests name their method in a header and never initialize, and `initialize` opens a
+  // session, so it never carries an id; skip the body for everything else.
+  if (request.method !== 'POST' || request.headers.has('mcp-method') || request.headers.has('mcp-session-id')) {
+    return false;
+  }
   const body =
     parsedBody ??
     (await request
@@ -1575,7 +1578,9 @@ export class MCPServer extends MCPServerBase {
       );
     }
     try {
-      const result = await this.completedToolResult(name, tool, execution.output, requestContext, apps);
+      // `transform` sees `apps: false`: a client polling a task may render no app, so the model gets the full
+      // result. A caller that renders apps keeps the app link, and its app reads the same full result.
+      const result = await this.completedToolResult(name, tool, execution.output, requestContext, false);
       return completed(apps ? result : { ...result, _meta: withoutUiMeta(result._meta) });
     } catch (error) {
       return this.toolErrorOutcome(name, error);

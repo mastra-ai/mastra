@@ -41,7 +41,8 @@ export interface MCPServerToolResultContext {
   /**
    * Whether the caller is served MCP Apps, so a host renders the tool's linked app with this result.
    * Hosts give the model `content` and the app `structuredContent` and `_meta`, so an app-linked tool
-   * can send the model a summary and the app the full output. `false` for results of tool tasks.
+   * can send the model a summary and the app the full output. Always `false` for the result of a tool
+   * task, since a client polling a task may not render the app; the app link stays for callers that do.
    */
   apps: boolean;
 }

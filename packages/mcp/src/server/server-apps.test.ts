@@ -77,6 +77,16 @@ describe('MCP Apps gated on the client declaring the UI extension', () => {
     }
   });
 
+  // A 2026-07-28 client declares its capabilities per request; the SDK seeds them before `server/discover` runs.
+  it('answers a modern server/discover from the envelope it carries', async () => {
+    const discover = async (capabilities: Record<string, unknown>) =>
+      (await rawRequest(served.url, { method: 'server/discover', capabilities })).json().result.capabilities;
+    expect((await discover(declaresUi.capabilities)).extensions).toEqual({ [UI]: {} });
+    expect((await discover(declaresUi.capabilities)).resources).toBeDefined();
+    expect((await discover({})).extensions).toBeUndefined();
+    expect((await discover({})).resources).toBeUndefined();
+  });
+
   it('shows a client without the extension the server as if it had no apps', async () => {
     const client = await connectClient(served.url);
     try {
@@ -263,6 +273,10 @@ describe('tool task results', () => {
         appsRequireClientSupport: true,
         appResources: { 'ui://viewer': { name: 'Viewer', html: '<h1>viewer</h1>' } },
         tasks: { tools: { list: 'always' } },
+        toolResult: {
+          transform: ({ result, apps }) =>
+            apps ? { ...result, content: [{ type: 'text', text: 'summary' }] } : result,
+        },
         tools: {
           list: createTool({
             id: 'list',
@@ -297,7 +311,8 @@ describe('tool task results', () => {
     const tasks = new TaskRequester(client);
     for (let i = 0; i < 200; i++) {
       const task = await tasks.get(result.taskId);
-      if (task.status === 'completed') return task.result as { _meta?: Record<string, unknown> };
+      if (task.status === 'completed')
+        return task.result as { _meta?: Record<string, unknown>; content: { type: string; text?: string }[] };
       await new Promise(resolve => setTimeout(resolve, 20));
     }
     throw new Error('task never completed');
@@ -306,5 +321,12 @@ describe('tool task results', () => {
   it("keeps the app link for a caller that renders apps and drops it for one that doesn't", async () => {
     expect((await taskResult(true))._meta).toMatchObject({ ui: { resourceUri: 'ui://viewer' } });
     expect((await taskResult(false))._meta?.ui).toBeUndefined();
+  });
+
+  // A task can be polled by a client that renders no app, so the model must get the full result, not a summary.
+  it('sends the full result in content, never the summary a transform gives app callers', async () => {
+    for (const ui of [true, false]) {
+      expect((await taskResult(ui)).content).toEqual([{ type: 'text', text: JSON.stringify({ rows: [] }) }]);
+    }
   });
 });

@@ -29,9 +29,9 @@ export type {
   ObservabilityWidgetDraft,
 } from './observability-dashboard';
 
+// The trace viewer and observability explorer are only on their subpaths, so importing the root doesn't
+// pull in their bundles.
 export type { McpAppResource } from './app-resource';
-export { observabilityExplorerApp } from './observability-explorer';
-export { traceViewerApp } from './trace-viewer';
 
 /**
  * Greets the `name` argument of the tool that opens it, fetching the greeting from the server's

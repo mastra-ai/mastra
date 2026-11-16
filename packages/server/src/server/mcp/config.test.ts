@@ -108,6 +108,23 @@ describe('resolveBuiltinMCPConfig studioUrl', () => {
     expect(studioUrl({ mcp: { studioUrl: false } })).toBeUndefined();
   });
 
+  it('follows the port and host mastra dev passes in the environment', () => {
+    vi.stubEnv('MASTRA_DEV', 'true');
+    vi.stubEnv('PORT', '4112');
+    vi.stubEnv('MASTRA_HOST', 'devbox.local');
+    expect(studioUrl({})).toBe('http://devbox.local:4112');
+    expect(studioUrl({ port: 5000, host: 'other.local' })).toBe('http://other.local:5000');
+    vi.stubEnv('MASTRA_HOST', '0.0.0.0');
+    expect(studioUrl({})).toBe('http://localhost:4112');
+  });
+
+  it('normalizes studioBase the way the dev server does', () => {
+    vi.stubEnv('MASTRA_DEV', 'true');
+    expect(studioUrl({ studioBase: 'studio' })).toBe('http://localhost:4111/studio');
+    expect(studioUrl({ studioBase: '//admin//ui/' })).toBe('http://localhost:4111/admin/ui');
+    expect(studioUrl({ studioBase: ' / ' })).toBe('http://localhost:4111');
+  });
+
   it('uses https when the dev server serves HTTPS, from server.https or mastra dev --https', () => {
     vi.stubEnv('MASTRA_DEV', 'true');
     const https = { key: Buffer.from('key'), cert: Buffer.from('cert') };
