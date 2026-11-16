@@ -284,6 +284,31 @@ describe('WorkflowsInMemory storage v2 methods', () => {
     expect(db.workflowRunEntries.get('other-r1')!.map(e => e.kind)).toEqual(['state', 'state-draft', 'state']);
   });
 
+  it('leaves the stored journal untouched when serializing an append throws', async () => {
+    const { db, store } = setup();
+    await store.writeWorkflowRunCheckpoint({ ...run, header: makeHeader('r1'), steps: { a: ok(1) }, state: { n: 1 } });
+    const before = db.workflowRunEntries.get('wf-r1')!.length;
+
+    // The store keeps the request context as JSON, which a BigInt can't be. The append throws after
+    // it has built the entry for `b`.
+    await expect(
+      store.appendWorkflowRunEntries({ ...run, requestContext: { big: 1n } as any, steps: { b: ok(2) } }),
+    ).rejects.toThrow();
+    // The state is serialized too, after the step entries are built.
+    await expect(
+      store.appendWorkflowRunEntries({ ...run, steps: { b: ok(2) }, state: { big: 1n } as any }),
+    ).rejects.toThrow();
+
+    expect(db.workflowRunEntries.get('wf-r1')!.length).toBe(before);
+    const loaded = await store.loadWorkflowRun({ ...run, successfulSteps: 'full' });
+    expect(Object.keys(loaded!.steps)).toEqual(['a']);
+    expect(loaded!.lastSeq).toBe(2);
+
+    // The next append hands out the seq numbers the failed ones never stored.
+    expect(await store.appendWorkflowRunEntries({ ...run, steps: { c: ok(3) } })).toMatchObject({ lastSeq: 3 });
+    expect(db.workflowRunEntries.get('wf-r1')!.map(entry => entry.seq)).toEqual([1, 2, 3]);
+  });
+
   it('returns the last seq of each write', async () => {
     const { store } = setup();
     expect(

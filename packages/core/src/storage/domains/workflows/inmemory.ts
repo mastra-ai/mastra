@@ -868,42 +868,51 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     const now = new Date();
     let seq = existing?.lastSeq ?? 0;
     const previous = this.db.workflowRunEntries.get(key) ?? [];
-    const entries: WorkflowRunEntry[] = append
-      ? previous
-      : existing?.stateShared
-        ? previous.filter(entry => entry.kind !== 'step' && entry.kind !== 'step-patch')
-        : [];
+    const kept: WorkflowRunEntry[] = existing?.stateShared
+      ? previous.filter(entry => entry.kind !== 'step' && entry.kind !== 'step-patch')
+      : [];
+    // Build the new entries, the header and the state columns before storing any of them: cloning a
+    // step result or serializing the state or a patch can throw, and a throw must not leave the
+    // journal holding entries the header doesn't count, whose sequence numbers the next append
+    // would hand out again.
+    const added: WorkflowRunEntry[] = [];
     for (const [stepId, result] of Object.entries(steps)) {
-      entries.push({ seq: ++seq, kind: 'step', stepId, result: cloneRunData(result) });
+      added.push({ seq: ++seq, kind: 'step', stepId, result: cloneRunData(result) });
     }
     for (const [stepId, ops] of Object.entries(stepPatches ?? {})) {
-      entries.push({ seq: ++seq, kind: 'step-patch', stepId, ops: cloneRunData(ops) });
+      added.push({ seq: ++seq, kind: 'step-patch', stepId, ops: cloneRunData(ops) });
     }
+    let sharedBase: ReturnType<InMemoryDB['workflowRunHeaders']['get']>;
     if (state !== undefined) {
-      entries.push({ seq: ++seq, kind: 'state', state: storedJson(state) });
+      added.push({ seq: ++seq, kind: 'state', state: storedJson(state) });
     } else if (stateBase !== undefined) {
-      entries.push({ seq: ++seq, kind: 'state-base', base: { ...stateBase } });
-      const base = this.db.workflowRunHeaders.get(this.getWorkflowKey(stateBase.workflowName, stateBase.runId));
-      if (base) base.stateShared = true;
+      added.push({ seq: ++seq, kind: 'state-base', base: { ...stateBase } });
+      sharedBase = this.db.workflowRunHeaders.get(this.getWorkflowKey(stateBase.workflowName, stateBase.runId));
     } else if (!append) {
-      entries.push({ seq: ++seq, kind: 'state', state: {} });
+      added.push({ seq: ++seq, kind: 'state', state: {} });
     }
     if (state === undefined && statePatch !== undefined) {
-      entries.push({ seq: ++seq, kind: 'state-patch', ops: storedJson(statePatch) });
+      added.push({ seq: ++seq, kind: 'state-patch', ops: storedJson(statePatch) });
     }
+    const storedHeader = header
+      ? storedRunHeader(header)
+      : {
+          ...existing!.header,
+          ...(requestContext && {
+            requestContext: { ...existing!.header.requestContext, ...storedJson(requestContext) },
+          }),
+        };
+    const stateColumns = applyStateColumnsWrite(
+      existing,
+      stateColumnsWrite({ state, stateBase, statePatch }, !append),
+      seq,
+    );
     const runToken = existing?.runToken ?? randomUUID();
     const record = {
       workflow_name: workflowName,
       run_id: runId,
       resourceId: resourceId ?? existing?.resourceId,
-      header: header
-        ? storedRunHeader(header)
-        : {
-            ...existing!.header,
-            ...(requestContext && {
-              requestContext: { ...existing!.header.requestContext, ...storedJson(requestContext) },
-            }),
-          },
+      header: storedHeader,
       lastSeq: seq,
       runToken,
       // A checkpoint's state entries come last, so its start state is the state as of its last entry.
@@ -911,10 +920,13 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       stateShared: existing?.stateShared,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
-      ...applyStateColumnsWrite(existing, stateColumnsWrite({ state, stateBase, statePatch }, !append), seq),
+      ...stateColumns,
     };
+    if (append) previous.push(...added);
+    else kept.push(...added);
+    if (sharedBase) sharedBase.stateShared = true;
     this.db.workflowRunHeaders.set(key, record);
-    this.db.workflowRunEntries.set(key, entries);
+    this.db.workflowRunEntries.set(key, append ? previous : kept);
     return record;
   }
 

@@ -159,15 +159,17 @@ describe.each([1, 2] as const)('step state writers on storage v%i', storageVersi
     const workflow = oneWriteStepWorkflow({
       id: `updatestate-removes-v${storageVersion}`,
       storageVersion,
-      write: async ({ updateState }) => {
+      write: async ({ updateState, getState }) => {
         await updateState({ b: undefined });
-        return {};
+        // The key is gone, not an own property holding undefined.
+        return { hasB: Object.hasOwn(await getState(), 'b') };
       },
     });
 
     const result = await run(workflow, { a: 1, b: 2 });
 
     expect(result.status).toBe('success');
+    expect(result.steps.write.output).toEqual({ hasB: false });
     expect(result.state.b).toBeUndefined();
     expect(result.state).toEqual({ a: 1 });
   });

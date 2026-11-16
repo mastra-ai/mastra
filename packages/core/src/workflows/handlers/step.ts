@@ -550,7 +550,7 @@ export async function executeStep(
       };
 
       // updateState merges its top-level keys into the state and validates the result.
-      // Only the keys it was given change: a key the step's stateSchema strips isn't set, as on v1.
+      // Only the keys it was given change: a key the step's stateSchema strips isn't set.
       const updateState = async (update: Record<string, unknown> | null | undefined) => {
         const { changes, merged } = mergeIntoStateView(update);
         const { stateData, validationError: stateValidationError } = await validateStepStateData({
@@ -561,13 +561,14 @@ export async function executeStep(
         if (stateValidationError) {
           throw stateValidationError;
         }
-        const delta = { ...(journal ? contextMutations.stateDelta : contextMutations.stateUpdate) };
+        // Record only the given keys, so a key set to undefined is removed when the step's mutations
+        // are applied instead of becoming an own property that holds undefined.
+        const delta = { ...contextMutations.stateDelta };
         for (const [key, value] of Object.entries(changes)) {
           if (value === undefined) delta[key] = undefined;
           else if (Object.prototype.hasOwnProperty.call(stateData, key)) delta[key] = stateData[key];
         }
-        if (journal) contextMutations.stateDelta = delta;
-        else contextMutations.stateUpdate = delta;
+        contextMutations.stateDelta = delta;
       };
 
       // A nested run hands back its whole state, so its partial update is merged first.

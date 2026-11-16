@@ -101,6 +101,7 @@ export async function processWorkflowLoop(
     step,
     stepResult,
     savedCondition,
+    replayedIterationCount,
   }: {
     pubsub: PubSub;
     runStorage: RunStorage;
@@ -108,13 +109,18 @@ export async function processWorkflowLoop(
     step: Extract<StepFlowEntry, { type: 'loop' }>;
     stepResult: StepResult<any, any, any, any>;
     savedCondition?: boolean;
+    /**
+     * The count already stored for this completion by an earlier delivery's `loopAgain`. A replay
+     * must report the same count instead of advancing it a second time.
+     */
+    replayedIterationCount?: number;
   },
 ) {
   // Get current state from stepResult, stepResults or passed state
   const currentState = resolveCurrentState({ stepResult, stepResults, state });
 
   const prevIterationCount = stepResults[getEntryId(step.step)]?.metadata?.iterationCount ?? 0;
-  const iterationCount = prevIterationCount + 1;
+  const iterationCount = replayedIterationCount ?? prevIterationCount + 1;
   const loopCondition =
     savedCondition ??
     (await evaluateLoopCondition(
@@ -159,6 +165,9 @@ export async function processWorkflowLoop(
               }
             : (countedBody as StepResult<any, any, any, any>),
         requestContext: withoutAuthToken(requestContext),
+        // The body's state as of this iteration, next to its next input: a restart then resumes
+        // from the state its input belongs to instead of the previous iteration's.
+        state: currentState,
       });
     }
     await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });

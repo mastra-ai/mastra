@@ -2543,6 +2543,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     const leafId = getEntryId(step.step);
     const store = await this.mastra.getStorage()?.getStore('workflows');
     let stepResult = result;
+    let replayedIterationCount: number | undefined;
     const guarded = startedBy && this.#guardsSteps(store);
     if (guarded) {
       try {
@@ -2589,6 +2590,10 @@ export class WorkflowEventProcessor extends EventProcessor {
           throw markNonRedeliverable(getErrorFromUnknown(error.storedResult.error, { serializeStack: false }));
         }
         stepResult = error.storedResult;
+        // A stored count means an earlier delivery of this same completion already ran the loop's
+        // continuation, so replaying it reports the count it stored instead of advancing it again.
+        const storedCount = error.storedResult.metadata?.iterationCount;
+        replayedIterationCount = typeof storedCount === 'number' ? storedCount : undefined;
         const stored = storedContext(error.storedSnapshot);
         args = {
           ...args,
@@ -2607,6 +2612,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         step,
         stepResult,
         savedCondition: guarded ? stepResult.metadata?.loopCondition : undefined,
+        replayedIterationCount,
       },
     );
   }
