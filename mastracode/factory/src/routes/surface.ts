@@ -42,7 +42,7 @@ import {
 } from '../session/factory-session.js';
 import type { EnsuredFactorySourceSession, OrganizationModelSources } from '../session/factory-session.js';
 import type { LiveSessions } from '../session/live-sessions.js';
-import { repositoryChosenByRun, resolveRunRepository } from '../session/work-item-repository.js';
+import { repositoryChosenByRun, resolveRunRepositoryFromIntake } from '../session/work-item-repository.js';
 import type { StateSigner } from '../state-signing.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
@@ -390,14 +390,6 @@ async function starterOf(
   return { type: 'agent', bindingId, role: binding?.role ?? 'agent' };
 }
 
-async function resolveCardRunRepository(
-  intake: Pick<IntakeStorage, 'getConfig'> | undefined,
-  args: Omit<Parameters<typeof resolveRunRepository>[0], 'linearRepositoryMap'>,
-) {
-  const intakeConfig = await intake?.getConfig({ orgId: args.orgId, integrationIds: ['linear'] });
-  return resolveRunRepository({ ...args, linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject });
-}
-
 /**
  * Start a factory run for a rule binding: ensure the source-control session the
  * coordinator requires, then hand it to `prepare` along with the factory's
@@ -467,7 +459,7 @@ export async function prepareFactoryRuleBinding(
     // repository, else starts in the environment's first one; its agent
     // determines which repository the card belongs to. An explicit signal is
     // never overridden.
-    const repository = await resolveCardRunRepository(intake, {
+    const repository = await resolveRunRepositoryFromIntake(intake, {
       sourceControl,
       orgId: input.record.orgId,
       factoryProjectId: input.record.factoryProjectId,
@@ -1048,7 +1040,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
                   if (!sourceControl) {
                     return { status: 'unlinked', hint: 'Factory project has no linked source-control repository.' };
                   }
-                  return resolveCardRunRepository(deps.domains.intake, {
+                  return resolveRunRepositoryFromIntake(deps.domains.intake, {
                     sourceControl,
                     orgId,
                     factoryProjectId,

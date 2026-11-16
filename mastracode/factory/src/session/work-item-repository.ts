@@ -1,3 +1,4 @@
+import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import { SourceControlConnectionNotFoundError } from '../storage/domains/source-control/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { Card } from '../storage/domains/work-items/base.js';
@@ -189,6 +190,14 @@ export async function resolveRunRepository(
     return { status: 'unlinked', hint: 'None of the repositories linked to this Factory is in its environment.' };
   }
   return { status: 'resolved', projectRepositoryId: primary.link.id, slug: primary.repository.slug, unnamed };
+}
+
+export async function resolveRunRepositoryFromIntake(
+  intake: Pick<IntakeStorage, 'getConfig'> | undefined,
+  args: Omit<Parameters<typeof resolveRunRepository>[0], 'linearRepositoryMap'>,
+): Promise<RunRepositoryResolution> {
+  const intakeConfig = await intake?.getConfig({ orgId: args.orgId, integrationIds: ['linear'] });
+  return resolveRunRepository({ ...args, linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject });
 }
 
 /** Card metadata recording the `repository` a run chose for a card that named none. */
