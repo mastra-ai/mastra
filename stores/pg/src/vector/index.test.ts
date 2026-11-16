@@ -350,6 +350,68 @@ describe('PgVector', () => {
         expect(await getNamespaceColumns()).toHaveLength(1);
       });
 
+      // The constructor's background cache warmup lists the tables, then reads each one's metadata.
+      // A listing taken before deleteIndex() must not cache a metadata read for the dropped table.
+      it('upserts after deletion and raw recreation while the startup warmup is still running', async () => {
+        const listing = Promise.withResolvers<void>();
+        const listIndexes = PgVector.prototype.listIndexes;
+        const spy = vi.spyOn(PgVector.prototype, 'listIndexes').mockImplementationOnce(async function (this: PgVector) {
+          const indexes = await listIndexes.call(this);
+          await listing.promise;
+          return indexes;
+        });
+        const warm = new PgVector({ connectionString, id: 'pg-vector-warmup-race' });
+        spy.mockRestore();
+
+        let holdDescribe = true;
+        const describeRead = Promise.withResolvers<void>();
+        const releaseDescribe = Promise.withResolvers<void>();
+        const connect = warm.pool.connect.bind(warm.pool);
+        const wrapped = new WeakSet<pg.PoolClient>();
+        vi.spyOn(warm.pool, 'connect').mockImplementation(async () => {
+          const client = await connect();
+          if (wrapped.has(client)) return client;
+          wrapped.add(client);
+          const query = client.query.bind(client);
+          vi.spyOn(client, 'query').mockImplementation(async (...args: any[]) => {
+            const result = await (query as any)(...args);
+            if (
+              holdDescribe &&
+              String(args[0]).includes("a.attname = 'embedding'") &&
+              args[1]?.[0] === `"${lazyIndex}"`
+            ) {
+              holdDescribe = false;
+              describeRead.resolve();
+              await releaseDescribe.promise;
+            }
+            return result;
+          });
+          return client;
+        });
+
+        try {
+          await warm.query({ indexName: lazyIndex, filter: { source: 'legacy' } });
+          await warm.deleteIndex({ indexName: lazyIndex });
+          listing.resolve();
+          // Either the warmup reads the dropped table's metadata (and is held there), or it finishes.
+          await Promise.race([describeRead.promise, (warm as any).cacheWarmupPromise]);
+          holdDescribe = false;
+          await vectorDB.pool.query(
+            'CREATE TABLE ' + lazyIndex + ' (vector_id text UNIQUE, embedding vector(3), metadata jsonb)',
+          );
+          const upsert = warm.upsert({ indexName: lazyIndex, vectors: [[1, 0, 0]], ids: ['recreated'] });
+          releaseDescribe.resolve();
+          await upsert;
+          expect((await vectorDB.pool.query('SELECT vector_id, namespace FROM ' + lazyIndex)).rows).toEqual([
+            { vector_id: 'recreated', namespace: 'default' },
+          ]);
+        } finally {
+          listing.resolve();
+          releaseDescribe.resolve();
+          await warm.disconnect();
+        }
+      });
+
       it('does not repeat catalog readiness checks on a warm instance', async () => {
         await lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'legacy' } });
         const client = await lazyVectorDB.pool.connect();
