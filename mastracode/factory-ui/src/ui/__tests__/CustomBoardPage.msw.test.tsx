@@ -2,11 +2,12 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { releaseBoard } from '../../../e2e/ui/board-catalog';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
+import { recordProviderListRequests } from '../../../e2e/ui/provider-list-requests';
 import { renderWithProviders, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { BoardCatalogResponse, IntakeRouteListResponse } from '../../api/types';
 import { createAppRoutes } from '../router';
@@ -21,8 +22,8 @@ function intakeRouteTo(boardKey: string, overrides: Partial<IntakeRoute> = {}): 
     enabled: true,
     position: 0,
     when: null,
-    target: { boardKey, phaseKey: null, joinClosedIssue: false },
-    on: ['work_item.created'],
+    target: { boardKey, phaseKey: null, joinClosedIssue: false, moveToBoardKey: null },
+    on: ['work_item.opened'],
     revision: 1,
     createdBy: 'user-1',
     createdAt: '2026-11-01T00:00:00.000Z',
@@ -41,7 +42,7 @@ function renderBoard(
   linear: { sourceIds: string[]; bindings: unknown[] } | null = null,
   intakeRoutes: IntakeRoute[] | (() => Response) = [intakeRouteTo('release')],
 ) {
-  const intakeRequest = vi.fn(() => HttpResponse.json({ issues: [], pullRequests: [] }));
+  const providerLists = recordProviderListRequests();
   server.use(
     http.get('*/api/agent-controller/code/sessions/:id/permissions', () => HttpResponse.json({ permissions: [] })),
     http.get('*/web/intake/bindings', () => HttpResponse.json({ bindings: linear?.bindings ?? [] })),
@@ -54,7 +55,7 @@ function renderBoard(
           {
             id: 'fp-1',
             name: 'Factory',
-            repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
+            repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main' })],
           },
         ],
       }),
@@ -78,15 +79,13 @@ function renderBoard(
       HttpResponse.json({ enabled: Boolean(linear), connected: Boolean(linear), workspace: null }),
     ),
     http.get('*/web/factory/projects/:factoryId/sessions', () => HttpResponse.json({ sessions: [] })),
-    http.get('*/web/github/projects/:id/issues', intakeRequest),
-    http.get('*/web/github/projects/:id/prs', intakeRequest),
     http.get('*/web/factory/projects/:id/work-items', () =>
       HttpResponse.json({ workItems, runningSessionIds: [], parkedSessionIds: [] }),
     ),
   );
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/fp-1/${board}`] });
   const { client } = renderWithProviders(<RouterProvider router={router} />);
-  return { intakeRequest, client, router };
+  return { providerLists, client, router };
 }
 
 describe('custom-only board routing', () => {
@@ -138,20 +137,24 @@ describe('custom-only board routing', () => {
     ['its only route moves existing cards on a later event', [intakeRouteTo('release', { on: ['work_item.closed'] })]],
     [
       'its only route joins pull requests to existing cards',
-      [intakeRouteTo('release', { target: { boardKey: 'release', phaseKey: null, joinClosedIssue: true } })],
+      [
+        intakeRouteTo('release', {
+          target: { boardKey: 'release', phaseKey: null, joinClosedIssue: true, moveToBoardKey: null },
+        }),
+      ],
     ],
-  ])('asks for an intake route, not a source, while a source is connected but %s', async (_case, intakeRoutes) => {
+  ])('asks for an intake rule, not a source, while a source is connected but %s', async (_case, intakeRoutes) => {
     const { client } = renderBoard(undefined, undefined, undefined, undefined, null, intakeRoutes);
     await waitForMutationsIdle(client);
 
     const queued = await screen.findByTestId('board-column-queued');
-    expect(await within(queued).findByText('No intake route sends cards here')).toBeVisible();
+    expect(await within(queued).findByText('No rule here takes new items')).toBeVisible();
     expect(within(queued).queryByText('Intake is clear')).not.toBeInTheDocument();
     expect(within(queued).queryByText(/No intake sources/)).not.toBeInTheDocument();
     expect(within(queued).queryByRole('link', { name: 'Connect issue source' })).not.toBeInTheDocument();
-    expect(within(queued).getByRole('link', { name: 'Add intake route' })).toHaveAttribute(
+    expect(within(queued).getByRole('link', { name: 'Add intake rule' })).toHaveAttribute(
       'href',
-      '/factories/fp-1/settings/intake#new-cards',
+      '/factories/fp-1/boards/release/rules',
     );
   });
 
@@ -210,7 +213,7 @@ describe('custom-only board routing', () => {
   });
 
   it('renders declaration-ordered custom groups without built-in intake or automation', async () => {
-    const { intakeRequest, client } = renderBoard();
+    const { providerLists, client } = renderBoard();
     const columns = await screen.findByLabelText('Board stages');
     expect(
       within(columns)
@@ -223,7 +226,7 @@ describe('custom-only board routing', () => {
     expect(screen.queryByText('Auto-approve plans')).toBeNull();
     // Columns render before every query settles, so only judge the feeds once idle.
     await waitForMutationsIdle(client);
-    expect(intakeRequest).not.toHaveBeenCalled();
+    expect(providerLists).toEqual([]);
   });
 
   it('labels each custom phase kind on a Kanban view', async () => {

@@ -5,7 +5,6 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { LoaderFunctionArgs } from 'react-router';
 
 import type { ApiConfig } from '../api/config';
-import { activeRunsQueryOptions } from '../hooks/useActiveRunResources';
 import { boardCatalogQueryOptions } from '../hooks/useBoardCatalog';
 import { intakeRoutesQueryOptions } from '../hooks/useIntakeRoutes';
 import { defaultModelQueryOptions } from '../hooks/use-default-model';
@@ -20,15 +19,13 @@ import { intakeBindingsQueryOptions, intakeConfigQueryOptions } from '../hooks/u
 import { jiraStatusQueryOptions } from '../hooks/useJiraData';
 import { linearStatusQueryOptions } from '../hooks/useLinearData';
 import { serverFeaturesQueryOptions } from '../hooks/useServerFeatures';
+import { sessionActivityQueryOptions, sessionRowsQueryOptions } from '../hooks/useSessionRows';
 import {
   boardPhasesQueryOptions,
-  sessionCardsQueryOptions,
   workItemActivityQueryOptions,
   workItemFilterOptionsQueryOptions,
   workItemStartersQueryOptions,
 } from '../hooks/useWorkItems';
-import { workspacesQueryOptions } from '../hooks/useWorkspaces';
-import { AGENT_CONTROLLER_ID } from './domains/chat/services/constants';
 import { boardPhasesRequest } from './domains/factory/boardPhasesRequest';
 import { boardFiltersFromParams } from './domains/factory/boardFilters';
 import { BOARD_VIEW_QUERY } from './domains/factory/boardSavedViews';
@@ -38,7 +35,11 @@ import { BOARD_SEARCH_QUERY } from './domains/factory/hooks/useBoardView';
 import { DEFAULT_ACTIVITY_PERIOD } from './domains/factory/periodActivity';
 import { ruleDecisionGroup } from './domains/factory/ruleDecisionGroups';
 import { isSettingsPath } from './domains/settings/hooks/useSettingsOpen';
+import { readPinnedSessions } from './domains/workspaces/hooks/usePinnedSessions';
+import { readSessionFilters } from './domains/workspaces/hooks/useSessionFilters';
+import { readSessionListView } from './domains/workspaces/hooks/useSessionListView';
 import { hasLinkedRepository } from './domains/workspaces/services/factoryRepositories';
+import { sessionRowsRequest } from './domains/workspaces/services/sessionRowReads';
 import type { FactoryProject } from './domains/workspaces/services/github';
 import type { LazyPageComponent } from './layouts/PageSuspense';
 
@@ -78,16 +79,13 @@ function whenFactoryListed(
   }, noop);
 }
 
-function prefetchSessionRuns({ queryClient, api }: RouteLoaderServices, factoryId: string) {
-  void queryClient.query(workspacesQueryOptions(api.baseUrl, factoryId)).catch(noop);
-  void queryClient.query(activeRunsQueryOptions(AGENT_CONTROLLER_ID, api.baseUrl)).catch(noop);
-}
-
 export const prefetchFactoryLayout: Prefetch = (services, { params }) => {
   const { factoryId } = params;
   if (!factoryId) return;
+  const { queryClient, api } = services;
   whenFactoryListed(services, factoryId, factory => {
-    if (hasLinkedRepository(factory)) prefetchSessionRuns(services, factoryId);
+    if (!hasLinkedRepository(factory)) return;
+    void queryClient.query(sessionActivityQueryOptions(api.baseUrl, factoryId)).catch(noop);
   });
 };
 
@@ -100,9 +98,18 @@ export const prefetchSidebar: Prefetch = (services, { params, request }) => {
   void queryClient.query(boardCatalogQueryOptions(api.client, factoryId)).catch(noop);
   // Says whether the sidebar offers "New board": only organization admins may change boards.
   void queryClient.query(intakeRoutesQueryOptions(api.baseUrl, factoryId)).catch(noop);
-  void queryClient.query(sessionCardsQueryOptions(api.baseUrl, factoryId)).catch(noop);
-  void queryClient.query(boardDecisionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
-  prefetchSessionRuns(services, factoryId);
+  const { sort, groupBy, revealChildSessions } = readSessionListView();
+  const rows = sessionRowsRequest({
+    sort,
+    groupBy,
+    filters: readSessionFilters(),
+    pinned: readPinnedSessions(),
+    // User sessions route as `user/threads/:threadId`.
+    open: params.sessionId ?? params.threadId,
+    children: revealChildSessions,
+    windows: {},
+  });
+  void queryClient.query(sessionRowsQueryOptions(api.baseUrl, factoryId, rows)).catch(noop);
 };
 
 export const prefetchBoard: Prefetch = (services, { params, request }) => {
@@ -126,6 +133,7 @@ export const prefetchBoard: Prefetch = (services, { params, request }) => {
     void queryClient.query(boardPhasesQueryOptions(api.baseUrl, factoryId, view)).catch(noop);
   }
   void queryClient.query(workItemFilterOptionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
+  void queryClient.query(boardDecisionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
   whenFactoryListed(services, factoryId, factory => {
     if (!hasLinkedRepository(factory)) return;
     void queryClient.query(runQueueQueryOptions(api.baseUrl, factoryId)).catch(noop);

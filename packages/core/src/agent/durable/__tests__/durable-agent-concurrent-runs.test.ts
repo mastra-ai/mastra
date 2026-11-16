@@ -12,7 +12,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { WorkflowRunState } from '../../../workflows/types';
 import { DurableStepIds } from '../constants';
-import { storeRunsInV2 } from './storage-version';
 
 const LETTERS = ['A', 'B', 'C', 'D'] as const;
 type Letter = (typeof LETTERS)[number];
@@ -88,7 +87,7 @@ async function startProcess() {
     },
   });
   // The test captures and restores runs through v1's snapshot writes.
-  const durableAgent = storeRunsInV2(createDurableAgent({ agent }), false);
+  const durableAgent = createDurableAgent({ agent, storageVersion: 1 });
   const mastra = new Mastra({
     agents: { durableAgent },
     storage,

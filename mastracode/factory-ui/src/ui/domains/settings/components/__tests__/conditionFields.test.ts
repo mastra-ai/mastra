@@ -13,7 +13,7 @@ const selfReviewRule: RuleGroup = {
     {
       operator: 'OR',
       conditions: [
-        { operator: 'AND', conditions: [{ field: 'author.trusted', operator: 'equals', value: true }] },
+        { operator: 'AND', conditions: [{ field: 'item.trusted', operator: 'equals', value: true }] },
         {
           operator: 'OR',
           conditions: [
@@ -63,24 +63,31 @@ describe('condition rows', () => {
   });
 
   it('name stored values the way a person reads them', () => {
-    const fields = conditionFields(intakeRouteFacts(['work_item.created', 'work_item.closed']));
+    const fields = conditionFields(intakeRouteFacts(['work_item.opened', 'work_item.closed']));
     const label = (id: string, value: string | boolean) => {
       const suggestions = fields.find(field => field.id === id)?.suggestions;
       return Array.isArray(suggestions) ? suggestions.find(option => option.value === String(value))?.label : undefined;
     };
 
-    expect(label('author.trusted', false)).toBe('Outside author');
+    expect(label('item.trusted', false)).toBe('Outside author');
     expect(label('source.kind', 'pull_request')).toBe('Pull request');
     expect(label('source.integration', 'incidentio')).toBe('incident.io');
     expect(label('event.reason', 'canceled')).toBe('Not planned');
   });
 
-  it('offer event facts only to routes that handle an event besides new cards', () => {
-    const ids = (on: string[]) => conditionFields(intakeRouteFacts(on)).map(field => field.id);
-
-    expect(ids(['work_item.created'])).not.toContain('event.type');
-    expect(ids(['work_item.reopened'])).toContain('event.type');
-    expect(ids(['work_item.reopened'])).not.toContain('event.reason');
-    expect(ids(['work_item.closed'])).toContain('event.reason');
+  const CHANGES = ['event.labels.added', 'event.labels.removed', 'event.assignees.added', 'event.assignees.removed'];
+  it.each([
+    // New issues have no event to filter on, legacy rules included; a pull request opening may also move a card.
+    [['work_item.opened'], [], ['event.type', ...CHANGES]],
+    [['work_item.created'], [], ['event.type', ...CHANGES]],
+    [['pull_request.opened'], ['event.type'], CHANGES],
+    [['work_item.reopened'], ['event.type'], ['event.reason', ...CHANGES]],
+    [['work_item.closed'], ['event.type', 'event.reason'], CHANGES],
+    [['work_item.updated'], ['event.type', ...CHANGES], ['event.reason']],
+    [['pull_request.updated'], CHANGES, ['event.reason']],
+  ])('offer a rule on %j the event facts it can see', (on, offered, hidden) => {
+    const ids = conditionFields(intakeRouteFacts(on)).map(field => field.id);
+    expect(ids).toEqual(expect.arrayContaining(offered));
+    for (const id of hidden) expect(ids).not.toContain(id);
   });
 });

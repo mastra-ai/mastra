@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ListPlus, Plus } from 'lucide-react';
 import { useState } from 'react';
 
 import {
@@ -16,6 +15,8 @@ import {
 } from './rule-lines';
 import type { RuleLogic } from './rule-lines';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/ds/components/Select';
+import { IconListAdd } from '@/ds/icons/central/IconListAdd';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 
 const meta: Meta<typeof RuleLines> = {
   title: 'Elements/RuleLines',
@@ -48,8 +49,8 @@ function Picker({ label, value, items }: { label: string; value: string; items: 
 function AddButtons() {
   return (
     <>
-      <RuleAddButton icon={<Plus />}>Add condition</RuleAddButton>
-      <RuleAddButton icon={<ListPlus />}>Add group</RuleAddButton>
+      <RuleAddButton icon={<IconPlusMedium />}>Add condition</RuleAddButton>
+      <RuleAddButton icon={<IconListAdd />}>Add group</RuleAddButton>
     </>
   );
 }

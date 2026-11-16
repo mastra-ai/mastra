@@ -21,6 +21,7 @@ import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
 import type { IMastraLogger } from '../logger';
 import { RegisteredLogger } from '../logger';
+import { latestProcessedModelOutput } from '../loop/shared/steps/tool-result-commit-core';
 import type { Mastra } from '../mastra';
 import { DEFAULT_RESTART_CONCURRENCY, runWithConcurrency } from '../mastra/run-with-concurrency';
 import type { ObservabilityContext, Span, TracingOptions, TracingPolicy } from '../observability';
@@ -116,7 +117,7 @@ import type {
 } from './step';
 import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
 import type { AgentStepOptions, ClassifierStepOptions } from './step-factories';
-import { collectPredicateStepRefs, resolveStepOutputs } from './step-refs';
+import { collectPredicateStepRefs, predicateReadsState, resolveStepOutputs } from './step-refs';
 import type {
   DefaultEngineType,
   DynamicMapping,
@@ -222,6 +223,7 @@ function isDeclarativePredicateArg(value: unknown): value is { predicate: Predic
  */
 export function predicateToCondition(predicate: Predicate): (params: any) => Promise<boolean> {
   const stepRefs = collectPredicateStepRefs(predicate);
+  const readsState = predicateReadsState(predicate);
   return async (params: any) => {
     // Resolve every referenced step up front. Passing the sync getStepResult
     // instead would let the predicate's fail-quiet lookup swallow its throw on
@@ -233,7 +235,12 @@ export function predicateToCondition(predicate: Predicate): (params: any) => Pro
     return evaluatePredicate(predicate, {
       initData: params?.getInitData ? params.getInitData() : undefined,
       inputData: params?.inputData,
-      state: params?.state,
+      // Storage v2 runs serve the state through getState only.
+      state: readsState
+        ? typeof params?.getState === 'function'
+          ? await params.getState()
+          : params?.state
+        : undefined,
       stepResults,
     });
   };
@@ -996,6 +1003,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
         toolCallId,
         args: toolCallArgs,
         toolResultValue,
+        modelOutput,
         providerExecuted,
         // Shared processor states map for accessing persisted state
         processorStates,
@@ -1333,6 +1341,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
         toolCallId,
         args: toolCallArgs,
         toolResultValue,
+        modelOutput,
         providerExecuted,
       };
 
@@ -1820,6 +1829,8 @@ export function createStepFromProcessor<TProcessorId extends string>(
                 toolCallId: toolCallId ?? '',
                 args: toolCallArgs,
                 result: toolResultValue,
+                // The mapping an earlier processor committed, not the original.
+                modelOutput: latestProcessedModelOutput(checkedMessageList, toolCallId ?? '', modelOutput),
                 providerExecuted,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 steps: steps ?? [],
@@ -2198,12 +2209,12 @@ export class Workflow<
 
   __registerMastra(mastra: Mastra) {
     // Checked here rather than in the constructor: other engines set engineType after super().
-    if (this.#options.storageVersion === 2 && this.engineType !== 'default') {
+    if (this.#options.storageVersion === 2 && this.engineType !== 'default' && this.engineType !== 'evented') {
       throw new MastraError({
         id: 'WORKFLOW_STORAGE_V2_UNSUPPORTED_ENGINE',
         domain: ErrorDomain.MASTRA_WORKFLOW,
         category: ErrorCategory.USER,
-        text: `Workflow "${this.id}" sets storageVersion: 2, which the ${this.engineType} engine doesn't support yet. Use the default engine or storageVersion: 1.`,
+        text: `Workflow "${this.id}" sets storageVersion: 2, which the ${this.engineType} engine doesn't support yet. Use the default or evented engine, or storageVersion: 1.`,
       });
     }
     this.#mastra = mastra;
@@ -2530,6 +2541,21 @@ export class Workflow<
     return this as any;
   }
 
+  // Sleep ids are recorded in snapshots, so a restart or time travel in another
+  // process must derive the same id: use the ordinal of this entry among the
+  // workflow's sleeps (`sleep` and `sleepUntil` share the prefix, so they share
+  // one count), as `map()` does, unless a custom id generator is configured.
+  #defaultSleepId(stepType: 'sleep' | 'sleep-until'): string {
+    if (this.#mastra?.getIdGenerator()) {
+      return `sleep_${this.#mastra.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType })}`;
+    }
+    let ordinal = this.stepFlow.filter(entry => entry.type === 'sleep' || entry.type === 'sleepUntil').length;
+    while (`sleep_${this.id}_${ordinal}` in this.steps) {
+      ordinal++;
+    }
+    return `sleep_${this.id}_${ordinal}`;
+  }
+
   /**
    * Adds a sleep step to the workflow
    * @param duration The duration to sleep for
@@ -2540,9 +2566,7 @@ export class Workflow<
     duration: number | ExecuteFunction<TState, TPrevSchema, number, any, any, TEngineType>,
     options?: StepFlowEntryOptions,
   ) {
-    const id =
-      options?.id ||
-      `sleep_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'sleep' }) || globalThis.crypto.randomUUID()}`;
+    const id = options?.id || this.#defaultSleepId('sleep');
     // Only the display fields: `id` is spelled explicitly from the normalized
     // value above, so a falsy caller id can never override the generated one.
     const displayFields = toEntryOptionFields({ description: options?.description, metadata: options?.metadata });
@@ -2591,9 +2615,7 @@ export class Workflow<
     date: Date | ExecuteFunction<TState, TPrevSchema, Date, any, any, TEngineType>,
     options?: StepFlowEntryOptions,
   ) {
-    const id =
-      options?.id ||
-      `sleep_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'sleep-until' }) || globalThis.crypto.randomUUID()}`;
+    const id = options?.id || this.#defaultSleepId('sleep-until');
     // Only the display fields: `id` is spelled explicitly from the normalized
     // value above, so a falsy caller id can never override the generated one.
     const displayFields = toEntryOptionFields({ description: options?.description, metadata: options?.metadata });
@@ -3142,6 +3164,118 @@ export class Workflow<
   }
 
   /**
+   * Takes the nested-run handoff set by execute() and clears it, so a later top-level createRun()
+   * on the same instance cannot inherit it. Concurrent parent runs share the workflow instance, so
+   * this must be taken synchronously, before the first await.
+   */
+  protected takeNestedRun() {
+    const nestedRun = this.#nestedRun;
+    this.#nestedRun = undefined;
+    return nestedRun;
+  }
+
+  /**
+   * Resolves the storage version a createRun() call uses, and reads the stored run that call
+   * reopens. Shared by the default and evented engines so their rules cannot drift.
+   *
+   * A stored run keeps the version it was created with, whatever the workflow sets now. A new
+   * nested run takes its parent run's version, so the version its parent looks it up under is the
+   * one it is stored in. A new top-level run takes the workflow's option, or the automatic choice.
+   * Only a caller-given top-level id can name a run stored in the other version's table.
+   */
+  protected async resolveRunStorage({
+    runId,
+    reopen,
+    cachedRun,
+    nestedRun,
+    lookUpStoredRun,
+  }: {
+    runId: string;
+    /** The caller supplied this id, so it may name a run created earlier. */
+    reopen: boolean;
+    cachedRun?: { storageVersion: 1 | 2 };
+    nestedRun?: { storageVersion: 1 | 2 };
+    /** The run can be in storage: the snapshot policy persists it, or the caller named it. */
+    lookUpStoredRun: boolean;
+  }): Promise<{
+    storageVersion: 1 | 2;
+    existsInStorage: boolean;
+    stored?: Pick<WorkflowRunState, 'status' | 'parentWorkflow'>;
+  }> {
+    // A v2 run can't be stored where the store has no journal, so only a stored v1 run may continue.
+    // With autoStorageVersion, a new run takes v2 only where it can be stored as v2, on an engine
+    // that can write one.
+    const { storageVersion: optionVersion, autoStorageVersion } = this.#options;
+    const workflowsStore = await (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows');
+    const journal = !!workflowsStore?.supportsRunJournal();
+    let unsupportedV2 = false;
+    let autoVersion: 1 | 2 | undefined;
+    if (!nestedRun && (optionVersion === 2 || (optionVersion === undefined && autoStorageVersion))) {
+      if (optionVersion === 2) unsupportedV2 = !!workflowsStore && !journal;
+      else autoVersion = journal && (this.engineType === 'default' || this.engineType === 'evented') ? 2 : 1;
+    }
+    const throwUnsupportedV2 = (): never => {
+      throw new MastraError({
+        id: 'WORKFLOW_STORAGE_V2_UNSUPPORTED_STORE',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: `Workflow "${this.id}" sets storageVersion: 2, which the configured storage adapter doesn't support yet. Use storageVersion: 1.`,
+      });
+    };
+    if (unsupportedV2 && !reopen) throwUnsupportedV2();
+
+    let storageVersion: 1 | 2 =
+      cachedRun?.storageVersion ??
+      nestedRun?.storageVersion ??
+      (unsupportedV2 ? 1 : (optionVersion ?? autoVersion ?? 1));
+    // A cached run's version is already known, and a nested run is stored in its parent's.
+    const probeOtherVersion = reopen && !cachedRun && !nestedRun;
+    const loadStoredHeader = (version: 1 | 2) =>
+      createRunStorage({
+        storageVersion: version,
+        workflowName: this.id,
+        runId,
+        getStore: async () => (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows'),
+      }).loadHeader();
+    let existsInStorage = false;
+    let stored: Pick<WorkflowRunState, 'status' | 'parentWorkflow'> | undefined;
+
+    if (storageVersion === 2) {
+      // The header holds the status and parent this reads, so one header read replaces the
+      // existence check and a snapshot load.
+      const header = lookUpStoredRun ? await loadStoredHeader(2) : null;
+      if (header) {
+        existsInStorage = true;
+        stored = header;
+      } else if (probeOtherVersion) {
+        const v1Header = await loadStoredHeader(1);
+        if (v1Header) {
+          existsInStorage = true;
+          stored = v1Header;
+          storageVersion = 1;
+        }
+      }
+    } else {
+      // Unlike the header reads, this finds the run in either version's table.
+      const existingRun = lookUpStoredRun
+        ? await this.getWorkflowRunById(runId, { withNestedWorkflows: false })
+        : undefined;
+      existsInStorage = !!existingRun && !existingRun.isFromInMemory;
+      if (existsInStorage && existingRun?.status) {
+        let header = await loadStoredHeader(1);
+        if (!header && probeOtherVersion && journal) {
+          header = await loadStoredHeader(2);
+          if (header) storageVersion = 2;
+        }
+        stored = { status: existingRun.status as WorkflowRunStatus, parentWorkflow: header?.parentWorkflow };
+      }
+    }
+    if (unsupportedV2 && !existsInStorage) throwUnsupportedV2();
+
+    return { storageVersion, existsInStorage, stored };
+  }
+
+  /**
    * Creates a new workflow run instance and stores a snapshot of the workflow in the storage
    * @param options Optional configuration for the run
    * @param options.runId Optional custom run ID, defaults to a random UUID
@@ -3167,8 +3301,7 @@ export class Workflow<
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>> {
     // Taken before the first await: concurrent parent runs share this workflow
     // instance, so a later execute() would otherwise swap in its own input and state.
-    const nestedRun = this.#nestedRun;
-    this.#nestedRun = undefined;
+    const nestedRun = this.takeNestedRun();
     const nestedRunStart = nestedRun?.start;
     if (this.stepFlow.length === 0) {
       throw new Error(
@@ -3178,27 +3311,6 @@ export class Workflow<
     if (!this.executionGraph.steps) {
       throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
     }
-    // A v2 run can't be stored where the store has no journal, so only a stored v1 run may continue.
-    // With autoStorageVersion, a new run takes v2 only where it can be stored as v2.
-    // A nested run doesn't use the workflow's options, so it never hits either.
-    const { storageVersion: optionVersion, autoStorageVersion } = this.#options;
-    let unsupportedV2 = false;
-    let autoVersion: 1 | 2 | undefined;
-    if (!nestedRun && (optionVersion === 2 || (optionVersion === undefined && autoStorageVersion))) {
-      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-      const journal = !!workflowsStore?.supportsRunJournal();
-      if (optionVersion === 2) unsupportedV2 = !!workflowsStore && !journal;
-      else autoVersion = journal && this.engineType === 'default' ? 2 : 1;
-    }
-    const throwUnsupportedV2 = (): never => {
-      throw new MastraError({
-        id: 'WORKFLOW_STORAGE_V2_UNSUPPORTED_STORE',
-        domain: ErrorDomain.MASTRA_WORKFLOW,
-        category: ErrorCategory.USER,
-        text: `Workflow "${this.id}" sets storageVersion: 2, which the configured storage adapter doesn't support yet. Use storageVersion: 1.`,
-      });
-    };
-    if (unsupportedV2 && !options?.runId) throwUnsupportedV2();
     const runIdToUse =
       options?.runId ||
       this.#mastra?.generateId({
@@ -3220,64 +3332,13 @@ export class Workflow<
     // existence read would be a guaranteed miss. Skipping it removes one storage
     // round trip per streamed chunk on the agent output-processor hot path (#19015).
     const lookUpStoredRun = shouldPersistSnapshot || !!options?.runId;
-    // A stored run keeps the version it was created with, whatever the workflow sets now. A new
-    // nested run takes its parent run's, and a new top-level run the workflow's. The version's
-    // table is probed first; only a caller-given top-level id can name a run stored in the other
-    // one. A cached run's version is already known, and a nested run is stored in its parent's.
-    let storageVersion: 1 | 2 =
-      cachedRun?.storageVersion ??
-      nestedRun?.storageVersion ??
-      (unsupportedV2 ? 1 : (optionVersion ?? autoVersion ?? 1));
-    const probeOtherVersion = !!options?.runId && !cachedRun && !nestedRun;
-    const loadStoredHeader = (version: 1 | 2) =>
-      createRunStorage({
-        storageVersion: version,
-        workflowName: this.id,
-        runId: runIdToUse,
-        getStore: async () => (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows'),
-      }).loadHeader();
-    let existsInStorage = false;
-    let stored: Pick<WorkflowRunState, 'status' | 'parentWorkflow'> | undefined;
-
-    if (storageVersion === 2) {
-      // The header holds the status and parent this reads, so one header read replaces the
-      // existence check and the snapshot load.
-      const header = lookUpStoredRun ? await loadStoredHeader(2) : null;
-      if (header) {
-        existsInStorage = true;
-        stored = header;
-      } else if (probeOtherVersion) {
-        const v1Snapshot = await loadStoredHeader(1);
-        if (v1Snapshot) {
-          existsInStorage = true;
-          stored = v1Snapshot;
-          storageVersion = 1;
-        }
-      }
-    } else {
-      // Unlike the header reads, this finds the run in either version's table.
-      const existingRun = lookUpStoredRun
-        ? await this.getWorkflowRunById(runIdToUse, { withNestedWorkflows: false })
-        : undefined;
-
-      // Check if run exists in persistent storage (not just in-memory)
-      existsInStorage = !!existingRun && !existingRun.isFromInMemory;
-
-      // If a run exists in storage, update the run's status to reflect the actual state
-      // This fixes the issue where createRun checks storage but doesn't use the stored data
-      if (existsInStorage && existingRun?.status) {
-        let header = await loadStoredHeader(1);
-        if (!header && probeOtherVersion) {
-          const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-          if (workflowsStore?.supportsRunJournal()) {
-            header = await loadStoredHeader(2);
-            if (header) storageVersion = 2;
-          }
-        }
-        stored = { status: existingRun.status as WorkflowRunStatus, parentWorkflow: header?.parentWorkflow };
-      }
-    }
-    if (unsupportedV2 && !existsInStorage) throwUnsupportedV2();
+    const { storageVersion, existsInStorage, stored } = await this.resolveRunStorage({
+      runId: runIdToUse,
+      reopen: !!options?.runId,
+      cachedRun,
+      nestedRun,
+      lookUpStoredRun,
+    });
 
     // Return a new Run instance with object parameters
     const run =
@@ -3342,7 +3403,7 @@ export class Workflow<
         error: undefined,
         timestamp: Date.now(),
       };
-      await run.runStorage.writeInitial(
+      await run.runStorage.writeSnapshot(
         // Storage v2 doesn't prune; a nested workflow with the hook can still run as v2 under a v2 parent.
         this.#options.pruneSnapshot && storageVersion === 1
           ? this.#options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
@@ -4669,7 +4730,7 @@ export class Run<
             timestamp: Date.now(),
           };
           try {
-            await this.runStorage.writeInitial(
+            await this.runStorage.writeSnapshot(
               this.executionEngine.options.pruneSnapshot && this.storageVersion === 1
                 ? this.executionEngine.options.pruneSnapshot({
                     snapshot: initialRunSnapshot,

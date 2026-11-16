@@ -46,7 +46,11 @@ describe('readMessageListState', () => {
     const runId = 'run-from-another-process';
     expect(globalRunRegistry.get(runId)).toBeUndefined();
     const restored = await readMessageListState(
-      { state: { messageListState: stored }, getInitData: () => ({ runId, agentId: 'agent' }), mastra },
+      {
+        getState: async () => ({ messageListState: stored }),
+        getInitData: () => ({ runId, agentId: 'agent' }),
+        mastra,
+      },
       {},
     );
     expect(restored).toEqual(transcript);

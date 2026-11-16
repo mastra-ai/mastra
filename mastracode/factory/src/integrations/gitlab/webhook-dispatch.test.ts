@@ -50,7 +50,6 @@ function subscription(
     sessionId: `session-${id}`,
     resourceId: 'resource-1',
     threadId,
-    sessionScope: null,
     status,
     data: {
       host: 'gitlab.example.com',

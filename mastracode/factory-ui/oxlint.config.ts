@@ -11,6 +11,7 @@ export default defineConfig({
     // typography rules have existing hits here.
     'playground-ui/icon-button-size': 'error',
     'playground-ui/placeholder-text': 'error',
+    'playground-ui/icon-size-from-parent': 'error',
     'mastra/import-order': 'off',
     'typescript/no-unnecessary-type-assertion': 'error',
     'typescript/no-unnecessary-template-expression': 'error',
@@ -30,8 +31,12 @@ export default defineConfig({
     },
     {
       // Test stubs aren't UI people see.
-      files: ['src/**/*.{test,spec}.*', 'src/**/__tests__/**'],
-      rules: { 'mastra/sentence-case-labels': 'off', 'playground-ui/placeholder-text': 'off' },
+      files: ['src/**/*.{test,spec}.*', 'src/**/*.stories.*', 'src/**/__tests__/**'],
+      rules: {
+        'mastra/sentence-case-labels': 'off',
+        'playground-ui/placeholder-text': 'off',
+        'playground-ui/icon-size-from-parent': 'off',
+      },
     },
   ],
 });

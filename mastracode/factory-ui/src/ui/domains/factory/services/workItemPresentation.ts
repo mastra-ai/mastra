@@ -8,3 +8,8 @@ import { isPullRequestSource } from './workItems';
 export function genericExternalWorkItemUrl(item: Pick<WorkItem, 'source' | 'url'>): string | undefined {
   return isPullRequestSource(item.source) ? undefined : (item.url ?? undefined);
 }
+
+export function sourceState(item: Pick<WorkItem, 'source' | 'workItem'>): string | undefined {
+  if (item.workItem?.provider === 'factory' || isPullRequestSource(item.source)) return undefined;
+  return item.workItem?.state || undefined;
+}

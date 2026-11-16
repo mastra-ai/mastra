@@ -249,6 +249,15 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   }
 
   /**
+   * The sandbox directory shell commands default to: the same root file paths
+   * resolve against, so a relative path means the same thing to a shell command
+   * and to a file tool. Non-empty whenever the workspace root is known.
+   */
+  async getCommandCwd(): Promise<string | undefined> {
+    return (await this.base()) || undefined;
+  }
+
+  /**
    * Whether tools like `grep` should treat a file as text: the built-in text
    * extensions plus any `textExtensions` passed to the constructor.
    */

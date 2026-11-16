@@ -1,5 +1,89 @@
 # @mastra/core
 
+## 1.84.0-alpha.3
+
+### Minor Changes
+
+- Added `collectionExists(name)` to Factory storage so a domain can tell whether a table already exists before registering it. Supported by `LibSQLFactoryStorage` and `PgFactoryStorage`; it is an optional capability, so other backends keep working unchanged. ([#30488](https://github.com/mastra-ai/mastra/pull/30488))
+
+  ```ts
+  if (!storage.collectionExists || (await storage.collectionExists('work_items'))) {
+    await storage.ensureCollections([WORK_ITEMS_SCHEMA]);
+  }
+  ```
+
+- Added `ModelRouterLanguageModel.isGatewayMemoryManaged()`. It reports whether the Mastra Gateway serves Observational Memory for the credential the model will use, so framework code can keep memory local when the gateway can't serve it. A gateway project key is served by the gateway. An organization key (`msk-gateway-…`, `mskv2_…`) is served by a gateway without the memory API. A credential that can't be resolved — including one the gateway reports as missing — is thrown instead of reported as local, so a caller never mistakes a failed lookup for local ownership and the gateway and the local store can't both save the same conversation ([#30391](https://github.com/mastra-ai/mastra/issues/30391)). ([#30414](https://github.com/mastra-ai/mastra/pull/30414))
+
+  ```typescript
+  const model = new ModelRouterLanguageModel('mastra/openai/gpt-6.1-sol');
+
+  if (await model.isGatewayMemoryManaged()) {
+    // The gateway stores the thread's observations.
+  } else {
+    // Memory has to stay local.
+  }
+  ```
+
+### Patch Changes
+
+- Fixed restart and time travel of workflow runs that contain a `.sleep()` or `.sleepUntil()` without an `id`. When another process restarted or time traveled such a run, the step after the sleep got no input, because each process gave the sleep a different random id. Unnamed sleeps now get the id `sleep_<workflowId>_<n>`, where `n` follows the order the sleeps are declared in, so every process agrees. ([#30397](https://github.com/mastra-ai/mastra/pull/30397))
+
+  Scheduled workflows with an unnamed sleep now have the same definition hash on every instance, so an instance no longer refuses a schedule another instance registered.
+
+  Limits:
+
+  - Runs stored before this version keep their random sleep ids and still won't match after a restart or time travel.
+  - If the workflow is already registered with a Mastra instance that has a custom `idGenerator` when the sleep is declared, that generator produces the id instead, so a generator that returns random ids still gives each process a different id.
+  - Adding or removing a sleep changes the ids of the unnamed sleeps after it; pass `{ id }` to keep one fixed:
+
+  ```ts
+  workflow.sleep(5000, { id: 'wait-for-payment' });
+  ```
+
+## 1.84.0-alpha.2
+
+### Minor Changes
+
+- Added run metadata to background process callbacks. ([#30161](https://github.com/mastra-ai/mastra/pull/30161))
+
+  `backgroundProcesses` callbacks on `execute_command` now receive, when available, the `agentId`, `threadId`, `resourceId`, and `runId` of the call that started the process, so hosts can route exit notices to the right conversation. `onExit` also receives `killedByAbort`, which is `true` when the abort signal fired (the run's signal by default) and killed the process.
+
+  ```ts
+  backgroundProcesses: {
+    onExit: ({ pid, exitCode, threadId, killedByAbort }) => {
+      if (!killedByAbort) notifyThread(threadId, `Process ${pid} exited with code ${exitCode}`);
+    },
+  },
+  ```
+
+  `truncateOutput` and `DEFAULT_TAIL_LINES` are now exported from `@mastra/core/workspace`, so hosts can trim process output the same way `execute_command` does.
+
+### Patch Changes
+
+- Fixed retries in `dountil` and `dowhile` loops on the evented engine. Each iteration of a loop body now starts at `retryCount` 0 and gets the step's full `retries`, as on the default engine. Before, the count carried over from earlier iterations, so a body that failed once in a later iteration could run out of retries and fail the run. ([#30383](https://github.com/mastra-ai/mastra/pull/30383))
+
+  If your step code reads `retryCount` inside a loop body, it now gets the attempt within the current iteration. The loop condition receives the iteration number as `iterationCount`. To use it inside the body, pass it through the step's output or workflow state.
+
+- Fixed durable agent runs failing with `DURABLE_AGENT_EXECUTION_UNVERIFIED` when an ownership check took longer than the lease TTL (15 seconds by default) while the same process still held the run. These runs used to fail and lose their saved snapshots. They now keep running, and a step stops only when an ownership check fails, the claim can't be renewed before it expires, or another execution takes over the run. ([#30386](https://github.com/mastra-ai/mastra/pull/30386))
+
+- Fixed workflow recovery restarting a run that is still executing, which ran its steps twice. `startAsync()` now takes the run's lease before it saves the first snapshot, so it resolves after the lease is taken and rejects if taking it fails. Runs of workflows whose `shouldPersistSnapshot` saves `waiting` but not `running` now hold a lease too, so recovery no longer restarts them while they execute or sleep. ([#30384](https://github.com/mastra-ai/mastra/pull/30384))
+
+- `processToolResult` now sees and can rewrite a tool's `toModelOutput` result. Previously, when a tool mapped its result with `toModelOutput` (for example a file viewer returning images), output processors only saw and changed the raw result, and the mapped output, images included, still reached the next model call and stored history unchanged. ([#30401](https://github.com/mastra-ai/mastra/pull/30401))
+
+  The hook now receives `modelOutput`. To replace it, commit a `result`-state part that carries the new value in `providerMetadata.mastra.modelOutput`:
+
+  ```ts
+  processToolResult({ messageList, toolCallId, toolName, args, result, modelOutput }) {
+    messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: { state: 'result', toolCallId, toolName, args, result },
+      providerMetadata: { mastra: { modelOutput: shrinkImages(modelOutput) } },
+    });
+  }
+  ```
+
+  A processor that replaces only `result`, or edits it in place, now has the new value mapped through `toModelOutput` again, so the model reads the mapping of the processed result rather than of the original. With several processors, each one receives the `modelOutput` the processor before it committed, so a later processor can't bring back an image an earlier one removed. This applies to both regular and durable agents. In durable agents, a `processToolResult` that throws now also keeps the unprocessed mapped output from the model, not only the raw result.
+
 ## 1.84.0-alpha.1
 
 ### Minor Changes

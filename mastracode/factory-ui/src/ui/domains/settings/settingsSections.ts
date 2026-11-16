@@ -43,10 +43,17 @@ export function sessionDefaultsAnchor(modelScope: FactoryModelScope | undefined)
 
 export const VOICE_INPUT_ANCHOR = 'voice-input';
 
-/** Work Intake's list of routes that decide where new cards land. */
-export const NEW_CARD_ROUTES_ANCHOR = 'new-cards';
+/** The order intake asks boards to take a new item, in Settings → Intake. */
+export const INTAKE_ORDER_ANCHOR = 'intake-order';
 
-type SettingsAnchor = ModelDefaultsAnchor | typeof VOICE_INPUT_ANCHOR | typeof NEW_CARD_ROUTES_ANCHOR;
+/** Items no board took, in Settings → Intake. */
+export const NOT_ROUTED_ANCHOR = 'not-routed';
+
+type SettingsAnchor =
+  | ModelDefaultsAnchor
+  | typeof VOICE_INPUT_ANCHOR
+  | typeof INTAKE_ORDER_ANCHOR
+  | typeof NOT_ROUTED_ANCHOR;
 
 type SettingsTarget = { section: SettingsSection; anchor?: ModelDefaultsAnchor };
 

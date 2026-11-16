@@ -1,4 +1,6 @@
+import { matchesSourceFilters } from '@mastra/factory/work-items/card-source-filters';
 import { describe, expect, it } from 'vitest';
+import { boardFilterFields } from './components/boardFilterFields';
 import {
   boardFilterItems,
   boardFilterParams,
@@ -8,6 +10,26 @@ import {
 } from './boardFilters';
 
 describe('Board source filters', () => {
+  it('offers Detail findings even without a connected source and filters them from other cards', () => {
+    const state = boardFiltersFromParams(new URLSearchParams(), false);
+    const source = boardFilterFields({
+      reviewsPullRequests: false,
+      filters: state,
+      participants: [],
+      availableLabels: [],
+      connectedSources: new Set(),
+    }).find(field => field.id === 'source');
+
+    expect(source?.suggestions).toEqual(
+      expect.arrayContaining([expect.objectContaining({ value: 'detail', label: 'Detail' })]),
+    );
+    const selected = withBoardFilterValues(state, 'source', ['detail']);
+    expect(matchesSourceFilters({ source: 'detail-finding', metadata: {}, hasPullRequest: false }, selected)).toBe(
+      true,
+    );
+    expect(matchesSourceFilters({ source: 'manual', metadata: {}, hasPullRequest: false }, selected)).toBe(false);
+  });
+
   it('preserves every filter through URL and saved view filters', () => {
     const params = new URLSearchParams(
       'source=github&source=linear&linearProject=project-a&linearProject=project-b&author=github%3Aalice&assignee=github%3Abob&label=needs%2Creview&label=p0&sort=created-newest',

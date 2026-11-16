@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PubSub } from '../../../events';
+import { createRunStorage } from '../../run-storage';
 import type { StepFlowEntry } from '../../types';
 import type { Workflow } from '../../workflow';
 import { StepExecutor } from '../step-executor';
@@ -20,6 +21,13 @@ const args = {
   requestContext: {},
 } as unknown as ProcessorArgs;
 
+const runStorage = createRunStorage({
+  storageVersion: 2,
+  workflowName: 'wf',
+  runId: 'run-1',
+  getStore: async () => undefined,
+});
+
 const cases = [
   {
     name: 'sleep for 30 days',
@@ -27,6 +35,7 @@ const cases = [
       processWorkflowSleep(args, {
         pubsub,
         stepExecutor: new StepExecutor({}),
+        runStorage,
         step: { type: 'sleep', id: 'nap', duration: thirtyDays } as Extract<StepFlowEntry, { type: 'sleep' }>,
       }),
   },
@@ -36,6 +45,7 @@ const cases = [
       processWorkflowSleepUntil(args, {
         pubsub,
         stepExecutor: new StepExecutor({}),
+        runStorage,
         step: { type: 'sleepUntil', id: 'until', date: new Date(Date.now() + thirtyDays) } as Extract<
           StepFlowEntry,
           { type: 'sleepUntil' }

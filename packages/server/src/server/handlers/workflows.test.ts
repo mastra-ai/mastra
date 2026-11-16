@@ -1700,6 +1700,39 @@ describe('vNext Workflow Handlers', () => {
         parse({ workflowId: 'inner', runId: 'run-1', executionPath: [0], parentWorkflow: { workflowId: 'outer' } }),
       ).toBe(false);
     });
+
+    it("runs the step under the run's storage version", async () => {
+      const read = createStep({
+        id: 'read',
+        inputSchema: z.object({}),
+        outputSchema: z.any(),
+        execute: async ({ getStepResult }) => getStepResult('earlier'),
+      });
+      const workflow = createWorkflow({ id: 'reads', inputSchema: z.object({}), outputSchema: z.any() })
+        .then(read)
+        .commit();
+      const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: { reads: workflow } });
+      const execute = (storageVersion?: 1 | 2) =>
+        EXECUTE_WORKFLOW_STEP_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workflowId: 'reads',
+          runId: 'run-1',
+          ...EXECUTE_WORKFLOW_STEP_ROUTE.bodySchema!.parse({
+            stepId: 'read',
+            executionPath: [0],
+            stepResults: { earlier: { status: 'success', output: { n: 1 } } },
+            state: {},
+            requestContext: {},
+            input: {},
+            storageVersion,
+          }),
+        } as any);
+
+      await expect(execute()).resolves.toMatchObject({ status: 'success', output: { n: 1 } });
+      const v2 = (await execute(2)) as { status: string; error: Error };
+      expect(v2.status).toBe('failed');
+      expect(v2.error.message).toMatch(/Use `await getStepResultAsync\("earlier"\)` instead/);
+    });
   });
 });
 

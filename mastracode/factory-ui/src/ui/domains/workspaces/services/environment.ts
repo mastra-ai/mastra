@@ -22,7 +22,6 @@ export interface FactoryEnvironmentRepository {
   teardownCommand: string | null;
   lastBuildStatus: EnvironmentRepositoryBuildStatus;
   lastBuildError: string | null;
-  lastBuiltAt: string | null;
 }
 
 /** The host's FactorySandbox as the route describes it: provider id, settings JSON Schema, capabilities. */
