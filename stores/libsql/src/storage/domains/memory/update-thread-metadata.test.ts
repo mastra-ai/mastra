@@ -86,12 +86,12 @@ describe('MemoryLibSQL.updateThread metadata', () => {
     });
   });
 
-  it('returns what getThreadById returns for a title-only update of a thread with NULL metadata', async () => {
+  it('returns {} metadata for a title-only update of a thread with NULL metadata, as before', async () => {
     await client.execute({ sql: `UPDATE mastra_threads SET metadata = NULL WHERE id = ?`, args: ['thread-1'] });
 
     const updated = await store.updateThread({ id: 'thread-1', title: 'New title' });
 
-    expect(updated).toEqual(await store.getThreadById({ threadId: 'thread-1' }));
-    expect(updated.metadata).toBeNull();
+    expect(updated.title).toBe('New title');
+    expect(updated.metadata).toEqual({});
   });
 });

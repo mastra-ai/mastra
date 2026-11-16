@@ -1615,7 +1615,8 @@ export class MemoryLibSQL extends MemoryStorage {
         id: row.id as string,
         resourceId: row.resourceId as string,
         title: row.title as string,
-        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata as any),
+        // Base spread a NULL column into {}; keep returning an object.
+        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : ((row.metadata as any) ?? {}),
         createdAt: new Date(row.createdAt as string),
         updatedAt: now,
       };
