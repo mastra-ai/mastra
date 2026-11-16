@@ -2002,6 +2002,7 @@ it('catalog extensions execute distinct resources with configured billing polici
 
 it('invalid catalogs and partial startup fail without external work or leaked lifecycle', async () => {
   const f = await catalogFixture();
+  f.catalog.configuration.billingKeys.meters.push({ key: 'tasks', unit: 'tasks', funding: ['metered'] });
   const [answer, extra, report] = f.catalog.definitions;
   const invalid: readonly ResourceDefinition[][] = [
     [answer, answer],
@@ -2012,6 +2013,36 @@ it('invalid catalogs and partial startup fail without external work or leaked li
     [{ ...answer, policy: { ...answer.policy, charge: { type: 'credits', meter: 'missing', units: 1 } } }],
     [{ ...answer, operations: ['start'] }],
     [{ ...answer, adapter: { ...answer.adapter, maxSteps: 0 } }],
+    [
+      {
+        ...answer,
+        adapter: { ...answer.adapter, artifactSlots: 1 },
+        policy: { ...answer.policy, charge: { type: 'none' } },
+      },
+    ],
+    [
+      answer,
+      {
+        ...report,
+        adapter: { ...report.adapter, artifactSlots: 1 },
+        policy: { ...report.policy, charge: { type: 'none' } },
+      },
+    ],
+    [
+      {
+        ...answer,
+        adapter: { ...answer.adapter, artifactSlots: 1 },
+        policy: { ...answer.policy, charge: { type: 'per-task', meter: 'tasks', units: 1, funding: 'metered' } },
+      },
+    ],
+    [
+      answer,
+      {
+        ...report,
+        adapter: { ...report.adapter, artifactSlots: 1 },
+        policy: { ...report.policy, charge: { type: 'per-task', meter: 'tasks', units: 1, funding: 'metered' } },
+      },
+    ],
     [{ ...answer, actions: [...answer.actions, ...answer.actions] }],
     [{ ...report, agentDependencies: ['missing'] }],
     [answer, { ...report, agentDependencies: ['catalog-report'] }],
@@ -2031,7 +2062,12 @@ it('invalid catalogs and partial startup fail without external work or leaked li
   ];
   for (const resources of invalid) {
     await expect(
-      createBillingApplication({ environment: f.environment, catalog: { ...f.catalog, definitions: resources } }),
+      createBillingApplication({ environment: f.environment, catalog: { ...f.catalog, definitions: resources } }).then(
+        application => {
+          cleanups.push(() => application.close());
+          return application;
+        },
+      ),
     ).rejects.toMatchObject({ code: 'invalid_configuration' });
     expect(f.created).toEqual([]);
     expect(f.closed).toEqual([]);

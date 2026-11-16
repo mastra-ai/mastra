@@ -1,5 +1,6 @@
 import type { BillingProvider } from './contracts/provider.js';
 import { z } from 'zod';
+import { prepaid } from './contracts/reservations.js';
 import type { ExecutionScope } from './runtime/execution-scope.js';
 import type { AgentProjection } from './mastra-resources.js';
 import type { ArtifactReader } from './contracts/artifacts.js';
@@ -224,6 +225,8 @@ const graphSchema = z
 const adapterPolicySchema = z.array(z.custom<ResourceDefinition>()).superRefine((resources, context) => {
   for (const resource of resources) {
     const charge = resource.policy.charge;
+    if (resource.adapter.artifactSlots !== undefined && !prepaid(resource.policy))
+      context.addIssue({ code: 'custom', message: 'Artifact slots require a prepaid reservation.' });
     if (
       resource.measurements.some(
         measure => !['tokens', 'input-tokens', 'output-tokens', 'model-calls'].includes(measure.key),
