@@ -1,5 +1,6 @@
 import { MongoClient } from 'mongodb';
-import type { Db, Document } from 'mongodb';
+import type { CommandStartedEvent, Db, Document } from 'mongodb';
+import type { MongoDBVector } from '../';
 
 export const ATLAS_LOCAL_URI =
   'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true&serverSelectionTimeoutMS=2000';
@@ -52,4 +53,34 @@ export function deferred<T = void>(): { promise: Promise<T>; resolve: (v: T) => 
   let resolve!: (v: T) => void;
   const promise = new Promise<T>(r => (resolve = r));
   return { promise, resolve };
+}
+
+/** A test hook that signals `reached` when called, then blocks until `release` resolves. */
+export function pause() {
+  const reached = deferred();
+  const release = deferred();
+  return {
+    reached,
+    release,
+    hook: async () => {
+      reached.resolve();
+      await release.promise;
+    },
+  };
+}
+
+/** Fails fast instead of hanging when a hook is never called. */
+export async function reached(p: { reached: { promise: Promise<void> } }): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    p.reached.promise,
+    new Promise((_r, reject) => (timer = setTimeout(() => reject(new Error('hook not reached')), 15_000))),
+  ]).finally(() => clearTimeout(timer));
+}
+
+/** Every command the store's client sends from now on. The store needs `options: { monitorCommands: true }`. */
+export function captureCommands(store: MongoDBVector): CommandStartedEvent[] {
+  const events: CommandStartedEvent[] = [];
+  (store as any).client.on('commandStarted', (e: CommandStartedEvent) => events.push(e));
+  return events;
 }

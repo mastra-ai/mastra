@@ -14,8 +14,16 @@ import type {
   UpdateVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
-import { MongoClient, ObjectId } from 'mongodb';
-import type { MongoClientOptions, Document, Db, Collection, ClientSession } from 'mongodb';
+import { MongoClient, ObjectId, ReadPreference } from 'mongodb';
+import type {
+  MongoClientOptions,
+  Document,
+  Db,
+  Collection,
+  ClientSession,
+  ListSearchIndexesOptions,
+  TransactionOptions,
+} from 'mongodb';
 import packageJson from '../../package.json';
 
 import { MongoDBFilterTranslator } from './filter';
@@ -333,7 +341,10 @@ interface IndexTarget {
 }
 
 /** The driver types listSearchIndexes() rows as `{ name }`; these are the fields this store reads. */
-type SearchIndexInfo = { name: string; status?: string; latestDefinition?: Document };
+type SearchIndexRow = { name: string; id?: string; status?: string; latestDefinition?: Document };
+
+/** Which protocol step lists a search index name (see {@link MongoDBVector.listSearchIndexRows}). */
+type ListPhase = 'P1' | 'P3a' | 'P5' | 'reconciler' | 'orphan' | 'claim' | 'delete';
 
 /** Shape of a registry document persisted in {@link MongoDBVector.REGISTRY_COLLECTION}. */
 interface RegistryDoc extends IndexTarget {
@@ -447,6 +458,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     afterCreateSearchIndexRead?: (indexName: string) => Promise<void>;
     /** Called by createSearchIndex after the registry write and before provisioning; a throw simulates a provisioning failure. */
     beforeSearchIndexProvision?: (indexName: string) => Promise<void>;
+    /** Wraps every `createSearchIndexes` command; `run` sends the real one. */
+    createSearchIndexesCommand?: (command: Document, run: () => Promise<Document>) => Promise<Document>;
   };
   /**
    * Name of the mastra-owned collection that durably records the logical-index → target
@@ -454,6 +467,15 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * collection is never polluted with mastra bookkeeping. Excluded from `listIndexes`.
    */
   private static readonly REGISTRY_COLLECTION = '__mastra_vector_indexes__';
+  /**
+   * Registry reads and writes, and their transactions, never inherit the client's read preference
+   * or concerns (I7a): a read from a lagging secondary would miss a committed registration.
+   */
+  private static readonly TXN_OPTIONS: TransactionOptions = {
+    readPreference: 'primary',
+    readConcern: { level: 'majority' },
+    writeConcern: { w: 'majority' },
+  };
   /**
    * Waits between attempts while a queried index is in INITIAL_SYNC, about six seconds in all.
    * On a live Atlas cluster the window lasted around two seconds for both a regular and an
@@ -644,9 +666,49 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     return `${target.collectionName}_search_index`;
   }
 
+  /** The registry handle, pinned to the primary with majority concerns (I7a). */
+  private registry(): Collection<RegistryDoc> {
+    return this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION, MongoDBVector.TXN_OPTIONS);
+  }
+
+  /**
+   * The only path for `createSearchIndexes`, `dropSearchIndex` and `updateSearchIndex` (I7a): on the
+   * primary, with no read or write concern, which the server rejects for these commands.
+   */
+  private async runSearchIndexCommand(command: Document, timeoutMS?: number): Promise<Document> {
+    const run = () => this.db.command(command, { readPreference: 'primary', ...(timeoutMS ? { timeoutMS } : {}) });
+    const hook = this.testHooks?.createSearchIndexesCommand;
+    return 'createSearchIndexes' in command && hook ? hook(command, run) : run();
+  }
+
+  /**
+   * List the search indexes named `name` on the primary with `readConcern: local` (I7a). The driver's
+   * listing cursor ignores the handle's and the client's settings, and takes a read preference only
+   * as a `ReadPreference` instance, so both are passed per call. A missing collection has none.
+   */
+  private async listSearchIndexRows(
+    collection: Collection<MongoDBDocument>,
+    name: string,
+    _phase: ListPhase,
+  ): Promise<SearchIndexRow[]> {
+    try {
+      return (await collection
+        // The driver's type omits readConcern, but the cursor sends it; without it a client with
+        // readConcernLevel=majority would send none.
+        .listSearchIndexes(name, {
+          readPreference: ReadPreference.primary,
+          readConcern: { level: 'local' },
+        } as ListSearchIndexesOptions)
+        .toArray()) as SearchIndexRow[];
+    } catch (err: any) {
+      if (err?.codeName === 'NamespaceNotFound' || err?.code === 26) return [];
+      throw err;
+    }
+  }
+
   /** Read a logical-index target from the durable registry collection, if present. */
   private async readRegistryEntry(indexName: string): Promise<RegistryDoc | null> {
-    const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
+    const registry = this.registry();
     return (await registry.findOne({ _id: indexName })) ?? null;
   }
 
@@ -667,7 +729,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     upsert = true,
     bumpRev = false,
   ): Promise<void> {
-    const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
+    const registry = this.registry();
     await registry.updateOne(
       { _id: indexName, ...claim },
       { $set: { indexName, ...entry }, ...(bumpRev ? { $inc: { rev: 1 } } : {}) },
@@ -704,7 +766,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     this.indexTargets.delete(indexName);
     this.declaredFilterPaths.delete(indexName);
     try {
-      const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
+      const registry = this.registry();
       // The rolled-back write never changes `rev`, so it still holds the value read before it.
       const filter = {
         _id: indexName,
@@ -783,7 +845,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     try {
       await session.withTransaction(async () => {
         result = await fn(session);
-      });
+      }, MongoDBVector.TXN_OPTIONS);
       committed = true;
       await this.testHooks?.afterDeleteCommit?.(indexName);
       return result;
@@ -807,7 +869,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     collection: Collection<MongoDBDocument> | null,
   ): Promise<void> {
     const indexName = entry._id;
-    const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
+    const registry = this.registry();
     let work: { drop: string[]; deleteToken: string } | 'gone' | 'handed-off';
     if (entry.deleting && entry.deleteToken) {
       work = { drop: recordedDropSet(entry), deleteToken: entry.deleteToken };
@@ -888,7 +950,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     deleteToken: string,
     name: string,
   ): Promise<'drop' | 'kept' | 'gone'> {
-    const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
+    const registry = this.registry();
     const live = { collectionName, _id: { $ne: indexName }, deleting: { $ne: true } };
     const users = {
       ...live,
@@ -961,7 +1023,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     expected: Partial<Pick<RegistryDoc, 'searchIndexName' | 'textSearchIndexName'>>,
   ): Promise<void> {
     await this.testHooks?.beforePendingDropCheck?.(indexName);
-    const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
+    const registry = this.registry();
     const own = await registry.findOne({ _id: indexName });
     if (!own) {
       throw new MastraError({
@@ -1016,7 +1078,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   private async deleteManagedCollection(entry: RegistryDoc): Promise<void> {
     const indexName = entry._id;
     const collectionName = entry.collectionName;
-    const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
+    const registry = this.registry();
     const othersFilter = { collectionName, _id: { $ne: indexName } };
     const inUse = (others: RegistryDoc[]) =>
       new MastraError({
@@ -1651,10 +1713,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   ): Promise<boolean> {
     // The server answers a create matching an existing index's definition with success, so
     // success alone does not prove this call created it.
-    const existing = (await collection.listSearchIndexes(description.name).toArray()) as SearchIndexInfo[];
+    const existing = await this.listSearchIndexRows(collection, description.name, 'P3a');
     if (existing.some(idx => idx.status !== 'DELETING' && idx.status !== 'DOES_NOT_EXIST')) return false;
     try {
-      await collection.createSearchIndex(description);
+      await this.runSearchIndexCommand({ createSearchIndexes: collection.collectionName, indexes: [description] });
       return true;
     } catch (error: any) {
       if (error?.codeName === 'IndexAlreadyExists') {
@@ -1671,7 +1733,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    */
   private async dropSearchIndexIgnoringMissing(collection: Collection<MongoDBDocument>, name: string): Promise<void> {
     try {
-      await collection.dropSearchIndex(name);
+      await this.runSearchIndexCommand({ dropSearchIndex: collection.collectionName, name });
     } catch (err: any) {
       const code = err?.codeName ?? err?.code;
       // NamespaceNotFound: the caller's BYO collection was dropped externally — its search
@@ -1829,9 +1891,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           textSearchIndexName: previous.textSearchIndexName ?? null,
           deleting: { $ne: true },
         };
-        const written = await this.db
-          .collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION)
-          .updateOne(observed, sameName ? { $set: textFields } : rename);
+        const written = await this.registry().updateOne(observed, sameName ? { $set: textFields } : rename);
         if (written.matchedCount === 0) {
           const current = await this.readRegistryEntry(indexName);
           this.assertNotDeleting(current, 'CREATE_SEARCH_INDEX');
@@ -1868,10 +1928,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       } else if ((sameName && previous?.ownsTextIndex) || previous?.retiredTextIndexNames?.includes(name)) {
         // Ours already: either unchanged, or a retired name this rename just reactivated.
         // Recreating our own index with a different `fields` mapping must change the mapping.
-        await collection.updateSearchIndex(name, definition);
+        await this.runSearchIndexCommand({ updateSearchIndex: collection.collectionName, name, definition });
       } else {
         // Someone else's index: attach to it as-is, and refuse if it maps different fields.
-        const [existing] = (await collection.listSearchIndexes(name).toArray()) as SearchIndexInfo[];
+        const [existing] = await this.listSearchIndexRows(collection, name, 'P1');
         if (!searchDefinitionsEquivalent(existing?.latestDefinition, definition)) {
           const hint =
             !target.isByo && target.ownsTextIndex === undefined
@@ -2350,7 +2410,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
     const startTime = Date.now();
     while (Date.now() - startTime < timeoutMs) {
-      const indexInfo = (await collection.listSearchIndexes().toArray()) as SearchIndexInfo[];
+      const indexInfo = (await collection.listSearchIndexes().toArray()) as SearchIndexRow[];
       const indexData = indexInfo.find(idx => idx.name === indexNameInternal);
       const status = indexData?.status;
       if (status === 'READY') {
@@ -2391,7 +2451,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
     const startTime = Date.now();
     while (Date.now() - startTime < timeoutMs) {
-      const indexInfo = (await collection.listSearchIndexes().toArray()) as SearchIndexInfo[];
+      const indexInfo = (await collection.listSearchIndexes().toArray()) as SearchIndexRow[];
       const indexData = indexInfo.find(idx => idx.name === textIndex);
       if (indexData?.status === 'READY') {
         return;
@@ -2766,7 +2826,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // (a) Registered logical index names (includes BYO). One read serves both purposes:
       // the logical names to return, and the physical collection names of registered
       // (esp. BYO) indexes so step (b) does not re-list them under their physical name.
-      const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
+      const registry = this.registry();
       const registered = await registry.find({}, { projection: { _id: 1, collectionName: 1 } }).toArray();
       const registeredCollections = new Set<string>();
       for (const doc of registered) {
@@ -2851,7 +2911,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   private async readVectorIndexDefinition(indexName: string): Promise<Omit<IndexStats, 'count'>> {
     const { collectionName, searchIndexName } = await this.resolveIndexTarget(indexName);
     const collection = await this.getCollection(collectionName, true);
-    const indexInfo = (await collection.listSearchIndexes().toArray()) as SearchIndexInfo[];
+    const indexInfo = (await collection.listSearchIndexes().toArray()) as SearchIndexRow[];
     const indexData = indexInfo.find(idx => idx.name === searchIndexName);
 
     if (!indexData) {
@@ -2961,7 +3021,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * One-time upgrade helper for managed indexes created before `@mastra/mongodb@1.15.0`, or registered by 1.15–1.27 without ownership records. Calling it asserts that Mastra created the collection and its recorded search indexes; `deleteIndex()` will then drop the collection and all its data.
    */
   async claimLegacyIndex({ indexName }: { indexName: string }): Promise<void> {
-    const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
+    const registry = this.registry();
     const vectorIndex = `${indexName}_vector_index`;
     const refuse = (
       code: 'BYO' | 'CONFLICT' | 'IN_USE' | 'NOT_FOUND',
@@ -3040,10 +3100,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         return await claimRegistered(entry);
       }
 
-      const collectionExists = await this.db.listCollections({ name: indexName }).hasNext();
-      const searchIndexes = collectionExists
-        ? ((await this.db.collection(indexName).listSearchIndexes().toArray()) as SearchIndexInfo[]).map(i => i.name)
-        : [];
+      const claimed = this.db.collection<MongoDBDocument>(indexName);
+      const searchIndexes: string[] = [];
+      for (const name of [vectorIndex, `${indexName}_search_index`]) {
+        const rows = await this.listSearchIndexRows(claimed, name, 'claim');
+        if (rows.length) searchIndexes.push(name);
+      }
       if (!searchIndexes.includes(vectorIndex)) {
         throw refuse(
           'NOT_FOUND',
@@ -3464,7 +3526,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     const { collectionName, searchIndexName } = await this.resolveIndexTarget(indexName);
     const collection = await this.getCollection(collectionName, true);
     const indexNameInternal = searchIndexName;
-    const indexInfo = (await collection.listSearchIndexes().toArray()) as SearchIndexInfo[];
+    const indexInfo = (await collection.listSearchIndexes().toArray()) as SearchIndexRow[];
     const indexData = indexInfo.find(idx => idx.name === indexNameInternal);
 
     const paths = new Set<string>();
