@@ -1004,6 +1004,8 @@ export class Agent<
   #streamBus?: AgentStreamBus;
   /** Published runs executing in this process, with the owner the abort route checks. */
   #publishedRuns = new Map<string, { publisher: AgentStreamPublisher; resourceId?: string; threadId?: string }>();
+  /** Run ids between their admission check and their publisher, which `#publishedRuns` covers from then on. */
+  #admittingRuns = new Set<string>();
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext, TEditor>;
   #subAgentToolSchemas: Partial<Record<SubAgentToolSchemaVariant, SubAgentToolSchemas>> = {};
@@ -1849,30 +1851,57 @@ export class Agent<
    *
    * Reading the record and writing our own is not atomic, so two processes
    * starting the same id within one cache round-trip of each other can still
-   * overlap. The cache has no compare-and-set to close that.
+   * overlap. The cache has no compare-and-set to close that. Within this
+   * process the id is reserved from the check until its publisher exists, so
+   * no other run of the id can start, or start and finish, in between.
    *
-   * Returns the record it accepted, so the caller can tell a fresh id from a
-   * reused one.
+   * Only ids the caller supplied, and resumes, are checked against the record.
+   * An id this server generated can't already be held in the cache, and
+   * skipping the read lets the run start while the cache is unreachable. The
+   * read is bounded and fails closed: when the record can't be read in time,
+   * there is no way to tell whether another run owns the id.
+   *
+   * Returns the run's publisher, or undefined when streams are off.
    */
-  async #assertRunIdAvailable(
+  async #claimRunStream(
     runId: string,
-    resourceId: string | undefined,
-    { resuming }: { resuming: boolean },
-  ): Promise<AgentRunRecord | undefined> {
+    owner: { resourceId?: string; threadId?: string; abortSignal?: AbortSignal },
+    { resuming, checkRecord }: { resuming: boolean; checkRecord: boolean },
+  ): Promise<AgentStreamPublisher | undefined> {
     const bus = this.#ownStreamBus();
     if (!bus) return undefined;
 
     // A resume may still find its own finishing publisher here: the suspension is
     // persisted before the publisher ends, so the entry outlives the handoff.
-    if (!resuming && this.#publishedRuns.has(runId)) {
+    if (this.#admittingRuns.has(runId) || (!resuming && this.#publishedRuns.has(runId))) {
       throw runIdAlreadyClaimedError({ agentName: this.name, runId });
     }
-
-    // Fail closed: without the record we cannot tell whether another run owns this id.
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let record: AgentRunRecord | undefined;
+    this.#admittingRuns.add(runId);
     try {
-      record = await Promise.race([
+      const record = checkRecord ? await this.#readRunRecordForAdmission(bus, runId) : undefined;
+      if (record?.resourceId && record.resourceId !== owner.resourceId) {
+        throw runIdAlreadyClaimedError({ agentName: this.name, runId });
+      }
+      if (record?.status === 'running' && !resuming) {
+        throw runIdAlreadyClaimedError({ agentName: this.name, runId });
+      }
+      // A finished run's log stays on the topic until its cleanup timer fires, so a reused id
+      // starts the new run on top of the old frames: a reader replaying from the start would
+      // get the previous finish event and close before the new run says anything. Suspended
+      // runs keep their log, because that is the history the resume continues.
+      if (record?.status === 'finished') {
+        await bus.pubsub.clearTopic(AGENT_STREAM_TOPIC(runId));
+      }
+      return this.#createStreamPublisher(bus, runId, owner);
+    } finally {
+      this.#admittingRuns.delete(runId);
+    }
+  }
+
+  async #readRunRecordForAdmission(bus: AgentStreamBus, runId: string): Promise<AgentRunRecord | undefined> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
         readAgentRunRecord(bus.runRecordCache, this.id, runId),
         new Promise<never>((_, reject) => {
           timer = setTimeout(
@@ -1886,22 +1915,13 @@ export class Agent<
     } finally {
       clearTimeout(timer);
     }
-    if (!record) return undefined;
-    if (record.resourceId && record.resourceId !== resourceId) {
-      throw runIdAlreadyClaimedError({ agentName: this.name, runId });
-    }
-    if (record.status === 'running' && !resuming) {
-      throw runIdAlreadyClaimedError({ agentName: this.name, runId });
-    }
-    return record;
   }
 
   #createStreamPublisher(
+    bus: AgentStreamBus,
     runId: string,
     owner: { resourceId?: string; threadId?: string; abortSignal?: AbortSignal },
-  ): AgentStreamPublisher | undefined {
-    const bus = this.#ownStreamBus();
-    if (!bus) return undefined;
+  ): AgentStreamPublisher {
     const publisher = createAgentStreamPublisher({
       pubsub: bus.pubsub,
       runId,
@@ -9103,6 +9123,7 @@ export class Agent<
   async #execute<OUTPUT>({
     methodType,
     resumeContext,
+    generatedRunId,
     _threadStreamPubSub,
     ...options
   }: InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub }) {
@@ -9161,6 +9182,7 @@ export class Agent<
             const delegated: unknown = (resolved as unknown as this).#execute<OUTPUT>({
               methodType,
               resumeContext,
+              generatedRunId,
               _threadStreamPubSub,
               ...options,
               requestContext,
@@ -9350,14 +9372,19 @@ export class Agent<
       memory,
     });
 
-    // Admit the run once its setup has resolved, and before any of its state is claimed.
-    // The check must not run before the setup awaits: a run admitted early can hold that
+    // Claim the run once its setup has resolved, and before any of its state is taken.
+    // The claim must not run before the setup awaits: a run admitted early can hold that
     // admission through a paused setup, let another run finish on the same id, and then
-    // claim it. A refused run must not open a span or consume the output processors a
+    // take it over. A refused run must not open a span or consume the output processors a
     // resume is holding either, or the retry it is told to make would start without them.
-    const priorRunRecord = await this.#assertRunIdAvailable(runId, resourceId, {
-      resuming: Boolean(resumeContext?.claim),
-    });
+    const streamPublisher = await this.#claimRunStream(
+      runId,
+      { resourceId, threadId: threadFromArgs?.id, abortSignal: options.abortSignal },
+      {
+        resuming: Boolean(resumeContext?.claim),
+        checkRecord: Boolean(resumeContext) || (!generatedRunId && !!options.runId),
+      },
+    );
 
     const keptOutputProcessors = this.#suspendedRunOutputProcessors.get(runId);
     this.#suspendedRunOutputProcessors.delete(runId);
@@ -9475,20 +9502,6 @@ export class Agent<
       normalizeToolPayloadTransformPolicy(
         this.#mastra?.getToolPayloadTransform?.() ?? (this.#mastra as any)?.getToolPayloadProjection?.(),
       );
-
-    // A finished run's log stays on the topic until its cleanup timer fires, so a reused id
-    // starts the new run on top of the old frames: a reader replaying from the start would
-    // get the previous finish event and close before the new run says anything. Suspended
-    // runs keep their log, because that is the history the resume continues.
-    if (priorRunRecord?.status === 'finished') {
-      await this.__getStreamBus()?.pubsub.clearTopic(AGENT_STREAM_TOPIC(runId));
-    }
-
-    const streamPublisher = this.#createStreamPublisher(runId, {
-      resourceId,
-      threadId: threadFromArgs?.id,
-      abortSignal: options.abortSignal,
-    });
 
     // Create the workflow with all necessary context
     const executionWorkflow = createPrepareStreamWorkflow<OUTPUT>({
@@ -10212,6 +10225,7 @@ export class Agent<
     // is invisible to signals: a signal sent mid-turn finds an idle thread and wakes a second run that
     // never sees this turn. The wait also reserves the thread for this runId.
     const threadStreamPubSub = this.getPubSub();
+    const generatedRunId = mergedOptions.runId == null;
     mergedOptions.runId ??=
       this.#mastra?.generateId({
         idType: 'run',
@@ -10246,6 +10260,7 @@ export class Agent<
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
+      generatedRunId,
       _threadStreamPubSub: threadStreamPubSub,
     } as unknown as InnerAgentExecutionOptions<any> & { _threadStreamPubSub?: PubSub };
 
@@ -11203,6 +11218,7 @@ export class Agent<
     }
 
     const threadStreamPubSub = this.getPubSub();
+    const generatedRunId = mergedOptions.runId == null;
     mergedOptions.runId ??=
       this.#mastra?.generateId({
         idType: 'run',
@@ -11240,6 +11256,7 @@ export class Agent<
       methodType: 'stream',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
+      generatedRunId,
       _threadStreamPubSub: threadStreamPubSub,
     } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub };
 

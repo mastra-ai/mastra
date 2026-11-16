@@ -63,11 +63,21 @@ export const AgentStreamEventTypes = {
 } as const;
 
 /**
- * How long starting a run waits for its run record to be read. Past this the run
- * is refused: an unreachable cache would otherwise hold the caller for the
- * whole outage.
+ * How long starting a run on a caller-supplied id, or resuming one, waits for
+ * its run record to be read. Past this the run is refused: an unreachable cache
+ * would otherwise hold the caller for the whole outage.
  */
 export const RUN_RECORD_ADMISSION_TIMEOUT_MS = 5_000;
+
+/**
+ * How many of a run's stream events may wait to be published. Past this the
+ * rest of the run is left out of its replay, so a bus that stopped answering
+ * doesn't hold the whole run in memory; the caller's own stream is unaffected.
+ */
+export const MAX_PENDING_STREAM_EVENTS = 10_000;
+
+/** Id of the error a run's replay ends with when events were left out of it. */
+export const AGENT_STREAM_REPLAY_INCOMPLETE = 'AGENT_STREAM_REPLAY_INCOMPLETE';
 
 /** How long a finished run's stream stays replayable before it is cleaned up. */
 export const DEFAULT_STREAM_CLEANUP_TIMEOUT_MS = 30_000;

@@ -187,6 +187,39 @@ describe('run id ownership', () => {
     expect(await agent.__getRunRecord('gated-run')).toMatchObject({ resourceId: 'tenant-b' });
   });
 
+  // Two runs of one id in this process must not both pass the check while the first is
+  // still reading the record: the second would publish on the first's topic, and the
+  // first would then overwrite the second's record.
+  it('refuses a second run of an id whose first run is still being admitted', async () => {
+    const cache = new InMemoryServerCache();
+    const agent = makeAgent();
+    new Mastra({ agents: { agent }, pubsub: new RecordingPubSub(), cache, logger: false });
+    const get = cache.get.bind(cache);
+    let releaseRead = () => {};
+    const readReleased = new Promise<void>(resolve => {
+      releaseRead = resolve;
+    });
+    let reads = 0;
+    vi.spyOn(cache, 'get').mockImplementation(async key => {
+      const value = await get(key);
+      if (String(key).includes('admitting-run') && ++reads === 1) await readReleased;
+      return value;
+    });
+
+    // Tenant A's record read is held, so A is between its check and its publisher.
+    const first = agent.stream('Say hello.', { runId: 'admitting-run', requestContext: resource('tenant-a') });
+    await vi.waitFor(() => expect(reads).toBe(1));
+
+    await expect(
+      agent.stream('Say hello.', { runId: 'admitting-run', requestContext: resource('tenant-b') }),
+    ).rejects.toMatchObject(RUN_ID_CLAIMED);
+
+    releaseRead();
+    await (await first).consumeStream();
+    expect(await agent.__getRunRecord('admitting-run')).toMatchObject({ resourceId: 'tenant-a', status: 'finished' });
+    vi.restoreAllMocks();
+  });
+
   it('refuses a scoped run id to a caller without a resource id', async () => {
     const agent = makeAgent();
     new Mastra({ agents: { agent }, pubsub: new RecordingPubSub(), logger: false });
@@ -288,12 +321,23 @@ describe('run id ownership', () => {
       vi.restoreAllMocks();
     });
 
-    // A paused or partitioned cache answers nothing; the run must be refused
-    // within the bound instead of waiting out the outage.
-    it.each([
-      ['a generated run id', undefined],
-      ['a caller-supplied run id', 'caller-run'],
-    ])('refuses to start %s when the cache does not answer', async (_label, runId) => {
+    // An id this server generated can't already be held by another run, so the run
+    // starts without reading the record and an unreachable cache doesn't hold it up.
+    it('runs a generated run id to completion when the cache does not answer', async () => {
+      const cache = new InMemoryServerCache();
+      const agent = makeAgent();
+      new Mastra({ agents: { agent }, pubsub: new RecordingPubSub(), cache, logger: false });
+      const get = vi.spyOn(cache, 'get').mockReturnValue(new Promise(() => {}));
+
+      const stream = await agent.stream('Say hello.', { requestContext: resource('tenant-a') });
+
+      expect(await stream.text).toBe('Hello there.');
+      expect(get.mock.calls.filter(([key]) => String(key).includes(stream.runId))).toEqual([]);
+    });
+
+    // A caller-supplied id may be another run's, so without the record the run is
+    // refused within the bound instead of waiting out the outage.
+    it('refuses to start a caller-supplied run id when the cache does not answer', async () => {
       const pubsub = new RecordingPubSub();
       const cache = new InMemoryServerCache();
       const agent = makeAgent();
@@ -301,7 +345,7 @@ describe('run id ownership', () => {
       vi.spyOn(cache, 'get').mockReturnValue(new Promise(() => {}));
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 
-      const started = agent.stream('Say hello.', { runId, requestContext: resource('tenant-a') });
+      const started = agent.stream('Say hello.', { runId: 'caller-run', requestContext: resource('tenant-a') });
       const refused = expect(started).rejects.toMatchObject(RECORD_UNAVAILABLE);
       await vi.advanceTimersByTimeAsync(RUN_RECORD_ADMISSION_TIMEOUT_MS);
       await refused;
@@ -317,7 +361,9 @@ describe('run id ownership', () => {
       const outage = new Error('Socket closed unexpectedly');
       vi.spyOn(cache, 'get').mockRejectedValue(outage);
 
-      const error = await agent.stream('Say hello.', { requestContext: resource('tenant-a') }).catch(e => e);
+      const error = await agent
+        .stream('Say hello.', { runId: 'failed-read-run', requestContext: resource('tenant-a') })
+        .catch(e => e);
 
       expect(error).toMatchObject(RECORD_UNAVAILABLE);
       expect(error.cause).toMatchObject({ message: 'Socket closed unexpectedly' });

@@ -941,6 +941,8 @@ export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptions
     claim?: AgentLoopResumeClaim;
   };
   toolCallId?: string;
+  /** Internal: The run id was generated for this call, not supplied by its caller */
+  generatedRunId?: boolean;
   /** Internal: The run's resolved scopes, persisted in suspend snapshots for resume */
   resolvedScopes?: string[];
 } & ([NonNullable<OUTPUT>] extends [never]
