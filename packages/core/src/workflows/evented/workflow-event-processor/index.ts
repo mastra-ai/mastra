@@ -1218,9 +1218,18 @@ export class WorkflowEventProcessor extends EventProcessor {
       }) ?? true;
 
     // Guarded execution requires a durable run row even when optional snapshots are disabled.
-    const requiresGuardedSnapshot =
-      workflowsStore?.supportsWorkflowStepGuards() && !restart && !timeTravel && !resumeSteps?.length;
-    if (shouldPersist || requiresGuardedSnapshot) {
+    const isFreshStart = !restart && !timeTravel && !resumeSteps?.length;
+    const requiresGuardedSnapshot = workflowsStore?.supportsWorkflowStepGuards() && isFreshStart;
+    // A nested run's record is how the evented engine merges parallel branch
+    // results and foreach iteration output, and how a resume finds the nested
+    // run at all. Top-level runs always write it (see evented/workflow.ts); a
+    // nested run must too, even when shouldPersistSnapshot skips 'running'.
+    // A child dispatched while its parent is resuming inherits the parent's
+    // `resumeSteps`, so freshness can't rely on `isFreshStart` alone: what
+    // matters is that the child has no run row yet. Resuming an existing child
+    // keeps its row (and its `suspended` status) untouched.
+    const requiresNestedRecord = !!parentWorkflow && (isFreshStart || (!restart && !timeTravel && !existingRun));
+    if (shouldPersist || requiresGuardedSnapshot || requiresNestedRecord) {
       const runningSnapshot: WorkflowRunState = {
         activePaths: restart ? (executionPath ?? restart.activePaths) : [],
         parentWorkflow: parentWorkflow
@@ -1240,7 +1249,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           __state: initialState,
         } as WorkflowRunState['context'],
         status: 'running',
-        guardedOnlySnapshot: !!requiresGuardedSnapshot && !shouldPersist,
+        guardedOnlySnapshot: (!!requiresGuardedSnapshot || requiresNestedRecord) && !shouldPersist,
         value: initialState,
         // A cancel sent before the first step result reads its execution claim from here.
         requestContext: withoutAuthToken(requestContext),
@@ -3534,6 +3543,9 @@ export class WorkflowEventProcessor extends EventProcessor {
             },
             executionPath: [0],
             runId: nestedRunId,
+            // The nested run's forced initial record must keep the parent's
+            // attribution (see processWorkflowStart).
+            resourceId: parentRun?.resourceId,
             resumeSteps,
             prevResult,
             resumeData,
