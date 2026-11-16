@@ -71,6 +71,7 @@ describe('durable tool-call remote abort listener', () => {
         suspend: vi.fn(),
         resumeData: undefined,
         requestContext: new Map(),
+        getState: async () => ({}),
         getInitData: () => ({
           runId: RUN_ID,
           agentId: 'waiter',
@@ -121,6 +122,7 @@ describe('durable tool-call remote abort listener', () => {
       suspend: vi.fn(),
       resumeData: undefined,
       requestContext: new Map(),
+      getState: async () => ({}),
       getInitData: () => ({
         runId: RUN_ID,
         agentId: 'waiter',

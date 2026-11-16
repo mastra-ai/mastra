@@ -764,11 +764,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         stateSigner: ctx.stateSigner,
         baseUrl: ctx.baseUrl,
         controller: ctx.controller,
-        memorySettings: ctx.storage.memorySettings,
         projects: ctx.storage.projects,
         emitAudit: ctx.hooks?.emitAudit,
         ingestFactoryEvent,
-        ...(ctx.workItems ? { workItems: ctx.workItems } : {}),
       }).filter(
         route =>
           route.path !== '/web/github/status' &&

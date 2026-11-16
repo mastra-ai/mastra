@@ -360,7 +360,6 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
       auth: ctx.auth,
       intake: ctx.storage?.intake,
       emitAudit: ctx.hooks?.emitAudit,
-      sandbox: ctx.sandbox,
       webhookSecret: this.webhookSecret,
       ingestFactoryEvent,
       ...(ctx.controller ? { controller: ctx.controller } : {}),

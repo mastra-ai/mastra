@@ -1,4 +1,4 @@
-import type { BoardPhasesRequest, WorkspaceChangesScope } from './types';
+import type { BoardPhasesRequest, SessionRowsRequest, WorkspaceChangesScope } from './types';
 
 /**
  * Stable, scoped React Query keys for the settings API.
@@ -119,6 +119,10 @@ export const queryKeys = {
     [...queryKeys.boardFacts(factoryProjectId), 'activity', depth] as const,
   workItemFilterOptions: (factoryProjectId: string | undefined) =>
     [...queryKeys.boardFacts(factoryProjectId), 'filter-options'] as const,
+  // Apart from a session page's read of the same route, so the feed refreshes only the sidebar's.
+  sidebarPullRequestSubscriptionsAll: () => ['sidebar-pull-request-subscriptions'] as const,
+  sidebarPullRequestSubscriptions: (provider: string, sessionId: string, threadId: string) =>
+    [...queryKeys.sidebarPullRequestSubscriptionsAll(), provider, sessionId, threadId] as const,
   knowledgeGraph: (factoryProjectId: string | undefined) =>
     ['factory', 'knowledge-graph', factoryProjectId ?? null] as const,
   knowledgePage: (factoryProjectId: string | undefined, pageId: string | null, noteCursor?: string) =>
@@ -141,6 +145,11 @@ export const queryKeys = {
     ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
   sessions: (factoryId: string | undefined) => ['sessions', factoryId ?? null] as const,
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
+  // Outside `workItems`: a rewrite of the cached cards must not reach these, which hold no card.
+  sessionRowsRoot: (factoryId: string | undefined) => ['factory', 'session-rows', factoryId ?? null] as const,
+  sessionRows: (factoryId: string | undefined, request: SessionRowsRequest) =>
+    [...queryKeys.sessionRowsRoot(factoryId), request] as const,
+  sessionActivity: (factoryId: string | undefined) => ['factory', 'session-activity', factoryId ?? null] as const,
   providers: () => ['providers'] as const,
   mastraGatewayCredits: () => ['mastra-gateway-credits'] as const,
   availableModels: (filter?: AvailableModelsFilter) =>
@@ -159,6 +168,9 @@ export const queryKeys = {
   workspaceTreeScope: (workspacePath: string | undefined) => ['workspace-tree', workspacePath ?? null] as const,
   workspaceTree: (workspacePath: string | undefined, path: string) =>
     ['workspace-tree', workspacePath ?? null, path] as const,
+  // Under the tree's prefix so a tree refresh refreshes it; the object never equals a folder path.
+  workspaceFileIndex: (workspacePath: string | undefined) =>
+    ['workspace-tree', workspacePath ?? null, { index: 'files' }] as const,
   workspaceFileScope: (workspacePath: string | undefined) => ['workspace-file', workspacePath ?? null] as const,
   workspaceFile: (workspacePath: string | undefined, filePath: string | undefined) =>
     ['workspace-file', workspacePath ?? null, filePath ?? null] as const,
@@ -189,9 +201,6 @@ export const queryKeys = {
       'state',
       ...(threadId ? [threadId] : []),
     ] as const,
-  // Session state must stay out of the key: it would reset the query on navigation, and a reset reads as every run going idle.
-  agentControllerActivity: (agentControllerId: string | undefined, baseUrl: string) =>
-    ['agent-controller', agentControllerId ?? null, 'activity', baseUrl] as const,
   agentControllerSettings: (agentControllerId: string | undefined, sessionId: string | undefined) =>
     [...queryKeys.agentControllerSession(agentControllerId, sessionId), 'settings'] as const,
   agentControllerPermissions: (agentControllerId: string | undefined, sessionId: string | undefined) =>

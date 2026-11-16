@@ -237,6 +237,13 @@ Tigris uses virtual-hosted-style addressing, so `forcePathStyle` must be set to 
     isOptional: true,
     defaultValue: 'false',
   },
+  {
+    name: 'owner',
+    type: '{ uid: number; gid: number }',
+    description:
+      "Owner of the files inside a FUSE mount when this filesystem is mounted in a sandbox, as numeric uid and gid. Set it when sandbox commands run as a user other than the one that mounts, so that user can read and write the mounted files. When unset, the sandbox probes the default user's uid and gid.",
+    isOptional: true,
+  },
 ]}
 />
 

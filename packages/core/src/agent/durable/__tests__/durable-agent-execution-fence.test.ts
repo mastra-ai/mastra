@@ -49,11 +49,10 @@ import {
   getExecutionClaim,
   resolveLeaseProvider,
 } from '../execution-fence';
-import { getExecutionStreamPublisher } from '../execution-stream-publisher';
+import { getExecutionStreamOwner } from '../execution-stream-publisher';
 import { runInRunFenceScope } from '../run-fence-scope';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitErrorEvent } from '../stream-adapter';
-import { storeRunsInV2 } from './storage-version';
 
 const THREAD = 'fence-thread';
 const RESOURCE = 'fence-resource';
@@ -502,7 +501,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       }
     });
 
-    it.each(['takeover', 'unverified'])(
+    it.each(['takeover', 'released-takeover', 'unverified'])(
       'a held terminal preserves shared state and only completes a nonsuperseded reader when ownership is %s (COR-1560)',
       async ownership => {
         const storage = createStorage(backend);
@@ -549,14 +548,15 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         const clearTopic = vi.spyOn(pubsub, 'clearTopic');
         const result = await agent.stream('Answer me.', { runId, onFinish });
         const stream = collect(result.fullStream);
+        const observer = ownership === 'unverified' ? await agent.observe(runId) : undefined;
+        const observedStream = observer ? collect(observer.fullStream) : undefined;
         const fence = ExecutionFence.getLocalActive(runId)!;
         const foreign = foreignOwnership(backend, storage, pubsub);
-        const originalPublisher = getExecutionStreamPublisher({
+        const originalPublisher = getExecutionStreamOwner({
           runId,
           agentId: agent.id,
           mastra,
           claim: fence.claim,
-          role: 'lifecycle',
         })!;
         try {
           await model.entered;
@@ -564,25 +564,28 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
           await fence.whenSettled;
           expect(fence.settlement).toBe('owned');
           expect(terminal).toBeDefined();
-          if (ownership === 'takeover') {
+          if (ownership !== 'unverified') {
             await foreign.hold(agent.id, runId, 'replacement-reader');
             const record =
               backend === 'storage'
                 ? await storage.stores.workflows!.getRunOwnership({ agentId: agent.id, runId })
                 : undefined;
-            const replacement = getExecutionStreamPublisher({
+            const replacement = getExecutionStreamOwner({
               runId,
               agentId: agent.id,
               mastra,
-              role: 'lifecycle',
               claim: { executionId: 'replacement-reader', agentId: agent.id, generation: record?.generation },
             })!;
             await replacement.ready;
+            if (ownership === 'released-takeover') {
+              await replacement.settle('finished');
+              await foreign.free(agent.id, runId, 'replacement-reader');
+            }
           }
           const expected = await agent.__getRunRecord(runId);
           expect(expected).toMatchObject({
-            status: 'running',
-            publisherId: ownership === 'takeover' ? 'replacement-reader' : fence.executionId,
+            status: ownership === 'released-takeover' ? 'finished' : 'running',
+            publisherId: ownership !== 'unverified' ? 'replacement-reader' : fence.executionId,
           });
           if (ownership === 'unverified') {
             const unavailable = new Error('ownership backend unavailable');
@@ -597,10 +600,15 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
           await terminalDelivery;
           expect(await agent.__getRunRecord(runId)).toEqual(expected);
           if (ownership === 'unverified') {
-            expect(stream.chunks.some(chunk => chunk.type === 'finish')).toBe(true);
+            await expect.poll(() => onFinish.mock.calls.length).toBe(1);
+            await expect.poll(() => stream.chunks.some(chunk => chunk.type === 'finish')).toBe(true);
             expect(onFinish).toHaveBeenCalledOnce();
             expect(onFinish.mock.calls[0]![0].text).toBe('old answer');
-            expect(scheduleCleanup).not.toHaveBeenCalled();
+            await expect(observer!.output.text).resolves.toBe('old answer');
+            for (const [cleanup] of scheduleCleanup.mock.calls) cleanup();
+            expect(clearTopic).not.toHaveBeenCalled();
+            observer!.cleanup();
+            await originalPublisher.detach();
             expect(clearTopic).not.toHaveBeenCalled();
             expect(agent.__getRunOwner(runId)).toBeDefined();
             result.cleanup();
@@ -619,6 +627,8 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         } finally {
           model.release();
           await stream.stop();
+          await observedStream?.stop();
+          observer?.detach();
           result.cleanup();
           if (ownership === 'takeover') await foreign.free(agent.id, runId, 'replacement-reader');
         }
@@ -644,12 +654,11 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       const result = await agent.stream('Answer me.', { runId });
       const stream = collect(result.fullStream);
       const fence = ExecutionFence.getLocalActive(runId)!;
-      const publisher = getExecutionStreamPublisher({
+      const publisher = getExecutionStreamOwner({
         runId,
         agentId: agent.id,
         mastra,
         claim: fence.claim,
-        role: 'lifecycle',
       })!;
       try {
         await model.entered;
@@ -677,7 +686,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         memory,
       });
       // The recoverer's checkpoint below is a v1 snapshot, which only replaces a run stored in v1.
-      const durableAgent = storeRunsInV2(createDurableAgent({ agent: baseAgent, pubsub }), false);
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub, storageVersion: 1 });
       new Mastra({ agents: { 'fence-agent': durableAgent as any }, logger: false, storage, pubsub });
 
       const result = await durableAgent.stream('What is the answer?', {
@@ -2131,7 +2140,16 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         [DurableStepIds.AGENTIC_EXECUTION]: 'running',
       });
       const writes = (
-        ['persistWorkflowSnapshot', 'updateWorkflowResults', 'updateWorkflowState', 'deleteWorkflowRunById'] as const
+        [
+          'persistWorkflowSnapshot',
+          'updateWorkflowResults',
+          'updateWorkflowState',
+          'appendWorkflowRunEntries',
+          'mergeWorkflowRunStepResult',
+          'writeWorkflowRunCheckpoint',
+          'updateWorkflowRunHeader',
+          'deleteWorkflowRunById',
+        ] as const
       ).map(method => vi.spyOn(workflows, method));
       await memory.saveMessages({ messages: [recoveredAssistantMessage(messageId, 'recovered answer')] });
 
@@ -2375,6 +2393,7 @@ describe.each(['durable', 'evented'] as const)('%s agent: the storage fence cove
       'updateWorkflowResults',
       'updateWorkflowState',
       'appendWorkflowRunEntries',
+      'mergeWorkflowRunStepResult',
       'writeWorkflowRunCheckpoint',
       'updateWorkflowRunHeader',
     ] as const) {

@@ -1,6 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { EyeIcon, Globe, LockIcon, MoreVerticalIcon, PencilIcon } from 'lucide-react';
+import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
+import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
+import { IconGlobe } from '@mastra/playground-ui/icons/central/IconGlobe';
+import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useNavigate } from 'react-router';
 import { useVisibilityChange } from '../../hooks/use-visibility-change-agent';
@@ -46,7 +50,7 @@ export function AgentBuilderMobileMenu({
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
           <Button size="icon-sm" variant="ghost" tooltip="More actions" data-testid="agent-builder-mobile-menu-trigger">
-            <MoreVerticalIcon />
+            <IconDotGrid1x3Vertical />
           </Button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end">
@@ -58,7 +62,7 @@ export function AgentBuilderMobileMenu({
                 void navigate(`/agent-builder/agents/${agentId}/view`, { viewTransition: true });
               }}
             >
-              <EyeIcon />
+              <IconEyeOpen />
               <span>View agent</span>
             </DropdownMenu.Item>
           )}
@@ -70,7 +74,7 @@ export function AgentBuilderMobileMenu({
                 void navigate(`/agent-builder/agents/${agentId}/edit`, { viewTransition: true });
               }}
             >
-              <PencilIcon />
+              <IconPencil />
               <span>Edit agent</span>
             </DropdownMenu.Item>
           )}
@@ -109,7 +113,7 @@ function VisibilityMenuItem({ agentId, disabled }: VisibilityMenuItemProps) {
             requestChange('public');
           }}
         >
-          <Globe />
+          <IconGlobe />
           <span>Add to library</span>
         </DropdownMenu.Item>
       ) : (
@@ -121,7 +125,7 @@ function VisibilityMenuItem({ agentId, disabled }: VisibilityMenuItemProps) {
             requestChange('private');
           }}
         >
-          <LockIcon />
+          <IconLock />
           <span>Remove from library</span>
         </DropdownMenu.Item>
       )}

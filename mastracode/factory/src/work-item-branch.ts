@@ -15,6 +15,7 @@ export type WorkItemBranchSource =
   | 'incidentio-follow-up'
   | 'github-dependabot-alert'
   | 'vanta-vulnerability'
+  | 'detail-finding'
   | 'slack-thread'
   | 'manual';
 
@@ -36,6 +37,7 @@ export function workItemBranchSource(externalSource: ExternalWorkItemSource | nu
   // Only GitHub, GitLab, Linear, Jira, and incident.io carry provider identities; anything
   // else (a Slack thread, say) is a plain work item rather than a mislabeled GitHub issue.
   if (externalSource.integrationId === 'vanta') return 'vanta-vulnerability';
+  if (externalSource.integrationId === 'detail') return 'detail-finding';
   if (externalSource.integrationId !== 'github') return 'manual';
   if (externalSource.type === 'dependabot-alert') return 'github-dependabot-alert';
   return externalSource.type === 'pull-request' ? 'github-pr' : 'github-issue';
@@ -158,6 +160,15 @@ export function mergeRequestNumberFromBranch(branch: string): number | undefined
   const match = /^factory\/gitlab-mr-([1-9]\d*)-[a-z0-9]{1,12}$/.exec(branch);
   const number = match ? Number(match[1]) : undefined;
   return number !== undefined && Number.isSafeInteger(number) ? number : undefined;
+}
+
+export const USER_BRANCH_PREFIX = 'user/';
+export const USER_SESSION_BRANCH_PREFIX = `${USER_BRANCH_PREFIX}session-`;
+// Slack thread sessions live on `slack/<thread>` branches (integrations/slack/slack.ts threadBranch).
+export const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
+
+export function isPersonSessionBranch(branch: string): boolean {
+  return branch.startsWith(USER_BRANCH_PREFIX) || branch.startsWith(SLACK_SESSION_BRANCH_PREFIX);
 }
 
 /** Whether a provider-reported branch name is safe to show an agent or pass to git. */

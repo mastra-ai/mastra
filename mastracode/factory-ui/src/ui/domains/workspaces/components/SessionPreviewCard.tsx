@@ -1,29 +1,35 @@
+import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { HoverCardContent } from '@mastra/playground-ui/components/HoverCard';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowRight } from 'lucide-react';
-import { useState } from 'react';
+import { useClock } from '@mastra/playground-ui/hooks/use-clock';
 import type { RefObject } from 'react';
 
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import { useSessionWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import { RelatedWorkItemLink } from '../../factory/components/RelatedWorkItemLink';
+import { toMinute } from '../../factory/stageStays';
 import type { TrailPerson } from '../hooks/useSessionTrail';
-import type { WorkItem } from '../../factory/services/workItems';
+import type { PullRequestSubscription } from '../../factory/services/githubSubscriptions';
 import { isPullRequestSource } from '../../factory/services/workItems';
 import { useSessionTrail } from '../hooks/useSessionTrail';
 import { layoutSessionTrack } from '../services/sessionTrack';
 import type { SessionOwnerDetails } from '../services/sessionPresentation';
-import type { SessionRowStatus } from '../services/sessionStatus';
-import type { FactoryUserSession } from '../services/user-sessions';
+import type { SessionRowSession } from '../services/sessionRows';
 import { SessionTrack } from './SessionTrack';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 
 export interface SessionPreviewDetails {
   factoryId: string;
-  session: FactoryUserSession;
+  session: SessionRowSession;
   owner: SessionOwnerDetails;
-  item?: WorkItem;
+  cardId?: string;
+  board: string | undefined;
   threadId?: string;
+  repository?: string;
+  subscriptions?: readonly PullRequestSubscription[];
 }
 
 const STATUS_LABELS: Record<SessionRowStatus, string> = {
@@ -74,22 +80,22 @@ function SessionPreview({
   merged?: boolean;
   details: SessionPreviewDetails;
 }) {
-  const [openedAt] = useState(Date.now);
+  const now = useClock(toMinute);
   const { runs, ownerChanges, people } = useSessionTrail({
     factoryId: details.factoryId,
     sessionRowId: details.session.id,
     threadId: details.threadId,
   });
+  const board = useBoardCatalog(details.factoryId).data?.find(candidate => candidate.id === details.board);
+  const sessionCards = useSessionWorkItemsQuery(
+    details.factoryId,
+    details.cardId === undefined ? undefined : details.session.sessionId,
+  );
+  const card = sessionCards.data?.find(candidate => candidate.id === details.cardId);
   const startedAt = Date.parse(details.session.createdAt);
-  const layout = layoutSessionTrack({
-    startedAt,
-    now: openedAt,
-    stageHistory: details.item?.stageHistory ?? [],
-    runs,
-    ownerChanges,
-  });
+  const layout = layoutSessionTrack({ startedAt, now, card, runs, ownerChanges });
   const previousOwnerId = ownerChanges.at(-1)?.fromOwnerId;
-  const linkShowsPullRequestState = details.item?.url != null && isPullRequestSource(details.item.source);
+  const linkShowsPullRequestState = card?.url != null && isPullRequestSource(card.source);
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -102,14 +108,20 @@ function SessionPreview({
             owner={details.owner}
             previousOwner={previousOwnerId === undefined ? undefined : ownerDetailsFor(people, previousOwnerId)}
           />
-          {details.item?.url != null && (
-            <RelatedWorkItemLink item={details.item} href={details.item.url} kind="external" />
+          {card?.url != null && (
+            <RelatedWorkItemLink
+              item={card}
+              href={card.url}
+              kind="external"
+              contextRepository={details.repository}
+              subscriptions={details.subscriptions}
+            />
           )}
         </div>
       </div>
       <SessionStatusLine status={status} merged={merged && !linkShowsPullRequestState} />
       {(layout.stages.length > 0 || layout.runs.length > 0 || layout.pins.length > 0) && (
-        <SessionTrack layout={layout} startedAt={startedAt} now={openedAt} people={people} />
+        <SessionTrack layout={layout} startedAt={startedAt} now={now} people={people} board={board} />
       )}
     </div>
   );
@@ -130,7 +142,7 @@ function SessionOwner({ owner, previousOwner }: { owner: SessionOwnerDetails; pr
             <span className="flex opacity-50">
               <Avatar src={previousOwner.avatarUrl} name={previousOwner.name} size="inline" />
             </span>
-            <ArrowRight className="text-placeholder size-2.5" />
+            <IconArrowRight className="text-placeholder size-icon-xs" />
           </span>
         </>
       )}

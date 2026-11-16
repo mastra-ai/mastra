@@ -10,7 +10,7 @@ import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds, markErrorForStreamRejection } from './constants';
 import { ExecutionFence, fencePubSub, resolveLeaseProvider, supportsRunFencing } from './execution-fence';
 import type { UntrackedRunLiveness } from './execution-fence';
-import { withExecutionStreamPublisher } from './execution-stream-publisher';
+import { withExecutionStreamProducer } from './execution-stream-publisher';
 import { emitAbortEvent } from './stream-adapter';
 import type { DurableAgenticWorkflowInput } from './types';
 import { createDurableAgenticWorkflow } from './workflows/create-durable-agentic-workflow';
@@ -227,7 +227,7 @@ export class DurableExecutionEngine {
     logger: IMastraLogger,
   ): PubSub {
     if (executionFence)
-      pubsub = withExecutionStreamPublisher(pubsub, {
+      pubsub = withExecutionStreamProducer(pubsub, {
         runId: executionFence.runId,
         agentId: this.id,
         mastra: this.mastra,
@@ -242,12 +242,11 @@ export class DurableExecutionEngine {
 
   async deleteRunSnapshots(runId: string, workflow: DurableWorkflow): Promise<void> {
     try {
-      await workflow.deleteWorkflowRunById(runId, { storageVersion: 1 });
+      await workflow.deleteWorkflowRunById(runId);
       const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
       await workflowsStore?.deleteWorkflowRunById({
         runId,
         workflowName: DurableStepIds.AGENTIC_EXECUTION,
-        storageVersion: 1,
       });
     } catch (error) {
       this.mastra

@@ -1,7 +1,10 @@
+import { SLACK_SESSION_BRANCH_PREFIX } from '@mastra/factory/work-item-branch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import type { ReactNode } from 'react';
 import { useLocation } from 'react-router';
 
+import { changeRequestStatus } from '../../factory/changeRequestState';
+import type { PullRequestSubscription } from '../../factory/services/githubSubscriptions';
 import { useAnswerParkedApproval } from '../hooks/useAnswerParkedApproval';
 import { updatePinnedSessions } from '../hooks/usePinnedSessions';
 import { useRegenerateSessionTitle } from '../hooks/useRegenerateSessionTitle';
@@ -10,13 +13,12 @@ import { STATUS_MARKER_BY_ACTIVITY, pinnedSessionsAfter } from '../services/sess
 import type { SessionListRow } from '../services/sessionRows';
 import type { UserSessionVisibility } from '../services/user-sessions';
 import { SessionNavRow } from './SessionNavRow';
-import type { LivePullRequestStatus } from '../../../../hooks/useWorkspacePullRequestStatuses';
 
 export function SessionListItem({
   factoryId,
   row,
+  subscriptions,
   disabled,
-  liveStatus,
   level,
   compact,
   onDelete,
@@ -24,13 +26,13 @@ export function SessionListItem({
 }: {
   factoryId: string;
   row: SessionListRow;
+  /** The session thread's subscriptions, fresher than the card's last sync. */
+  subscriptions?: readonly PullRequestSubscription[];
   /** 1 for a card's child session, listed under the card's row. */
   level?: number;
-  /** Single-line row; otherwise a second line shows when it last moved and its change request. */
+  /** Single-line row; otherwise a second line shows its time and its change request. */
   compact: boolean;
   disabled: boolean;
-  /** The change request's state from the live check, which can be ahead of the work item. */
-  liveStatus: LivePullRequestStatus | undefined;
   onDelete: (row: SessionListRow) => void;
   /** The card's child sessions, nested under its row. */
   subItems?: ReactNode;
@@ -62,11 +64,18 @@ export function SessionListItem({
       source={row.source}
       active={row.active}
       disabled={disabled}
-      liveStatus={liveStatus}
-      changeRequestProvider={row.pullRequest?.provider}
       status={STATUS_MARKER_BY_ACTIVITY[row.status]}
       pinned={row.pinned}
-      preview={{ factoryId, session: row.session, owner: row.owner, item: row.item, threadId: row.threadId }}
+      preview={{
+        factoryId,
+        session: row.session,
+        owner: row.owner,
+        cardId: row.cardId,
+        board: row.board,
+        threadId: row.threadId,
+        repository: row.repository,
+        subscriptions,
+      }}
       onPinChange={pin => updatePinnedSessions(pinned => pinnedSessionsAfter(pinned, row, pin))}
       onDelete={row.ownedByViewer ? () => onDelete(row) : undefined}
       onRegenerateTitle={row.canRegenerateTitle ? regenerate : undefined}
@@ -76,10 +85,16 @@ export function SessionListItem({
       visibility={row.origin === 'user' ? row.session.visibility : undefined}
       // Slack threads keep the visibility they were created with; the server refuses a change.
       onVisibilityChange={
-        ownUserSession && !row.session.branch.startsWith('slack/') ? handleVisibilityChange : undefined
+        ownUserSession && !row.session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX)
+          ? handleVisibilityChange
+          : undefined
       }
       changingVisibility={changing}
       pullRequest={row.pullRequest}
+      pullRequestStatus={
+        row.pullRequest && subscriptions ? changeRequestStatus(row.pullRequest, subscriptions) : row.pullRequestStatus
+      }
+      repository={row.repository}
       updatedAt={row.updatedAt}
       compact={compact}
       subItems={subItems}

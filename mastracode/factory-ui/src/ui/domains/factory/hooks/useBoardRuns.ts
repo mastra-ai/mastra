@@ -1,3 +1,4 @@
+import { itemThreadSession } from '@mastra/factory/work-items/card-context-sessions';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -5,9 +6,8 @@ import { useNavigate } from 'react-router';
 import { useApiConfig } from '../../../../api/config';
 import { useStartFactoryRun } from '../../../../hooks/useStartFactoryRun';
 import { useCardRepositorySlug } from './useCardRepositorySlug';
-import { itemSessionSpec, itemThreadSession } from '../boardItems';
+import { itemSessionSpec } from '../boardItems';
 import { repositoryMatchesCardSource } from '../boardRepository';
-import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { listWorkItems } from '../services/workItems';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 
@@ -19,14 +19,6 @@ export function useBoardRuns({ factoryProjectId }: { factoryProjectId: string })
   const { start, startingItemIds, enabled, repositories } = useStartFactoryRun();
   const repositorySlugFor = useCardRepositorySlug(repositories);
   const navigate = useNavigate();
-  const [repositorySelection, setRepositorySelection] = useState<{
-    item: WorkItem;
-    branch: string;
-    threadTitle: string;
-  }>();
-  const repositoryChoices = repositorySelection
-    ? repositories.filter(repository => repositoryMatchesCardSource(repository, repositorySelection.item.source))
-    : [];
 
   // A card click refetches items before it can decide whether to open an
   // existing thread or mint a new session. That wait is a round trip long and
@@ -97,19 +89,13 @@ export function useBoardRuns({ factoryProjectId }: { factoryProjectId: string })
         ...refreshed.metadata,
         ...refreshed.workItem?.metadata,
       });
-      const hasLinkedTarget = compatibleRepositories.some(repository => repository.slug === targetSlug);
-      if (!targetSlug && compatibleRepositories.length > 1) {
-        setRepositorySelection({ item: refreshed, ...spec });
-        return 'repository-selection-required' as const;
-      }
-      if (targetSlug && !hasLinkedTarget) {
+      if (targetSlug && !compatibleRepositories.some(repository => repository.slug === targetSlug)) {
         toast.error(`Repository ${targetSlug} is not linked to this Factory with a provider matching this card`);
         return;
       }
       await start.mutateAsync({
         branch: spec.branch,
         threadTitle: spec.threadTitle,
-        repositorySlug: targetSlug ?? compatibleRepositories[0]?.slug,
         workItem: {
           id: refreshed.id,
           role: 'chat',
@@ -125,37 +111,9 @@ export function useBoardRuns({ factoryProjectId }: { factoryProjectId: string })
     }
   };
 
-  const selectRepository = async (repository: LinkedRepositoryPayload) => {
-    if (!repositorySelection) return;
-    const { item, branch, threadTitle } = repositorySelection;
-    setRepositorySelection(undefined);
-    try {
-      await start.mutateAsync({
-        branch,
-        threadTitle,
-        repositorySlug: repository.slug,
-        workItem: {
-          id: item.id,
-          role: 'chat',
-          source: item.source,
-          sourceKey: item.sourceKey,
-          title: item.title,
-          metadata: item.metadata,
-          workItem: item.workItem,
-        },
-      });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to start the run');
-    }
-  };
-
   return {
     enabled,
     error: start.error,
-    repositoryChoices,
-    repositorySelection,
-    selectRepository,
-    closeRepositorySelection: () => setRepositorySelection(undefined),
     preparingFor: (itemId: string): string | undefined =>
       preparingItems[itemId] ?? (startingItemIds.includes(itemId) ? PREPARING_SESSION_LABEL : undefined),
     openThread,
