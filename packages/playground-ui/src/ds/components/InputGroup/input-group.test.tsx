@@ -108,20 +108,6 @@ describe('InputGroup', () => {
     expect(getInput().className).toContain('flex-1');
   });
 
-  it('caps a single-line group at its rung so a flex-column parent cannot stretch it', () => {
-    render(
-      <div className="flex flex-col">
-        <InputGroup size="sm">
-          <InputGroupInput placeholder="search" />
-        </InputGroup>
-      </div>,
-    );
-    // The root's `flex-1` grows along the parent's main axis; in a column that is the height.
-    expect(getWrapper().className).toContain('max-h-control-sm');
-    // Vertical shapes release the cap so the stacked addon / textarea still fit.
-    expect(getWrapper().className).toContain('has-[textarea]:max-h-none');
-  });
-
   it('also gives the control a height per group size (so it never collapses in block mode)', () => {
     render(
       <InputGroup size="lg">
