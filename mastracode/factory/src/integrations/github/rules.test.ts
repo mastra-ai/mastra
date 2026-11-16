@@ -12,7 +12,11 @@ import { FACTORY_GITHUB_EVENTS } from '../../rules/types.js';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
-import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../storage/test-utils.js';
+import {
+  createFactoryStorageForTests,
+  createIsolatedFactoryPostgresForTests,
+  finishQueuedRunsForTests,
+} from '../../storage/test-utils.js';
 import { workItemBranch, workItemBranchSource } from '../../work-item-branch.js';
 import { KeptCards } from '../kept-cards.js';
 import { GithubAppIdentity } from './app-identity.js';
@@ -1005,6 +1009,7 @@ describe('GithubRules', () => {
     expect(
       (await workItems.listDeferredDecisions('org-1', project.id)).map(record => record.decision.type),
     ).toEqual(['signalActivity']);
+    await finishQueuedRunsForTests(workItems);
 
     const moved = await new FactoryTransitionService({ storage: workItems, configVersion, boards }).transition({
       orgId: 'org-1',

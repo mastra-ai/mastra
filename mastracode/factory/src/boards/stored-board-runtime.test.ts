@@ -783,6 +783,16 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           timeout: 20_000,
         });
         expect(runsOf(requests, 'factory-triage', card.title)).toEqual([]);
+        // A person moves the card on once Planning's run is over: a busy card holds its phase.
+        await vi.waitFor(
+          async () => {
+            const open = (
+              await replica.workItems.listDeferredDecisions(orgId, projectId, { workItemId: card.id })
+            ).filter(record => ['pending', 'retry', 'leased'].includes(record.status));
+            expect(open).toEqual([]);
+          },
+          { timeout: 20_000 },
+        );
 
         for (const stage of ['execute', 'done']) {
           const result = await move((await replica.workItems.get({ orgId, id: card.id }))!, stage);

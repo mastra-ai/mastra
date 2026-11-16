@@ -461,6 +461,18 @@ function optimisticStageHistory(
   return next;
 }
 
+/**
+ * Puts a refused move's card back in the phase it left. The card the move was asked of may be an
+ * older read than the one held now, so only its phase comes back, and the card loses its version
+ * so the settle's re-read downloads it whatever the server names.
+ */
+function moveUndone(asked: WorkItem) {
+  return (item: WorkItem): WorkItem =>
+    item.id === asked.id && item.revision === asked.revision
+      ? { ...item, stages: asked.stages, stageHistory: asked.stageHistory, version: undefined }
+      : item;
+}
+
 export function useTransitionWorkItemMutation(factoryProjectId: string | undefined, currentUserId?: string) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
@@ -494,20 +506,12 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
       );
       return { enteredAt, actor };
     },
-    // The card the move was asked of is the one held before it: every read holds cards by revision.
-    onError: (_error, variables) => {
-      patchCards(queryClient, listKey, cards =>
-        cards.map(item => {
-          if (item.id !== variables.item.id || item.revision !== variables.item.revision) return item;
-          return variables.item;
-        }),
-      );
-    },
+    onError: (_error, variables) => patchCards(queryClient, listKey, cards => cards.map(moveUndone(variables.item))),
     onSuccess: async (result, variables, context) => {
       patchCards(queryClient, listKey, cards =>
         cards.map(item => {
           if (item.id !== variables.item.id || item.revision !== variables.item.revision) return item;
-          if (result.status === 'rejected') return variables.item;
+          if (result.status === 'rejected') return moveUndone(variables.item)(item);
           if (result.revision <= item.revision) return item;
           const previousItem = variables.item;
           return {
