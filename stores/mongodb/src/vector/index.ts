@@ -2441,9 +2441,13 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           // Fail closed: nothing records that this store created an unregistered collection, and an
           // `${indexName}_vector_index` on it may be a caller's index left behind by a BYO delete.
           if (!registered) {
-            throw new Error(
-              `Index "${indexName}" is not registered, so this store cannot verify that it created collection "${collectionName}". Nothing was dropped; drop the collection directly if it is no longer needed.`,
-            );
+            throw new MastraError({
+              id: createVectorErrorId('MONGODB', 'DELETE_INDEX', 'NOT_REGISTERED'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              details: { indexName, collectionName },
+              text: `Index "${indexName}" is not registered, so this store cannot verify that it created collection "${collectionName}". Nothing was dropped. If Mastra created it before the registry existed, call claimLegacyIndex({ indexName }) first.`,
+            });
           }
           // Retry-safe (FIX 4): a managed collection already dropped by a prior (partially
           // failed) deleteIndex must not block the retry from clearing the registry entry.
@@ -2465,6 +2469,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         throw new Error(`Index (Collection) "${indexName}" does not exist`);
       }
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createVectorErrorId('MONGODB', 'DELETE_INDEX', 'FAILED'),
