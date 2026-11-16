@@ -2,6 +2,7 @@ import type { PubSub } from '../../events/pubsub';
 import type { IMastraLogger } from '../../logger';
 import { TOOL_ABORT_GRACE_MS, TOOL_SETTLE_MARGIN_MS } from '../../loop/shared/tool-abort-grace';
 import {
+  createTimeoutAbortSignal,
   DEADLINE_SAVE_CLAIM_HOLD_MS,
   DEADLINE_SAVE_WAIT_MS,
   isMastraTimeoutError,
@@ -18,6 +19,7 @@ import { DurableStepIds } from './constants';
 import { ExecutionFence, fencePubSub, resolveLeaseProvider, supportsRunFencing } from './execution-fence';
 import type { UntrackedRunLiveness } from './execution-fence';
 import { withExecutionStreamPublisher } from './execution-stream-publisher';
+import { persistDurableRunInput } from './persist-run-input';
 import { ExtendedRunRegistry, getRunRegistryEntry } from './run-registry';
 import { emitAbortEvent } from './stream-adapter';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from './types';
@@ -77,6 +79,69 @@ export class DurableExecutionEngine {
   #canceledRunTerminals = new Set<string>();
 
   constructor(protected readonly host: DurableExecutionHost) {}
+
+  async persistInitialInput(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
+    await persistDurableRunInput(runId, workflowInput, this.host.mastra);
+  }
+
+  async redeliverDeadlineError(entry: RunRegistryEntry, fence: ExecutionFence): Promise<boolean> {
+    if (!fence.deadlineError) return false;
+    if (!entry.deadlineErrorRedelivered) {
+      entry.deadlineErrorRedelivered = true;
+      await this.host.emitError(fence.runId, fence.deadlineError, fence.generation);
+    }
+    return true;
+  }
+
+  installAbortWithTotalTimeout(
+    entry: RunRegistryEntry,
+    abortController: AbortController,
+    executionFence: ExecutionFence,
+  ): void {
+    entry.abortController = abortController;
+    entry.deadlineErrorRedelivered = false;
+    const totalTimeout = createTimeoutAbortSignal({
+      parentSignal: abortController.signal,
+      timeoutMs: entry.timeoutTotalMs,
+      timeoutType: 'total',
+      // The controller is per-session, but entry cleanup can also run on registry
+      // eviction while calls holding `entry.abortSignal` are still in flight (#26126).
+      // Only tear down the timer so `abort()` keeps reaching them.
+      detachParentOnCleanup: false,
+    });
+    entry.abortSignal = totalTimeout.signal;
+    if (totalTimeout.timeoutPromise) {
+      void totalTimeout.timeoutPromise
+        .catch(async error => {
+          if (!isMastraTimeoutError(error) || error.timeoutType !== 'total' || totalTimeout.signal?.reason !== error)
+            return;
+          await this.host.settleExecution(executionFence.runId, executionFence, { status: 'failed', error });
+        })
+        .catch(error => {
+          this.host.logger.warn('Failed to settle durable agent at its total deadline', { error });
+        });
+    }
+    void executionFence.whenSettled.then(() => totalTimeout.cleanup());
+    const previousCleanup = entry.cleanup;
+    entry.cleanup = () => {
+      totalTimeout.cleanup();
+      previousCleanup?.();
+    };
+  }
+
+  abortLocalController(runId: string): void {
+    const controller = (this.runRegistry.get(runId) ?? getRunRegistryEntry(runId, this.host.mastra))?.abortController;
+    if (controller && !controller.signal.aborted) {
+      controller.abort(new Error('Aborted'));
+    }
+  }
+
+  raceFenceLoss<T>(operation: Promise<T>, executionFence: ExecutionFence): Promise<T> {
+    const lost = new Promise<never>((_, reject) => executionFence.onLost(reject));
+    // The loser of the race must not surface as an unhandled rejection.
+    lost.catch(() => {});
+    return Promise.race([operation, lost]);
+  }
 
   beginSegment(runId: string): symbol {
     const segment = Symbol(runId);

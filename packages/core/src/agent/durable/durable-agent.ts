@@ -11,7 +11,6 @@ import {
   getScopeStreamSlot,
   untilIdleHandlesBackgroundTask,
 } from '../../loop/shared/stream-until-idle-helpers';
-import { createTimeoutAbortSignal, isMastraTimeoutError } from '../../loop/timeout';
 import { withDefaultToolCallConcurrencyLimit } from '../../loop/workflows/agentic-execution/tool-call-concurrency';
 import type { Mastra } from '../../mastra';
 import { createRunScope } from '../../mastra/run-scope';
@@ -99,7 +98,6 @@ import {
 import type { UntrackedRunLiveness } from './execution-fence';
 import { getExecutionStreamPublisher } from './execution-stream-publisher';
 import { detachFullStreamOnEnd } from './observe-full-stream';
-import { persistDurableRunInput } from './persist-run-input';
 import { prepareForDurableExecution } from './preparation';
 import type { PreparationOptions, PreparationResult } from './preparation';
 import { durableReplayOwnerKey, readDurableReplayOwner } from './replay-owners';
@@ -1603,10 +1601,7 @@ export class DurableAgent<
    * on ignores the abort signal.
    */
   #raceFenceLoss<T>(operation: Promise<T>, executionFence: ExecutionFence): Promise<T> {
-    const lost = new Promise<never>((_, reject) => executionFence.onLost(reject));
-    // The loser of the race must not surface as an unhandled rejection.
-    lost.catch(() => {});
-    return Promise.race([operation, lost]);
+    return this.executionEngine.raceFenceLoss(operation, executionFence);
   }
 
   /** Rebuilds process-local recovery state from the persisted durable workflow input. */
@@ -2495,7 +2490,7 @@ export class DurableAgent<
   }
 
   private async persistInitialInput(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
-    await persistDurableRunInput(runId, workflowInput, this.#mastra);
+    await this.executionEngine.persistInitialInput(runId, workflowInput);
   }
 
   /**
@@ -2883,20 +2878,11 @@ export class DurableAgent<
 
   /** Flip the controller this process holds for `runId`, if it holds one. */
   #abortLocalController(runId: string): void {
-    const controller = (this.executionEngine.runRegistry.get(runId) ?? getRunRegistryEntry(runId, this.#mastra))
-      ?.abortController;
-    if (controller && !controller.signal.aborted) {
-      controller.abort(new Error('Aborted'));
-    }
+    return this.executionEngine.abortLocalController(runId);
   }
 
   async #redeliverDeadlineError(entry: RunRegistryEntry, fence: ExecutionFence): Promise<boolean> {
-    if (!fence.deadlineError) return false;
-    if (!entry.deadlineErrorRedelivered) {
-      entry.deadlineErrorRedelivered = true;
-      await this.emitError(fence.runId, fence.deadlineError, fence.generation);
-    }
-    return true;
+    return this.executionEngine.redeliverDeadlineError(entry, fence);
   }
 
   /**
@@ -2915,35 +2901,7 @@ export class DurableAgent<
     abortController: AbortController,
     executionFence: ExecutionFence,
   ): void {
-    entry.abortController = abortController;
-    entry.deadlineErrorRedelivered = false;
-    const totalTimeout = createTimeoutAbortSignal({
-      parentSignal: abortController.signal,
-      timeoutMs: entry.timeoutTotalMs,
-      timeoutType: 'total',
-      // The controller is per-session, but entry cleanup can also run on registry
-      // eviction while calls holding `entry.abortSignal` are still in flight (#26126).
-      // Only tear down the timer so `abort()` keeps reaching them.
-      detachParentOnCleanup: false,
-    });
-    entry.abortSignal = totalTimeout.signal;
-    if (totalTimeout.timeoutPromise) {
-      void totalTimeout.timeoutPromise
-        .catch(async error => {
-          if (!isMastraTimeoutError(error) || error.timeoutType !== 'total' || totalTimeout.signal?.reason !== error)
-            return;
-          await this.settleExecution(executionFence.runId, executionFence, { status: 'failed', error });
-        })
-        .catch(error => {
-          this.logger.warn('Failed to settle durable agent at its total deadline', { error });
-        });
-    }
-    void executionFence.whenSettled.then(() => totalTimeout.cleanup());
-    const previousCleanup = entry.cleanup;
-    entry.cleanup = () => {
-      totalTimeout.cleanup();
-      previousCleanup?.();
-    };
+    return this.executionEngine.installAbortWithTotalTimeout(entry, abortController, executionFence);
   }
 
   /**
