@@ -13,6 +13,7 @@ import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleItemC
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
 import {
+  asProjectFromBeforeIntakeEvaluator,
   createFactoryStorageForTests,
   createIsolatedFactoryPostgresForTests,
   finishQueuedRunsForTests,
@@ -310,6 +311,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub provider
       transitionService: new FactoryTransitionService({ storage: workItems, boards, configVersion }),
       storage: workItems,
       boards,
+      intakeEvaluator: 'route-list',
       ownerId: 'provider-ingest-worker',
     });
     const opened = issueOpened('provider-split-opened', '2020-01-01T00:00:00Z');
@@ -1216,6 +1218,7 @@ describe('GithubRules', () => {
       transitionService,
       storage: workItems,
       boards: autoStartingBoards(createTriageWorkRegistry()),
+      intakeEvaluator: 'route-list',
       ownerId: 'worker-guard',
     });
 
@@ -1249,6 +1252,7 @@ describe('GithubRules', () => {
       transitionService: new FactoryTransitionService({ storage: workItems, configVersion, boards }),
       storage: workItems,
       boards: autoStartingBoards(boards),
+      intakeEvaluator: 'route-list',
       ownerId: 'worker-guard',
     });
 
@@ -1359,6 +1363,7 @@ describe('GithubRules', () => {
       transitionService,
       storage: workItems,
       boards: autoStartingBoards(createTriageWorkRegistry()),
+      intakeEvaluator: 'route-list',
       ownerId: 'worker-1',
       primeCredentials,
       prepareBinding: async ({ record, item, role }) => {
@@ -4357,6 +4362,8 @@ describe('GithubRules with intake routes', () => {
       ownerId: 'worker-intake-routes',
     });
     const scope = { orgId: 'org-1', factoryProjectId: base.project.id };
+    // These cases pin the route list, which a project from before the evaluator setting keeps.
+    await asProjectFromBeforeIntakeEvaluator(base.storage, scope);
     if (!withDefaultRoute) {
       // Last first, so no delete moves (and re-revisions) a route still to delete.
       for (const defaultRoute of (await base.boards.listIntakeRoutes(scope)).toReversed()) {
@@ -6119,7 +6126,8 @@ describe('pull request cards on the Work board', () => {
       }),
       storage: harness.workItems,
       boards: autoStartingBoards(boards),
-      ...(withRoutes ? { intakeRoutes: harness.boards } : {}),
+      // Without intake rules to read, the route list, as before intake order.
+      ...(withRoutes ? { intakeRoutes: harness.boards } : { intakeEvaluator: 'route-list' as const }),
       ownerId: 'worker-1',
     });
     let tick = 0;

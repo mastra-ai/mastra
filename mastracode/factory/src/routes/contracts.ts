@@ -18,7 +18,7 @@ import {
   SESSION_ROW_WINDOWS_MAX,
   sessionRowOwnerSchema,
 } from '../session/session-row-query.js';
-import { MAX_INTAKE_ROUTES } from '../storage/domains/boards/base.js';
+import { MAX_INTAKE_ROUTES_PER_BOARD } from '../storage/domains/boards/base.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 import { PULL_REQUEST_STATUSES } from '../work-items/change-requests.js';
 import type { CardChangeRequest } from '../work-items/change-requests.js';
@@ -156,16 +156,24 @@ export const intakeRoutePatchSchema = z
   .refine(({ expectedRevision: _revision, ...fields }) => Object.values(fields).some(value => value !== undefined), {
     message: 'Change at least one field.',
   });
+/** Bounds a whole-project reorder, which names every rule of every board. */
+const MAX_PROJECT_INTAKE_ROUTES = 10_000;
 export const intakeRouteReorderBodySchema = z
   .object({
-    /** Every route of the project, once each, in the new order. */
+    /** Reorders only this board's rules, within the places they hold; omitted, the whole project's. */
+    boardKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH).optional(),
+    /** Every rule of the board (or of the project), once each, in the new order. */
     ids: z
       .array(uuidSchema)
       .min(1)
-      .max(MAX_INTAKE_ROUTES)
+      .max(MAX_PROJECT_INTAKE_ROUTES)
       .refine(ids => new Set(ids).size === ids.length, { message: 'Each route may appear only once.' }),
   })
-  .strict();
+  .strict()
+  .refine(({ boardKey, ids }) => boardKey === undefined || ids.length <= MAX_INTAKE_ROUTES_PER_BOARD, {
+    message: `A board has at most ${MAX_INTAKE_ROUTES_PER_BOARD} intake rules.`,
+    path: ['ids'],
+  });
 const intakeRouteSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -195,6 +203,91 @@ const intakeRerouteResponseSchema = z.object({
   moves: z.array(z.object({ fromBoard: z.string(), toBoard: z.string(), count: z.number().int() })),
 });
 const intakeRerouteApplyResponseSchema = z.object({ moved: z.number().int(), skipped: z.number().int() });
+const intakeRouteListQuerySchema = z
+  .object({
+    /** Lists only this board's rules, in their order. */
+    boardKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH).optional(),
+  })
+  .strict();
+const intakeOrderResponseSchema = z.object({
+  /** Every board of the project, in the order intake asks them. */
+  boards: z.array(z.object({ boardKey: z.string(), name: z.string() })),
+  /**
+   * `derived` follows the rule list until an admin sets the order; then it is `explicit`. A project
+   * created with intake order has its own order from the start, so it is `explicit` from the start.
+   */
+  origin: z.enum(['derived', 'explicit']),
+  /** Which evaluator places the project's new items now: `route-list` (the old one) or `intake-order`. */
+  evaluator: z.enum(['route-list', 'intake-order']),
+  /**
+   * What decided `evaluator`: the Factory's `intake.evaluator` option or `FACTORY_INTAKE_EVALUATOR`
+   * (forced on every project), the project's own setting, or none (a project from before the
+   * setting, on `route-list`).
+   */
+  evaluatorSource: z.enum(['option', 'env', 'project', 'legacy']),
+  /** The project's own setting, used unless one is forced; null for a project from before the setting. */
+  projectEvaluator: z.enum(['route-list', 'intake-order']).nullable(),
+  /** Both evaluators run over the project's newest 200 items against this order, worked out on each read. */
+  comparison: z.object({
+    compared: z.number().int(),
+    differing: z.number().int(),
+    notRouted: z.number().int(),
+  }),
+  /** Whether the caller may change the order. */
+  canEdit: z.boolean(),
+});
+export const intakeOrderBodySchema = z
+  .object({
+    /** Every board of the project, once each, in the new order. */
+    boardKeys: z
+      .array(z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH))
+      .min(1)
+      .max(MAX_PROJECT_INTAKE_ROUTES)
+      .refine(keys => new Set(keys).size === keys.length, { message: 'Each board may appear only once.' })
+      .optional(),
+    /** Switches the project's evaluator; a forced one still wins until it is unset. */
+    evaluator: z.enum(['route-list', 'intake-order']).optional(),
+  })
+  .strict()
+  .refine(body => body.boardKeys !== undefined || body.evaluator !== undefined, {
+    message: 'Name the boardKeys, the evaluator, or both.',
+  });
+const intakeDecisionSchema = z.object({
+  id: z.string(),
+  outcome: z.enum(['placed', 'not_routed']),
+  evaluator: z.enum(['route-list', 'intake-order']),
+  boardKey: z.string().nullable(),
+  routeId: z.string().nullable(),
+  /** Why no board took it. */
+  reason: z.string().nullable(),
+  sourceKey: z.string().nullable(),
+  title: z.string(),
+  url: z.string().nullable(),
+  decidedAt: z.string(),
+});
+const intakeNotRoutedQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    /** The `nextCursor` of the page before. */
+    cursor: z.string().min(1).max(200).optional(),
+  })
+  .strict();
+const intakeNotRoutedResponseSchema = z.object({
+  /** Oldest first. */
+  notRouted: z.array(intakeDecisionSchema),
+  /** Pass as `cursor` for the next page; null on the last. */
+  nextCursor: z.string().nullable(),
+  /** Whether the caller may route an item again. */
+  canEdit: z.boolean(),
+});
+const intakeDecisionPathSchema = z.object({ id: uuidSchema, decisionId: uuidSchema });
+const intakeRouteAgainResponseSchema = z.object({
+  /** The item is queued to be filed here; the card appears once the dispatcher files it. */
+  status: z.literal('queued'),
+  boardKey: z.string(),
+  phaseKey: z.string(),
+  routeId: z.string(),
+});
 const workItemPathSchema = z.object({ id: uuidSchema });
 const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema });
 
@@ -1401,6 +1494,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
     path: '/web/factory/projects/:id/intake-routes',
     description: "List a Factory project's intake routes in evaluation order",
     pathSchema: projectPathSchema,
+    querySchema: intakeRouteListQuerySchema,
     responseSchema: intakeRouteListResponseSchema,
   },
   intakeRouteGet: {
@@ -1456,6 +1550,36 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: projectPathSchema,
     bodySchema: intakeRouteReorderBodySchema,
     responseSchema: intakeRouteListResponseSchema,
+  },
+  intakeOrderGet: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/intake-order',
+    description: "The order a Factory project's boards are asked to take a new item, and the evaluator in use",
+    pathSchema: projectPathSchema,
+    responseSchema: intakeOrderResponseSchema,
+  },
+  intakeOrderUpdate: {
+    method: 'PUT',
+    path: '/web/factory/projects/:id/intake-order',
+    description: "Set the order a Factory project's boards are asked to take a new item, or its evaluator",
+    pathSchema: projectPathSchema,
+    bodySchema: intakeOrderBodySchema,
+    responseSchema: intakeOrderResponseSchema,
+  },
+  intakeNotRoutedList: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/intake/not-routed',
+    description: "Items no board's intake rules took, oldest first, a page at a time",
+    pathSchema: projectPathSchema,
+    querySchema: intakeNotRoutedQuerySchema,
+    responseSchema: intakeNotRoutedResponseSchema,
+  },
+  intakeRouteAgain: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/intake/not-routed/:decisionId/route-again',
+    description: 'Run intake again for an item no board took, filing it where the rules now say',
+    pathSchema: intakeDecisionPathSchema,
+    responseSchema: intakeRouteAgainResponseSchema,
   },
   workItemList: {
     method: 'GET',

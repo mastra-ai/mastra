@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { BoardEventFacts } from '../boards/board-events.js';
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
@@ -10,8 +10,8 @@ import {
   DEFAULT_INTAKE_ROUTE,
   PULL_REQUEST_INTAKE_ROUTE,
 } from '../storage/domains/boards/base.js';
-import type { StoredIntakeRouteInput } from '../storage/domains/boards/base.js';
-import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import type { IntakeEvaluator, StoredIntakeRouteInput } from '../storage/domains/boards/base.js';
+import { asProjectFromBeforeIntakeEvaluator, createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision } from './types.js';
@@ -43,6 +43,8 @@ const docsBoard = {
 /**
  * A real dispatcher over real storage, with the project's stored boards and intake routes.
  * Tests start without the default routes every project gets, unless they pass `withDefaultRoute`.
+ * The project is one from before the evaluator setting, on the route list, unless `project` is
+ * `new` (stamped with intake order, as one created today is).
  */
 async function setup(
   options: {
@@ -51,11 +53,14 @@ async function setup(
     autoStart?: boolean;
     withDefaultRoute?: boolean;
     codeRegistry?: BoardRegistry;
+    intakeEvaluator?: IntakeEvaluator;
+    project?: 'new' | 'older';
   } = {},
 ) {
   const seeded = await createFactoryStorageForTests();
   const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Routes' } });
   const scope = { orgId: 'org-1', factoryProjectId: project.id };
+  if (options.project !== 'new') await asProjectFromBeforeIntakeEvaluator(seeded.storage, scope);
   const defaults = await seeded.boards.listIntakeRoutes(scope);
   const defaultRoute = defaults.find(route => route.name === DEFAULT_INTAKE_ROUTE.name);
   if (!options.withDefaultRoute) {
@@ -73,14 +78,26 @@ async function setup(
   });
   const configVersion = 'intake-routes-v1';
   const workItems = seeded.workItems;
-  const dispatcher = new FactoryDecisionDispatcher({
-    controller: {} as never,
-    transitionService: new FactoryTransitionService({ storage: workItems, configVersion, boards, audit: seeded.audit }),
-    storage: workItems,
-    boards,
-    ...(options.withRoutesReader === false ? {} : { intakeRoutes: seeded.boards }),
-    ownerId: 'worker-routes',
-  });
+  const dispatcherWith = (withRoutesReader: boolean) =>
+    new FactoryDecisionDispatcher({
+      controller: {} as never,
+      transitionService: new FactoryTransitionService({
+        storage: workItems,
+        configVersion,
+        boards,
+        audit: seeded.audit,
+      }),
+      storage: workItems,
+      boards,
+      ...(withRoutesReader ? { intakeRoutes: seeded.boards } : {}),
+      ...(options.intakeEvaluator ? { intakeEvaluator: options.intakeEvaluator } : {}),
+      ownerId: 'worker-routes',
+    });
+  let dispatcher = dispatcherWith(options.withRoutesReader !== false);
+  /** A replica that boots with the boards domain working again takes over. */
+  const recover = () => {
+    dispatcher = dispatcherWith(true);
+  };
   let deliveries = 0;
   const route = (input: StoredIntakeRouteInput) => seeded.boards.createIntakeRoute(scope, input, 'admin');
   /** Commits one linked-card decision, as an integration's rules would, and lets the dispatcher apply it. */
@@ -127,7 +144,7 @@ async function setup(
       .map(decision => decision.status);
   };
   /** Gives the dispatcher another turn, a day later, so a decision waiting to retry runs again. */
-  const retry = () => dispatcher.runOnce(new Date('2030-01-02T00:00:00Z'));
+  const retry = (at = new Date('2030-01-02T00:00:00Z')) => dispatcher.runOnce(at);
   /** Commits a status event on an existing card, as an integration does when no rule decided anything, and dispatches it. */
   const deliverEvent = (cardId: string, event: BoardEventFacts, identity = `event-${(deliveries += 1)}`) =>
     deliverDecision(cardId, { type: 'routeEvent', idempotencyKey: `${identity}:event-route`, event }, identity);
@@ -187,6 +204,7 @@ async function setup(
     deliverEvent,
     deliverDecision,
     putAt,
+    recover,
     routeDecisions,
     stageAudits,
     runs,
@@ -687,8 +705,8 @@ describe('intake routes placing linked cards', () => {
     });
   });
 
-  it('places nothing without a routes reader, whatever the project stored', async () => {
-    const { route, deliver } = await setup({ withRoutesReader: false });
+  it('places nothing without a routes reader under a forced route list, whatever the project stored', async () => {
+    const { route, deliver } = await setup({ withRoutesReader: false, intakeEvaluator: 'route-list' });
     await route({ name: 'Everything to triage', target: { boardKey: 'work', phaseKey: 'triage' } });
 
     expect(placed(await deliver({ sourceKey: 'github-issue:1', metadata: { authorTrusted: true } }))).toEqual({
@@ -1080,8 +1098,8 @@ describe('intake routes moving existing cards on status events', () => {
     expect(after!.stageHistory.filter(entry => entry.by.startsWith('intake-route:'))).toHaveLength(1);
   });
 
-  it('moves nothing without a routes reader', async () => {
-    const { route, deliver, deliverEvent } = await setup({ withRoutesReader: false });
+  it('moves nothing without a routes reader under a forced route list', async () => {
+    const { route, deliver, deliverEvent } = await setup({ withRoutesReader: false, intakeEvaluator: 'route-list' });
     await route({ name: 'Done', on: ['work_item.closed'], target: { boardKey: 'work', phaseKey: 'done' } });
     const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
     expect((await deliverEvent(card.id, { type: 'work_item.closed', reason: 'completed' })).card).toMatchObject({
@@ -1228,5 +1246,160 @@ describe('intake routes moving existing cards on pull request events', () => {
     const merged = (await harness.deliverEvent(card.id, { type: 'pull_request.merged' })).card;
     expect(merged).toMatchObject({ stages: ['published'] });
     expect(merged!.stageHistory.at(-1)).toMatchObject({ stage: 'published', by: `intake-route:${route.id}` });
+  });
+});
+
+describe('which evaluator decides a project’s arrivals', () => {
+  const docsRule = { name: 'Docs', when: DOCS, target: { boardKey: 'docs', phaseKey: null } };
+  /** A project whose only rule takes docs items; a bug report matches nothing. */
+  async function docsOnly(options: Parameters<typeof setup>[0] = {}) {
+    const seeded = await setup(options);
+    await seeded.boards.create(seeded.scope, docsBoard, 'admin');
+    await seeded.route(docsRule);
+    return seeded;
+  }
+  const bug = { sourceKey: 'github-issue:7', metadata: { labels: ['bug'] } };
+
+  it('decides a project created now by intake order with nothing forcing it', async () => {
+    const seeded = await docsOnly({ project: 'new' });
+
+    expect(await seeded.deliver(bug)).toBeUndefined();
+    expect((await seeded.boards.listNotRouted(seeded.scope)).notRouted).toMatchObject([
+      { sourceKey: 'github-issue:7', evaluator: 'intake-order' },
+    ]);
+  });
+
+  it('keeps a project from before the setting on the route list, which files an unmatched item on Work', async () => {
+    const seeded = await docsOnly({ project: 'older' });
+
+    expect(placed(await seeded.deliver(bug))).toEqual({ board: 'work', stages: ['intake'] });
+  });
+
+  it('lets a forced evaluator win over the project’s setting, either way', async () => {
+    const forcedOld = await docsOnly({ project: 'new', intakeEvaluator: 'route-list' });
+    expect(placed(await forcedOld.deliver(bug))).toEqual({ board: 'work', stages: ['intake'] });
+
+    const forcedNew = await docsOnly({ project: 'older', intakeEvaluator: 'intake-order' });
+    expect(await forcedNew.deliver(bug)).toBeUndefined();
+  });
+
+  it('decides the next arrival by the evaluator an older project is switched to', async () => {
+    const seeded = await docsOnly({ project: 'older' });
+    await seeded.boards.setIntakeEvaluator(seeded.scope, 'intake-order');
+
+    expect(await seeded.deliver(bug)).toBeUndefined();
+  });
+});
+
+describe('intake by intake order', () => {
+  const docsRule = { name: 'Docs', when: DOCS, target: { boardKey: 'docs', phaseKey: null } };
+  const everything = { name: 'Everything else', when: null, target: { boardKey: 'work', phaseKey: null } };
+
+  it.each(['route-list', 'intake-order'] as const)(
+    "files each arrival on the same board under %s when each board's rules sit together",
+    async intakeEvaluator => {
+      const seeded = await setup({ intakeEvaluator });
+      await seeded.boards.create(seeded.scope, docsBoard, 'admin');
+      await seeded.route(docsRule);
+      await seeded.route(everything);
+
+      const docs = await seeded.deliver({ sourceKey: 'github-issue:1', metadata: { labels: ['docs'] } });
+      const other = await seeded.deliver({ sourceKey: 'github-issue:2', metadata: { labels: ['bug'] } });
+
+      expect(placed(docs)).toEqual({ board: 'docs', stages: ['inbox'] });
+      expect(placed(other)).toEqual({ board: 'work', stages: ['intake'] });
+    },
+  );
+
+  it('asks each board in intake order, so an interleaved list places by board, not by line', async () => {
+    const seeded = await setup({ intakeEvaluator: 'intake-order' });
+    await seeded.boards.create(seeded.scope, docsBoard, 'admin');
+    await seeded.route(everything);
+    await seeded.route(docsRule);
+    await seeded.boards.setIntakeOrder(seeded.scope, ['docs', 'work'], { boards: ['work', 'docs'] });
+
+    const docs = await seeded.deliver({ sourceKey: 'github-issue:1', metadata: { labels: ['docs'] } });
+    const other = await seeded.deliver({ sourceKey: 'github-issue:2', metadata: { labels: ['bug'] } });
+
+    expect(placed(docs)).toEqual({ board: 'docs', stages: ['inbox'] });
+    expect(placed(other)).toEqual({ board: 'work', stages: ['intake'] });
+  });
+
+  it('files no card for an arrival no board takes, and records it Not routed with the arrival', async () => {
+    const seeded = await setup({ intakeEvaluator: 'intake-order' });
+    await seeded.boards.create(seeded.scope, docsBoard, 'admin');
+    await seeded.route(docsRule);
+
+    const card = await seeded.deliver({ sourceKey: 'github-issue:9', metadata: { labels: ['bug'] } });
+
+    expect(card).toBeUndefined();
+    expect(await seeded.workItems.list(seeded.scope)).toEqual([]);
+    const [notRouted, ...rest] = (await seeded.boards.listNotRouted(seeded.scope)).notRouted;
+    expect(rest).toEqual([]);
+    expect(notRouted).toMatchObject({
+      outcome: 'not_routed',
+      evaluator: 'intake-order',
+      sourceKey: 'github-issue:9',
+      title: 'Issue github-issue:9',
+      reason: expect.stringContaining("No board's intake rules match it"),
+      arrival: { type: 'upsertLinkedWorkItem', sourceKey: 'github-issue:9' },
+      resolvedAt: null,
+    });
+    // The arrival's decision is done; nothing is left to retry.
+    const decisions = await seeded.workItems.listDeferredDecisions('org-1', seeded.project.id);
+    expect(decisions.every(decision => decision.status !== 'pending')).toBe(true);
+  });
+
+  it('marks the Not routed record resolved once the item is filed after a rule is fixed', async () => {
+    const seeded = await setup({ intakeEvaluator: 'intake-order' });
+    expect(await seeded.deliver({ sourceKey: 'github-issue:9', metadata: { labels: ['bug'] } })).toBeUndefined();
+    await seeded.route(everything);
+
+    const card = await seeded.deliver({ sourceKey: 'github-issue:9', metadata: { labels: ['bug'] } });
+
+    expect(placed(card)).toEqual({ board: 'work', stages: ['intake'] });
+    expect((await seeded.boards.listNotRouted(seeded.scope)).notRouted).toEqual([]);
+  });
+
+  it('resolves the Not routed record on a retry when resolving failed after the card was filed', async () => {
+    const seeded = await setup({ intakeEvaluator: 'intake-order' });
+    expect(await seeded.deliver({ sourceKey: 'github-issue:9', metadata: { labels: ['bug'] } })).toBeUndefined();
+    await seeded.route(everything);
+    vi.spyOn(seeded.boards, 'resolveNotRouted').mockRejectedValueOnce(new Error('storage unavailable'));
+
+    const card = await seeded.deliver({ sourceKey: 'github-issue:9', metadata: { labels: ['bug'] } });
+    expect(placed(card)).toEqual({ board: 'work', stages: ['intake'] });
+    expect((await seeded.boards.listNotRouted(seeded.scope)).notRouted).toHaveLength(1);
+
+    await seeded.retry();
+    expect((await seeded.boards.listNotRouted(seeded.scope)).notRouted).toEqual([]);
+    expect(await seeded.workItems.list(seeded.scope)).toHaveLength(1);
+  });
+
+  it("files nothing while the project's evaluator setting cannot be read, then files it once the boards domain is back", async () => {
+    // As when the boards domain failed to initialize: no intake rules, no evaluator setting, nothing forced.
+    const seeded = await setup({ withRoutesReader: false, project: 'new' });
+    await seeded.boards.create(seeded.scope, docsBoard, 'admin');
+    await seeded.boards.createIntakeRoute(
+      seeded.scope,
+      { name: 'Docs', target: { boardKey: 'docs' }, when: DOCS },
+      'admin',
+    );
+    expect(await seeded.deliver({ sourceKey: 'github-issue:9', metadata: { labels: ['docs'] } })).toBeUndefined();
+    await seeded.retry();
+    expect(await seeded.workItems.list(seeded.scope)).toEqual([]);
+    const [waiting] = await seeded.workItems.listDeferredDecisions('org-1', seeded.project.id);
+    expect(waiting).toMatchObject({ status: 'retry', lastError: expect.stringContaining('unavailable') });
+
+    seeded.recover();
+    await seeded.retry(new Date('2030-01-09T00:00:00Z'));
+    const cards = await seeded.workItems.list(seeded.scope);
+    expect(cards.map(placed)).toEqual([{ board: 'docs', stages: ['inbox'] }]);
+  });
+
+  it("keeps an older project's arrival waiting too while its setting cannot be read", async () => {
+    const seeded = await setup({ withRoutesReader: false, withDefaultRoute: true });
+    expect(await seeded.deliver({ sourceKey: 'github-issue:9', metadata: { labels: ['bug'] } })).toBeUndefined();
+    expect(await seeded.workItems.list(seeded.scope)).toEqual([]);
   });
 });

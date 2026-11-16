@@ -6282,6 +6282,8 @@ describe('FactoryDecisionDispatcher', () => {
       boards: autoStartingBoards(),
       transitionService,
       storage,
+      // No intake rules to read: the route list, as before intake order.
+      intakeEvaluator: 'route-list',
       ownerId: 'worker-1',
       resolveLinkedWorkItemParentId,
     });
@@ -7524,6 +7526,8 @@ describe('custom-board deferred targets', () => {
       storage,
       boards: autoStartingBoards(boards),
       transitionService: new FactoryTransitionService({ storage, boards, configVersion }),
+      // No intake rules to read: the route list, as before intake order.
+      intakeEvaluator: 'route-list',
       ownerId: 'custom-worker',
     });
   }
@@ -7937,6 +7941,7 @@ describe('custom-board deferred targets', () => {
       boards: autoStartingBoards(boards),
       transitionService: service,
       controller: createSession().controller as never,
+      intakeEvaluator: 'route-list',
     }).runOnce();
     expect(await decisionByKey(storage, 'custom-linked')).toMatchObject({
       status: 'retry',
