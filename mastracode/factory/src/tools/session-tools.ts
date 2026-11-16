@@ -477,7 +477,7 @@ export function createFactorySessionTools(
     } catch (error) {
       if (!alreadyFollowing) {
         await deps.workItems.unsubscribeFromWorkItem({
-          orgId: scope.orgId,
+          ...followScope,
           workItemId: item.id,
           sessionId: scope.sessionId,
         });

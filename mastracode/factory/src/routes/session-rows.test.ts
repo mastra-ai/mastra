@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { Card } from '../storage/domains/work-items/base.js';
@@ -172,10 +172,6 @@ async function responsesFor(app: Hono, viewer: string): Promise<string[]> {
   );
 }
 
-afterEach(() => {
-  vi.useRealTimers();
-});
-
 beforeEach(async () => {
   seed = await createFactoryStorageForTests();
   sourceControl = seed.sourceControl.forIntegration('gitlab');
@@ -215,7 +211,7 @@ describe('GET /web/factory/projects/:id/session-rows', () => {
 
     const body = await readRows(buildApp('u1'), '?groupBy=board');
 
-    expect(body).toMatchObject({ total: 3, matching: 3, boards: ['work'], settling: false });
+    expect(body).toMatchObject({ total: 3, matching: 3, boards: ['work'] });
     expect(body.owners.map(owner => owner.userId)).toEqual(['u1', 'u2']);
     expect(body.groups.flatMap(group => group.rows.map(row => row.session.sessionId)).toSorted()).toEqual([
       'card-run',
@@ -343,7 +339,6 @@ describe('GET /web/factory/projects/:id/session-activity', () => {
       parkedSessionIds: ['parked-run'],
       initializingSessionIds: ['starting'],
       cards: { working: 1, waiting: 1 },
-      settling: true,
     });
   });
 
@@ -355,7 +350,6 @@ describe('GET /web/factory/projects/:id/session-activity', () => {
     expect(await readActivity(buildApp('u1', { running }))).toMatchObject({
       runningSessionIds: [],
       initializingSessionIds: [],
-      settling: false,
     });
     expect(await readActivity(buildApp('u2', { running }))).toMatchObject({
       runningSessionIds: ['their-running'],
@@ -374,8 +368,6 @@ describe.each([{ authEnabled: true }, { authEnabled: false }])(
       await createCardSession('their-card-run', 'Their card', { userId: 'u2', visibility: 'private' });
       await createSession('their-draft', { userId: 'u2', visibility: 'private' });
       await createSession('their-starting', { userId: 'u2', visibility: 'private', materialized: false });
-      // Storage only shares a list once its newest write is a few seconds old.
-      vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 10_000 });
       const app = buildApp('u2', {
         authEnabled,
         running: [

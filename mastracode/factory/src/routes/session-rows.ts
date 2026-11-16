@@ -3,7 +3,7 @@ import { registerApiRoute } from '@mastra/core/server';
 
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { LiveSessions } from '../session/live-sessions.js';
-import { isSettling, sessionActivity, sessionRowsView } from '../session/session-row-view.js';
+import { sessionActivity, sessionRowsView } from '../session/session-row-view.js';
 import { runningSessionIds } from '../session/session-rows.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { hashedBody, sendRevalidated, sessionIdsWhere } from './board-snapshot.js';
@@ -98,14 +98,7 @@ export function buildSessionRowRoutes(deps: SessionRowRouteDependencies): ApiRou
           pinnedSessionIds: pin,
           revealChildSessions: children === 'true',
         });
-        const now = Date.now();
-        return sendRevalidated(
-          context,
-          hashedBody({
-            ...sessionRowsView(rows, view, resolved.userId, now),
-            settling: isSettling(facts.seen.sessions, now),
-          }),
-        );
+        return sendRevalidated(context, hashedBody(sessionRowsView(rows, view, resolved.userId, Date.now())));
       },
     }),
 
@@ -120,7 +113,7 @@ export function buildSessionRowRoutes(deps: SessionRowRouteDependencies): ApiRou
         const facts = await sessionFacts(deps, resolved);
         return sendRevalidated(
           context,
-          hashedBody(sessionActivity({ ...facts, sessions: facts.seen.sessions, now: Date.now() })),
+          hashedBody(sessionActivity({ ...facts, sessions: facts.seen.sessions })),
         );
       },
     }),
