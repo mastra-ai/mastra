@@ -69,8 +69,14 @@ function runOnServer() {
   let live: MastraDBMessage | null = null;
   let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
 
-  const send = (event: { type: string; [key: string]: unknown }) =>
+  const write = (event: { type: string; [key: string]: unknown }) =>
     stream?.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+  const snapshot = () =>
+    write({ type: 'display_state_changed', displayState: { isRunning: true, currentMessage: live } });
+  const send = (event: { type: string; [key: string]: unknown }) => {
+    write(event);
+    snapshot();
+  };
 
   const rowInFlight = () => {
     const storedRow = stored.find(message => message.id === live?.id);
@@ -98,14 +104,14 @@ function runOnServer() {
         new ReadableStream<Uint8Array>({
           start(controller) {
             stream = controller;
-            send({ type: 'display_state_changed', displayState: { isRunning: true, currentMessage: live } });
+            snapshot();
           },
         }),
         { headers: { 'content-type': 'text/event-stream' } },
       );
     }),
-    http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, () =>
-      HttpResponse.json({ messages: structuredClone(stored) }),
+    http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, ({ params }) =>
+      HttpResponse.json({ messages: structuredClone(stored.filter(message => message.threadId === params.threadId)) }),
     ),
   );
 
@@ -113,10 +119,24 @@ function runOnServer() {
     get streaming() {
       return stream !== undefined;
     },
-    startRow(id: string, text: string) {
-      live = { id, role: 'assistant', createdAt: CREATED_AT, content: { format: 2, parts: [{ type: 'text', text }] } };
+    startRow(id: string, text: string, threadId = SESSION_ID) {
+      live = {
+        id,
+        role: 'assistant',
+        createdAt: CREATED_AT,
+        threadId,
+        content: { format: 2, parts: [{ type: 'text', text }] },
+      };
       stored.push(structuredClone(live));
       send({ type: 'message_start', message: structuredClone(live) });
+    },
+    say(delta: string) {
+      const row = rowInFlight();
+      const at = row.live.content.parts.findLastIndex(part => part.type === 'text');
+      const part = row.live.content.parts[at];
+      if (part?.type !== 'text') throw new Error('No text to grow');
+      row.live.content.parts[at] = { ...part, text: part.text + delta };
+      send({ type: 'message_update', id: row.live.id, event: { type: 'text-delta', delta } });
     },
     callTool,
     runTool(tool: Tool) {
@@ -286,5 +306,32 @@ describe('ThreadPage joining a run in flight', () => {
     run.callTool(postComment);
 
     await expectLineListing(/^Posting comment/, CALLS_BEFORE_THE_COMMENT);
+  });
+
+  it('keeps the words a reply wrote while the tab was away', async () => {
+    stubThreadRoute();
+    const run = runOnServer();
+    const client = await openThread(run);
+    run.startRow('row-now', 'Checking');
+    await screen.findByText('Checking');
+
+    await leaveTab(run);
+    run.say(' the authors');
+    await comeBackToTab(run, client);
+    run.say(' now.');
+
+    expect(await screen.findByText('Checking the authors now.')).toBeInTheDocument();
+  });
+
+  it('leaves out a reply in flight on another thread of the session', async () => {
+    stubThreadRoute();
+    const run = runOnServer();
+    run.startRow('row-elsewhere', 'Working on the other thread.', 'thread-other');
+
+    await openThread(run);
+    run.startRow('row-here', 'Working on this thread.');
+    await screen.findByText('Working on this thread.');
+
+    expect(screen.queryByText('Working on the other thread.')).not.toBeInTheDocument();
   });
 });

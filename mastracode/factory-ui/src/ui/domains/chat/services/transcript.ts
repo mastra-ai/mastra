@@ -988,18 +988,18 @@ function adoptCoveringWindowCopies(state: TranscriptState, anchors: Map<MastraDB
 
 function windowCopyCovers(onScreen: MastraMessagePart[], persisted: MastraMessagePart[]): boolean {
   if (persisted.length < onScreen.length) return false;
-  return onScreen.every((part, index) => {
-    const counterpart = persisted[index];
-    if (part.type === 'text' && counterpart.type === 'text') return counterpart.text.startsWith(part.text);
-    if (part.type === 'tool-invocation' && counterpart.type === 'tool-invocation') {
-      if (part.toolInvocation.toolCallId !== counterpart.toolInvocation.toolCallId) return false;
-      return (
-        !isTerminalInvocationState(part.toolInvocation.state) ||
-        isTerminalInvocationState(counterpart.toolInvocation.state)
-      );
-    }
-    return JSON.stringify(counterpart) === JSON.stringify(part);
-  });
+  return onScreen.every((part, index) => partCovers(persisted[index], part));
+}
+
+function partCovers(copy: MastraMessagePart, part: MastraMessagePart): boolean {
+  if (part.type === 'text' && copy.type === 'text') return copy.text.startsWith(part.text);
+  if (part.type === 'tool-invocation' && copy.type === 'tool-invocation') {
+    if (part.toolInvocation.toolCallId !== copy.toolInvocation.toolCallId) return false;
+    return (
+      !isTerminalInvocationState(part.toolInvocation.state) || isTerminalInvocationState(copy.toolInvocation.state)
+    );
+  }
+  return JSON.stringify(copy) === JSON.stringify(part);
 }
 
 // SSE gaps can swallow tool_start or tool_end; persisted invocations settle the row.
@@ -1169,6 +1169,7 @@ function followLiveRow(
   viewerId?: string,
 ): TranscriptState {
   if (!isRunning || currentMessage?.role !== 'assistant') return state;
+  if (currentMessage.threadId && state.threadId && currentMessage.threadId !== state.threadId) return state;
   const live = { ...currentMessage, createdAt: new Date(currentMessage.createdAt) };
   const index = state.entries.findIndex(
     entry => entry.kind === 'message' && (entry.id === live.id || entry.message.id === live.id),
@@ -1183,15 +1184,16 @@ function followLiveRow(
 function followsStream(entry: MessageEntry, live: MastraDBMessage, drawnElsewhere: Set<string>): boolean {
   const drawn = entry.message.content.parts;
   const streamIndexes = entry.sourcePartIndexes ?? drawn.map((_, at) => at);
-  const inPlace = drawn.every((part, at) => {
-    const counterpart = live.content.parts[streamIndexes[at] ?? -1];
-    if (!counterpart) return part.type === 'tool-invocation';
-    return part.type === counterpart.type && toolCallIdForPart(part) === toolCallIdForPart(counterpart);
+  const drawnAt = new Map(streamIndexes.map((streamIndex, at) => [streamIndex, drawn[at]]));
+  const holdsLiveParts = live.content.parts.every((part, index) => {
+    const own = drawnAt.get(index);
+    return own ? partCovers(own, part) : drawnElsewhere.has(toolCallIdForPart(part) ?? '');
   });
-  const placed = new Set(streamIndexes);
   return (
-    inPlace &&
-    live.content.parts.every((part, index) => placed.has(index) || drawnElsewhere.has(toolCallIdForPart(part) ?? ''))
+    holdsLiveParts &&
+    drawn.every(
+      (part, at) => (streamIndexes[at] ?? Infinity) < live.content.parts.length || part.type === 'tool-invocation',
+    )
   );
 }
 
