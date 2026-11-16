@@ -897,6 +897,8 @@ Manages authentication for Mastra platform. Credentials are stored in `~/.mastra
 
 Opens a browser for login and stores the credentials locally.
 
+When browser sign-in is needed and there's no interactive terminal (in CI, when input or output is piped, or in an agent's shell), the command first prints how to authenticate headless shells, then still waits for browser sign-in. On the same machine, you can run `mastra auth login` once in your own terminal so later commands reuse the saved session. In CI or on another machine, set `MASTRA_API_TOKEN` and `MASTRA_ORG_ID` instead. Create the token from a signed-in terminal with [`mastra auth tokens create`](#mastra-auth-tokens-create) or in the dashboard. If the browser sign-in wait times out, the command exits with status 1. If `MASTRA_API_TOKEN` is already set in a non-interactive shell, the command skips browser sign-in: it verifies the token and checks that an organization is selected (from `MASTRA_ORG_ID` or saved credentials), then exits with status 0. If either check fails, it exits with status 1 and names what's missing.
+
 ### `mastra auth logout`
 
 Removes stored credentials. If `MASTRA_API_TOKEN` is still set in the environment, the CLI warns that it will continue to be used.
@@ -963,7 +965,7 @@ Connects a provider to the project. When the organization already has connection
 
 OAuth providers open the provider's consent screen in your browser and print its URL if you need to open it manually. API key and Basic auth providers prompt for credentials in the terminal and verify them before completing the connection. Providers with other auth types open a hosted connect page. The command waits until the connection becomes active before exiting.
 
-Credential prompts require an interactive terminal, even with `--yes`. Run the command outside CI or connect through the platform UI. See [provider setup](/docs/mastra-platform/connect/providers) for API keys and required permissions.
+Credential prompts require an interactive terminal, even with `--yes`. Run the command outside CI or connect through the platform UI. Each provider's [integration page](/docs/mastra-platform/connect#providers) lists its API key and permission requirements.
 
 Once a new connection is active, the command offers to set a display name so you can tell connections to the same provider apart. It lists the provider's existing connections, suggests a name that doesn't collide with them, and asks for confirmation if the chosen name duplicates another connection's name. Leave the field blank to skip naming. Setting a display name requires the organization admin role; if naming fails, the connection remains active.
 
@@ -1265,6 +1267,13 @@ Errors are written to `stderr` as JSON and return a non-zero exit code:
   }
 }
 ```
+
+The exit code reflects whether the request succeeded, not the contents of the response:
+
+- `0`: The server returned a successful response. This includes empty results and payloads that report existing state, such as a tool result saying a record already exists. A tool that returns an object with an `error` field still exits `0`, so check the `data` payload when the tool reports its own failures.
+- `1`: The request failed. This includes an unreachable server, invalid JSON input, a missing resource, or a tool that throws an error.
+
+If the command reading the output exits early, as with `| head`, the exit code still reflects whether the request succeeded.
 
 ### Target resolution
 
@@ -1871,26 +1880,94 @@ curl -sS "https://observability.mastra.ai/api/observability/traces/<trace-id>/sp
 
 #### `mastra api score create`
 
-Creates an observability score. The input uses the server score body shape. Inspect it with `--schema`.
+Creates a score for a trace. Wrap the record in `score` with a required `traceId` and an optional `spanId`. The CLI generates an ID and timestamp when omitted and preserves them across retries. Pass `--schema` to inspect the request fields.
 
 ```bash
-mastra api score create <input>
+mastra api score create '{"score":{"traceId":"trace_123","scorerId":"quality","score":0.95}}'
 ```
+
+Score and feedback creates accept an optional top-level `contextMode`. Use `"resolve"` to look up context from a stored trace or span, or `"provided"` to write the fields you supply without a lookup. When you omit `contextMode`, OSS uses `provided` and Platform uses `resolve`, regardless of any context fields you supply.
+
+Successful writes on Platform mean the record is accepted for storage and may not be readable immediately. Output preserves the server's success response and any returned ID and timestamp. Older servers may return only `success`.
 
 #### `mastra api score list`
 
-Lists observability scores. Pass optional JSON input for filters such as run ID or pagination.
+Lists scores with optional filters and pagination.
 
 ```bash
-mastra api score list [input]
+mastra api score list '{"traceId":"trace_123","page":0,"perPage":50}'
 ```
 
 #### `mastra api score get`
 
-Gets one observability score by ID.
+Gets a score by ID. Missing scores return `{"data":{"score":null}}`.
 
 ```bash
-mastra api score get <scoreId>
+mastra api score get score_123
+```
+
+#### `mastra api feedback create`
+
+Creates feedback for a trace or span. Wrap the record in `feedback`. Feedback requires `traceId`, with IDs and timestamps generated when omitted.
+
+```bash
+mastra api feedback create '{"contextMode":"resolve","feedback":{"traceId":"trace_123","feedbackType":"comment","feedbackSource":"user","value":"actionable","feedbackUserId":"reviewer_123"}}'
+```
+
+`feedbackUserId` identifies the feedback author. `userId` describes the trace or span context and is separate from the author.
+
+#### `mastra api feedback list`
+
+Lists feedback with optional filters and pagination.
+
+```bash
+mastra api feedback list '{"traceId":"trace_123","reviewStatus":"needs-review","page":0,"perPage":50}'
+```
+
+#### `mastra api feedback get`
+
+Gets feedback by ID. Missing feedback returns `{"data":{"feedback":null}}`.
+
+```bash
+mastra api feedback get feedback_123
+```
+
+#### `mastra api feedback replace`
+
+Replaces the full feedback record. Send the original `feedbackId`, `traceId`, and `timestamp`, along with the complete replacement. Copy the timestamp from the create response or a subsequent read. The ID in the argument must match the body. Scores don't support replacement.
+
+```bash
+mastra api feedback replace feedback_123 '{"feedback":{"feedbackId":"feedback_123","traceId":"trace_123","timestamp":"2026-11-11T10:00:00.123Z","feedbackType":"comment","feedbackSource":"user","value":"corrected"}}'
+```
+
+Creates and replacements retry missing trace/span responses and transient failures within the command timeout, for at most six attempts or 30 seconds. Each accepted replacement retry counts as a new replacement. Older servers without PUT support return an error.
+
+#### `mastra api feedback review-status`
+
+Changes only the review status to `needs-review` or `reviewed`. No timestamp is required. Missing feedback returns an error, including records still waiting to be stored on Platform.
+
+```bash
+mastra api feedback review-status feedback_123 '{"reviewStatus":"reviewed"}'
+```
+
+#### Score and feedback analytics
+
+Both command groups expose `aggregate`, `breakdown`, `timeseries`, and `percentiles` for numeric values. Select scores by `scorerId` and feedback by `feedbackType`. Use `--schema` on an operation to inspect its filters and options.
+
+```bash
+mastra api score aggregate '{"scorerId":"quality","aggregation":"avg"}'
+mastra api score breakdown '{"scorerId":"quality","aggregation":"avg","groupBy":["entityName"]}'
+mastra api feedback timeseries '{"feedbackType":"rating","aggregation":"avg","interval":"1d"}'
+mastra api feedback percentiles '{"feedbackType":"rating","percentiles":[0.5,0.95],"interval":"1d"}'
+```
+
+#### Score and feedback deletion
+
+Deletes records by ID. Platform returns `accepted: true` when cleanup is queued. OSS returns `success` after deletion.
+
+```bash
+mastra api score delete '{"scoreIds":["score_123"]}'
+mastra api feedback delete '{"feedbackIds":["feedback_123"]}'
 ```
 
 #### `mastra api dataset list`

@@ -1,21 +1,17 @@
-import type { DashboardQuery } from '@mastra/client-js';
 import { ChartArea } from '../../../metrics/components/chart-area';
 import { ChartCard } from '../../../metrics/components/chart-card';
 import { ChartCardError } from '../../../metrics/components/chart-card-error';
 import { BUCKET_AXIS } from '../../../metrics/lib/chart-axis';
 import { CHART_COLORS } from '../../../metrics/lib/chart-colors';
 import { bucketPlan, intervalHours } from '../../../metrics/lib/metrics-buckets';
-import { ViewGate } from '../../components/view-gate';
 import { PendingChartCard } from '../../components/widget-chrome';
-import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
-import { useScorers } from '../../hooks/use-scorers';
+import { ExpandAction } from '../../components/widget-controls';
+import { alertAction, pendingHeading, withAction } from '../../lib/alert-actions';
 import { viewTitle } from '../../lib/chrome';
 import type { ViewHeading } from '../../lib/chrome';
 import { FORMATTERS } from '../../lib/format';
-import { pinActions } from '../../lib/pin-actions';
-import { buildRequest } from '../../lib/requests';
-import type { DashboardPageContext } from '../../lib/requests';
-import { shapeScores, withScorer } from '../../lib/scores';
+import type { DashboardPageContext, DashboardResult } from '../../lib/requests';
+import { scorersOf, shapeScores } from '../../lib/scores';
 import type { ResolvedView, WidgetKindProps } from '../../widget-kind';
 import type { ScoresOptions } from './options';
 import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
@@ -30,19 +26,48 @@ const SCORER_COLORS = [
   CHART_COLORS.indigo,
 ];
 
-export function ScoresWidget({ widget, views, expand, dragHandle, pin }: WidgetKindProps<ScoresOptions>) {
+export function ScoresWidget({
+  widget,
+  views,
+  gate,
+  discovered,
+  results,
+  onRetry,
+  expand,
+  dragHandle,
+  onTitleChange,
+  actions,
+  alert,
+}: WidgetKindProps<ScoresOptions>) {
   const [view] = views;
-  // Scores show their first view only, so the title is plain or, with somewhere to expand to, a link.
-  const heading = {
-    ...viewTitle(widget, [view], 0, () => {}, expand),
-    dragHandle,
-    ...pinActions(pin),
-  };
+  // Scores show their first view only, so the title is plain; with somewhere to expand to, an action links there.
+  const title = viewTitle(widget, [view], 0, () => {}, expand);
+  const expandHref = expand?.href(widget);
+  const heading = withAction(
+    { ...title, dragHandle, onTitleChange, actions },
+    expand && expandHref && <ExpandAction title={title.title} href={expandHref} LinkComponent={expand.LinkComponent} />,
+  );
+  // The card, and the host's actions, stay while the view waits, so e.g. a pinned widget can still be unpinned.
+  if (gate.status === 'pending')
+    return <PendingChartCard gate={gate.gate} heading={pendingHeading(heading, gate.gate, alert, widget, view)} />;
   return (
-    // The card, and its pin, stay while the view waits, so a pinned widget can still be unpinned.
-    <ViewGate queries={view.queries} pending={gate => <PendingChartCard gate={gate} heading={heading} />}>
-      {page => <ScoresView heading={heading} view={view} page={page} />}
-    </ViewGate>
+    <ScoresView
+      heading={withAction(
+        heading,
+        // The scorers' means over the range: what the card's lines average to.
+        alertAction(alert, widget, view, {
+          page: gate.page,
+          values: [
+            { label: view.label?.trim() || widget.title?.trim() || 'Scores', value: { query: view.options.average } },
+          ],
+        }),
+      )}
+      view={view}
+      page={gate.page}
+      discovered={discovered}
+      results={results}
+      onRetry={onRetry}
+    />
   );
 }
 
@@ -50,31 +75,31 @@ function ScoresView({
   heading,
   view,
   page,
+  discovered,
+  results,
+  onRetry,
 }: {
   heading: ViewHeading;
   view: ResolvedView<ScoresOptions>;
   page: DashboardPageContext;
+  discovered: (DashboardResult | undefined)[];
+  results: (DashboardResult | undefined)[];
+  onRetry: () => void;
 }) {
   const { options } = view;
   const { interval } = bucketPlan(page.window.start, page.window.end);
   const stepHours = intervalHours(interval);
-  const { recent, scorers } = useScorers(view.queries, page);
-  const averageQuery = view.queries.find(q => q.id === options.average);
-  const seriesQuery = view.queries.find(q => q.id === options.series);
-  const send = (query: DashboardQuery | undefined, scorerId: string, bucket?: typeof interval) => {
-    const own = withScorer(query, scorerId);
-    return own && buildRequest(own, page, { interval: bucket });
-  };
+  const scorers = scorersOf(view.queries, discovered[0]?.data);
   // One answer per scorer in each list, in `scorers`' order.
-  const means = useDashboardRequests(scorers.map(({ scorerId }) => send(averageQuery, scorerId)));
-  const points = useDashboardRequests(scorers.map(({ scorerId }) => send(seriesQuery, scorerId, interval)));
+  const means = results.slice(0, scorers.length);
+  const points = results.slice(scorers.length, scorers.length * 2);
 
-  const all = [recent, ...means, ...points].filter(r => r !== undefined);
+  const all = [...discovered, ...results].filter(r => r !== undefined);
   const failed = all.filter(r => r.isError);
   if (failed.length > 0) {
     return (
       <ChartCard {...heading}>
-        <ChartCardError error={failed[0]?.error} onRetry={() => failed.forEach(r => void r.refetch())} />
+        <ChartCardError error={failed[0]?.error} onRetry={onRetry} />
       </ChartCard>
     );
   }
@@ -95,7 +120,7 @@ function ScoresView({
 
   return (
     <ChartCard {...heading} isUpdating={all.some(r => r.isRefetching)}>
-      <ChartArea isEmpty={!isLoading && lines.length === 0} emptyMessage={options.emptyMessage}>
+      <ChartArea isEmpty={!isLoading && lines.length === 0}>
         <MetricsLineChart
           lineStyle="thin"
           data={isLoading ? [] : buckets}

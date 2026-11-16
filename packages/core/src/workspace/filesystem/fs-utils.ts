@@ -283,6 +283,24 @@ const TEXT_EXTENSIONS = new Set([
   '.sas',
   '.log',
   '.jsonl',
+  // Templates
+  '.erb',
+  '.hbs',
+  '.handlebars',
+  '.haml',
+  '.slim',
+  '.ejs',
+  '.mustache',
+  '.jinja',
+  '.j2',
+  '.twig',
+  '.cshtml',
+  // Build, package and lock files
+  '.gemspec',
+  '.lock',
+  '.proto',
+  '.gradle',
+  '.properties',
 ]);
 
 /**

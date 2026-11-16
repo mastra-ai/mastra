@@ -12,7 +12,6 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../../test-utils.js';
-import { WorkItemCommentsStorage } from '../comments/base.js';
 import { WorkItemsStorage } from './base.js';
 
 const ORG = 'org-1';
@@ -205,30 +204,12 @@ describe('board list cache', () => {
       expectedRevision: card.revision,
       destinationStage: 'plan',
       actorId: 'user-alice',
-      ingress: { identity: 'move-1', triggerType: 'human', transitionId: 'move-1' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'move-1', transitionId: 'move-1' },
       causalChain: [],
       evaluation: { outcome: 'accepted', decisions: [] },
     });
 
     expect((await poll(seed.workItems))[0]?.stages[0]).toBe('plan');
-  });
-
-  it('shows a new comment count on the card, though only the comment domain wrote', async () => {
-    const seed = await createFactoryStorageForTests();
-    const card = await seedCard(seed.workItems);
-    expect((await poll(seed.workItems))[0]?.commentCount).toBe(0);
-
-    // What posting a comment does: store it, then refresh the card's feed counters.
-    const scope = { orgId: ORG, factoryProjectId: PROJECT, workItemId: card.id };
-    await seed.comments.create({
-      ...scope,
-      author: { kind: 'user', id: 'user-alice', displayName: 'Alice' },
-      body: 'looking at it now',
-    });
-    await seed.comments.refreshWorkItemFeedActivity(scope);
-
-    expect((await poll(seed.workItems))[0]?.commentCount).toBe(1);
   });
 
   it('shows a write made through another replica on the next poll', async () => {
@@ -238,7 +219,6 @@ describe('board list cache', () => {
     const replica = async (id: string) => {
       const backend = new LibSQLFactoryStorage({ id, url });
       const workItems = backend.registerDomain(new WorkItemsStorage());
-      backend.registerDomain(new WorkItemCommentsStorage());
       await backend.init();
       return { backend, workItems };
     };

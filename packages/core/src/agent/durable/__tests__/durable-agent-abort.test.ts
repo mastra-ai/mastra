@@ -25,7 +25,7 @@ import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 
 /** @param onCall - invoked as soon as the model starts streaming, to synchronize on a live run. */
-function createAbortableModel(onCall?: () => void) {
+function createAbortableModel(onCall?: () => void, text?: string) {
   return new MockLanguageModelV2({
     doStream: async ({ abortSignal }: { abortSignal?: AbortSignal }) => {
       onCall?.();
@@ -47,6 +47,7 @@ function createAbortableModel(onCall?: () => void) {
               timestamp: new Date(0),
             });
             controller.enqueue({ type: 'text-start', id: 'text-1' });
+            if (text) controller.enqueue({ type: 'text-delta', id: 'text-1', delta: text });
             // Hold the stream open and resolve with an AbortError as soon as
             // the signal fires — the durable step then catches AbortError and
             // emits the abort event to the bridge.
@@ -152,6 +153,9 @@ describe('DurableAgent abort signal', () => {
     new Mastra({ agents: { durableAgent }, storage, pubsub, logger: false });
     const workflowsStore = (await storage.getStore('workflows'))!;
     const persistedSteps = vi.spyOn(workflowsStore, 'updateWorkflowResults');
+    // Storage v2 runs write step results as entries instead.
+    const appendedSteps = vi.spyOn(workflowsStore, 'appendWorkflowRunEntries');
+    const mergedSteps = vi.spyOn(workflowsStore, 'mergeWorkflowRunStepResult');
     const onAbort = vi.fn();
 
     const { output, abort, cleanup } = await durableAgent.stream('Go', { onAbort });
@@ -161,7 +165,11 @@ describe('DurableAgent abort signal', () => {
     }
     await vi.waitFor(() => expect(onAbort).toHaveBeenCalledTimes(1));
 
-    const stepIds = persistedSteps.mock.calls.map(([args]) => args.stepId);
+    const stepIds = [
+      ...persistedSteps.mock.calls.map(([args]) => args.stepId),
+      ...appendedSteps.mock.calls.flatMap(([args]) => Object.keys(args.steps)),
+      ...mergedSteps.mock.calls.map(([args]) => args.stepId),
+    ];
     if (_kind === 'evented') expect(stepIds).toContain('durable-llm-execution');
     for (const stepId of [
       'extract-tool-calls',
@@ -328,7 +336,8 @@ describe('DurableAgent abort signal', () => {
       const modelCalled = new Promise<void>(resolve => {
         streaming = resolve;
       });
-      const blocking = createAbortableModel(streaming);
+      // Input interrupts a silent model; wait for visible output so this tests queued cancellation instead.
+      const blocking = createAbortableModel(streaming, 'Initial answer');
       let calls = 0;
       const model = new MockLanguageModelV2({
         doStream: async options => {
@@ -364,6 +373,14 @@ describe('DurableAgent abort signal', () => {
       const result = await agent.stream('initial', { memory: { thread: scope.threadId, resource: scope.resourceId } });
       try {
         await modelCalled;
+        const reader = result.output.fullStream.getReader();
+        try {
+          let chunk = await reader.read();
+          while (!chunk.done && chunk.value.type !== 'text-delta') chunk = await reader.read();
+          expect(chunk.done).toBe(false);
+        } finally {
+          reader.releaseLock();
+        }
         observer?.unsubscribe();
         const removed = agent.sendSignal({ type: 'user-message', contents: 'cancelled durable input' }, scope);
         await removed.accepted;

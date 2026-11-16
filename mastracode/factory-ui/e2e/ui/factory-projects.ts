@@ -19,7 +19,6 @@ export function listedRepository(
     slug,
     defaultBranch: 'main',
     branch: null,
-    sandboxWorkdir: `/workspace/${slug}`,
     ...overrides,
   };
 }

@@ -1,6 +1,6 @@
 services:
   valkey:
-    image: valkey/valkey:8-alpine
+    image: valkey/valkey:9-alpine
     ports:
       - '6382:6379'
     command: valkey-server --requirepass valkey_password

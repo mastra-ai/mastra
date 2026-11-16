@@ -9,6 +9,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { createLegacyCardTablesForTests } from '../../test-utils.js';
 import {
   applyStageTransition,
   factoryDecisionAttentionIdentity,
@@ -126,8 +127,7 @@ describe('WorkItemsStorage', () => {
         expectedRevision,
         destinationStage: 'intake',
         actorId: 'triage-agent',
-        ingress: { identity, triggerType: 'agent', transitionId: identity },
-        configVersion: 'rules-v1',
+        ingress: { identity, transitionId: identity },
         causalChain: [],
         evaluation: { outcome: 'accepted', decisions: [] },
         triageType,
@@ -276,8 +276,7 @@ describe('WorkItemsStorage', () => {
       storage.commitRuleEvaluation({
         ...scope,
         workItemId: null,
-        ingress: { identity: 'linear:issue:ENG-1:1', triggerType: 'issue.observed' },
-        configVersion: 'v1',
+        ingress: { identity: 'linear:issue:ENG-1:1' },
         expectedRevision: null,
         actor: { type: 'system', id: 'rules' },
         outcome: { status: 'accepted' },
@@ -329,8 +328,7 @@ describe('WorkItemsStorage', () => {
         orgId: 'org1',
         factoryProjectId: 'p1',
         workItemId: created.item.id,
-        ingress: { identity: 'github:delivery-1', triggerType: 'github.issueComment' },
-        configVersion: 'v1',
+        ingress: { identity: 'github:delivery-1' },
         expectedRevision,
         actor: { type: 'system', id: 'rules' },
         outcome: { status: 'accepted' },
@@ -357,8 +355,7 @@ describe('WorkItemsStorage', () => {
       orgId: 'org1',
       factoryProjectId: 'p1',
       workItemId: other.item.id,
-      ingress: { identity: 'github:delivery-2', triggerType: 'github.issueComment' },
-      configVersion: 'v1',
+      ingress: { identity: 'github:delivery-2' },
       expectedRevision: other.item.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -385,8 +382,7 @@ describe('WorkItemsStorage', () => {
     const commitResult = await storage.commitRuleEvaluation({
       ...scope,
       workItemId: null,
-      ingress: { identity: 'github:issue:1:1', triggerType: 'issue.observed' },
-      configVersion: 'v1',
+      ingress: { identity: 'github:issue:1:1' },
       expectedRevision: null,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -475,6 +471,143 @@ describe('WorkItemsStorage', () => {
     const shared = await storage.listShared({ orgId: 'org1', factoryProjectId: 'p1' });
     expect(shared[0]?.title).toBe('Fix login');
     expect(shared[0]?.stages).toEqual(['intake']);
+  });
+
+  it('throws when a caller writes to a card shared with the list cache', async () => {
+    const storage = await makeStorage();
+    await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
+
+    const [card] = await storage.listShared({ orgId: 'org1', factoryProjectId: 'p1' });
+    expect(() => Object.assign(card!, { title: 'Mutated by a caller' })).toThrow(TypeError);
+    expect(() => card!.stages.push('build')).toThrow(TypeError);
+    expect(() => Object.assign(card!.workItem, { title: 'Mutated by a caller' })).toThrow(TypeError);
+
+    const [again] = await storage.listShared({ orgId: 'org1', factoryProjectId: 'p1' });
+    expect(again?.title).toBe('Fix login');
+    expect(again?.stages).toEqual(['intake']);
+  });
+
+  it('rereads only the changed and deleted cards after a write, not the whole board', async () => {
+    const storage = await makeStorage();
+    const scope = { orgId: 'org1', factoryProjectId: 'p1' };
+    const cards = [];
+    for (let i = 0; i < 6; i++) {
+      cards.push(
+        await storage.upsert({
+          ...scope,
+          userId: 'u',
+          input: { ...input, externalSource: { ...input.externalSource, externalId: `e${i}` } },
+        }),
+      );
+    }
+    // Step past the window a delta rereads to tolerate clock skew between writers.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(Date.now() + 10_000);
+    const full = await storage.list(scope);
+    expect(full).toHaveLength(6);
+    vi.setSystemTime(Date.now() + 10_000);
+    await storage.update({ orgId: 'org1', id: cards[2]!.item.id, userId: 'mover', patch: { stages: ['build'] } });
+    await storage.delete({ orgId: 'org1', id: cards[4]!.item.id });
+
+    const findMany = vi.spyOn(storage.ops, 'findMany');
+    const after = await storage.list(scope);
+    const boardRowsRead = (
+      await Promise.all(
+        findMany.mock.calls
+          .map((call, i) => [call[0], findMany.mock.results[i]!.value] as const)
+          .filter(([table]) => table === 'factory_board_items')
+          .map(([, rows]) => rows),
+      )
+    ).reduce((sum, rows: unknown[]) => sum + rows.length, 0);
+    findMany.mockRestore();
+    vi.useRealTimers();
+
+    expect(boardRowsRead).toBeLessThanOrEqual(1);
+    expect(after.map(card => card.id)).toEqual(full.map(card => card.id).filter(id => id !== cards[4]!.item.id));
+    expect(after.find(card => card.id === cards[2]!.item.id)?.stages).toEqual(['build']);
+    expect(after).toEqual(
+      (await storage.listWith(storage.ops, scope)).map(card =>
+        expect.objectContaining({ id: card.id, stages: card.stages }),
+      ),
+    );
+  });
+
+  describe('a list cached before a write that leaves the card row untouched', () => {
+    const scope = { orgId: 'org1', factoryProjectId: 'p1' };
+
+    /** Lists the board, lets `write` land well after it, and returns the next list beside a full read. */
+    async function listAfter(storage: WorkItemsStorage, write: () => Promise<unknown>) {
+      // Step past the window a delta rereads to tolerate clock skew between writers.
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      onTestFinished(() => void vi.useRealTimers());
+      vi.setSystemTime(Date.now() + 10_000);
+      await storage.list(scope);
+      vi.setSystemTime(Date.now() + 10_000);
+      await write();
+      return { listed: await storage.list(scope), stored: await storage.listWith(storage.ops, scope) };
+    }
+
+    it('shows labels a provider sync wrote to the source alone', async () => {
+      const storage = await makeStorage();
+      const { item } = await storage.upsert({ ...scope, userId: 'u', input });
+
+      const { listed, stored } = await listAfter(storage, () =>
+        storage.syncWorkItemSource({
+          ...scope,
+          provider: item.workItem.provider,
+          externalId: item.workItem.externalId,
+          patch: { labels: ['urgent'] },
+        }),
+      );
+
+      expect(listed[0]?.workItem.labels).toEqual(['urgent']);
+      expect(listed).toEqual(stored);
+    });
+
+    it('shows a new title on a card that has a source', async () => {
+      const storage = await makeStorage();
+      const { item } = await storage.upsert({ ...scope, userId: 'u', input });
+
+      const { listed, stored } = await listAfter(storage, () =>
+        storage.update({ orgId: 'org1', id: item.id, userId: 'u', patch: { title: 'Fix login on Safari' } }),
+      );
+
+      expect(listed[0]?.title).toBe('Fix login on Safari');
+      expect(listed).toEqual(stored);
+    });
+
+    it('moves the other Review cards to Work when the last open one closes', async () => {
+      const storage = await makeStorage();
+      const cards = [];
+      for (const [externalId, stage] of [
+        ['open', 'review'],
+        ['done', 'done'],
+      ] as const) {
+        const { item } = await storage.upsert({
+          ...scope,
+          userId: 'u',
+          input: { ...input, externalSource: { ...input.externalSource, externalId } },
+        });
+        // A row as the retired Review board left it.
+        await storage.ops.updateMany(
+          'factory_board_items',
+          { id: item.id },
+          {
+            board: 'review',
+            stages: [stage],
+            stage_history: [{ stage, enteredAt: new Date(0).toISOString(), by: 'user' }],
+          },
+        );
+        cards.push(item);
+      }
+
+      const { listed, stored } = await listAfter(storage, () =>
+        storage.update({ orgId: 'org1', id: cards[0]!.id, userId: 'u', patch: { stages: ['done'] } }),
+      );
+
+      expect(listed.map(card => card.board)).toEqual(['work', 'work']);
+      expect(listed).toEqual(stored);
+    });
   });
 
   it('holds list order when a later write touches an older card', async () => {
@@ -693,8 +826,7 @@ describe('WorkItemsStorage', () => {
       await storage.commitRuleEvaluation({
         ...scope,
         workItemId: created.item.id,
-        ingress: { identity: `park-${index}`, triggerType: 'test' },
-        configVersion: 'rules-v1',
+        ingress: { identity: `park-${index}` },
         expectedRevision: current?.revision ?? created.item.revision,
         actor: { type: 'system', id: 'rules' },
         outcome: { status: 'accepted' },
@@ -743,8 +875,7 @@ describe('WorkItemsStorage', () => {
     await storage.commitRuleEvaluation({
       ...scope,
       workItemId: created.item.id,
-      ingress: { identity: 'receipt-race', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'receipt-race' },
       expectedRevision: created.item.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1184,8 +1315,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       await workItems.commitRuleEvaluation({
         ...scope,
         workItemId: item.id,
-        ingress: { identity: 'approval', triggerType: 'test' },
-        configVersion: 'v1',
+        ingress: { identity: 'approval' },
         expectedRevision: item.revision,
         actor: { type: 'system', id: 'rules' },
         outcome: { status: 'accepted' },
@@ -1233,6 +1363,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       const legacy = (await new Cards(storage.ops).findOne({ id: a.item.id }))!;
       delete legacy.work_item;
       delete legacy.work_item_sources;
+      delete legacy.changed_at;
+      await createLegacyCardTablesForTests(storage);
       await storage.ops.insertOne('work_items', { ...legacy, claim_key: 'jira:issue:X' });
 
       const b = await upsert('project-b');

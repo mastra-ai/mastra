@@ -3,7 +3,8 @@ import type { ButtonProps } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Tag, X } from 'lucide-react';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
 import { useState } from 'react';
 
 export function BulkTagPicker({
@@ -30,7 +31,7 @@ export function BulkTagPicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button size={size} icon={<Tag />}>
+        <Button size={size} icon={<IconTag />}>
           Tag {selectedCount} items
         </Button>
       </PopoverTrigger>
@@ -66,7 +67,7 @@ export function BulkTagPicker({
                 onClick={() => onRemoveTag(tag)}
                 className="ml-2 text-placeholder hover:text-destructive-foreground"
               >
-                <X className="h-3 w-3" />
+                <IconCrossMedium className="h-3 w-3" />
               </button>
             </div>
           ))}

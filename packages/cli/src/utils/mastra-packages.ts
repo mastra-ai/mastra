@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { getPackageInfo } from 'local-pkg';
 
@@ -50,4 +51,17 @@ export async function getMastraPackages(rootDir: string): Promise<MastraPackageI
   } catch {
     return [];
   }
+}
+
+/** File name of the packages manifest, shared by `mastra dev` and `mastra build`. */
+export const MASTRA_PACKAGES_FILE_NAME = 'mastra-packages.json';
+
+/**
+ * Writes the resolved Mastra package versions next to the built server, so a
+ * deployed server can report what it runs without access to the project's
+ * package.json or node_modules.
+ */
+export async function writeMastraPackagesManifest(outputDir: string, packages: MastraPackageInfo[]): Promise<void> {
+  await mkdir(outputDir, { recursive: true });
+  await writeFile(join(outputDir, MASTRA_PACKAGES_FILE_NAME), JSON.stringify(packages, null, 2));
 }

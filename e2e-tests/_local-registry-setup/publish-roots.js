@@ -37,6 +37,10 @@ const SHARED_REGISTRY_SUITES = {
     manifestGlobs: ['e2e-tests/experiment-worker/fixtures/**/package.json'],
     extraRoots: ['@mastra/deployer'],
   },
+  // packages/mcp/integration-tests (E2E MCP compatibility job)
+  'mcp-compat': {
+    manifestGlobs: ['packages/mcp/integration-tests/published-v1/package.json'],
+  },
 };
 
 function readJson(path) {

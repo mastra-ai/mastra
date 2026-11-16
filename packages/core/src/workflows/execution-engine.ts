@@ -18,6 +18,7 @@ import type {
   WorkflowErrorCallbackInfo,
   WorkflowStartCallbackInfo,
   WorkflowStateTracingContext,
+  WorkflowStepResults,
 } from './types';
 import type { RestartExecutionParams, StepFlowEntry, TimeTravelExecutionParams } from '.';
 
@@ -156,7 +157,7 @@ export abstract class ExecutionEngine extends MastraBase {
     status: WorkflowRunStatus;
     result?: any;
     error?: any;
-    steps: Record<string, StepResult<any, any, any, any>>;
+    steps: WorkflowStepResults<Record<string, StepResult<any, any, any, any>>, 1 | 2>;
     tripwire?: any;
     runId: string;
     workflowId: string;
@@ -265,7 +266,7 @@ export abstract class ExecutionEngine extends MastraBase {
     /** Called once the run is handed to workers. Engines that execute in-process ignore it. @internal */
     onDispatched?: () => void;
     /** For a storage v2 resume or restart, what the store reported for the loaded state. @internal */
-    storedState?: { seq: number; patchBytes: number };
+    storedState?: { seq: number; patchBytes: number; patchCount: number };
     /** For a storage v2 nested start or time travel, the version of the parent's state it starts from. @internal */
     inheritedState?: StateBase;
   }): Promise<TOutput>;

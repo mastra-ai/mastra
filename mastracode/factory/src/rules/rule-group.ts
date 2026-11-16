@@ -31,9 +31,15 @@ export const CARD_RULE_FIELDS = [
   'item.labels',
   'item.title',
   'item.author',
+  'item.key',
+  'item.state',
+  'item.assignees',
   'author.trusted',
   'source.kind',
   'source.integration',
+  'source.provider',
+  'source.repository',
+  'item.pullRequest',
 ] as const;
 
 export type RuleValue = string | number | boolean | Array<string | number | boolean>;
@@ -130,15 +136,20 @@ function compare(actual: unknown, expected: unknown, test: (left: number, right:
   return typeof actual === 'number' && typeof expected === 'number' && test(actual, expected);
 }
 
+/** Whether `actual` is `expected`; a list fact (labels, assignees) is when one of its members is. */
+const matches = (actual: unknown, expected: unknown) =>
+  Array.isArray(actual) ? actual.some(entry => same(entry, expected)) : same(actual, expected);
+
 /**
  * Evaluate one condition. Strings compare case-insensitively (labels and
  * repository slugs are case-insensitive on every provider Factory reads). A
+ * list fact is tested by its members, and an empty list counts as missing. A
  * missing fact fails every operator except `not_exists`, `not_equals`,
  * `not_contains` and `not_in`.
  */
 function evaluateCondition(condition: RuleCondition, facts: RuleFacts): boolean {
   const actual = facts[condition.field];
-  const present = actual !== undefined && actual !== null;
+  const present = actual !== undefined && actual !== null && !(Array.isArray(actual) && actual.length === 0);
   const expected = condition.value;
   switch (condition.operator) {
     case 'exists':
@@ -146,17 +157,17 @@ function evaluateCondition(condition: RuleCondition, facts: RuleFacts): boolean 
     case 'not_exists':
       return !present;
     case 'equals':
-      return present && same(actual, expected);
+      return present && matches(actual, expected);
     case 'not_equals':
-      return !present || !same(actual, expected);
+      return !present || !matches(actual, expected);
     case 'contains':
       return present && contains(actual, expected);
     case 'not_contains':
       return !present || !contains(actual, expected);
     case 'in':
-      return present && Array.isArray(expected) && expected.some(candidate => same(actual, candidate));
+      return present && Array.isArray(expected) && expected.some(candidate => matches(actual, candidate));
     case 'not_in':
-      return !present || !Array.isArray(expected) || !expected.some(candidate => same(actual, candidate));
+      return !present || !Array.isArray(expected) || !expected.some(candidate => matches(actual, candidate));
     case 'greater_than':
       return compare(actual, expected, (left, right) => left > right);
     case 'less_than':

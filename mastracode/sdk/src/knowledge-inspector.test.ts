@@ -289,6 +289,19 @@ describe('KnowledgeInspector', () => {
     expect(names(await harness.inspector.listNodes({ level: 'org' }))).toEqual(['Acme handbook', 'P1 plan']);
   });
 
+  it('reads the same canonical scopes the code agent writes, encoding only Memory ids', async () => {
+    // Host scopes reach the agent as canonical addresses, so the inspector must not encode them again.
+    harness = await createHarness({}, ['org:a%3Ab']);
+    await harness.seed.page('org:a%3Ab', 'Encoded org page');
+    expect(names(await harness.inspector.listNodes({ level: 'org' }))).toEqual(['Encoded org page']);
+
+    // A Factory org id with a colon is held encoded, as the agent holds it.
+    harness = await createHarness({ factoryOrgId: 'acme:eu', factoryProjectId: 'p:1' }, []);
+    await harness.seed.page('org:acme%3Aeu', 'EU handbook');
+    await harness.seed.page('project:p%3A1', 'P1 plan');
+    expect(names(await harness.inspector.listNodes({ level: 'org' }))).toEqual(['EU handbook', 'P1 plan']);
+  });
+
   it('fails closed when a Factory-owned session has no resolved org', async () => {
     harness = await createHarness({ factoryProjectId: 'p1' }, []);
     await expect(harness.inspector.getScopeTree()).rejects.toMatchObject({ code: 'unavailable' });

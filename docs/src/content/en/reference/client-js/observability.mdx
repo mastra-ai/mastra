@@ -374,10 +374,16 @@ const result = await mastraClient.deleteTraces({
   traceIds: ['trace-1', 'trace-2'],
 })
 
-console.log(result.success)
+if ('accepted' in result) {
+  console.log('Deletion requested')
+} else {
+  console.log(result.success)
+}
 ```
 
 Each request accepts up to 1,000 trace IDs and no tenant scope fields. Signals that aren't linked to a trace are preserved. Traces created by experiments are deleted like any other trace.
+
+The client supports two response shapes: OSS returns `{ success: true }` after its delete operation, while a Platform backend that supports queued batch deletion returns `202 { accepted: true }` after accepting cleanup. Acceptance doesn't mean records have disappeared from reads, so check the response before reporting deletion as complete. Using these client methods with Platform requires a deployment that supports the batch deletion endpoints.
 
 ## Scoring traces
 
@@ -406,6 +412,17 @@ const scores = await mastraClient.listScoresBySpan({
 })
 ```
 
+## Get a score by ID
+
+Use `getScore()` to retrieve one observability score:
+
+```typescript
+const { score } = await mastraClient.getScore('score-id-123')
+```
+
+The response is `{ score: record | null }`. A missing score returns HTTP 200 with `{ score: null }`.
+The return type is `GetScoreResponse`, exported from `@mastra/client-js`.
+
 ## Creating scores
 
 Create a score for a trace, optionally identifying a span within it:
@@ -425,7 +442,20 @@ const response = await mastraClient.createScore({
 
 ## Feedback
 
-Feedback methods create, list, and query human-in-the-loop signals such as ratings, thumbs, comments, and corrections through the configured API server. Create methods support OSS and Platform. Full replacement uses Platform's PUT endpoint. See the [feedback guide](/docs/observability/feedback) for examples and the [feedback reference](/reference/observability/feedback) for full schemas.
+Feedback methods create, list, and query human-in-the-loop signals such as ratings, thumbs, comments, and corrections through the configured API server. Create methods support OSS and Platform. Full replacement is supported by Platform and OSS servers with feedback replacement support. See the [feedback guide](/docs/observability/feedback) for examples and the [feedback reference](/reference/observability/feedback) for full schemas.
+
+### Get feedback by ID
+
+Use `getFeedback()` to retrieve one feedback record:
+
+```typescript
+const { feedback } = await mastraClient.getFeedback('feedback-id-123')
+```
+
+The response is `{ feedback: record | null }`. A missing record returns HTTP 200 with `{ feedback: null }`.
+The return type is `GetFeedbackResponse`, exported from `@mastra/client-js`.
+
+Both getters accept an unencoded ID and encode it as a URL path segment. They use the client's configured API prefix, credentials, and headers. Record timestamps are ISO strings in the JSON response.
 
 ### Creating feedback
 
@@ -473,9 +503,9 @@ Create responses contain `success` and optional `data` with the generated or sup
 
 Explicit modes require server support. Older servers may ignore `contextMode`. Deploy Platform's supplied-context support before sending `"provided"` there.
 
-### Replacing feedback on Platform
+### Replacing feedback
 
-`replaceFeedback()` sends a full replacement to `PUT /api/observability/feedback/:feedbackId`. Include the original `feedbackId`, `traceId`, and normalized `timestamp`, along with all feedback fields to retain. This method targets Platform. OSS server doesn't implement this replacement endpoint.
+`replaceFeedback()` sends a full replacement to `PUT /api/observability/feedback/:feedbackId`. Include the original `feedbackId`, `traceId`, and normalized `timestamp`, along with all feedback fields to retain. Platform and OSS servers with feedback replacement support accept this method. OSS returns `501` when its storage adapter doesn't support replacement. For OSS, check `capabilities.feedbackReplacement` before offering edits. A missing capability means unavailable.
 
 ```typescript
 await mastraClient.replaceFeedback({
@@ -490,7 +520,7 @@ await mastraClient.replaceFeedback({
 })
 ```
 
-Use the normalized timestamp from the create response's `data` when available. A changed timestamp identifies a different Platform record. The client preserves the replacement body across retries, but each accepted PUT retry is a new replacement and can supersede another edit. Pass `{ retries: 0, anchorRetryTimeoutMs: 0 }` as the second argument to disable automatic retries.
+Use the normalized timestamp from the create response's `data` when available. OSS rejects changes to the original trace or timestamp with `409`. Platform uses the timestamp as part of record identity, so preserve it there too. The client preserves the replacement body across retries, but each accepted PUT retry is a new replacement and can supersede another edit. Pass `{ retries: 0, anchorRetryTimeoutMs: 0 }` as the second argument to disable automatic retries.
 
 ### Deleting feedback and scores
 
@@ -509,6 +539,8 @@ await mastraClient.deleteScores({
   resourceId: 'resource-1',
 })
 ```
+
+Both methods return `{ success: boolean }` from OSS or `{ accepted: true }` from a Platform backend that supports queued batch deletion. See [Deleting traces](#deleting-traces) for response handling. Accepted records can remain readable until cleanup runs. Platform uses authenticated organization/project scope, which request-body scope fields can't override.
 
 ### Listing feedback
 

@@ -1,9 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Bell, BellOff, Monitor, Moon, Sun } from 'lucide-react';
 import { useState } from 'react';
 
 import { SegmentedControl, SegmentedControlItem } from './segmented-control';
 import type { SegmentedControlProps } from './segmented-control';
+import { IconBell2 } from '@/ds/icons/central/IconBell2';
+import { IconBell2Off } from '@/ds/icons/central/IconBell2Off';
+import { IconMoon } from '@/ds/icons/central/IconMoon';
+import { IconStudioDisplay } from '@/ds/icons/central/IconStudioDisplay';
+import { IconSun } from '@/ds/icons/central/IconSun';
 
 const meta: Meta<typeof SegmentedControl> = {
   title: 'Elements/SegmentedControl',
@@ -55,13 +59,13 @@ export const IconOnly: Story = {
   render: () => (
     <Controlled aria-label="Theme" initial="system" iconOnly>
       <SegmentedControlItem value="system" aria-label="System">
-        <Monitor />
+        <IconStudioDisplay />
       </SegmentedControlItem>
       <SegmentedControlItem value="light" aria-label="Light">
-        <Sun />
+        <IconSun />
       </SegmentedControlItem>
       <SegmentedControlItem value="dark" aria-label="Dark">
-        <Moon />
+        <IconMoon />
       </SegmentedControlItem>
     </Controlled>
   ),
@@ -71,10 +75,10 @@ export const IconAndText: Story = {
   render: () => (
     <Controlled aria-label="Alerts" initial="on">
       <SegmentedControlItem value="on">
-        <Bell /> On
+        <IconBell2 /> On
       </SegmentedControlItem>
       <SegmentedControlItem value="off">
-        <BellOff /> Off
+        <IconBell2Off /> Off
       </SegmentedControlItem>
     </Controlled>
   ),

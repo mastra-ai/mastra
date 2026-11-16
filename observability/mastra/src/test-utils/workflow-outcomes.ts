@@ -15,6 +15,47 @@ export {
   expectedResumeOutcomes,
 } from './workflow-outcome-fixtures';
 
+export function createConcurrencyFailureFixture() {
+  return {
+    step: createStep({
+      id: 'resolver-body',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      execute: async () => ({}),
+    }),
+    options: {
+      concurrency: () => {
+        throw new Error('Concurrency resolver failed');
+      },
+    },
+  };
+}
+
+export function createInstrumentedFailureStep() {
+  return createStep({
+    id: 'instrumented-failure',
+    inputSchema: z.object({}),
+    outputSchema: z.object({}),
+    execute: async ({ tracingContext }) => {
+      const child = tracingContext?.currentSpan?.createChildSpan({ name: 'child operation', type: SpanType.TOOL_CALL });
+      const error = new Error('Child operation failed');
+      child?.error({ error });
+      throw error;
+    },
+  });
+}
+
+/** Internal error attribution must not become part of a public workflow response. */
+export function expectPublicWorkflowError(result: { error?: unknown }) {
+  expect(result.error).toBeDefined();
+  expect(Object.keys(result.error as object)).not.toContain('__mastraSpanErrorOrigin');
+  expect(JSON.stringify(result)).not.toContain('__mastraSpanErrorOrigin');
+  const error = result.error as { toJSON?: () => unknown };
+  if (typeof error.toJSON === 'function') {
+    expect(JSON.stringify(error.toJSON())).not.toContain('__mastraSpanErrorOrigin');
+  }
+}
+
 /** Assert exported executions, independently of the transport's public status. */
 export function expectWorkflowOutcome(spans: AnyExportedSpan[], mode: WorkflowOutcomeMode) {
   const expected =
@@ -32,6 +73,14 @@ export function expectWorkflowOutcome(spans: AnyExportedSpan[], mode: WorkflowOu
   const roots = spans.filter(span => span.type === SpanType.WORKFLOW_RUN);
   expect(roots).toHaveLength(1);
   expect(roots[0]).toMatchObject(expected);
+  if (mode === 'error' || mode === 'retry') {
+    // OBS-901: failures belong to their originating step, even when the run
+    // propagates the failure or a later attempt succeeds. Deduplicate exports.
+    const localCounts = [...new Map(spans.map(span => [span.id, span.errorCount])).values()];
+    expect(localCounts.every(count => typeof count === 'number')).toBe(true);
+    expect(localCounts.reduce<number>((sum, count) => sum + (count ?? NaN), 0)).toBe(1);
+    expect(roots[0]?.errorCount).toBe(0);
+  }
   expect(
     spans.findLast(span => span.type === SpanType.WORKFLOW_STEP && span.entityId === `decision-${mode}`),
   ).toMatchObject(expected);

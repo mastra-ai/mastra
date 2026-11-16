@@ -52,9 +52,20 @@ vi.mock('@earendil-works/pi-tui', () => {
     isShowingAutocomplete(): boolean {
       return false;
     }
+
+    getPaddingX(): number {
+      return 0;
+    }
+
+    protected scrollOffset = 0;
+    protected lastWidth = 80;
+    protected buildVisualLineMap(): Array<{ logicalLine: number; startCol: number; length: number }> {
+      return this.state.lines.map((line, logicalLine) => ({ logicalLine, startCol: 0, length: line.length }));
+    }
   }
 
   return {
+    CURSOR_MARKER: '\x1b_pi:c\x07',
     Editor: MockEditor,
     matchesKey: mocks.matchesKey,
     visibleWidth: (value: string) => value.replace(/\x1b\[[0-9;]*m/g, '').length,

@@ -1,7 +1,7 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { IconPlay } from '@mastra/playground-ui/icons/central/IconPlay';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { Play } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
@@ -42,7 +42,7 @@ export function RerunExperimentButton({ experiment }: RerunExperimentButtonProps
         tooltip={
           isActive ? 'Available once this run finishes' : 'Run this experiment again with the same configuration'
         }
-        icon={<Play />}
+        icon={<IconPlay />}
       >
         Rerun
       </Button>

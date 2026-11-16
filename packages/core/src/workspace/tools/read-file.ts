@@ -124,6 +124,59 @@ function buildMediaTypeCheck(
   };
 }
 
+/** Bytes decoded from the start of a media file to check its signature. PDF allows its header anywhere in the first 1 KiB. */
+const MEDIA_SNIFF_BYTES = 1024;
+
+const startsWithBytes = (bytes: Uint8Array, prefix: number[], offset = 0) =>
+  bytes.length >= offset + prefix.length && prefix.every((byte, index) => bytes[offset + index] === byte);
+
+/**
+ * Media types with a fixed signature, and how to recognize each from a file's first bytes.
+ * Other configured types (e.g. SVG, HEIC, audio) have no reliable signature here and are
+ * trusted by extension.
+ */
+const MEDIA_SIGNATURES: [mediaType: string, matches: (bytes: Uint8Array) => boolean][] = [
+  ['image/png', bytes => startsWithBytes(bytes, [0x89, 0x50, 0x4e, 0x47])],
+  ['image/jpeg', bytes => startsWithBytes(bytes, [0xff, 0xd8, 0xff])],
+  // `GIF87a` or `GIF89a`.
+  [
+    'image/gif',
+    bytes =>
+      startsWithBytes(bytes, [0x47, 0x49, 0x46, 0x38, 0x37, 0x61]) ||
+      startsWithBytes(bytes, [0x47, 0x49, 0x46, 0x38, 0x39, 0x61]),
+  ],
+  [
+    'image/webp',
+    bytes => startsWithBytes(bytes, [0x52, 0x49, 0x46, 0x46]) && startsWithBytes(bytes, [0x57, 0x45, 0x42, 0x50], 8),
+  ],
+  // A version header such as `%PDF-1.7`, which readers accept anywhere in the first 1 KiB.
+  ['application/pdf', bytes => /%PDF-\d\.\d/.test(Buffer.from(bytes).toString('latin1'))],
+];
+
+const SIGNED_MEDIA_TYPES = new Set([...MEDIA_SIGNATURES.map(([mediaType]) => mediaType), 'image/jpg']);
+
+/**
+ * The media type to send for a file whose extension maps to `declared`. For types with a known
+ * signature, this is the type the bytes show (so a PNG named `.jpg` goes as `image/png`), or
+ * undefined when they show none: an HTML error page saved as `.pdf` is not a PDF, and providers
+ * reject it with a 400 that also fails every later call carrying the same history.
+ */
+function contentMediaType(head: Uint8Array, declared: string): string | undefined {
+  if (!SIGNED_MEDIA_TYPES.has(declared.split(';', 1)[0]!.trim().toLowerCase())) return declared;
+  return MEDIA_SIGNATURES.find(([, matches]) => matches(head))?.[0];
+}
+
+/** Whether a whole file is UTF-8 text: no NUL bytes and no invalid sequences. */
+function isUtf8Text(content: Uint8Array): boolean {
+  if (content.includes(0)) return false;
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(content);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const readFileTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
   description:
@@ -194,24 +247,39 @@ export const readFileTool = createTool({
       // config (#23896). Read as base64 and return a MediaToolResult so
       // `toModelOutput` can surface it as a file/image part the model can
       // natively consume.
+      // Set when the extension says media but the bytes don't, and the bytes read as text.
+      let mislabeledNote: string | undefined;
       if (shouldReturnAsMedia(stat.mimeType)) {
         const maxMediaBytes = readFileConfig?.maxMediaBytes ?? DEFAULT_MAX_MEDIA_BYTES;
         if (stat.size <= maxMediaBytes) {
           const base64 = (await filesystem.readFile(path, { encoding: 'base64' })) as string;
-          const header = `${stat.path} (${stat.size} bytes, ${stat.mimeType})`;
-          span.end({ success: true }, { bytesTransferred: stat.size });
-          return {
-            __workspaceMedia: true,
-            text: header,
-            mediaType: stat.mimeType!,
-            data: base64,
-          } satisfies MediaToolResult;
-        }
-        // Oversized media: avoid materializing huge base64 strings (and
-        // persisting them through storage on rehydration). Return metadata-only
-        // unless the caller explicitly asked for raw bytes via `encoding`, in
-        // which case fall through to the raw read path below.
-        if (!encoding) {
+          const head = Buffer.from(base64.slice(0, Math.ceil(MEDIA_SNIFF_BYTES / 3) * 4), 'base64');
+          const mediaType = contentMediaType(head, stat.mimeType!);
+          if (mediaType && shouldReturnAsMedia(mediaType)) {
+            const header = `${stat.path} (${stat.size} bytes, ${mediaType})`;
+            span.end({ success: true }, { bytesTransferred: stat.size });
+            return {
+              __workspaceMedia: true,
+              text: header,
+              mediaType,
+              data: base64,
+            } satisfies MediaToolResult;
+          }
+          // The extension says media but the content isn't. Never send it as media: show text
+          // content as text, and only metadata for anything else, unless `encoding` was given.
+          const mismatch = `the extension says ${stat.mimeType}, but the content is ${mediaType ?? 'not a valid file of that type'}`;
+          // The whole file, not just its head: binary content can follow a first KiB of ASCII.
+          if (isUtf8Text(Buffer.from(base64, 'base64'))) {
+            mislabeledNote = mismatch;
+          } else if (!encoding) {
+            span.end({ success: true }, { bytesTransferred: 0 });
+            return `${stat.path} (${stat.size} bytes) — ${mismatch}, so it was not sent as media. Pass an explicit \`encoding\` (e.g. \`hex\`) to read the raw bytes.`;
+          }
+        } else if (!encoding) {
+          // Oversized media: avoid materializing huge base64 strings (and
+          // persisting them through storage on rehydration). Return metadata-only
+          // unless the caller explicitly asked for raw bytes via `encoding`, in
+          // which case fall through to the raw read path below.
           span.end({ success: true }, { bytesTransferred: 0 });
           return `${stat.path} (${stat.size} bytes, ${stat.mimeType}) — exceeds maxMediaBytes (${maxMediaBytes}). Returning metadata only; configure \`maxMediaBytes\` on the read_file tool to raise this cap.`;
         }
@@ -221,7 +289,7 @@ export const readFileTool = createTool({
       // a binary type that's neither text-readable nor in `mediaTypes`,
       // return metadata only so the agent knows about the file without
       // dumping useless base64 into the conversation.
-      if (!encoding && !isTextLikeMimeType(stat.mimeType)) {
+      if (!encoding && !mislabeledNote && !isTextLikeMimeType(stat.mimeType)) {
         span.end({ success: true }, { bytesTransferred: 0 });
         return `${stat.path} (${stat.size} bytes, ${stat.mimeType ?? 'unknown'}) — binary file not readable as text. Pass an explicit \`encoding\` (e.g. \`base64\`) to read the raw bytes, or configure \`mediaTypes\` on the read_file tool to surface it as a media part.`;
       }
@@ -269,6 +337,7 @@ export const readFileTool = createTool({
       } else {
         header = `${stat.path} (${stat.size} bytes)`;
       }
+      if (mislabeledNote) header += ` — ${mislabeledNote}; showing it as text`;
 
       const output = await applyTokenLimit(`${header}\n${formattedContent}`, tokenLimit, 'end');
       span.end({ success: true }, { bytesTransferred: stat.size });

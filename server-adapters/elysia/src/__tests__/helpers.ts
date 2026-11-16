@@ -100,3 +100,36 @@ export async function startElysiaServer(app: Elysia): Promise<{
     },
   };
 }
+
+/** The srvx server behind @elysiajs/node, which `listen` hands back as `raw`. */
+type SrvxNodeServer = {
+  ready(): Promise<unknown>;
+  node?: { server?: Server };
+  close(closeActiveConnections?: boolean): Promise<void>;
+};
+
+/**
+ * Serves an app through Elysia's official Node adapter, the way production does.
+ *
+ * `listen` calls back before the socket accepts connections and reports port 0
+ * back for an ephemeral port, so wait for srvx's `ready()` and read the bound
+ * port from the socket. Binds 127.0.0.1 (not `localhost`, which can resolve to
+ * `::1`) and without `reusePort`, so no other process can share the port.
+ */
+export async function listenWithNodeAdapter(app: Elysia): Promise<{
+  baseUrl: string;
+  close: () => Promise<void>;
+}> {
+  const server = await new Promise<SrvxNodeServer>(resolve =>
+    app.listen({ port: 0, hostname: '127.0.0.1', reusePort: false }, started => {
+      resolve((started as unknown as { raw: SrvxNodeServer }).raw);
+    }),
+  );
+  await server.ready();
+  const { port } = server.node!.server!.address() as AddressInfo;
+  return {
+    baseUrl: `http://127.0.0.1:${port}`,
+    // Also drops open connections, so a stuck stream can't hold teardown.
+    close: () => server.close(true),
+  };
+}

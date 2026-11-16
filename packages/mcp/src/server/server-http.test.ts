@@ -481,6 +481,8 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
         await client.connect(new StreamableHTTPClientTransport(lenientServed.url));
         try {
           expect(client.getServerVersion()?.name).toBe('Lenient');
+          // 2025-era clients (e.g. MCP Inspector) set the session log level because `logging` is advertised.
+          await expect(client.setLoggingLevel('debug')).resolves.toBeDefined();
           const { tools } = await client.listTools();
           expect(tools.map(tool => tool.name)).toContain('echoTool');
           const result = await client.callTool({ name: 'echoTool', arguments: { text: 'hi' } });

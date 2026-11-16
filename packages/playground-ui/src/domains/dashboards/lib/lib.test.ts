@@ -8,7 +8,7 @@ import { scoresIssues } from '../kinds/scores/options';
 import type { ResolvedView } from '../widget-kind';
 import { dashboardDefaults, inScope, targetScope, viewDrilldown } from './definition';
 import { intersectFilters } from './filters';
-import { buildPreviousRequest, buildRequest, sendRequest } from './requests';
+import { buildPreviousRequest, buildRequest, pageQuery, sendRequest } from './requests';
 import type { DashboardAnswer, DashboardPageContext, DashboardRequestOptions } from './requests';
 import {
   buildTableRows,
@@ -187,6 +187,64 @@ describe('buildRequest', () => {
     const previous = buildPreviousRequest(query, page, {});
     expect(previous).toMatchObject({ priority: 2 });
     expect(previous?.args).toMatchObject({ timeRange: { to: window.start.toISOString() } });
+  });
+});
+
+describe('pageQuery', () => {
+  const spanWhere = { op: 'eq', left: { path: 'environment' }, right: { literal: 'production' } } as const;
+
+  it("ANDs a trace query's predicate with the page's, as its request does", () => {
+    const query: DashboardQuery = {
+      source: 'traceAggregate',
+      where: { op: 'exists', path: 'threadId' },
+      groupBy: ['threadId'],
+      measures: ['count'],
+    };
+    expect(pageQuery(query, page)).toEqual({ ...query, where: { op: 'and', args: [query.where, page.traceWhere] } });
+  });
+
+  it("gives a span query the page's predicate when it has none, and leaves one alone on an unfiltered page", () => {
+    const query: DashboardQuery = { source: 'spanAggregate', measures: ['errorRate'] };
+    expect(pageQuery(query, { ...page, spanWhere })).toEqual({ ...query, where: spanWhere });
+    expect(pageQuery(query, { window, filters: { timestamp: window } })).toBe(query);
+  });
+
+  it("intersects metrics and scores filters with the page's, without the time window", () => {
+    const metrics: DashboardQuery = {
+      source: 'metrics',
+      request: 'breakdown',
+      name: ['mastra_agent_duration_ms'],
+      aggregation: 'count',
+      groupBy: ['entityName'],
+      filters: { entityType: EntityType.AGENT },
+    };
+    expect(pageQuery(metrics, page)).toEqual({
+      ...metrics,
+      filters: { entityType: 'agent', environment: 'production' },
+    });
+    const scores: DashboardQuery = {
+      source: 'scores',
+      request: 'aggregate',
+      scorerId: 'relevance',
+      aggregation: 'avg',
+    };
+    expect(pageQuery(scores, page)).toEqual({ ...scores, filters: { environment: 'production' } });
+  });
+
+  it('drops an empty filters object rather than sending one', () => {
+    const query: DashboardQuery = { source: 'metrics', request: 'aggregate', name: ['x'], aggregation: 'count' };
+    expect(pageQuery(query, { window, filters: { timestamp: window } })).toEqual(query);
+  });
+
+  it('says a query whose filters contradict the page can match nothing', () => {
+    const query: DashboardQuery = {
+      source: 'metrics',
+      request: 'aggregate',
+      name: ['mastra_agent_duration_ms'],
+      aggregation: 'count',
+      filters: { environment: 'staging' },
+    };
+    expect(pageQuery(query, page)).toBe('unsatisfiable');
   });
 });
 
@@ -696,8 +754,21 @@ describe('kpisIssues', () => {
       name: ['mastra_agent_duration_ms'],
       aggregation: 'count',
     };
-    expect(kpisIssues(kpi([series]))).toEqual([
-      "KPI 'Runs' reads query 'runs', which is not a metrics or scores aggregate",
+    expect(kpisIssues(kpi([series]))).toEqual(["KPI 'Runs' reads query 'runs', which is not an aggregate"]);
+  });
+
+  it('takes a KPI reading one measure of an ungrouped trace aggregate, and reports one that groups or names none', () => {
+    const traces: DashboardQuery = { id: 'runs', source: 'traceAggregate', measures: ['duration.p95'] };
+    const read = (query: DashboardQuery, measure?: string): ResolvedView<KpisOptions> => ({
+      queries: [query],
+      options: { items: [{ label: 'Runs', format: 'duration', value: { query: 'runs', measure } }] },
+    });
+    expect(kpisIssues(read(traces, 'duration.p95'))).toEqual([]);
+    expect(kpisIssues(read({ ...traces, groupBy: ['entityName'] }, 'duration.p95'))).toEqual([
+      "KPI 'Runs' reads query 'runs', which groups or buckets its rows; a KPI shows one figure",
+    ]);
+    expect(kpisIssues(read(traces, 'count'))).toEqual([
+      "KPI 'Runs' reads query 'runs' without naming one of its measures",
     ]);
   });
 

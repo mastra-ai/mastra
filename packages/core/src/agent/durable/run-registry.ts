@@ -239,18 +239,30 @@ export function getActiveDurableAgentWorkflowExecutions(mastra: Mastra): Promise
 }
 
 /**
+ * Whether shutdown only detaches `mastra` from this durable-agent execution rather than abandoning it: an evented
+ * execution behind a broker, which another process may be executing.
+ */
+function detachesOnShutdown(mastra: Mastra, entry: RunRegistryEntry): boolean {
+  return !!entry.eventedExecution && !(mastra.pubsub.__rawBus() instanceof EventEmitterPubSub);
+}
+
+export function isDurableAgentExecutionDetached(mastra: Mastra, runId: string): boolean {
+  const entry = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
+  return !!entry && entry.mastra === mastra && detachesOnShutdown(mastra, entry);
+}
+
+/**
  * Abandon the durable-agent executions `mastra` is still running: each stops
  * without writing and releases its run, so recovery can take it right away.
  * Executions that already settled are left alone.
  */
 export async function abandonDurableAgentExecutions(mastra: Mastra): Promise<void> {
   await stopDurableExecutionParticipants(mastra);
-  const processLocal = mastra.pubsub.__rawBus() instanceof EventEmitterPubSub;
   await Promise.allSettled(
     registryEntries().map(async entry => {
       if (entry.mastra !== mastra || !entry.executionFence) return;
       // A broker does not prove that this is the only executing process.
-      if (entry.eventedExecution && !processLocal) entry.executionFence.detach();
+      if (detachesOnShutdown(mastra, entry)) entry.executionFence.detach();
       else await entry.executionFence.abandon();
     }),
   );

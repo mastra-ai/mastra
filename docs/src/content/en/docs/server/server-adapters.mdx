@@ -314,6 +314,7 @@ Without this call, the following features never run:
 - [Scheduled workflows](/docs/workflows/scheduled-workflows): Schedule rows aren't created and cron triggers don't fire.
 - [Agent schedules](/docs/harness/schedules) created with `mastra.schedules`
 - Event listeners you've registered on the Mastra instance
+- The [recovery loop](/docs/workflows/overview#recovery-loop): Default-engine workflow runs whose instance stops after this server booted aren't restarted.
 
 Call `startWorkers()` once, after the server starts listening:
 
@@ -371,6 +372,8 @@ const server = new MastraServer({
 ```
 
 With this prefix, Mastra routes become `/api/v2/agents`, `/api/v2/workflows`, etc. Custom routes you add directly to the app aren't affected by this prefix.
+
+The [built-in MCP server](/docs/server/mcp) moves with the prefix to `/api/v2/mcp`. Its OAuth metadata stays at the server root, at `/.well-known/oauth-protected-resource/api/v2/mcp`.
 
 ## OpenAPI spec
 

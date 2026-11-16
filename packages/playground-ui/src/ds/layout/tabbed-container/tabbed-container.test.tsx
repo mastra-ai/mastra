@@ -31,7 +31,7 @@ const renderTables = () =>
         value="runs"
         label="Runs"
         columns="auto 1fr"
-        search={{ label: 'Search runs', placeholder: 'Search runs', onSearch: vi.fn() }}
+        search={{ label: 'Search runs', placeholder: 'Search runs', value: '', onSearch: vi.fn() }}
         filter={{
           'aria-label': 'Filter by status',
           multiple: true,
@@ -54,7 +54,7 @@ const renderTables = () =>
         value="scores"
         label="Scores"
         columns="auto 1fr"
-        search={{ label: 'Search scores', placeholder: 'Search scores', onSearch: vi.fn() }}
+        search={{ label: 'Search scores', placeholder: 'Search scores', value: '', onSearch: vi.fn() }}
       >
         <DataList.Top>
           <DataList.TopCell>ID</DataList.TopCell>
@@ -160,7 +160,7 @@ describe('TabbedContainer', () => {
           value="runs"
           label="Runs"
           columns="auto"
-          search={{ label: 'Search runs', placeholder: 'Search runs', onSearch: vi.fn() }}
+          search={{ label: 'Search runs', placeholder: 'Search runs', value: '', onSearch: vi.fn() }}
         >
           <DataList.RowStatic>
             <DataList.Cell>run_1</DataList.Cell>

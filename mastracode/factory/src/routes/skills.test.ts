@@ -374,9 +374,6 @@ describe('workspace skill invocation route', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/workspace/repository',
     });
     await sourceControlStorage.sessions.create({
       sessionId,
@@ -480,7 +477,7 @@ describe('factory skills catalog route', () => {
     const names = skills.map(s => s.name);
     expect(names).toContain('factory-triage');
     expect(names).toContain('factory-plan');
-    expect(names).toContain('factory-complete-issue');
+    expect(names).toContain('factory-build');
     const triage = skills.find(s => s.name === 'factory-triage')!;
     expect(triage.description.length).toBeGreaterThan(0);
     expect(triage.content).toContain('# Factory Triage');

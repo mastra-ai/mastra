@@ -187,6 +187,7 @@ export class ValkeyStreamsClient {
         useTLS:
           configuration.useTLS ??
           (parsed ? parsed.protocol === 'rediss:' || parsed.protocol === 'valkeys:' : undefined),
+        clientInfoTag: configuration.clientInfoTag ?? 'mastra',
       });
     }
     return this.#client;

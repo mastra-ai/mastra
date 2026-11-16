@@ -77,12 +77,15 @@ function setup({
   observerReplies,
   maxRetries,
   failurePolicy,
+  markdownWorkingMemory,
 }: {
   scope: 'thread' | 'resource';
   /** Observer replies in call order; the last one repeats. */
   observerReplies: FixtureResponse[];
   maxRetries: number;
   failurePolicy?: 'abort' | 'continue';
+  /** Markdown working memory managed by the Observer, which requires a <working-memory> section. */
+  markdownWorkingMemory?: boolean;
 }) {
   observerReplies.forEach((reply, sequenceIndex) => {
     mock.on({ endpoint: 'chat', model: OBSERVER, sequenceIndex }, reply);
@@ -95,6 +98,9 @@ function setup({
   const memory = new Memory({
     storage: store,
     options: {
+      ...(markdownWorkingMemory
+        ? { workingMemory: { enabled: true, scope: 'resource' as const, template: '# Profile\n- Name:\n' } }
+        : {}),
       observationalMemory: {
         enabled: true,
         scope,
@@ -103,6 +109,7 @@ function setup({
           messageTokens: 20,
           bufferTokens: false,
           maxRetries,
+          ...(markdownWorkingMemory ? { manageWorkingMemory: true } : {}),
           ...(failurePolicy ? { failurePolicy } : {}),
         },
         reflection: { model: openai.chat(OBSERVER), observationTokens: 100_000 },
@@ -193,6 +200,53 @@ describe('Observer reply with text but no observations', { timeout: 30_000 }, ()
       expect(result.tripwire).toBeUndefined();
       expect(result.text).toBe(ACTOR_REPLY);
       expect(record?.lastObservedAt).toBeInstanceOf(Date);
+    });
+  });
+
+  describe('thread scope with Observer-managed Markdown working memory', () => {
+    it('does not advance lastObservedAt when the Observer refuses', async () => {
+      const { result, record, observerCalls } = await runTurn({
+        scope: 'thread',
+        observerReplies: [{ content: REFUSAL }],
+        maxRetries: 0,
+        failurePolicy: 'continue',
+        markdownWorkingMemory: true,
+      });
+
+      expect(observerCalls).toHaveLength(1);
+      expect(result.text).toBe(ACTOR_REPLY);
+      expect(record?.lastObservedAt).toBeUndefined();
+      expect(record?.activeObservations ?? '').toBe('');
+    });
+
+    it('retries a refusal and observes the messages from the next good reply', async () => {
+      const { result, record, observerCalls } = await runTurn({
+        scope: 'thread',
+        observerReplies: [{ content: REFUSAL }, { content: goodObserverReply('thread') }],
+        maxRetries: 1,
+        failurePolicy: 'abort',
+        markdownWorkingMemory: true,
+      });
+
+      expect(observerCalls).toHaveLength(2);
+      expect(result.tripwire).toBeUndefined();
+      expect(record?.lastObservedAt).toBeInstanceOf(Date);
+      expect(record?.activeObservations).toContain('zero-downtime billing database migration');
+    });
+
+    it('commits a reply that has observations but omits <working-memory> without retrying', async () => {
+      const { result, record, observerCalls } = await runTurn({
+        scope: 'thread',
+        observerReplies: [{ content: goodObserverReply('thread') }],
+        maxRetries: 1,
+        failurePolicy: 'abort',
+        markdownWorkingMemory: true,
+      });
+
+      expect(observerCalls).toHaveLength(1);
+      expect(result.tripwire).toBeUndefined();
+      expect(record?.lastObservedAt).toBeInstanceOf(Date);
+      expect(record?.activeObservations).toContain('zero-downtime billing database migration');
     });
   });
 

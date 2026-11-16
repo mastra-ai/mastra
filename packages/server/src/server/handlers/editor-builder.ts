@@ -196,6 +196,13 @@ export const GET_EDITOR_BUILDER_SETTINGS_ROUTE = createRoute({
 export const GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE = createRoute({
   method: 'GET',
   path: '/editor/builder/models/available',
+  mcp: {
+    toolset: 'stored_agents',
+    name: 'list_available_models',
+    description:
+      'List the models you can give an agent (providers with an API key, filtered by the agent-builder model policy).',
+    requires: capabilities => capabilities.storedAgents,
+  },
   responseType: 'json',
   responseSchema: builderAvailableModelsResponseSchema,
   summary: 'List builder-available AI models',

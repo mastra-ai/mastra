@@ -20,7 +20,8 @@ export type PluginSignalLaneOptions = {
    * polling, and the built-ins are invisible to the lane's own registry.
    */
   reservedProviderIds?: string[];
-  onError?: (message: string, error: unknown) => void;
+  /** Called with the id of the plugin that owns the failing provider. */
+  onError?: (message: string, error: unknown, pluginId: string) => void;
 };
 
 /**
@@ -36,7 +37,7 @@ export type PluginSignalLaneOptions = {
 export class PluginSignalLane {
   readonly #live = new Map<string, LiveProvider>();
   readonly #reservedProviderIds: Set<string>;
-  readonly #onError: (message: string, error: unknown) => void;
+  readonly #onError: (message: string, error: unknown, pluginId: string) => void;
   #agent: Agent | undefined;
   #mastra: Mastra | undefined;
   // Replaced wholesale, never mutated: a request that already resolved its
@@ -88,6 +89,7 @@ export class PluginSignalLane {
         this.#onError(
           `Plugin "${pluginId}" signal provider "${provider.id}" is already running; refusing to start a second instance.`,
           undefined,
+          pluginId,
         );
         seen.delete(key);
         continue;
@@ -176,7 +178,11 @@ export class PluginSignalLane {
    * which fails the whole plugin record.
    */
   #failProvider(key: string, live: LiveProvider, error: unknown): void {
-    this.#onError(`Plugin "${live.pluginId}" signal provider "${live.provider.id}" failed to start:`, error);
+    this.#onError(
+      `Plugin "${live.pluginId}" signal provider "${live.provider.id}" failed to start:`,
+      error,
+      live.pluginId,
+    );
     this.#retire(key, live);
   }
 
@@ -189,7 +195,11 @@ export class PluginSignalLane {
     try {
       live.provider.stop();
     } catch (error) {
-      this.#onError(`Plugin "${live.pluginId}" signal provider "${live.provider.id}" failed to stop:`, error);
+      this.#onError(
+        `Plugin "${live.pluginId}" signal provider "${live.provider.id}" failed to stop:`,
+        error,
+        live.pluginId,
+      );
     }
   }
 
@@ -222,6 +232,7 @@ export class PluginSignalLane {
         this.#onError(
           `Plugin "${live.pluginId}" signal provider "${live.provider.id}" failed to provide processors:`,
           error,
+          live.pluginId,
         );
       }
     }

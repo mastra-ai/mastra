@@ -1,7 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { BotIcon, CoinsIcon, HashIcon } from 'lucide-react';
 import { MetricsKpiCard } from '../MetricsKpiCard';
 import { MetricsCardGroup } from './metrics-card-group';
+import { IconCoins } from '@/ds/icons/central/IconCoins';
+import { IconHashtag } from '@/ds/icons/central/IconHashtag';
+import { IconRobot } from '@/ds/icons/central/IconRobot';
 
 const meta: Meta<typeof MetricsCardGroup> = {
   title: 'Metrics/MetricsCardGroup',
@@ -37,11 +39,31 @@ export const KpiCards: Story = {
   ),
 };
 
+/** Two cards at 50rem, where groups of three or more switch to three columns: these keep two, without an empty column. */
+export const TwoKpiCardsAtMediumWidth: Story = {
+  render: args => (
+    <div className="w-200">
+      <MetricsCardGroup {...args}>
+        {kpis.slice(0, 2).map(({ label, value, ...change }) => (
+          <MetricsKpiCard key={label}>
+            <MetricsKpiCard.Label>{label}</MetricsKpiCard.Label>
+            <MetricsKpiCard.ValueRow>
+              <MetricsKpiCard.Value>{value}</MetricsKpiCard.Value>
+              <MetricsKpiCard.Change comparison="vs previous 24h" {...change} />
+              <MetricsKpiCard.Prev value={change.prevValue} />
+            </MetricsKpiCard.ValueRow>
+          </MetricsKpiCard>
+        ))}
+      </MetricsCardGroup>
+    </div>
+  ),
+};
+
 export const MixedStates: Story = {
   render: args => (
     <MetricsCardGroup {...args}>
       <MetricsKpiCard>
-        <MetricsKpiCard.Label icon={<BotIcon />}>Agent runs</MetricsKpiCard.Label>
+        <MetricsKpiCard.Label icon={<IconRobot />}>Agent runs</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Value>12.3k</MetricsKpiCard.Value>
           <MetricsKpiCard.Change comparison="vs previous 24h" changePct={15.3} prevValue="10.7k" />
@@ -49,13 +71,13 @@ export const MixedStates: Story = {
         <MetricsKpiCard.Footer detail="41 runs today" prevValue="10.7k" />
       </MetricsKpiCard>
       <MetricsKpiCard>
-        <MetricsKpiCard.Label icon={<CoinsIcon />}>Model cost</MetricsKpiCard.Label>
+        <MetricsKpiCard.Label icon={<IconCoins />}>Model cost</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Loading />
         </MetricsKpiCard.ValueRow>
       </MetricsKpiCard>
       <MetricsKpiCard>
-        <MetricsKpiCard.Label icon={<HashIcon />}>Tokens</MetricsKpiCard.Label>
+        <MetricsKpiCard.Label icon={<IconHashtag />}>Tokens</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Value>8.2M</MetricsKpiCard.Value>
         </MetricsKpiCard.ValueRow>

@@ -1,9 +1,15 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { it, expect } from 'vitest';
+import { afterAll, beforeAll, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { MockMemory } from '../../../../memory/mock';
 import { createTool } from '../../../../tools';
-import { createSharedAgent, runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import {
+  createSharedAgent,
+  runLoopScenario,
+  useLoopScenarioAimock,
+  describeForAllEngines,
+  isDurableEngineVariant,
+} from '../aimock-scenario';
 
 /**
  * Regression class: provider tool-call id reuse across memory-backed turns.
@@ -22,6 +28,14 @@ import { createSharedAgent, runLoopScenario, useLoopScenarioAimock, describeForA
  * each dispatching the background tool as `call_0`, every turn's result
  * recorded in the transcript.
  */
+// Turn ordering here relies on message-history's 10ms pause after each save; keep real waits.
+beforeAll(() => {
+  vi.stubEnv('MASTRA_TEST_FAST_WAITS', '0');
+});
+afterAll(() => {
+  vi.unstubAllEnvs();
+});
+
 describeForAllEngines(
   'AIMock loop scenario: background tool with reused provider call ids',
   engine => {
@@ -79,6 +93,20 @@ describeForAllEngines(
             llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: `Turn ${turn} dispatched.` });
           },
         });
+
+        // A turn's background result lands after its run returns. Let it land before the next
+        // turn: arriving during that turn's first request would cancel the request (queued input
+        // interrupts it) after it used the scripted tool call, so that turn would never dispatch.
+        await vi.waitFor(async () => {
+          const { messages } = await memory.recall({ threadId, resourceId });
+          expect(JSON.stringify(messages)).toContain(`turn-${turn} done`);
+        });
+
+        // Durable engines wait for the task before the follow-up model call, so
+        // that call sees the real result instead of the placeholder.
+        if (isDurableEngineVariant(engine)) {
+          expect(JSON.stringify(getMock().getRequests()[1]!.body!.messages)).toContain(`turn-${turn} done`);
+        }
       }
 
       // The tool ran once per turn — turn 2+ did not hang or get dropped.

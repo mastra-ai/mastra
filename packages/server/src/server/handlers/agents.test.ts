@@ -7,7 +7,7 @@ import type { DurableAgent } from '@mastra/core/agent/durable';
 import { matchesPermission } from '@mastra/core/auth/ee';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { EventEmitterPubSub } from '@mastra/core/events';
-import { PROVIDER_REGISTRY } from '@mastra/core/llm';
+import { MastraGateway, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import {
@@ -39,6 +39,7 @@ import {
 } from '../schemas/agents';
 import { getEffectivePermission } from '../server-adapter/routes';
 import { AGENTS_ROUTES } from '../server-adapter/routes/agents';
+import { toAgentStreamChunks } from '../utils/agent-stream-events';
 import {
   GET_PROVIDERS_ROUTE,
   GENERATE_AGENT_ROUTE,
@@ -463,6 +464,96 @@ describe('getProvidersHandler', () => {
       const result = await GET_PROVIDERS_ROUTE.handler({ mastra, requestContext, abortSignal });
 
       expect(result.providers.find(p => p.id === 'mastra')?.connected).toBe(true);
+    });
+
+    it('uses only the live Mastra catalog in v2 mode', async () => {
+      process.env.MASTRA_GATEWAY_VERSION = 'v2';
+      process.env.MASTRA_GATEWAY_API_KEY = 'test-key';
+      Object.assign(globalThis, {
+        __MOCK_PROVIDER_REGISTRY__: {
+          mastra: {
+            name: 'Gateway',
+            models: ['stale-v1-model'],
+            apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
+            gateway: 'mastra',
+          },
+        },
+      });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) =>
+          url.endsWith('/v1/models')
+            ? Response.json({ data: [{ id: 'live-chat-model', endpoints: ['chat'] }] })
+            : Response.json({ providers: {} }),
+        ),
+      );
+
+      const result = await GET_PROVIDERS_ROUTE.handler({
+        mastra: new Mastra({}),
+        requestContext: new RequestContext(),
+      });
+
+      expect(result.providers.find(provider => provider.id === 'mastra')?.models).toEqual(['live-chat-model']);
+    });
+
+    it('uses the live Mastra catalog when v2 is signaled only by a registered gateway config key', async () => {
+      delete process.env.MASTRA_GATEWAY_VERSION;
+      delete process.env.MASTRA_GATEWAY_API_KEY;
+      Object.assign(globalThis, {
+        __MOCK_PROVIDER_REGISTRY__: {
+          mastra: {
+            name: 'Gateway',
+            models: ['stale-v1-model'],
+            apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
+            gateway: 'mastra',
+          },
+        },
+      });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) =>
+          url.endsWith('/v1/models')
+            ? Response.json({ data: [{ id: 'live-chat-model', endpoints: ['chat'] }] })
+            : Response.json({ providers: {} }),
+        ),
+      );
+
+      const result = await GET_PROVIDERS_ROUTE.handler({
+        mastra: new Mastra({ gateways: { mastra: new MastraGateway({ apiKey: 'mskv2_org-key' }) } }),
+        requestContext: new RequestContext(),
+      });
+
+      expect(result.providers.find(provider => provider.id === 'mastra')?.models).toEqual(['live-chat-model']);
+    });
+
+    it('does not fall back to cached Mastra models when the v2 catalog fails', async () => {
+      process.env.MASTRA_GATEWAY_VERSION = 'v2';
+      process.env.MASTRA_GATEWAY_API_KEY = 'test-key';
+      Object.assign(globalThis, {
+        __MOCK_PROVIDER_REGISTRY__: {
+          mastra: {
+            name: 'Gateway',
+            models: ['stale-v1-model'],
+            apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
+            gateway: 'mastra',
+          },
+        },
+      });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) => {
+          if (url.endsWith('/v1/models')) throw new Error('catalog unavailable');
+          return Response.json({ providers: {} });
+        }),
+      );
+
+      const result = await GET_PROVIDERS_ROUTE.handler({
+        mastra: new Mastra({}),
+        requestContext: new RequestContext(),
+      });
+
+      expect(result.providers.find(provider => provider.id === 'mastra')).toBeUndefined();
+      expect(result.providers.find(provider => provider.id === 'openai')).toBeDefined();
     });
   });
 
@@ -2769,6 +2860,22 @@ describe('Agent Routes Authorization', () => {
       expect(abort).not.toHaveBeenCalled();
     });
 
+    it('does not cancel a run known only to the in-process owner registry', async () => {
+      vi.spyOn(mockDurableAgent, '__getRunOwner').mockReturnValue({ resourceId: 'user-a' });
+      const acknowledged = vi.spyOn(mockDurableAgent, '__abortRunAcknowledged');
+      const abortRunStream = vi.spyOn(mockDurableAgent, 'abortRunStream');
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'test-durable-agent',
+          runId: 'registry-only',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+        }),
+      ).resolves.toEqual({ aborted: false });
+      expect(acknowledged).not.toHaveBeenCalled();
+      expect(abortRunStream).not.toHaveBeenCalled();
+    });
+
     it.each([
       ['another resource', 'user-a', 'user-b'],
       ['an ownerless run', 'user-a', undefined],
@@ -3058,7 +3165,7 @@ describe('Agent Routes Authorization', () => {
           data: { delivery: 'reject', error: { name: 'Error', message: 'Run superseded' } },
         });
         const reader = (await observe(runId)).getReader();
-        expect((await reader.read()).value).toEqual(chunk);
+        expect((await reader.read()).value).toEqual({ ...chunk, index: 0 });
         await expect(reader.read()).rejects.toThrow('Run superseded');
         reader.releaseLock();
       });
@@ -3083,7 +3190,7 @@ describe('Agent Routes Authorization', () => {
         return unsubscribe;
       });
 
-      expect(await collectWithDeadline(await observe(runId))).toEqual([event.data]);
+      expect(await collectWithDeadline(await observe(runId))).toEqual([{ ...event.data, index: 0 }]);
       expect(unsubscribe).toHaveBeenCalledTimes(1);
     });
 
@@ -3156,6 +3263,63 @@ describe('Agent Routes Authorization', () => {
       } as any);
       expect((await next).value.type).toBe('step-finish');
       abort.abort();
+      expect(await reader.read()).toEqual({ done: true, value: undefined });
+    });
+
+    it.each([
+      { offset: 3, reads: [2] },
+      { offset: 100, reads: [99, 0] },
+    ])(
+      'closes a finished legacy run resumed at offset $offset, reading history from $reads',
+      async ({ offset, reads }) => {
+        (mockDurableAgent as any).__subscribeToRunStream = undefined;
+        const runId = `observe-legacy-past-end-${offset}`;
+        const topic = AGENT_STREAM_TOPIC(runId);
+        await mockDurableAgent.pubsub.publish(topic, { runId, type: 'chunk', data: { type: 'text-delta' } } as any);
+        await mockDurableAgent.pubsub.publish(topic, { runId, type: 'chunk', data: { type: 'text-delta' } } as any);
+        await mockDurableAgent.pubsub.publish(topic, { runId, type: 'finish', data: {} } as any);
+        const getHistory = vi.spyOn(mockDurableAgent.pubsub, 'getHistory');
+        expect(await collectWithDeadline(await observe(runId, { offset }))).toEqual([]);
+        expect(getHistory.mock.calls.filter(([t]) => t === topic).map(([, from]) => from)).toEqual(reads);
+      },
+    );
+
+    it('closes a legacy run whose log ends in an error event, resumed past the end', async () => {
+      (mockDurableAgent as any).__subscribeToRunStream = undefined;
+      const runId = 'observe-legacy-past-end-error';
+      const topic = AGENT_STREAM_TOPIC(runId);
+      await mockDurableAgent.pubsub.publish(topic, { runId, type: 'chunk', data: { type: 'text-delta' } } as any);
+      await mockDurableAgent.pubsub.publish(topic, { runId, type: 'error', data: {} } as any);
+      const unsubscribe = vi.spyOn(mockDurableAgent.pubsub, 'unsubscribe');
+      expect(await collectWithDeadline(await observe(runId, { offset: 2 }))).toEqual([]);
+      expect(unsubscribe.mock.calls.filter(([t]) => t === topic)).toHaveLength(1);
+    });
+
+    it('unsubscribes a cancelled past-end resume while the history read is still pending', async () => {
+      (mockDurableAgent as any).__subscribeToRunStream = undefined;
+      const runId = 'observe-legacy-pending-history';
+      const topic = AGENT_STREAM_TOPIC(runId);
+      // A cache that lost its connection queues reads until it reconnects.
+      vi.spyOn(mockDurableAgent.pubsub, 'getHistory').mockReturnValue(new Promise(() => {}));
+      const unsubscribe = vi.spyOn(mockDurableAgent.pubsub, 'unsubscribe');
+      const abort = new AbortController();
+      const reader = (await observe(runId, { offset: 5, abortSignal: abort.signal })).getReader();
+      await vi.waitFor(() => expect(mockDurableAgent.pubsub.getHistory).toHaveBeenCalled());
+      abort.abort();
+      expect(await reader.read()).toEqual({ done: true, value: undefined });
+      await vi.waitFor(() => expect(unsubscribe.mock.calls.filter(([t]) => t === topic)).toHaveLength(1));
+    });
+
+    it('keeps a past-end resume open after a trailing error chunk until the run finishes', async () => {
+      (mockDurableAgent as any).__subscribeToRunStream = undefined;
+      const runId = 'observe-legacy-error-chunk';
+      const topic = AGENT_STREAM_TOPIC(runId);
+      await mockDurableAgent.pubsub.publish(topic, { runId, type: 'chunk', data: { type: 'error' } } as any);
+      const reader = (await observe(runId, { offset: 1 })).getReader();
+      const next = reader.read();
+      await new Promise(resolve => setTimeout(resolve, 50));
+      await mockDurableAgent.pubsub.publish(topic, { runId, type: 'finish', data: {} } as any);
+      expect((await next).value).toMatchObject({ type: 'finish', index: 1 });
       expect(await reader.read()).toEqual({ done: true, value: undefined });
     });
 
@@ -5028,21 +5192,21 @@ describe('extractVersionOptions', () => {
 });
 
 describe('plain Agent resumable streams', () => {
-  function plainAgent(id: string, streams?: boolean) {
+  function plainAgent(id: string, durable?: boolean) {
     return new Agent({
       id,
       name: id,
       instructions: 'test-instructions',
       model: { specificationVersion: 'v2' } as any,
-      ...(streams === undefined ? {} : { streams }),
+      ...(durable === undefined ? {} : { durable }),
     });
   }
 
   it.each([
     [undefined, true],
     [false, false],
-  ])('streams: %s on a registered agent detaches on HTTP close = %s', async (streams, detaches) => {
-    const agent = plainAgent('plain-agent', streams);
+  ])('durable: %s on a registered agent detaches on HTTP close = %s', async (durable, detaches) => {
+    const agent = plainAgent('plain-agent', durable);
     const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
     let captured: any;
     vi.spyOn(agent, 'stream').mockImplementation(async (_messages, options) => {
@@ -5063,18 +5227,14 @@ describe('plain Agent resumable streams', () => {
     expect(captured._detachObserverOnCancel).toBe(detaches);
   });
 
-  it('detaches a durable proxy wrapper whose wrapped agent has streams off', async () => {
-    // Inngest wraps its agent in a Proxy that forwards hasResumableStreams() to the wrapped Agent.
+  it.each([true, false, undefined])('detaches a durable wrapper reporting stream capability %s', async capability => {
     const inner = plainAgent('wrapped-agent', false);
     const durable = createDurableAgent({ agent: inner, id: 'proxied-durable', name: 'proxied-durable' });
-    const proxied = new Proxy(durable, {
-      get(target, prop) {
-        if (prop === 'hasResumableStreams') return inner.hasResumableStreams.bind(inner);
-        const value = Reflect.get(target, prop);
-        return typeof value === 'function' ? value.bind(target) : value;
-      },
+    // Older Inngest proxies can inherit false from the plain Agent, or lack the method entirely.
+    Object.defineProperty(durable, 'hasResumableStreams', {
+      value: capability === undefined ? undefined : () => capability,
     });
-    const mastra = new Mastra({ agents: { 'proxied-durable': proxied as any }, logger: false });
+    const mastra = new Mastra({ agents: { 'proxied-durable': durable as any }, logger: false });
     let captured: any;
     vi.spyOn(durable, 'stream').mockImplementation(async (_messages: any, options: any) => {
       captured = options;
@@ -5101,7 +5261,7 @@ describe('plain Agent resumable streams', () => {
       name: 'plain-agent',
       instructions: 'test-instructions',
       model: { specificationVersion: 'v2' } as any,
-      streams: { pubsub },
+      durable: { pubsub },
     });
     const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
     vi.spyOn(agent, '__getRunRecord').mockResolvedValue({ status: 'running' });
@@ -5130,7 +5290,7 @@ describe('plain Agent resumable streams', () => {
       name: 'plain-agent',
       instructions: 'test-instructions',
       model: { specificationVersion: 'v2' } as any,
-      streams: { pubsub },
+      durable: { pubsub },
     });
     const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
     vi.spyOn(agent, '__getRunRecord').mockResolvedValue({ status: 'running' });
@@ -5231,6 +5391,33 @@ describe('plain Agent resumable streams', () => {
       const agent = plainAgent('plain-agent');
       const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
       await expect(observeAs(mastra, 'elsewhere', 'user-a')).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('closes a finished plain run resumed far past its end (COR-1506)', async () => {
+      const agent = plainAgent('plain-agent');
+      const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
+      vi.spyOn(agent, '__getRunRecord').mockResolvedValue({ resourceId: 'user-a', status: 'running' });
+      const runId = 'plain-past-end';
+      const bus = agent.__getStreamBus()!.pubsub;
+      await bus.publish(AGENT_STREAM_TOPIC(runId), {
+        runId,
+        type: AgentStreamEventTypes.FINISH,
+        data: { output: {}, stepResult: { reason: 'stop' } },
+      });
+      const getHistory = vi.spyOn(bus, 'getHistory');
+      const stream = await OBSERVE_AGENT_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'plain-agent',
+        runId,
+        offset: 100,
+        requestContext: new RequestContext([[MASTRA_RESOURCE_ID_KEY, 'user-a']]),
+      } as any);
+      const events: any[] = [];
+      const started = Date.now();
+      for await (const event of stream as any) events.push(event);
+      expect(events).toEqual([]);
+      expect(Date.now() - started).toBeLessThan(1_000);
+      expect(getHistory.mock.calls.map(([, from]) => from)).toEqual([99, 0]);
     });
   });
 
@@ -5427,5 +5614,20 @@ describe('plain Agent resumable streams', () => {
       ).rejects.toMatchObject({ status: 503 });
       expect(abort).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('toAgentStreamChunks', () => {
+  const nested = { type: 'text-delta', runId: 'sub', from: 'AGENT', index: 7, payload: { id: 't', text: 'hi' } };
+
+  it("replaces a forwarded sub-agent chunk's index with the envelope's", () => {
+    const [frame] = toAgentStreamChunks({ type: 'chunk', runId: 'parent', data: nested, index: 3 } as any);
+    expect(frame).toEqual({ ...nested, index: 3 });
+  });
+
+  it("drops a forwarded sub-agent chunk's index when the envelope has none", () => {
+    const [frame] = toAgentStreamChunks({ type: 'chunk', runId: 'parent', data: nested } as any);
+    expect(frame).not.toHaveProperty('index');
+    expect(frame).toMatchObject({ type: 'text-delta', payload: { text: 'hi' } });
   });
 });

@@ -32,19 +32,25 @@ afterEach(() => {
 });
 
 describe('ChatPageLayout', () => {
-  it('renders no header on mobile — AppLayout owns the mobile trigger and search', () => {
+  it('puts the drawer trigger, the title and the page actions on one mobile header row, leaving search to the sidebar', () => {
     mockMobileViewport(true);
     render(
       <MemoryRouter initialEntries={['/settings/preferences']}>
         <SidebarProvider storageKey="chat-header-test" mobileBreakpoint={10_000}>
           <OverlaysProvider>
-            <ChatPageLayout>body</ChatPageLayout>
+            <ChatPageLayout title="Page title" headerActions={<button type="button">Panel</button>}>
+              body
+            </ChatPageLayout>
           </OverlaysProvider>
         </SidebarProvider>
       </MemoryRouter>,
     );
 
-    expect(screen.queryByRole('banner')).not.toBeInTheDocument();
+    const header = screen.getByRole('banner');
+    expect(within(header).getByRole('button', { name: 'Open navigation menu' })).toBeInTheDocument();
+    expect(within(header).getByText('Page title')).toBeInTheDocument();
+    expect(within(header).getByRole('button', { name: 'Panel' })).toBeInTheDocument();
+    expect(within(header).queryByRole('button', { name: 'Search and navigate' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).not.toBeInTheDocument();
   });
 
@@ -53,7 +59,7 @@ describe('ChatPageLayout', () => {
     render(
       <SidebarProvider storageKey="chat-header-desktop-test" collapsedWidth={0} mobileBreakpoint={768}>
         <OverlaysProvider>
-          <ChatPageLayout crumbs={<li>Page title</li>}>body</ChatPageLayout>
+          <ChatPageLayout title="Page title">body</ChatPageLayout>
         </OverlaysProvider>
       </SidebarProvider>,
     );
@@ -82,7 +88,7 @@ describe('ChatPageLayout', () => {
     );
 
     const trigger = screen.getByRole('button', { name: 'Toggle sidebar' });
-    expect(screen.getByRole('button', { name: 'Search and navigate' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Search and navigate' })).not.toBeInTheDocument();
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByTestId('desktop-sidebar-state')).toHaveTextContent('collapsed');
     expect(screen.queryByLabelText('Open navigation menu')).not.toBeInTheDocument();

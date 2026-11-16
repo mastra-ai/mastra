@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Bell, Check, ChevronDown, Copy, Folder, Play, Plus, Search, Settings, Trash2, X } from 'lucide-react';
+import * as centralIconModules from './central';
 import { Icon } from './Icon';
 import type { IconSize } from './Icon';
 import {
@@ -72,6 +72,17 @@ import {
   ZaiIcon,
 } from './index';
 import { Button } from '@/ds/components/Button';
+import { IconBell2 } from '@/ds/icons/central/IconBell2';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
+import { IconPencil } from '@/ds/icons/central/IconPencil';
+import { IconPlay } from '@/ds/icons/central/IconPlay';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
+import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import { Sizes } from '@/ds/tokens/sizes';
 
 const meta: Meta<typeof Icon> = {
@@ -84,6 +95,23 @@ const meta: Meta<typeof Icon> = {
 
 export default meta;
 type Story = StoryObj<typeof Icon>;
+
+const centralIcons = Object.entries(centralIconModules);
+
+export const CentralIcons: Story = {
+  render: () => (
+    <div className="grid w-200 grid-cols-4 gap-4">
+      {centralIcons.map(([name, CentralIcon]) => (
+        <div key={name} className="flex min-w-0 flex-col items-center gap-2 rounded-lg bg-card p-3">
+          <Icon size="lg" className="text-foreground">
+            <CentralIcon />
+          </Icon>
+          <span className="max-w-full truncate text-caption text-muted-foreground">{name.replace(/^Icon/, '')}</span>
+        </div>
+      ))}
+    </div>
+  ),
+};
 
 const icons = [
   { name: 'AgentIcon', component: AgentIcon },
@@ -132,7 +160,7 @@ const icons = [
 const IconGrid = ({ size = 'md' }: { size?: IconSize }) => (
   <div className="grid grid-cols-6 gap-4">
     {icons.map(({ name, component: IconComponent }) => (
-      <div key={name} className="state-layer flex flex-col items-center gap-2 rounded-lg bg-card p-3">
+      <div key={name} className="flex flex-col items-center gap-2 rounded-lg bg-card state-layer p-3">
         <Icon size={size} className="text-foreground">
           <IconComponent />
         </Icon>
@@ -319,7 +347,18 @@ export const BrandIcons: Story = {
   ),
 };
 
-const strokeGlyphs = [Plus, Search, Settings, ChevronDown, Trash2, Copy, X, Check, Folder, Bell];
+const strokeGlyphs = [
+  IconPlusMedium,
+  IconMagnifyingGlass,
+  IconSettingsGear5,
+  IconChevronDownMedium,
+  IconPencil,
+  IconSquareBehindSquare1,
+  IconCrossMedium,
+  IconCheckmark2Medium,
+  IconFolder1,
+  IconBell2,
+];
 
 // Every lucide icon draws its line from `--icon-stroke-width`, however it is sized.
 // Use this story for before/after shots of a stroke change.
@@ -340,30 +379,37 @@ export const Stroke: Story = {
               ))}
             </div>
           ))}
+          <div className="flex items-center gap-3 text-foreground">
+            {centralIcons.map(([name, CentralIcon]) => (
+              <Icon key={name} size={size}>
+                <CentralIcon />
+              </Icon>
+            ))}
+          </div>
         </div>
       ))}
       <div className="flex items-center gap-3">
-        <Button size="sm" icon={<Plus />}>
+        <Button size="sm" icon={<IconPlusMedium />}>
           Add header
         </Button>
-        <Button size="md" icon={<Plus />}>
+        <Button size="md" icon={<IconPlusMedium />}>
           Add header
         </Button>
-        <Button size="lg" icon={<Play />}>
+        <Button size="lg" icon={<IconPlay />}>
           Run
         </Button>
         <Button size="icon-md" tooltip="Copy">
-          <Copy />
+          <IconSquareBehindSquare1 />
         </Button>
       </div>
       <div className="flex items-center gap-3 text-muted-foreground">
         <span className="w-16 text-caption">Unwrapped</span>
-        <Search className="size-3" />
-        <Search className="size-3.5" />
-        <Search className="size-4" />
-        <Search className="size-5" />
+        <IconMagnifyingGlass className="size-3" />
+        <IconMagnifyingGlass className="size-3.5" />
+        <IconMagnifyingGlass className="size-4" />
+        <IconMagnifyingGlass className="size-5" />
         <span className="flex items-center [&>svg]:size-3.5">
-          <Folder />
+          <IconFolder1 />
         </span>
       </div>
     </div>

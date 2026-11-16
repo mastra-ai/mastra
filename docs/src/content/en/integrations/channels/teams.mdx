@@ -3,13 +3,64 @@ title: "Microsoft Teams | Channels"
 description: "Connect a Mastra agent to Microsoft Teams mentions and conversation events by installing the adapter and configuring agent webhook handling."
 packages:
   - "@mastra/core"
+  - "@mastra/connect"
 ---
+
+import TeamsConnectTools from "@site/src/components/connect/generated/microsoft-teams.mdx";
 
 # Microsoft Teams
 
-Microsoft Teams channels let a Mastra agent receive mentions and conversation events from Teams. Mastra handles the agent wiring and webhook route; the Chat SDK Teams adapter docs cover Teams app setup, authentication, and permissions.
+Use Microsoft Teams with Mastra in two ways:
 
-## Install the adapter
+- **Agent tools** let an agent act in Teams, for example to read and send messages or manage channels.
+- **Agent chat** lets people talk to your agent through Teams mentions and conversation events.
+
+[Mastra Connect](/docs/mastra-platform/connect) sets up both and registers the Teams bot for you, so you don't need your own Azure app registration. You can also register the bot and manage its credentials yourself.
+
+## Connect
+
+Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get-started) to install `@mastra/connect` and configure your platform project.
+
+One `microsoft-teams` connection provides both agent tools and agent chat. Sign in with a Microsoft work or school account. Some requested permissions need admin consent, so the first connection in a tenant needs a Microsoft Entra administrator.
+
+<TeamsConnectTools />
+
+### Agent chat
+
+When you connect an agent, Mastra registers a bot for it in the Teams Developer Portal. Mastra stores the bot credential encrypted. Set `MASTRA_ENCRYPTION_KEY` to use a dedicated key. Without it, `channels()` derives a key from the platform access token and logs a warning. If you then rotate the platform access token, Mastra can't read the stored bot credentials. Disconnect and reconnect the channel to create new ones.
+
+Your server needs a public URL for Teams webhooks and OAuth callbacks. Mastra platform supplies this URL. When you host elsewhere, set `MASTRA_SERVER_URL` to your public server URL. For local development, use a public HTTPS tunnel.
+
+1. If you haven't added the connection yet, run `mastra connect add microsoft-teams` and sign in.
+
+1. Pass [`channels()`](/reference/connect/channels) to the `Mastra` constructor. It registers the Teams channel provider and its routes:
+
+   ```typescript title="src/mastra/index.ts"
+   import { Mastra } from '@mastra/core'
+   import { channels } from '@mastra/connect'
+   import { assistant } from './agents/assistant'
+
+   export const mastra = new Mastra({
+     agents: { assistant },
+     channels: await channels({ providers: ['microsoft-teams'] }),
+   })
+   ```
+
+   To register other channels too, add their provider IDs to `providers`.
+
+1. Start your Mastra application.
+
+1. In Studio, connect the Teams channel to an agent. Mastra creates a single-tenant bot registration for the agent and returns a link to the [Teams Developer Portal](https://dev.teams.microsoft.com/bots).
+
+1. Open the link, package the bot into a Teams app in the Developer Portal, and add the app to Teams.
+
+Disconnecting the agent deletes the bot registration and its Entra application.
+
+## Self-managed setup
+
+Use the Chat SDK Teams adapter with your own Azure bot registration and credentials.
+
+### Install the adapter
 
 Install the Teams adapter from the Chat SDK:
 
@@ -17,7 +68,7 @@ Install the Teams adapter from the Chat SDK:
 npm install @chat-adapter/teams
 ```
 
-## Agent configuration
+### Agent configuration
 
 Add `createTeamsAdapter()` to the agent's `channels.adapters` object:
 
@@ -51,7 +102,7 @@ export const mastra = new Mastra({
 })
 ```
 
-## Adapter setup
+### Adapter setup
 
 Follow the [Chat SDK Teams adapter docs](https://chat-sdk.dev/adapters/official/teams) for Teams-specific setup, including Azure bot registration, Teams CLI usage, authentication options, and required permissions.
 
@@ -63,7 +114,7 @@ TEAMS_APP_PASSWORD=your-azure-bot-app-password
 TEAMS_APP_TENANT_ID=your-azure-tenant-id
 ```
 
-## Webhook URL
+### Webhook URL
 
 Mastra generates the Teams webhook route from the agent ID and adapter key:
 

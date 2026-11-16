@@ -2,7 +2,6 @@ import { createServer } from 'node:http';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import { EventEmitterPubSub } from '@mastra/core/events';
 import { MCPClient } from '@mastra/mcp';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -14,7 +13,6 @@ import type { RouteAuth } from '../routes/route.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import { createSourceControlSessionLookup } from '../session/factory-session.js';
 import { AuditDomain } from '../storage/domains/audit/domain.js';
-import { CommentsDomain } from '../storage/domains/comments/domain.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryToolDependencies } from '../tools/index.js';
 import { ACTIVITY_SETTLE_MS } from './events.js';
@@ -93,15 +91,6 @@ async function setup() {
   const auditDomain = new AuditDomain({ auth, audit: seed.audit, projects: seed.projects });
   const tools: FactoryToolDependencies = {
     workItems: seed.workItems,
-    comments: seed.comments,
-    feed: new CommentsDomain({
-      auth,
-      comments: seed.comments,
-      workItems: seed.workItems,
-      projects: seed.projects,
-      audit: auditDomain,
-      pubsub: new EventEmitterPubSub(),
-    }),
     audit: seed.audit,
     boards,
     transitionService: new FactoryTransitionService({
@@ -172,9 +161,6 @@ async function setup() {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'alice',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/app',
     });
     for (const session of sessions) {
       await sourceControl.sessions.create({
@@ -743,7 +729,7 @@ describe('Factory activity over MCP events', () => {
     await record({
       actorId: 'agent:gone-thread',
       actorType: 'agent',
-      action: 'factory.work_item.comment_created',
+      action: 'factory.work_item.labels_reconciled',
       targets: [{ type: 'work_item', id: item.id, name: item.title }],
     });
     tick(1);
@@ -771,10 +757,10 @@ describe('Factory activity over MCP events', () => {
         summary: 'stage moved: Fix the login page (in a private session)',
       },
       {
-        ...activity('factory.work_item.comment_created'),
+        ...activity('factory.work_item.labels_reconciled'),
         actor: { type: 'agent', id: 'agent' },
         workItemId: item.id,
-        summary: 'comment created: Fix the login page',
+        summary: 'labels reconciled: Fix the login page',
       },
       { ...activity('factory.work_item.updated'), workItemId: item.id, summary: 'updated: Fix the sign-in page' },
     ]);
@@ -795,10 +781,10 @@ describe('Factory activity over MCP events', () => {
         summary: 'stage moved: Fix the login page',
       },
       {
-        ...activity('factory.work_item.comment_created'),
+        ...activity('factory.work_item.labels_reconciled'),
         actor: { type: 'agent', id: 'agent' },
         workItemId: item.id,
-        summary: 'comment created: Fix the login page',
+        summary: 'labels reconciled: Fix the login page',
       },
       { ...activity('factory.work_item.updated'), workItemId: item.id, summary: 'updated: Fix the sign-in page' },
     ]);

@@ -39,6 +39,12 @@ describe('Knowledge scopes materialize on first write', () => {
     const { knowledge, call, context, scopes } = setup();
     const held = ['org:acme', 'project:p1'];
 
+    expect(knowledge.__principalsKey(context(held, SLACK_USER)).split('\n')).toEqual([
+      'org:acme',
+      'project:p1',
+      'resource:slack%3AU123',
+      'thread:slack%3AC1%3A1700000000.0001',
+    ]);
     await call(held, 'knowledge_search', { query: 'refund policy' }, SLACK_USER);
     await call(held, 'knowledge_list', {}, SLACK_USER);
     await expect(call(held, 'knowledge_read', { page: 'project:p1' }, SLACK_USER)).rejects.toThrow(/not found/);
@@ -48,7 +54,7 @@ describe('Knowledge scopes materialize on first write', () => {
     await knowledge.__deliveredPins(context(held, SLACK_USER));
 
     expect(
-      await scopes(['org:acme', 'project:p1', `resource:${SLACK_USER.resourceId}`, `thread:${SLACK_USER.threadId}`]),
+      await scopes(['org:acme', 'project:p1', 'resource:slack%3AU123', 'thread:slack%3AC1%3A1700000000.0001']),
     ).toEqual([]);
   });
 

@@ -26,6 +26,7 @@ import {
   runTeardownCommand,
   shellQuote,
   SetupCommandError,
+  githubCredentialHelper,
   syncEnvironmentRepository,
 } from './sandbox.js';
 import type { RepoMaterializeInfo } from './sandbox.js';
@@ -694,6 +695,34 @@ describe('syncEnvironmentRepository', () => {
   const opts = { branch: 'factory/issue-7', defaultBranch: 'main', token: 'tok-secret', repoFullName: 'octocat/docs' };
   const authEnvOf = (sandbox: FakeSandbox, fragment: string) =>
     sandbox.executions.find(execution => execution.args.join(' ').includes(fragment))?.options?.env;
+
+  it('points the checkout credential helper at the sandbox token that covers the repository', async () => {
+    const sandbox = new FakeSandbox(() => OK);
+
+    await syncEnvironmentRepository(sandbox, '/workspace/docs', { ...opts, tokenEnvName: 'GH_TOKEN_2' });
+
+    expect(sandbox.calls).toContain(
+      'git -C /workspace/docs config credential.helper !f() { GH_TOKEN="${GH_TOKEN_2:-$GH_TOKEN}" gh auth git-credential "$@"; }; f',
+    );
+  });
+
+  it('installs the plain gh credential helper for repositories GH_TOKEN covers, and none for non-GitHub hosts', async () => {
+    const github = new FakeSandbox(() => OK);
+    await syncEnvironmentRepository(github, '/workspace/docs', opts);
+    expect(github.calls).toContain('git -C /workspace/docs config credential.helper !gh auth git-credential');
+
+    const gitlab = new FakeSandbox(() => OK);
+    await syncEnvironmentRepository(gitlab, '/workspace/docs', {
+      ...opts,
+      authUsername: 'oauth2',
+      tokenEnvName: 'GH_TOKEN_2',
+    });
+    expect(gitlab.calls.join('\n')).not.toContain('config credential.helper');
+  });
+
+  it('refuses a token variable name it would have to quote into the helper', () => {
+    expect(() => githubCredentialHelper('GH_TOKEN_2; rm -rf /')).toThrow();
+  });
 
   it('resumes the session branch from the remote when the remote has it, authenticated with the repo token', async () => {
     const sandbox = new FakeSandbox(script => {

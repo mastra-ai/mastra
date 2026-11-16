@@ -1,0 +1,11 @@
+import { createCentralIcon } from './create-central-icon';
+
+export const IconBasket1 = createCentralIcon('IconBasket1', () => (
+  <path
+    d="M2 3H2.72931C3.46257 3 4.08835 3.53012 4.2089 4.2534L4.5 6M4.5 6L5.72147 13.3288C5.8822 14.2932 6.71658 15 7.69425 15H17.8514C18.8088 15 19.6319 14.3215 19.8147 13.3817L20.9027 7.7863C21.0827 6.86035 20.3735 6 19.4302 6H4.5ZM9 19C9 19.5523 8.55228 20 8 20C7.44772 20 7 19.5523 7 19C7 18.4477 7.44772 18 8 18C8.55228 18 9 18.4477 9 19ZM18 19C18 19.5523 17.5523 20 17 20C16.4477 20 16 19.5523 16 19C16 18.4477 16.4477 18 17 18C17.5523 18 18 18.4477 18 19Z"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  />
+));

@@ -143,6 +143,49 @@ describe('generated fs-agents module — executed, not just emitted', () => {
     await expect(runGeneratedModule('invalid')).rejects.toThrow(/agents\/support\/schedules\/broken/);
   });
 
+  // The Cloudflare deployer turns `export const mastra = new Mastra(...)` into a
+  // per-request factory, so the wrapper must register file-based agents onto
+  // every instance that factory returns. (#29996)
+  it.for([
+    { exported: 'an instance', source: 'new Mastra({})', getMastra: (mod: any) => mod.mastra },
+    { exported: 'a factory', source: '() => new Mastra({})', getMastra: (mod: any) => mod.mastra() },
+  ])('registers file-based agents when index.ts exports $exported (#29996)', async ({ source, getMastra }) => {
+    await writeAgent('support');
+    const userEntry = join(dir, 'index.js');
+    await writeFile(userEntry, `import { Mastra } from '@mastra/core/mastra';\nexport const mastra = ${source};\n`);
+
+    const wrapper = await generateFsAgentsModule(userEntry.replaceAll('\\', '/'), await discoverFsAgents(dir));
+    const modPath = join(dir, 'entry-user.mjs');
+    await writeFile(modPath, wrapper);
+    const mod = await import(pathToFileURL(modPath).href);
+
+    const agent = getMastra(mod).getAgentById('support');
+    expect(agent.name).toBe('support');
+    // On Node every file-based agent gets the default workspace.
+    expect(agent.hasOwnWorkspace()).toBe(true);
+  });
+
+  // `addAgent` binds an agent to the Mastra registering it, so an agent shared
+  // across per-request instances would follow whichever request came last.
+  it('keeps each file-based agent bound to the instance a factory export returned (#29996)', async () => {
+    await writeAgent('support');
+    const userEntry = join(dir, 'index.js');
+    await writeFile(
+      userEntry,
+      `import { Mastra } from '@mastra/core/mastra';\nexport const mastra = () => new Mastra({});\n`,
+    );
+
+    const wrapper = await generateFsAgentsModule(userEntry.replaceAll('\\', '/'), await discoverFsAgents(dir));
+    const modPath = join(dir, 'entry-factory.mjs');
+    await writeFile(modPath, wrapper);
+    const mod = await import(pathToFileURL(modPath).href);
+
+    const first = mod.mastra();
+    const second = mod.mastra();
+    expect(first.getAgentById('support').getMastraInstance()).toBe(first);
+    expect(second.getAgentById('support').getMastraInstance()).toBe(second);
+  });
+
   it('fails at module evaluation when a subagent declares schedules', async () => {
     await writeAgent('support', {
       subagents: { researcher: { 'heartbeat.js': scheduleModule(`{ cron: '0 3 * * *', prompt: 'hi' }`) } },

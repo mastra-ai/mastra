@@ -3,7 +3,6 @@ export { MessageList, convertMessages, aiV5ModelMessageToV2PromptMessage, TypeDe
 export type { OutputFormat } from './message-list';
 export * from './types';
 export type { AgentStreamsConfig } from './streams/types';
-export type { AgentStreamsOption } from './streams/config';
 export * from './signals';
 export * from '../signals/signal-provider';
 export * from '../signals/webhook-signal-provider';

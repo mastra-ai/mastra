@@ -59,6 +59,14 @@ describe('resolveSlackAdapterConfig', () => {
     expect('textDisplay' in resolveSlackAdapterConfig({})).toBe(false);
   });
 
+  it('carries generativeUI through to the resolved adapter config', () => {
+    expect(resolveSlackAdapterConfig({ generativeUI: true }).generativeUI).toBe(true);
+    expect(resolveSlackAdapterConfig({ adapterConfig: { generativeUI: true } }).generativeUI).toBe(true);
+    expect(resolveSlackAdapterConfig({ generativeUI: false, adapterConfig: { generativeUI: true } }).generativeUI).toBe(
+      false,
+    );
+  });
+
   it('carries textFormat through to the resolved adapter config', () => {
     const resolved = resolveSlackAdapterConfig({ textFormat: 'plain' });
     expect(resolved.textFormat).toBe('plain');

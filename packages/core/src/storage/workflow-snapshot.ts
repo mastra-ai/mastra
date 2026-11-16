@@ -57,24 +57,18 @@ export function createEmptyWorkflowSnapshot(runId: string): WorkflowRunState {
   } as WorkflowRunState;
 }
 
-export function mergeWorkflowStepResult({
-  snapshot,
-  stepId,
-  result,
-  requestContext,
-  state,
-}: {
-  snapshot: WorkflowRunState;
-  stepId: string;
-  result: StepResult<any, any, any, any>;
-  requestContext: Record<string, any>;
-  state?: Record<string, any>;
-}): Record<string, StepResult<any, any, any, any>> {
-  if (!snapshot?.context) {
-    throw new Error(`Snapshot context not found for runId ${snapshot?.runId}`);
-  }
-
-  const existingResult = snapshot.context[stepId];
+/**
+ * A step's stored result with a new write of it merged in: per element when both outputs are
+ * arrays (foreach iterations written one at a time, or pending markers resetting elements),
+ * otherwise the new result. A failed foreach keeps its first failure. Foreach child run ids from
+ * both are kept.
+ */
+export function mergeStepResult(
+  existingResult: StepResult<any, any, any, any> | undefined,
+  result: StepResult<any, any, any, any>,
+): StepResult<any, any, any, any> {
+  const failedResult = existingResult?.status === 'failed' ? existingResult : undefined;
+  let merged = result;
   if (
     existingResult &&
     'output' in existingResult &&
@@ -102,28 +96,63 @@ export function mergeWorkflowStepResult({
         }
       }
     }
-    snapshot.context[stepId] = {
+    merged = {
       ...existingResult,
       // Pending-marker writes are reset commands built from an earlier snapshot,
       // so keep existing step-level fields and ignore sibling values they carry.
       ...(hasPendingMarker ? {} : (result as any)),
       output: mergedOutput,
     };
-  } else {
-    snapshot.context[stepId] = result;
+    // A failed foreach stays failed with its first failure. Siblings settling from a read taken
+    // before the failure landed would otherwise flip it back to running, and a later failure
+    // would replace the error (and the failed index) the run fails with.
+    if (failedResult) {
+      const failedIndex = failedResult.metadata?.foreachFailedIndex;
+      merged = {
+        ...merged,
+        status: 'failed',
+        error: failedResult.error,
+        endedAt: failedResult.endedAt,
+        ...(failedIndex !== undefined ? { metadata: { ...merged.metadata, foreachFailedIndex: failedIndex } } : {}),
+      } as StepResult<any, any, any, any>;
+    }
   }
 
   // Concurrent child starts and completions carry partial/stale foreach metadata.
   // Preserve the durable identity of every sibling, not just the last writer's child.
   if (existingResult?.metadata?.foreachNestedRunIds || result.metadata?.foreachNestedRunIds) {
-    snapshot.context[stepId]!.metadata = {
-      ...snapshot.context[stepId]!.metadata,
-      foreachNestedRunIds: {
-        ...existingResult?.metadata?.foreachNestedRunIds,
-        ...snapshot.context[stepId]!.metadata?.foreachNestedRunIds,
+    merged = {
+      ...merged,
+      metadata: {
+        ...merged.metadata,
+        foreachNestedRunIds: {
+          ...existingResult?.metadata?.foreachNestedRunIds,
+          ...merged.metadata?.foreachNestedRunIds,
+        },
       },
     };
   }
+  return merged;
+}
+
+export function mergeWorkflowStepResult({
+  snapshot,
+  stepId,
+  result,
+  requestContext,
+  state,
+}: {
+  snapshot: WorkflowRunState;
+  stepId: string;
+  result: StepResult<any, any, any, any>;
+  requestContext: Record<string, any>;
+  state?: Record<string, any>;
+}): Record<string, StepResult<any, any, any, any>> {
+  if (!snapshot?.context) {
+    throw new Error(`Snapshot context not found for runId ${snapshot?.runId}`);
+  }
+
+  snapshot.context[stepId] = mergeStepResult(snapshot.context[stepId], result);
 
   if (state !== undefined) {
     (snapshot.context as Record<string, unknown>).__state = state;
