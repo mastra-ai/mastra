@@ -125,6 +125,8 @@ export function moveVerdictLabel(move: CardMove, boardName: (key: string) => str
         : "no rule takes it, and the integration doesn't move it";
     case 'ignored':
       return move.reason ? `ignored. ${move.reason}` : 'ignored';
+    case 'unknown':
+      return move.reason ? `can't tell. ${move.reason}` : "can't tell";
   }
 }
 

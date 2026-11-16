@@ -377,6 +377,36 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake dry run 
     expect(body.moves).toHaveLength(10);
     expect(body.moves[0].at).toBe(new Date(Date.UTC(2030, 0, 1, 0, 0, 0, CARD_HISTORY + 4)).toISOString());
     const rows = await Promise.all(listed.mock.results.map(result => result.value));
-    expect(rows.map(read => read.length)).toEqual([CARD_HISTORY]);
+    expect(rows.map(read => read.length)).toEqual([CARD_HISTORY + 1]);
+  });
+
+  it("won't say where a burst lands when part of it is older than the decisions it reads", async () => {
+    const { send, docsCard, domains, scope } = await setup();
+    // The oldest update adds docs; dispatch folds it into the newest, past the history the tester reads.
+    for (let n = 0; n <= CARD_HISTORY; n++) {
+      const { revision } = (await domains.workItems.get({ orgId: scope.orgId, id: docsCard.id }))!;
+      await domains.workItems.commitRuleEvaluation({
+        ...scope,
+        workItemId: docsCard.id,
+        ingress: { identity: `burst-${n}` },
+        configVersion: 'test',
+        expectedRevision: revision,
+        actor: { type: 'system', id: 'rules' },
+        outcome: { status: 'accepted' },
+        decisions: [
+          {
+            type: 'routeEvent',
+            idempotencyKey: `burst-${n}`,
+            event: { type: 'work_item.updated', labels: { added: [n === 0 ? 'docs' : `l-${n}`], removed: [] } },
+          },
+        ],
+        causalChain: [],
+        now: new Date(Date.UTC(2030, 0, 1, 0, 0, 0, n)),
+      });
+    }
+    const { body } = await send('/intake/test', { itemId: docsCard.id }, MEMBER);
+    expect(body.moves).toHaveLength(1);
+    expect(body.moves[0]).toMatchObject({ outcome: 'unknown', to: null, rules: [] });
+    expect(body.moves[0].reason).toMatch(/older than/);
   });
 });

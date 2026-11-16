@@ -11986,7 +11986,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "moves",
                   "stays",
                   "rule_default",
-                  "ignored"
+                  "ignored",
+                  "unknown"
                 ]
               },
               "to": {

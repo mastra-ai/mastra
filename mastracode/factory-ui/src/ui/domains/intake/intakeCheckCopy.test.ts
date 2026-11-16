@@ -5,6 +5,7 @@ import {
   changedSummary,
   eventLabel,
   failedConditionLabel,
+  moveVerdictLabel,
   notRoutedSummary,
   ruleCounts,
   ruleFiledLabel,
@@ -33,6 +34,23 @@ describe('intake check copy', () => {
       ['takes 0', 'lost 3 to Ship, 1 to Platform'],
     ],
     ['live counts', ruleFiledLabel({ filed: 4 }), 'filed 4 in the last 30 days'],
+    [
+      'a burst reaching past the history read',
+      moveVerdictLabel(
+        {
+          decisionId: 'd-1',
+          at: null,
+          event: { type: 'work_item.updated' },
+          outcome: 'unknown',
+          to: null,
+          phase: null,
+          reason: 'Part of the burst is older than the decisions read.',
+          rules: [],
+        },
+        boardName,
+      ),
+      "can't tell. Part of the burst is older than the decisions read.",
+    ],
     [
       'a board losing items',
       boardSummary({ takes: keys(14), lostTo: [{ boardKey: 'ship', keys: keys(9) }] }, 200, boardName),

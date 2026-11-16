@@ -219,11 +219,13 @@ export class IntakeCheck {
     card: Card,
     tried: BoardEventFacts | undefined,
   ) {
-    // Bounded: an update burst longer than this folds from the part read, where dispatch folds all of it.
-    const records = await this.deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, {
-      newest: CARD_HISTORY,
+    // Bounded: one decision past the history says whether older ones were left unread.
+    const read = await this.deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, {
+      newest: CARD_HISTORY + 1,
       workItemId: card.id,
     });
+    const truncated = read.length > CARD_HISTORY;
+    const records = truncated ? read.slice(1) : read;
     const moveCommitted = async (other: (typeof records)[number]) =>
       Boolean(
         await this.deps.workItems.getTransitionResultByIngress(
@@ -261,9 +263,19 @@ export class IntakeCheck {
         async ({
           record,
           decision,
-        }): Promise<{ record: typeof record; event: BoardEventFacts | undefined; fallback?: { stage: string } }> => {
+        }): Promise<{
+          record: typeof record;
+          event: BoardEventFacts | undefined;
+          unread?: boolean;
+          fallback?: { stage: string };
+        }> => {
           if (decision.type === 'routeEvent' && isUpdateEvent(decision.event.type)) {
-            const fold = await foldUpdate(groupOf(decision), record.id, moveCommitted);
+            // Folded as dispatch folded it when it acted: newer updates of its group weren't there yet.
+            const group = groupOf(decision);
+            const upTo = group.slice(0, group.findIndex(other => other.id === record.id) + 1);
+            const fold = await foldUpdate(upTo, record.id, moveCommitted);
+            // No earlier update moved the card within what was read, so its burst may reach further back.
+            if (truncated && fold.since.length === upTo.length - 1) return { record, event: undefined, unread: true };
             return { record, event: fold.event };
           }
           if (decision.type === 'routeEvent') return { record, event: decision.event };
@@ -279,18 +291,29 @@ export class IntakeCheck {
       at: string | null;
       event: BoardEventFacts;
       netsOut?: boolean;
+      unread?: boolean;
       fallback?: { stage: string };
     }[] = [
       ...(tried ? [{ decisionId: null, at: null, event: tried }] : []),
-      ...stored.toReversed().map(({ record, event, fallback }) => ({
+      ...stored.toReversed().map(({ record, event, unread, fallback }) => ({
         decisionId: record.id,
         at: record.createdAt.toISOString(),
         event: event ?? (record.decision as unknown as { event: BoardEventFacts }).event,
-        ...(event === undefined && { netsOut: true }),
+        ...(unread ? { unread } : event === undefined && { netsOut: true }),
         ...(fallback && { fallback }),
       })),
     ];
-    return replays.map(({ fallback, netsOut, ...replay }) => {
+    return replays.map(({ fallback, netsOut, unread, ...replay }) => {
+      if (unread) {
+        return {
+          ...replay,
+          outcome: 'unknown' as const,
+          to: null,
+          phase: null,
+          reason: `Part of the burst it folds is older than the ${CARD_HISTORY} decisions read, so where it lands isn't known.`,
+          rules: [],
+        };
+      }
       // The dispatcher drops an update burst whose labels and assignees end where they started.
       if (netsOut) {
         return {

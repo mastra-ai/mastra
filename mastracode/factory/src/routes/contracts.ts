@@ -514,9 +514,10 @@ const intakeTestResponseSchema = z.object({
       /**
        * `moves` to `to`; `stays` where it is; `rule_default` leaves it to the integration's own move
        * (to `phase`, when there is one) because no rule takes it; `ignored` when the event can't move
-       * a card in its state, with `reason`.
+       * a card in its state, with `reason`; `unknown` when an update burst reaches back past the
+       * history read, with `reason`.
        */
-      outcome: z.enum(['moves', 'stays', 'rule_default', 'ignored']),
+      outcome: z.enum(['moves', 'stays', 'rule_default', 'ignored', 'unknown']),
       to: z.object({ boardKey: z.string(), phase: z.string(), routeId: z.string() }).nullable(),
       phase: z.string().nullable(),
       reason: z.string().nullable(),

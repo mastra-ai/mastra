@@ -1613,6 +1613,32 @@ describe('intake routes moving existing cards when labels or assignees change', 
     expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['intake'] });
   });
 
+  it('replays an update that already moved the card as it moved it, though a newer one waits', async () => {
+    const { card, commitUpdate, dispatcher, workItems, shipping, ...harness } = await shipRoute();
+    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:10:00Z');
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:05Z'));
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['done'] });
+    await commitUpdate(card.id, labels(['bug']), '2030-01-01T00:20:00Z');
+
+    const { IntakeCheck } = await import('../routes/intake-check.js');
+    const registry = (
+      await new ProjectBoardCache({
+        codeRegistry: createTriageWorkRegistry(),
+        storage: harness.boards,
+        recheckMs: 0,
+      }).describe(harness.scope)
+    ).registry;
+    const { moves } = await new IntakeCheck({ storage: harness.boards, workItems }).test(harness.scope, registry, {
+      itemId: card.id,
+    });
+    // Replayed against the card as it is now, already Done: the ship rule still takes it, so it stays.
+    expect(moves.map(move => [move.event.labels?.added, move.outcome])).toEqual([
+      [['bug'], 'stays'],
+      [['ship'], 'stays'],
+    ]);
+    expect(moves[1]!.rules).toEqual([{ routeId: shipping.id, name: 'Ship it', outcome: 'took' }]);
+  });
+
   it("replays two linked pull requests' label changes apart, as dispatch does, never netting one against the other", async () => {
     const { card, commitUpdate, dispatcher, workItems, boards, scope, route } = await shipRoute();
     const shipping = await route({
