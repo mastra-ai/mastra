@@ -78,7 +78,7 @@ describe('MemoryLibSQL thread metadata concurrency', () => {
     return thread!.metadata as Record<string, unknown>;
   }
 
-  it('updateThread keeps every key when two processes write concurrently', async () => {
+  it('updateThread keeps every key when two writers update the same thread concurrently', async () => {
     for (let i = 0; i < ROUNDS; i++) {
       await Promise.all([
         a.updateThread({ id: THREAD_ID, metadata: { [`a${i}`]: i } }),
@@ -89,7 +89,7 @@ describe('MemoryLibSQL thread metadata concurrency', () => {
     expect(await storedMetadata()).toEqual(expectedKeys());
   });
 
-  it('updateThreadMetadata keeps every key when two processes write whole objects concurrently', async () => {
+  it('updateThreadMetadata keeps every key when two writers write whole objects concurrently', async () => {
     for (let i = 0; i < ROUNDS; i++) {
       await Promise.all([
         a.updateThreadMetadata({
