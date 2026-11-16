@@ -11,7 +11,12 @@ import type { CollectionColumnSpec, CollectionSchema, FactoryStorage } from '@ma
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from './test-utils.js';
+import {
+  createFactoryStorageForTests,
+  createIsolatedFactoryPostgresForTests,
+  createLegacyCardTablesForTests,
+  createLegacyIntakeTablesForTests,
+} from './test-utils.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 const NOW = new Date('2030-01-01T00:00:00.000Z');
@@ -52,10 +57,13 @@ const RETIRED: Record<string, Record<string, CollectionColumnSpec>> = {
   factory_intake_routes: { allow_working_phase: { type: 'boolean', nullable: true } },
 };
 
-/** Every collection the current domains declare, with the retired columns put back. */
+/** Every collection the current domains declare on an upgraded database, with the retired columns put back. */
 async function previousReleaseSchemas(): Promise<CollectionSchema[]> {
   const probe = new LibSQLFactoryStorage({ id: `retired-probe-${randomUUID()}`, url: ':memory:' });
   const declared = vi.spyOn(probe, 'ensureCollections');
+  // The previous release also had the carry-forward tables, which only an upgraded database still registers.
+  await createLegacyCardTablesForTests(probe);
+  await createLegacyIntakeTablesForTests(probe);
   await createFactoryStorageForTests(probe);
   const schemas = declared.mock.calls.flatMap(([batch]) => batch);
   expect(schemas.map(schema => schema.name)).toEqual(expect.arrayContaining(Object.keys(RETIRED)));

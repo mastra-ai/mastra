@@ -303,10 +303,7 @@ export class IntakeStorage extends FactoryStorageDomain {
   }
 
   async init(): Promise<void> {
-    await this.ensureCollections([
-      INTAKE_ORG_SETTINGS_SCHEMA,
-      INTAKE_SOURCE_SUBSCRIPTIONS_SCHEMA,
-    ]);
+    await this.ensureCollections([INTAKE_ORG_SETTINGS_SCHEMA, INTAKE_SOURCE_SUBSCRIPTIONS_SCHEMA]);
     this.#legacy = {
       userSettings: await ensureLegacyCollections(this.storage, [LEGACY_INTAKE_USER_SETTINGS_SCHEMA]),
       bindings: await ensureLegacyCollections(this.storage, [
