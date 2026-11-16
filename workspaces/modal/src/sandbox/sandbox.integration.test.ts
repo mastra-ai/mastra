@@ -9,6 +9,8 @@
  *   MODAL_TOKEN_SECRET
  */
 
+import { setTimeout as sleep } from 'node:timers/promises';
+import { ModalClient, NotFoundError } from 'modal';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ModalSandbox } from './index';
 
@@ -165,4 +167,41 @@ describe.skipIf(!hasCredentials)('ModalSandbox clone idle timeout', () => {
     expect(result.success).toBe(true);
     expect(result.stdout.trim()).toBe('done');
   }, 150_000);
+});
+
+// The other half of #30369: the clone must really shut down once it sits idle.
+describe.skipIf(!hasCredentials)('ModalSandbox clone idle shutdown', () => {
+  const id = `mastra-test-idle-stop-${Date.now().toString(36)}`;
+  // A 10-minute lifetime, so at ~100s only the 1-minute idle timeout can end the clone.
+  const template = new ModalSandbox({ baseImage: 'ubuntu:22.04', timeoutMs: 10 * 60_000 });
+  const clone = template.clone({ id, idleTimeoutMinutes: 1 });
+
+  afterAll(async () => {
+    await clone._destroy();
+  }, 30_000);
+
+  it('terminates a clone that sits idle past its idle window', async () => {
+    await clone._start();
+    const result = await clone.executeCommand!('echo', ['hi']);
+    expect(result.stdout.trim()).toBe('hi');
+
+    // Hold the Modal Sandbox itself. Going through ModalSandbox would restart a
+    // dead sandbox (retryOnDead), which would hide the shutdown.
+    const sb = clone.modal;
+    // poll() returns null while the sandbox runs and its exit code once it has ended.
+    // It is a control-plane status call, not an exec, so it does not count as activity.
+    expect(await sb.poll()).toBeNull();
+
+    // No exec, stdin or tunnel traffic for longer than the 60s idle window.
+    await sleep(100_000);
+
+    expect(await sb.poll()).not.toBeNull();
+    // Modal looks names up only among running sandboxes, so the id is free again.
+    const client = new ModalClient();
+    try {
+      await expect(client.sandboxes.fromName('mastra', id)).rejects.toBeInstanceOf(NotFoundError);
+    } finally {
+      client.close();
+    }
+  }, 180_000);
 });

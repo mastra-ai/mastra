@@ -248,6 +248,16 @@ describe('ModalSandbox lifecycle', () => {
     expect(params).toMatchObject({ timeoutMs: 60 * 60_000, idleTimeoutMs: 120_000 });
   });
 
+  // Only clone({ idleTimeoutMinutes }) raises timeoutMs. A caller who sets both
+  // explicitly gets exactly what they asked for, even an idle window that cannot fire.
+  it('sends explicit timeoutMs and a longer idleTimeoutMs unchanged', async () => {
+    const sandbox = new ModalSandbox({ timeoutMs: 60_000, idleTimeoutMs: 600_000 });
+    await sandbox._start();
+
+    const [, , params] = mockSandboxes.create.mock.calls[0]!;
+    expect(params).toMatchObject({ timeoutMs: 60_000, idleTimeoutMs: 600_000 });
+  });
+
   it('sends no idle timeout when idleTimeoutMs is not set', async () => {
     const sandbox = new ModalSandbox({ timeoutMs: 120_000 });
     await sandbox._start();

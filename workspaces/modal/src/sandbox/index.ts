@@ -43,9 +43,11 @@ export interface ModalSandboxOptions extends Omit<MastraSandboxOptions, 'process
   timeoutMs?: number;
   /**
    * How long in milliseconds the sandbox can sit idle before Modal terminates it.
-   * Must be a multiple of 1000. `timeoutMs` still caps the total lifetime, so an
-   * idle timeout longer than `timeoutMs` has no effect. When unset, the sandbox
-   * runs until `timeoutMs` expires.
+   * Must be a multiple of 1000. `timeoutMs` still caps the total lifetime: an
+   * idle timeout longer than `timeoutMs` never fires, because `timeoutMs` ends
+   * the sandbox first. Both values are sent as given; only
+   * `clone({ idleTimeoutMinutes })` raises `timeoutMs` to cover the idle window.
+   * When unset, the sandbox runs until `timeoutMs` expires.
    */
   idleTimeoutMs?: number;
   /** Environment variables baked into the sandbox at create time. */
@@ -157,8 +159,9 @@ export class ModalSandbox extends MastraSandbox {
    * Use it when one configured sandbox acts as the template for a fleet of
    * independent sandboxes (e.g. one per project).
    *
-   * `options.idleTimeoutMinutes` maps to Modal's `idleTimeoutMs`, so the
-   * sandbox clone is terminated after that long without activity. If the
+   * `options.idleTimeoutMinutes` maps to Modal's `idleTimeoutMs`, rounded up to
+   * a whole second, so the sandbox clone is terminated after that long without
+   * activity. If the
    * inherited `timeoutMs` (wall-clock lifetime) is shorter than the idle
    * window, it is raised to match so the lifetime does not cut the idle window
    * short. `options.sandboxId` is ignored because Modal reconnects by logical
@@ -166,7 +169,9 @@ export class ModalSandbox extends MastraSandbox {
    */
   clone(options: SandboxCloneOptions = {}): ModalSandbox {
     const { id: _id, ...base } = this._constructorOptions;
-    const idleTimeoutMs = options.idleTimeoutMinutes !== undefined ? options.idleTimeoutMinutes * 60_000 : undefined;
+    // Modal takes whole seconds, so round a fractional window up to the next second.
+    const idleTimeoutMs =
+      options.idleTimeoutMinutes !== undefined ? Math.ceil(options.idleTimeoutMinutes * 60) * 1000 : undefined;
     return new ModalSandbox({
       ...base,
       ...(options.id !== undefined && { id: options.id }),

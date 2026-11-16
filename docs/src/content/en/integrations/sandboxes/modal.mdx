@@ -97,7 +97,7 @@ Get your credentials from the [Modal dashboard](https://modal.com/settings/token
     name: 'idleTimeoutMs',
     type: 'number',
     description:
-      'How long in milliseconds the sandbox can sit idle before Modal terminates it. Must be a multiple of 1000. `timeoutMs` still caps the total lifetime, so set it at least as long as this value. When unset, the sandbox runs until `timeoutMs` expires.',
+      'How long in milliseconds the sandbox can sit idle before Modal terminates it. Must be a multiple of 1000. `timeoutMs` still caps the total lifetime: an idle timeout longer than `timeoutMs` never fires, because `timeoutMs` ends the sandbox first, so set `timeoutMs` at least as long as this value. The constructor sends both values as given; only `clone({ idleTimeoutMinutes })` raises `timeoutMs` to cover the idle window. When unset, the sandbox runs until `timeoutMs` expires.',
     isOptional: true,
   },
   {
@@ -233,7 +233,7 @@ const sandbox = new ModalSandbox({
 })
 ```
 
-Modal counts a sandbox as active while a command started with `executeCommand()` or a background process started with `processes.spawn()` is running, while its stdin is being written to, or while it has an open TCP connection over one of its tunnels. An open tunnel connection keeps the sandbox running even when no command is active.
+Modal counts a sandbox as active while a command started with `executeCommand()`, a background process started with `processes.spawn()`, or a `ModalFilesystem` file operation is running, while its stdin is being written to, or while it has an open TCP connection over one of its tunnels. An open tunnel connection keeps the sandbox running even when no command is active.
 
 `clone({ idleTimeoutMinutes })` sets `idleTimeoutMs` on a newly created clone. The clone's hard lifetime is the larger of the template's `timeoutMs` and the idle window, and it ends the clone even while a command runs. To let a busy clone run past the idle window, give the template a `timeoutMs` longer than that window. If a sandbox with the clone's `id` is already running, `start()` reconnects to it and keeps the timeouts it was created with. To apply new timeouts, use an `id` with no running sandbox.
 

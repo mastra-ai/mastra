@@ -157,6 +157,18 @@ describe.each([
     expect(request).toMatchObject({ definition: { name: 'x', timeoutSecs: 900, idleTimeoutSecs: 900 } });
   });
 
+  // Modal accepts only whole seconds and the SDK rejects anything else at start(),
+  // so a fractional window (0.01 min = 600ms) is rounded up to the next second.
+  it('a clone with a fractional idleTimeoutMinutes gets a whole-second idle timeout', async () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec' });
+    const clone = template.clone({ id: 'x', idleTimeoutMinutes: 0.01 });
+
+    await clone._start();
+
+    const [request] = createRequests();
+    expect(request).toMatchObject({ definition: { name: 'x', timeoutSecs: 300, idleTimeoutSecs: 1 } });
+  });
+
   it('a sandbox with no idle timeout asks Modal for none', async () => {
     const sandbox = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', timeoutMs: 60 * 60_000 });
 
