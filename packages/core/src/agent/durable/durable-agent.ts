@@ -5145,8 +5145,11 @@ export class DurableAgent<
       });
     }
 
-    // Ownership and thread filters need full snapshots; keep only matching summaries.
-    const matchedRuns: DurableAgentActiveRun[] = [];
+    // Scan every candidate for an exact filtered total, but retain only the requested page.
+    const runs: DurableAgentActiveRun[] = [];
+    const start = perPage !== undefined && page !== undefined ? page * perPage : 0;
+    const end = perPage !== undefined && page !== undefined ? start + perPage : Infinity;
+    let total = 0;
     for await (const { run, snapshot } of this.executionEngine.listRunningSnapshots(workflowsStore, {
       resourceId,
       fromDate,
@@ -5167,7 +5170,9 @@ export class DurableAgent<
       if (threadId && runThreadId !== threadId) continue;
       if (resourceId && runResourceId !== resourceId) continue;
 
-      matchedRuns.push({
+      const index = total++;
+      if (index < start || index >= end) continue;
+      runs.push({
         runId: run.runId,
         status: 'running',
         threadId: runThreadId,
@@ -5176,13 +5181,7 @@ export class DurableAgent<
       });
     }
 
-    const total = matchedRuns.length;
-    const paginatedRuns =
-      perPage !== undefined && page !== undefined
-        ? matchedRuns.slice(page * perPage, (page + 1) * perPage)
-        : matchedRuns;
-
-    return { runs: paginatedRuns, total };
+    return { runs, total };
   }
 
   /**
