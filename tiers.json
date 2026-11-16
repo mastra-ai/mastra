@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-11-15",
+  "updated": "2026-11-16",
   "scope": "all",
   "files": {
     ".github/scripts/ci-routing.test.ts": {
@@ -24821,8 +24821,8 @@
     },
     "packages/playground/src/domains/agent-builder/hooks/__tests__/use-autosave-agent.test.tsx": {
       "tier": "in",
-      "since": "2026-11-15",
-      "last_failure": "2026-11-15",
+      "since": "2026-11-16",
+      "last_failure": "2026-11-16",
       "reason": "versioning-fail"
     },
     "packages/playground/src/domains/agent-builder/hooks/__tests__/use-autosave-skill.test.tsx": {
@@ -33803,9 +33803,9 @@
     },
     "job:mastracode-e2e": {
       "tier": "in",
-      "since": "2026-11-01",
-      "last_failure": "2026-10-31",
-      "reason": "failed-last-30d"
+      "since": "2026-11-16",
+      "last_failure": "2026-11-16",
+      "reason": "versioning-fail"
     },
     "job:mastracode-om": {
       "tier": "out",
