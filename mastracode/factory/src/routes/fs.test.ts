@@ -829,6 +829,25 @@ describe('live session file tree', () => {
   it('leaves out a gitlink with no .gitmodules entry and an untracked nested repository', async () => {
     const { parent } = await seedHostCheckouts();
     const repo = join(parent, 'repo');
+    const git = (...args: string[]) => execFileAsync('git', ['-C', repo, ...COMMIT_IDENTITY, ...args]);
+    await git('add', 'README.md');
+    await git('commit', '-q', '-m', 'base');
+    await git('checkout', '-q', '-b', 'theirs');
+    await writeFile(join(repo, 'README.md'), 'theirs');
+    await git('commit', '-q', '-am', 'theirs');
+    await git('checkout', '-q', '-');
+    await writeFile(join(repo, 'README.md'), 'ours');
+    await git('commit', '-q', '-am', 'ours');
+    await expect(git('merge', '-q', 'theirs')).rejects.toThrow();
+
+    const index = await listSessionWorkspaceFiles(makeSession());
+
+    expect(index.paths.toSorted()).toEqual(['.gitignore', 'README.md', 'src/agent.ts', 'src/nested/deep.ts']);
+  });
+
+  it('leaves out a gitlink with no .gitmodules entry and an untracked nested repository', async () => {
+    const { parent } = await seedHostCheckouts();
+    const repo = join(parent, 'repo');
     const git = (dir: string, ...args: string[]) => execFileAsync('git', ['-C', dir, ...COMMIT_IDENTITY, ...args]);
     await execFileAsync('git', ['init', '-q', join(repo, 'tools')]);
     await writeFile(join(repo, 'tools', 'run.sh'), 'echo run');
@@ -907,6 +926,27 @@ describe('live session file tree', () => {
       'repo/src/agent.ts',
       'repo/src/nested/deep.ts',
     ]);
+  });
+
+  it('leaves out a checkout replaced by a symlink to a repository outside the working directory', async () => {
+    const { parent } = await seedHostCheckouts(['acme/repo', 'acme/docs']);
+    const outside = await realpath(await mkdtemp(join(tmpdir(), 'factory-index-outside-')));
+    await execFileAsync('git', ['init', '-q', outside]);
+    await writeFile(join(outside, 'secret.txt'), 'secret');
+    await execFileAsync('git', ['-C', outside, 'add', 'secret.txt']);
+    await execFileAsync('git', ['-C', outside, ...COMMIT_IDENTITY, 'commit', '-q', '-m', 'outside']);
+    await rm(join(parent, 'docs'), { recursive: true });
+    await symlink(outside, join(parent, 'docs'));
+
+    const index = await listSessionWorkspaceFiles(makeSession());
+
+    expect(index.paths.toSorted()).toEqual([
+      'repo/.gitignore',
+      'repo/README.md',
+      'repo/src/agent.ts',
+      'repo/src/nested/deep.ts',
+    ]);
+    expect(index.truncated).toBe(true);
   });
 
   it('fails the index when no checkout can be listed', async () => {

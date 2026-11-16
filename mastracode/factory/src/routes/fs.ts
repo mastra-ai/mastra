@@ -977,8 +977,23 @@ export async function listSessionWorkspaceFiles(session: SourceControlSession): 
   const handle = await sessionSandbox(session);
   if (!handle) return { workspacePath: session.sessionId, available: false, paths: [], truncated: false };
   const { layout, sandbox } = handle;
+  const physical =
+    layout.repos.length > 1
+      ? realPaths(
+          sandbox,
+          layout.root,
+          layout.repos.map(repo => repo.prefix),
+        )
+      : undefined;
   const settled = await Promise.allSettled([
-    ...layout.repos.map(repo => checkoutFiles(sandbox, layout, repo)),
+    ...layout.repos.map(async (repo, i) => {
+      const real = await physical;
+      // Git follows a symlinked checkout, so one would list a repository outside the session's physical workspace.
+      if (real && `${real.paths[i]}/` !== posixPath.join(real.root, repo.prefix)) {
+        throw new Error('Path is not available in this session');
+      }
+      return checkoutFiles(sandbox, layout, repo);
+    }),
     ...(layout.repos.length > 1 ? [rootFiles(sandbox, layout)] : []),
   ]);
   const checkouts = settled.flatMap(checkout => (checkout.status === 'fulfilled' ? [checkout.value] : []));
