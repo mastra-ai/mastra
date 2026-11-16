@@ -224,18 +224,18 @@ describe("a teammate's Factory session", () => {
   describe('when a teammate tries to change its model', () => {
     const lockedReason = 'Only Ward Peeters can change this session’s model or thinking level.';
 
-    it('shows the model and thinking level disabled, with who can change them', async () => {
+    it('shows the model picker disabled, with who can change it', async () => {
       serveModelCatalogs({ sessionScope: 'user', viewerModels: [openAIKeyModel] });
       openWardSessionAs('user-damien');
       const user = userEvent.setup();
 
       const model = await screen.findByRole('button', { name: `Session model: GPT-4o Mini. ${lockedReason}` });
       expect(model).toHaveAttribute('aria-disabled', 'true');
-      const thinking = await screen.findByRole('button', { name: `Thinking: Medium. ${lockedReason}` });
-      expect(thinking).toHaveAttribute('aria-disabled', 'true');
 
       await user.hover(model);
       expect(await screen.findByRole('tooltip')).toHaveTextContent(lockedReason);
+      await user.click(model);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
     it('refuses /model and /think without changing the session', async () => {
