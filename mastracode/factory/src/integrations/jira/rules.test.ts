@@ -162,6 +162,39 @@ describe('JiraRules', () => {
     expect(upserts).toHaveLength(1);
   });
 
+  it('finds a card filed by hand under the issue key when the sweep names the issue by its id', async () => {
+    const { project, service, workItems, drain } = await setup();
+    const ingest = (observed: typeof issue) =>
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [observed] });
+    await ingest({ ...issue, id: issue.identifier });
+    await drain();
+
+    await ingest({ ...issue, id: '10001', updatedAt: '2026-07-03T00:00:00Z' });
+    await drain();
+
+    const cards = (await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).filter(
+      item => item.externalSource?.url === issue.url,
+    );
+    expect(cards.map(item => item.externalSource?.externalId)).toEqual([issue.identifier]);
+  });
+
+  it('keeps two sites apart when their issues share a key', async () => {
+    const { project, service, workItems, drain } = await setup();
+    const ingest = (observed: typeof issue) =>
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [observed] });
+    await ingest({ ...issue, id: issue.identifier });
+    await drain();
+
+    await ingest({ ...issue, id: '10001', url: 'https://beta.atlassian.net/browse/ENG-42', site: 'beta.atlassian.net' });
+    await drain();
+
+    const cards = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(cards.map(item => item.externalSource?.url).sort()).toEqual([
+      'https://acme.atlassian.net/browse/ENG-42',
+      'https://beta.atlassian.net/browse/ENG-42',
+    ]);
+  });
+
   it('a reopened issue finds its card', async () => {
     const { project, service, workItems, drain, cardsFor } = await setup();
     const ingest = (observed: typeof issue) =>

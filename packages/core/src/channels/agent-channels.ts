@@ -1633,6 +1633,10 @@ export class AgentChannels {
       messageId: message.id,
       actor: message.author,
     });
+    // `eventType` stays 'mention' for subscribed-thread messages too, so mark
+    // the ones that actually tag the bot; the prompt tells the model to always
+    // answer those.
+    if (!chatThread.isDM && batch.some(m => m.isMention)) attributes.mentioned = 'true';
 
     // NOTE: `requestContext` is constructed per message at the handler boundary
     // (see `beginMessage` in initialize) so a custom handler can contribute to

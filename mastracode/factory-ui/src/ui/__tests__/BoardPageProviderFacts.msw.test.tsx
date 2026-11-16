@@ -42,9 +42,13 @@ describe('native card facts', () => {
   });
 });
 
-it.each(['board', 'list'])(
-  'shows source facts in %s and details without provider lookups beyond routine intake browsing',
-  async layout => {
+it.each([
+  { layout: 'board', repositories: ['acme/app'], reference: 'Issue #73' },
+  { layout: 'list', repositories: ['acme/app'], reference: 'Issue #73' },
+  { layout: 'board', repositories: ['acme/app', 'acme/docs'], reference: 'Issue acme/app#73' },
+])(
+  'shows source facts in $layout and details without provider lookups beyond routine intake browsing, as $reference among $repositories',
+  async ({ layout, repositories, reference }) => {
     const projectUrl = `${TEST_BASE_URL}/web/factory/projects/fp-1`;
     const providerRequests: string[] = [];
     server.use(
@@ -57,7 +61,9 @@ it.each(['board', 'list'])(
             {
               id: 'fp-1',
               name: 'Acme Factory',
-              repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
+              repositories: repositories.map((slug, index) =>
+                listedRepository(`repo-${index + 1}`, slug, { branch: 'main', sandboxWorkdir: `/repo/${slug}` }),
+              ),
             },
           ],
         }),
@@ -92,7 +98,7 @@ it.each(['board', 'list'])(
 
     const card = await screen.findByTestId('work-item-card');
     expect(card).toHaveTextContent('Repair source facts');
-    expect(card).toHaveTextContent('acme/app#73');
+    expect(card).toHaveTextContent(reference);
     expect(card).toHaveTextContent('reporter');
     expect(within(card).getByLabelText('Source state: closed')).toBeVisible();
     expect(within(card).getByText('customer-visible')).toBeVisible();
@@ -107,7 +113,7 @@ it.each(['board', 'list'])(
       .map(reporter => reporter.closest('[data-slot="metadata"]'))
       .filter(Boolean);
     expect(sourceFacts).toHaveLength(1);
-    expect(sourceFacts[0]).toHaveTextContent('acme/app#73');
+    expect(sourceFacts[0]).toHaveTextContent(reference);
     expect(within(details).getByLabelText('Source state: closed')).toBeVisible();
     expect(within(details).getByText('customer-visible')).toBeVisible();
     expect(within(details).getByRole('link', { name: /^Open in GitHub/ })).toHaveAttribute(

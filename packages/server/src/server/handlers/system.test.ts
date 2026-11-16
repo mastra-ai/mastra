@@ -38,6 +38,7 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   threadQueryRows: false,
   spanQuery: false,
   spanQueryDurationSort: false,
+  spanQueryModelProviderSort: false,
   spanQueryContextFields: false,
   spanQueryModelFields: false,
   spanQueryOutcomeFields: false,
@@ -679,6 +680,19 @@ describe('System Handlers', () => {
           }
         }
         expect(await capabilitiesFor(new DurationStore())).toMatchObject({ spanQueryDurationSort: supported });
+      });
+
+      it.each([
+        { features: ['span-query', 'span-query-model-provider-sort'], supported: true },
+        { features: ['span-query'], supported: false },
+        { features: ['span-query-model-provider-sort'], supported: false },
+      ] as const)('reports model/provider ordering for $features as $supported', async ({ features, supported }) => {
+        class ModelSortStore extends BaseObservabilityStore {
+          getFeatures() {
+            return features;
+          }
+        }
+        expect(await capabilitiesFor(new ModelSortStore())).toMatchObject({ spanQueryModelProviderSort: supported });
       });
 
       it.each([

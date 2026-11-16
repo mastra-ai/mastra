@@ -305,21 +305,44 @@ describe('sendRunEndReport', () => {
     expect(env.deliveries).toHaveLength(2);
   });
 
-  it('names the toolCallId of a parked plan so a follower can answer it', async () => {
+  it('tells a follower how to approve or decline a tool that paused for a yes or no, whatever the tool', async () => {
     const env = reporting();
     await sendRunEndReport(env.reporting, {
       sender: SENDER,
       recipients: [PARENT],
       since: new Date(Date.now() - 1000),
-      outcome: { status: 'blocked', toolName: 'submit_plan', toolCallId: 'call-9' },
+      outcome: { status: 'blocked', toolName: 'sign_off', toolCallId: 'call-9', decision: true },
       subject: 'The work session for #7',
     });
     expect(env.deliveries[0]!.notification).toMatchObject({
       kind: 'blocked',
+      priority: 'urgent',
       summary:
-        'The work session for #7 is waiting on submit_plan and needs an answer. Answer it with factory_answer_approval (toolCallId call-9).',
-      attributes: { 'parked-tool': 'submit_plan', 'tool-call-id': 'call-9' },
+        'The work session for #7 is waiting on sign_off and needs an answer. Approve or decline it with factory_answer_approval (sessionId "session-w", toolCallId "call-9").',
+      // What the chat needs to answer it in place: the session that waits, and the call.
+      attributes: {
+        'parked-tool': 'sign_off',
+        'tool-call-id': 'call-9',
+        'waiting-for': 'approval',
+        'from-session': SENDER.sessionId,
+        'from-thread': SENDER.threadId,
+      },
     });
+  });
+
+  it('sends a question to the session that asked it, with no approval to answer', async () => {
+    const env = reporting();
+    await sendRunEndReport(env.reporting, {
+      sender: SENDER,
+      recipients: [PARENT],
+      since: new Date(Date.now() - 1000),
+      outcome: { status: 'blocked', toolName: 'ask_user', toolCallId: 'call-9' },
+      subject: 'The work session for #7',
+    });
+    expect(env.deliveries[0]!.notification).toMatchObject({
+      summary: 'The work session for #7 is waiting on ask_user and needs an answer.',
+    });
+    expect(env.deliveries[0]!.notification.attributes).not.toHaveProperty('waiting-for');
   });
 
   it('names the failure code and the parked tool', async () => {

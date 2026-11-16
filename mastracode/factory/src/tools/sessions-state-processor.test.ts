@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
 import { createSourceControlSessionLookup } from '../session/factory-session.js';
+import { FACTORY_BOARD_ITEMS_SCHEMA } from '../storage/domains/work-items/work-item-schema.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FACTORY_SESSIONS_MAX_AGE_MS, FactorySessionsStateProcessor } from './sessions-state-processor.js';
 
@@ -402,6 +403,20 @@ describe('FactorySessionsStateProcessor', () => {
     const item = await env.fileItem(7);
     await env.bind(item.id, 'worker-7');
     await expect(env.step({ sessionId: 'worker-7', threadId: 'worker-7-thread' })).resolves.toBeUndefined();
+  });
+
+  it('does not read the work item card when nobody follows the worker item', async () => {
+    const env = await setup();
+    await env.createSession('worker-7');
+    const item = await env.fileItem(7);
+    await env.bind(item.id, 'worker-7');
+    const findOne = vi.spyOn(env.seed.storage.ops, 'findOne');
+    const findMany = vi.spyOn(env.seed.storage.ops, 'findMany');
+
+    await expect(env.step({ sessionId: 'worker-7', threadId: 'worker-7-thread' })).resolves.toBeUndefined();
+
+    const collections = [...findOne.mock.calls, ...findMany.mock.calls].map(([collection]) => collection);
+    expect(collections).not.toContain(FACTORY_BOARD_ITEMS_SCHEMA.name);
   });
 
   it('tells an item worker which item and role it works on and who follows it', async () => {

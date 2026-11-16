@@ -56,6 +56,24 @@ export function useCanEditBoards(factoryProjectId: string | undefined): boolean 
   return useIntakeRoutesQuery(factoryProjectId).data?.canEdit ?? false;
 }
 
+export interface RerouteMove {
+  fromBoard: string;
+  toBoard: string;
+  count: number;
+}
+
+/** Untouched cards the current routes would now file on another board. */
+export function previewReroute(baseUrl: string, factoryProjectId: string) {
+  return sendRouteRequest<{ total: number; moves: RerouteMove[] }>(baseUrl, routesPath(factoryProjectId, '/reroute'));
+}
+
+/** Moves those cards to the start of the board their route now names. */
+export function applyReroute(baseUrl: string, factoryProjectId: string) {
+  return sendRouteRequest<{ moved: number; skipped: number }>(baseUrl, routesPath(factoryProjectId, '/reroute'), {
+    method: 'POST',
+  });
+}
+
 export type RouteWrite =
   | { kind: 'create'; route: IntakeRouteInput }
   | { kind: 'update'; id: string; patch: IntakeRoutePatch }

@@ -2,29 +2,20 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
+import { useApiConfig } from '../../../../api/config';
 import { useStartFactoryRun } from '../../../../hooks/useStartFactoryRun';
 import { useCardRepositorySlug } from './useCardRepositorySlug';
 import { itemSessionSpec, itemThreadSession } from '../boardItems';
 import { repositoryMatchesCardSource } from '../boardRepository';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
+import { listWorkItems } from '../services/workItems';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 
 const PREPARING_SESSION_LABEL = 'Preparing session…';
 
 /** Opening the chat session a card carries, and minting one when it has none yet. */
-export function useBoardRuns({
-  factoryProjectId,
-  refetchItems,
-}: {
-  factoryProjectId: string;
-  /**
-   * A fresh read of the cards a click can land on. It is given the id of the card clicked, and may
-   * send that card alone: the card is taken as deleted when the read succeeds without it.
-   */
-  refetchItems: (
-    itemId: string,
-  ) => Promise<{ isSuccess: true; data: WorkItem[] } | { isSuccess: false; error: unknown }>;
-}) {
+export function useBoardRuns({ factoryProjectId }: { factoryProjectId: string }) {
+  const { baseUrl } = useApiConfig();
   const { start, startingItemIds, enabled, repositories } = useStartFactoryRun();
   const repositorySlugFor = useCardRepositorySlug(repositories);
   const navigate = useNavigate();
@@ -65,16 +56,18 @@ export function useBoardRuns({
     navigate(`/factories/${factoryProjectId}/workspaces/${session.sessionId}/threads/${session.threadId}`);
   };
 
-  // Refetch failures here used to be silent: an expired auth cookie made every
-  // board click a no-op with no feedback. Toast so the click never dies quietly.
+  // The clicked card alone, read fresh: it may have gained a session since it was listed, or been
+  // deleted. A failed read used to be silent: an expired auth cookie made every board click a
+  // no-op with no feedback. Toast so the click never dies quietly.
   const refreshItem = async (itemId: string) => {
-    const refreshedItems = await refetchItems(itemId);
-    if (!refreshedItems.isSuccess) {
-      const cause = refreshedItems.error;
+    let cards: WorkItem[];
+    try {
+      cards = (await listWorkItems(baseUrl, factoryProjectId, undefined, { workItemId: [itemId] })).workItems;
+    } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : 'Failed to refresh the board. Try reloading the page.');
       return;
     }
-    const item = refreshedItems.data.find(candidate => candidate.id === itemId);
+    const item = cards.find(candidate => candidate.id === itemId);
     if (!item) {
       toast.error('This card no longer exists. The board may be out of date.');
       return;

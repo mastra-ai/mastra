@@ -37,6 +37,8 @@ export type GithubStatusReason =
   | 'auth_required'
   | 'organization_required'
   | 'not_connected'
+  /** Platform withholds a personal-account install while the Mastra organization has more than one member. */
+  | 'personal_install_hidden'
   | 'ready'
   | 'unavailable';
 

@@ -20,6 +20,8 @@ export interface SandboxEnvRoutesDeps extends RouteDependencies {
    */
   writable: boolean;
   audit?: AuditEmitter;
+  /** Called after a variable changed; Build variables are part of the environment template. */
+  onEnvironmentSaved?: (projectId: string) => void;
 }
 
 type Resolved = { orgId: string; userId: string; projectId: string };
@@ -141,6 +143,7 @@ export class SandboxEnvRoutes extends Route<SandboxEnvRoutesDeps> {
           targets: [{ type: 'sandbox_env', id: env.name, name: env.name }],
           metadata: { appliesTo: env.appliesTo },
         });
+        this.deps.onEnvironmentSaved?.(scope.projectId);
         return context.json({ env: payload(env) });
       }),
       this.#route(contracts.projectSandboxEnvUpdate, async (context, scope) => {
@@ -166,6 +169,7 @@ export class SandboxEnvRoutes extends Route<SandboxEnvRoutesDeps> {
           targets: [{ type: 'sandbox_env', id: env.name, name: env.name }],
           metadata: { appliesTo: env.appliesTo },
         });
+        this.deps.onEnvironmentSaved?.(scope.projectId);
         return context.json({ env: payload(env) });
       }),
       this.#route(contracts.projectSandboxEnvDelete, async (context, scope) => {
@@ -179,6 +183,7 @@ export class SandboxEnvRoutes extends Route<SandboxEnvRoutesDeps> {
           action: 'factory.sandbox_env.deleted',
           targets: [{ type: 'sandbox_env', id: name.name, name: name.name }],
         });
+        this.deps.onEnvironmentSaved?.(scope.projectId);
         return context.body(null, 204);
       }),
     ];

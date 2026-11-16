@@ -1,4 +1,5 @@
 import { SpanType, InternalSpans } from '@mastra/core/observability';
+import * as coreObservability from '@mastra/core/observability';
 import type {
   Span,
   SpanTypeMap,
@@ -262,6 +263,30 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public tags?: string[];
   public links?: SpanLink[];
   public traceState?: TraceState;
+  private localErrorCount: number | undefined = typeof coreObservability.claimSpanError === 'function' ? 0 : undefined;
+  private errorOccurrenceIds?: Set<string>;
+
+  public recordError(error: Error, options?: { occurrenceId?: string; origin?: 'new' | 'propagated' }): void {
+    if (this.isEvent || this.endTime) return;
+    if (error === null || (typeof error !== 'object' && typeof error !== 'function')) {
+      this.localErrorCount = undefined;
+      return;
+    }
+    const id = coreObservability.claimSpanError?.(error, this.traceId, this.id, options);
+    // Preserve excluded origins so visible ancestors never claim their failures.
+    if (this.isExcluded || id === undefined || this.errorOccurrenceIds?.has(id)) return;
+    (this.errorOccurrenceIds ??= new Set()).add(id);
+    if (this.localErrorCount !== undefined) this.localErrorCount++;
+  }
+
+  public restoreErrorCount(cached: SpanSnapshot<TType>): void {
+    // A scalar without occurrence history cannot safely resume positive accounting.
+    this.localErrorCount =
+      typeof coreObservability.claimSpanError !== 'function' || (cached.errorCount && !cached.errorOccurrenceIds)
+        ? undefined
+        : cached.errorCount;
+    this.errorOccurrenceIds = cached.errorOccurrenceIds?.length ? new Set(cached.errorOccurrenceIds) : undefined;
+  }
   /** Entity type that created the span (e.g., agent, workflow) */
   public entityType?: EntityType;
   /** Entity ID that created the span */
@@ -791,6 +816,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       output: hideOutput ? undefined : this.output,
       // An error's message, stack header and details often quote the data the flags hide.
       errorInfo: hideInput || hideOutput ? redactErrorInfo(this.errorInfo, this.errorStackMessage) : this.errorInfo,
+      ...(this.localErrorCount !== undefined ? { errorCount: this.localErrorCount } : {}),
       ...(this.outcome !== undefined ? { outcome: this.outcome } : {}),
       ...(this.stopReason !== undefined ? { stopReason: this.stopReason } : {}),
       ...(this.stopReasonContext !== undefined ? { stopReasonContext: this.stopReasonContext } : {}),
@@ -818,6 +844,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     return {
       ...this.exportSpan(this.observabilityInstance.getConfig().includeInternalSpans),
       ownEntityVersionId: this.ownEntityVersionId ?? null,
+      ...(this.errorOccurrenceIds ? { errorOccurrenceIds: [...this.errorOccurrenceIds] } : {}),
       ...(this.traceState ? { traceState: this.traceState } : {}),
     };
   }

@@ -11,6 +11,8 @@ The `MCPServer` class provides the functionality to expose your existing Mastra 
 
 Note that if you only need to use your tools or agents directly within your Mastra application, you don't necessarily need to create an MCP server. This API is specifically for exposing your Mastra tools and agents to _external_ MCP clients.
 
+To expose every agent, workflow, and tool on your Mastra app without defining a server, use the [built-in MCP server](/docs/server/mcp) at `/api/mcp` instead. It builds its tool list per caller and runs each call through the matching HTTP route's auth and permission checks. Use `MCPServer` to publish a chosen set of tools and agents with your own prompts and resources, or to serve over stdio.
+
 It supports the [stdio (subprocess) and Streamable HTTP MCP transports](https://modelcontextprotocol.io/docs/concepts/transports) of the MCP `2026-07-28` revision.
 
 :::note
@@ -177,6 +179,13 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
     isOptional: true,
     description:
       "How HTTP requests from 2025-era clients (those that open with `initialize`, such as VS Code and Cursor) are served. `'reject'` (default) answers them with an unsupported-protocol-version error. `'stateless'` answers each request without a session: listing and calling tools, reading resources and getting prompts work, `GET` and `DELETE` session requests get `405`, and features that need 2026-07-28 (suspend/resume, `subscriptions/listen`, events) aren't available to these clients.",
+  },
+  {
+    name: 'maxRequestBodySize',
+    type: 'number',
+    isOptional: true,
+    description:
+      'Upper bound, in bytes, on the HTTP request body the server reads from the request stream. A larger body is answered with a `413` JSON-RPC error before it is parsed, so no tool runs. It bounds only the body the server reads itself: when body-parsing middleware supplies the parsed body, this bound does not apply, so set the size limit on that parser as well. Defaults to `4194304` (4 MiB). Raise it on servers that receive large `tools/call` payloads, such as base64-encoded documents. Must be a positive number. Not applied to `stdio`, which has no request bodies.',
   },
   {
     name: 'toolResult',

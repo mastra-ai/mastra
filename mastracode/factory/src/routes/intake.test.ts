@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Intake } from '../capabilities/intake.js';
+import { PlatformGithubIntegration } from '../integrations/platform/github/integration.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
@@ -88,12 +89,12 @@ describe('intake configuration', () => {
     expect((await buildApp({ workosId: 'u1' }).request('/web/intake/config')).status).toBe(403);
   });
 
-  it('defaults every configured capability to enabled with no selected sources', async () => {
+  it('defaults every configured capability to disabled with no selected sources', async () => {
     const response = await buildApp(orgUser).request('/web/intake/config');
     expect(await response.json()).toEqual({
       config: {
-        github: { enabled: true, sourceIds: null },
-        linear: { enabled: true, sourceIds: null },
+        github: { enabled: false, sourceIds: null },
+        linear: { enabled: false, sourceIds: null },
       },
     });
   });
@@ -121,6 +122,28 @@ describe('intake configuration', () => {
         },
       },
     ]);
+  });
+
+  it("accepts GitHub's Dependabot opt-in under its own id and rejects it when GitHub is absent", async () => {
+    vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', 'https://platform.test');
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'test-key');
+    const platformGithub = new PlatformGithubIntegration();
+    vi.unstubAllEnvs();
+    const withGithub = [{ id: 'github', intake: github }, ...platformGithub.additionalIntakes];
+    const config = { dependabot: { enabled: true, sourceIds: ['acme/app'] } };
+    const put = (app: Hono) =>
+      app.request('/web/intake/config', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+
+    expect((await put(buildApp(orgUser, integrations))).status).toBe(400);
+
+    const response = await put(buildApp(orgUser, withGithub));
+    expect(response.status).toBe(200);
+    expect((await response.json()).config.dependabot).toEqual(config.dependabot);
+    expect(await seed.intake.getConfig({ orgId: 'org1', integrationIds: ['dependabot'] })).toEqual(config);
   });
 
   describe('source bindings', () => {

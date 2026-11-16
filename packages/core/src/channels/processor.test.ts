@@ -151,6 +151,17 @@ describe('ChatChannelProcessor', () => {
     });
   });
 
+  it('tells the model to always answer a message that mentions it, even a heads-up', async () => {
+    const args = createArgs({ channel: { platform: 'slack', isDM: false } as ChannelContext });
+    await new ChatChannelProcessor().processInputStep(args);
+    const prompt = String(args.messageList.getSystemMessages('chat-channel-context')[0]!.content);
+
+    expect(prompt).toContain('A message marked mentioned="true" tags you directly. Always respond with text to it');
+    expect(prompt).toContain('Got it — standing by for the details.');
+    expect(prompt).toContain('For messages that do not mention you, if users appear to be talking to each other');
+    expect(prompt).toContain('Do NOT acknowledge messages that do not mention you');
+  });
+
   describe('with reply text hidden', () => {
     it('tells an inbound run that only what it posts with tools is seen, and to stay silent by posting nothing', async () => {
       const args = createArgs({ channel: { platform: 'slack', isDM: false } as ChannelContext });
@@ -159,7 +170,8 @@ describe('ChatChannelProcessor', () => {
       const prompt = String(args.messageList.getSystemMessages('chat-channel-context')[0]!.content);
 
       expect(prompt).toContain('Your text replies are not posted to this conversation.');
-      expect(prompt).toContain('Only post when you are explicitly mentioned');
+      expect(prompt).toContain('A message marked mentioned="true" tags you directly. Always post to it');
+      expect(prompt).toContain('For any other message, only post when');
       expect(prompt).toContain('To stay silent, post nothing.');
       expect(prompt).not.toContain('empty message');
     });

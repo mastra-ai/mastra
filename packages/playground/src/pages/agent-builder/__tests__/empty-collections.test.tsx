@@ -37,7 +37,7 @@ describe.each([
       expect(await screen.findByRole('heading', { name: `No ${prefix} agents yet` })).toBeTruthy();
       fireEvent.click(await screen.findByRole('button', { name: 'Skills', exact: true }));
       expect(await screen.findByRole('heading', { name: `No ${prefix} skills yet` })).toBeTruthy();
-      fireEvent.change(screen.getByPlaceholderText('Filter by name or description'), { target: { value: 'missing' } });
+      fireEvent.change(screen.getByPlaceholderText('Search by name or description'), { target: { value: 'missing' } });
       expect(screen.queryByText('No skills match your search')).toBeNull();
       expect(screen.getByRole('heading', { name: `No ${prefix} skills yet` })).toBeTruthy();
       fireEvent.click(screen.getByRole('button', { name: 'Agents', exact: true }));

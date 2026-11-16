@@ -4,6 +4,7 @@ import { FactorySandbox } from '@mastra/core/workspace';
 import type { FactorySandboxBuilds } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ENVIRONMENT_BUILD_WORKFLOW_ID } from '../../../environment/build-workflow.js';
 import { MastraFactory } from '../../../factory.js';
 import { createPlaintextFactorySecretEncryption } from '../../../secret-encryption.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
@@ -373,6 +374,16 @@ describe('Platform GitHub push rebuilds the environment template', () => {
         expect(built?.activeTemplateId).toBe('tpl-1');
         expect(built?.activeTemplateHeads).toEqual({ 'octo/hello': SHA_NEW });
       });
+      // The finished build checks once more for a saved change; nothing changed, so it ends without one.
+      const workflow = harness.controller.getMastra()!.getWorkflow(ENVIRONMENT_BUILD_WORKFLOW_ID);
+      await vi.waitFor(async () => {
+        const { runs } = await workflow.listWorkflowRuns();
+        const statuses = runs.flatMap(({ snapshot }) =>
+          typeof snapshot !== 'string' && snapshot.context.input?.projectId === project.id ? [snapshot.status] : [],
+        );
+        expect(statuses.sort()).toEqual(['success', 'success']);
+      });
+      expect(sandbox.started).toHaveLength(1);
     } finally {
       await harness.controller.getMastra()?.stopWorkers();
       await storage.close();

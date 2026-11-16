@@ -740,7 +740,39 @@ function adaptFirefliesGetTranscript(action: ExtractedAction): ExtractedAction {
   return { ...action, moduleStatements, execBody };
 }
 
+/**
+ * OpenAI retired gpt-image-1 on 2026-10-23, so a call that omits `model` fails
+ * against the upstream template's default. Default to OpenAI's recommended
+ * replacement instead. Drop this once the upstream template does.
+ */
+const OPENAI_IMAGE_DEFAULT_MODEL = 'gpt-image-2.5-sunburst';
+
+function adaptOpenAICreateImage(action: ExtractedAction): ExtractedAction {
+  const moduleStatements = action.moduleStatements.map(statement =>
+    statement.includes(`const ${action.inputSchemaName}`)
+      ? replaceOnce(
+          statement,
+          /Defaults to \\?"gpt-image-1\\?"/,
+          `Defaults to \"${OPENAI_IMAGE_DEFAULT_MODEL}\"`,
+          action,
+          'model default description',
+        )
+      : statement,
+  );
+  const execBody = replaceOnce(
+    action.execBody,
+    /input\.model \?\? 'gpt-image-1'/,
+    `input.model ?? '${OPENAI_IMAGE_DEFAULT_MODEL}'`,
+    action,
+    'model default',
+  );
+  return { ...action, moduleStatements, execBody };
+}
+
 function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction {
+  if (action.candidate.providerId === 'openai' && action.candidate.actionSlug === 'create-image') {
+    return adaptOpenAICreateImage(action);
+  }
   if (action.candidate.providerId === 'fireflies' && action.candidate.actionSlug === 'get-transcript') {
     return adaptFirefliesGetTranscript(action);
   }

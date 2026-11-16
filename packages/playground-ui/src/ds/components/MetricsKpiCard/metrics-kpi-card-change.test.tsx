@@ -21,7 +21,7 @@ describe('MetricsKpiCardChange', () => {
     for (const changePct of [0, 0.04, -0.04]) {
       const html = renderToStaticMarkup(<MetricsKpiCardChange changePct={changePct} />);
       expect(html).toContain('>0%<');
-      expect(html).not.toContain('lucide-arrow');
+      expect(html).not.toContain('data-central-icon="IconArrow');
     }
   });
 

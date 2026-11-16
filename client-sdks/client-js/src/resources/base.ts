@@ -8,6 +8,22 @@ import {
   normalizeRoutePath,
 } from '../utils';
 
+/**
+ * Retry attempts applied when the caller has not configured one. Only read
+ * methods keep this default; every other method is attempted once unless the
+ * caller opts in with an explicit `retries` count.
+ */
+const DEFAULT_RETRIES = 3;
+
+/**
+ * HTTP methods that read server state. A retried read only repeats a lookup,
+ * so it is safe to retry by default. Methods outside this set (POST, PUT,
+ * PATCH, DELETE and anything unrecognized) may already have applied a side
+ * effect when the attempt failed, so they are not retried unless the caller
+ * asks for it.
+ */
+const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
 export class BaseResource {
   readonly options: ClientOptions;
   protected readonly apiPrefix: string;
@@ -15,6 +31,15 @@ export class BaseResource {
   constructor(options: ClientOptions) {
     this.options = options;
     this.apiPrefix = normalizeRoutePath(options.apiPrefix ?? '/api');
+  }
+
+  /**
+   * Retry count for a request that only reads server state even though its HTTP method is not a
+   * read method, such as a query sent as POST. It keeps the read default unless the client was
+   * configured with an explicit `retries` count, which always wins.
+   */
+  protected readRetries(): number {
+    return this.options.retries ?? DEFAULT_RETRIES;
   }
 
   /**
@@ -27,7 +52,7 @@ export class BaseResource {
     let lastError: Error | null = null;
     const {
       baseUrl,
-      retries: defaultRetries = 3,
+      retries: configuredRetries,
       backoffMs = 100,
       maxBackoffMs = 1000,
       headers = {},
@@ -35,7 +60,11 @@ export class BaseResource {
       fetch: customFetch,
     } = this.options;
     const { retries: requestRetries, ...fetchOptions } = options;
-    const retries = requestRetries ?? defaultRetries;
+    // Only read requests retry by default. A retry of a write can duplicate a side
+    // effect the server already applied, so writes are sent once unless the caller
+    // opts in with an explicit retry count on the client or the call.
+    const method = (fetchOptions.method ?? 'GET').toUpperCase();
+    const retries = requestRetries ?? configuredRetries ?? (READ_METHODS.has(method) ? DEFAULT_RETRIES : 0);
     if (!Number.isSafeInteger(retries) || retries < 0) {
       throw new RangeError('retries must be a non-negative safe integer');
     }

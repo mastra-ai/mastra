@@ -15,6 +15,9 @@ import { StorageDomain } from '../base';
 import type { StateRef, StateVersion, StoredWorkflowRun, StoredWorkflowRunHeader, WorkflowRunHeader } from './journal';
 import type { StatePatchOp } from './state-patch';
 
+// Reads the default getRunOwnerships() keeps in flight, so one batch does not flood the store.
+const RUN_OWNERSHIP_READ_CONCURRENCY = 8;
+
 function runJournalNotSupportedError(adapter: string): MastraError {
   return new MastraError({
     id: 'STORAGE_RUN_JOURNAL_NOT_SUPPORTED',
@@ -114,8 +117,49 @@ export abstract class WorkflowsStorage extends StorageDomain {
     throw runFencingNotSupportedError('workflows', this.constructor.name);
   }
 
+  /** The run's current ownership record, or null when the run has no stored record. */
   async getRunOwnership(_args: { runId: string }): Promise<RunOwnershipRecord | null> {
     throw runFencingNotSupportedError('workflows', this.constructor.name);
+  }
+
+  /**
+   * The ownership records of several runs, keyed by run ID, each as
+   * `getRunOwnership` returns it. Runs without a stored record are left out of
+   * the map. It is a `Map` because run IDs are caller-chosen strings, such as
+   * `__proto__`, that a plain object would mishandle.
+   *
+   * The default reads each run separately, at most 8 at once, so every adapter
+   * that implements `getRunOwnership` supports it. Adapters with a batch read
+   * override it with one query, or one per chunk of IDs when the backend caps
+   * a request. The first failed read rejects the call.
+   */
+  async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
+    const records = new Map<string, RunOwnershipRecord>();
+    const queue = [...new Set(runIds)];
+
+    // Each reader takes the next ID once its previous read settles, until the queue is empty.
+    const next = async (): Promise<void> => {
+      const runId = queue.shift();
+      if (runId === undefined) {
+        return;
+      }
+
+      try {
+        const record = await this.getRunOwnership({ runId });
+        if (record) {
+          records.set(runId, record);
+        }
+      } catch (error) {
+        // The call already rejects with this error; stop the other readers from starting new reads.
+        queue.length = 0;
+        throw error;
+      }
+
+      return next();
+    };
+
+    await Promise.all(Array.from({ length: Math.min(RUN_OWNERSHIP_READ_CONCURRENCY, queue.length) }, next));
+    return records;
   }
 
   // Storage v2 runs. Adapters that return true from supportsRunJournal() implement these.

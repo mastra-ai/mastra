@@ -1068,7 +1068,10 @@ describe('PlatformGithubEventWorker', () => {
 
     expect(reconcileFactoryState).toHaveBeenCalledTimes(2);
     expect(discoverPullRequests).toHaveBeenCalledTimes(13);
-    expect(discoverPullRequests).toHaveBeenCalledWith([{ id: 101, fullName: 'acme/repo', installationId: 7 }]);
+    // With the linked projects the poll already read, so discovery needn't read them again.
+    expect(discoverPullRequests).toHaveBeenCalledWith([
+      { id: 101, fullName: 'acme/repo', installationId: 7, projects: [{ orgId: 'org-1', factoryProjectId: 'proj-1' }] },
+    ]);
     expect(deps.logger.info).toHaveBeenCalledWith(
       'Platform GitHub pull request discovery replayed missed opens',
       expect.objectContaining({ created: 1, candidateRepositories: 1 }),

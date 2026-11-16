@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { TOOL_ABORT_NOTICE } from '../../../../loop/shared/tool-abort-grace';
+import { MastraTimeoutError } from '../../../../loop/timeout';
 import { BACKGROUND_WORK_CONTEXT } from '../../../../processors/background-work-signals';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { globalRunRegistry } from '../../run-registry';
@@ -202,7 +204,7 @@ describe('durable tool-call background task dispatch', () => {
 
     const result = await executeStep(pubsub, initData);
 
-    expect(waitForCompletion).toHaveBeenCalledWith({ abortSignal: undefined });
+    expect(waitForCompletion).toHaveBeenCalledWith({ abortSignal: expect.any(AbortSignal) });
     expect(result.result).toEqual(authoritativeResult);
     expect(result.providerMetadata).toMatchObject({
       mastra: { backgroundTask: { taskId: 'task-awaited', status: 'completed' } },
@@ -210,7 +212,7 @@ describe('durable tool-call background task dispatch', () => {
     expect(messageList.updateToolInvocation).toHaveBeenCalledTimes(1);
   });
 
-  it('stops awaiting background work when the durable run is aborted', async () => {
+  it.each(['abort', 'deadline'] as const)('preserves the run %s outcome while awaiting background work', async stop => {
     const pubsub = mockPubsub();
     const abortController = new AbortController();
     setupRegistry({ abortSignal: abortController.signal });
@@ -241,9 +243,48 @@ describe('durable tool-call background task dispatch', () => {
 
     const execution = executeStep(pubsub, initData);
     await vi.waitFor(() => expect(waitForCompletion).toHaveBeenCalledWith({ abortSignal: abortController.signal }));
-    abortController.abort(new Error('durable run aborted'));
+    abortController.abort(
+      stop === 'deadline'
+        ? new MastraTimeoutError({ timeoutType: 'total', timeoutMs: 100 })
+        : new Error('durable run aborted'),
+    );
 
-    await expect(execution).rejects.toThrow('durable run aborted');
+    await expect(execution).resolves.toMatchObject({
+      ...baseInput(),
+      result: TOOL_ABORT_NOTICE,
+      aborted: true,
+      ...(stop === 'deadline' ? { deadlineTimeout: { timeoutType: 'total', timeoutMs: 100 } } : { runAborted: true }),
+    });
+  });
+
+  it.each([false, true])('propagates unrelated background wait errors when the run is aborted: %s', async aborted => {
+    const pubsub = mockPubsub();
+    const abortController = new AbortController();
+    setupRegistry({ abortSignal: abortController.signal });
+    const waitError = new Error('background wait failed');
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      disposition: 'awaited',
+      timeoutMs: 30_000,
+      maxRetries: 0,
+    } as any);
+
+    const waitForCompletion = vi.fn(async () => {
+      if (aborted) abortController.abort(new Error('durable run aborted'));
+      throw waitError;
+    });
+    vi.mocked(createBackgroundTask).mockReturnValue({
+      dispatch: vi.fn().mockResolvedValue({ task: { id: 'task-wait-error' }, fallbackToSync: false }),
+      checkIfExisting: vi.fn().mockResolvedValue(undefined),
+      checkIfRunning: vi.fn().mockResolvedValue(false),
+      restart: vi.fn(),
+      task: { id: 'task-wait-error' },
+      cancel: vi.fn(),
+      waitForCompletion,
+    } as any);
+
+    await expect(executeStep(pubsub, makeInitData())).rejects.toBe(waitError);
   });
 
   it('reconciles an awaited task that completed before workflow replay without dispatching a duplicate', async () => {
@@ -295,7 +336,7 @@ describe('durable tool-call background task dispatch', () => {
 
     expect(dispatch).not.toHaveBeenCalled();
     expect(checkIfRunning).not.toHaveBeenCalled();
-    expect(waitForCompletion).toHaveBeenCalledWith({ abortSignal: undefined });
+    expect(waitForCompletion).toHaveBeenCalledWith({ abortSignal: expect.any(AbortSignal) });
     expect(result.result).toEqual(authoritativeResult);
     expect(result.providerMetadata).toMatchObject({
       mastra: { backgroundTask: { taskId: terminalTask.id, status: 'completed' } },
@@ -795,7 +836,7 @@ describe('durable tool-call background task dispatch', () => {
 
     const result = await executeStep(pubsub, initData, undefined, testCase.resumeData);
 
-    expect(waitForCompletion).toHaveBeenCalledWith({ abortSignal: undefined });
+    expect(waitForCompletion).toHaveBeenCalledWith({ abortSignal: expect.any(AbortSignal) });
     expect(result.result).toEqual(authoritativeResult);
     expect(result.providerMetadata).toMatchObject({
       mastra: { backgroundTask: { taskId, status: 'completed' } },

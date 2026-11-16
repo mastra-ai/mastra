@@ -703,9 +703,11 @@ describe('theme.css export', () => {
     const output = compiler.build(['shadow-raised', 'state-layer', 'prose', 'animate-in', 'bg-field', 'dark:invert']);
 
     expect(compiler.sources).toEqual([]);
-    for (const utility of ['shadow-raised', 'state-layer', 'prose', 'animate-in', 'bg-field']) {
+    for (const utility of ['shadow-raised', 'prose', 'animate-in', 'bg-field']) {
       expect(output).toContain(`.${utility} {`);
     }
+    // Only states, no resting rule.
+    expect(output).toMatch(/\.state-layer:not\([^)]*\):hover/);
     expect(output).toContain('.dark\\:invert:is(.dark *)');
     expect(output).toContain('--syntax-string: var(--green-300)');
   });

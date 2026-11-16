@@ -203,3 +203,25 @@ describe('SidebarSections', () => {
     expect(screen.getByRole('link', { name: 'Drafts' }).className).toContain('pl-10');
   });
 });
+
+describe('SidebarSections group titles', () => {
+  it('opens the list with rows: the first group title is only for screen readers, later ones show', () => {
+    render(
+      <SidebarSections
+        sections={[
+          { key: 'primitives', title: 'Primitives', links: [{ name: 'Agents', url: '/agents' }] },
+          { key: 'evaluation', title: 'Evaluation', links: [{ name: 'Scorers', url: '/scorers' }] },
+        ]}
+      />,
+    );
+
+    // Both groups stay named regions for assistive tech.
+    const first = screen.getByRole('region', { name: 'Primitives' });
+    const second = screen.getByRole('region', { name: 'Evaluation' });
+
+    const firstTitle = first.querySelector('header');
+    const secondTitle = second.querySelector('header');
+    expect(firstTitle?.classList.contains('sr-only')).toBe(true);
+    expect(secondTitle?.classList.contains('sr-only')).toBe(false);
+  });
+});

@@ -1,37 +1,11 @@
 import type { DragEvent } from 'react';
 
 import type { BoardCardOwner } from './boardCardState';
-import type { BoardCandidate } from './boardCandidates';
-import { SOURCE_LABELS } from './boardItems';
-import type { WorkItemSource } from './services/workItems';
 
 // Native HTML5 drag & drop; the card menus are the accessible fallback.
 export const CARD_MIME = 'application/x-factory-card';
 
-export type DragPayload =
-  | { kind: 'work-item'; id: string; fromStage: string; ownerKind: BoardCardOwner['kind'] }
-  | {
-      kind: 'candidate';
-      candidate: Pick<BoardCandidate, 'source' | 'sourceKey' | 'title' | 'url' | 'metadata'> & {
-        /** Typed guidance for this run; saved as the card description. Dragging carries none. */
-        customPrompt?: string;
-      };
-    };
-
-/** The candidate as the board files it; the run already knows which issue or PR it is about, so typed guidance travels alone. */
-export function candidatePayload(candidate: BoardCandidate, guidance?: string): DragPayload {
-  return {
-    kind: 'candidate',
-    candidate: {
-      source: candidate.source,
-      sourceKey: candidate.sourceKey,
-      title: candidate.title,
-      url: candidate.url,
-      metadata: candidate.metadata,
-      ...(guidance === undefined ? {} : { customPrompt: guidance }),
-    },
-  };
-}
+export type DragPayload = { kind: 'work-item'; id: string; fromStage: string; ownerKind: BoardCardOwner['kind'] };
 
 export function setDragPayload(event: DragEvent, payload: DragPayload) {
   event.dataTransfer.setData(CARD_MIME, JSON.stringify(payload));
@@ -47,35 +21,14 @@ export function readDragPayload(dataTransfer: DataTransfer): DragPayload | undef
   } catch {
     return;
   }
-  if (!isRecord(parsed)) return;
-  if (parsed.kind === 'work-item') {
-    if (typeof parsed.id !== 'string' || typeof parsed.fromStage !== 'string') return;
-    if (!isOwnerKind(parsed.ownerKind)) return;
-    return { kind: 'work-item', id: parsed.id, fromStage: parsed.fromStage, ownerKind: parsed.ownerKind };
-  }
-  if (parsed.kind !== 'candidate' || !isRecord(parsed.candidate)) return;
-  const candidate = parsed.candidate;
-  if (!isWorkItemSource(candidate.source)) return;
-  if (typeof candidate.sourceKey !== 'string' || typeof candidate.title !== 'string') return;
-  if (typeof candidate.url !== 'string' || !isRecord(candidate.metadata)) return;
-  return {
-    kind: 'candidate',
-    candidate: {
-      source: candidate.source,
-      sourceKey: candidate.sourceKey,
-      title: candidate.title,
-      url: candidate.url,
-      metadata: candidate.metadata,
-    },
-  };
+  if (!isRecord(parsed) || parsed.kind !== 'work-item') return;
+  if (typeof parsed.id !== 'string' || typeof parsed.fromStage !== 'string') return;
+  if (!isOwnerKind(parsed.ownerKind)) return;
+  return { kind: 'work-item', id: parsed.id, fromStage: parsed.fromStage, ownerKind: parsed.ownerKind };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
-}
-
-function isWorkItemSource(value: unknown): value is WorkItemSource {
-  return typeof value === 'string' && value in SOURCE_LABELS;
 }
 
 const OWNER_KINDS: Record<BoardCardOwner['kind'], true> = { free: true, you: true, automation: true, session: true };

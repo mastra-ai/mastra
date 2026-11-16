@@ -80,11 +80,16 @@ import { startRunStep } from '../../../run-lease-fence';
 import { createSignal } from '../../../signals';
 import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
-import { ensureRemoteAbortListener } from '../../abort-transport';
+import { ensureRemoteAbortListener, readRunDeadline } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import { ExecutionFence, getExecutionOwnershipGuard } from '../../execution-fence';
 import { endRunSpansWithError, getRunRegistryEntry, markRunActive } from '../../run-registry';
-import { createStepStartChunk, emitChunkEvent, publishStepStartChunk } from '../../stream-adapter';
+import {
+  createStepStartChunk,
+  emitChunkEvent,
+  emitIterationStartEvent,
+  publishStepStartChunk,
+} from '../../stream-adapter';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
 import { createRunMessageList } from '../../utils/run-message-list';
@@ -303,6 +308,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       const { agentId, messageId, options: execOptions } = typedInput;
       const runId = typedInput.runId;
       const logger = mastra?.getLogger?.();
+      if (pubsub) await emitIterationStartEvent(pubsub, runId, inputData.stepIndex ?? 0);
 
       // 1. Resolve runtime dependencies (tools from Mastra)
       const resolved = await resolveRuntimeDependencies({
@@ -371,7 +377,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // so it is logged rather than thrown.
       if (pubsub) {
         try {
-          await ensureRemoteAbortListener(pubsub, runId, mastra);
+          await ensureRemoteAbortListener(pubsub, runId, mastra, readRunDeadline(requestContext));
         } catch (error) {
           ownership?.throwIfLost();
           logger?.warn?.('Failed to subscribe to cross-process abort requests', {
@@ -1938,7 +1944,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                           }
                           try {
                             if (chunk.type === 'step-start') {
-                              await publishStepStartChunk(pubsub, runId, chunk, true);
+                              await publishStepStartChunk(pubsub, runId, chunk, true, inputData.stepIndex ?? 0);
                             } else {
                               await emitChunkEvent(pubsub, runId, chunk, true);
                             }
@@ -1969,7 +1975,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       break;
                     }
                   } else {
-                    await publishStepStartChunk(pubsub, runId, stepStartChunk);
+                    await publishStepStartChunk(pubsub, runId, stepStartChunk, undefined, inputData.stepIndex ?? 0);
                   }
                 }
 

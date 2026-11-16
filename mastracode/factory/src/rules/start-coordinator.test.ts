@@ -7,6 +7,7 @@ import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
 import { FactoryTransitionService } from './transition-service.js';
+import type { FactoryRuleActor } from './types.js';
 
 const { primeTenant } = vi.hoisted(() => ({ primeTenant: vi.fn() }));
 vi.mock('../routes/tenant-credentials.js', async importOriginal => {
@@ -483,6 +484,68 @@ describe('FactoryStartCoordinator', () => {
     expect(bindingsDuringRule).toBe(1);
     expect(sendMessage).not.toHaveBeenCalled();
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
+  });
+
+  describe('who a start that moves the card is recorded as', () => {
+    const FACTORY = `factory-project:${PROJECT_ID}`;
+
+    async function startOnFactorySession(startedBy?: FactoryRuleActor) {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const audit = vi.fn(async (_event: { actorId: string; actorType: string }) => null);
+      const transitionService = new FactoryTransitionService({
+        storage,
+        configVersion: 'rules-v1',
+        boards: createPolicyTestRegistry(async () => undefined),
+        audit: { record: audit } as never,
+      });
+      const transition = vi.spyOn(transitionService, 'transition');
+      const sourceControl = makeSourceControl();
+      // The Factory owns the session the run starts in.
+      const session = await sourceControl.sessions.getBySessionId('session-1');
+      (session as { userId: string }).userId = FACTORY;
+      const coordinator = new FactoryStartCoordinator(
+        makeController().controller as never,
+        storage,
+        transitionService,
+        sourceControl as never,
+      );
+      const prepared = await coordinator.prepare({
+        ...startRequest(),
+        userId: FACTORY,
+        destinationStage: 'execute',
+        ...(startedBy ? { startedBy } : {}),
+      });
+      const item = await storage.get({ orgId: 'org-1', id: prepared.workItemId });
+      const entered = item?.stageHistory.find(entry => entry.stage === 'execute');
+      const [recorded] = audit.mock.calls.map(([event]) => ({ actorId: event.actorId, actorType: event.actorType }));
+      return { movedAs: transition.mock.calls[0]![0].actor, enteredBy: entered?.by, recorded };
+    }
+
+    it('names the person who started the work, not the Factory that owns the session', async () => {
+      await expect(startOnFactorySession({ type: 'human', id: 'user-mover' })).resolves.toEqual({
+        movedAs: { type: 'human', id: 'user-mover' },
+        enteredBy: 'user-mover',
+        recorded: { actorId: 'user-mover', actorType: 'human' },
+      });
+    });
+
+    it('names the Factory as a system, never a person, when nobody started the work', async () => {
+      await expect(startOnFactorySession()).resolves.toEqual({
+        movedAs: { type: 'system', id: FACTORY },
+        enteredBy: FACTORY,
+        recorded: { actorId: FACTORY, actorType: 'system' },
+      });
+    });
+
+    it('names the agent that started the work as an agent, never a person', async () => {
+      await expect(
+        startOnFactorySession({ type: 'agent', bindingId: 'binding-earlier', role: 'triage' }),
+      ).resolves.toEqual({
+        movedAs: { type: 'agent', bindingId: 'binding-earlier', role: 'triage' },
+        enteredBy: 'agent:binding-earlier',
+        recorded: { actorId: 'agent:binding-earlier', actorType: 'agent' },
+      });
+    });
   });
 
   it('binds the controller session to the exact Factory session thread', async () => {

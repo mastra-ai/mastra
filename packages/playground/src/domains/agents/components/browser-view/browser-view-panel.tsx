@@ -1,9 +1,12 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconGlobe } from '@mastra/playground-ui/icons/central/IconGlobe';
+import { IconMinimize45 } from '@mastra/playground-ui/icons/central/IconMinimize45';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import { overlaySurfaceStyle, raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { X, Minimize2, ExternalLink, Globe } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useBrowserSession } from '../../context/browser-session-context';
 import { BrowserToolCallHistory } from './browser-tool-call-history';
@@ -78,7 +81,7 @@ export function BrowserViewPanel() {
         onClick={e => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
-          <Globe className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <IconGlobe className="h-4 w-4 shrink-0 text-muted-foreground" />
           <div className={cn(raisedSurfaceStyle, 'min-w-0 flex-1 rounded-md px-3 py-1.5')}>
             <Txt
               as="span"
@@ -93,15 +96,15 @@ export function BrowserViewPanel() {
           </Badge>
           <div className="ml-2 flex items-center gap-1">
             <Button variant="ghost" size="icon-sm" tooltip="Minimize to chat" onClick={hide}>
-              <Minimize2 className="h-4 w-4" />
+              <IconMinimize45 className="h-4 w-4" />
             </Button>
             {currentUrl && (
               <Button variant="ghost" size="icon-sm" tooltip="Open in new tab" onClick={handleOpenExternal}>
-                <ExternalLink className="h-4 w-4" />
+                <IconSquareArrowTopRight className="h-4 w-4" />
               </Button>
             )}
             <Button variant="ghost" size="icon-sm" tooltip="Close browser" onClick={closeBrowser}>
-              <X className="h-4 w-4" />
+              <IconCrossMedium className="h-4 w-4" />
             </Button>
           </div>
         </div>

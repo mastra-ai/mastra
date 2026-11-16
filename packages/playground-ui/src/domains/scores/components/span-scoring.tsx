@@ -1,11 +1,11 @@
 import type { GetScorerResponse } from '@mastra/client-js';
 import { useTriggerScorer } from '@mastra/react/hooks/scores';
-import { InfoIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Combobox } from '@/ds/components/Combobox';
 import { DialogAction, DialogBody, DialogCancel, DialogDescription, DialogFooter } from '@/ds/components/Dialog';
 import { Notice } from '@/ds/components/Notice';
 import { TextAndIcon } from '@/ds/components/Text';
+import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
 import { toast } from '@/utils/toast';
 
 export interface SpanScoringProps {
@@ -115,7 +115,7 @@ export function SpanScoring({
         />
         {selectedScorerDescription && (
           <TextAndIcon>
-            <InfoIcon /> {selectedScorerDescription}
+            <IconCircleInfo /> {selectedScorerDescription}
           </TextAndIcon>
         )}
       </DialogBody>

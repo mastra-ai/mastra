@@ -15,7 +15,13 @@ import {
 } from '../../../../loop/shared/steps/background-task-result-core';
 import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core';
 import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk-core';
-import { computeModelOutputProviderMetadata } from '../../../../loop/shared/steps/tool-result-commit-core';
+import {
+  computeModelOutputProviderMetadata,
+  readModelOutput,
+  resolveModelOutputAfterToolResultProcessors,
+  snapshotToolResult,
+  hasToolResultProcessor,
+} from '../../../../loop/shared/steps/tool-result-commit-core';
 import type { ToolResultCommitOutcome } from '../../../../loop/shared/steps/tool-result-commit-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
@@ -57,6 +63,7 @@ import { startRunStep } from '../../../run-lease-fence';
 import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
 import { TripWire } from '../../../trip-wire';
+import { ensureRemoteAbortListener, readRunDeadline } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import {
   assertExecutionNotSuperseded,
@@ -129,6 +136,14 @@ const serializedErrorSchema = z.object({
   name: z.string(),
   message: z.string(),
   stack: z.string().optional(),
+  __mastraSpanErrorOrigin: z
+    .object({
+      traceId: z.string(),
+      spanId: z.string(),
+      occurrenceId: z.string(),
+      attemptId: z.string().optional(),
+    })
+    .optional(),
 });
 
 const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
@@ -189,7 +204,34 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   delegationBailed: z.boolean().optional(),
   // Why that delegation failed, carried the same way for the root spans' outcome.
   tracingDelegationFailure: z.custom<SpanTermination>().optional(),
+  // Set when the total deadline aborted this tool call. Carried on the step
+  // output so a later step on another worker, which may never have received
+  // the abort request, still ends the run as the deadline.
+  deadlineTimeout: z.object({ timeoutType: z.literal('total'), timeoutMs: z.number() }).optional(),
+  // Set when abort() stopped this tool call; carried for the same reason.
+  runAborted: z.boolean().optional(),
 });
+
+/**
+ * Marks a tool call the run was stopped during, however the tool settled: the total deadline or
+ * abort(). The next step may run on a worker that never received the abort request, so the mark
+ * travels on the step output. An abort only this execution saw (lost ownership) is not the run's.
+ */
+function runStopOf(
+  signal: AbortSignal | undefined,
+  runSignal: AbortSignal | undefined,
+): { deadlineTimeout?: DurableToolDeadlineTimeout; runAborted?: true } {
+  if (!signal?.aborted || !runSignal?.aborted) return {};
+  const reason: unknown = runSignal.reason;
+  if (isMastraTimeoutError(reason)) {
+    return reason.timeoutType === 'total'
+      ? { deadlineTimeout: { timeoutType: 'total', timeoutMs: reason.timeoutMs } }
+      : {};
+  }
+  return { runAborted: true };
+}
+
+type DurableToolDeadlineTimeout = { timeoutType: 'total'; timeoutMs: number };
 
 /**
  * Flush messages to memory before suspending.
@@ -1443,9 +1485,42 @@ export function createDurableToolCallStep() {
       // so execution continues past the suspend call).
       let wasSuspended = false;
 
+      // A tool step can run on a worker whose LLM step ran elsewhere, so it subscribes to abort
+      // requests too. Otherwise a deadline or abort() published while the tool runs never reaches it.
+      // Only a real entry: a cold worker without one keeps no registry state. Called on every tool
+      // step rather than keyed on the signal: a step whose subscribe failed earlier retries it, and a
+      // warm worker re-arms the deadline this segment carries. The listener reuses the entry's
+      // controller; a signal with no controller behind it would be replaced, so leave it alone.
+      if (
+        pubsub &&
+        registryEntry &&
+        !registryEntry.isPlaceholder &&
+        (!registryEntry.abortSignal || registryEntry.abortController)
+      ) {
+        try {
+          await ensureRemoteAbortListener(pubsub, runId, mastra as Mastra | undefined, readRunDeadline(requestContext));
+          registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined) ?? registryEntry;
+        } catch (error) {
+          logger?.warn?.('Failed to subscribe to cross-process abort requests', {
+            runId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
       // Forward abort signal from the run registry so tools can observe
       // cancellation (mirrors the non-durable tool-call-step).
       const toolAbortSignal = ownership?.composeSignal(registryEntry?.abortSignal) ?? registryEntry?.abortSignal;
+
+      // A queued step must not start tool side effects after its run has stopped.
+      if (toolAbortSignal?.aborted) {
+        return {
+          ...typedInput,
+          result: TOOL_ABORT_NOTICE,
+          aborted: true,
+          ...runStopOf(toolAbortSignal, registryEntry?.abortSignal),
+        };
+      }
 
       // Provide outputWriter so context.writer.write() / context.writer.custom()
       // emit chunks through pubsub (matching the regular agent's tool streaming).
@@ -1998,7 +2073,19 @@ export function createDurableToolCallStep() {
 
       if (bgOutcome.status !== 'sync') {
         if (bgOutcome.disposition === 'awaited') {
-          const completedTask = await bgOutcome.waitForCompletion({ abortSignal: toolAbortSignal });
+          let completedTask: Awaited<ReturnType<typeof bgOutcome.waitForCompletion>>;
+          try {
+            completedTask = await bgOutcome.waitForCompletion({ abortSignal: toolAbortSignal });
+          } catch (error) {
+            if (!toolAbortSignal?.aborted || error !== toolAbortSignal.reason) throw error;
+            return {
+              ...typedInput,
+              args: cleanedArgs,
+              result: TOOL_ABORT_NOTICE,
+              aborted: true,
+              ...runStopOf(toolAbortSignal, registryEntry?.abortSignal),
+            };
+          }
           // Cancellation deregisters the task context without calling onResult, so there is no reconciliation to await.
           if (completedTask.status !== 'cancelled') {
             const reconciliation = await reconciliationComplete;
@@ -2281,6 +2368,12 @@ export function createDurableToolCallStep() {
             agent: registryEntry.agent,
             processorStates: registryEntry.processorStates,
           });
+          const resultBeforeProcessors = result;
+          const resultSnapshotBeforeProcessors =
+            mappingTool?.toModelOutput && hasToolResultProcessor(registryEntry.outputProcessors)
+              ? snapshotToolResult(resultBeforeProcessors)
+              : undefined;
+          let processorsSucceeded = false;
           try {
             await resultProcessorRunner.runProcessToolResult({
               // The accumulated StepResult[] is not reconstructable at
@@ -2294,6 +2387,7 @@ export function createDurableToolCallStep() {
               toolCallId,
               toolArgs: cleanedArgs,
               result,
+              modelOutput: readModelOutput(providerMetadata),
               ...(processorObservabilityContext ?? {}),
               requestContext: registryEntry.requestContext,
               retryCount: 0,
@@ -2323,6 +2417,7 @@ export function createDurableToolCallStep() {
             if (postProcessorResult !== undefined && postProcessorResult !== result) {
               result = postProcessorResult;
             }
+            processorsSucceeded = true;
           } catch (processorError) {
             ownership?.throwIfLost();
             if (processorError instanceof TripWire) {
@@ -2366,6 +2461,38 @@ export function createDurableToolCallStep() {
             // keeps the run alive.
             logger?.warn?.(`[DurableAgent] processToolResult failed for tool "${toolName}": ${processorError}`);
             result = { error: 'Tool result processing failed' };
+            // The mapped output came from the unprocessed value; the model must not read it either.
+            if (providerMetadata?.mastra && 'modelOutput' in providerMetadata.mastra) {
+              const { modelOutput: _unprocessed, ...mastra } = providerMetadata.mastra;
+              providerMetadata = { ...providerMetadata, mastra };
+            }
+          }
+
+          // Carry a model output a processor rewrote (or a re-mapping of the result it
+          // rewrote) into the emitted chunk and the serialized step output. Outside the
+          // try so a failing `toModelOutput` fails the run, as it does before the hook.
+          if (processorsSucceeded && outcome.status === 'success') {
+            let resolvedProviderMetadata: typeof providerMetadata;
+            try {
+              resolvedProviderMetadata = (await resolveModelOutputAfterToolResultProcessors({
+                messageList,
+                tool: mappingTool,
+                toolName,
+                toolCallId,
+                resultBeforeProcessors,
+                resultSnapshotBeforeProcessors,
+                providerMetadata,
+                parentSpan: stepSpan,
+              })) as typeof providerMetadata;
+            } catch (mappingError) {
+              mappingFailure = { error: mappingError };
+              throw mappingError;
+            }
+            ownership?.throwIfLost();
+            if (resolvedProviderMetadata !== providerMetadata) {
+              providerMetadata = resolvedProviderMetadata;
+              modelOutputComputed = true;
+            }
           }
         }
 
@@ -2448,6 +2575,7 @@ export function createDurableToolCallStep() {
           providerMetadata,
           result,
           ...(outcome.status === 'aborted' ? { aborted: true } : {}),
+          ...runStopOf(toolAbortSignal, registryEntry?.abortSignal),
           modelOutputComputed,
           ...(resultHidden ? { resultHidden: true } : {}),
           ...(approvalGrant ?? {}),
@@ -2481,6 +2609,7 @@ export function createDurableToolCallStep() {
           return {
             ...typedInput,
             mappingError: serializeError(error),
+            ...runStopOf(toolAbortSignal, registryEntry?.abortSignal),
           };
         }
         // Output processor failures and authorization denials must fail the run
@@ -2542,6 +2671,7 @@ export function createDurableToolCallStep() {
           ...(approvalGrant ?? {}),
           ...(processorDataParts.length ? { processorDataParts } : {}),
           ...(errorTransformMetadata ? { transformMetadata: errorTransformMetadata } : {}),
+          ...runStopOf(toolAbortSignal, registryEntry?.abortSignal),
           // A hook may bail on a FAILED delegation too (success: false).
           ...consumeDelegationBailSignal(),
         };

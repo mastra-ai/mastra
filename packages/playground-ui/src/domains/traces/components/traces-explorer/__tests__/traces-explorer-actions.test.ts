@@ -447,3 +447,11 @@ describe('buildTracesLegacyFilters', () => {
     });
   });
 });
+
+describe('trace search with date presets', () => {
+  describe('when the user changes the time window', () => {
+    it('keeps the applied search', () => {
+      expect(applyDatePreset({ ...baseFilters, textSearch: 'needle' }, 'last-24h').textSearch).toBe('needle');
+    });
+  });
+});

@@ -18,7 +18,9 @@ import {
 
 import {
   createOutcomeStep,
+  createConcurrencyFailureFixture,
   expectWorkflowOutcome,
+  expectPublicWorkflowError,
   expectNestedWorkflowOutcome,
   workflowOutcomeModes,
   createForeachSeed,
@@ -26,6 +28,81 @@ import {
 } from './test-utils/workflow-outcomes';
 
 const empty = z.object({});
+
+describe.each(['default', 'evented'] as const)('originating failures across %s retries', engine => {
+  it('counts a concurrency resolver failure before any child starts', async () => {
+    const exporter = new TestExporter();
+    const fixture = createConcurrencyFailureFixture();
+    const workflow = (engine === 'default' ? createWorkflow : createEventedWorkflow)({
+      id: 'resolver-failure',
+      inputSchema: z.array(empty),
+      outputSchema: z.array(empty),
+    })
+      .foreach(fixture.step, fixture.options)
+      .commit();
+    const mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { workflow },
+      observability: new Observability({ configs: { default: { serviceName: 'resolver', exporters: [exporter] } } }),
+    });
+    try {
+      if (engine === 'evented') await mastra.startWorkers();
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: [{}] });
+      expect(result.status).toBe('failed');
+      expectPublicWorkflowError(result);
+      const spans = [
+        ...new Map(
+          exporter.getByEventType(TracingEventType.SPAN_ENDED).map(e => [e.exportedSpan.id, e.exportedSpan]),
+        ).values(),
+      ];
+      expect(spans.reduce((sum, span) => sum + (span.errorCount ?? NaN), 0)).toBe(1);
+    } finally {
+      await mastra.shutdown();
+    }
+  });
+
+  it('retains two failed attempts after success when the step rethrows the same Error', async () => {
+    const exporter = new TestExporter();
+    const failure = new Error('service unavailable');
+    const step = createStep({
+      id: 'retry-error-count',
+      inputSchema: empty,
+      outputSchema: empty,
+      execute: async ({ retryCount }) => {
+        if (retryCount < 2) throw failure;
+        return {};
+      },
+    });
+    const workflow = (engine === 'default' ? createWorkflow : createEventedWorkflow)({
+      id: 'retry-error-count',
+      inputSchema: empty,
+      outputSchema: empty,
+      retryConfig: { attempts: 2, delay: 0 },
+    })
+      .then(step)
+      .commit();
+    const mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { workflow },
+      observability: new Observability({ configs: { default: { serviceName: 'errors', exporters: [exporter] } } }),
+    });
+    try {
+      if (engine === 'evented') await mastra.startWorkers();
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('success');
+      const spans = new Map(
+        exporter.getByEventType(TracingEventType.SPAN_ENDED).map(event => [event.exportedSpan.id, event.exportedSpan]),
+      );
+      expect([...spans.values()].reduce((sum, span) => sum + (span.errorCount ?? NaN), 0)).toBe(2);
+      expect([...spans.values()].find(span => span.type === SpanType.WORKFLOW_RUN)?.errorCount).toBe(0);
+    } finally {
+      await mastra.shutdown();
+    }
+  });
+});
 
 const quickStep = createStep({
   id: 'quick',
@@ -282,7 +359,9 @@ describe('workflow run cancellation tracing', () => {
         expect(host.__getRunTracingContext(run.runId)).toBeUndefined();
         return;
       }
-      expect((await run.start({ inputData: {} })).status).toBe(fail ? 'failed' : 'success');
+      const result = await run.start({ inputData: {} });
+      expect(result.status).toBe(fail ? 'failed' : 'success');
+      if (fail) expectPublicWorkflowError(result);
       const roots = endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
       expectWorkflowOutcome(endedSpans(), fail ? 'error' : 'success');
       // A late cancel cannot rewrite an already completed execution.

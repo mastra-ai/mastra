@@ -35,7 +35,9 @@ export const FEEDBACK_SCORE_SCHEMAS = {
               },
               "additionalProperties": false
             },
-            {}
+            {
+              "type": "string"
+            }
           ]
         },
         "traceId": {
@@ -186,7 +188,9 @@ export const FEEDBACK_SCORE_SCHEMAS = {
                 "type": "string"
               }
             },
-            {}
+            {
+              "type": "string"
+            }
           ]
         },
         "scorerId": {
@@ -225,7 +229,9 @@ export const FEEDBACK_SCORE_SCHEMAS = {
                 }
               ]
             },
-            {}
+            {
+              "type": "string"
+            }
           ]
         },
         "source": {
@@ -1298,8 +1304,8 @@ export const FEEDBACK_SCORE_SCHEMAS = {
       "required": [
         "score"
       ],
-      "additionalProperties": false,
-      "description": "Arguments for creating a score"
+      "description": "Arguments for creating a score",
+      "additionalProperties": false
     },
     "responseSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -1370,8 +1376,8 @@ export const FEEDBACK_SCORE_SCHEMAS = {
       "required": [
         "scoreIds"
       ],
-      "additionalProperties": false,
-      "description": "Arguments for deleting scores by id"
+      "description": "Arguments for deleting scores by id",
+      "additionalProperties": false
     },
     "responseSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -2128,8 +2134,8 @@ export const FEEDBACK_SCORE_SCHEMAS = {
               "type": "string"
             }
           },
-          "additionalProperties": false,
-          "description": "Filters for querying scores"
+          "description": "Filters for querying scores",
+          "additionalProperties": false
         },
         "comparePeriod": {
           "type": "string",
@@ -2145,8 +2151,8 @@ export const FEEDBACK_SCORE_SCHEMAS = {
         "scorerId",
         "aggregation"
       ],
-      "additionalProperties": false,
-      "description": "Arguments for getting a score aggregate"
+      "description": "Arguments for getting a score aggregate",
+      "additionalProperties": false
     },
     "responseSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -2429,8 +2435,8 @@ export const FEEDBACK_SCORE_SCHEMAS = {
               "type": "string"
             }
           },
-          "additionalProperties": false,
-          "description": "Filters for querying scores"
+          "description": "Filters for querying scores",
+          "additionalProperties": false
         }
       },
       "required": [
@@ -2438,8 +2444,8 @@ export const FEEDBACK_SCORE_SCHEMAS = {
         "groupBy",
         "aggregation"
       ],
-      "additionalProperties": false,
-      "description": "Arguments for getting a score breakdown"
+      "description": "Arguments for getting a score breakdown",
+      "additionalProperties": false
     },
     "responseSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -2734,8 +2740,8 @@ export const FEEDBACK_SCORE_SCHEMAS = {
               "type": "string"
             }
           },
-          "additionalProperties": false,
-          "description": "Filters for querying scores"
+          "description": "Filters for querying scores",
+          "additionalProperties": false
         },
         "groupBy": {
           "minItems": 1,
@@ -2751,8 +2757,8 @@ export const FEEDBACK_SCORE_SCHEMAS = {
         "interval",
         "aggregation"
       ],
-      "additionalProperties": false,
-      "description": "Arguments for getting score time series"
+      "description": "Arguments for getting score time series",
+      "additionalProperties": false
     },
     "responseSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -3054,8 +3060,8 @@ export const FEEDBACK_SCORE_SCHEMAS = {
               "type": "string"
             }
           },
-          "additionalProperties": false,
-          "description": "Filters for querying scores"
+          "description": "Filters for querying scores",
+          "additionalProperties": false
         }
       },
       "required": [
@@ -3063,8 +3069,8 @@ export const FEEDBACK_SCORE_SCHEMAS = {
         "percentiles",
         "interval"
       ],
-      "additionalProperties": false,
-      "description": "Arguments for getting score percentiles"
+      "description": "Arguments for getting score percentiles",
+      "additionalProperties": false
     },
     "responseSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -3151,7 +3157,9 @@ export const FEEDBACK_SCORE_SCHEMAS = {
               },
               "additionalProperties": false
             },
-            {}
+            {
+              "type": "string"
+            }
           ]
         },
         "traceId": {
@@ -3302,7 +3310,9 @@ export const FEEDBACK_SCORE_SCHEMAS = {
                 "type": "string"
               }
             },
-            {}
+            {
+              "type": "string"
+            }
           ]
         },
         "feedbackType": {
@@ -4943,8 +4953,8 @@ export const FEEDBACK_SCORE_SCHEMAS = {
       "required": [
         "feedback"
       ],
-      "additionalProperties": false,
-      "description": "Arguments for creating feedback"
+      "description": "Arguments for creating feedback",
+      "additionalProperties": false
     },
     "responseSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -5548,8 +5558,8 @@ export const FEEDBACK_SCORE_SCHEMAS = {
       "required": [
         "feedbackIds"
       ],
-      "additionalProperties": false,
-      "description": "Arguments for deleting feedback by id"
+      "description": "Arguments for deleting feedback by id",
+      "additionalProperties": false
     },
     "responseSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -6303,8 +6313,8 @@ export const FEEDBACK_SCORE_SCHEMAS = {
               ]
             }
           },
-          "additionalProperties": false,
-          "description": "Filters for querying feedback"
+          "description": "Filters for querying feedback",
+          "additionalProperties": false
         },
         "comparePeriod": {
           "type": "string",
@@ -6320,8 +6330,8 @@ export const FEEDBACK_SCORE_SCHEMAS = {
         "feedbackType",
         "aggregation"
       ],
-      "additionalProperties": false,
-      "description": "Arguments for getting a feedback aggregate over numeric values"
+      "description": "Arguments for getting a feedback aggregate over numeric values",
+      "additionalProperties": false
     },
     "responseSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -6599,8 +6609,8 @@ export const FEEDBACK_SCORE_SCHEMAS = {
               ]
             }
           },
-          "additionalProperties": false,
-          "description": "Filters for querying feedback"
+          "description": "Filters for querying feedback",
+          "additionalProperties": false
         }
       },
       "required": [
@@ -6608,8 +6618,8 @@ export const FEEDBACK_SCORE_SCHEMAS = {
         "groupBy",
         "aggregation"
       ],
-      "additionalProperties": false,
-      "description": "Arguments for getting a feedback breakdown over numeric values"
+      "description": "Arguments for getting a feedback breakdown over numeric values",
+      "additionalProperties": false
     },
     "responseSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -6899,8 +6909,8 @@ export const FEEDBACK_SCORE_SCHEMAS = {
               ]
             }
           },
-          "additionalProperties": false,
-          "description": "Filters for querying feedback"
+          "description": "Filters for querying feedback",
+          "additionalProperties": false
         },
         "groupBy": {
           "minItems": 1,
@@ -6916,8 +6926,8 @@ export const FEEDBACK_SCORE_SCHEMAS = {
         "interval",
         "aggregation"
       ],
-      "additionalProperties": false,
-      "description": "Arguments for getting feedback time series over numeric values"
+      "description": "Arguments for getting feedback time series over numeric values",
+      "additionalProperties": false
     },
     "responseSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -7214,8 +7224,8 @@ export const FEEDBACK_SCORE_SCHEMAS = {
               ]
             }
           },
-          "additionalProperties": false,
-          "description": "Filters for querying feedback"
+          "description": "Filters for querying feedback",
+          "additionalProperties": false
         }
       },
       "required": [
@@ -7223,8 +7233,8 @@ export const FEEDBACK_SCORE_SCHEMAS = {
         "percentiles",
         "interval"
       ],
-      "additionalProperties": false,
-      "description": "Arguments for getting feedback percentiles over numeric values"
+      "description": "Arguments for getting feedback percentiles over numeric values",
+      "additionalProperties": false
     },
     "responseSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",

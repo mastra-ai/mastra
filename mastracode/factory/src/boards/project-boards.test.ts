@@ -368,12 +368,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     expect(served.name).toBe('Stored release');
     expect(codeBoardOf(served)).toBe(release);
     expect(served.tools.ship_it?.onResult).toBe(shipped);
-    expect(described.registry.has('review')).toBe(false);
+    expect(described.registry.get('review')!.name).toBe('Stored review');
+    expect(described.details.get('review')).toEqual({ source: 'stored', editable: true, problems: [] });
     expect(described.details.get('release')).toEqual({ source: 'app', editable: true, problems: [] });
     expect(described.registry.has('bugs')).toBe(true);
-    expect(described.problems).toEqual([
-      'Stored board "review" isn\'t served: the key is reserved for the retired Review board.',
-    ]);
+    expect(described.problems).toEqual([]);
     expect((await a.boards.get(scope, 'release'))!).toMatchObject({ name: 'Stored release', revision: 1 });
   });
 
@@ -402,7 +401,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
   );
 
   it.each([false, true])(
-    'reports a non-Review board stored under the review key by Factory (Review in use: %s)',
+    'serves a board stored under the review key that is not the seed, whoever stored it (Review in use: %s)',
     async reviewInUse => {
       const { a, scope } = await setup();
       // Factory's actor alone doesn't make a row the Review seed: its board isn't Review's.
@@ -415,11 +414,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
         reviewBoardInUse: async () => reviewInUse,
       }).describe(scope);
 
-      expect(described.problems).toEqual([
-        reviewInUse
-          ? 'Stored board "review" is hidden by the code board with the same key.'
-          : 'Stored board "review" isn\'t served: the key is reserved for the retired Review board.',
-      ]);
+      expect(described.problems).toEqual([]);
+      expect(described.registry.get('review')!.initialPhase).toBe('reported');
+      expect(described.details.get('review')).toEqual({ source: 'stored', editable: true, problems: [] });
     },
   );
 

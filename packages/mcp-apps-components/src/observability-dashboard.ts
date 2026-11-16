@@ -132,6 +132,8 @@ const READS = {
   metricBreakdown: { source: 'metrics', request: 'breakdown' },
   metricTimeSeries: { source: 'metrics', request: 'timeSeries' },
   metricPercentiles: { source: 'metrics', request: 'percentiles' },
+  scoreAggregate: { source: 'scores', request: 'aggregate' },
+  scoreTimeSeries: { source: 'scores', request: 'timeSeries' },
 } as const satisfies Record<string, { source: DashboardQuery['source']; request?: string }>;
 type ReadKey = keyof typeof READS;
 
@@ -139,12 +141,13 @@ type ReadKey = keyof typeof READS;
 const CHART_READS = [
   'metricTimeSeries',
   'metricPercentiles',
+  'scoreTimeSeries',
   'traceAggregate',
   'spanAggregate',
 ] as const satisfies ReadKey[];
-const RANGE_READS = [...CHART_READS, 'metricAggregate'] as const satisfies ReadKey[];
+const RANGE_READS = [...CHART_READS, 'metricAggregate', 'scoreAggregate'] as const satisfies ReadKey[];
 const TABLE_READS = ['traceAggregate', 'spanAggregate', 'metricBreakdown'] as const satisfies ReadKey[];
-const KPI_READS = ['metricAggregate'] as const satisfies ReadKey[];
+const KPI_READS = ['metricAggregate', 'scoreAggregate', 'traceAggregate', 'spanAggregate'] as const satisfies ReadKey[];
 
 /** The fields of a read that pick a number out of its answer rather than change the request. */
 const PICKS = ['measure', 'percentile', 'field', 'groups', 'notGroups'] as const;
@@ -160,6 +163,10 @@ const isTraceRead = (key: ReadKey) => key === 'traceAggregate' || key === 'spanA
 const namedFilters = (query: z.ZodObject, id: string) => ({
   filters: (query.shape.filters as z.ZodOptional<z.ZodObject>).meta({ id }),
 });
+
+const [scoreAggregateQuery, , scoreTimeSeriesQuery] = dashboardQuerySchema.out.options[3].options;
+/** Built once: the scores view and the score reads share it, and a JSON Schema id can name one schema. */
+const scoreFilters = namedFilters(scoreAggregateQuery, 'MastraScoreFilters');
 
 /** Each read's arguments, with metric names limited to `metricNames` when given. */
 const readSchemas = (metricNames?: [string, ...string[]]) => {
@@ -195,6 +202,12 @@ const readSchemas = (metricNames?: [string, ...string[]]) => {
     (query.shape.groupBy as z.ZodType)
       .optional()
       .describe("The dimensions to group by. In a table, defaults to the table's `groupBy`.");
+  // A scores query without a scorer sends nothing outside the scores widget, which expands it per scorer.
+  const scorer = {
+    scorerId: (scoreAggregateQuery.shape.scorerId as z.ZodOptional<z.ZodString>)
+      .unwrap()
+      .describe('The scorer whose scores this reads.'),
+  };
   return named({
     traceAggregate: traceRead('traceAggregate', traceAggregate),
     spanAggregate: traceRead('spanAggregate', spanAggregate),
@@ -219,6 +232,14 @@ const readSchemas = (metricNames?: [string, ...string[]]) => {
       ...filters,
       name: metricName,
       percentile: picks.percentile,
+    }),
+    scoreAggregate: z.strictObject({ ...fieldsOf(scoreAggregateQuery, omit), ...scoreFilters, ...scorer }),
+    scoreTimeSeries: z.strictObject({
+      ...fieldsOf(scoreTimeSeriesQuery, omit),
+      ...scoreFilters,
+      ...scorer,
+      groups: picks.groups,
+      notGroups: picks.notGroups,
     }),
   });
 };
@@ -249,34 +270,21 @@ const TABLE_VALUE_KEYS: readonly string[] = [...TABLE_READS, ...OPERATORS];
 
 /**
  * The keys a value takes, one of which it sets: each read among `reads` holding its arguments, and
- * each operator over `self`, the value nested inside it. `sumOnly` leaves `sum` as the one operator.
+ * each operator over `self`, the value nested inside it.
  */
-const valueCases = (
-  schemas: ReadSchemas,
-  reads: readonly ReadKey[],
-  self: z.ZodType<ObservabilityValue>,
-  sumOnly = false,
-) => {
-  const operators = sumOnly ? (['sum'] as const) : OPERATORS;
+const valueCases = (schemas: ReadSchemas, reads: readonly ReadKey[], self: z.ZodType<ObservabilityValue>) => {
   const parts = (description: string) => z.array(self).min(1).optional().describe(description);
   return {
-    keys: [...reads, ...operators],
-    summary: `a read (${keysList(reads)}) holding its arguments, or ${sumOnly ? '`sum`' : `an operator (${keysList(operators)})`} over values. Reads that differ only in ${keysList(PICKS)} share one request.`,
+    keys: [...reads, ...OPERATORS],
+    summary: `a read (${keysList(reads)}) holding its arguments, or an operator (${keysList(OPERATORS)}) over values. Reads that differ only in ${keysList(PICKS)} share one request.`,
     shape: {
       ...Object.fromEntries(reads.map(key => [key, schemas[key].optional()])),
       sum: parts('The parts added up; a missing part counts as 0.'),
-      ...(sumOnly
-        ? {}
-        : {
-            const: z.number().optional(),
-            minus: z.tuple([self, self]).optional().describe('The first minus the second.'),
-            ratio: z
-              .strictObject({ of: self, over: self })
-              .optional()
-              .describe('`of / over`; no value when `over` is 0.'),
-            max: parts('The largest part that has a value.'),
-            coalesce: parts('The first part that has a value.'),
-          }),
+      const: z.number().optional(),
+      minus: z.tuple([self, self]).optional().describe('The first minus the second.'),
+      ratio: z.strictObject({ of: self, over: self }).optional().describe('`of / over`; no value when `over` is 0.'),
+      max: parts('The largest part that has a value.'),
+      coalesce: parts('The first part that has a value.'),
     },
   };
 };
@@ -287,13 +295,11 @@ const valueSchema = (
   reads: readonly ReadKey[],
   id: string,
   description: string,
-  sumOnly = false,
 ): z.ZodType<ObservabilityValue> => {
   const cases = valueCases(
     schemas,
     reads,
     z.lazy(() => value),
-    sumOnly,
   );
   const value: z.ZodType<ObservabilityValue> = oneKeyOf<ObservabilityValue>(
     cases.keys,
@@ -617,8 +623,7 @@ export function createObservabilityDraftSchemas(
     reads,
     KPI_READS,
     'MastraKpiValue',
-    'A KPI figure: one aggregate or the sum of several.',
-    true,
+    'A KPI figure over the whole range: an aggregate, or aggregates combined. A trace or span aggregate reads one measure, e.g. `duration.p95`, and must not group.',
   );
 
   const { label, description } = dashboardWidgetViewSchema.shape;
@@ -737,9 +742,7 @@ export function createObservabilityDraftSchemas(
     view => tableIssues(view.columns as never, view.options as never, view.queries as never),
   );
 
-  const [scoreAggregate, , scoreTimeSeries] = dashboardQuerySchema.out.options[3].options;
-  const { scorerId, scoreSource } = scoreAggregate.shape;
-  const scoreFilters = namedFilters(scoreAggregate, 'MastraScoreFilters');
+  const { scorerId, scoreSource } = scoreAggregateQuery.shape;
   const scores = viewOf<ObservabilityScoresDraft>(
     'scores',
     {
@@ -748,13 +751,13 @@ export function createObservabilityDraftSchemas(
       scoreSource,
       average: z
         .strictObject({
-          ...fieldsOf(scoreAggregate, ['source', 'request', 'id', 'interval', 'scorerId', 'scoreSource']),
+          ...fieldsOf(scoreAggregateQuery, ['source', 'request', 'id', 'interval', 'scorerId', 'scoreSource']),
           ...scoreFilters,
         })
         .describe("Each scorer's mean over the range."),
       series: z
         .strictObject({
-          ...fieldsOf(scoreTimeSeries, ['source', 'request', 'id', 'interval', 'scorerId', 'scoreSource']),
+          ...fieldsOf(scoreTimeSeriesQuery, ['source', 'request', 'id', 'interval', 'scorerId', 'scoreSource']),
           ...scoreFilters,
         })
         .describe("Each scorer's line over time."),
@@ -839,6 +842,8 @@ export type ObservabilityReads = {
   metricBreakdown: Args<MetricQuery<'breakdown'>, 'groupBy'> & { groupBy?: string[] } & Field;
   metricTimeSeries: Args<MetricQuery<'timeSeries'>> & Field & Groups;
   metricPercentiles: Args<MetricQuery<'percentiles'>, 'percentiles'> & { percentile: number };
+  scoreAggregate: Args<ScoreQuery<'aggregate'>, 'scorerId'> & { scorerId: string };
+  scoreTimeSeries: Args<ScoreQuery<'timeSeries'>, 'scorerId'> & { scorerId: string } & Groups;
 };
 
 /** One read, named by its key, e.g. `{ metricAggregate: { name: [...], aggregation: 'count' } }`. */

@@ -34,6 +34,7 @@ import { normalizeSessionTitle } from '../../session/session-title.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
 import type { MemorySettingsStorage } from '../../storage/domains/memory-settings/base.js';
+import { isFactoryPrincipalId } from '../../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
@@ -515,6 +516,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             repoFullName: subscription.data.repositorySlug,
             pullRequestNumber: Number(subscription.data.changeRequestId),
             status: subscription.status,
+            updatedAt: subscription.updatedAt.toISOString(),
             url: `https://github.com/${subscription.data.repositorySlug}/pull/${subscription.data.changeRequestId}`,
           })),
         });
@@ -1185,10 +1187,16 @@ function createSessionOwnerProfileResolver(users: SessionOwnerUserProvider | und
   };
 
   return async (userIds: string[]): Promise<Map<string, SessionOwnerProfile>> => {
-    if (!users) return new Map();
-
-    const requestedUserIds = [...new Set(userIds)].slice(0, MAX_SESSION_OWNER_PROFILES);
     const profiles = new Map<string, SessionOwnerProfile>();
+    // A session the Factory owns has no person to look up; it is named for what it is.
+    for (const userId of userIds) {
+      if (isFactoryPrincipalId(userId)) profiles.set(userId, { id: userId, name: 'Factory' });
+    }
+    if (!users) return profiles;
+
+    const requestedUserIds = [...new Set(userIds)]
+      .filter(userId => !isFactoryPrincipalId(userId))
+      .slice(0, MAX_SESSION_OWNER_PROFILES);
     const unresolvedUserIds: string[] = [];
     const now = Date.now();
 

@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { RotateCcw } from 'lucide-react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useIncidentioSourcesQuery } from '../../../../hooks/useIncidentioData';
 import type { IncidentioStatus } from '../../factory/services/incidentio';
@@ -12,6 +11,7 @@ import type { IntakeSectionProps } from './IntakeProviderCard';
 import { RoutedSourcePicker } from './IntakeSourceRouting';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { IntakeSyncControl } from './common/IntakeSyncControl';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 
 // A deployment API key serves follow-ups without a Platform connection.
 export function isIncidentioDirectConfigured(status: IncidentioStatus | undefined) {
@@ -79,7 +79,7 @@ export function IncidentioIntakeSection({
           <Button
             size="sm"
             variant="ghost"
-            icon={<RotateCcw />}
+            icon={<IconArrowRotateCounterClockwise />}
             onClick={() => {
               void connectionsQuery.refetch();
               void statusQuery.refetch();

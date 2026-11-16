@@ -620,17 +620,20 @@ describe('QUERY_SPANS', () => {
   });
 });
 
-it('rejects duration ordering before executing an older store', async () => {
-  const { mastra, observabilityStore } = createHarness();
-  const error = await captureHttpException(
-    QUERY_SPANS.handler(
-      params(mastra, {
-        timeRange: TIME_RANGE,
-        orderBy: [{ field: 'durationMs', direction: 'desc' }],
-      }),
-    ),
-  );
-  expect(error.status).toBe(501);
-  expect(await error.getResponse().json()).toMatchObject({ code: 'SPAN_QUERY_UNSUPPORTED' });
-  expect(observabilityStore.querySpans).not.toHaveBeenCalled();
-});
+it.each(['durationMs', 'model', 'provider'] as const)(
+  'rejects %s ordering before executing an older store',
+  async field => {
+    const { mastra, observabilityStore } = createHarness();
+    const error = await captureHttpException(
+      QUERY_SPANS.handler(
+        params(mastra, {
+          timeRange: TIME_RANGE,
+          orderBy: [{ field, direction: 'desc' }],
+        }),
+      ),
+    );
+    expect(error.status).toBe(501);
+    expect(await error.getResponse().json()).toMatchObject({ code: 'SPAN_QUERY_UNSUPPORTED' });
+    expect(observabilityStore.querySpans).not.toHaveBeenCalled();
+  },
+);

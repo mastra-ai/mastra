@@ -8,6 +8,7 @@ import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { WorkspaceTreeView } from '@mastra/playground-ui/domains/workspace';
 import type { WorkspaceSkillInstallParams } from '@mastra/playground-ui/domains/workspace';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import {
@@ -23,7 +24,6 @@ import {
 } from '@mastra/react/hooks/workspace';
 import type { WorkspaceItem } from '@mastra/react/hooks/workspace';
 import { useQueryClient } from '@tanstack/react-query';
-import { RefreshCw } from 'lucide-react';
 import { useSearchParams, useParams, useNavigate } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
@@ -382,7 +382,7 @@ export default function Workspace() {
                     disabled={updateSkills.isPending}
                     onClick={() => void handleUpdateSkills()}
                   >
-                    <RefreshCw className={updateSkills.isPending ? 'animate-spin' : undefined} />
+                    <IconArrowRotateClockwise className={updateSkills.isPending ? 'animate-spin' : undefined} />
                   </Button>
                 ) : undefined
               }

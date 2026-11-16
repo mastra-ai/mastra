@@ -7,6 +7,7 @@ import { join } from 'node:path';
 
 import type { ProcessAPIErrorArgs, Processor, StreamErrorRetryProcessorOptions } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
+import { InMemoryStore } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const providerRegistryMock: Record<string, unknown> = {};
@@ -124,6 +125,7 @@ const controllerSetThreadSettingMock = vi.fn();
 const controllerSetThreadSettingOnMock = vi.fn();
 const controllerEmitMock = vi.fn();
 const controllerGetSessionMock = vi.fn();
+const controllerResolveToolApprovalMock = vi.fn((_toolName: string, _scope?: unknown) => 'ask');
 let createdSessionMock: any;
 const createMcpManagerMock = vi.fn();
 const hookManagerConstructorMock = vi.fn();
@@ -262,6 +264,7 @@ vi.mock('@mastra/core/agent-controller', async importOriginal => ({
         getWorkspace: () => undefined,
         getThreadScope: () => ({}),
         emit: (event: unknown) => controllerEmitMock(event),
+        resolveToolApproval: (toolName: string, scope?: unknown) => controllerResolveToolApprovalMock(toolName, scope),
         state: {
           get: () => controllerStateMock,
           set: (state: unknown) => controllerSetStateMock(state),
@@ -498,7 +501,9 @@ vi.mock('../utils/project.js', () => ({
   getResourceIdOverride: getResourceIdOverrideMock,
 }));
 
-const createStorageMock = vi.fn((): { storage: unknown; backend?: string } => ({ storage: {} }));
+const createStorageMock = vi.fn((): { storage: unknown; backend?: string } => ({
+  storage: new InMemoryStore({ id: 'code-sdk-test' }),
+}));
 const createVectorStoreMock = vi.fn(() => ({}));
 
 vi.mock('../utils/storage-factory.js', () => ({
@@ -653,7 +658,7 @@ describe('createMastraCode', () => {
     mastraCodeGatewayMock.getApiKey.mockClear();
     mastraCodeGatewayMock.resolveLanguageModel.mockClear();
     createStorageMock.mockReset();
-    createStorageMock.mockReturnValue({ storage: {}, backend: 'memory' });
+    createStorageMock.mockReturnValue({ storage: new InMemoryStore({ id: 'code-sdk-test' }), backend: 'memory' });
     createVectorStoreMock.mockReset();
     createVectorStoreMock.mockReturnValue({});
     getDynamicMemoryMock.mockReset();
@@ -692,6 +697,8 @@ describe('createMastraCode', () => {
     });
     controllerStateMock = { cavemanObservations: false };
     controllerThreadMetadataMock = undefined;
+    controllerResolveToolApprovalMock.mockReset();
+    controllerResolveToolApprovalMock.mockImplementation(() => 'ask');
     controllerModeMock = 'build';
     controllerModelMock = 'anthropic/claude-opus-4-6';
     loadSettingsMock.mockReset();
@@ -1350,7 +1357,7 @@ describe('createMastraCode', () => {
   // even though the instance is a real store. Detection must be structural.
   describe('injected storage from a foreign @mastra/core copy', () => {
     class ForeignCompositeStore {
-      stores = {};
+      stores = new InMemoryStore({ id: 'foreign-code-sdk-test' }).stores;
       async init() {}
       __registerMastra() {}
     }
@@ -1467,7 +1474,7 @@ describe('createMastraCode', () => {
       getPluginSignalProviders: vi.fn(() => []),
     };
 
-    createStorageMock.mockReturnValue({ storage: {}, backend: 'pg' });
+    createStorageMock.mockReturnValue({ storage: new InMemoryStore({ id: 'code-sdk-plugin-test' }), backend: 'pg' });
     const built = await createMastraCode({ pluginManager: pluginManager as any });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
@@ -2438,6 +2445,42 @@ describe('createMastraCode', () => {
     expect(built.controller).toBeDefined();
   });
 
+  it('reports plugin signal provider errors through the plugin manager', async () => {
+    const { SignalProvider } = await import('@mastra/core/signals');
+    const { createMastraCode } = await import('../index.js');
+
+    class BrokenProvider extends SignalProvider<string> {
+      readonly id = 'acme-broken-signals';
+      async start() {
+        throw new Error('provider warm-up broke');
+      }
+    }
+    const reportPluginError = vi.fn();
+    const pluginManager = {
+      reload: vi.fn(async () => [{ id: 'acme.plugin', status: 'active', toolNames: [] }]),
+      getPluginTools: vi.fn(() => ({})),
+      setRuntime: vi.fn(),
+      onReload: vi.fn(),
+      getPluginSignalProviders: vi.fn(() => [
+        { pluginId: 'acme.plugin', versionStamp: 'v1', value: new BrokenProvider() },
+      ]),
+      getPluginProcessors: vi.fn(() => ({ input: [], output: [] })),
+      reportPluginError,
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await createMastraCode({ pluginManager: pluginManager as any });
+
+    await vi.waitFor(() =>
+      expect(reportPluginError).toHaveBeenCalledWith({
+        pluginId: 'acme.plugin',
+        message: 'Plugin "acme.plugin" signal provider "acme-broken-signals" failed to start: provider warm-up broke',
+      }),
+    );
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it('stops plugin signal providers and stops listening for reloads on teardown', async () => {
     const { SignalProvider } = await import('@mastra/core/signals');
     const { createMastraCode } = await import('../index.js');
@@ -2553,10 +2596,12 @@ describe('createMastraCode', () => {
       modelRoute: { entries: [{ id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol' }] },
       yolo: false,
       sandboxAllowedPaths: ['/active-only'],
+      permissionRules: { categories: { edit: 'allow' }, tools: {} },
     };
     controllerThreadMetadataMock = {
       currentModelId: 'openai/gpt-5.6-sol',
       modeModelId_build: 'anthropic/claude-fable-5-1',
+      permissionRules: { categories: { edit: 'ask' }, tools: { view: 'allow' } },
       modelRoute: {
         entries: [
           { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5-1' },
@@ -2612,9 +2657,18 @@ describe('createMastraCode', () => {
       },
       yolo: false,
       sandboxAllowedPaths: [],
+      // The woken thread's own rules, not the open thread's.
+      permissionRules: { categories: { edit: 'ask' }, tools: { view: 'allow' } },
     });
     expect(controllerContext.getSubagentModelId({ agentType: 'explore' })).toBe('openai/gpt-5.6-mini');
-    expect(decision.streamOptions.requireToolApproval).toBe(true);
+    // Only calls the woken thread's policy does not allow pause for approval.
+    const requireToolApproval = decision.streamOptions.requireToolApproval;
+    expect(requireToolApproval).toBeTypeOf('function');
+    controllerResolveToolApprovalMock.mockImplementation(toolName => (toolName === 'view' ? 'allow' : 'ask'));
+    expect(requireToolApproval({ toolName: 'view' })).toBe(false);
+    expect(requireToolApproval({ toolName: 'write_file' })).toBe(true);
+    expect(controllerResolveToolApprovalMock).toHaveBeenCalledWith('view', decision.streamOptions.requestContext);
+    expect(decision.streamOptions.toolCallConcurrency).toEqual({ strategy: 'called' });
     controllerSetStateMock.mockClear();
 
     const pendingFallback = {

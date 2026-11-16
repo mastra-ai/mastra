@@ -123,10 +123,10 @@ export function generateRouteOpenAPI({
 /**
  * Helper to convert any PublicSchema to JSON Schema for OpenAPI
  */
-export function schemaToJsonSchema(schema: PublicSchema<unknown>): JSONSchema7 {
+export function schemaToJsonSchema(schema: PublicSchema<unknown>, io: 'input' | 'output' = 'output'): JSONSchema7 {
   const standardSchema = toStandardSchema(schema);
 
-  return standardSchemaToJSONSchema(standardSchema);
+  return standardSchemaToJSONSchema(standardSchema, { io });
 }
 
 /** Shared `components.schemas` map that route schemas hoist their definitions into. */
@@ -236,8 +236,12 @@ export function hoistSchemaDefinitions(schema: unknown, components: OpenAPICompo
   return rootIsReferenced ? { $ref: componentRef(names[names.length - 1]!) } : rewriteRefs(root, rewrite);
 }
 
-function toComponentSchema(schema: PublicSchema<unknown>, components?: OpenAPIComponentSchemas): any {
-  const jsonSchema = schemaToJsonSchema(schema);
+function toComponentSchema(
+  schema: PublicSchema<unknown>,
+  components?: OpenAPIComponentSchemas,
+  io: 'input' | 'output' = 'output',
+): any {
+  const jsonSchema = schemaToJsonSchema(schema, io);
   return components ? hoistSchemaDefinitions(jsonSchema, components) : jsonSchema;
 }
 
@@ -264,7 +268,7 @@ function convertToJsonSchema(spec: OpenAPIRoute, components?: OpenAPIComponentSc
 
   // Convert path parameters
   if (spec.requestParams?.path) {
-    const pathSchema = resolveComponentRef(toComponentSchema(spec.requestParams.path, components), components);
+    const pathSchema = resolveComponentRef(toComponentSchema(spec.requestParams.path, components, 'input'), components);
     const properties = pathSchema.properties || {};
 
     Object.entries(properties).forEach(([name, schema]) => {
@@ -280,7 +284,10 @@ function convertToJsonSchema(spec: OpenAPIRoute, components?: OpenAPIComponentSc
 
   // Convert query parameters
   if (spec.requestParams?.query) {
-    const querySchema = resolveComponentRef(toComponentSchema(spec.requestParams.query, components), components);
+    const querySchema = resolveComponentRef(
+      toComponentSchema(spec.requestParams.query, components, 'input'),
+      components,
+    );
     const properties = querySchema.properties || {};
     const required = querySchema.required || [];
 
@@ -305,7 +312,7 @@ function convertToJsonSchema(spec: OpenAPIRoute, components?: OpenAPIComponentSc
       required: true,
       content: {
         'application/json': {
-          schema: toComponentSchema(spec.requestBody.content['application/json'].schema, components),
+          schema: toComponentSchema(spec.requestBody.content['application/json'].schema, components, 'input'),
         },
       },
     };

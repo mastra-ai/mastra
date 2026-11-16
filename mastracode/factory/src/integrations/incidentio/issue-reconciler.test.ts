@@ -1,8 +1,11 @@
+import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../../boards/index.js';
+import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { IntegrationContext } from '../base.js';
+import { INCIDENTIO_FOLLOW_UPS_SOURCE_ID, INCIDENTIO_INCIDENTS_SOURCE_ID } from './intake.js';
 import { IncidentioIntegration } from './integration.js';
 import { attachIncidentioIssueReconciler } from './issue-reconciler.js';
 
@@ -66,7 +69,7 @@ describe('incident.io issue reconciler', () => {
     });
     const integration = new IncidentioIntegration({ apiKey: 'incident-key', fetchImpl });
     const context = {
-      storage: { projects: seeded.projects },
+      storage: { projects: seeded.projects, intake: seeded.intake },
       runtime: {
         configVersion: 'test-v1',
         workItems: seeded.workItems,
@@ -98,5 +101,117 @@ describe('incident.io issue reconciler', () => {
         }),
       ]),
     );
+  });
+});
+
+describe('incident.io first-sight intake', () => {
+  const sources = [INCIDENTIO_INCIDENTS_SOURCE_ID, INCIDENTIO_FOLLOW_UPS_SOURCE_ID];
+  /** Real storage, rules and integration; `listFollowUps` answers incident.io's follow-up listing. */
+  async function setup(listFollowUps: (after: string | null) => Response) {
+    const seeded = await createFactoryStorageForTests();
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/v2/incidents')) return json({ incidents: [incident] });
+      if (url.pathname.endsWith('/v3/follow_ups')) return listFollowUps(url.searchParams.get('after'));
+      throw new Error(`Unexpected request: ${url.href}`);
+    });
+    const integration = new IncidentioIntegration({ apiKey: 'incident-key', fetchImpl });
+    const context = {
+      auth: fakeRouteAuth(),
+      storage: { projects: seeded.projects, intake: seeded.intake },
+      runtime: { configVersion: 'test-v1', workItems: seeded.workItems, boards: createBoardRegistry() },
+    } as unknown as IntegrationContext;
+    const project = async (orgId: string, boundSources: string[], selected = sources) => {
+      const { id } = await seeded.projects.create({ orgId, userId: 'user-1', input: { name: 'Factory' } });
+      await seeded.intake.saveConfig({ orgId, config: { incidentio: { enabled: true, sourceIds: selected } } });
+      for (const sourceId of boundSources) {
+        await seeded.intake.setSharedBinding({
+          orgId,
+          integrationId: 'incidentio',
+          sourceId,
+          factoryProjectId: id,
+          labels: null,
+        });
+      }
+      return id;
+    };
+    const filed = async (orgId: string, factoryProjectId: string) =>
+      (await seeded.workItems.listDeferredDecisions(orgId, factoryProjectId)).map(
+        entry => (entry.decision as { sourceKey?: string }).sourceKey,
+      );
+    const sweep = attachIncidentioIssueReconciler(integration, context)!;
+    return { integration, context, fetchImpl, project, filed, sweep };
+  }
+  const outstanding = { ...followUp, status: 'outstanding' as const };
+
+  it('files a follow-up on the sweep, once, only where a selected source is bound, never on a board read', async () => {
+    const { integration, context, fetchImpl, project, filed, sweep } = await setup(() =>
+      json({ follow_ups: [outstanding], pagination_meta: {} }),
+    );
+    const bound = await project('org-1', sources);
+    const unbound = await project('org-1', []);
+    const unselected = await project('org-2', [INCIDENTIO_FOLLOW_UPS_SOURCE_ID], [INCIDENTIO_INCIDENTS_SOURCE_ID]);
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app, integration.routes(context));
+
+    // The incidents source is the board's first page and holds nothing a board shows.
+    const read = async (after = '') =>
+      (await app.request(`/web/incidentio/issues?factoryProjectId=${bound}${after}`)).json();
+    const { nextCursor } = await read();
+    expect(await read(`&after=${nextCursor}`)).toMatchObject({ issues: [{ id: 'incidentio:follow-up:follow-up-1' }] });
+    expect(await filed('org-1', bound)).toEqual([]);
+    fetchImpl.mockClear();
+
+    await expect(sweep()).resolves.toMatchObject({ observed: 1, failed: 0 });
+    await expect(sweep()).resolves.toMatchObject({ observed: 1, failed: 0 });
+    expect(await filed('org-1', bound)).toEqual(['incidentio:follow-up:follow-up-1']);
+    expect(await filed('org-1', unbound)).toEqual([]);
+    expect(await filed('org-2', unselected)).toEqual([]);
+    // One follow-up listing per sweep, for the one project with a selected source bound; incidents are never listed.
+    expect(fetchImpl.mock.calls.map(([input]) => new URL(String(input)).pathname)).toEqual([
+      '/v3/follow_ups',
+      '/v3/follow_ups',
+    ]);
+  });
+
+  it('reads follow-ups to the last page, since incident.io lists the newest last', async () => {
+    const pages = 8;
+    const { fetchImpl, project, filed, sweep } = await setup(after => {
+      const page = after ? Number(after) : 0;
+      return json({
+        follow_ups: [{ ...outstanding, id: `follow-up-${page + 1}` }],
+        pagination_meta: page + 1 < pages ? { after: String(page + 1) } : {},
+      });
+    });
+    const id = await project('org-1', [INCIDENTIO_FOLLOW_UPS_SOURCE_ID]);
+
+    await expect(sweep()).resolves.toMatchObject({ observed: pages, failed: 0 });
+    expect(fetchImpl).toHaveBeenCalledTimes(pages);
+    expect(await filed('org-1', id)).toContain(`incidentio:follow-up:follow-up-${pages}`);
+  });
+
+  it('records a project whose listing fails and still files the others', async () => {
+    let listings = 0;
+    const { project, filed, sweep } = await setup(() => {
+      listings += 1;
+      return listings === 1
+        ? new Response('{}', { status: 500 })
+        : json({ follow_ups: [outstanding], pagination_meta: {} });
+    });
+    const projects = [
+      { orgId: 'org-1', id: await project('org-1', [INCIDENTIO_FOLLOW_UPS_SOURCE_ID]) },
+      { orgId: 'org-2', id: await project('org-2', [INCIDENTIO_FOLLOW_UPS_SOURCE_ID]) },
+    ];
+
+    const summary = await sweep();
+    expect(summary).toMatchObject({ observed: 1, failed: 1, errors: [{ projectId: expect.any(String) }] });
+    const [failedProject] = projects.filter(({ id }) => id === summary.errors[0]!.projectId);
+    const [filedProject] = projects.filter(({ id }) => id !== summary.errors[0]!.projectId);
+    expect(await filed(failedProject!.orgId, failedProject!.id)).toEqual([]);
+    expect(await filed(filedProject!.orgId, filedProject!.id)).toEqual(['incidentio:follow-up:follow-up-1']);
   });
 });

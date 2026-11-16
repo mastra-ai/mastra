@@ -1,19 +1,15 @@
 import { boardLoop, boardOf } from '../boardFlow';
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import {
   useDeleteWorkItemMutation,
   useTransitionWorkItemMutation,
   useUpdateWorkItemMutation,
-  useUpsertWorkItemMutation,
-  useWorkItemsQuery,
 } from '../../../../hooks/useWorkItems';
 import type { DragPayload } from '../boardDrag';
-import { persistedSourceKeys } from '../boardItems';
-import { belongsToBoard, itemBoard, pullRequestMayEnter } from '../boardStages';
+import { itemBoard, pullRequestMayEnter } from '../boardStages';
 import type { BoardKind } from '../boardStages';
-import { inferredParentWorkItemId } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 
@@ -23,37 +19,28 @@ interface MoveOptions {
   repositorySlug?: string;
 }
 
-/** The board's persisted cards: the query behind them and the moves that rewrite them. */
+/** The moves that rewrite a board's persisted cards, for a caller that holds the cards it acts on. */
 export function useBoardItems({
   factoryProjectId,
   kind,
   currentUserId,
   onFailure,
-  items: given,
+  items: all,
 }: {
   factoryProjectId: string | undefined;
   kind: BoardKind;
-  /** The cards to act on, from a caller that holds a few of them and must not download the board, e.g. search. */
-  items?: readonly WorkItem[];
+  /** The cards to act on: the ones the caller shows, and the ones holding a session. */
+  items: readonly WorkItem[];
   currentUserId?: string;
   /** Where a failure goes when no card is on screen to carry it, e.g. the search palette. */
   onFailure?: (message: string) => void;
 }) {
-  const items = useWorkItemsQuery(given ? undefined : factoryProjectId);
   const catalog = useBoardCatalog(factoryProjectId);
-  const upsert = useUpsertWorkItemMutation(factoryProjectId);
   const update = useUpdateWorkItemMutation(factoryProjectId);
   const transition = useTransitionWorkItemMutation(factoryProjectId, currentUserId);
   const remove = useDeleteWorkItemMutation(factoryProjectId);
   const [transitionReasons, setTransitionReasons] = useState<Record<string, string>>({});
-  const [dropError, setDropError] = useState<Error>();
   const movingRef = useRef<Set<string>>(new Set());
-
-  const all = useMemo(() => given ?? items.data ?? [], [given, items.data]);
-  const knownSourceKeys = useMemo(() => persistedSourceKeys(all), [all]);
-  // Sources whose card sits on another board: the only withheld feed items worth explaining.
-  const elsewhereSourceKeys = persistedSourceKeys(all.filter(item => !belongsToBoard(item, kind)));
-  const visible = all.filter(item => belongsToBoard(item, kind));
 
   const requestTransition = (item: WorkItem, toStage: string, options: MoveOptions = {}, onSettled?: () => void) => {
     setTransitionReasons(current => {
@@ -119,54 +106,15 @@ export function useBoardItems({
   };
 
   const handleDrop = (payload: DragPayload, toStage: BoardStageId, cause = 'board_drag') => {
-    if (payload.kind === 'work-item') {
-      const item = all.find(candidate => candidate.id === payload.id);
-      if (!item || !belongsToBoard(item, kind) || payload.fromStage === toStage) return;
-      move(payload.id, toStage, { cause });
-      return;
-    }
-    setDropError(undefined);
-    // A dropped candidate files onto this board and enters at its initial phase.
-    // With the catalog unresolved, `stages` is left out so the server picks it
-    // rather than guessing a phase the board may not declare.
-    const initialPhase = catalog.data?.find(board => board.id === kind)?.initialPhase;
-    const { source, sourceKey, title, url, metadata, customPrompt } = payload.candidate;
-    const parentWorkItemId =
-      source === 'github-pr' || source === 'gitlab-pr' ? inferredParentWorkItemId(metadata, all) : undefined;
-    void (async () => {
-      const item = await upsert.mutateAsync({
-        board: kind,
-        source,
-        sourceKey,
-        parentWorkItemId,
-        title,
-        url,
-        ...(initialPhase ? { stages: [initialPhase] } : {}),
-        metadata,
-        // Kickoffs carry the card description, so typed guidance reaches the run through it.
-        ...(customPrompt ? { description: customPrompt } : {}),
-      });
-      if (!item.stages.includes(toStage) && pullRequestMayEnter(boardOf(catalog.data, item), item, toStage)) {
-        requestTransition(item, toStage, { cause });
-      }
-    })().catch(error => {
-      const failure = error instanceof Error ? error : new Error('The card could not be filed.');
-      setDropError(failure);
-      onFailure?.(failure.message);
-    });
+    const item = all.find(candidate => candidate.id === payload.id);
+    if (!item || itemBoard(item) !== kind || payload.fromStage === toStage) return;
+    move(payload.id, toStage, { cause });
   };
 
   return {
-    all,
-    visible,
-    knownSourceKeys,
-    elsewhereSourceKeys,
-    isPending: items.isPending,
-    error: items.isError ? items.error : undefined,
-    mutationError: [upsert, transition, remove].find(mutation => mutation.isError)?.error ?? dropError,
+    mutationError: [transition, remove].find(mutation => mutation.isError)?.error,
     evaluatingStages: new Map(transition.pendingTransitions.map(({ itemId, stage }) => [itemId, stage])),
     transitionReasons,
-    refetch: items.refetch,
     move,
     remove: (id: string) => remove.mutate(id),
     handleDrop,

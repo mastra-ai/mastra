@@ -70,7 +70,7 @@ Check information architecture, page shape, writing, links, components, diagrams
 
 Type: deterministic.
 
-Use `scripts/run-checks.sh` for audited-page formatting, Remark, Vale, and repository validation. It wraps `pnpm check --format json` and attributes findings to the page by file path. Report missing tools or ambiguous attribution as `warn`; report proven unrelated failures separately.
+Use `scripts/run-checks.sh` for audited-page formatting, Remark, Vale, and repository validation. It wraps `pnpm check --format json` and attributes findings to the page by file path. If `vale-target=fail` comes from `mastra/vale-unavailable`, run `pnpm vale:download` in `docs/` and rerun the script before reporting; don't report it as an environment limitation. Report other missing tools or ambiguous attribution as `warn`; report proven unrelated failures separately.
 
 - `pass`: No audited-target error.
 - `warn`: The audited page has warning-level findings, a check could not run, or repository validation attribution is ambiguous.

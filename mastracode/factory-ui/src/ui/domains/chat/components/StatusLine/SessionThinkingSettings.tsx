@@ -9,7 +9,7 @@ interface SessionThinkingSettingsProps {
 
 /** The thinking level inside the model picker, under the model list. Same size while loading or unavailable. */
 export function SessionThinkingSettings({ modelId, switchingModel }: SessionThinkingSettingsProps) {
-  const { options, state, setLevel, resetLevel } = useSessionThinking(modelId, switchingModel);
+  const { options, state, summary, setLevel, resetLevel } = useSessionThinking(modelId, switchingModel);
 
   if ('unavailableReason' in state) {
     return (
@@ -29,9 +29,8 @@ export function SessionThinkingSettings({ modelId, switchingModel }: SessionThin
     );
   }
 
-  const levelLabel = options.find(option => option.value === state.effective.level)?.label ?? state.effective.level;
   return (
-    <div role="group" aria-label={`Thinking: ${levelLabel} (${state.source})`}>
+    <div role="group" aria-label={`Thinking: ${summary} (${state.source})`}>
       <ThinkingLevelRamp
         options={options}
         value={state.effective.level}

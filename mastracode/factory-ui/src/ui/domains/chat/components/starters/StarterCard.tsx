@@ -1,7 +1,6 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowRight } from 'lucide-react';
 import { useId } from 'react';
 import type { CSSProperties } from 'react';
 
@@ -10,6 +9,7 @@ import { usePromptButton } from '../../hooks/usePromptButton';
 import { StarterArt } from './StarterArt';
 import { starterCellClasses } from './starterGrid';
 import '../chat-enter.css';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 
 interface StaggerStyle extends CSSProperties {
   '--i': number;
@@ -59,7 +59,7 @@ export function StarterCard({ starter, index, count }: { starter: StarterPrompt;
         )}
       >
         {starter.action}
-        <ArrowRight
+        <IconArrowRight
           aria-hidden
           className="duration-fast ease-out-custom size-3.5 transition-transform group-hover/starter:translate-x-0.5 motion-reduce:transition-none"
         />

@@ -176,6 +176,19 @@ async function addCondition(
  * Where the project's items live: a GitHub repository and a GitLab project linked to it, a Linear
  * project in team ENG and a Jira project PLAT bound to it, and a Linear team bound to another project.
  */
+/** Adds one more condition to `group`, picking its value from the ones the field offers. */
+async function addChoice(user: ReturnType<typeof userEvent.setup>, group: HTMLElement, field: string, value: string) {
+  await user.click(within(group).getByRole('button', { name: 'Add condition' }));
+  await user.click(within(group).getAllByRole('combobox', { name: 'Field' }).at(-1)!);
+  await user.click(await screen.findByRole('option', { name: field }));
+  // A yes-or-no fact is answered in place; any other offers its values in a list.
+  if (value === 'Yes' || value === 'No') return user.click(within(group).getByRole('radio', { name: value }));
+  await user.click(within(group).getAllByRole('combobox', { name: 'Value' }).at(-1)!);
+  await user.click(await screen.findByRole('option', { name: value }));
+}
+
+const JOIN_SWITCH = 'Join the issue’s card instead';
+
 function serveProjectSources() {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
@@ -523,6 +536,102 @@ describe('IntakeRoutesSection', () => {
 
     const phases = (await screen.findAllByRole('option')).map(option => option.textContent);
     expect(phases).toEqual(workBoardInfo.phases.filter(phase => phase.kind !== 'terminal').map(phase => phase.name));
+  });
+
+  it("adds a route that joins a pull request to its issue's card, in any unfinished phase", async () => {
+    const state = serveRoutes();
+    const user = userEvent.setup();
+    renderSection();
+
+    const draft = await startRoute(user, 'Fixes join their issue');
+    await addChoice(user, draft, 'Source kind', 'Pull request');
+    await addChoice(user, draft, 'Pull request closes an issue', 'Yes');
+    expect(within(draft).getByText('Send to')).toBeInTheDocument();
+    await user.click(within(draft).getByRole('switch', { name: JOIN_SWITCH }));
+    expect(within(draft).getByText('Join the issue’s card, move to')).toBeInTheDocument();
+    expect(within(draft).queryByText('Send to')).not.toBeInTheDocument();
+
+    await user.click(within(draft).getByRole('combobox', { name: 'Phase' }));
+    const phases = (await screen.findAllByRole('option')).map(option => option.textContent);
+    expect(phases).toEqual(workBoardInfo.phases.filter(phase => phase.kind !== 'terminal').map(phase => phase.name));
+    await user.click(screen.getByRole('option', { name: 'Building' }));
+    await user.click(within(draft).getByRole('button', { name: 'Add route' }));
+
+    await waitFor(() => expect(routeNames()).toContain('Fixes join their issue'));
+    expect(state.requests).toEqual([
+      {
+        method: 'POST',
+        path: '',
+        body: {
+          name: 'Fixes join their issue',
+          when: {
+            operator: 'AND',
+            conditions: [
+              { field: 'source.kind', operator: 'equals', value: 'pull_request' },
+              { field: 'pullRequest.closesIssue', operator: 'equals', value: true },
+            ],
+          },
+          target: { boardKey: 'work', phaseKey: 'execute', joinClosedIssue: true },
+        },
+      },
+    ]);
+  });
+
+  it('offers joining only to a route for pull requests that close an issue', async () => {
+    const state = serveRoutes();
+    const user = userEvent.setup();
+    renderSection();
+
+    const draft = await startRoute(user, 'Pull requests');
+    expect(within(draft).queryByRole('switch', { name: JOIN_SWITCH })).not.toBeInTheDocument();
+    await addChoice(user, draft, 'Source kind', 'Pull request');
+    expect(within(draft).queryByRole('switch', { name: JOIN_SWITCH })).not.toBeInTheDocument();
+    await addChoice(user, draft, 'Pull request closes an issue', 'No');
+    expect(within(draft).queryByRole('switch', { name: JOIN_SWITCH })).not.toBeInTheDocument();
+
+    // Turned on while it could join, then narrowed to pull requests with no issue to join.
+    await user.click(within(draft).getByRole('radio', { name: 'Yes' }));
+    await user.click(within(draft).getByRole('switch', { name: JOIN_SWITCH }));
+    expect(within(draft).getByText('Join the issue’s card, move to')).toBeInTheDocument();
+    await user.click(within(draft).getByRole('radio', { name: 'No' }));
+    expect(within(draft).queryByRole('switch', { name: JOIN_SWITCH })).not.toBeInTheDocument();
+    expect(within(draft).getByText('Send to')).toBeInTheDocument();
+
+    await user.click(within(draft).getByRole('button', { name: 'Add route' }));
+    await waitFor(() => expect(routeNames()).toContain('Pull requests'));
+    expect(state.requests[0]?.body).toMatchObject({ target: { boardKey: 'work', phaseKey: 'intake' } });
+    expect(state.requests[0]?.body).not.toHaveProperty('target.joinClosedIssue');
+    // Saved, it still has nothing to join.
+    expect(within(routeRow('Pull requests')).queryByRole('switch', { name: JOIN_SWITCH })).not.toBeInTheDocument();
+  });
+
+  it('turns joining off and on for a saved route, keeping a phase the cards can be in', async () => {
+    const state = serveRoutes();
+    const user = userEvent.setup();
+    renderSection();
+
+    await screen.findByRole('list', { name: 'Intake routes' });
+    const name = 'Pull requests that close a waiting issue join its card';
+    const id = state.routes.find(route => route.name === name)!.id;
+    expect(within(routeRow(name)).getByRole('switch', { name: JOIN_SWITCH })).toBeChecked();
+
+    await user.click(within(routeRow(name)).getByRole('switch', { name: JOIN_SWITCH }));
+    await waitFor(() => expect(state.requests).toHaveLength(1));
+    expect(state.requests[0]).toMatchObject({
+      method: 'PATCH',
+      path: id,
+      body: { target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false }, expectedRevision: 1 },
+    });
+    expect(within(routeRow(name)).getByText('Send to')).toBeInTheDocument();
+
+    await user.click(within(routeRow(name)).getByRole('switch', { name: JOIN_SWITCH }));
+    await waitFor(() => expect(state.requests).toHaveLength(2));
+    expect(state.requests[1]).toMatchObject({
+      method: 'PATCH',
+      path: id,
+      body: { target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: true }, expectedRevision: 2 },
+    });
+    expect(within(routeRow(name)).getByText('Join the issue’s card, move to')).toBeInTheDocument();
   });
 
   it('adds a route once however fast Add is pressed, and takes it back from the toast', async () => {

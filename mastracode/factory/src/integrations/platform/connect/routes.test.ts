@@ -77,6 +77,7 @@ describe('platform connect routes', () => {
     const response = await app.request('/web/integrations/platform/connect-tools');
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
+      projectId: 'proj_1',
       connections: [
         {
           id: 'conn-linear',
@@ -111,6 +112,7 @@ describe('platform connect routes', () => {
     const response = await app.request('/web/integrations/platform/connect-tools');
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
+      projectId: 'proj_1',
       connections: [expect.objectContaining({ id: 'conn-linear', providerName: 'linear', logoUrl: null })],
     });
   });
