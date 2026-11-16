@@ -233,7 +233,7 @@ const sandbox = new ModalSandbox({
 })
 ```
 
-Modal counts a sandbox as active while a command started with `executeCommand()` is running, while its stdin is being written to, or while it has an open TCP connection over one of its tunnels. An open tunnel connection keeps the sandbox running even when no command is active.
+Modal counts a sandbox as active while a command started with `executeCommand()` or a background process started with `processes.spawn()` is running, while its stdin is being written to, or while it has an open TCP connection over one of its tunnels. An open tunnel connection keeps the sandbox running even when no command is active.
 
 `clone({ idleTimeoutMinutes })` sets `idleTimeoutMs` on a newly created clone. The clone's hard lifetime is the larger of the template's `timeoutMs` and the idle window, and it ends the clone even while a command runs. To let a busy clone run past the idle window, give the template a `timeoutMs` longer than that window. If a sandbox with the clone's `id` is already running, `start()` reconnects to it and keeps the timeouts it was created with. To apply new timeouts, use an `id` with no running sandbox.
 

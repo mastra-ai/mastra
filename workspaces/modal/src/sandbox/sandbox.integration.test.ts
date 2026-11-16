@@ -146,3 +146,23 @@ describe.skipIf(!hasCredentials)('ModalSandbox stop-and-resume', () => {
     await first._destroy();
   }, 120_000);
 });
+
+// #30369: before the fix, clone({ idleTimeoutMinutes: 1 }) became a 60s hard
+// lifetime, so a command running past one minute was killed.
+describe.skipIf(!hasCredentials)('ModalSandbox clone idle timeout', () => {
+  const template = new ModalSandbox({ baseImage: 'ubuntu:22.04', timeoutMs: 10 * 60_000 });
+  const clone = template.clone({ id: `mastra-test-idle-${Date.now().toString(36)}`, idleTimeoutMinutes: 1 });
+
+  afterAll(async () => {
+    await clone._destroy();
+  }, 30_000);
+
+  it('keeps a clone alive for a command that runs past the idle window', async () => {
+    await clone._start();
+
+    const result = await clone.executeCommand!('sh', ['-c', 'sleep 90 && echo done']);
+
+    expect(result.success).toBe(true);
+    expect(result.stdout.trim()).toBe('done');
+  }, 150_000);
+});

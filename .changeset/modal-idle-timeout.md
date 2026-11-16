@@ -1,5 +1,5 @@
 ---
-'@mastra/modal': patch
+'@mastra/modal': minor
 ---
 
 Fixed `clone({ idleTimeoutMinutes })` on `ModalSandbox` killing the sandbox clone that many minutes after it started, even while a command was running. It now sets an idle timeout, so the clone also shuts down after that long without activity. The clone's hard lifetime is the larger of the template's `timeoutMs` and the idle window, and it applies even while a command runs. To let a busy clone run past the idle window, give the template a `timeoutMs` longer than that window. Fixes [#30369](https://github.com/mastra-ai/mastra/issues/30369).
