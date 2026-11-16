@@ -104,6 +104,7 @@ import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
 import { trackOpenReasoning, watchInterruptibleStream } from '../../shared/interruptible-stream';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
+import { describeNonSuccessFinishReason } from '../../shared/non-success-finish-reason';
 import { persistUnavailableAttachments } from '../../shared/persist-unavailable-attachments';
 import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-message';
 import { snapshotSignalOutcome } from '../../shared/signal-outcome';
@@ -570,6 +571,8 @@ async function processOutputStream<OUTPUT = undefined>({
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
   let hasStepContent = false;
+  // Like hasStepContent, but reasoning alone does not count: it is not an answer.
+  let hasAnswerContent = false;
   let toolResultTripwire: TripWire | null = null;
   let toolResultProcessorRunner: ProcessorRunner | null = null;
   const getToolResultProcessorRunner = (): ProcessorRunner => {
@@ -786,6 +789,7 @@ async function processOutputStream<OUTPUT = undefined>({
 
     if (chunk.type == 'object' || chunk.type == 'object-result') {
       hasStepContent = true;
+      hasAnswerContent = true;
       controller.enqueue(chunk);
       continue;
     }
@@ -846,6 +850,7 @@ async function processOutputStream<OUTPUT = undefined>({
 
     if (STEP_CONTENT_CHUNK_TYPES.has(chunk.type)) {
       hasStepContent = true;
+      if (chunk.type !== 'reasoning-delta') hasAnswerContent = true;
     }
 
     // Collect every chunk for post-stream message building
@@ -1001,6 +1006,34 @@ async function processOutputStream<OUTPUT = undefined>({
               ...runState.state.stepResult,
               reason: 'error',
               isContinued: false,
+            },
+          });
+        }
+
+        // A model that spends its whole output budget before answering (typically all of it
+        // on reasoning) stops with finishReason 'length' and no text. Truncated text is a
+        // usable result, but an empty one is not: without an error the caller just gets ''.
+        // Report it the way AgentController does, through the deferred-error path.
+        if (chunk.payload.stepResult.reason === 'length' && !hasAnswerContent && !runState.state.hasErrored) {
+          const syntheticError = new MastraError({
+            id: 'AGENT_STREAM_ERROR',
+            text: `${describeNonSuccessFinishReason('length', chunk.payload.metadata?.providerMetadata ?? chunk.payload.providerMetadata)} The step produced no text or tool calls; increase maxOutputTokens to leave room for the answer.`,
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: {
+              runId: chunk.runId,
+              finishReason: 'length',
+            },
+          });
+
+          runState.setState({
+            hasErrored: true,
+            apiError: syntheticError,
+            deferredErrorChunk: {
+              type: 'error',
+              runId: chunk.runId,
+              from: chunk.from,
+              payload: { error: syntheticError },
             },
           });
         }
