@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { CreateFeedbackBody } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -181,7 +182,7 @@ describe('feedback tabs pending comment', () => {
     server.use(
       http.get(FEEDBACK_URL, () => HttpResponse.json(listFeedbackResponse(stored))),
       http.post(FEEDBACK_URL, async ({ request }) => {
-        const { feedback } = (await request.json()) as { feedback: { feedbackId: string } };
+        const { feedback } = (await request.json()) as CreateFeedbackBody;
         stored = [feedbackRecord({ feedbackId: feedback.feedbackId, feedbackType: 'comment', value: 'now stored' })];
         return HttpResponse.json({ success: true });
       }),
