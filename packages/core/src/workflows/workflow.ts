@@ -3512,8 +3512,11 @@ export class Workflow<
     [PUBSUB_SYMBOL]: PubSub;
     [PARENT_STATE_SYMBOL]?: ParentStateLink;
     [HAND_BACK_STATE_SYMBOL]?: (state: TState, base: Record<string, unknown>) => Promise<void>;
-    /** `null`: the restarted resume didn't record its target inside the nested run. */
-    [RESTART_RESUME_SYMBOL]?: NestedResumeTarget | null;
+    /**
+     * Without `steps`: the restarted resume didn't record its target inside the nested run;
+     * `received` is the nested run's state the parent last took in (storage v1).
+     */
+    [RESTART_RESUME_SYMBOL]?: NestedResumeTarget | { received?: Record<string, unknown> };
     mastra: Mastra;
     requestContext?: RequestContext<TRequestContext>;
     engine: DefaultEngineType;
@@ -3698,7 +3701,7 @@ export class Workflow<
           outputWriter,
           outputOptions: { includeState: true, includeResumeLabels: true },
         });
-      } else if (resumeNested && !resume && restartResume === null) {
+      } else if (resumeNested && !resume && restartResume && !('steps' in restartResume)) {
         // The interrupted resume didn't record its target inside the nested run: leave the nested
         // run suspended as stored, and this step suspends with it, to be resumed again.
         const stored = await run.runStorage.loadFull();
@@ -3707,11 +3710,16 @@ export class Workflow<
           steps: (stored?.context ?? {}) as any,
           resumeLabels: stored?.resumeLabels,
         } as WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>;
-        // The nested run hasn't run since it parked, so the state it had handed back then is its
-        // stored state; it hands nothing back now.
-        if (!parentState) parkedState = toJsonState(stored?.value);
+        if (!parentState) {
+          // The resumed nested run may have changed the state and parked again before this run
+          // stored that: hand its changes back against the state this run last took in from it, or
+          // whole without one, as a restart does. The parent then holds its stored state.
+          res.state = stored?.value as TState;
+          handBackBase = restartResume.received;
+          parkedState = toJsonState(stored?.value);
+        }
       } else if (resumeNested) {
-        const target = resume ?? restartResume ?? undefined;
+        const target = resume ?? (restartResume && 'steps' in restartResume ? restartResume : undefined);
         res = await run.resumeNestedByParent({
           resumeData,
           step: target?.steps?.length ? (target.steps as any) : undefined,

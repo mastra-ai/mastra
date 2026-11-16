@@ -193,6 +193,13 @@ export async function executeStep(
       nestedResumeTarget = getNestedResumeTarget(storedResult);
     }
   }
+  // The nested run's state this run took in when it last parked on it (storage v1).
+  const parkedMeta = storedResult?.suspendPayload?.__workflow_meta;
+  const receivedState: Record<string, unknown> | undefined = (
+    executionContext.foreachIndex !== undefined
+      ? parkedMeta?.foreachOutput?.[executionContext.foreachIndex]?.suspendPayload?.__workflow_meta
+      : parkedMeta
+  )?.startState;
 
   // Extract suspend data if this step was previously suspended
   // A resumed step re-run after a crash is stored as 'running' but still carries its suspendPayload.
@@ -502,17 +509,7 @@ export async function executeStep(
             storageVersion: 1,
           });
           if (snapshot?.status === 'success') {
-            // The state the nested run started from, recorded when this run parked on it.
-            const meta = storedResult?.suspendPayload?.__workflow_meta;
-            completedNestedOutput = {
-              found: true,
-              value: snapshot.result,
-              state: snapshot.value,
-              base:
-                executionContext.foreachIndex !== undefined
-                  ? meta?.foreachOutput?.[executionContext.foreachIndex]?.suspendPayload?.__workflow_meta?.startState
-                  : meta?.startState,
-            };
+            completedNestedOutput = { found: true, value: snapshot.result, state: snapshot.value, base: receivedState };
           }
         }
       }
@@ -704,10 +701,12 @@ export async function executeStep(
             ? (((state: unknown) => journal.baseFor(state)) satisfies ParentStateLink)
             : undefined,
         [HAND_BACK_STATE_SYMBOL]: isNestedWorkflow ? setState : undefined,
-        // `null` tells the nested workflow the restarted resume's target is unknown (a record stored
-        // before targets were): it then leaves the nested run suspended.
+        // No target means the restarted resume's target is unknown (a record stored before targets
+        // were): the nested workflow then leaves the nested run suspended.
         [RESTART_RESUME_SYMBOL]:
-          restartsResume && step.component === 'WORKFLOW' ? (nestedResumeTarget ?? null) : undefined,
+          restartsResume && step.component === 'WORKFLOW'
+            ? (nestedResumeTarget ?? { received: receivedState })
+            : undefined,
         engine: engine.getEngineContext(),
         abortSignal: abortController?.signal,
         outputWriter,
