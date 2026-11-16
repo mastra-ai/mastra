@@ -33,7 +33,8 @@ const ACTIVITY_RANK: Record<SessionRow['status'], number> = {
 
 const SESSION_ROW_ORDER: Record<SessionRowsView['sort'], (a: SessionRow, b: SessionRow) => number> = {
   activity: (a, b) =>
-    ACTIVITY_RANK[a.status] - ACTIVITY_RANK[b.status] || b.session.createdAt.localeCompare(a.session.createdAt),
+    ACTIVITY_RANK[a.cardStatus ?? a.status] - ACTIVITY_RANK[b.cardStatus ?? b.status] ||
+    b.session.createdAt.localeCompare(a.session.createdAt),
   updated: (a, b) => b.updatedAt.localeCompare(a.updatedAt),
   created: (a, b) => b.session.createdAt.localeCompare(a.session.createdAt),
 };
@@ -99,7 +100,7 @@ function windowedGroup(key: string, rows: readonly SessionRow[], view: SessionRo
             row.childRows?.some(child => child.session.sessionId === open) === true,
         );
   const count = view.window.get(key) ?? SESSION_ROW_WINDOW;
-  const visible = rows.slice(0, count + Number(openIndex >= SESSION_ROW_WINDOW));
+  const visible = rows.slice(0, count + Number(openIndex >= count));
   const openRow = rows[openIndex];
   if (openRow && openIndex >= visible.length) visible[visible.length - 1] = openRow;
   return { key, total: rows.length, ...(openIndex === -1 ? {} : { openIndex }), rows: visible };
