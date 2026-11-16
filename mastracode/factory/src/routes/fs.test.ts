@@ -225,6 +225,15 @@ describe('readWorkspaceFile', () => {
 const WORKDIR = '/workspaces/acme/repo';
 const BASE_SHA = '0123456789abcdef0123456789abcdef01234567';
 
+const COMMIT_IDENTITY = [
+  '-c',
+  'user.name=Factory',
+  '-c',
+  'user.email=factory@example.com',
+  '-c',
+  'commit.gpgsign=false',
+];
+
 function makeSession(overrides: Partial<SourceControlSession> = {}): SourceControlSession {
   return {
     id: 'row-1',
@@ -801,8 +810,7 @@ describe('live session file tree', () => {
   it('indexes a file with a merge conflict once', async () => {
     const { parent } = await seedHostCheckouts();
     const repo = join(parent, 'repo');
-    const git = (...args: string[]) =>
-      execFileAsync('git', ['-C', repo, '-c', 'user.name=Factory', '-c', 'user.email=factory@example.com', ...args]);
+    const git = (...args: string[]) => execFileAsync('git', ['-C', repo, ...COMMIT_IDENTITY, ...args]);
     await git('add', 'README.md');
     await git('commit', '-q', '-m', 'base');
     await git('checkout', '-q', '-b', 'theirs');
@@ -821,8 +829,7 @@ describe('live session file tree', () => {
   it('leaves out a gitlink with no .gitmodules entry and an untracked nested repository', async () => {
     const { parent } = await seedHostCheckouts();
     const repo = join(parent, 'repo');
-    const git = (dir: string, ...args: string[]) =>
-      execFileAsync('git', ['-C', dir, '-c', 'user.name=Factory', '-c', 'user.email=factory@example.com', ...args]);
+    const git = (dir: string, ...args: string[]) => execFileAsync('git', ['-C', dir, ...COMMIT_IDENTITY, ...args]);
     await execFileAsync('git', ['init', '-q', join(repo, 'tools')]);
     await writeFile(join(repo, 'tools', 'run.sh'), 'echo run');
     await execFileAsync('git', ['init', '-q', join(repo, 'vendor', 'kit')]);
@@ -1309,15 +1316,6 @@ describe('workspace changes', () => {
 });
 
 describe('workspace patches', () => {
-  const COMMIT_IDENTITY = [
-    '-c',
-    'user.name=Factory',
-    '-c',
-    'user.email=factory@example.com',
-    '-c',
-    'commit.gpgsign=false',
-  ];
-
   async function seedRepositories(slugs: string[] = ['acme/repo']) {
     const parent = await realpath(await mkdtemp(join(tmpdir(), 'factory-patches-')));
     const dirs = slugs.map(slug => join(parent, slug.split('/')[1]!));
