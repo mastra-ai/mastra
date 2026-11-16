@@ -49,6 +49,7 @@ import {
 import type { InlineLinkRule } from './inline-media';
 import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
 import type { ChatChannelRenderContext } from './output-processor';
+import { PlatformDedupeStateAdapter } from './platform-dedupe-state-adapter';
 import { ChatChannelProcessor } from './processor';
 import { MastraStateAdapter } from './state-adapter';
 import { extractErrorMessage } from './stream-helpers';
@@ -605,6 +606,13 @@ export class AgentChannels {
         this.stateAdapter = new MastraStateAdapter(memoryStore, () => this.getOwnerId());
         this.log('info', 'Using MastraStateAdapter (subscriptions persist across restarts)');
       }
+
+      // A platform can declare its own deduplication window, but the Chat SDK
+      // keeps one TTL for the whole instance, so the swap happens on the
+      // adapter instead of in `chatOptions`. The wrapper is a pass-through for
+      // platforms that declare nothing, and reading `adapterConfigs` lazily
+      // keeps adapters registered later working too.
+      this.stateAdapter = new PlatformDedupeStateAdapter(this.stateAdapter, key => this.dedupeTtlMsFor(key));
 
       const { Chat, Message: ChatMessage, ThreadImpl } = await getChatModule();
       const chat = new Chat({
@@ -3018,6 +3026,23 @@ export class AgentChannels {
     // Already-sanitized diagnostics (plain objects) pass through untouched.
     const payload = fields.error instanceof Error ? { ...fields, error: getErrorFromUnknown(fields.error) } : fields;
     this.logger[level](prefixed, payload);
+  }
+
+  /**
+   * The deduplication window a platform asked for, read off the key the Chat
+   * SDK records its deduplication markers under
+   * (`dedupe:<platform>:<messageId>`, wrapped in the adapter's concurrency
+   * scope when it declares one). Returns `undefined` for every other key and
+   * for platforms that didn't set their own `dedupeTtlMs`, which leaves the
+   * instance-wide window in place.
+   */
+  private dedupeTtlMsFor(key: string): number | undefined {
+    for (const [platform, adapterConfig] of Object.entries(this.adapterConfigs)) {
+      if (adapterConfig.dedupeTtlMs !== undefined && key.includes(`dedupe:${platform}:`)) {
+        return adapterConfig.dedupeTtlMs;
+      }
+    }
+    return undefined;
   }
 }
 
