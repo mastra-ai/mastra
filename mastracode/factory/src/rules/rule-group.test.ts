@@ -147,11 +147,6 @@ describe('rule group schemas', () => {
       true,
     );
   });
-
-  it('reads a condition saved under the old author.trusted name as item.trusted', () => {
-    const parsed = cardRuleGroupSchema.parse(any(all({ field: 'author.trusted', operator: 'equals', value: true })));
-    expect(parsed).toEqual(any(all({ field: 'item.trusted', operator: 'equals', value: true })));
-  });
 });
 
 describe('a condition stored under author.trusted', () => {
