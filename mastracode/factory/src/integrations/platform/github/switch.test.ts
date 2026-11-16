@@ -154,6 +154,8 @@ async function setup(
     emitAudit,
     modes,
     generic,
+    /** What each app token reaches on GitHub; null makes GitHub refuse it. */
+    apps,
     /** Installs an app on another account, as its own connection. */
     install: (id: string, integrationId: string, token: string, install: AppInstall) => {
       apps[token] = install;
@@ -372,6 +374,27 @@ describe('GitHub app switch', () => {
     ]);
   });
 
+  it('retries on the next load an account whose connection could not be read', async () => {
+    const { switchApps, githubStatus, install, apps, modes } = await setup();
+    expect((await switchApps()).status).toBe(200);
+    const globex = { installationId: 910, account: 'globex', repositories: [201] };
+    install('conn-github-globex', FACTORY_GITHUB_PROVIDER_KEY, 'tok-github-globex', globex);
+    install('conn-reviews-globex', FACTORY_REVIEWS_GITHUB_PROVIDER_KEY, 'tok-reviews-globex', {
+      ...globex,
+      installationId: 911,
+    });
+    apps['tok-github-globex'] = null;
+
+    expect((await githubStatus()).status).toBe(200);
+    expect((await modes.get('org-1')).installations?.map(installation => installation.installationId)).toEqual([900]);
+
+    apps['tok-github-globex'] = globex;
+    expect((await githubStatus()).status).toBe(200);
+    expect((await modes.get('org-1')).installations?.map(installation => installation.installationId)).toEqual([
+      900, 910,
+    ]);
+  });
+
   it('moves open pull request subscriptions to the new installation, so their threads keep waking', async () => {
     const { switchApps, generic, linked } = await setup();
     const subscriptions = generic as unknown as GithubSubscriptionStorage;
@@ -418,7 +441,7 @@ describe('GitHub app switch', () => {
   });
 
   it('merges two legacy installations of one account onto the new one', async () => {
-    const { switchApps, sourceControl, legacy, linkRepository, modes } = await setup();
+    const { switchApps, sourceControl, legacy, linkRepository, modes, generic } = await setup();
     const second = await sourceControl.installations.upsert({
       orgId: 'org-1',
       connectedByUserId: 'admin-1',
@@ -426,8 +449,32 @@ describe('GitHub app switch', () => {
       accountName: 'acme',
     });
     const other = await linkRepository(second.id, '102', 'acme/api', 'proj-2');
+    const subscriptions = generic as unknown as GithubSubscriptionStorage;
+    await subscribeToPullRequest(
+      {
+        orgId: 'org-1',
+        installationExternalId: '8',
+        projectRepositoryId: other.link.id,
+        repositoryExternalId: '102',
+        repositorySlug: 'acme/api',
+        changeRequestId: '3',
+        sessionId: 'session-3',
+        ownerId: 'admin-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-3',
+        source: 'factory-pr-create',
+      },
+      subscriptions,
+    );
 
     expect((await switchApps()).status).toBe(200);
+    expect(
+      await listPullRequestSubscriptionsForWebhook(
+        { installationExternalId: '900', repositoryExternalId: '102', changeRequestId: '3' },
+        undefined,
+        subscriptions,
+      ),
+    ).toMatchObject([{ sessionId: 'session-3' }]);
     expect(await sourceControl.installations.list({ orgId: 'org-1' })).toMatchObject([
       { id: legacy.id, externalId: '900' },
     ]);

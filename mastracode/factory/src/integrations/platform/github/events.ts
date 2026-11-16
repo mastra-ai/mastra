@@ -38,7 +38,7 @@ export type GithubEventLogger = Pick<IMastraLogger, 'debug' | 'warn' | 'error'>;
 export interface GithubEventDeliveryConfig {
   controller: MountedMastraCode['controller'];
   github: GithubWebhookDispatchIntegration;
-  ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
+  ingestFactoryEvent?: (event: ParsedGithubWebhook, options?: { orgIds?: readonly string[] }) => Promise<unknown>;
   dispatch?: typeof dispatchGithubWebhook;
 }
 
@@ -94,9 +94,9 @@ export function withGithubEventInstallation(event: ParsedGithubWebhook, installa
  * then the pull request subscription dispatcher. Throws when ingest fails so
  * the events worker retries; ingest and delivery are idempotent per delivery id.
  *
- * Only `orgIds`' subscriptions are woken: when orgs on different apps link the
- * same repository, each app's copy of the webhook belongs to its own orgs.
- * Ingest needs no filter, because each org's rows carry its own installation.
+ * Only `orgIds`' projects and subscriptions see it: when orgs on different apps
+ * link the same repository, each app's copy of the webhook belongs to its own
+ * orgs, even where two orgs share an installation.
  */
 export async function deliverGithubEvent(
   config: GithubEventDeliveryConfig,
@@ -105,7 +105,7 @@ export async function deliverGithubEvent(
   logger?: GithubEventLogger,
 ): Promise<void> {
   if (isFactoryIngestedEvent(event)) {
-    await config.ingestFactoryEvent?.(event);
+    await config.ingestFactoryEvent?.(event, { orgIds });
   } else {
     logger?.debug('Platform GitHub event not forwarded to Factory ingress', {
       deliveryId: event.deliveryId,

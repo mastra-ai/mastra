@@ -291,12 +291,10 @@ export class PlatformGithubSwitch {
     if (record.mode !== 'connect' || now - (this.#refreshedAt.get(orgId) ?? -Infinity) < REFRESH_INTERVAL_MS) {
       return record;
     }
-    const { installations: found } = planGithubSwitch({
-      scans: await this.#scan(await this.#appConnections()),
-      legacy: [],
-    });
-    // A failed scan is retried on the next load, not five minutes later.
-    this.#refreshedAt.set(orgId, now);
+    const scans = await this.#scan(await this.#appConnections());
+    const { installations: found } = planGithubSwitch({ scans, legacy: [] });
+    // A connection that couldn't be read is retried on the next load, not five minutes later.
+    if (!scans.some(scan => scan.error)) this.#refreshedAt.set(orgId, now);
     // Merge into the stored record, not a cached one another replica may have saved over since.
     this.#options.modes.invalidate(orgId);
     const fresh = await this.#options.modes.get(orgId);

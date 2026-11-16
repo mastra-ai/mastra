@@ -646,7 +646,7 @@ export class ConnectGithubTransport implements GithubTransport {
     if (!review) {
       throw new GithubApiError(
         404,
-        'Review not found. For a pending human review, its author must connect GitHub or add a GitHub token in Factory.',
+        'Review not found. For a pending human review, its author must connect GitHub or add a GitHub token in Factory. A pending review the Mastra GitHub App started before the switch to the Mastra Factory apps can no longer be changed.',
       );
     }
     const author = review.user?.login;
