@@ -295,15 +295,16 @@ export function runsToInspect(runs) {
 
 /**
  * Fetches each run's failures, newest first, until the deadline (a backlog then drains from its
- * newest end while each new day is covered at once). Runs in `tiers.inspected_runs`
- * are skipped: every failure they held was already settled. A run counts as settled when none of
+ * newest end while each new day is covered at once). A run whose current attempt is in
+ * `tiers.inspected_runs` is skipped: every failure it held was already settled. A rerun keeps the
+ * run id but bumps the attempt, so it is inspected again. A run counts as settled when none of
  * its failures is still `unresolved` (no later green head yet, or a job failure too young to call).
  * A transient GitHub error that outlasts the retries ends the day early the same way.
  * Returns the failures, the runs that settled, and how many runs were left for the next day.
  */
 export function inspectRuns(tiers, runs, inspectRun, { deadline, now = Date.now }) {
   const pending = runs
-    .filter(r => !tiers.inspected_runs?.[r.id])
+    .filter(r => tiers.inspected_runs?.[r.id]?.attempt !== r.run_attempt)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
   const failures = [];
   const settled = [];
@@ -333,8 +334,8 @@ export function settleDay(tiers, { failures, settled, left }, date, days, testFi
   const windowStart = daysBefore(date, days);
   const { tally, caught } = recordPrFailures(tiers, failures, date, days);
   const remembered = { ...tiers.inspected_runs };
-  for (const run of settled) remembered[run.id] = run.created_at.slice(0, 10);
-  for (const [id, day] of Object.entries(remembered)) if (day < windowStart) delete remembered[id];
+  for (const run of settled) remembered[run.id] = { day: run.created_at.slice(0, 10), attempt: run.run_attempt };
+  for (const [id, seen] of Object.entries(remembered)) if (!seen.day || seen.day < windowStart) delete remembered[id];
   tiers.inspected_runs = remembered;
   const { removed, added } = syncFiles(tiers, testFiles, date);
   const out = left ? [] : moveOut(tiers, date);
@@ -624,7 +625,7 @@ function dailyCommand(tiers, { days, date, budgetMinutes }) {
 
   const compareCache = new Map();
   const toInspect = runsToInspect(runs);
-  const known = toInspect.filter(r => tiers.inspected_runs?.[r.id]).length;
+  const known = toInspect.filter(r => tiers.inspected_runs?.[r.id]?.attempt === r.run_attempt).length;
   console.error(
     `inspecting ${toInspect.length - known} of ${runs.length} PR runs since ${since} (${known} already settled)`,
   );
