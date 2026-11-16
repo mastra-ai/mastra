@@ -25,6 +25,14 @@ const VIEW: SessionRowsRequest = {
   windows: {},
 };
 const CREATED_AT = '2026-09-04T10:00:00.000Z';
+const listedSession = {
+  sessionId: SESSION_ID,
+  projectRepositoryId: 'ghp-1',
+  title: 'Build fix login',
+  branch: 'factory/issue-1',
+  materializedAt: CREATED_AT,
+  createdAt: CREATED_AT,
+};
 
 const heldCard: WorkItem = {
   id: CARD_ID,
@@ -60,18 +68,7 @@ function serveProject({ decision }: { decision?: 'proposed' }) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/boards`, () => HttpResponse.json(workBoardCatalog)),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/sessions`, () =>
-      HttpResponse.json({
-        sessions: [
-          {
-            sessionId: SESSION_ID,
-            projectRepositoryId: 'ghp-1',
-            title: 'Build fix login',
-            branch: 'factory/issue-1',
-            materializedAt: CREATED_AT,
-            createdAt: CREATED_AT,
-          },
-        ],
-      }),
+      HttpResponse.json({ sessions: [listedSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, () =>
       HttpResponse.json({ workItems: listedCards() }),
@@ -176,41 +173,53 @@ describe('useSessionRowsQuery', () => {
     { edit: 'renamed', next: 'failed' },
     { edit: 'deleted', next: 'loading' },
     { edit: 'deleted', next: 'failed' },
-  ] as const)('shows a session $edit while the rows of a new sort are $next', async ({ edit, next }) => {
-    serveProject({});
-    let releaseNextRead = () => {};
-    const nextRead = new Promise<void>(resolve => {
-      releaseNextRead = resolve;
-    });
-    let nextRequested = false;
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/session-rows`, async ({ request }) => {
-        if (new URL(request.url).searchParams.get('sort') !== 'updated') return undefined;
-        nextRequested = true;
-        if (next === 'failed') return HttpResponse.json({ error: 'Service unavailable' }, { status: 503 });
-        await nextRead;
-        return undefined;
-      }),
-    );
-    const { result, client, rerender } = renderHookWithProviders(
-      ({ request }: { request: SessionRowsRequest }) => {
-        const { read, shown } = useSessionRowsQuery(PROJECT_ID, request);
-        return { shown, failed: read.isError };
-      },
-      { initialProps: { request: VIEW } },
-    );
-    const shownRows = () => result.current.shown?.groups.flatMap(group => group.rows) ?? [];
-    await waitFor(() => expect(shownRows().map(row => row.session.title)).toEqual(['Build fix login']));
+  ] as const)(
+    'shows a session $edit while the rows of a new sort are $next, and once they settle',
+    async ({ edit, next }) => {
+      serveProject({});
+      let releaseNextRead = () => {};
+      const nextRead = new Promise<void>(resolve => {
+        releaseNextRead = resolve;
+      });
+      let nextRequested = false;
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/session-rows`, async ({ request }) => {
+          if (new URL(request.url).searchParams.get('sort') !== 'updated') return undefined;
+          nextRequested = true;
+          if (next === 'failed') return HttpResponse.json({ error: 'Service unavailable' }, { status: 503 });
+          await nextRead;
+          return undefined;
+        }),
+      );
+      const { result, client, rerender } = renderHookWithProviders(
+        ({ request }: { request: SessionRowsRequest }) => {
+          const { read, shown } = useSessionRowsQuery(PROJECT_ID, request);
+          return { shown, failed: read.isError, fetching: read.isFetching };
+        },
+        { initialProps: { request: VIEW } },
+      );
+      const titles = () =>
+        (result.current.shown?.groups.flatMap(group => group.rows) ?? []).map(row => row.session.title);
+      await waitFor(() => expect(titles()).toEqual(['Build fix login']));
 
-    rerender({ request: { ...VIEW, sort: 'updated' } });
-    await waitFor(() => expect(nextRequested).toBe(true));
-    if (next === 'failed') await waitFor(() => expect(result.current.failed).toBe(true));
-    if (edit === 'renamed') await updateCachedSessionTitle(client, PROJECT_ID, SESSION_ID, 'Fix sign-in');
-    else removeCachedSession(client, PROJECT_ID, SESSION_ID);
+      rerender({ request: { ...VIEW, sort: 'updated' } });
+      await waitFor(() => expect(nextRequested).toBe(true));
+      if (next === 'failed') await waitFor(() => expect(result.current.failed).toBe(true));
+      const stored = edit === 'renamed' ? [{ ...listedSession, title: 'Fix sign-in' }] : [];
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/sessions`, () =>
+          HttpResponse.json({ sessions: stored }),
+        ),
+      );
+      if (edit === 'renamed') await updateCachedSessionTitle(client, PROJECT_ID, SESSION_ID, 'Fix sign-in');
+      else removeCachedSession(client, PROJECT_ID, SESSION_ID);
 
-    await waitFor(() =>
-      expect(shownRows().map(row => row.session.title)).toEqual(edit === 'renamed' ? ['Fix sign-in'] : []),
-    );
-    releaseNextRead();
-  });
+      const edited = stored.map(session => session.title);
+      await waitFor(() => expect(titles()).toEqual(edited));
+
+      releaseNextRead();
+      await waitFor(() => expect(result.current.fetching).toBe(false));
+      expect(titles()).toEqual(edited);
+    },
+  );
 });
