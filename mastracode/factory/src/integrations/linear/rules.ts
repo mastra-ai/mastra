@@ -12,6 +12,7 @@ import {
 import type { BoardRegistry } from '../../boards/index.js';
 import { toBoardSource } from '../../boards/project-boards.js';
 import type { ProjectBoardSource } from '../../boards/project-boards.js';
+import { effectiveBoard } from '../../boards/relocate.js';
 import { recordIntakeEvent } from '../../metrics/intake.js';
 import { commitObservedChange, deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type { FactoryLinearRuleContext, FactoryRuleDecision } from '../../rules/types.js';
@@ -20,6 +21,7 @@ import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
+import { cardIngressId, cardsByExternalId } from '../record-cards.js';
 import type { LinearEventRules } from './default-rules.js';
 
 const RULE_TIMEOUT_MS = 5_000;
@@ -121,19 +123,29 @@ export class LinearRules {
     });
     // The shared list is the cache itself: only the card handed on to rules is cloned.
     const items = await this.options.storage.listShared({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
-    const itemsBySourceKey = new Map(items.map(item => [item.externalSource?.externalId, item]));
+    const itemsBySourceKey = cardsByExternalId(items, { integrationId: 'linear', type: 'issue' });
     const statuses: IngressStatus[] = [];
     for (const issue of input.issues) {
-      // One card per Linear issue per project; other projects may file their own.
-      // The identifier finds the card filed under it; after Linear renamed the
-      // identifier, the stable issue id finds it, preferring a live card over
-      // finished ones, as the issue detail route does.
-      const byIssueId = items.filter(item => item.workItem.metadata?.linearIssueId === issue.id);
-      const relatedItem =
-        itemsBySourceKey.get(`linear:${issue.identifier}`) ??
-        byIssueId.find(item => !isTerminalWorkItem(this.#boards(input), item)) ??
-        byIssueId[0];
-      statuses.push(await this.#ingestIssue(input, issue, relatedItem && structuredClone(relatedItem)));
+      // One card per Linear issue per board; other projects may file their own. The cards
+      // filed under the issue's identifier are its cards on their boards. After Linear renamed
+      // the identifier, the stable issue id finds its cards on every other board, one per board,
+      // preferring a live card over finished ones, as the issue detail route does.
+      const byIssueId = items.filter(
+        item => item.externalSource?.integrationId === 'linear' && item.workItem.metadata?.linearIssueId === issue.id,
+      );
+      const cards = [...(itemsBySourceKey.get(`linear:${issue.identifier}`) ?? [])];
+      const covered = new Set(cards.map(card => effectiveBoard(card)));
+      const live = (card: Card) => !isTerminalWorkItem(this.#boards(input), card);
+      for (const card of [...byIssueId.filter(live), ...byIssueId.filter(card => !live(card))]) {
+        if (covered.has(effectiveBoard(card)) || cards.some(held => held.id === card.id)) continue;
+        covered.add(effectiveBoard(card));
+        cards.push(card);
+      }
+      if (!cards.length) statuses.push(await this.#ingestIssue(input, issue, undefined));
+      // Each board's card runs its own rules for the issue.
+      for (const card of cards) {
+        statuses.push(await this.#ingestIssue(input, issue, structuredClone(card), 1));
+      }
     }
     if (statuses.some(status => status === 'committed')) return { status: 'committed', ingested: statuses.length };
     if (statuses.some(status => status === 'replayed')) return { status: 'replayed', ingested: statuses.length };
@@ -146,7 +158,7 @@ export class LinearRules {
     relatedItem: Card | undefined,
     attempt = 1,
   ): Promise<IngressStatus> {
-    const ingressId = `linear:${issue.id}:${issue.updatedAt}`;
+    const ingressId = await cardIngressId(this.options.storage, `linear:${issue.id}:${issue.updatedAt}`, relatedItem);
     const actor = { type: 'human' as const, id: input.userId };
 
     // Closed issues without existing work items should not create new ones.

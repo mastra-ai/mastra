@@ -1061,6 +1061,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "boardKey",
       "boards",
       "event",
       "itemId",
@@ -11427,8 +11428,11 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "itemId": {
           "$ref": "#/$defs/__schema15"
         },
-        "event": {
+        "boardKey": {
           "$ref": "#/$defs/__schema16"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema17"
         }
       },
       "additionalProperties": false,
@@ -11756,6 +11760,11 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "$ref": "#/$defs/__schema3"
         },
         "__schema16": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "__schema17": {
           "type": "object",
           "properties": {
             "type": {
@@ -11782,10 +11791,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               ]
             },
             "labels": {
-              "$ref": "#/$defs/__schema17"
+              "$ref": "#/$defs/__schema18"
             },
             "assignees": {
-              "$ref": "#/$defs/__schema17"
+              "$ref": "#/$defs/__schema18"
             },
             "pullRequestTrusted": {
               "type": "boolean"
@@ -11796,7 +11805,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ],
           "additionalProperties": false
         },
-        "__schema17": {
+        "__schema18": {
           "type": "object",
           "properties": {
             "added": {
@@ -11804,7 +11813,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "maxItems": 100,
               "type": "array",
               "items": {
-                "$ref": "#/$defs/__schema18"
+                "$ref": "#/$defs/__schema19"
               }
             },
             "removed": {
@@ -11812,18 +11821,18 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "maxItems": 100,
               "type": "array",
               "items": {
-                "$ref": "#/$defs/__schema19"
+                "$ref": "#/$defs/__schema20"
               }
             }
           },
           "additionalProperties": false
         },
-        "__schema18": {
+        "__schema19": {
           "type": "string",
           "minLength": 1,
           "maxLength": 500
         },
-        "__schema19": {
+        "__schema20": {
           "type": "string",
           "minLength": 1,
           "maxLength": 500

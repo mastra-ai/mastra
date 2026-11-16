@@ -312,6 +312,33 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake dry run 
     expect(await snapshot()).toEqual(before);
   });
 
+  it('answers for the card on the board asked about when the item has a card on several, else for its first card', async () => {
+    const { send, domains, scope } = await setup();
+    const first = (await domains.workItems.list(scope)).find(
+      card => card.externalSource?.externalId === 'github:1:issue:2',
+    )!;
+    const onDocs = (await domains.workItems.linkWorkItemToBoard({
+      orgId: first.orgId,
+      id: first.id,
+      board: 'docs',
+      stage: 'inbox',
+      userId: ADMIN,
+    }))!;
+    const url = 'https://github.com/acme/app/issues/2';
+    const answer = async (body: Record<string, unknown>) => {
+      const { item, current } = (await send('/intake/test', body)).body;
+      return [item.id, current.boardKey];
+    };
+    expect(await answer({ url, boardKey: 'docs' })).toEqual([onDocs.id, 'docs']);
+    expect(await answer({ url, boardKey: 'work' })).toEqual([first.id, 'work']);
+    expect(await answer({ url })).toEqual([first.id, 'work']);
+    // The dry run counts the item once, as its first card.
+    const sampled = (await send('/intake/dry-run', {})).body.items.filter(
+      (item: { key: string }) => item.key === 'github:1:issue:2',
+    );
+    expect(sampled).toMatchObject([{ id: first.id, kind: 'card' }]);
+  });
+
   it('resolves a URL to the card holding it, else reads it once from its provider, a Not routed item included', async () => {
     const { send, docsCard, lookups, domains } = await setup();
     await domains.workItems.attachSource({

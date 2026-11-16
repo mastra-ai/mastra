@@ -3,7 +3,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
 import { boundChangeRequestNumber, createBoardRegistry, defineBoard } from '../../boards/index.js';
 import { reviewBoard } from '../../boards/review.js';
-import { autoStartingBoards } from '../../boards/test-utils.js';
+import { autoStartingBoards, createTestBoard } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { FACTORY_GITLAB_EVENTS } from '../../rules/types.js';
@@ -547,6 +547,55 @@ describe('GitLabRules', () => {
         expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'gitlab-pr', board: 'work' }),
         expect.objectContaining({ type: 'sendMessage', role: 'work' }),
       ]),
+    );
+  });
+
+  it("runs no other workspace's card that shares the authoring Slack card's external id", async () => {
+    const opened = (board: string) =>
+      defineBoard({
+        id: board,
+        title: board,
+        initialPhase: 'queued',
+        phases: {
+          queued: { title: 'Queued', kind: 'resting', next: 'building' },
+          building: { title: 'Building', kind: 'working', role: 'work', next: 'shipped' },
+          shipped: { title: 'Shipped', kind: 'terminal' },
+        },
+        events: {
+          gitlab: {
+            mergeRequestOpened: (context: FactoryGitLabRuleContext) => ({
+              type: 'sendMessage' as const,
+              idempotencyKey: `${context.ingress.id}:${board}`,
+              role: 'work',
+              message: 'out',
+            }),
+          },
+        },
+      });
+    const { seeded, project, service } = await setup({
+      boards: createBoardRegistry({ boards: [opened('delivery'), opened('audit')] }),
+    });
+    const thread = (workspaceId: string, board: string, sessions: Record<string, unknown>) =>
+      seeded.workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: { integrationId: 'slack', type: 'slack-thread', workspaceId, externalId: 'C1:1.000' },
+          title: `Thread in ${workspaceId}`,
+          board,
+          stages: ['building'],
+          sessions,
+        },
+      });
+    await thread('T1', 'delivery', { work: { sessionId: 'work-session', threadId: 'work-thread', branch: 'feature-17' } });
+    await thread('T2', 'audit', {});
+
+    await expect(service.ingest(mergeRequestOpened())).resolves.toMatchObject({ status: 'committed' });
+
+    const deferred = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+    expect(deferred.map(entry => entry.decision)).not.toContainEqual(
+      expect.objectContaining({ type: 'sendMessage', idempotencyKey: expect.stringContaining(':audit') }),
     );
   });
 
@@ -1734,6 +1783,27 @@ describe('GitLab label and assignee changes on a card', () => {
     }
     const stored = (await seeded.workItems.get({ orgId: 'org-1', id: card.id }))!;
     expect({ labels: stored.workItem.labels, assignees: stored.workItem.metadata?.assignees }).toEqual({ labels, assignees: [] });
+  });
+
+  it.each([
+    { kind: 'issue', mergeRequest: false, type: 'work_item.updated' },
+    { kind: 'merge request', mergeRequest: true, type: 'pull_request.updated' },
+  ] as const)("hands a $kind's label change to its card on every board", async ({ kind, mergeRequest, type }) => {
+    const { seeded, project, service } = await setup({ boards: createBoardRegistry({ boards: [createTestBoard()] }) });
+    const card = await gitlabCard(seeded, project.id, { mergeRequest });
+    const release = (await seeded.workItems.linkWorkItemToBoard({
+      orgId: 'org-1',
+      id: card.id,
+      board: 'release',
+      stage: 'queued',
+      userId: 'user-1',
+    }))!;
+    await service.ingest(updateHook(kind, 'relabel', { labels: { previous: [], current: titles(['ship']) } }));
+    for (const each of [card, release]) {
+      expect((await routeEvents(seeded, project.id, each.id)).map(decision => decision.event).filter(event => event.type === type)).toEqual([
+        expect.objectContaining({ labels: { added: ['ship'], removed: [] } }),
+      ]);
+    }
   });
 
   it.each([

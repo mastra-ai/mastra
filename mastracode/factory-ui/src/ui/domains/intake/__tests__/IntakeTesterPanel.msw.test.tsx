@@ -112,6 +112,20 @@ describe('IntakeTesterPanel', () => {
     expect((screen.getByRole('textbox', { name: 'Issue or pull request URL' }) as HTMLInputElement).value).toBe('');
   });
 
+  it("asks for the card on the panel's board when a pasted URL's item has a card on several boards", async () => {
+    const bodies = serveTest(shipped);
+    renderWithProviders(<IntakeTesterPanel factoryProjectId="fp-1" boardKey="ship" />);
+
+    await userEvent.type(
+      screen.getByRole('textbox', { name: 'Issue or pull request URL' }),
+      'https://github.com/mastra-ai/mastra/issues/12',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Test' }));
+
+    expect(await screen.findByText('Goes to Work › intake')).toBeTruthy();
+    expect(bodies).toEqual([{ url: 'https://github.com/mastra-ai/mastra/issues/12', boardKey: 'ship' }]);
+  });
+
   it('tests a recent item as soon as it opens, against unsaved order, and says why nothing takes it', async () => {
     const bodies = serveTest({
       ...shipped,

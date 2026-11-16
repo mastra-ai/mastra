@@ -12,6 +12,8 @@ export interface IntakeTesterPanelProps {
   factoryProjectId: string;
   /** A recent card's or Not routed decision's id to test as soon as the panel opens. */
   itemId?: string;
+  /** The board whose card answers for a pasted URL whose item has a card on several boards. */
+  boardKey?: string;
   /** Unsaved rules or intake order to test against instead of the saved ones. */
   draft?: Pick<IntakeTestBody, 'boards' | 'order'>;
 }
@@ -82,7 +84,7 @@ export function IntakeTesterPanel(props: IntakeTesterPanelProps) {
   return <TesterBody key={props.factoryProjectId} {...props} />;
 }
 
-function TesterBody({ factoryProjectId, itemId, draft }: IntakeTesterPanelProps) {
+function TesterBody({ factoryProjectId, itemId, boardKey, draft }: IntakeTesterPanelProps) {
   const [url, setUrl] = useState('');
   const test = useIntakeTest(factoryProjectId);
   const { mutate } = test;
@@ -95,7 +97,7 @@ function TesterBody({ factoryProjectId, itemId, draft }: IntakeTesterPanelProps)
   // A pasted URL wins; with none, Test runs the open item again, against the draft as it is now.
   const submit = () => {
     const trimmed = url.trim();
-    if (trimmed) mutate({ ...draft, url: trimmed });
+    if (trimmed) mutate({ ...draft, url: trimmed, ...(boardKey ? { boardKey } : {}) });
     else if (itemId) mutate({ ...draft, itemId });
   };
   const result = test.data;

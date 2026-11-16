@@ -352,6 +352,52 @@ describe('intake routes placing linked cards', () => {
       });
     });
 
+    it("links an outsider's pull request to the issue's card on every board, each untrusted and told it opened", async () => {
+      const seeded = await setup({ withDefaultRoute: true });
+      await seeded.boards.create(seeded.scope, docsBoard, 'admin');
+      const issue = (await seeded.deliver({ sourceKey: 'github-issue:42', metadata: { authorTrusted: false } }))!;
+      const docs = (await seeded.workItems.linkWorkItemToBoard({
+        orgId: 'org-1',
+        id: issue.id,
+        board: 'docs',
+        stage: 'inbox',
+        userId: 'admin',
+      }))!;
+
+      expect(await seeded.deliver(pullRequest(issue.id, false))).toBeUndefined();
+
+      const opened = (await seeded.workItems.listDeferredDecisions('org-1', seeded.scope.factoryProjectId))
+        .filter(entry => entry.decision.type === 'routeEvent' && entry.decision.event.type === 'pull_request.opened')
+        .map(entry => entry.workItemId)
+        .sort();
+      expect(opened).toEqual([issue.id, docs.id].sort());
+      for (const id of [issue.id, docs.id]) {
+        expect(await sourceTypes(seeded, id)).toEqual(['issue', 'pull-request']);
+        expect((await seeded.workItems.get({ orgId: 'org-1', id }))!.metadata).toMatchObject({
+          untrustedPullRequests: [expect.stringContaining('17')],
+        });
+      }
+      expect(await seeded.workItems.list(seeded.scope)).toHaveLength(2);
+    });
+
+    it("distrusts an outsider's pull request on a card added to another board after the pull request linked", async () => {
+      const seeded = await setup({ withDefaultRoute: true });
+      await seeded.boards.create(seeded.scope, docsBoard, 'admin');
+      const issue = (await seeded.deliver({ sourceKey: 'github-issue:42', metadata: { authorTrusted: false } }))!;
+      await seeded.deliver(pullRequest(issue.id, false));
+
+      const docs = (await seeded.workItems.linkWorkItemToBoard({
+        orgId: 'org-1',
+        id: issue.id,
+        board: 'docs',
+        stage: 'inbox',
+        userId: 'admin',
+      }))!;
+
+      expect(await sourceTypes(seeded, docs.id)).toEqual(['issue', 'pull-request']);
+      expect(docs.metadata).toMatchObject({ untrustedPullRequests: [expect.stringContaining('17')] });
+    });
+
     it('files the pull request on its own card when the issue card is finished', async () => {
       const seeded = await setup();
       const issue = (await seeded.deliver({ sourceKey: 'github-issue:42', metadata: { authorTrusted: true } }))!;

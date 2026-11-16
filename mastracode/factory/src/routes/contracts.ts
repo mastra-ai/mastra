@@ -445,6 +445,8 @@ export const intakeTestBodySchema = z
     url: z.string().trim().url().max(2000).optional(),
     /** A recent item: a card's id, or a Not routed decision's. */
     itemId: uuidSchema.optional(),
+    /** For a URL whose item has a card on several boards: the board whose card answers. Omitted, its first card does. */
+    boardKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH).optional(),
     /** A status event to try on the item's card, as if it had just happened; its recent events are replayed either way. */
     event: intakeTestEventSchema.optional(),
   })

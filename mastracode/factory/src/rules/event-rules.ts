@@ -9,6 +9,7 @@ import {
 } from '../boards/board-events.js';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { OBSERVED_ITEM_METADATA_KEY } from '../storage/domains/work-items/cards.js';
 import { isPullRequestCard } from '../work-items/change-requests.js';
 import type { FactoryRouteEventDecision, FactoryRuleHandler, FactoryTransitionDecision } from './types.js';
 
@@ -194,9 +195,6 @@ export async function commitCardUpdate(
   }
   return 'ignored';
 }
-
-/** The labels and assignees a polled provider last reported for a card's item. */
-const OBSERVED_ITEM_METADATA_KEY = 'observedItem';
 
 function observedItem(
   item: Pick<Card, 'metadata' | 'workItem'>,

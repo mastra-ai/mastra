@@ -377,10 +377,14 @@ export class IntakeCheck {
       throw new IntakeCheckRefusal(404, 'intake_item_not_found', 'No such item in this project.');
     }
     const url = body.url!;
-    const card = (await this.deps.workItems.listShared(scope)).find(
+    const cards = (await this.deps.workItems.listShared(scope)).filter(
       // The card's own source or any it holds since, such as a pull request linked to an issue card.
       entry => entry.workItem.sources.some(source => source.url !== null && sameUrl(source.url, url)),
     );
+    // An item with a card on several boards answers as the card on the board asked about, else its first.
+    const card =
+      cards.find(entry => body.boardKey !== undefined && boardForWorkItem(entry) === body.boardKey) ??
+      cards.toSorted(byFiling)[0];
     if (card) return fromCard(card);
     needsCard();
     const decision = (await this.deps.storage.listRecentNotRouted(scope, INTAKE_ORDER_SAMPLE)).find(
@@ -426,6 +430,10 @@ export class IntakeCheck {
       }),
     };
   }
+}
+
+function byFiling(left: Card, right: Card) {
+  return left.createdAt.getTime() - right.createdAt.getTime() || left.id.localeCompare(right.id);
 }
 
 function fromCard(card: Card) {

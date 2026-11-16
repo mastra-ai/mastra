@@ -59,6 +59,7 @@ import {
   externalSourceKey,
   FACTORY_RULE_MATERIALIZATION_KEY,
   FactoryRunBindingSupersededError,
+  WorkItemAlreadyOnBoardError,
   WorkItemSourceConflictError,
   WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
@@ -2225,7 +2226,7 @@ export class FactoryDecisionDispatcher {
     // gets its own card, as before.
     if (this.#storage.legacyMode) return false;
     const boards = await this.#boards.load(record);
-    let attached: { card: Card; phase: string | null } | undefined;
+    let attached: { card: Card; phase: string | null; siblings: Card[] } | undefined;
     for (let attempt = 0; attempt < 3 && !attached; attempt++) {
       const card = await this.#storage.get({ orgId: record.orgId, id: workItemId });
       if (
@@ -2247,13 +2248,12 @@ export class FactoryDecisionDispatcher {
           source: externalSourceForDecision(decision),
           metadata: decision.metadata ?? null,
           expectedRevision: card.revision,
-          // The card as `admit` read it: the attach commits at that revision.
-          ...(cardMetadata
-            ? { cardMetadata: (metadata: Record<string, unknown>) => cardMetadata(metadata, card) }
-            : {}),
+          // Each card the pull request joins, as it is under the attach's locks: this one at the
+          // revision `admit` read, and the issue's cards on other boards.
+          ...(cardMetadata ? { cardMetadata } : {}),
         });
         if (!result) return false;
-        attached = { card: result.item, phase: admitted.phase };
+        attached = { card: result.item, phase: admitted.phase, siblings: result.siblings };
       } catch (error) {
         if (error instanceof WorkItemSourceConflictError) return false;
         if (error instanceof WorkItemUpdateConflictError) continue;
@@ -2261,8 +2261,12 @@ export class FactoryDecisionDispatcher {
       }
     }
     if (!attached) return false;
-    const { card, phase } = attached;
+    const { card, phase, siblings } = attached;
     await afterAttach?.(card);
+    // The issue's cards on other boards carry the pull request too; each board's rules hear of it.
+    for (const sibling of siblings) {
+      if (!isTerminalWorkItem(boards, sibling)) await afterAttach?.(sibling);
+    }
     const stage = card.stages.length === 1 ? card.stages[0] : undefined;
     const board = boards.get(boardForWorkItem(card));
     if (!phase || !stage || stage === phase) return true;
@@ -2664,20 +2668,35 @@ export class FactoryDecisionDispatcher {
     }
     const { item, board, route } = first;
     const crossesBoards = route.board !== board.id;
-    const result = await this.#transitionService.transition({
-      orgId: record.orgId,
-      factoryProjectId: record.factoryProjectId,
-      workItemId: item.id,
-      board: board.id,
-      ...(crossesBoards ? { toBoard: route.board } : {}),
-      stage: route.phase,
-      expectedRevision: item.revision,
-      actor: { type: 'system', id: `intake-route:${route.routeId}` },
-      ingress: { type: 'rule', identity },
-      cause: 'event_route',
-      causalChain,
-      eventRoute: { routeId: route.routeId },
-    });
+    let result: Awaited<ReturnType<FactoryTransitionService['transition']>>;
+    try {
+      result = await this.#transitionService.transition({
+        orgId: record.orgId,
+        factoryProjectId: record.factoryProjectId,
+        workItemId: item.id,
+        board: board.id,
+        ...(crossesBoards ? { toBoard: route.board } : {}),
+        stage: route.phase,
+        expectedRevision: item.revision,
+        actor: { type: 'system', id: `intake-route:${route.routeId}` },
+        ingress: { type: 'rule', identity },
+        cause: 'event_route',
+        causalChain,
+        eventRoute: { routeId: route.routeId },
+      });
+    } catch (error) {
+      // The record already has a card on the target board: the card stays, and the rule's skip is logged.
+      if (!(error instanceof WorkItemAlreadyOnBoardError)) throw error;
+      console.info(`Factory left card ${item.id} on ${board.id}: ${error.message}`);
+      await this.#logSkippedRoutes(record, item, event, [
+        {
+          routeId: route.routeId,
+          boardKey: route.board,
+          reason: `the item already has a card on board "${route.board}"`,
+        },
+      ]);
+      return;
+    }
     // A refusal is the card's answer (recorded on it); only a lost revision race is worth a retry.
     if (result.status === 'rejected' && result.code === 'stale') throw new Error(`${result.code}: ${result.reason}`);
     // Work the old board proposed for the card is not the new board's to run; what the move queued

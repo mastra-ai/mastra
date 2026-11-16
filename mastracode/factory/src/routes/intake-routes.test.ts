@@ -12,6 +12,7 @@ import { ProjectBoardCache } from '../boards/project-boards.js';
 import { createTriageWorkRegistry } from '../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../rules/dispatcher.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
+import { externalSourceForWorkItem } from '../rules/types.js';
 import { auditActionsInNamespaces } from '../storage/domains/audit/actions.js';
 import { AuditStorage } from '../storage/domains/audit/base.js';
 import { AuditDomain } from '../storage/domains/audit/domain.js';
@@ -701,6 +702,41 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     ]);
   });
 
+  it("skips moving an issue's card onto a board that already holds a card for the issue", async () => {
+    const { a, scope, projectPath, base, replicaA } = await setup();
+    expect((await replicaA.send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);
+    const { item: work } = await a.workItems.upsert({
+      ...scope,
+      userId: ADMIN,
+      input: {
+        title: 'Docs issue',
+        board: 'work',
+        stages: ['intake'],
+        externalSource: { integrationId: 'github', type: 'issue', externalId: 'github:10:issue:7' },
+        metadata: { labels: ['docs'] },
+      },
+    });
+    const docs = (await a.workItems.linkWorkItemToBoard({
+      orgId: scope.orgId,
+      id: work.id,
+      board: 'docs',
+      stage: 'inbox',
+      userId: ADMIN,
+    }))!;
+    expect((await replicaA.send('POST', base, { name: 'Docs', when: DOCS, target: { boardKey: 'docs' } })).status).toBe(
+      201,
+    );
+
+    expect(await replicaA.send('POST', `${base}/reroute`)).toEqual({ status: 200, body: { moved: 0, skipped: 1 } });
+    const after = await a.workItems.listShared(scope);
+    expect(after.filter(item => item.id === work.id || item.id === docs.id).map(item => [item.id, item.board])).toEqual(
+      expect.arrayContaining([
+        [work.id, 'work'],
+        [docs.id, 'docs'],
+      ]),
+    );
+  });
+
   it('accepts a stored board as a target, and deleting the board deletes its rules with an audit entry', async () => {
     const { a, orgId, projectPath, base, replicaA } = await setup();
     expect((await replicaA.send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);
@@ -1230,6 +1266,83 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
         status: 409,
         body: { error: 'intake_decision_resolved' },
       });
+    });
+
+    it("routes a Not routed item again onto the board its record already has a card on, leaving the record's other card", async () => {
+      const { a, orgId, scope, projectPath, base, replicaA } = await setup({ evaluator: 'intake-order' });
+      expect((await replicaA.send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);
+      const arrival = {
+        type: 'upsertLinkedWorkItem' as const,
+        idempotencyKey: 'arrival-9',
+        board: 'work',
+        source: 'github-issue',
+        sourceKey: 'github-issue:9',
+        title: 'Flaky build',
+        url: 'https://example.com/9',
+        stage: 'intake',
+        metadata: { labels: ['docs'] },
+      };
+      const decided = await a.boards.recordIntakeDecision(scope, {
+        idempotencyKey: 'arrival-9',
+        outcome: 'not_routed',
+        evaluator: 'intake-order',
+        reason: "No board's intake rules match it (checked Work).",
+        sourceKey: 'github-issue:9',
+        title: 'Flaky build',
+        url: 'https://example.com/9',
+        arrival,
+      });
+      // Filed by hand since: first on Docs, then on Work.
+      const { item: docs } = await a.workItems.upsert({
+        ...scope,
+        userId: ADMIN,
+        input: {
+          title: 'Flaky build',
+          board: 'docs',
+          stages: ['inbox'],
+          externalSource: externalSourceForWorkItem(arrival.source, arrival.sourceKey, arrival.url),
+        },
+      });
+      const work = (await a.workItems.linkWorkItemToBoard({
+        orgId,
+        id: docs.id,
+        board: 'work',
+        stage: 'intake',
+        userId: ADMIN,
+      }))!;
+      await replicaA.send('POST', base, { name: 'Docs', when: DOCS, target: TRIAGE });
+      expect((await replicaA.send('POST', `${projectPath}/intake/not-routed/${decided.id}/route-again`)).status).toBe(
+        202,
+      );
+
+      const boards = new ProjectBoardCache({
+        codeRegistry: createTriageWorkRegistry(),
+        storage: a.boards,
+        recheckMs: 0,
+      });
+      await new FactoryDecisionDispatcher({
+        controller: {} as never,
+        transitionService: new FactoryTransitionService({
+          storage: a.workItems,
+          configVersion: 'intake-routes-test',
+          boards,
+        }),
+        storage: a.workItems,
+        boards,
+        intakeRoutes: a.boards,
+        intakeEvaluator: 'intake-order',
+        ownerId: 'worker-route-again',
+      }).runOnce(new Date(Date.now() + 1000));
+
+      expect(
+        (await a.workItems.listDeferredDecisions(orgId, scope.factoryProjectId)).map(record => record.status),
+      ).toEqual(['succeeded']);
+      const cards = await a.workItems.list(scope);
+      expect(Object.fromEntries(cards.map(card => [card.id, [card.board, card.stages]]))).toEqual({
+        [docs.id]: ['docs', ['inbox']],
+        [work.id]: ['work', ['intake']],
+      });
+      expect((await replicaA.send('GET', `${projectPath}/intake/not-routed`)).body.notRouted).toEqual([]);
     });
   });
 });

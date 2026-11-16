@@ -49,7 +49,7 @@ export function BoardRulesPage() {
             </PageHeader.Description>
           </PageHeader>
           <div className="mt-3">
-            <IntakeTesterDialog factoryProjectId={factory.id} label="Test an item" />
+            <IntakeTesterDialog factoryProjectId={factory.id} boardKey={boardId || undefined} label="Test an item" />
           </div>
         </div>
       }

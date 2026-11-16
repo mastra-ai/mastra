@@ -17,6 +17,7 @@ import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../..
 import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import { cardIngressId, cardsByExternalId } from '../record-cards.js';
 import type { IncidentioEventRules } from './default-rules.js';
 
 const RULE_TIMEOUT_MS = 5_000;
@@ -110,26 +111,33 @@ export class IncidentioRules {
     });
     // The shared list is the cache itself: only the card handed on to rules is cloned.
     const items = await this.options.storage.listShared({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
-    const itemsBySourceKey = new Map(items.map(item => [item.externalSource?.externalId, item]));
-    const ingressIds = new Map(input.issues.map(issue => [issue, ingressIdFor(issue)]));
+    const itemsBySourceKey = cardsByExternalId(items, { integrationId: 'incidentio', type: 'issue' });
+    // Each board's card runs its own rules for the record, under its own identity.
+    const targets = await Promise.all(
+      input.issues.flatMap(issue =>
+        (itemsBySourceKey.get(issue.id) ?? [undefined]).map(async card => ({
+          issue,
+          card,
+          ingressId: await cardIngressId(this.options.storage, ingressIdFor(issue), card),
+        })),
+      ),
+    );
     const recorded = await this.options.storage.listRecordedIngress(
       input.orgId,
       input.factoryProjectId,
-      [...ingressIds.values()],
+      targets.map(target => target.ingressId),
     );
     const statuses: IngressStatus[] = [];
     const failures: unknown[] = [];
-    for (const issue of input.issues) {
-      // One card per follow-up per project; other projects may file their own.
-      const relatedItem = itemsBySourceKey.get(issue.id);
+    for (const { issue, card, ingressId } of targets) {
       // A sighting already evaluated runs no rules again, unless it has a card: then its label or
       // assignee change may still be waiting to be queued, if queueing it failed the first time.
-      if (recorded.has(ingressIds.get(issue)!) && !relatedItem) {
+      if (recorded.has(ingressId) && !card) {
         statuses.push('replayed');
         continue;
       }
       try {
-        statuses.push(await this.#ingestIssue(input, issue, relatedItem && structuredClone(relatedItem)));
+        statuses.push(await this.#ingestIssue(input, issue, card && structuredClone(card)));
       } catch (error) {
         failures.push(error);
       }
@@ -147,7 +155,7 @@ export class IncidentioRules {
     relatedItem: Card | undefined,
     attempt = 1,
   ): Promise<IngressStatus> {
-    const ingressId = ingressIdFor(issue);
+    const ingressId = await cardIngressId(this.options.storage, ingressIdFor(issue), relatedItem);
     const actor = { type: 'human' as const, id: input.userId };
 
     // Closed follow-ups without existing work items should not create new ones.

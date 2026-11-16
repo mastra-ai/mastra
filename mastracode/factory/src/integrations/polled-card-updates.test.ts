@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { createTestBoard } from '../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../rules/dispatcher.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -48,7 +49,7 @@ const SHIP = { field: 'event.labels.added', operator: 'contains', value: 'ship' 
 
 async function setup(provider: Provider, options: { onlyShipFiles?: boolean } = {}) {
   const seeded = await createFactoryStorageForTests();
-  const boards = createBoardRegistry();
+  const boards = createBoardRegistry({ boards: [createTestBoard()] });
   const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'acme/repo' } });
   const routeScope = { orgId: 'org-1', factoryProjectId: project.id };
   if (options.onlyShipFiles) {
@@ -113,6 +114,32 @@ describe.each(PROVIDERS)('a $name sync changing labels', provider => {
 
     await drain();
     expect((await current(card.id)).stages).toEqual(['done']);
+  });
+
+  it("moves the issue's Work card and leaves its card on another board, which the route would put on Work too", async () => {
+    const { seeded, project, sync, drain, file, updates, current } = await setup(provider);
+    const card = await file();
+    const release = (await seeded.workItems.linkWorkItemToBoard({ orgId: 'org-1', id: card.id, board: 'release', stage: 'queued', userId: 'user-1' }))!;
+    const shipToWork = await seeded.boards.createIntakeRoute(
+      { orgId: 'org-1', factoryProjectId: project.id },
+      { name: 'Ship to Work', on: ['work_item.updated'], when: { operator: 'AND', conditions: [SHIP] }, target: { boardKey: 'release', moveToBoardKey: 'work', phaseKey: 'done' } },
+      'admin',
+    );
+    const recorded = vi.spyOn(seeded.boards, 'recordIntakeDecision');
+    await sync('2026-07-03T00:00:00Z', ['bug', 'ship']);
+    expect([await updates(card.id), await updates(release.id)]).toEqual([SHIPPED, SHIPPED]);
+
+    await drain();
+    expect([(await current(card.id)).stages, (await current(release.id)).board]).toEqual([['done'], 'release']);
+    const skips = (await Promise.all(recorded.mock.results.map(result => result.value))).filter(
+      record => record.outcome === 'rule_skipped',
+    );
+    expect(skips).toEqual([
+      expect.objectContaining({ boardKey: 'work', routeId: shipToWork.id, reason: expect.stringContaining('already has a card') }),
+    ]);
+    // The skip is the decision's answer: nothing is left to retry.
+    const decisions = await seeded.workItems.listDeferredDecisions('org-1', project.id, { workItemId: release.id });
+    expect(decisions.map(record => record.status)).toEqual(['succeeded']);
   });
 
   it('hands the change over when the same sighting is polled again after queueing it failed', async () => {

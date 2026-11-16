@@ -1,4 +1,4 @@
-import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
+import { WorkItemAlreadyOnBoardError, WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { DEFAULT_BOARD_ID } from './default-board.js';
 import { holdsLegacyPlanner } from './legacy-plan-role.js';
@@ -13,7 +13,7 @@ export function effectiveBoard(item: Card): string {
  * Put one card on `targetBoard`, at `targetStage` or the board's initial phase. Terminal cards,
  * cards on a board that is not installed, and cards with a session attached to a current stage stay put; so does a card that changed under us
  * (a run started or someone moved it), a card already on the target board when no phase is named,
- * and a card already sitting at the named destination.
+ * a card already sitting at the named destination, and a card whose record already has a card on the target board.
  */
 export async function moveCardToBoard({
   workItems,
@@ -78,6 +78,11 @@ export async function moveCardToBoard({
     });
     return 'moved';
   } catch (error) {
+    if (error instanceof WorkItemAlreadyOnBoardError) {
+      // The record's card on that board is the one to work; this card stays where it is.
+      console.info(`Factory left card ${item.id} on ${currentBoard}: ${error.message}`);
+      return 'skipped';
+    }
     if (!(error instanceof WorkItemUpdateConflictError)) throw error;
     return 'skipped';
   }

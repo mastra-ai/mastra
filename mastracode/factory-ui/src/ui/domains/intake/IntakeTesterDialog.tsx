@@ -8,10 +8,13 @@ import { IntakeTesterPanel } from './IntakeTesterPanel';
 export function IntakeTesterDialog({
   factoryProjectId,
   itemId,
+  boardKey,
   label,
 }: {
   factoryProjectId: string;
   itemId?: string;
+  /** The board whose card answers for an item with a card on several. */
+  boardKey?: string;
   label: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -27,7 +30,7 @@ export function IntakeTesterDialog({
               <DialogTitle>Test intake</DialogTitle>
             </DialogHeader>
             <DialogBody>
-              <IntakeTesterPanel factoryProjectId={factoryProjectId} itemId={itemId} />
+              <IntakeTesterPanel factoryProjectId={factoryProjectId} itemId={itemId} boardKey={boardKey} />
             </DialogBody>
           </DialogContent>
         </Dialog>

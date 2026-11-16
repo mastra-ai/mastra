@@ -87,6 +87,30 @@ describe('IncidentioRules', () => {
     ]);
   });
 
+  it('files a follow-up whose id another integration\'s card in the project also carries', async () => {
+    const { project, service, workItems } = await setup();
+    const { item: other } = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'jira', type: 'issue', externalId: issue.id },
+        title: 'A Jira issue',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const evaluate = vi.spyOn(workItems, 'commitRuleEvaluation');
+
+    await service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] });
+
+    expect(evaluate.mock.calls.map(([input]) => input.workItemId)).not.toContain(other.id);
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      { decision: { type: 'upsertLinkedWorkItem', sourceKey: issue.id } },
+    ]);
+  });
+
   it('files the same follow-up in a second project while the first still holds a live card', async () => {
     const { project, service, workItems } = await setup();
     await workItems.upsert({

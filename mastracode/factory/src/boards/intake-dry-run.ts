@@ -44,8 +44,14 @@ export async function intakeSample(context: {
   card(id: string): Promise<Card | null>;
 }): Promise<IntakeSampleItem[]> {
   const items: IntakeSampleItem[] = [];
-  for (const card of context.cards) {
-    if (!card.externalSource) continue;
+  // An item with a card on several boards is sampled once, as the card it was first filed as.
+  const filed = new Set<string>();
+  const cards = context.cards.toSorted(
+    (left, right) => left.createdAt.getTime() - right.createdAt.getTime() || left.id.localeCompare(right.id),
+  );
+  for (const card of cards) {
+    if (!card.externalSource || filed.has(card.externalSource.externalId)) continue;
+    filed.add(card.externalSource.externalId);
     items.push({
       key: card.externalSource.externalId,
       id: card.id,

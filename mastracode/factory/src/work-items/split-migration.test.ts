@@ -681,6 +681,33 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
     expect((await readSplit(storage)).boardItems.get(id)?.autonomy_armed_at).toEqual(later);
   });
 
+  it("shows an old replica's rewrite on every card of the issue once it is recopied", async () => {
+    const { storage, workItems } = await createStorage(backend);
+    const cards = await seed(workItems);
+    await seedLegacy(storage);
+    await migrateWorkItemSplit(storage);
+    const id = cards.get('github issue')!;
+    const second = (await workItems.linkWorkItemToBoard({
+      orgId: ORG,
+      id,
+      board: 'security',
+      stage: 'triage',
+      userId: USER,
+    }))!;
+    const legacy = (await storage.ops.findOne<WorkItemDbRow>('work_items', { id }))!;
+    await storage.ops.updateMany(
+      'work_items',
+      { id },
+      { metadata: { ...legacy.metadata, labels: [{ name: 'bug' }, { name: 'p1' }] } },
+    );
+
+    expect(await migrateWorkItemSplit(storage)).toMatchObject({ recopied: 1 });
+
+    for (const card of [id, second.id]) {
+      expect((await workItems.get({ orgId: ORG, id: card }))?.workItem.labels).toEqual(['bug', 'p1']);
+    }
+  });
+
   // Production: rows an old replica rewrote during the first rollout. Edited on the board too, they
   // skip; untouched there, they recopy once. Later passes must not repeat the recopies.
   it("recopies an old replica's rewrites once and then reports the same skips on every pass", async () => {

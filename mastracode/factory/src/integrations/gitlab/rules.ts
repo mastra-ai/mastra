@@ -49,6 +49,7 @@ import type {
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
 import {
+  externalSourceKey,
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
   WorkItemUpdateConflictError,
 } from '../../storage/domains/work-items/base.js';
@@ -56,6 +57,7 @@ import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/ba
 import type { IntegrationContext } from '../base.js';
 import { closingIssueNumbers } from '../closing-references.js';
 import { recordPullRequestHead } from '../pull-request-head.js';
+import { cardIngressId } from '../record-cards.js';
 import type { GitLabEventRules } from './default-rules.js';
 import { decodeIssueReference, encodeIssueReference, encodeSourceId, GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.js';
 import type { ParsedGitLabWebhook } from './webhook.js';
@@ -727,8 +729,28 @@ export class GitLabRules {
             : event.startsWith('mergeRequest')
               ? [pushedReviewItem ?? attachedItem ?? authoringItem]
               : [issueItem];
+    // The record's cards on other boards run their own rules for it, each under its own identity.
+    const evaluated = new Set(candidates.map(item => item?.id));
+    const firstSibling = candidates.length;
+    for (const item of [...candidates]) {
+      if (!item?.externalSource) continue;
+      const key = externalSourceKey(item.externalSource);
+      for (const sibling of items) {
+        if (evaluated.has(sibling.id) || externalSourceKey(sibling.externalSource) !== key) continue;
+        evaluated.add(sibling.id);
+        candidates.push(structuredClone(sibling));
+      }
+    }
     const results = [];
     for (const [index, item] of candidates.entries()) {
+      const delivery = `gitlab:${projectId}:${parsed.deliveryId}`;
+      // The first card and the record's cards on other boards take an identity that survives
+      // another card of the record being deleted; a card evaluated twice keeps its own scheme.
+      const repeated = candidates.filter(other => other?.id === item?.id).length > 1;
+      const ingressIdentity =
+        (index === 0 && !repeated) || index >= firstSibling
+          ? await cardIngressId(this.options.storage, delivery, item)
+          : `${delivery}${index ? `:${item?.id ?? index}` : ''}`;
       results.push(
         await this.#evaluate({
           parsed,
@@ -754,8 +776,16 @@ export class GitLabRules {
           factoryAuthored: Boolean(authoringItem),
           item,
           ...(pullRequestHome ? { pullRequestHome } : {}),
-          ingressIdentity: `gitlab:${projectId}:${parsed.deliveryId}${index ? `:${item?.id ?? index}` : ''}`,
-          ownsMergeRequest: item !== undefined && item.id === ownItem?.id,
+          ingressIdentity,
+          // The merge request's own card, or that card's sibling on another board.
+          ownsMergeRequest:
+            item !== undefined &&
+            (item.id === ownItem?.id ||
+              (ownItem?.externalSource !== undefined &&
+                ownItem.externalSource !== null &&
+                item.externalSource !== null &&
+                item.externalSource !== undefined &&
+                externalSourceKey(item.externalSource) === externalSourceKey(ownItem.externalSource))),
           // A merge request opening concerns two cards: its own card,
           // which the integration handler files against the authoring item,
           // and that authoring item, which its board may react to. The second

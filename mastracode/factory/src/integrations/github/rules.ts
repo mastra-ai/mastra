@@ -65,6 +65,7 @@ import { closingIssueNumbers } from '../closing-references.js';
 import { storageCards } from '../kept-cards.js';
 import type { CardSource } from '../kept-cards.js';
 import { recordPullRequestHead } from '../pull-request-head.js';
+import { cardIngressId } from '../record-cards.js';
 import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubEventRules } from './default-rules.js';
 import type { GithubRepositoryPermission } from './integration.js';
@@ -606,40 +607,52 @@ export class GithubRules {
     if (!found) return this.#intakeIfNotRouted(parsed, repositoryId, repositoryName, project, issueNumber);
     if (found.externalSource?.type !== 'issue') return { status: 'ignored' };
     const labels = labelNames(issue?.labels);
-    const before = cardLabels(found);
     // GitHub can deliver webhooks out of order (a removal before the add it undoes): drop payloads
     // older than the last applied one, as for assignees. Equal timestamps (one-second resolution) still apply.
     const updatedAt = string(issue?.updated_at);
     const payloadTime = timestamp(updatedAt);
-    const storedTime = timestamp(found.workItem.metadata?.githubLabelsUpdatedAt);
-    if (payloadTime !== undefined && storedTime !== undefined && payloadTime < storedTime) {
-      return { status: 'ignored' };
-    }
-    const advancesTime = payloadTime !== undefined && (storedTime === undefined || payloadTime > storedTime);
-    if (sameLabels(before, labels) && !advancesTime) return { status: 'ignored' };
-    // Queued before the labels are recorded: if queueing fails, a redelivery still sees the change.
-    const queued = await this.#commitUpdate(
-      parsed,
-      repositoryName,
-      project,
-      found,
-      updateEventFacts('work_item.updated', { labels: listChange(before, labels) }),
-    );
-    if (queued === 'ignored') return { status: 'ignored' };
-    try {
-      await this.options.storage.syncCard({
-        orgId: found.orgId,
-        id: found.id,
-        userId: CARD_SYNC_USER_ID,
-        patch: { metadata: { labels, ...(payloadTime !== undefined ? { githubLabelsUpdatedAt: updatedAt } : {}) } },
-        expectedSourceRevision: primarySource(found)?.revision,
-      });
-    } catch (error) {
-      // The card changed under us (a run wrote it, or a concurrent delivery won). The next
-      // delivery or reconcile pass carries the same labels, so drop this one instead of 5xx-ing.
-      if (!(error instanceof WorkItemUpdateConflictError)) throw error;
-    }
-    return { status: 'committed' };
+    // Each of the issue's cards, one per board, hears the change through its own routes.
+    return this.#updateEveryCard(found, async card => {
+      const before = cardLabels(card);
+      const storedTime = timestamp(card.workItem.metadata?.githubLabelsUpdatedAt);
+      if (payloadTime !== undefined && storedTime !== undefined && payloadTime < storedTime) return 'ignored';
+      const advancesTime = payloadTime !== undefined && (storedTime === undefined || payloadTime > storedTime);
+      if (sameLabels(before, labels) && !advancesTime) return 'ignored';
+      // Queued before the labels are recorded: if queueing fails, a redelivery still sees the change.
+      const queued = await this.#commitUpdate(
+        parsed,
+        repositoryName,
+        project,
+        card,
+        updateEventFacts('work_item.updated', { labels: listChange(before, labels) }),
+      );
+      if (queued === 'ignored') return 'ignored';
+      try {
+        await this.options.storage.syncCard({
+          orgId: card.orgId,
+          id: card.id,
+          userId: CARD_SYNC_USER_ID,
+          patch: { metadata: { labels, ...(payloadTime !== undefined ? { githubLabelsUpdatedAt: updatedAt } : {}) } },
+          expectedSourceRevision: primarySource(card)?.revision,
+        });
+      } catch (error) {
+        // The card changed under us (a run wrote it, or a concurrent delivery won). The next
+        // delivery or reconcile pass carries the same labels, so drop this one instead of 5xx-ing.
+        if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+      }
+      return 'committed';
+    });
+  }
+
+  /** Runs `update` for the issue card and its cards on other boards; committed if any card took the change. */
+  async #updateEveryCard(
+    found: Card,
+    update: (card: Card) => Promise<'ignored' | 'committed'>,
+  ): Promise<{ status: 'ignored' | 'committed' }> {
+    const cards = [found, ...(await this.#siblingCards([found])).filter(card => card.externalSource?.type === 'issue')];
+    let status: 'ignored' | 'committed' = 'ignored';
+    for (const card of cards) if ((await update(card)) === 'committed') status = 'committed';
+    return { status };
   }
 
   /**
@@ -668,7 +681,7 @@ export class GithubRules {
       orgId: project.orgId,
       factoryProjectId: project.factoryProjectId,
       item,
-      ingress: { identity: `${installationId}:${parsed.deliveryId}` },
+      ingress: { identity: await cardIngressId(this.options.storage, `${installationId}:${parsed.deliveryId}`, item) },
       actor: { ...actor },
       event,
       fromCardSession,
@@ -706,44 +719,44 @@ export class GithubRules {
     // Timestamps have one-second resolution, so equal timestamps still apply.
     const updatedAt = string(issue?.updated_at);
     const payloadTime = timestamp(updatedAt);
-    const storedTime = timestamp(item.workItem.metadata?.githubAssigneesUpdatedAt);
-    if (payloadTime !== undefined && storedTime !== undefined && payloadTime < storedTime) {
-      return { status: 'ignored' };
-    }
-    // A newer payload with unchanged assignees still advances the stored time, so a delayed older
-    // payload cannot slip in behind it.
-    const advancesTime = payloadTime !== undefined && (storedTime === undefined || payloadTime > storedTime);
-    if (sameStrings(item.workItem.metadata?.assignees, assignees) && !advancesTime) return { status: 'ignored' };
-    // Queued before the assignees are recorded: if queueing fails, a redelivery still sees the change.
-    const queued = await this.#commitUpdate(
-      parsed,
-      repositoryName,
-      project,
-      item,
-      updateEventFacts('work_item.updated', {
-        assignees: listChange(stringList(item.workItem.metadata?.assignees), assignees),
-      }),
-    );
-    if (queued === 'ignored') return { status: 'ignored' };
-    try {
-      await this.options.storage.syncCard({
-        orgId: item.orgId,
-        id: item.id,
-        userId: CARD_SYNC_USER_ID,
-        patch: {
-          metadata: {
-            assignees,
-            ...(payloadTime !== undefined ? { githubAssigneesUpdatedAt: updatedAt } : {}),
+    return this.#updateEveryCard(item, async card => {
+      const storedTime = timestamp(card.workItem.metadata?.githubAssigneesUpdatedAt);
+      if (payloadTime !== undefined && storedTime !== undefined && payloadTime < storedTime) return 'ignored';
+      // A newer payload with unchanged assignees still advances the stored time, so a delayed older
+      // payload cannot slip in behind it.
+      const advancesTime = payloadTime !== undefined && (storedTime === undefined || payloadTime > storedTime);
+      if (sameStrings(card.workItem.metadata?.assignees, assignees) && !advancesTime) return 'ignored';
+      // Queued before the assignees are recorded: if queueing fails, a redelivery still sees the change.
+      const queued = await this.#commitUpdate(
+        parsed,
+        repositoryName,
+        project,
+        card,
+        updateEventFacts('work_item.updated', {
+          assignees: listChange(stringList(card.workItem.metadata?.assignees), assignees),
+        }),
+      );
+      if (queued === 'ignored') return 'ignored';
+      try {
+        await this.options.storage.syncCard({
+          orgId: card.orgId,
+          id: card.id,
+          userId: CARD_SYNC_USER_ID,
+          patch: {
+            metadata: {
+              assignees,
+              ...(payloadTime !== undefined ? { githubAssigneesUpdatedAt: updatedAt } : {}),
+            },
           },
-        },
-        expectedSourceRevision: primarySource(item)?.revision,
-      });
-    } catch (error) {
-      // A concurrent write won; nothing reconciles issue-card assignees, so they stay as the
-      // winner left them until the next assigned/unassigned delivery for this issue.
-      if (!(error instanceof WorkItemUpdateConflictError)) throw error;
-    }
-    return { status: 'committed' };
+          expectedSourceRevision: primarySource(card)?.revision,
+        });
+      } catch (error) {
+        // A concurrent write won; nothing reconciles issue-card assignees, so they stay as the
+        // winner left them until the next assigned/unassigned delivery for this issue.
+        if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+      }
+      return 'committed';
+    });
   }
 
   /** A reopened pull request reads open again on every card that holds it; clearing the sweep's settled stamp lets a later close replay. */
@@ -1478,7 +1491,8 @@ export class GithubRules {
     // identity suffixed with its id, because ingress identities are the replay
     // key and reusing the delivery's own would drop it as a duplicate.
     const pullRequestOpened = event === 'pullRequestOpened';
-    const primary = await evaluate(evaluated, deliveryIdentity, pullRequestOpened);
+    const primaryIdentity = await cardIngressId(this.options.storage, deliveryIdentity, evaluated);
+    const primary = await evaluate(evaluated, primaryIdentity, pullRequestOpened);
     // A closed pull request is the one *other* event both linked cards need:
     // the Review card has to close, and the Work item that wrote the code has
     // to finish (on merge) or at least stop recording it as open. Resolution binds the delivery to
@@ -1625,17 +1639,49 @@ export class GithubRules {
       relatedItem.externalSource?.type !== 'pull-request'
         ? relatedItem
         : undefined;
-    if (linked === undefined && authoringItem === undefined) {
-      await stampClosed();
-      return primary;
-    }
     const companion = linked ?? authoringItem;
-    const secondary = await evaluate(companion, `${deliveryIdentity}:${companion?.id ?? 'pull-request'}`);
-    await stampClosed(secondary.status);
+    // When the authoring card's record has cards on other boards, the arrival already took the
+    // card's suffixed identity; the card's own evaluation then takes one of its own.
+    const companionIdentity = `${deliveryIdentity}:${companion?.id}`;
+    const secondary = companion
+      ? await evaluate(
+          companion,
+          companionIdentity === primaryIdentity ? `${companionIdentity}:authoring` : companionIdentity,
+        )
+      : undefined;
+    await stampClosed(secondary?.status);
+    // The record's cards on other boards run their own rules for it, each under its own identity.
+    const statuses = [primary, ...(secondary ? [secondary] : [])];
+    for (const sibling of await this.#siblingCards([relatedItem, companion])) {
+      statuses.push(await evaluate(sibling, await cardIngressId(this.options.storage, deliveryIdentity, sibling)));
+    }
     for (const status of ['committed', 'replayed'] as const) {
-      if (primary.status === status || secondary.status === status) return { status };
+      if (statuses.some(result => result.status === status)) return { status };
     }
     return primary;
+  }
+
+  /**
+   * The other cards filed for each evaluated card's record (the issue's and the pull request's),
+   * one per board, excluding the evaluated cards themselves.
+   */
+  async #siblingCards(evaluated: ReadonlyArray<Card | undefined>): Promise<Card[]> {
+    const seen = new Set(evaluated.flatMap(card => (card ? [card.id] : [])));
+    const siblings: Card[] = [];
+    for (const card of evaluated) {
+      if (!card?.externalSource) continue;
+      const cards = await this.options.storage.listByProjectSource({
+        orgId: card.orgId,
+        factoryProjectId: card.factoryProjectId,
+        source: card.externalSource,
+      });
+      for (const other of cards) {
+        if (seen.has(other.id)) continue;
+        seen.add(other.id);
+        siblings.push(other);
+      }
+    }
+    return siblings;
   }
 
   /**
