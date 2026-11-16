@@ -413,6 +413,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
         ref,
         ...sharedProps,
         disabled: undefined,
+        type: undefined,
         ...disabledLinkProps,
         className: cn(sharedProps.className, renderedLink.props.className),
         children: content,
