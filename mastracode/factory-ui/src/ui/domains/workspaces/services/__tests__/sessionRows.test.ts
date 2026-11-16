@@ -1,4 +1,4 @@
-import { SESSION_ROW_PINS_MAX } from '@mastra/factory/session/session-row-limits';
+import { SESSION_ROW_PINS_MAX } from '@mastra/factory/session/session-row-query';
 import { describe, expect, it } from 'vitest';
 
 import type { SessionRowWire } from '../../../../../api/types';

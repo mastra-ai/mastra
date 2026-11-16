@@ -1,4 +1,4 @@
-import { SESSION_ROW_ALL_OWNERS, SESSION_ROW_MY_SESSIONS } from '@mastra/factory/routes/contracts';
+import { SESSION_ROW_ALL_OWNERS, SESSION_ROW_MY_SESSIONS } from '@mastra/factory/session/session-row-query';
 import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
 import type { LucideIcon } from 'lucide-react';
 

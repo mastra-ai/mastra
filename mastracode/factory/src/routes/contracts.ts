@@ -7,7 +7,16 @@ import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem, STATUS_EVENTS } from '../
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
 import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
-import { SESSION_ROW_PINS_MAX, SESSION_ROW_WINDOW_MAX } from '../session/session-row-limits.js';
+import {
+  SESSION_ROW_ALL_OWNERS,
+  SESSION_ROW_GROUP_BYS,
+  SESSION_ROW_PINS_MAX,
+  SESSION_ROW_SORTS,
+  SESSION_ROW_STATUSES,
+  SESSION_ROW_UPDATED_WITHIN,
+  SESSION_ROW_WINDOW_MAX,
+  sessionRowOwnerSchema,
+} from '../session/session-row-query.js';
 import { MAX_INTAKE_ROUTES } from '../storage/domains/boards/base.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 import { PULL_REQUEST_STATUSES } from '../work-items/change-requests.js';
@@ -720,35 +729,6 @@ export const workItemFilterOptionsResponseSchema = z.object({
 export type BoardPhasesQuery = z.output<typeof boardPhasesQuerySchema>;
 export type BoardPhasesResponse = z.infer<typeof boardPhasesResponseSchema>;
 export type WorkItemFilterOptionsResponse = z.infer<typeof workItemFilterOptionsResponseSchema>;
-
-export const SESSION_ROW_STATUSES = ['waiting', 'working', 'initializing', 'idle', 'done'] as const;
-export const SESSION_ROW_SORTS = ['activity', 'updated', 'created'] as const;
-export const SESSION_ROW_GROUP_BYS = ['board', 'status', 'owner', 'none'] as const;
-export const SESSION_ROW_UPDATED_WITHIN = ['24h', '7d', '30d'] as const;
-export const SESSION_ROW_ALL_OWNERS = 'all';
-export const SESSION_ROW_MY_SESSIONS = 'mine';
-const SESSION_ROW_OWNER_PREFIX = 'owner:';
-
-export function sessionRowOwnerKey(userId: string): string {
-  return `${SESSION_ROW_OWNER_PREFIX}${userId}`;
-}
-
-export const sessionRowGroupKeys = {
-  board: (boardId: string) => `board:${boardId}`,
-  user: 'user',
-  slack: 'slack',
-  status: (status: (typeof SESSION_ROW_STATUSES)[number]) => `status:${status}`,
-  owner: sessionRowOwnerKey,
-  all: 'all',
-} as const;
-
-export const sessionRowOwnerSchema = z.union([
-  z.enum([SESSION_ROW_ALL_OWNERS, SESSION_ROW_MY_SESSIONS]),
-  z
-    .string()
-    .regex(new RegExp(`^${SESSION_ROW_OWNER_PREFIX}.+$`))
-    .max(512),
-]);
 
 /** `<group key>:<count>`: how many rows of one group to list. Group keys hold colons, so the count follows the last. */
 const sessionRowWindowSchema = z

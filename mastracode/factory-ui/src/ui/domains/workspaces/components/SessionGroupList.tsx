@@ -1,4 +1,4 @@
-import { SESSION_ROW_WINDOW, SESSION_ROW_WINDOW_MAX } from '@mastra/factory/session/session-row-limits';
+import { SESSION_ROW_WINDOW, SESSION_ROW_WINDOW_MAX } from '@mastra/factory/session/session-row-query';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import type { ReactNode } from 'react';
 import { Fragment, useState } from 'react';

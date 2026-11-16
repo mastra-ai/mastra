@@ -1,9 +1,3 @@
-import {
-  SESSION_ROW_ALL_OWNERS,
-  SESSION_ROW_MY_SESSIONS,
-  sessionRowGroupKeys,
-  sessionRowOwnerKey,
-} from '../routes/contracts.js';
 import type {
   SessionActivityResponse,
   SessionRow,
@@ -12,7 +6,13 @@ import type {
 } from '../routes/contracts.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import { SLACK_SESSION_BRANCH_PREFIX } from '../work-item-branch.js';
-import { SESSION_ROW_WINDOW } from './session-row-limits.js';
+import {
+  SESSION_ROW_ALL_OWNERS,
+  SESSION_ROW_MY_SESSIONS,
+  SESSION_ROW_WINDOW,
+  sessionRowGroupKeys,
+  sessionRowOwnerKey,
+} from './session-row-query.js';
 import { sessionRowStatus } from './session-row-status.js';
 import type { RowSession } from './session-rows.js';
 

@@ -1,4 +1,4 @@
-import { SESSION_ROW_PINS_MAX, SESSION_ROW_WINDOW_MAX } from '@mastra/factory/session/session-row-limits';
+import { SESSION_ROW_PINS_MAX, SESSION_ROW_WINDOW_MAX } from '@mastra/factory/session/session-row-query';
 
 import type { SessionActivity, SessionRowsRequest, SessionRowsResponse } from '../../../../api/types';
 import { requestJson } from '../../factory/services/request';

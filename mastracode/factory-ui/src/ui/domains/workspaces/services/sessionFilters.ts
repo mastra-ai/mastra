@@ -3,8 +3,8 @@ import {
   SESSION_ROW_MY_SESSIONS,
   SESSION_ROW_STATUSES,
   sessionRowOwnerKey,
-} from '@mastra/factory/routes/contracts';
-import type { SESSION_ROW_UPDATED_WITHIN } from '@mastra/factory/routes/contracts';
+} from '@mastra/factory/session/session-row-query';
+import type { SESSION_ROW_UPDATED_WITHIN } from '@mastra/factory/session/session-row-query';
 import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
 
 import { SESSION_STATUS_LABELS } from './sessionRows';

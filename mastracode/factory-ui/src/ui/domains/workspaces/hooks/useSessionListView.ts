@@ -1,4 +1,4 @@
-import { SESSION_ROW_GROUP_BYS, SESSION_ROW_SORTS } from '@mastra/factory/routes/contracts';
+import { SESSION_ROW_GROUP_BYS, SESSION_ROW_SORTS } from '@mastra/factory/session/session-row-query';
 import { createLocalStorageStore, useLocalStorageStore } from '@mastra/playground-ui/hooks/use-local-storage-store';
 import { z } from 'zod';
 
