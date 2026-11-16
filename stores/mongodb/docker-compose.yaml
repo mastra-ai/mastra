@@ -24,6 +24,10 @@ services:
     command: ['mongod', '--replSet', 'rs0', '--bind_ip_all', '--port', '27019']
     ports:
       - '127.0.0.1:27019:27019'
+    volumes:
+      # Named for the same reason as mongodbdata-mongo7: an earlier 9.0.8
+      # container's anonymous /data/db would be reused and 7.x can't open it.
+      - mongodbfidelity-mongo7:/data/db
     healthcheck:
       test:
         - CMD
@@ -64,3 +68,4 @@ services:
       start_period: 3s
 volumes:
   mongodbdata-mongo7:
+  mongodbfidelity-mongo7:
