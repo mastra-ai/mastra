@@ -4146,7 +4146,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 "enum": [
                   "placed",
                   "not_routed",
-                  "rule_skipped"
+                  "rule_skipped",
+                  "rule_retired"
                 ]
               },
               "evaluator": {
