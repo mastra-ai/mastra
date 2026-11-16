@@ -8,6 +8,7 @@ import { PosthogAnalytics, setAnalytics } from 'mastra/dist/analytics/index.js';
 
 import { create } from './create.js';
 import { redactError } from './utils/redact.js';
+import { versionTagForAnalytics } from './utils/versions.js';
 
 const pkg = JSON.parse(
   readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8'),
@@ -50,7 +51,7 @@ program
     const region = args.region ? String(args.region) : undefined;
     const validRegion = region === 'eu' || region === 'us' ? region : undefined;
     const versionTag = args.tag?.trim() || undefined;
-    const knownVersionTag = versionTag === 'latest' || versionTag === 'alpha' ? versionTag : undefined;
+    const analyticsVersionTag = versionTagForAnalytics(versionTag);
     // Values that must never reach analytics if a failure message echoes them.
     // (redactError also covers derived variants, e.g. degit's prefix-stripped repo.)
     const sensitiveValues = [
@@ -59,7 +60,7 @@ program
       // Valid regions are already reported in args; only an invalid (arbitrary)
       // value is sensitive.
       validRegion ? undefined : region,
-      knownVersionTag ? undefined : versionTag,
+      analyticsVersionTag === 'custom' ? versionTag : undefined,
       projectNameArg,
     ];
 
@@ -74,7 +75,7 @@ program
           no_platform: args.platform === false,
           has_org: Boolean(args.org),
           region: validRegion ?? (region ? 'invalid' : undefined),
-          version_tag: knownVersionTag ?? (versionTag ? 'custom' : undefined),
+          version_tag: analyticsVersionTag,
         },
         execution: async () => {
           try {

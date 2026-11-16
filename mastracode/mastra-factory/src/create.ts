@@ -23,7 +23,7 @@ import {
 } from './platform.js';
 import { canScaffoldInto, cloneTemplate, renameProject } from './utils/clone.js';
 import { detectPackageManager, getInstallArgs } from './utils/pm.js';
-import { pinMastraPackages } from './utils/versions.js';
+import { pinMastraPackages, versionTagForAnalytics } from './utils/versions.js';
 
 export const PLATFORM_TEMPLATE_REPO = 'https://github.com/mastra-ai/template-factory';
 export const SELF_HOSTED_TEMPLATE_REPO = 'https://github.com/mastra-ai/template-factory-self-hosted';
@@ -116,7 +116,7 @@ export async function create(args: CreateArgs): Promise<void> {
   args.analytics.trackEvent('sf_create_started', {
     package_manager: packageManager,
     no_platform: Boolean(args.noPlatform),
-    version_tag: args.versionTag,
+    version_tag: versionTagForAnalytics(args.versionTag),
   });
 
   // ── Clone template ───────────────────────────────────────────────────────

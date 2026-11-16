@@ -451,6 +451,21 @@ describe('create --tag', () => {
     );
   });
 
+  it.each([
+    ['alpha', 'alpha'],
+    ['my-private-tag', 'custom'],
+  ])('reports the %s tag to analytics as %s', async (versionTag, reported) => {
+    const trackEvent = vi.fn();
+    const trackingAnalytics = { trackEvent, shutdown: async () => {} } as unknown as PosthogAnalytics;
+
+    await create({ projectName: 'my-factory', noPlatform: true, versionTag, analytics: trackingAnalytics }).catch(
+      () => {},
+    );
+
+    expect(trackEvent).toHaveBeenCalledWith('sf_create_started', expect.objectContaining({ version_tag: reported }));
+    expect(JSON.stringify(trackEvent.mock.calls)).not.toContain('my-private-tag');
+  });
+
   it('pins any dist-tag, not just latest and alpha', async () => {
     vi.stubEnv('npm_config_user_agent', 'npm/11.0.0 node/v22.0.0');
     try {

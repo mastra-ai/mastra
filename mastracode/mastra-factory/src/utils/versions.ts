@@ -22,6 +22,12 @@ export interface PinResult {
  * install uses that release channel. Templates declare these as `latest`, so
  * without this an install always takes the stable channel.
  */
+/** Reports only well-known dist-tags to analytics; custom tags may identify a user. */
+export function versionTagForAnalytics(tag: string | undefined): string | undefined {
+  if (!tag) return undefined;
+  return tag === 'latest' || tag === 'alpha' ? tag : 'custom';
+}
+
 export async function pinMastraPackages(projectPath: string, tag: string): Promise<PinResult> {
   const pkgPath = path.join(projectPath, 'package.json');
   const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf8')) as Record<string, unknown>;
