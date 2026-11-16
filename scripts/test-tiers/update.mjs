@@ -21,6 +21,9 @@ export const LOOKBACK_DAYS = 14;
 // The daily update stops inspecting runs after this long (listing included) and saves what it has,
 // inside the workflow's 60-minute job timeout. The next day picks up the runs it didn't reach.
 export const DAILY_BUDGET_MINUTES = 45;
+// No GitHub call starts, waits or keeps running past the budget plus this, so the day's results
+// are still written and committed inside the job timeout.
+const GH_GRACE_MINUTES = 8;
 
 // Same file classes E4 used to call the fix a test-only change or a source change.
 const TEST_PATH =
@@ -33,6 +36,7 @@ const daysBefore = (date, days) => {
   d.setUTCDate(d.getUTCDate() - days);
   return d.toISOString().slice(0, 10);
 };
+const daysAfter = (date, days) => daysBefore(date, -days);
 const later = (a, b) => (!a ? b : !b ? a : a > b ? a : b);
 
 /** Files that failed on a versioning PR run on every PR again, from today. */
@@ -296,20 +300,26 @@ export function runsToInspect(runs) {
 /**
  * Fetches each run's failures, newest first, until the deadline (a backlog then drains from its
  * newest end while each new day is covered at once). A run whose current attempt is in
- * `tiers.inspected_runs` is skipped: every failure it held was already settled. A rerun keeps the
- * run id but bumps the attempt, so it is inspected again. A run counts as settled when none of
- * its failures is still `unresolved` (no later green head yet, or a job failure too young to call).
- * A transient GitHub error that outlasts the retries ends the day early the same way.
- * Returns the failures, the runs that settled, and how many runs were left for the next day.
+ * `tiers.inspected_runs` is skipped: either every failure it held was settled, or it is `waiting`
+ * on something that hasn't happened yet (a later green head, or a job failure old enough to call)
+ * and `ready` says nothing could settle it today. So runs that stay unresolved are not fetched
+ * again every day, and cannot use up the budget ahead of runs never looked at. A rerun keeps the
+ * run id but bumps the attempt, so it is inspected again. A transient GitHub error that outlasts
+ * the retries ends the day early the same way as the deadline.
+ * Returns the failures, the runs that settled, the runs still waiting, and how many were left.
  */
-export function inspectRuns(tiers, runs, inspectRun, { deadline, now = Date.now }) {
+export function inspectRuns(tiers, runs, inspectRun, { deadline, now = Date.now, ready = () => true }) {
   const pending = runs
-    .filter(r => tiers.inspected_runs?.[r.id]?.attempt !== r.run_attempt)
+    .filter(r => {
+      const seen = tiers.inspected_runs?.[r.id];
+      return seen?.attempt !== r.run_attempt || (seen.waiting && ready(r, seen));
+    })
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
   const failures = [];
   const settled = [];
+  const waiting = [];
   for (const [i, run] of pending.entries()) {
-    if (now() >= deadline) return { failures, settled, left: pending.length - i };
+    if (now() >= deadline) return { failures, settled, waiting, left: pending.length - i };
     if (i % 50 === 0) console.error(`  run ${i + 1}/${pending.length}`);
     let found;
     try {
@@ -318,23 +328,26 @@ export function inspectRuns(tiers, runs, inspectRun, { deadline, now = Date.now 
       // Retries already ran out; keep what is settled rather than lose the whole day.
       if (!isTransientGhError(error)) throw error;
       console.error(`GitHub kept failing (${String(error.stderr ?? error.message).trim()}); stopping early`);
-      return { failures, settled, left: pending.length - i };
+      return { failures, settled, waiting, left: pending.length - i };
     }
     failures.push(...found);
     if (found.every(f => (f.verdict ?? classifyPrFailure(f)) !== 'unresolved')) settled.push(run);
+    else waiting.push(run);
   }
-  return { failures, settled, left: 0 };
+  return { failures, settled, waiting, left: 0 };
 }
 
 /**
  * Records the day's failures and settled runs, then syncs the file list. Files move out only
  * when every run was inspected: a run left for tomorrow may hold the catch that keeps a file in.
  */
-export function settleDay(tiers, { failures, settled, left }, date, days, testFiles) {
+export function settleDay(tiers, { failures, settled, waiting = [], left }, date, days, testFiles) {
   const windowStart = daysBefore(date, days);
   const { tally, caught } = recordPrFailures(tiers, failures, date, days);
   const remembered = { ...tiers.inspected_runs };
   for (const run of settled) remembered[run.id] = { day: run.created_at.slice(0, 10), attempt: run.run_attempt };
+  for (const run of waiting)
+    remembered[run.id] = { day: run.created_at.slice(0, 10), attempt: run.run_attempt, waiting: true, checked: date };
   for (const [id, seen] of Object.entries(remembered)) if (!seen.day || seen.day < windowStart) delete remembered[id];
   tiers.inspected_runs = remembered;
   const { removed, added } = syncFiles(tiers, testFiles, date);
@@ -352,6 +365,25 @@ export function nextGreenRun(runs, run) {
       r.created_at > run.created_at &&
       r.head_sha !== run.head_sha &&
       r.conclusion === 'success',
+  );
+}
+
+/**
+ * Whether a run left `waiting` could settle today: its branch has a later green run (a fix to
+ * diff against, or a pass that makes it a flake), or it was last checked within three days of
+ * starting, while its job failures were still too young to call.
+ */
+export function waitingRunReady(runs, run, seen) {
+  return (
+    seen.checked < daysAfter(seen.day, 3) ||
+    runs.some(
+      r =>
+        r.workflow_id === run.workflow_id &&
+        r.head_repo === run.head_repo &&
+        r.head_branch === run.head_branch &&
+        r.created_at > run.created_at &&
+        r.conclusion === 'success',
+    )
   );
 }
 
@@ -383,13 +415,22 @@ export function isTransientGhError(error) {
 export const GH_RETRY_DELAYS_MS = [5_000, 20_000, 60_000];
 const sleepSync = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
-/** Calls fn, repeating it after each delay while it throws a transient GitHub error. */
-export function retryTransient(fn, delays = GH_RETRY_DELAYS_MS, sleep = sleepSync) {
+/**
+ * Calls fn, repeating it after each delay while it throws a transient GitHub error, but never
+ * waiting past `stopAt`.
+ */
+export function retryTransient(
+  fn,
+  delays = GH_RETRY_DELAYS_MS,
+  sleep = sleepSync,
+  { stopAt = Infinity, now = Date.now } = {},
+) {
   for (let attempt = 0; ; attempt++) {
     try {
       return fn();
     } catch (error) {
       if (attempt >= delays.length || !isTransientGhError(error)) throw error;
+      if (now() + delays[attempt] >= stopAt) throw error;
       console.warn(
         `gh api failed (${String(error.stderr ?? error.message).trim()}); retrying in ${delays[attempt]} ms`,
       );
@@ -401,10 +442,32 @@ export function retryTransient(fn, delays = GH_RETRY_DELAYS_MS, sleep = sleepSyn
 // ---------------------------------------------------------------------------------------------
 // GitHub glue (not unit tested; exercised only in the workflow).
 
+/**
+ * One `gh api` call, retried on transient errors, that neither starts, waits nor runs past
+ * `stopAt`: a call still running then is killed. Either way it throws a transient error, which
+ * ends the day's inspection early with what was settled kept. A --paginate call is repeated
+ * whole, so a retry never mixes pages from two attempts.
+ */
+export function boundedGh(args, { stopAt = Infinity, now = Date.now, exec = execFileSync, delays, sleep } = {}) {
+  return retryTransient(
+    () => {
+      const remaining = stopAt - now();
+      if (remaining <= 0) throw new Error('gh api not started: the daily time limit has passed (ETIMEDOUT)');
+      return exec('gh', ['api', ...args], {
+        encoding: 'utf8',
+        maxBuffer: 1 << 28,
+        ...(Number.isFinite(remaining) && { timeout: remaining }),
+      });
+    },
+    delays,
+    sleep,
+    { stopAt, now },
+  );
+}
+
 const repo = process.env.GITHUB_REPOSITORY ?? 'mastra-ai/mastra';
-// A --paginate call is repeated whole, so a retry never mixes pages from two attempts.
-const gh = (...args) =>
-  retryTransient(() => execFileSync('gh', ['api', ...args], { encoding: 'utf8', maxBuffer: 1 << 28 }));
+let ghStopAt = Infinity;
+const gh = (...args) => boundedGh(args, { stopAt: ghStopAt });
 const ghJson = (...args) =>
   gh('--paginate', ...args)
     .trim()
@@ -596,6 +659,7 @@ function versioningCommand(tiers, { runId, date }) {
 
 function dailyCommand(tiers, { days, date, budgetMinutes }) {
   const startedAt = Date.now();
+  ghStopAt = startedAt + (Number(budgetMinutes) + GH_GRACE_MINUTES) * 60_000;
   const since = daysBefore(date, Number(days));
   // One page line per page carries total_count, so a range over the cap can be split.
   const listRange = workflow => range => {
@@ -625,9 +689,11 @@ function dailyCommand(tiers, { days, date, budgetMinutes }) {
 
   const compareCache = new Map();
   const toInspect = runsToInspect(runs);
-  const known = toInspect.filter(r => tiers.inspected_runs?.[r.id]?.attempt === r.run_attempt).length;
+  const ready = (run, seen) => waitingRunReady(runs, run, seen);
+  const remembered = toInspect.filter(r => tiers.inspected_runs?.[r.id]?.attempt === r.run_attempt);
+  const skipped = remembered.filter(r => !tiers.inspected_runs[r.id].waiting || !ready(r, tiers.inspected_runs[r.id]));
   console.error(
-    `inspecting ${toInspect.length - known} of ${runs.length} PR runs since ${since} (${known} already settled)`,
+    `inspecting ${toInspect.length - skipped.length} of ${runs.length} PR runs since ${since} (${skipped.length} settled or still waiting)`,
   );
   const inspectRun = run => {
     const failures = [];
@@ -669,7 +735,10 @@ function dailyCommand(tiers, { days, date, budgetMinutes }) {
     }
     return failures;
   };
-  const inspected = inspectRuns(tiers, toInspect, inspectRun, { deadline: startedAt + Number(budgetMinutes) * 60_000 });
+  const inspected = inspectRuns(tiers, toInspect, inspectRun, {
+    deadline: startedAt + Number(budgetMinutes) * 60_000,
+    ready,
+  });
   if (inspected.left) {
     console.error(
       `stopped early (time budget ${budgetMinutes} min or GitHub errors): ${inspected.left} runs left for the next run; no files move out today`,

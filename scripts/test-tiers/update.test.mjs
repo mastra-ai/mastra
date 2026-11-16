@@ -6,6 +6,7 @@ import path from 'node:path';
 import test from 'node:test';
 import {
   addJobKeys,
+  boundedGh,
   applyCatches,
   applyVersioningFailures,
   classifyPrFailure,
@@ -25,6 +26,7 @@ import {
   runsToInspect,
   settleDay,
   syncFiles,
+  waitingRunReady,
 } from './update.mjs';
 
 const tiers = files => ({ version: 1, updated: '2026-11-01', scope: 'core-list', files });
@@ -496,11 +498,96 @@ test('a run whose failures are all settled is remembered; one with an open failu
   );
   assert.equal(result.left, 0);
   assert.equal(result.failures.length, 2);
+  assert.deepEqual(
+    result.waiting.map(r => r.id),
+    [2],
+  );
   settleDay(t, result, '2026-11-16', 14, []);
   assert.deepEqual(t.inspected_runs, {
     1: { day: '2026-11-10', attempt: 1 },
+    2: { day: '2026-11-10', attempt: 1, waiting: true, checked: '2026-11-16' },
     3: { day: '2026-11-11', attempt: 1 },
   });
+});
+
+test('a run still waiting for a green head is not fetched again until one could settle it', () => {
+  const t = tiers({});
+  t.inspected_runs = {
+    1: { day: '2026-11-10', attempt: 1, waiting: true, checked: '2026-11-15' },
+    2: { day: '2026-11-10', attempt: 1, waiting: true, checked: '2026-11-15' },
+  };
+  const fetched = [];
+  const result = inspectRuns(t, [run(1, 10), run(2, 10), run(3, '09')], r => (fetched.push(r.id), []), {
+    deadline: Infinity,
+    ready: r => r.id === 2,
+  });
+  assert.deepEqual(fetched, [2, 3]);
+  settleDay(t, result, '2026-11-16', 14, []);
+  assert.deepEqual(t.inspected_runs, {
+    1: { day: '2026-11-10', attempt: 1, waiting: true, checked: '2026-11-15' },
+    2: { day: '2026-11-10', attempt: 1 },
+    3: { day: '2026-11-09', attempt: 1 },
+  });
+});
+
+test('newer runs that stay unresolved cannot starve an older catch out of the window', () => {
+  const file = 'packages/core/src/a.test.ts';
+  const t = tiers({ [file]: { tier: 'in', since: '2026-09-01', last_failure: '2026-10-01', reason: 'pr-catch' } });
+  const runs = [run(1, '03'), run(2, 14), run(3, 15)];
+  const caught = {
+    file,
+    jobId: '1',
+    date: '2026-11-03',
+    pkgDir: 'packages/core',
+    nextGreenHead: 'b',
+    diffFiles: ['packages/core/src/a.ts'],
+  };
+  const open = id => ({
+    file: 'packages/core/src/b.test.ts',
+    jobId: String(id),
+    date: '2026-11-15',
+    pkgDir: 'packages/core',
+  });
+  // Each day the budget covers two runs; runs 2 and 3 never see a green head.
+  const day = date => {
+    let clock = 0;
+    const result = inspectRuns(t, runs, r => ((clock += 10), r.id === 1 ? [caught] : [open(r.id)]), {
+      deadline: 20,
+      now: () => clock,
+      ready: () => false,
+    });
+    return settleDay(t, result, date, 14, [file]);
+  };
+  day('2026-11-15');
+  day('2026-11-16');
+  assert.equal(t.files[file].last_failure, '2026-11-03');
+  assert.equal(t.inspected_runs[1].attempt, 1);
+});
+
+test('a waiting run is ready once its branch has a later green run, or for three days while job failures settle', () => {
+  const failed = {
+    id: 1,
+    workflow_id: 7,
+    head_repo: 'o/r',
+    head_branch: 'x',
+    head_sha: 'a',
+    created_at: '2026-11-10T10:00:00Z',
+  };
+  const green = (over = {}) => ({
+    ...failed,
+    id: 2,
+    head_sha: 'b',
+    created_at: '2026-11-11T10:00:00Z',
+    conclusion: 'success',
+    ...over,
+  });
+  const seen = checked => ({ day: '2026-11-10', attempt: 1, waiting: true, checked });
+  assert.equal(waitingRunReady([failed, green()], failed, seen('2026-11-20')), true);
+  assert.equal(waitingRunReady([failed, green({ head_sha: 'a' })], failed, seen('2026-11-20')), true);
+  assert.equal(waitingRunReady([failed, green({ head_branch: 'y' })], failed, seen('2026-11-20')), false);
+  assert.equal(waitingRunReady([failed, green({ conclusion: 'failure' })], failed, seen('2026-11-20')), false);
+  assert.equal(waitingRunReady([failed], failed, seen('2026-11-12')), true);
+  assert.equal(waitingRunReady([failed], failed, seen('2026-11-13')), false);
 });
 
 test('a remembered run is never fetched again; remembered runs leave with the window', () => {
@@ -806,4 +893,37 @@ test('gh retry: which GitHub errors are transient', () => {
   ];
   for (const stderr of transient) assert.equal(isTransientGhError({ stderr }), true, stderr);
   for (const stderr of permanent) assert.equal(isTransientGhError({ stderr }), false, stderr);
+});
+
+test('gh calls stop at the hard limit: none starts after it, and each is cut off when it arrives', () => {
+  const calls = [];
+  const exec = (cmd, args, opts) => (calls.push(opts.timeout), '{}');
+  assert.equal(boundedGh(['x'], { stopAt: 1_000, now: () => 400, exec, delays: [] }), '{}');
+  assert.deepEqual(calls, [600]);
+  assert.throws(
+    () => boundedGh(['x'], { stopAt: 1_000, now: () => 1_000, exec, delays: [] }),
+    e => isTransientGhError(e),
+  );
+  assert.equal(calls.length, 1);
+});
+
+test('gh retry: never waits past the hard limit', () => {
+  let clock = 0;
+  const waits = [];
+  const down = Object.assign(new Error('Command failed'), { stderr: 'gh: Server Error (HTTP 502)' });
+  const exec = () => {
+    throw down;
+  };
+  assert.throws(
+    () =>
+      boundedGh(['x'], {
+        stopAt: 30,
+        now: () => clock,
+        exec,
+        delays: [5, 20, 60],
+        sleep: ms => (waits.push(ms), (clock += ms)),
+      }),
+    down,
+  );
+  assert.deepEqual(waits, [5, 20]);
 });
