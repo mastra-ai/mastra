@@ -850,7 +850,10 @@ async function processOutputStream<OUTPUT = undefined>({
 
     if (STEP_CONTENT_CHUNK_TYPES.has(chunk.type)) {
       hasStepContent = true;
-      if (chunk.type !== 'reasoning-delta') hasAnswerContent = true;
+      // An empty text-delta can still arrive to carry provider metadata (e.g. a Gemini
+      // thought signature); it is not part of an answer.
+      const isEmptyTextDelta = chunk.type === 'text-delta' && !chunk.payload.text;
+      if (chunk.type !== 'reasoning-delta' && !isEmptyTextDelta) hasAnswerContent = true;
     }
 
     // Collect every chunk for post-stream message building

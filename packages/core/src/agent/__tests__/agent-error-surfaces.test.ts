@@ -947,6 +947,29 @@ describe('agent error surfaces', () => {
       expect(onError).toHaveBeenCalledTimes(1);
     });
 
+    it('errors on stream when the only text-delta is an empty one carrying provider metadata', async () => {
+      const agent = new Agent({
+        id: 'length-metadata-only-text',
+        name: 'Length Metadata Only Text',
+        model: createLengthModel([
+          ...reasoningOnly,
+          { type: 'text-start', id: 't-1' },
+          { type: 'text-delta', id: 't-1', delta: '', providerMetadata: { google: { thoughtSignature: 'sig' } } },
+          { type: 'text-end', id: 't-1' },
+        ]),
+        instructions: 'You are a helpful assistant.',
+      });
+
+      const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+      const errorChunks: any[] = [];
+      for await (const chunk of output.fullStream) {
+        if (chunk.type === 'error') errorChunks.push(chunk);
+      }
+
+      expect(errorChunks).toHaveLength(1);
+      expect((errorChunks[0].payload.error as Error).message).toContain(lengthMessage);
+    });
+
     it('still returns truncated text without an error when the step produced text', async () => {
       const agent = new Agent({
         id: 'length-with-text',
