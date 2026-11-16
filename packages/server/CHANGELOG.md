@@ -1,5 +1,23 @@
 # @mastra/server
 
+## 1.84.0-alpha.4
+
+### Patch Changes
+
+- Fixed Gateway v2 deployments calling the Gateway v1 memory API. Studio now uses the agent's own memory configuration when Gateway v2 is selected. ([#29445](https://github.com/mastra-ai/mastra/pull/29445))
+
+- Preserved durable runs when an HTTP observer disconnects, including with older Inngest wrappers that do not explicitly advertise detached streaming. ([#30229](https://github.com/mastra-ai/mastra/pull/30229))
+
+- Fixed a `.foreach()` run staying stuck as running when the first failed item's failure could not be sent. The run now fails with the first item's error once that failure is delivered again. ([#29370](https://github.com/mastra-ai/mastra/pull/29370))
+
+- Fixed a `.foreach()` over a nested workflow on a run stored with the experimental `storageVersion: 2` option only keeping the last item's run. Restarting the run could give an item another item's result. Every item's run is kept again. ([#29370](https://github.com/mastra-ai/mastra/pull/29370))
+
+- Workflow steps run by a standalone worker through the step-execution endpoint now follow the run's experimental `storageVersion`, so a version 2 run reads step results and state the same way remotely as in-process. ([#29370](https://github.com/mastra-ai/mastra/pull/29370))
+
+- Updated dependencies [[`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`88f94f2`](https://github.com/mastra-ai/mastra/commit/88f94f237acc406efb774367f5ba7bdeaac8e88d), [`7517474`](https://github.com/mastra-ai/mastra/commit/7517474b395a44ca6b7573a16d307ca7964ab3a8), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`d929736`](https://github.com/mastra-ai/mastra/commit/d9297364354b6a9c5dc0b870c2cea1e305f5faa1), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`037b9b7`](https://github.com/mastra-ai/mastra/commit/037b9b75a89388b5ecd7ca72799d29107180f211), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913)]:
+  - @mastra/core@1.84.0-alpha.4
+  - @mastra/mcp@2.10.0-alpha.0
+
 ## 1.84.0-alpha.3
 
 ### Patch Changes
