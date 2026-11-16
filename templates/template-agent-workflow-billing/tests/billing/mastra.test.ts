@@ -634,7 +634,7 @@ describe('billed Mastra runtime', () => {
           args: [handle.executionId],
         })
       ).rows;
-      expect(events.length).toBe(ledger[0]?.units === 2n ? 1 : 0);
+      expect(events).toEqual([]);
     }
   }, 60000);
 
