@@ -26,7 +26,13 @@ import type { BoardRegistry } from '../boards/registry.js';
 import { boardForWorkItem } from '../boards/semantics.js';
 import type { RuleFacts } from '../rules/rule-group.js';
 import type { FactoryCommitDecision } from '../rules/types.js';
-import { eventRouteIngress, FOLDABLE_UPDATE_STATUSES, foldUpdate, updateGroup } from '../rules/update-fold.js';
+import {
+  eventRouteIngress,
+  FOLDABLE_UPDATE_STATUSES,
+  foldUpdate,
+  updateGroup,
+  updateSuperseded,
+} from '../rules/update-fold.js';
 import type {
   StoredBoardScope,
   StoredBoardsStorage,
@@ -221,28 +227,44 @@ export class IntakeCheck {
           eventRouteIngress(other.idempotencyKey),
         ),
       );
-    const stored = (
-      await Promise.all(
-        records.map(
-          async (
-            record,
-          ): Promise<{ record: typeof record; event: BoardEventFacts | undefined; fallback?: { stage: string } }[]> => {
-            // Stored decisions are JSON; these two kinds are the ones that carry a status event.
-            const decision = record.decision as unknown as FactoryCommitDecision;
-            if (decision.type === 'transition' && decision.event) {
-              return [{ record, event: decision.event, fallback: { stage: decision.stage } }];
-            }
-            if (decision.type !== 'routeEvent') return [];
-            if (!isUpdateEvent(decision.event.type)) return [{ record, event: decision.event }];
-            // Updates replay as the dispatcher acts on them: folded into the newest of a burst.
-            if (record.status === 'superseded') return [];
+    // Which events to show is decided from the records alone, so only those shown are folded:
+    // folding reads storage for each earlier update of a burst.
+    const shown = records
+      .flatMap(record => {
+        // Stored decisions are JSON; these two kinds are the ones that carry a status event.
+        const decision = record.decision as unknown as FactoryCommitDecision;
+        if (decision.type === 'transition' && decision.event) return [{ record, decision }];
+        if (decision.type !== 'routeEvent') return [];
+        if (!isUpdateEvent(decision.event.type)) return [{ record, decision }];
+        // Updates replay as the dispatcher acts on them: folded into the newest of a burst.
+        if (record.status === 'superseded') return [];
+        if (
+          FOLDABLE_UPDATE_STATUSES.has(record.status) &&
+          updateSuperseded(updateGroup(records, decision), record.id)
+        ) {
+          return [];
+        }
+        return [{ record, decision }];
+      })
+      .slice(-RECENT_CARD_EVENTS);
+    const stored = await Promise.all(
+      shown.map(
+        async ({
+          record,
+          decision,
+        }): Promise<{ record: typeof record; event: BoardEventFacts | undefined; fallback?: { stage: string } }> => {
+          if (decision.type === 'routeEvent' && isUpdateEvent(decision.event.type)) {
             const fold = await foldUpdate(updateGroup(records, decision), record.id, moveCommitted);
-            if (fold.superseded && FOLDABLE_UPDATE_STATUSES.has(record.status)) return [];
-            return [{ record, event: fold.event }];
-          },
-        ),
-      )
-    ).flat();
+            return { record, event: fold.event };
+          }
+          if (decision.type === 'routeEvent') return { record, event: decision.event };
+          if (decision.type === 'transition' && decision.event) {
+            return { record, event: decision.event, fallback: { stage: decision.stage } };
+          }
+          throw new Error(`Decision ${record.id} carries no status event.`);
+        },
+      ),
+    );
     const replays: {
       decisionId: string | null;
       at: string | null;
@@ -251,16 +273,13 @@ export class IntakeCheck {
       fallback?: { stage: string };
     }[] = [
       ...(tried ? [{ decisionId: null, at: null, event: tried }] : []),
-      ...stored
-        .slice(-RECENT_CARD_EVENTS)
-        .toReversed()
-        .map(({ record, event, fallback }) => ({
-          decisionId: record.id,
-          at: record.createdAt.toISOString(),
-          event: event ?? (record.decision as unknown as { event: BoardEventFacts }).event,
-          ...(event === undefined && { netsOut: true }),
-          ...(fallback && { fallback }),
-        })),
+      ...stored.toReversed().map(({ record, event, fallback }) => ({
+        decisionId: record.id,
+        at: record.createdAt.toISOString(),
+        event: event ?? (record.decision as unknown as { event: BoardEventFacts }).event,
+        ...(event === undefined && { netsOut: true }),
+        ...(fallback && { fallback }),
+      })),
     ];
     return replays.map(({ fallback, netsOut, ...replay }) => {
       // The dispatcher drops an update burst whose labels and assignees end where they started.

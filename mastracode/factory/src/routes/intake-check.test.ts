@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
 import { Hono } from 'hono';
-import { describe, expect, it, onTestFinished } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type { IntakeItemLookup } from '../boards/intake-lookup.js';
 import { ProjectBoardCache } from '../boards/project-boards.js';
@@ -389,6 +389,36 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake dry run 
       422,
     );
     expect(await snapshot()).toEqual(before);
+  });
+
+  it('replays a long burst of pending updates as one, reading each earlier update about once', async () => {
+    const { send, docsCard, domains, scope } = await setup();
+    for (let n = 0; n < 30; n++) {
+      const committed = await domains.workItems.commitRuleEvaluation({
+        ...scope,
+        workItemId: docsCard.id,
+        ingress: { identity: `burst-${n}`, triggerType: 'github.issueUpdated' },
+        configVersion: 'test',
+        expectedRevision: (await domains.workItems.get({ orgId: scope.orgId, id: docsCard.id }))!.revision,
+        actor: { type: 'system', id: 'rules' },
+        outcome: { status: 'accepted' },
+        decisions: [
+          {
+            type: 'routeEvent',
+            idempotencyKey: `burst-${n}:event-route`,
+            event: { type: 'work_item.updated', labels: { added: [`label-${n}`], removed: [] } },
+          },
+        ],
+        causalChain: [],
+        now: new Date(Date.UTC(2030, 0, 1, 0, 0, n)),
+      });
+      expect(committed.status).toBe('committed');
+    }
+    const lookups = vi.spyOn(domains.workItems, 'getTransitionResultByIngress');
+    const tested = await send('/intake/test', { itemId: docsCard.id }, MEMBER);
+    expect(tested.body.moves).toHaveLength(1);
+    expect(tested.body.moves[0].event.labels.added).toHaveLength(30);
+    expect(lookups.mock.calls.length).toBeLessThanOrEqual(30);
   });
 
   it("replays a card's recent events and a tried one through its board's card-move rules, writing nothing", async () => {

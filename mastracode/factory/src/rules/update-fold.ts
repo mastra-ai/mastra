@@ -28,6 +28,12 @@ export function updateGroup<T extends UpdateRecord>(records: readonly T[], decis
     .toSorted((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
 }
 
+/** Whether a newer update of the group, not given up on, carries update `id`'s change. Reads no storage. */
+export function updateSuperseded(group: readonly Pick<UpdateRecord, 'id' | 'status'>[], id: string): boolean {
+  const index = group.findIndex(other => other.id === id);
+  return group.slice(index + 1).some(other => other.status !== 'failed' && other.status !== 'dismissed');
+}
+
 /**
  * How the dispatcher folds update `id` of its group: `superseded` when a newer update not given up
  * on carries this one's change (it folded it, or will); `since` the earlier updates after the last
@@ -44,7 +50,7 @@ export async function foldUpdate<T extends UpdateRecord>(
   const index = group.findIndex(other => other.id === id);
   const own = group[index];
   if (!own) throw new Error(`Update ${id} is not in its group.`);
-  const superseded = group.slice(index + 1).some(other => other.status !== 'failed' && other.status !== 'dismissed');
+  const superseded = updateSuperseded(group, id);
   const earlier = group.slice(0, index);
   let last = earlier.findLastIndex(other => other.status === 'succeeded');
   for (let at = earlier.length - 1; at > last; at--) {
