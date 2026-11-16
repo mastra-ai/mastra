@@ -274,9 +274,6 @@ minimumReleaseAgeExclude:
   - 'fast-uri@4.2.1'
   - 'compression@1.8.2'
   - 'undici@8.11.2'
-  - '@ai-sdk/provider-utils@5.0.52'
-  - '@ai-sdk/provider-utils@4.0.56'
-  - '@ai-sdk/provider-utils@3.0.40'
   - '@ai-sdk/provider@4.0.18'
   - '@ai-sdk/provider@3.0.17'
   - '@ai-sdk/provider@2.0.5'
@@ -383,8 +380,6 @@ overrides:
   # (GHSA Dependabot alert #2266).
   # Vanta 2026-10-12: AIKIDO-2026-373183 critical (better-auth) fixed 1.7.7; pulls drizzle-adapter 1.7.7 (AIKIDO-2026-261025)
   better-auth: ^1.7.22
-  '@better-auth/drizzle-adapter@<1.7.7': 1.7.22
-  js-yaml@>=5.0.0 <5.4.1: 5.4.1
   # Vanta 2026-11-10: CVE-2026-118773 (glob >=9.0.0 <=14.0.1, fixed only in 14.0.2). Cross-major, approved.
   # Parents (rimraf 5, archiver-utils, @npmcli/*, unified-engine, @wdio/config, @fastify/static, @sentry/bundler-plugins,
   # react-docgen plugin) only use the promise/sync API, which 14.x keeps. Replaces the old glob@<=10.5.0 floor.
@@ -392,82 +387,31 @@ overrides:
   body-parser@<2.4.0: 2.4.0
   inngest: ^4.26.1
   fast-xml-parser@<5.5.7: ^5.12.0
-  langsmith@<0.6.0: ^0.6.0
   lodash@<=4.17.23: ^4.18.0
   prismjs@<1.30.0: ^1.30.0
   serialize-javascript@<7.0.5: ^7.1.4
   # Security floors for Dependabot alerts (transitive deps; patched versions
   # are within the parents' declared ranges).
-  simple-git@<3.36.0: 4.0.1
   axios@>=1.0.0 <1.20.0: 1.20.0
-  minimatch@>=5.0.0 <5.1.8: 5.1.8
   # Vanta 2026-11-10: CVE-2026-118764 (minimatch >=7.0.0 <11.0.1, fixed only in 11.0.1). Cross-major, approved.
   # 11.x drops makeRe()/Minimatch#regexp; @verdaccio/core 8.4.0 (e2e registry) is patched to use minimatch().
   minimatch@>=7.0.0 <11.0.1: 11.0.5
   ws@>=8.0.0 <8.21.3: 8.22.0
-  webpack-dev-server@<5.2.5: 5.2.6
   # Vanta 2026-10-28: CVE-2026-110816 / GHSA-6pq8-jhm2-2vcw (qs <=6.16.0 stringify comma DoS) fixed in 6.16.1
   qs@>=6.7.0 <6.16.1: 6.16.1
-  fast-uri@>=3.0.0 <3.1.9: 3.1.9
-  # Vanta 2026-10-29: fast-uri 4.x GHSA-333x-w4r6-6crp/-w74x-v6f9-j3xg/-wjr9-j795-jxcr/-xhq7-xmqj-769h fixed in 4.2.3 (raised from 4.2.1)
-  fast-uri@>=4.0.0 <4.2.3: 4.2.3
-  form-data@<2.5.6: 2.5.6
-  form-data@>=4.0.0 <4.0.6: 4.0.6
-  brace-expansion@>=1.0.0 <1.1.21: 1.1.21
-  brace-expansion@>=2.0.0 <2.1.7: 2.1.7
-  brace-expansion@>=4.0.0 <5.0.12: 5.0.12
-  immer@>=11.0.0 <11.1.9: 11.1.9
-  '@clerk/shared@>=3.0.0 <3.47.5': 3.47.8
-  js-cookie@>=3.0.0 <3.0.7: 3.0.7
-  path-to-regexp@<0.1.13: 9.0.0
-  joi@>=17.0.0 <17.13.8: 17.13.9
-  svgo@>=3.0.0 <3.3.5: 3.3.5
   e2b>undici8: npm:undici@8.12.4
-  multer@<2.5.0: 2.5.0
-  '@hey-api/openapi-ts@<0.97.3': 0.97.3
   '@opentelemetry/core@>=2.0.0 <2.8.0': 2.12.0
-  '@opentelemetry/sdk-node@<0.217.0': 0.300.0
-  '@opentelemetry/exporter-prometheus@<0.217.0': 0.300.0
-  uuid@>=13.0.0 <13.0.1: 13.0.1
-  # uuid <11.1.1 and tar <7.5.16 are pinned by transitive parents on old
-  # majors (msal-node/google-gax/etc. declare uuid ^8-^10; the sqlite3
-  # install chain declares tar ^6). Both keep the APIs those parents use.
+  # uuid <11.1.1 is pinned by transitive parents on old majors (msal-node/google-gax/etc.
+  # declare uuid ^8-^10). 11.x keeps the APIs those parents use.
   uuid@<11.1.1: 11.1.1
-  tar@<7.5.21: 7.5.21
-  http-proxy-middleware@>=0.16.0 <2.0.10: 2.0.10
-  # Vanta 2026-10-21: GHSA-587h-7wmj-h5pm (CVE-2026-112942/3/4) via webpack-dev-server
-  launch-editor@<2.14.2: 2.14.2
-  mdast-util-to-hast@>=13.0.0 <13.2.1: 13.2.1
-  websocket-driver@<0.7.5: 0.7.5
   '@babel/core@>=7.0.0 <7.29.6': 8.0.7
-  '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 8.0.1
-  # Vanta 2026-10-21: AIKIDO-2026-580831/-760928/-864217 fixed in 3.4.17 (mermaid/posthog-js)
-  dompurify@>=3.0.0 <3.4.17: 3.4.17
   # Vanta 2026-10-21: AIKIDO-2026-930319 (powershell-utils <0.2.1); open 11.0.4 moves to wsl-utils 1 + powershell-utils ^0.2.1
   open@>=11.0.0 <11.0.4: 11.0.4
-  # Vanta 2026-10-09: AIKIDO-2026-901222 fixed in 4.13.11
-  hono@<4.13.13: 4.13.16
-  '@hono/node-server@<1.19.15': 1.19.15
-  postcss@<8.5.23: 8.5.23
-  ip-address@<10.7.1: 10.7.4
-  # Keep the security floor aligned with docs' Mermaid to avoid a second diagram runtime.
-  mermaid@>=11.0.0-alpha.1 <11.17.2: 11.17.2
   sharp@<0.35.5: 0.35.5
-  # Vanta/Dependabot 2026-09-17 (overrides allowed): critical + remaining GHSA floors
-  proxy-addr@<2.0.8: 2.0.8
-  '@fastify/proxy-addr@<=5.1.0': 5.1.1
   # Round 2 2026-09-18: clear remaining Dependabot + raise Aikido-visible floors
-  image-size@<=2.0.2: 2.0.4
   '@vitest/mocker@>=2.1.0 <4.1.12': 5.1.0
-  vitest@>=2.1.0 <4.1.12: 5.1.0
   jose@>=4.14.0 <6.2.12: 6.2.12
-  '@noble/hashes@>=1.0.0 <1.8.0': 1.8.0
-  '@noble/hashes@>=2.0.0 <2.4.0': 2.4.0
   katex@<0.18.2: 0.18.2
-  colord@<2.9.4: 2.9.4
-  fflate@>=0.4.5 <0.4.9: 0.4.9
-  browserslist@<=4.28.6: 4.28.7
-  deepmerge-ts@<8.0.0: 8.0.0
   # Vanta 2026-10-23: CVE-2026-114141/-114143/-114144 (toml <=5.0.0, fixed only in 5.0.1). Sole consumer is
   # effect 4.0.0-beta (via @opencode-ai/plugin, dev-only in integrations/opencode), which declares ^4.1.1 on every
   # beta; 5.x keeps the same parse(input) API (new opt-in options only). Floor raised from <4.1.2 -> 4.2.0.
@@ -476,8 +420,6 @@ overrides:
   # pins effect exactly (1.14.48 -> beta.59; even latest 1.19.5 -> beta.83), dev-only in integrations/opencode.
   # Same 4.0.0-beta prerelease line; parent-scoped so nothing else is affected.
   '@opencode-ai/plugin>effect': 4.0.0-beta.103
-  postcss-selector-parser@>=6.1.0 <6.1.3: 7.1.6
-  postcss-selector-parser@>=7.1.0 <7.1.6: 7.1.6
   # Vanta 2026-10-20 (CVE-2026-104844 / GHSA-rj75-hqrm-r3gf, fixed only in 7.1.6): these parents are on their
   # latest releases and still declare postcss-selector-parser 6.x (@tailwindcss/typography 0.5.x pins 6.0.10;
   # cssnano 6 plugins via @docusaurus/bundler 3.10.2). 7.0.0's only breaking change made insertions during
@@ -489,10 +431,7 @@ overrides:
   'postcss-minify-selectors>postcss-selector-parser': 7.1.6
   'postcss-unique-selectors>postcss-selector-parser': 7.1.6
   'stylehacks>postcss-selector-parser': 7.1.6
-  source-map-js@>=1.0.0 <1.2.2: 1.2.2
   # Vanta 2026-10-07: GHSA-6qxp-vccf-f47h (MCP sdk 1.31.0 / client 2.2.0; published @mastra/mcp pins client 2.0.0); Aikido in-major floors
-  # Vanta 2026-10-12: AIKIDO-2026-365378/156139/344432 fixed in 1.32.0; use aged 1.32.1
-  '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
   '@modelcontextprotocol/client@>=2.0.0 <2.3.0': 2.3.1
   # Vanta 2026-10-21: GHSA-46jr-4wx8-v453 / -jm63-cq47-j5jp / -rvq5-wwqv-78pq (CVE-2026-111768/-111770/-111771); published @mastra/mcp 1.18 (mcp-legacy) pins server/core 2.0.0
   '@modelcontextprotocol/server@>=2.0.0 <2.3.0': 2.3.1
@@ -500,51 +439,28 @@ overrides:
   '@modelcontextprotocol/core@>=2.0.0 <2.3.0': 2.3.1
   # Vanta 2026-10-28: GHSA-f897-62hf-6gxq (MCP HTTP transports: no body-size / batch-length limit); published @mastra/mcp 1.18 pins node 2.0.0; 2.1.1 is the fixed release whose peer range (server ^2.3.0) matches its server 2.3.1
   '@modelcontextprotocol/node@>=2.0.0 <2.1.0': 2.1.1
-  '@hono/node-server@>=2.0.0 <2.1.3': 2.1.6
   # Vanta 2026-11-02: CVE-2026-118663 / GHSA-rmxm-3fg6-px4f (serveStatic double-decode, >=1.19.10 <2.1.3; fixed only in 2.1.3).
   # The MCP SDK and @modelcontextprotocol/node already declare `^1.19.9 || ^2.x`; resolve them onto the 2.x line the
   # server adapters/deployer already use (2.x only drops Node 18 and the unused /vercel entry).
   '@modelcontextprotocol/sdk>@hono/node-server': 2.1.6
   '@modelcontextprotocol/node>@hono/node-server': 2.1.6
-  '@bufbuild/protobuf@>=2.0.0 <2.13.0': 2.13.0
-  '@opentelemetry/propagator-jaeger@<2.11.0': 2.12.0
-  '@ai-sdk/provider-utils@>=3.0.0 <3.0.40': 3.0.45
-  '@ai-sdk/provider-utils@>=4.0.0 <4.0.56': 4.0.56
-  # provider-utils 4.0.56 pins @ai-sdk/provider 3.0.18; keep ai v6/gateway on the
-  # same provider so @internal/ai-v6's bundled types don't get `_2`-suffixed.
-  '@ai-sdk/provider@>=3.0.0 <3.0.18': 3.0.18
-  '@ai-sdk/provider-utils@>=5.0.0 <5.0.52': 5.0.52
-  # Keep 3.x/4.x js-yaml consumers on patched lines when not forced to 5.x
-  js-yaml@>=3.0.0 <3.15.2: 3.15.2
+  '@ai-sdk/provider-utils@>=3.0.0 <3.0.46': 3.0.46
+  '@ai-sdk/provider-utils@>=4.0.0 <4.0.66': 4.0.66
+  # provider-utils 5.0.81 pins @ai-sdk/provider 4.0.38; keep ai v7/gateway on the
+  # same provider so @internal/ai-v7's bundled types don't get `_2`-suffixed.
+  '@ai-sdk/provider@>=4.0.0 <4.0.38': 4.0.38
+  '@ai-sdk/provider-utils@>=5.0.0 <5.0.81': 5.0.81
+  # Keep 4.x js-yaml consumers on a patched line when not forced to 5.x
   js-yaml@>=4.0.0 <4.3.2: 4.3.2
-  socket.io-parser@>=4.0.0 <4.2.7: 4.2.7
-  baseline-browser-mapping@>=2.0.0 <2.11.0: 2.11.0
-  valibot@<1.4.2: 1.4.2
-  find-my-way@<9.7.0: 9.9.0
   adm-zip@<=0.6.0: 0.6.1
-  '@tootallnate/once@<3.0.1': ^3.0.1
-  # Round 3 2026-09-21: nested-lock scrub + Vanta zero-attempt floors
-  compression@<=1.8.1: 1.8.2
   # Vanta zero pass 2026-09-23: remaining Aikido/GH highs + mediums
-  '@grpc/grpc-js@<1.14.5': 1.14.5
-  cookies@<=0.9.1: 0.9.2
   cjs-module-lexer@<2.2.1: 2.2.1
-  es-toolkit@<1.52.0: 1.52.0
   fast-copy@<4.1.1: 4.1.1
-  ioredis@>=5.0.0 <6.0.0: 6.0.0
   '@fastify/busboy@<3.2.2': 3.2.2
-  '@fastify/forwarded@<=3.0.1': 3.0.2
-  # Vanta 2026-10-29: CVE-2026-116576/116673/116674 (systeminformation <5.33.16) - raised from 5.33.13
-  systeminformation@<5.33.16: 5.33.16
   tinypool@<2.1.2: 2.1.2
   ajv@>=8.0.0 <8.20.0: 8.20.0
   # Vanta 2026-10-14: AIKIDO-2026-143019 fixed in 4.6.7
   zod@>=4.0.0 <4.6.7: 4.6.7
-  # Vanta 2026-09-28: Aikido residuals (docusaurus search + inngest OTEL instrumentations)
-  '@docsearch/react@>=4.0.0 <4.7.0': 4.7.0
-  '@opentelemetry/auto-instrumentations-node@<0.80.0': 0.82.0
-  # @lancedb/lancedb pins @huggingface/transformers@3.0.2 -> onnxruntime-node@1.19.2 (AIKIDO-2026-10293, fixed 1.24.2)
-  onnxruntime-node@<1.24.2: 1.24.3
   # Note: zod@3.x has no AIKIDO patches (fixes are 4.x-only); left as residual.
   '@codemirror/lang-jinja': ^6.0.1
   'aggregate-error': 'npm:@socketregistry/aggregate-error@^1.0.15'
@@ -649,17 +565,9 @@ overrides:
   # Vanta 2026-10-05 (Aikido): in-major floors for transitive deps whose parents pin an exact
   # vulnerable version (just-bash, @opentelemetry/configuration 0.221, @blaxel/core, @react-grab/cli,
   # fast-xml-parser 5.10.1, style-to-object 1.0.11).
-  'modern-tar@<0.7.7': 0.7.7
   '@opentelemetry/configuration>yaml': 2.9.1
-  'smol-toml@<1.9.0': 1.9.0
   'strnum@<2.4.2': 2.4.2
   'inline-style-parser@<0.2.9': 0.2.9
-  # Vanta 2026-10-08: GHSA-ch52-4w7c-c8xp (CVE-2026-93748); cacheable-request/make-fetch-happen declare ^4.1.x
-  'http-cache-semantics@<4.3.0': 4.3.0
-  # Vanta 2026-10-09: GHSA-8r5x-fm3f-whwj, GHSA-p8wg-vrv2-v86f (critical), GHSA-xw65-4hp5-5hc7 / AIKIDO-2026-258160, -970464, -869467; @verdaccio/hooks pins handlebars 4.7.9
-  'handlebars@<4.7.10': 4.7.10
-  # Vanta 2026-10-09: AIKIDO-2026-231269, AIKIDO-2026-154218 (follow-redirects header leak on redirect); axios declares ^1.15.x
-  'follow-redirects@<1.16.1': 1.16.2
 allowBuilds:
   '@clerk/shared': false
   '@datadog/native-appsec': false

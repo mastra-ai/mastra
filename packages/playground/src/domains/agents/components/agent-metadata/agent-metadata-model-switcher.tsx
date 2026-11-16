@@ -190,7 +190,7 @@ export const AgentMetadataModelSwitcher = ({
         className={cn(raisedSurfaceStyle, 'flex items-center gap-2 rounded-md px-3 py-2')}
         data-testid="agent-metadata-model-locked"
       >
-        <IconLock className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <IconLock className="size-icon-md shrink-0 text-muted-foreground" />
         <Txt as="span" variant="caption" tone="ink" className="truncate">
           {lockedLabel}
         </Txt>

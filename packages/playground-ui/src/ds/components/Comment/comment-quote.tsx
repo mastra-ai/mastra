@@ -38,7 +38,7 @@ export function CommentQuote({ authorName, quote, onDismiss, className }: Commen
           onClick={onDismiss}
           className="shrink-0"
         >
-          <IconCrossMedium size={12} aria-hidden />
+          <IconCrossMedium aria-hidden />
         </Button>
       ) : null}
     </blockquote>

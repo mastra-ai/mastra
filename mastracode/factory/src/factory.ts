@@ -267,6 +267,13 @@ export interface MastraFactoryConfig {
   /** Disable persistence of rich scorer results. Default: true. */
   disableScoreStorage?: boolean;
   /**
+   * Commit co-author identity for Factory agent sessions — the `Co-Authored-By`
+   * trailer in the commit guidance every session receives. Unspecified fields
+   * use the SDK defaults, so overriding only `name` keeps the default email.
+   * Omitted → `{ name: 'mastra-platform[bot]' }`.
+   */
+  coAuthor?: MastraCodeConfig['coAuthor'];
+  /**
    * Vector store instance for recall search — `PgVector` (`@mastra/pg`) on
    * the same database as `storage`. Omitted → the SDK mount's default vector
    * store resolution applies.
@@ -468,6 +475,13 @@ export type { FactorySandboxStart } from './workspace.js';
 export interface MastraFactoryDispatcherConfig {
   /** Automated agent runs one server process holds at once. Defaults to 10; runs past it wait in the run queue. */
   maxInFlight?: number;
+  /**
+   * Run slots one server process keeps for a person's reply on a card's GitHub
+   * pull request or issue, on top of `maxInFlight`, so the reply wakes its
+   * session without waiting behind automated runs. Defaults to 2; `0` keeps no
+   * reserve, though replies are still claimed ahead of automated runs.
+   */
+  maxInteractiveInFlight?: number;
 }
 
 const CONTROLLER_ID = 'code';
@@ -1779,7 +1793,7 @@ export class MastraFactory {
       prepareAgentControllerMount({
         controllerId: CONTROLLER_ID,
         browser: this.#config.browser,
-        coAuthor: { name: 'mastra-platform[bot]' },
+        coAuthor: this.#config.coAuthor ?? { name: 'mastra-platform[bot]' },
         ...(this.#config.disableBuiltinTools?.length ? { disableBuiltinTools: this.#config.disableBuiltinTools } : {}),
         modes: false,
         // User sessions carry no `factoryProjectId` to select this per session.
@@ -2266,6 +2280,7 @@ export class MastraFactory {
                     }
                   : {}),
                 maxInFlight: this.#config.dispatcher?.maxInFlight,
+                maxInteractiveInFlight: this.#config.dispatcher?.maxInteractiveInFlight,
                 factoryProjectExists: async ({ orgId, factoryProjectId }) => {
                   await factoryProjectsStorage.ensureReady();
                   return (await factoryProjectsStorage.get({ orgId, id: factoryProjectId })) !== null;

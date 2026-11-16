@@ -1,3 +1,4 @@
+import { cardChangeRequest } from '@mastra/factory/work-items/change-requests';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -6,14 +7,14 @@ import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { Link } from 'react-router';
 
 import { externalLinkLabel } from '../boardItems';
-import { cardChangeRequest, changeRequestStatus, changeRequestStatusLabel } from '../changeRequestState';
+import { changeRequestStatus, changeRequestStatusLabel } from '../changeRequestState';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
 import { relatedCardName, relationshipLabel, workItemReference } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import { isPullRequestSource } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
-import { IconBubbleWide } from '@mastra/playground-ui/icons/central/IconBubbleWide';
+import { IconChatBubble7 } from '@mastra/playground-ui/icons/central/IconChatBubble7';
 
 const RELATED_ITEM_LINK_CLASS = `hover:text-foreground relative z-10 flex w-fit max-w-full items-center gap-1 rounded-sm hover:underline ${focusRing}`;
 
@@ -55,10 +56,9 @@ export function RelatedWorkItemLink({
         {reference ?? item.title}
       </Txt>
       {live && (
-        <IconBubbleWide
+        <IconChatBubble7
           data-live-session-indicator
-          size={11}
-          className="text-badge-green-indicator shrink-0"
+          className="text-badge-green-indicator size-icon-xs shrink-0"
           aria-hidden
         />
       )}

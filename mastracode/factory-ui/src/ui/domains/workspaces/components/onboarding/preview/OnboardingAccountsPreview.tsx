@@ -118,12 +118,12 @@ function SessionIllustration({ x, label }: { x: number; label: string }) {
   return (
     <SketchLabel x={x + 10} y={169} width={84}>
       <div className="flex items-center gap-2">
-        <IconUser className="text-muted-foreground hidden size-3 shrink-0 min-[900px]:block" />
+        <IconUser className="text-muted-foreground size-icon-xs hidden shrink-0 min-[900px]:block" />
         <Txt variant="meta">{label}</Txt>
       </div>
       <div className="bg-fill mt-3 h-1 rounded-full min-[900px]:mt-4 min-[900px]:h-3" />
       <div className="text-muted-foreground mt-3 hidden items-center gap-2 min-[900px]:flex">
-        <IconSparklesTwo className="size-3 shrink-0" />
+        <IconSparklesTwo className="size-icon-xs shrink-0" />
         <div className="bg-fill h-1 w-full rounded-full" />
       </div>
     </SketchLabel>

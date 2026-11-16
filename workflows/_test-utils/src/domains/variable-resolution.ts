@@ -313,6 +313,118 @@ export function createVariableResolutionWorkflows(ctx: WorkflowCreatorContext) {
     workflows['var-step-result-async-map'] = { workflow, mocks: {} };
   }
 
+  // ============================================================================
+  // getState — in a step's execute and everywhere getStepResultAsync is provided
+  // ============================================================================
+
+  // Test: getState in a step's execute, before and after the step's own setState
+  {
+    const writeStep = createStep({
+      id: 'write-step',
+      execute: async ({ getState, setState }) => {
+        const before = { ...(await getState()) };
+        const beforePicked = await getState(['a', 'missing']);
+        await setState({ a: 2 });
+        return { before, beforePicked, after: { ...(await getState()) }, afterPicked: await getState(['a']) };
+      },
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+    });
+
+    const readStep = createStep({
+      id: 'read-step',
+      execute: async ({ getState }) => ({ ...(await getState()) }),
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+    });
+
+    const workflow = createWorkflow({
+      id: 'var-state-execute',
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+    });
+
+    workflow.then(writeStep).then(readStep).commit();
+
+    workflows['var-state-execute'] = { workflow, mocks: {} };
+  }
+
+  // Test: getState in loop predicates, sleep fns, .map fns and branch conditions
+  {
+    const seen: { sleep?: unknown } = {};
+
+    const increment = createStep({
+      id: 'increment',
+      execute: async ({ inputData }) => ({ count: inputData.count + 1 }),
+      inputSchema: z.object({ count: z.number() }),
+      outputSchema: z.object({ count: z.number() }),
+    });
+
+    const yesStep = createStep({
+      id: 'yes-step',
+      execute: async ({ inputData }) => ({ taken: 'yes', count: inputData.count }),
+      inputSchema: z.object({ count: z.number(), route: z.string() }),
+      outputSchema: z.object({ taken: z.string(), count: z.number() }),
+    });
+
+    const noStep = createStep({
+      id: 'no-step',
+      execute: async ({ inputData }) => ({ taken: 'no', count: inputData.count }),
+      inputSchema: z.object({ count: z.number(), route: z.string() }),
+      outputSchema: z.object({ taken: z.string(), count: z.number() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'var-state-control-flow',
+      inputSchema: z.object({ count: z.number() }),
+      outputSchema: z.any(),
+    });
+
+    workflow
+      .dowhile(increment, async ({ inputData, getState }) => inputData.count < (await getState(['limit'])).limit)
+      .sleep(async ({ getState }) => {
+        const state = await getState(['ms']);
+        seen.sleep = state;
+        return state.ms;
+      })
+      .map(async ({ inputData, getState }) => ({ count: inputData.count, route: (await getState()).route }))
+      .branch([
+        [async ({ getState }) => (await getState(['route'])).route === 'yes', yesStep],
+        [async ({ getState }) => (await getState(['route'])).route === 'no', noStep],
+      ])
+      .commit();
+
+    workflows['var-state-control-flow'] = {
+      workflow,
+      mocks: {},
+      getSeen: () => seen,
+      resetSeen: () => {
+        delete seen.sleep;
+      },
+    };
+  }
+
+  // Test: the sync `state` field matches getState. Reading it throws on storage v2 runs,
+  // so this is the only shared-suite test that still reads it.
+  {
+    const readStep = createStep({
+      id: 'read-step',
+      execute: async ({ state, getState }) => ({ sync: state, async: await getState() }),
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+    });
+
+    const workflow = createWorkflow({
+      id: 'var-state-sync',
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+    });
+
+    workflow.then(readStep).commit();
+
+    workflows['var-state-sync'] = { workflow, mocks: {} };
+  }
+
   // Test: should resolve trigger data from context
   {
     const executeAction = vi.fn().mockResolvedValue({ result: 'success' });
@@ -1228,6 +1340,60 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
 
         expect(result.status).toBe('success');
         expect(result.result).toEqual({ byRef: 'from-step1', byId: 'from-step2' });
+      });
+    });
+
+    describe('getState', () => {
+      it.skipIf(skipTests.state)(
+        "resolves to the state or only the named keys, with the step's own setState changes",
+        async () => {
+          if (!useRegistry) return;
+          const { workflow } = registry!['var-state-execute']!;
+          const result = await execute(workflow, {}, { initialState: { a: 1, b: 'x' } });
+
+          expect(result.status).toBe('success');
+          expect(result.steps['write-step']).toMatchObject({
+            status: 'success',
+            output: {
+              before: { a: 1, b: 'x' },
+              beforePicked: { a: 1 },
+              after: { a: 2, b: 'x' },
+              afterPicked: { a: 2 },
+            },
+          });
+          expect(result.steps['read-step']).toMatchObject({ status: 'success', output: { a: 2, b: 'x' } });
+        },
+      );
+
+      it.skipIf(skipTests.state)(
+        'is available in loop predicates, sleep fns, .map fns and branch conditions',
+        async () => {
+          if (!useRegistry) return;
+          const entry = registry!['var-state-control-flow']!;
+          entry.resetSeen();
+          const result = await execute(
+            entry.workflow,
+            { count: 0 },
+            { initialState: { limit: 3, ms: 10, route: 'yes' } },
+          );
+
+          expect(result.status).toBe('success');
+          expect(result.steps['yes-step']).toMatchObject({ status: 'success', output: { taken: 'yes', count: 3 } });
+          expect(result.steps['no-step']).toBeUndefined();
+          expect(entry.getSeen()).toEqual({ sleep: { ms: 10 } });
+        },
+      );
+
+      it.skipIf(skipTests.state || skipTests.stateSync)('matches the sync state field', async () => {
+        if (!useRegistry) return;
+        const { workflow } = registry!['var-state-sync']!;
+        const result = await execute(workflow, {}, { initialState: { a: 1 } });
+
+        expect(result.status).toBe('success');
+        expect(result.steps['read-step']).toMatchObject({
+          status: 'success',
+          output: { sync: { a: 1 }, async: { a: 1 } },
+        });
       });
     });
 

@@ -6,7 +6,6 @@ import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clip
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { pluralize } from '@mastra/playground-ui/utils/string';
-import { GitMerge } from 'lucide-react';
 import { useId } from 'react';
 import type { ReactNode } from 'react';
 
@@ -16,8 +15,9 @@ import { REPOSITORY_PROVIDER_ICONS } from './repositoryProviderIcons';
 import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
 import { IconChanges } from '@mastra/playground-ui/icons/central/IconChanges';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
-import { IconChevronRight } from '@mastra/playground-ui/icons/central/IconChevronRight';
 import { IconSquareBehindSquare1 } from '@mastra/playground-ui/icons/central/IconSquareBehindSquare1';
+import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
+import { IconMerged } from '@mastra/playground-ui/icons/central/IconMerged';
 
 interface WorkspaceBranch {
   branch: string;
@@ -65,7 +65,7 @@ function changesName(changes: WorkspaceChangesSummary): string {
 
 const rowClass = 'flex h-control-sm min-w-0 items-center gap-1.5';
 
-const branchIcon = <IconBranch aria-hidden className="text-muted-foreground size-3.5 shrink-0" />;
+const branchIcon = <IconBranch aria-hidden className="text-muted-foreground size-icon-sm shrink-0" />;
 
 function BranchCopyButton({ branch }: { branch: string }) {
   const { isCopied, handleCopy } = useCopyToClipboard({ text: branch });
@@ -153,7 +153,7 @@ export function WorkspaceSection({
             </Txt>
           ) : null}
           <Txt as="span" variant="caption" tone="muted" className="flex shrink-0 items-center gap-1.5">
-            <GitMerge aria-hidden className="size-3.5" />
+            <IconMerged aria-hidden className="size-icon-sm" />
             into {workspace.baseBranch}
           </Txt>
         </div>
@@ -193,7 +193,7 @@ export function WorkspaceSection({
             <DiffStat additions={lines.additions} deletions={lines.deletions} />
           </Txt>
         ) : null}
-        <IconChevronRight aria-hidden className="ml-auto" />
+        <IconChevronRightMedium aria-hidden className="ml-auto" />
       </Button>
     </section>
   );

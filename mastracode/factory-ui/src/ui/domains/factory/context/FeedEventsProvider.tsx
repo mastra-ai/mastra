@@ -6,7 +6,6 @@ import type { ReactNode } from 'react';
 import { useApiConfig } from '../../../../api/config';
 import { cardMoveMutationKey, queryKeys } from '../../../../api/keys';
 import { useRecentlyVisible } from '../../../lib/hooks/useDocumentVisible';
-import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { streamFeedEvents } from '../services/feedEvents';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
 import { RequestError } from '../services/request';
@@ -48,7 +47,8 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
       cardsKey,
       factsKey,
       queryKeys.factoryDecisionsRoot(factoryProjectId),
-      queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, baseUrl),
+      queryKeys.sessionRowsRoot(factoryProjectId),
+      queryKeys.sessionActivity(factoryProjectId),
       subscriptionsKey,
     ];
     // One read per query at a time, with at most one more queued behind it: a frame cancelling a slow

@@ -139,6 +139,8 @@ describe('api command descriptors', () => {
       'factoryWork-itemTransition': ['workItemTransition', ['id', 'workItemId'], true, true, false],
       'factoryWork-itemStart': ['workItemStart', ['id'], true, true, false],
       'factoryWork-itemAutomation-run': ['workItemAutomationRun', ['id', 'workItemId'], true, true, false],
+      factorySessionRows: ['sessionRows', ['id'], true, false, false],
+      factorySessionActivity: ['sessionActivity', ['id'], false, false, false],
       factoryBoards: ['boardCatalog', ['id'], false, false, false],
       factoryBoardGet: ['boardGet', ['id', 'boardKey'], false, false, false],
       factoryBoardPhases: ['boardPhases', ['id', 'boardKey'], true, false, false],

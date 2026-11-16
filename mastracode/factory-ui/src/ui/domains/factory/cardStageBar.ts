@@ -1,10 +1,12 @@
+import { contextLabel, phaseContext } from '@mastra/factory/work-items/card-context-sessions';
+import { cardChangeRequest } from '@mastra/factory/work-items/change-requests';
+
 import type { InstalledPhaseInfo } from '../../../api/types';
 import { formatDuration } from '../../../lib/date/formatDuration';
 import { allowsMove, boardLoop, phaseOf } from './boardFlow';
 import type { BoardInfo } from './boardFlow';
-import { contextLabel, phaseContext } from './boardItems';
 import { currentItemStage, phaseName, pullRequestMayEnter } from './boardStages';
-import { cardChangeRequest, changeRequestStatus, isOpenChangeRequest } from './changeRequestState';
+import { changeRequestStatus, isOpenChangeRequest } from './changeRequestState';
 import type { PullRequestSubscription } from './services/githubSubscriptions';
 import { changeRequestReference } from './sessionChangeRequests';
 import { isPullRequestSource } from './services/workItems';

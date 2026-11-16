@@ -678,10 +678,31 @@ describe('MastraFactory.prepare', () => {
     ).resolves.toBe('anthropic/factory-observer');
   });
 
-  it('uses the platform bot co-author identity', async () => {
+  it('defaults the commit co-author to the platform bot', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
 
     expect(config.coAuthor).toEqual({ name: 'mastra-platform[bot]' });
+  });
+
+  it('forwards a configured commit co-author identity', async () => {
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      auth: null,
+      coAuthor: { name: 'Acme Bot', email: 'bot@acme.dev' },
+    });
+
+    expect(config.coAuthor).toEqual({ name: 'Acme Bot', email: 'bot@acme.dev' });
+  });
+
+  it('forwards a partial commit co-author identity unchanged', async () => {
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      auth: null,
+      coAuthor: { name: 'Acme Bot' },
+    });
+
+    // The SDK fills the email it was not given; Factory only forwards.
+    expect(config.coAuthor).toEqual({ name: 'Acme Bot' });
   });
 
   it('warns and falls back to plaintext when auth is enabled without secret encryption', async () => {
@@ -945,7 +966,10 @@ describe('MastraFactory.prepare', () => {
   });
 
   it('forwards the configured dispatcher concurrency cap to the decision dispatcher', async () => {
-    const prepared = await prepareFactory({ storage: fakeStorage(), dispatcher: { maxInFlight: 7 } });
+    const prepared = await prepareFactory({
+      storage: fakeStorage(),
+      dispatcher: { maxInFlight: 7, maxInteractiveInFlight: 3 },
+    });
     (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
 
     const onFactoryRuntime = assembleFactoryApiRoutesSpy.mock.calls[0]![0].onFactoryRuntime;
@@ -954,6 +978,7 @@ describe('MastraFactory.prepare', () => {
 
     expect(dispatcherOptions).toHaveLength(1);
     expect(dispatcherOptions[0]?.maxInFlight).toBe(7);
+    expect(dispatcherOptions[0]?.maxInteractiveInFlight).toBe(3);
   });
 
   it('registers and initializes factory domains through the storage lifecycle', async () => {

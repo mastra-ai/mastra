@@ -20,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { createBoardRegistry } from '../boards/index.js';
+import { createProjectSessionsReader } from '../routes/project-sessions.js';
 import { buildSourceControlSessionRoutes } from '../routes/source-control-sessions.js';
 import {
   registerTenantCredentialResolver,
@@ -375,6 +376,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         ).execute({ sessionId: phase.sessionId, toolCallId: parked.toolCallId, decision }, {});
       /** The web app, signed in as `viewer`. */
       const web = (viewer: string) => {
+        const users = {
+          getUser: async (userId: string) => {
+            profileLookups.push(userId);
+            return { id: userId, name: `Person ${userId}` };
+          },
+        } as never;
         const app = new Hono();
         app.use('*', async (context, next) => {
           context.set('factoryAuthUser' as never, { workosId: viewer, organizationId: ORG } as never);
@@ -387,12 +394,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             sourceControls: [sourceControl],
             projects: seeded.projects,
             memorySettings: seeded.memorySettings,
-            users: {
-              getUser: async (userId: string) => {
-                profileLookups.push(userId);
-                return { id: userId, name: `Person ${userId}` };
-              },
-            } as never,
+            users,
+            projectSessions: createProjectSessionsReader({
+              sourceControls: [sourceControl],
+              users,
+              workItems: seeded.workItems,
+            }),
             controller: code.controller as never,
             audit: { record: (event: { actorId: string }) => audit.push(event) } as never,
             workItems: seeded.workItems,
@@ -423,6 +430,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         waitingOn,
         shipped,
         sourceControl,
+        workItems: seeded.workItems,
       };
     }
 
@@ -510,7 +518,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
     });
 
     it("tells a following session when a tool in the Factory's phase session waits for a person to allow it", async () => {
-      const { signals, phase, requesterSessionId } = await parkedPhaseSession({
+      const { signals, phase, project, requesterSessionId, workItems } = await parkedPhaseSession({
         ownedByFactory: true,
         movedFromOwnSession: true,
         parkedOn: 'release',
@@ -521,6 +529,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(signals[0]!.summary).toContain(
         `Answer it with factory_answer_approval (sessionId "${phase.sessionId}", toolCallId "call_release")`,
       );
+      // The notice goes straight to the following session. Nothing waits on the
+      // run queue, so it arrives even while automated runs hold every slot.
+      expect(await workItems.listDeferredDecisions(ORG, project.id)).toEqual([]);
     });
 
     it('names the Factory as the owner of its own session, without looking it up as a person', async () => {

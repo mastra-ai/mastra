@@ -247,7 +247,7 @@ const StaleWarning = ({ provider, modelId }: StaleWarningProps) => {
       data-testid="model-detail-stale-warning"
       role="alert"
     >
-      <IconExclamationTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+      <IconExclamationTriangle className="mt-0.5 size-icon-md shrink-0" />
       <Txt variant="meta">
         <Txt as="span" variant="meta">
           {provider}/{modelId}
@@ -268,7 +268,7 @@ const LockedModelChip = ({ provider, modelId }: LockedModelChipProps) => (
     className={cn(raisedSurfaceStyle, 'flex items-center gap-2 rounded-md px-3 py-2')}
     data-testid="model-detail-locked-chip"
   >
-    <IconLock className="h-4 w-4 shrink-0 text-muted-foreground" />
+    <IconLock className="size-icon-md shrink-0 text-muted-foreground" />
     <Txt variant="column" tone="ink" className="truncate">
       {provider && modelId ? `${provider}/${modelId}` : 'Locked by admin'}
     </Txt>

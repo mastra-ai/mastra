@@ -1,14 +1,14 @@
+import type { CardContextSession } from '@mastra/factory/work-items/card-context-sessions';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Link } from 'react-router';
 
-import { useActiveRunResourceIds } from '../../../../hooks/useActiveRunResources';
-import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import type { CardContextSession } from '../boardItems';
-import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
+import type { WorkItemSessionRef } from '../services/workItems';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 
-export function cardSessionPath(factoryId: string, session: CardContextSession): string {
+export function cardSessionPath(factoryId: string, session: CardContextSession<WorkItemSessionRef>): string {
   return `/factories/${factoryId}/workspaces/${session.ref.sessionId}/threads/${session.ref.threadId}`;
 }
 
@@ -18,15 +18,15 @@ export function SessionContextMenu({
   openSessionId,
 }: {
   factoryId: string;
-  sessions: readonly CardContextSession[];
+  sessions: readonly CardContextSession<WorkItemSessionRef>[];
   openSessionId: string;
 }) {
-  const running = useActiveRunResourceIds(AGENT_CONTROLLER_ID);
+  const running = new Set(useSessionActivityQuery(factoryId).data?.runningSessionIds);
 
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger variant="ghost" size="icon-sm" aria-label="Switch session">
-        <IconChevronBottom aria-hidden />
+        <IconChevronDownMedium aria-hidden />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="min-w-48">
         {sessions.map(session => {

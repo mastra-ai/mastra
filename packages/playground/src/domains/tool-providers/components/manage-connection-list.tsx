@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DialogBody, DialogFooter } from '@mastra/playground-ui/components/Dialog';
 import { Entity, EntityContent, EntityName } from '@mastra/playground-ui/components/Entity';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { IconChevronRight } from '@mastra/playground-ui/icons/central/IconChevronRight';
+import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import type { ManageableConnection } from './manage-connection-dialog';
@@ -43,7 +43,7 @@ export const ManageConnectionList = ({
                 >
                   <EntityName className="truncate">{connection.label?.trim() || 'Unnamed connection'}</EntityName>
                   <Icon className="shrink-0 text-muted-foreground">
-                    <IconChevronRight />
+                    <IconChevronRightMedium />
                   </Icon>
                 </button>
               </EntityContent>

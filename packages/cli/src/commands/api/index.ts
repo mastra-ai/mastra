@@ -763,6 +763,23 @@ export function registerApiCommand(program: CommanderCommand): void {
     ],
   });
 
+  const factorySession = factory.command('session').description("Inspect a Factory project's sessions");
+  addAction(factorySession, 'rows', FACTORY_API_ROUTE_CATALOG.sessionRows, {
+    description: "List the sidebar's session rows of a view, grouped and in order, with how many match",
+    input: 'optional',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'My sessions grouped by board, listing 25 rows of the Work board',
+        command: `mastra api factory session rows <project-id> '{"owner":"mine","groupBy":"board","window":["board:work:25"]}'`,
+      },
+    ],
+  });
+  addAction(factorySession, 'activity', FACTORY_API_ROUTE_CATALOG.sessionActivity, {
+    description: "List which of a project's sessions are running, waiting on a person or coming up",
+    routePlacement: 'origin',
+  });
+
   addAction(factory, 'boards', FACTORY_API_ROUTE_CATALOG.boardCatalog, {
     description: 'List the boards installed on a Factory project with their phases and transitions',
     routePlacement: 'origin',

@@ -7,8 +7,21 @@ import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem, STATUS_EVENTS } from '../
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
 import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
+import {
+  SESSION_ROW_ALL_OWNERS,
+  SESSION_ROW_GROUP_BYS,
+  SESSION_ROW_PINS_MAX,
+  SESSION_ROW_SORTS,
+  SESSION_ROW_STATUSES,
+  SESSION_ROW_UPDATED_WITHIN,
+  SESSION_ROW_WINDOW_MAX,
+  SESSION_ROW_WINDOWS_MAX,
+  sessionRowOwnerSchema,
+} from '../session/session-row-query.js';
 import { MAX_INTAKE_ROUTES_PER_BOARD } from '../storage/domains/boards/base.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
+import { PULL_REQUEST_STATUSES } from '../work-items/change-requests.js';
+import type { CardChangeRequest } from '../work-items/change-requests.js';
 
 export const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
 
@@ -324,6 +337,12 @@ const runQueueEntrySchema = z.object({
   /** `waiting`: no slot yet. `claimed`: a server holds a slot for it, starting or running the run. */
   state: z.enum(['waiting', 'claimed']),
   type: z.enum(['invokeSkill', 'sendMessage', 'signalActivity']),
+  /**
+   * `interactive`: a reply a person sent on the card's pull request or issue,
+   * claimed ahead of automated runs into its own reserve of slots.
+   * `automated`: everything else.
+   */
+  lane: z.enum(['automated', 'interactive']),
   role: z.string().nullable(),
   /** The skill an `invokeSkill` run starts; `null` for a prompt run and for messages and activity. */
   skillName: z.string().nullable(),
@@ -342,12 +361,27 @@ const runQueueEntrySchema = z.object({
 
 export const runQueueResponseSchema = z.object({
   /** This server process's run slots; `null` when it runs no dispatcher. Other servers keep their own. */
-  slots: z.object({ scope: z.literal('server'), inUse: z.number().int(), cap: z.number().int() }).nullable(),
+  slots: z
+    .object({
+      scope: z.literal('server'),
+      /** Automated run slots, including any a person's reply borrowed once its reserve was full. */
+      inUse: z.number().int(),
+      cap: z.number().int(),
+      /** Slots kept for people's replies, on top of `cap`. */
+      interactive: z.object({ inUse: z.number().int(), cap: z.number().int() }),
+    })
+    .nullable(),
   /** The project's runs holding a slot on any server. */
   running: z.number().int(),
   claimed: z.array(runQueueEntrySchema),
-  /** Every waiting run, though `queued` lists at most the oldest 50. */
+  /** Every waiting run, though `queued` lists at most 50. */
   queuedCount: z.number().int(),
+  /** `queuedCount` split by lane. */
+  queuedByLane: z.object({ automated: z.number().int(), interactive: z.number().int() }),
+  /**
+   * Waiting replies, then automated runs, each oldest first: interactive runs are claimed before
+   * automated ones. `position` counts within the run's lane.
+   */
   queued: z.array(runQueueEntrySchema.extend({ position: z.number().int().positive() })),
 });
 export type RunQueueResponse = z.infer<typeof runQueueResponseSchema>;
@@ -808,6 +842,156 @@ export const workItemFilterOptionsResponseSchema = z.object({
 export type BoardPhasesQuery = z.output<typeof boardPhasesQuerySchema>;
 export type BoardPhasesResponse = z.infer<typeof boardPhasesResponseSchema>;
 export type WorkItemFilterOptionsResponse = z.infer<typeof workItemFilterOptionsResponseSchema>;
+
+/** `<group key>:<count>`: how many rows of one group to list. Group keys hold colons, so the count follows the last. */
+const sessionRowWindowSchema = z
+  .string()
+  .transform((entry): [group: string, count: string] => {
+    const colon = entry.lastIndexOf(':');
+    return [entry.slice(0, Math.max(colon, 0)), entry.slice(colon + 1)];
+  })
+  .pipe(
+    z.tuple([
+      z.string().min(1).max(512),
+      z
+        .string()
+        .regex(/^[1-9]\d{0,2}$/)
+        .transform(Number)
+        .pipe(z.number().max(SESSION_ROW_WINDOW_MAX)),
+    ]),
+  );
+
+const sessionIdQuerySchema = z.string().min(1).max(512);
+
+export const sessionRowsQuerySchema = z.object({
+  sort: z.enum(SESSION_ROW_SORTS).default('activity'),
+  groupBy: z.enum(SESSION_ROW_GROUP_BYS).default('none'),
+  /** `all`, `mine`, or `owner:<user id>`. */
+  owner: sessionRowOwnerSchema.default(SESSION_ROW_ALL_OWNERS),
+  status: z.enum(SESSION_ROW_STATUSES).optional(),
+  updated: z.enum(SESSION_ROW_UPDATED_WITHIN).optional(),
+  /** `true` lists a card's other sessions under its row. */
+  children: z.enum(['true']).optional(),
+  /** Repeatable. Sessions listed before every other one of their group. */
+  pin: z
+    .array(sessionIdQuerySchema)
+    .max(SESSION_ROW_PINS_MAX)
+    .default([])
+    .transform(ids => new Set(ids)),
+  /** The session the reader has open: its group lists it however deep it lies. */
+  open: sessionIdQuerySchema.optional(),
+  /** Repeatable `<group key>:<count>`: lists that group's first `count` rows instead of `SESSION_ROW_WINDOW`. */
+  window: z
+    .array(sessionRowWindowSchema)
+    .max(SESSION_ROW_WINDOWS_MAX)
+    .default([])
+    .refine(windows => new Set(windows.map(([group]) => group)).size === windows.length, {
+      message: 'Send one window per group',
+    })
+    .transform(windows => new Map(windows)),
+});
+
+const sessionRowStatusSchema = z.enum(SESSION_ROW_STATUSES);
+
+const changeRequestSchema = z.object({
+  url: z.string().optional(),
+  provider: z.enum(['github', 'gitlab']),
+  number: z.number().optional(),
+  status: z.enum(PULL_REQUEST_STATUSES).optional(),
+  draft: z.boolean(),
+  syncedAt: z.number().optional(),
+}) satisfies z.ZodType<CardChangeRequest>;
+
+const sessionRowFields = {
+  session: z.object({
+    id: z.string(),
+    sessionId: z.string(),
+    projectRepositoryId: z.string().nullable(),
+    userId: z.string(),
+    branch: z.string(),
+    title: z.string().nullable(),
+    visibility: z.enum(['org', 'private']),
+    createdAt: z.string(),
+    owner: z.object({ id: z.string(), name: z.string(), avatarUrl: z.string().optional() }).optional(),
+  }),
+  /** `factory` for a session the Factory runs on a card's branch, `user` for one a person or Slack started. */
+  origin: z.enum(['factory', 'user']),
+  board: z.string().optional(),
+  status: sessionRowStatusSchema,
+  /** The status of the card's whole row: its most urgent session's. */
+  cardStatus: sessionRowStatusSchema.optional(),
+  pinned: z.boolean(),
+  /** The card's last change for a card's session, else the session's. */
+  updatedAt: z.string(),
+  card: z
+    .object({
+      id: z.string(),
+      title: z.string(),
+      workItemUrl: z.string().nullable(),
+      externalSource: z
+        .object({
+          integrationId: z.string(),
+          type: z.string(),
+          externalId: z.string(),
+          workspaceId: z.string().optional(),
+          url: z.string().optional(),
+        })
+        .nullable(),
+    })
+    .optional(),
+  itemId: z.string().optional(),
+  threadId: z.string().optional(),
+  pullRequest: changeRequestSchema.optional(),
+  cardSessionIds: z.array(z.string()).optional(),
+  phaseLabel: z.string().optional(),
+  runByFactory: z.literal(true).optional(),
+  /** A followed card's session waiting on a person. */
+  waitingSessionId: z.string().optional(),
+};
+
+const sessionRowSchema = z.object({
+  ...sessionRowFields,
+  /** With `children=true`: the card's other sessions. */
+  childRows: z.array(z.object(sessionRowFields)).optional(),
+});
+
+export const sessionRowsResponseSchema = z.object({
+  /** Rows of the project, whatever the filters. */
+  total: countSchema,
+  matching: countSchema,
+  groups: z.array(
+    z.object({
+      /** `board:<id>`, `user`, `slack`, `status:<status>`, `owner:<user id>` or `all`. */
+      key: z.string(),
+      /** Rows of this group that match the filters. */
+      total: countSchema,
+      openIndex: countSchema.optional(),
+      /** The first of them in the view's order, keeping the open session. */
+      rows: z.array(sessionRowSchema),
+    }),
+  ),
+  /** Boards some row belongs to, whatever the filters. */
+  boards: z.array(z.string()),
+  /** People who own some row, whatever the filters. */
+  owners: z.array(z.object({ userId: z.string(), name: z.string().optional(), avatarUrl: z.string().optional() })),
+  /** Some session is still coming up: the answer changes without anything else telling the reader. */
+  settling: z.boolean(),
+});
+
+export const sessionActivityResponseSchema = z.object({
+  runningSessionIds: z.array(z.string()),
+  /** Sessions of a card whose run waits on a person's answer. */
+  parkedSessionIds: z.array(z.string()),
+  initializingSessionIds: z.array(z.string()),
+  /** Cards with a session working, and with one waiting on a person. */
+  cards: z.object({ working: countSchema, waiting: countSchema }),
+  settling: z.boolean(),
+});
+
+export type SessionRowsQuery = z.output<typeof sessionRowsQuerySchema>;
+export type SessionRow = z.infer<typeof sessionRowSchema>;
+export type SessionRowsResponse = z.infer<typeof sessionRowsResponseSchema>;
+export type SessionActivityResponse = z.infer<typeof sessionActivityResponseSchema>;
 
 const sessionsSchema = z.record(z.string().min(1).max(64), sessionSchema);
 const metadataSchema = z
@@ -1439,6 +1623,21 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: 'List the labels and people the cards of a project can be filtered by',
     pathSchema: projectPathSchema,
     responseSchema: workItemFilterOptionsResponseSchema,
+  },
+  sessionRows: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/session-rows',
+    description: "List the sidebar's session rows of a view, grouped and in order, with how many match",
+    pathSchema: projectPathSchema,
+    querySchema: sessionRowsQuerySchema,
+    responseSchema: sessionRowsResponseSchema,
+  },
+  sessionActivity: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/session-activity',
+    description: "List which of a project's sessions are running, waiting on a person or coming up",
+    pathSchema: projectPathSchema,
+    responseSchema: sessionActivityResponseSchema,
   },
   workItemCreate: {
     method: 'POST',

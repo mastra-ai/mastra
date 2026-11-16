@@ -220,7 +220,7 @@ export async function settleEventedDurableExecution(mastra: Mastra, event: Event
   // Storage-backed deletes are fenced; lease-only stores retain their existing best-effort write guarantees.
   if (event.type !== 'workflow.suspend') {
     for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
-      await store?.deleteWorkflowRunById({ runId: event.runId, workflowName, storageVersion: 1, fence });
+      await store?.deleteWorkflowRunById({ runId: event.runId, workflowName, fence });
     }
   }
   // Keep the released generation as the retry barrier before dropping the thread token.

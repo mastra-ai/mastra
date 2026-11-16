@@ -145,9 +145,9 @@ export const BackgroundTaskMetadataDialogTrigger = ({ backgroundTask }: Backgrou
         onClick={() => setIsOpen(s => !s)}
       >
         {backgroundTask.completedAt || backgroundTask.suspendedAt ? (
-          <IconShareAndroid className="size-5 text-muted-foreground" />
+          <IconShareAndroid className="text-muted-foreground" />
         ) : (
-          <IconLoadingCircle className="size-5 animate-spin text-muted-foreground" />
+          <IconLoadingCircle className="animate-spin text-muted-foreground" />
         )}
       </Button>
 

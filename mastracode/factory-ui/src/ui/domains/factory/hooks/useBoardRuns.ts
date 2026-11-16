@@ -1,3 +1,4 @@
+import { itemThreadSession } from '@mastra/factory/work-items/card-context-sessions';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -5,7 +6,7 @@ import { useNavigate } from 'react-router';
 import { useApiConfig } from '../../../../api/config';
 import { useStartFactoryRun } from '../../../../hooks/useStartFactoryRun';
 import { useCardRepositorySlug } from './useCardRepositorySlug';
-import { itemSessionSpec, itemThreadSession } from '../boardItems';
+import { itemSessionSpec } from '../boardItems';
 import { repositoryMatchesCardSource } from '../boardRepository';
 import { listWorkItems } from '../services/workItems';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';

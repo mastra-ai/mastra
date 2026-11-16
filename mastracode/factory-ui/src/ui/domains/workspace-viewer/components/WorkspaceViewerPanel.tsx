@@ -22,7 +22,7 @@ import { WorkspaceSection } from './WorkspaceSection';
 import type { WorkspaceChangesSummary } from './WorkspaceSection';
 import { selectWorkspaceFilePreview } from './workspace-file-preview';
 import { unreadableRepositories } from './changes/unreadable-repositories';
-import { IconChevronLeft } from '@mastra/playground-ui/icons/central/IconChevronLeft';
+import { IconChevronLeftMedium } from '@mastra/playground-ui/icons/central/IconChevronLeftMedium';
 
 interface WorkspaceViewerPanelProps {
   workspacePath: string;
@@ -114,7 +114,7 @@ export const WorkspaceViewerPanel = memo(function WorkspaceViewerPanel({
       tooltip={parent.type === 'files' ? 'Back to files' : 'Back to overview'}
       onClick={() => show(parent)}
     >
-      <IconChevronLeft />
+      <IconChevronLeftMedium />
     </Button>
   ) : undefined;
   const workspace = ({ changeRequest, repository }: WorkspaceSectionSlots = {}) => (
