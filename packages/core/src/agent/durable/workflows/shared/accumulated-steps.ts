@@ -1,7 +1,10 @@
 import type { BaseIterationState } from './schemas';
 
 type AccumulatedSteps = NonNullable<BaseIterationState['accumulatedSteps']>;
+
 type StepsCarrier = { accumulatedSteps?: AccumulatedSteps };
+
+type StateParams = { getState(keys?: readonly string[]): Promise<unknown> };
 
 /**
  * Where the run's step records (`accumulatedSteps`) live between steps. Same
@@ -20,20 +23,24 @@ export function readAccumulatedSteps(workflowState: unknown, stepPayload: unknow
   );
 }
 
+/** Loads the run's step records, and nothing else from workflow state. */
+export async function loadAccumulatedSteps(params: StateParams, stepPayload: unknown): Promise<AccumulatedSteps> {
+  return readAccumulatedSteps(await params.getState(['accumulatedSteps']), stepPayload);
+}
+
 /**
  * Stores updated step records where this run keeps them. Returns the fields to
  * spread into the step output: nothing when they went to workflow state,
  * `{ accumulatedSteps }` when the run threads them through step payloads.
  */
 export async function storeAccumulatedSteps(
-  params: { state: unknown; setState(state: unknown): Promise<void> },
+  params: StateParams & { setState(state: unknown): Promise<void> },
   accumulatedSteps: AccumulatedSteps,
-): Promise<StepsCarrier> {
-  const workflowState = params.state as StepsCarrier | undefined;
-  if (workflowState?.accumulatedSteps === undefined) {
+): Promise<{ accumulatedSteps?: AccumulatedSteps }> {
+  const stored = (await params.getState(['accumulatedSteps'])) as StepsCarrier | undefined;
+  if (stored?.accumulatedSteps === undefined) {
     return { accumulatedSteps };
   }
-  // The default engine replaces state wholesale on setState.
-  await params.setState({ ...workflowState, accumulatedSteps });
+  await params.setState({ accumulatedSteps });
   return {};
 }

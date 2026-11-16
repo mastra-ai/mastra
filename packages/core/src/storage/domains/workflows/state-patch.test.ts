@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyStatePatch, diffState } from './state-patch';
+import { applyStatePatch, diffState, diffStateAsJson, patchState } from './state-patch';
 import type { StatePatchOp } from './state-patch';
 
 // mulberry32: a small seeded PRNG, so a failing case can be rerun from its seed.
@@ -215,5 +215,139 @@ describe('diffState and applyStatePatch', () => {
 
   it('replaces the root on an empty path', () => {
     expect(applyStatePatch({ a: 1 }, [{ op: 'set', path: [], value: { b: 2 } }])).toStrictEqual({ b: 2 });
+  });
+});
+
+class Holder {
+  constructor(fields: Record<string, unknown>) {
+    for (const [key, value] of Object.entries(fields)) {
+      Object.defineProperty(this, key, { value, writable: true, enumerable: true, configurable: true });
+    }
+  }
+  method() {
+    return 1;
+  }
+}
+
+function define(obj: object, key: string, value: unknown) {
+  Object.defineProperty(obj, key, { value, writable: true, enumerable: true, configurable: true });
+}
+
+// `value` rebuilt with what JSON.stringify converts or leaves out mixed in: toJSON (some using
+// their key), Dates, boxed primitives, non-finite numbers, -0, Maps, class instances, and
+// undefined, functions and symbols (left out of objects, null in arrays).
+function noisy(rand: Rand, value: unknown): unknown {
+  const r = rand();
+  if (Array.isArray(value)) {
+    const items = value.map(item => noisy(rand, item));
+    if (r < 0.1) items.push(pick(rand, [undefined, () => 1, Symbol('s')]));
+    return r > 0.9 ? { toJSON: () => items } : items;
+  }
+  if (typeof value === 'object' && value !== null) {
+    const fields: Record<string, unknown> = {};
+    for (const key of Object.keys(value)) define(fields, key, noisy(rand, (value as any)[key]));
+    if (r < 0.2) define(fields, pick(rand, ['gone', 'alsoGone']), pick(rand, [undefined, () => 1, Symbol('s')]));
+    if (r > 0.9) return new Holder(fields);
+    if (r > 0.85) return { toJSON: () => fields };
+    return fields;
+  }
+  if (r < 0.05) return new Date(Math.floor(rand() * 1e12));
+  if (r < 0.1) return { toJSON: (key: string) => `key:${key}` };
+  if (r < 0.13) return pick(rand, [NaN, Infinity, -Infinity, -0]);
+  if (r < 0.15) return new Map([['a', 1]]);
+  if (r < 0.2 && value !== null) return Object(value);
+  return value;
+}
+
+function deepFreeze<T>(value: T): T {
+  if (typeof value === 'object' && value !== null) {
+    for (const key of Object.keys(value)) deepFreeze((value as any)[key]);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+describe('diffStateAsJson', () => {
+  it("gives the ops diffState gives for the next state's JSON form", () => {
+    for (let seed = 1; seed <= 300; seed++) {
+      const rand = rng(seed * 7919);
+      const states = randomStates(seed, 20);
+      for (let i = 1; i < states.length; i++) {
+        const next = noisy(rand, states[i]);
+        expect(canonical(diffStateAsJson(states[i - 1], next)), `seed ${seed}, step ${i}`).toBe(
+          canonical(diffState(states[i - 1], json(next))),
+        );
+      }
+    }
+  });
+
+  it('copies set values, so the ops share nothing with the next state', () => {
+    const next = { a: { list: [1] }, b: [{ c: 1 }] };
+    const ops = diffStateAsJson({ b: [] }, next);
+    expect(ops).toEqual([
+      { op: 'set', path: ['a'], value: { list: [1] } },
+      { op: 'set', path: ['b', 0], value: { c: 1 } },
+    ]);
+    expect((ops[0] as any).value).not.toBe(next.a);
+    expect((ops[1] as any).value).not.toBe(next.b[0]);
+  });
+
+  it('applies a toJSON once, as JSON.stringify does, and drops its result’s own toJSON', () => {
+    const inner = { toJSON: () => 'inner' };
+    const value = { toJSON: () => ({ toJSON: () => 'twice', kept: inner }) };
+    expect(diffStateAsJson({}, { a: value })).toEqual([{ op: 'set', path: ['a'], value: { kept: 'inner' } }]);
+    expect(diffStateAsJson({ a: {} }, { a: value })).toEqual([{ op: 'set', path: ['a', 'kept'], value: 'inner' }]);
+  });
+
+  it('throws as JSON.stringify does on a cycle, a BigInt, or a state with no JSON form', () => {
+    const cyclic: Record<string, unknown> = { a: 1 };
+    cyclic.self = cyclic;
+    expect(() => diffStateAsJson({}, cyclic)).toThrow(TypeError);
+    expect(() => diffStateAsJson({ self: { self: {} } }, cyclic)).toThrow(TypeError);
+    expect(() => diffStateAsJson({}, { a: 1n })).toThrow(TypeError);
+    expect(() => diffStateAsJson({}, undefined)).toThrow(TypeError);
+  });
+
+  it('accepts the same object in two places', () => {
+    const shared = { n: 1 };
+    expect(diffStateAsJson({}, { a: shared, b: [shared] })).toEqual([
+      { op: 'set', path: ['a'], value: { n: 1 } },
+      { op: 'set', path: ['b'], value: [{ n: 1 }] },
+    ]);
+  });
+});
+
+describe('patchState', () => {
+  it('gives what applyStatePatch gives, leaving the state it patches as it is', () => {
+    for (let seed = 1; seed <= 300; seed++) {
+      const states = randomStates(seed, 20).map(deepFreeze);
+      for (let i = 1; i < states.length; i++) {
+        const before = canonical(states[i - 1]);
+        const ops = diffState(states[i - 1], states[i]);
+        expect(canonical(patchState(states[i - 1], ops)), `seed ${seed}, step ${i}`).toBe(canonical(states[i]));
+        expect(canonical(states[i - 1]), `seed ${seed}, step ${i}`).toBe(before);
+      }
+    }
+  });
+
+  it('replays a whole chain of diffs, flattened, from the first state to the last', () => {
+    for (let seed = 1; seed <= 300; seed++) {
+      const states = randomStates(seed, 30).map(deepFreeze);
+      const chain: StatePatchOp[][] = [];
+      for (let i = 1; i < states.length; i++) chain.push(diffState(states[i - 1], states[i]));
+      expect(canonical(patchState(states[0], chain.flat())), `seed ${seed}`).toBe(canonical(states.at(-1)));
+    }
+  });
+
+  it('shares only what the ops leave unchanged with the state it patches', () => {
+    const root = deepFreeze({ a: { x: 1, y: { z: 1 } }, b: { y: 2 } });
+    const result = patchState<Record<string, any>>(root, [
+      { op: 'set', path: ['a', 'x'], value: 2 },
+      { op: 'set', path: ['a', 'w'], value: 3 },
+    ]);
+    expect(result).toEqual({ a: { x: 2, y: { z: 1 }, w: 3 }, b: { y: 2 } });
+    expect(result.b).toBe(root.b);
+    expect(result.a.y).toBe(root.a.y);
+    expect(result.a).not.toBe(root.a);
   });
 });
