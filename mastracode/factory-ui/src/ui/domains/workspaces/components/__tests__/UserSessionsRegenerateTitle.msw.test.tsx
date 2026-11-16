@@ -160,6 +160,44 @@ describe('Session title regeneration', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Factory audit log review' })).toBeInTheDocument();
   });
 
+  it('keeps the regenerated title when the open session’s first read answers after it', async () => {
+    let current = session;
+    let releaseFirstRead = () => {};
+    const firstRead = new Promise<void>(resolve => {
+      releaseFirstRead = resolve;
+    });
+    let reads = 0;
+    useFactoryFixtures(() => [current]);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId`, () => HttpResponse.json({ project })),
+      http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+        HttpResponse.json({ modelId: null, thinkingLevel: null }),
+      ),
+      http.get(`${TEST_BASE_URL}/api/agent-controller/:agentControllerId/sessions/:resourceId/permissions`, () =>
+        HttpResponse.json({}),
+      ),
+      http.get(`${TEST_BASE_URL}/web/user-sessions/${sessionId}`, async () => {
+        const answer = current;
+        reads += 1;
+        if (reads === 1) await firstRead;
+        return HttpResponse.json({ session: answer });
+      }),
+      http.post(`${TEST_BASE_URL}/web/user-sessions/:sessionId/title`, () => {
+        current = { ...session, title: 'Factory audit log review' };
+        return HttpResponse.json({ title: 'Factory audit log review' });
+      }),
+    );
+
+    const user = userEvent.setup();
+    const { client } = renderOpenSession();
+    await openTitleAction(user, 'Tell me what have been done in the factory since');
+    expect(await screen.findByRole('link', { name: 'Factory audit log review' })).toBeInTheDocument();
+    releaseFirstRead();
+    await waitForMutationsIdle(client);
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Factory audit log review' })).toBeInTheDocument();
+  });
+
   it('keeps a pending session disabled while another session finishes first', async () => {
     const other: FactoryUserSession = { ...session, id: 'row-2', sessionId: 'sess-2', title: 'Second session' };
     let releaseFirst = () => {};
@@ -197,16 +235,13 @@ describe('Session title regeneration', () => {
   });
 
   it('keeps a pending session disabled after its group folds and unfolds again', async () => {
-    const newerSessions = Array.from(
-      { length: 5 },
-      (_, index): FactoryUserSession => ({
-        ...session,
-        id: `row-newer-${index}`,
-        sessionId: `sess-newer-${index}`,
-        title: `Newer session ${index}`,
-        updatedAt: `2026-07-24T0${index}:00:00.000Z`,
-      }),
-    );
+    const newerSessions = Array.from({ length: 5 }, (_, index): FactoryUserSession => ({
+      ...session,
+      id: `row-newer-${index}`,
+      sessionId: `sess-newer-${index}`,
+      title: `Newer session ${index}`,
+      updatedAt: `2026-07-24T0${index}:00:00.000Z`,
+    }));
     let releaseTitle = () => {};
     const titleAnswered = new Promise<void>(resolve => {
       releaseTitle = resolve;
