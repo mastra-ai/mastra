@@ -83,6 +83,13 @@ async function runTurn(hooks: { beforeRun?: Hook; duringTitle?: Hook } = {}) {
   });
   const mastra = new Mastra({ agents: { agent: createDurableAgent({ agent: base }) as any }, storage, logger: false });
   await hooks.beforeRun?.(memory);
+  // The title write starts with an existence check after the title model returns; count those reads.
+  let readsAfterTitle = 0;
+  const getThreadById = memory.getThreadById.bind(memory);
+  vi.spyOn(memory, 'getThreadById').mockImplementation(async args => {
+    if (titleCalls > 0) readsAfterTitle++;
+    return getThreadById(args);
+  });
   try {
     const res: any = await mastra.getAgent('agent').stream('Hi, please say hello.', {
       memory: { thread: threadId, resource: resourceId, options: { observationalMemory } },
@@ -90,8 +97,7 @@ async function runTurn(hooks: { beforeRun?: Hook; duringTitle?: Hook } = {}) {
     await (res.output ?? res).text;
     res.cleanup?.();
     await vi.waitFor(() => expect(titleCalls).toBe(1));
-    // The title write follows the title model call; give it time to land.
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await vi.waitFor(() => expect(readsAfterTitle).toBeGreaterThan(0));
     return { memory, titleCalls };
   } finally {
     await mastra.stopWorkers?.();
@@ -102,7 +108,7 @@ describe('DurableAgent observational-memory thread title (#30478)', () => {
   it('titles the thread and keeps the turn messages stored once', async () => {
     const { memory, titleCalls } = await runTurn();
 
-    expect((await memory.getThreadById({ threadId }))?.title).toBe('Durable OM title');
+    await vi.waitFor(async () => expect((await memory.getThreadById({ threadId }))?.title).toBe('Durable OM title'));
     expect(titleCalls).toBe(1);
     const { messages } = await memory.recall({ threadId, resourceId });
     expect(messages.map((m: any) => m.role)).toEqual(['user', 'assistant']);
@@ -120,9 +126,8 @@ describe('DurableAgent observational-memory thread title (#30478)', () => {
       },
     });
 
-    const thread = await memory.getThreadById({ threadId });
-    expect(thread?.title).toBe('Durable OM title');
-    expect(thread?.metadata).toMatchObject({ omCursor: 'cursor-1' });
+    await vi.waitFor(async () => expect((await memory.getThreadById({ threadId }))?.title).toBe('Durable OM title'));
+    expect((await memory.getThreadById({ threadId }))?.metadata).toMatchObject({ omCursor: 'cursor-1' });
   });
 
   it('does not re-create a thread deleted while the title was generating', async () => {
