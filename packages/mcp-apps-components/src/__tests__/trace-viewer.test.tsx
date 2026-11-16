@@ -78,6 +78,16 @@ it('loads the rest of a trace that get_trace returned in pages', async () => {
   expect(mcp.calls.map(call => call.args.offset)).toEqual([undefined, 1, 2]);
 });
 
+it('keeps the spans it has and says so when a later page of the trace fails', async () => {
+  const mcp = traceServer({ pageSize: 1, failAt: 2 });
+  await openTrace(mcp, 'trace-1');
+
+  expect((await screen.findByRole('alert')).textContent).toContain(
+    "Showing the first 2 of 3 spans; couldn't load the rest.",
+  );
+  expect(await spanRow("llm: 'gpt-5'")).toBeTruthy();
+});
+
 it("loads a picked span's details through get_span", async () => {
   const mcp = traceServer();
   await openTrace(mcp, 'trace-1');

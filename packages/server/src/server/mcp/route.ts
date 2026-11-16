@@ -88,44 +88,46 @@ let builtinApps: Promise<BuiltinApps | undefined> | undefined;
 /**
  * The MCP Apps the built-in server ships, from `@mastra/mcp-apps-components` (an optional peer dependency
  * like `@mastra/mcp`): without it, tools carry no app link and clients get their JSON results as before.
+ * An app that's installed but fails to load is logged and left out, so it can't take down `/api/mcp`.
  * Loaded once per process.
  */
-function loadBuiltinApps(): Promise<BuiltinApps | undefined> {
+function loadBuiltinApps(mastra: Mastra): Promise<BuiltinApps | undefined> {
   builtinApps ??= (async () => {
+    // Keep each import directly inside its own `try`, like `@mastra/mcp` above (wrangler's esbuild only
+    // accepts an unresolvable dynamic import there). Separate subpaths let an older package without the
+    // observability explorer still serve the trace viewer.
+    let traceViewer: AppResource | undefined;
+    let observabilityExplorer: AppResource | undefined;
     try {
-      // Keep each import directly inside its own `try`, like `@mastra/mcp` above (wrangler's esbuild only
-      // accepts an unresolvable dynamic import there). Separate subpaths let an older package without the
-      // observability explorer still serve the trace viewer.
-      let traceViewer: AppResource | undefined;
-      let observabilityExplorer: AppResource | undefined;
-      try {
-        traceViewer = (await import('@mastra/mcp-apps-components/trace-viewer')).traceViewerApp;
-      } catch (error) {
-        if (!isMissingAppsPackage(error)) throw error;
-      }
-      try {
-        observabilityExplorer = (await import('@mastra/mcp-apps-components/observability-explorer'))
-          .observabilityExplorerApp;
-      } catch (error) {
-        if (!isMissingAppsPackage(error)) throw error;
-      }
-      if (!traceViewer && !observabilityExplorer) return undefined;
-      const result: BuiltinApps = { appResources: {}, apps: {} };
-      if (traceViewer) {
-        result.appResources[TRACE_VIEWER_URI] = traceViewer;
-        result.apps.traceViewer = TRACE_VIEWER_URI;
-      }
-      if (observabilityExplorer) {
-        result.appResources[EXPLORER_URI] = observabilityExplorer;
-        result.apps.observabilityExplorer = EXPLORER_URI;
-      }
-      return result;
+      traceViewer = (await import('@mastra/mcp-apps-components/trace-viewer')).traceViewerApp;
     } catch (error) {
-      builtinApps = undefined;
-      throw error;
+      if (!isMissingAppsPackage(error)) reportAppLoadFailure(mastra, 'trace-viewer', error);
     }
+    try {
+      observabilityExplorer = (await import('@mastra/mcp-apps-components/observability-explorer'))
+        .observabilityExplorerApp;
+    } catch (error) {
+      if (!isMissingAppsPackage(error)) reportAppLoadFailure(mastra, 'observability-explorer', error);
+    }
+    if (!traceViewer && !observabilityExplorer) return undefined;
+    const result: BuiltinApps = { appResources: {}, apps: {} };
+    if (traceViewer) {
+      result.appResources[TRACE_VIEWER_URI] = traceViewer;
+      result.apps.traceViewer = TRACE_VIEWER_URI;
+    }
+    if (observabilityExplorer) {
+      result.appResources[EXPLORER_URI] = observabilityExplorer;
+      result.apps.observabilityExplorer = EXPLORER_URI;
+    }
+    return result;
   })();
   return builtinApps;
+}
+
+function reportAppLoadFailure(mastra: Mastra, app: string, error: unknown) {
+  mastra.getLogger()?.warn(`Built-in MCP server: couldn't load the ${app} MCP App, serving its tools without it`, {
+    error: error instanceof Error ? error.message : String(error),
+  });
 }
 
 /** Whether `error` says `@mastra/mcp-apps-components` (or, in an older version, its app subpath) isn't installed. */
@@ -187,7 +189,7 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
     }
     const config = resolveBuiltinMCPConfig(mastra, request);
     const { MCPServer, buildBuiltinMCPTools, modelSummaryOf } = await loadBuiltinMCP(mastra);
-    const apps = config.apps ? await loadBuiltinApps() : undefined;
+    const apps = config.apps ? await loadBuiltinApps(mastra) : undefined;
     const tools = await buildBuiltinMCPTools(
       {
         mastra,

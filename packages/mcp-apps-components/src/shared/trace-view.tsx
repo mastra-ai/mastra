@@ -19,16 +19,22 @@ export function isLightTrace(value: unknown): value is LightTrace {
 }
 
 /** Loads the rest of a trace that `get_trace` cut to fit the result size limit. */
-async function loadRest(app: App, trace: LightTrace): Promise<LightSpanRecord[]> {
+/** Every span of `trace`, page by page; on a failed page, the spans so far, marked incomplete. */
+async function loadRest(app: App, trace: LightTrace): Promise<{ spans: LightSpanRecord[]; incomplete?: true }> {
   const spans = [...trace.spans];
   let offset = trace.nextOffset;
   while (offset !== undefined) {
-    const page = await callTool(app, 'get_trace', { traceId: trace.traceId, offset });
+    let page: unknown;
+    try {
+      page = await callTool(app, 'get_trace', { traceId: trace.traceId, offset });
+    } catch {
+      return { spans, incomplete: true };
+    }
     if (!isLightTrace(page) || page.spans.length === 0) break;
     spans.push(...page.spans);
     offset = page.nextOffset;
   }
-  return spans;
+  return { spans };
 }
 
 /** The app's card already frames the trace, so its panels drop their own edge and rounding inside it. */
@@ -126,13 +132,17 @@ export function OpenedTrace({ app, trace, spanId }: { app: App; trace: LightTrac
     setShownTraceId(trace.traceId);
     setSelectedSpanId(spanId);
   }
+  const [incomplete, setIncomplete] = useState(false);
   useEffect(() => {
     setSpans(trace.spans);
+    setIncomplete(false);
     if (trace.nextOffset === undefined) return;
     // A newer trace can arrive while the rest of this one loads; its spans must not replace the newer trace's.
     let current = true;
     void loadRest(app, trace).then(rest => {
-      if (current) setSpans(rest);
+      if (!current) return;
+      setSpans(rest.spans);
+      setIncomplete(Boolean(rest.incomplete));
     });
     return () => {
       current = false;
@@ -158,6 +168,11 @@ export function OpenedTrace({ app, trace, spanId }: { app: App; trace: LightTrac
             </DataPanel.HeaderContent>
             <AskButton label={selectedSpan ? 'Ask about this span' : 'Ask about this trace'} prompt={prompt} />
           </DataPanel.Header>
+          {incomplete && (
+            <Txt variant="body-sm" tone="muted" className="px-4 py-2" role="alert">
+              Showing the first {spans.length} of {trace.spanCount} spans; couldn't load the rest.
+            </Txt>
+          )}
           <DataPanel.Content className="p-0">
             <TraceSpanTimeline
               hierarchicalSpans={hierarchicalSpans}

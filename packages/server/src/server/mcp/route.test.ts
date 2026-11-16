@@ -24,13 +24,14 @@ async function serveWithMCPImport(load: () => unknown) {
   const { getCustomHTTPExceptionResponse } = await import('../server-adapter');
   const mastra = new Mastra({ logger: false });
   const error = vi.spyOn(mastra.getLogger(), 'error');
+  const warn = vi.spyOn(mastra.getLogger(), 'warn');
   const request = () =>
     BUILTIN_MCP_HTTP_ROUTE.handler({
       mastra,
       requestContext: new RequestContext(),
       request: new Request('http://localhost/api/mcp', { method: 'POST' }),
     } as any);
-  return { request, error, getCustomHTTPExceptionResponse };
+  return { request, error, warn, getCustomHTTPExceptionResponse };
 }
 
 afterEach(() => {
@@ -159,31 +160,38 @@ describe('built-in MCP route without @mastra/mcp-apps-components installed', () 
     vi.doUnmock(LIST);
   });
 
+  const appWarnings = (warn: { mock: { calls: unknown[][] } }) =>
+    warn.mock.calls.filter(([message]) => String(message).includes('MCP App'));
+
   async function serveWithAppsImport(loadViewer: () => unknown, loadList: () => unknown = loadViewer) {
     vi.stubEnv('MASTRA_DEV', 'true');
     vi.doMock(VIEWER, loadViewer);
     vi.doMock(LIST, loadList);
     const app = await serveWithMCPImport(() => vi.importActual('@mastra/mcp'));
-    const { server } = (await app.request()) as { server: { appResourceList: { uri: string }[] } };
-    return server.appResourceList.map(resource => resource.uri);
+    const serve = async () => {
+      const { server } = (await app.request()) as { server: { appResourceList: { uri: string }[] } };
+      return server.appResourceList.map(resource => resource.uri);
+    };
+    return { serve, warn: app.warn };
   }
 
   for (const [kind, error] of Object.entries(appsNotInstalled)) {
     it(`serves the tools without apps (${kind})`, async () => {
-      const apps = await serveWithAppsImport(() => {
+      const { serve, warn } = await serveWithAppsImport(() => {
         throw error();
       });
-      expect(apps).toEqual([]);
+      expect(await serve()).toEqual([]);
+      expect(appWarnings(warn)).toEqual([]);
     });
   }
 
   it('serves both apps when installed', async () => {
-    const apps = await serveWithAppsImport(viewerModule, explorerModule);
+    const apps = await (await serveWithAppsImport(viewerModule, explorerModule)).serve();
     expect(apps.sort()).toEqual(['ui://mastra/observability-explorer', 'ui://mastra/trace-viewer']);
   });
 
   it('serves the trace viewer from an older version without the observability explorer', async () => {
-    const apps = await serveWithAppsImport(viewerModule, () => {
+    const { serve } = await serveWithAppsImport(viewerModule, () => {
       throw Object.assign(
         new Error(
           'Package subpath \'./observability-explorer\' is not defined by "exports" in /app/node_modules/@mastra/mcp-apps-components/package.json',
@@ -191,18 +199,21 @@ describe('built-in MCP route without @mastra/mcp-apps-components installed', () 
         { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' },
       );
     });
-    expect(apps).toEqual(['ui://mastra/trace-viewer']);
+    expect(await serve()).toEqual(['ui://mastra/trace-viewer']);
   });
 
-  it('rethrows other load failures', async () => {
+  // An installed package whose own import fails (a missing transitive dependency, a bundler error) must not
+  // turn every MCP request into a 500: the server leaves that app out, warns once, and keeps serving.
+  it('serves the tools without an app that fails to load, and warns once', async () => {
     const broken = Object.assign(
       new Error("Cannot find package 'react' imported from /app/node_modules/@mastra/mcp-apps-components/dist/x.js"),
       { code: 'ERR_MODULE_NOT_FOUND' },
     );
-    await expect(
-      serveWithAppsImport(() => {
-        throw broken;
-      }),
-    ).rejects.toThrow();
+    const { serve, warn } = await serveWithAppsImport(() => {
+      throw broken;
+    }, explorerModule);
+    expect(await serve()).toEqual(['ui://mastra/observability-explorer']);
+    expect(await serve()).toEqual(['ui://mastra/observability-explorer']);
+    expect(appWarnings(warn)).toEqual([[expect.stringContaining('trace-viewer'), { error: expect.any(String) }]]);
   });
 });
