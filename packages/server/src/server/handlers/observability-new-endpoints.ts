@@ -120,7 +120,6 @@ import {
   isObservabilityOutcomeField,
   supportsObservabilityTraceQueryOutcomeFields,
   assertObservabilityTraceQuerySupported,
-  assertObservabilityTextSearchSupported,
   createObservabilityListQuerySchema,
   getObservabilityStorageCapabilities,
   getObservabilityStore,
@@ -387,7 +386,7 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
           after,
           limit,
         },
-        { authorizationBinding, scope: resolveTraceQueryScope(requestContext), allowTokenSearch: true },
+        { authorizationBinding, scope: resolveTraceQueryScope(requestContext) },
       );
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
@@ -406,7 +405,6 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     try {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilityTraceQuerySupported(observabilityStore);
-      assertObservabilityTextSearchSupported(observabilityStore, plan.where, 'trace');
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryContextFieldsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
@@ -551,7 +549,7 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
           orderBy,
           limit,
         },
-        { scope: resolveTraceQueryScope(requestContext, 'TRACE_AGGREGATE_UNSUPPORTED'), allowTokenSearch: true },
+        { scope: resolveTraceQueryScope(requestContext, 'TRACE_AGGREGATE_UNSUPPORTED') },
       );
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
@@ -564,7 +562,6 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
     try {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilityTraceAggregateSupported(observabilityStore);
-      assertObservabilityTextSearchSupported(observabilityStore, plan.where, 'trace', 'aggregate');
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryContextFieldsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
@@ -698,7 +695,7 @@ export const AGGREGATE_SPANS = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_SPANS, {
           orderBy,
           limit,
         },
-        { scope: resolveTraceQueryScope(requestContext, 'SPAN_AGGREGATE_UNSUPPORTED'), allowTokenSearch: true },
+        { scope: resolveTraceQueryScope(requestContext, 'SPAN_AGGREGATE_UNSUPPORTED') },
       );
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
@@ -714,7 +711,6 @@ export const AGGREGATE_SPANS = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_SPANS, {
       // chunk included, so only time to first token and model/provider (as predicates, and as
       // dimensions or countDistinct fields) need a gate.
       assertObservabilitySpanAggregateSupported(observabilityStore);
-      assertObservabilityTextSearchSupported(observabilityStore, plan.where, 'span', 'aggregate');
       assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
       assertObservabilitySpanQueryModelFieldsSupported(observabilityStore, plan.where);
       assertObservabilitySpanAggregateModelDimensionsSupported(observabilityStore, plan);
@@ -818,7 +814,6 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
         { timeRange, where, orderBy, page },
         {
           scope: resolveTraceQueryScope(requestContext, 'SPAN_QUERY_UNSUPPORTED'),
-          allowTokenSearch: true,
           allowSpanDurationOrdering: true,
           allowSpanModelProviderOrdering: true,
         },
@@ -842,7 +837,6 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
       assertObservabilitySpanQuerySupported(observabilityStore);
       assertObservabilitySpanDurationSortSupported(observabilityStore, plan.orderBy);
       assertObservabilitySpanModelProviderSortSupported(observabilityStore, plan.orderBy);
-      assertObservabilityTextSearchSupported(observabilityStore, plan.where, 'span');
       assertObservabilitySpanQueryFieldsSupported(observabilityStore, plan.where);
       assertObservabilitySpanQueryModelFieldsSupported(observabilityStore, plan.where);
       assertObservabilitySpanQueryOutcomeFieldsSupported(observabilityStore, plan);

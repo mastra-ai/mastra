@@ -3263,7 +3263,6 @@ function evaluateScalarPredicate(
       : predicate.args.some(arg => evaluateScalarPredicate(arg, record));
   }
   if (predicate.type === 'not') return !evaluateScalarPredicate(predicate.arg, record);
-  if (predicate.type === 'tokens') throw new Error('Token search requires store-specific conformance tests');
   const value = record[predicate.field as keyof typeof record] as unknown;
   if (predicate.type === 'collection') {
     // Missing and empty collections are indistinguishable: both mean "no members".
@@ -3300,6 +3299,8 @@ function evaluateScalarPredicate(
       return value > predicate.value;
     case 'gte':
       return value >= predicate.value;
+    default:
+      throw new Error(`Unsupported reference-evaluator operator: ${predicate.operator}`);
   }
 }
 

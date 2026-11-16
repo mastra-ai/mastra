@@ -2,4 +2,4 @@
 '@mastra/server': minor
 ---
 
-Update experimental search contracts and capability flags for token predicates.
+Remove the legacy textSearch contract and keep token search disabled.

@@ -2,4 +2,4 @@
 '@mastra/clickhouse': patch
 ---
 
-Reject unsupported experimental token predicates.
+Maintain compatibility with experimental query predicate types.

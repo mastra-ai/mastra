@@ -235,7 +235,7 @@ export class ParameterBuilder {
 
 function fieldDefinition<TField extends string>(
   registry: Partial<FieldRegistry<TField>>,
-  field: TraceQueryCanonicalField,
+  field: string,
 ): FieldDefinition {
   const definition = registry[field as TField];
   if (definition === undefined) throw new Error(`Unsupported trusted trace-query field: ${field}`);
@@ -248,7 +248,7 @@ function resolveOrderField(field: string): TraceOrder['field'] {
   throw new Error(`Unsupported trusted trace-query field: ${field}`);
 }
 
-function isMetadataField(field: TraceQueryPredicateField): field is `metadata.${string}` {
+function isMetadataField(field: string): field is `metadata.${string}` {
   return field.startsWith('metadata.');
 }
 
@@ -258,7 +258,6 @@ function compileScalarPredicate<TField extends string>(
   parameters: ParameterBuilder,
   allowMetadata = false,
 ): string {
-  if (predicate.type === 'tokens') throw new Error('Indexed token search is not supported by this store');
   if (predicate.type === 'boolean') {
     const parts = predicate.args.map(arg => `(${compileScalarPredicate(arg, registry, parameters, allowMetadata)})`);
     return parts.join(predicate.operator === 'and' ? ' AND ' : ' OR ');
@@ -306,7 +305,7 @@ function compileScalarPredicate<TField extends string>(
   }
 
   const parameter = parameters.add(predicate.value, field.parameterType);
-  const operators = { eq: '=', ne: '!=', lt: '<', lte: '<=', gt: '>', gte: '>=' } as const;
+  const operators: Partial<Record<string, string>> = { eq: '=', ne: '!=', lt: '<', lte: '<=', gt: '>', gte: '>=' };
   const operator = operators[predicate.operator];
   if (operator === undefined) throw new Error(`Unsupported trusted trace-query operator: ${predicate.operator}`);
   return `ifNull(${field.sql} ${operator} ${parameter}, ${predicate.operator === 'ne' ? '1' : '0'})`;
