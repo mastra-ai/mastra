@@ -638,7 +638,7 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
     });
 
     describe('pages', () => {
-      it('rejects a list cursor it did not issue with KnowledgeInvalidCursorError', async () => {
+      it('rejects a list cursor it cannot decode with KnowledgeInvalidCursorError', async () => {
         const acme = await scope('org:acme', ORG);
         const invalid = { name: 'KnowledgeInvalidCursorError' };
         const cursor = 'not-a-cursor';

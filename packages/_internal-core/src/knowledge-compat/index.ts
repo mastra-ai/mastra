@@ -245,13 +245,14 @@ export function knowledgePagesResetMessage(reason: string): string {
 }
 
 /**
- * A list cursor the store did not issue. Defined here so every adapter can throw it on any core
- * version; core re-exports it from `@mastra/core/storage`. Recognise it by `name`.
+ * A list cursor the store cannot decode (malformed, or from another store or version). Defined
+ * here so every adapter can throw it on any core version; core re-exports it from
+ * `@mastra/core/storage`. Recognise it by `name`.
  * @experimental
  */
 export class KnowledgeInvalidCursorError extends Error {
   constructor(readonly cursor: string) {
-    super('Invalid Knowledge cursor: this store did not issue it');
+    super('Invalid Knowledge cursor: this store cannot decode it');
     this.name = 'KnowledgeInvalidCursorError';
   }
 }
