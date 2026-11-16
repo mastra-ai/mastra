@@ -69,6 +69,8 @@ import {
 } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
 import { intakeEvaluatorFrom } from './boards/intake-routing.js';
+import { createIntegrationBoardSetup } from './boards/integration-board-setup.js';
+import type { IntegrationBoardSetup } from './boards/integration-board-setup.js';
 import { occupiedPhasesOf, ownReviewBoard, ProjectBoardCache, toBoardSource } from './boards/project-boards.js';
 import type { ProjectBoardSource } from './boards/project-boards.js';
 import { publishDispatchWake, subscribeDispatchWakes } from './dispatch-wake.js';
@@ -679,6 +681,7 @@ export class MastraFactory {
   #boardStore:
     | { writes: BoardWrites; boards: ProjectBoardCache; projects: FactoryProjectsStorage; audit: AuditDomain }
     | undefined;
+  #boardSetup: IntegrationBoardSetup | undefined;
   readonly #skills: readonly InlineSkill[];
   readonly #configVersion: string;
   /** Recall embedder, built once from `config.embedder`. Undefined → the SDK's local fastembed. */
@@ -1190,6 +1193,14 @@ export class MastraFactory {
         projects: factoryProjectsStorage,
         audit: auditDomain,
       };
+      this.#boardSetup = createIntegrationBoardSetup({
+        writes: this.#boardStore.writes,
+        boards: projectBoards,
+        storage: storedBoardsStorage,
+        audit: async (scope, entry) => {
+          await auditDomain.record({ orgId: scope.orgId, actorId: 'factory', actorType: 'system', ...entry });
+        },
+      });
       await timedPhase('prepare.boards.preload', () =>
         projectBoards
           .preload()
@@ -2785,6 +2796,7 @@ export class MastraFactory {
             ...(this.#keptCards ? { keptCards: this.#keptCards } : {}),
             // Only with the boards domain ready, as intake routes are.
             ...(this.#projectBoards ? { notRouted: storedBoardsStorage } : {}),
+            ...(this.#boardSetup ? { boardSetup: this.#boardSetup } : {}),
             factoryReady,
             domains,
             // The Platform GitHub lane only receives pushes through its polling worker.

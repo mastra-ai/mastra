@@ -16,6 +16,7 @@ import {
   reviewedChangeRequest,
 } from '../boards/index.js';
 import type { BoardRegistry, InstalledBoard } from '../boards/index.js';
+import type { IntegrationBoardSetup } from '../boards/integration-board-setup.js';
 import { legacyPlanRoleFor, workLaneForRole } from '../boards/legacy-plan-role.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardCache, ProjectBoardSource } from '../boards/project-boards.js';
@@ -601,6 +602,7 @@ export function buildIntegrationContext(
     keptCards?: CardSource;
     /** Which items intake turned away, so integrations run intake again when one changes. */
     notRouted?: NotRoutedLookup;
+    boardSetup?: IntegrationBoardSetup;
     factoryReady: boolean;
     domains: Pick<
       FactoryApiRoutesDeps['domains'],
@@ -656,6 +658,7 @@ export function buildIntegrationContext(
             boards: deps.boardRegistry,
             ...(deps.keptCards ? { keptCards: deps.keptCards } : {}),
             ...(deps.notRouted ? { notRouted: deps.notRouted } : {}),
+            ...(deps.boardSetup ? { boardSetup: deps.boardSetup } : {}),
           },
         }
       : {}),

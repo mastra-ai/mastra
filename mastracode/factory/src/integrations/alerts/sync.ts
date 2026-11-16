@@ -55,6 +55,12 @@ export interface AlertSyncDeps {
    * `platform`, so the Alerts app posts the work-item link instead.
    */
   canReplyInThread?: (thread: { teamId: string; channelId: string }) => Promise<boolean>;
+  /**
+   * Sets a project up for alerts the first time it is bound (and again after it was unbound),
+   * before any of its events are applied. A throw leaves the project unstarted, so the next pass
+   * tries again.
+   */
+  projectBound?: (scope: { orgId: string; factoryProjectId: string }) => Promise<void>;
   /** A card create the dispatcher hasn't filed holds the cursor; past this many ticks, move on. */
   maxPendingTicks?: number;
   userId?: string;
@@ -145,6 +151,16 @@ export function createAlertSync(deps: AlertSyncDeps): () => Promise<IssueReconci
       const factoryProjectId = binding.factoryProjectId;
       let place = projects[factoryProjectId];
       if (!place) {
+        try {
+          await deps.projectBound?.({ orgId, factoryProjectId });
+        } catch (error) {
+          summary.failed++;
+          summary.errors.push({
+            projectId: factoryProjectId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          continue;
+        }
         place = await startCursor();
         projects[factoryProjectId] = place;
         await save();

@@ -256,4 +256,32 @@ describe('AlertReadClient', () => {
     await client.read('org-1', 'inc-1', { method: 'GET', path: '/traces' });
     expect(mint).toHaveBeenCalledTimes(2);
   });
+
+  it('sets a project up once when it is bound, before applying its events, and retries a failed setup', async () => {
+    const calls: string[] = [];
+    let fail = true;
+    const env = setup([], {
+      projectBound: async ({ orgId, factoryProjectId }) => {
+        calls.push(`${orgId}/${factoryProjectId}`);
+        if (fail) throw new Error('boards not ready');
+      },
+    });
+    env.append('i1');
+    const first = await env.sync();
+    expect(first.errors).toEqual([{ projectId: 'fp-1', error: 'boards not ready' }]);
+    expect(env.ingested).toEqual([]);
+    expect(env.cursor().projects?.['fp-1']).toBeUndefined();
+
+    fail = false;
+    await env.sync();
+    await env.sync();
+    expect(calls).toEqual(['org-1/fp-1', 'org-1/fp-1']);
+    expect(env.ingested).toEqual(['fp-1:i1:alert.opened']);
+
+    env.bind([]);
+    await env.sync();
+    env.bind([{ factoryProjectId: 'fp-1', labels: null, createdAt: new Date('2026-11-01') }]);
+    await env.sync();
+    expect(calls).toEqual(['org-1/fp-1', 'org-1/fp-1', 'org-1/fp-1']);
+  });
 });

@@ -17,6 +17,8 @@ const SEED_AND_LEGACY = new Set([
   'boards/work-migrations.ts',
   'boards/legacy-plan-role.ts',
   'storage/domains/work-items/legacy-review.ts',
+  // Work's Alert triage phase and route, seeded into a project's Work when it binds Mastra Alerts.
+  'integrations/alerts/board.ts',
 ]);
 
 /** Lines that match a pattern but name something other than a board or phase. */
