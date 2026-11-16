@@ -28,6 +28,7 @@ export function useConfigure(
   datePreset: ObservabilityDatePreset | 'custom',
   customRange: ObservabilityWidgetDateRange | undefined,
   filters: readonly unknown[] | undefined,
+  projectId: string | undefined,
 ): ReactNode {
   const configurable = useHostConfigurable(app);
   if (!configurable || !app.getHostCapabilities()?.updateModelContext?.structuredContent) return undefined;
@@ -39,6 +40,7 @@ export function useConfigure(
       datePreset,
       ...(customRange ? { customRange } : {}),
       ...(filters?.length ? { filters: [...filters] } : {}),
+      ...(projectId ? { projectId } : {}),
     };
     void app
       .updateModelContext({
