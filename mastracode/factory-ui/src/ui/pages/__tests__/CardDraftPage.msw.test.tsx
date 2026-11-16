@@ -109,19 +109,17 @@ describe('a card without a session', () => {
     await waitForMutationsIdle(client);
   });
 
-  it("starts the card's session on its branch with the first prompt, then opens the session's thread", async () => {
+  it("starts the card's session on its branch with the first prompt, then opens the thread of the session the server gave", async () => {
     const route = stubDraftRoute();
     const runStarts = stubCard();
     const user = userEvent.setup();
-    const { router, client } = renderAt(`/factories/${FACTORY_ID}/cards/${CARD_ID}/new/${DRAFT_SESSION_ID}`);
+    const { router, client } = renderAt(`/factories/${FACTORY_ID}/cards/${CARD_ID}`);
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await user.type(message, 'repair the facts');
     await user.keyboard('{Enter}');
 
-    await waitFor(() =>
-      expect(route.createBodies).toEqual([{ branch: 'factory/linear-eng-42', sessionId: DRAFT_SESSION_ID }]),
-    );
+    await waitFor(() => expect(route.createBodies).toEqual([{ branch: 'factory/linear-eng-42' }]));
     await waitFor(() =>
       expect(runStarts).toEqual([
         expect.objectContaining({
@@ -135,6 +133,54 @@ describe('a card without a session', () => {
         `/factories/${FACTORY_ID}/workspaces/${DRAFT_SESSION_ID}/threads/${DRAFT_SESSION_ID}`,
       ),
     );
+    await waitFor(() => expect(route.posted).toEqual(['repair the facts']));
+
+    route.finishWorkspace();
+    await waitForMutationsIdle(client);
+  });
+
+  it('keeps the prompt on the draft when the start fails, and the card reopened starts in the session it left', async () => {
+    const route = stubDraftRoute();
+    const runStarts = stubCard();
+    server.use(
+      http.post(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`,
+        async ({ request }) => {
+          runStarts.push(await request.json());
+          return HttpResponse.json({ error: 'Run start failed' }, { status: 500 });
+        },
+        { once: true },
+      ),
+    );
+    const user = userEvent.setup();
+    const { router, client } = renderAt(`/factories/${FACTORY_ID}/cards/${CARD_ID}`);
+
+    await user.type(await screen.findByRole('textbox', { name: 'Message' }), 'repair the facts');
+    await user.keyboard('{Enter}');
+
+    expect(await screen.findByText(/Could not create the session/)).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('repair the facts');
+    const failedDraftPath = router.state.location.pathname;
+    expect(failedDraftPath).toMatch(new RegExp(`^/factories/${FACTORY_ID}/cards/${CARD_ID}/new/`));
+
+    await router.navigate(`/factories/${FACTORY_ID}/cards/${CARD_ID}`);
+    await waitFor(() => expect(router.state.location.pathname).toMatch(/\/new\//));
+    expect(router.state.location.pathname).not.toBe(failedDraftPath);
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    await user.clear(message);
+    await user.type(message, 'repair the facts');
+    await user.keyboard('{Enter}');
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        `/factories/${FACTORY_ID}/workspaces/${DRAFT_SESSION_ID}/threads/${DRAFT_SESSION_ID}`,
+      ),
+    );
+    expect(route.createBodies).toEqual([{ branch: 'factory/linear-eng-42' }, { branch: 'factory/linear-eng-42' }]);
+    expect(runStarts).toEqual([
+      expect.objectContaining({ sessionId: DRAFT_SESSION_ID }),
+      expect.objectContaining({ sessionId: DRAFT_SESSION_ID }),
+    ]);
     await waitFor(() => expect(route.posted).toEqual(['repair the facts']));
 
     route.finishWorkspace();
@@ -203,10 +249,55 @@ describe('a card without a session', () => {
     await user.click(within(options).getByRole('option', { name: 'acme/docs' }));
     await user.click(screen.getByRole('button', { name: 'Send message' }));
 
-    await waitFor(() =>
-      expect(docsCreates).toEqual([{ branch: 'factory/linear-eng-42', sessionId: DRAFT_SESSION_ID }]),
-    );
+    await waitFor(() => expect(docsCreates).toEqual([{ branch: 'factory/linear-eng-42' }]));
     expect(patches).toEqual([{ metadata: { repository: 'acme/docs' } }]);
+    await waitFor(() => expect(runStarts).toHaveLength(1));
+    expect(route.createBodies).toEqual([]);
+
+    route.finishWorkspace();
+    await waitForMutationsIdle(client);
+  });
+
+  it('tells same-named repositories apart by provider and starts the session in the one picked', async () => {
+    const route = stubDraftRoute();
+    const runStarts = stubCard();
+    const gitlabCreates: unknown[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({
+          projects: [
+            {
+              id: FACTORY_ID,
+              name: 'Acme Factory',
+              repositories: [
+                listedRepository('repository-draft-handoff', 'acme/app'),
+                listedRepository('repository-gitlab-app', 'acme/app', { integrationId: 'gitlab' }),
+              ],
+            },
+          ],
+        }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/repository-gitlab-app/sessions`, async ({ request }) => {
+        gitlabCreates.push(await request.json());
+        return HttpResponse.json({ session: { sessionId: DRAFT_SESSION_ID, branch: 'factory/linear-eng-42' } });
+      }),
+    );
+    const user = userEvent.setup();
+    const { client } = renderAt(`/factories/${FACTORY_ID}/cards/${CARD_ID}/new/${DRAFT_SESSION_ID}`);
+
+    await user.type(await screen.findByRole('textbox', { name: 'Message' }), 'repair the facts');
+    await user.click(screen.getByRole('combobox', { name: 'Repository' }));
+    const options = await screen.findByRole('listbox');
+    expect(
+      within(options)
+        .getAllByRole('option')
+        .map(option => option.textContent),
+    ).toEqual(['acme/app (GitHub)', 'acme/app (GitLab)']);
+    await user.click(within(options).getByRole('option', { name: 'acme/app (GitLab)' }));
+    expect(screen.getByRole('combobox', { name: 'Repository' })).toHaveTextContent('acme/app (GitLab)');
+    await user.click(screen.getByRole('button', { name: 'Send message' }));
+
+    await waitFor(() => expect(gitlabCreates).toEqual([{ branch: 'factory/linear-eng-42' }]));
     await waitFor(() => expect(runStarts).toHaveLength(1));
     expect(route.createBodies).toEqual([]);
 
@@ -263,9 +354,7 @@ describe('a card without a session', () => {
     expect(screen.queryByRole('combobox', { name: 'Repository' })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Send message' }));
 
-    await waitFor(() =>
-      expect(otherCreates).toEqual([{ branch: 'factory/linear-eng-42', sessionId: DRAFT_SESSION_ID }]),
-    );
+    await waitFor(() => expect(otherCreates).toEqual([{ branch: 'factory/linear-eng-42' }]));
     expect(patches).toEqual([{ metadata: { repository: 'acme/other' } }]);
     await waitFor(() => expect(runStarts).toHaveLength(1));
     expect(route.createBodies).toEqual([]);

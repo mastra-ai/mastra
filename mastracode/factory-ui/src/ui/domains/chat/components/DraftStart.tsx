@@ -56,7 +56,7 @@ export function DraftStart({
   );
 }
 
-export function readRouteErrorNotice(state: unknown): string | undefined {
+function readRouteErrorNotice(state: unknown): string | undefined {
   if (typeof state !== 'object' || state === null || !('routeErrorNotice' in state)) return undefined;
   const { routeErrorNotice } = state;
   return typeof routeErrorNotice === 'string' ? routeErrorNotice : undefined;

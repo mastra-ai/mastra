@@ -83,8 +83,10 @@ export function cardSessionRepository(
       ? { kind: 'resolved', repository: only }
       : { kind: 'choose', choices: compatible };
   }
-  const repository = compatible.find(candidate => candidate.slug === slug);
-  if (repository) return { kind: 'resolved', repository };
+  const named = compatible.filter(candidate => candidate.slug === slug);
+  const [only] = named;
+  if (named.length > 1) return { kind: 'choose', choices: named };
+  if (only) return { kind: 'resolved', repository: only };
   return {
     kind: 'unavailable',
     reason: `Repository ${slug} is not linked to this Factory with a provider matching this card.`,

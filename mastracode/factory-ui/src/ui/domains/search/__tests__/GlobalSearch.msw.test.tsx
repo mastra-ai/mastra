@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isStubbedProjectRead } from '../../../../../e2e/ui/board-reads';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { workBoardInfo } from '../../../../../e2e/ui/board-catalog';
-import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render';
 import { createQueryClient } from '../../../../query-client';
 import type { GithubIssue, GithubPullRequest } from '../../factory/services/factory';
 import type { WorkItem } from '../../factory/services/workItems';
@@ -937,10 +937,10 @@ describe('Global search', () => {
     expect(screen.queryByText('feature/offline-index')).not.toBeInTheDocument();
   });
 
-  it('finds a board card with no session by identifier and moves it into its lane', async () => {
+  it('finds a board card with no session by identifier and opens it, moving nothing', async () => {
     const requests = stubSearchApi();
     const user = userEvent.setup();
-    renderSearchRoute();
+    const { router } = renderSearchRoute();
     const dialog = await openWithShortcut();
     await screen.findByText('Review command palette PR');
 
@@ -955,126 +955,14 @@ describe('Global search', () => {
 
     await user.click(card);
 
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument());
-    await waitFor(() => expect(requests.transitions).toHaveLength(1));
-    expect(requests.transitions[0]).toMatchObject({
-      itemId: 'work-item-unstarted-review',
-      body: { board: 'work', stage: 'pr-review', cause: 'card_action' },
-    });
-    expect(requests.createSessionRequests).toBe(0);
-  });
-
-  it('toasts the reason when the move it fired is refused, after the palette has closed', async () => {
-    stubSearchApi();
-    server.use(
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/work-items/:itemId/transition`, () =>
-        HttpResponse.json({ result: { status: 'rejected', reason: 'Reviewing is paused for this repository.' } }),
-      ),
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Bump the command palette dependencies' }),
+    ).toBeInTheDocument();
+    expect(router.state.location.pathname).toMatch(
+      new RegExp(`^/factories/${ACTIVE_FACTORY_ID}/cards/work-item-unstarted-review/new/`),
     );
-    const user = userEvent.setup();
-    renderSearchRoute();
-    await openWithShortcut();
-    await screen.findByText('Review command palette PR');
-
-    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
-    await user.click(await screen.findByText('Bump the command palette dependencies'));
-
-    expect(await screen.findByText('Reviewing is paused for this repository.')).toBeInTheDocument();
-  });
-
-  function stubAutomationStartingRunOn(workItemId: string) {
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/decisions`, () =>
-        HttpResponse.json({
-          decisions: [
-            {
-              id: 'decision-queued-run',
-              evaluationId: 'evaluation-queued-run',
-              workItemId,
-              type: 'invokeSkill',
-              status: 'pending',
-              attempts: 0,
-              failureOccurrence: 0,
-              source: null,
-              failureCode: null,
-              canRetry: true,
-              lastError: null,
-              createdAt: '2026-07-18T00:00:00.000Z',
-              updatedAt: '2026-07-18T00:01:00.000Z',
-              completedAt: null,
-            },
-          ],
-        }),
-      ),
-    );
-  }
-
-  it('refuses to move a card into its lane while automation is already starting a run on it', async () => {
-    const requests = stubSearchApi();
-    stubAutomationStartingRunOn('work-item-unstarted-review');
-    const user = userEvent.setup();
-    const { client } = renderSearchRoute();
-    await openWithShortcut();
-    await screen.findByText('Review command palette PR');
-    await waitFor(() => expect(client.isFetching()).toBe(0));
-
-    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
-    await user.click(await screen.findByText('Bump the command palette dependencies'));
-
-    expect(await screen.findByText("Another run can't start while this card is busy.")).toBeInTheDocument();
     expect(requests.transitions).toEqual([]);
-  });
-
-  it('refuses to open a session on a custom-board card while automation is already starting a run on it', async () => {
-    const item = { ...workItems[3], board: 'custom', metadata: { number: 777 } };
-    const requests = stubSearchApi({ workItems: [item] });
-    stubAutomationStartingRunOn(item.id);
-    const user = userEvent.setup();
-    const { client } = renderSearchRoute();
-    const search = await openWithShortcut();
-    const card = await within(search).findByText(item.title);
-    await waitFor(() => expect(client.isFetching()).toBe(0));
-
-    await user.click(card);
-
-    expect(await screen.findByText("Another run can't start while this card is busy.")).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
     expect(requests.createSessionRequests).toBe(0);
-    expect(requests.transitions).toEqual([]);
-  });
-
-  it('refuses a second move of a card whose first move from search is still in flight', async () => {
-    const requests = stubSearchApi();
-    let releaseTransition = () => {};
-    const transitionGate = new Promise<void>(resolve => {
-      releaseTransition = resolve;
-    });
-    server.use(
-      http.post(
-        `${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/work-items/:itemId/transition`,
-        async ({ params }) => {
-          requests.transitions.push({ itemId: String(params.itemId), body: {} });
-          await transitionGate;
-          return HttpResponse.json({ result: { status: 'rejected', reason: 'Released by the test.' } });
-        },
-      ),
-    );
-    const user = userEvent.setup();
-    const { client } = renderSearchRoute();
-    const pickCard = async () => {
-      await openWithShortcut();
-      await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
-      await user.click(await screen.findByText('Bump the command palette dependencies'));
-    };
-
-    await pickCard();
-    await waitFor(() => expect(requests.transitions).toHaveLength(1));
-    await pickCard();
-
-    expect(await screen.findByText("Another run can't start while this card is busy.")).toBeInTheDocument();
-    expect(requests.transitions).toHaveLength(1);
-    releaseTransition();
-    await waitForMutationsIdle(client);
   });
 
   it('scopes results to board cards with no session', async () => {
@@ -1094,26 +982,6 @@ describe('Global search', () => {
     expect(screen.queryByText('Review command palette PR')).not.toBeInTheDocument();
     expect(screen.queryByText('research-notes')).not.toBeInTheDocument();
   });
-
-  // A card in more than one phase sits in its furthest one, as its card label says.
-  it.each([[['planning']], [['triage', 'planning']]])(
-    "starts a card with no session in %j from the phase it sits in, not its board's first phase",
-    async stages => {
-      const planning = { ...workItems.find(item => item.id === 'work-item-unstarted-issue')!, stages };
-      const requests = stubSearchApi({ workItems: [planning] });
-      const user = userEvent.setup();
-      renderSearchRoute();
-      await openWithShortcut();
-
-      await user.click(await screen.findByText('Palette keyboard traps focus on mobile'));
-
-      await waitFor(() => expect(requests.transitions).toHaveLength(1));
-      expect(requests.transitions[0]).toMatchObject({
-        itemId: 'work-item-unstarted-issue',
-        body: { stage: 'planning' },
-      });
-    },
-  );
 
   it('lists a pull request already filed as a card only once', async () => {
     stubSearchApi();

@@ -8,18 +8,13 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconTicket } from '@mastra/playground-ui/icons/central/IconTicket';
 import { useState } from 'react';
-import { Link, Navigate, useLocation, useParams } from 'react-router';
+import { Link, Navigate, useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../hooks/useBoardCatalog';
 import { useWorkItemQuery } from '../../hooks/useWorkItems';
 import type { InstalledBoardInfo } from '../../api/types';
 import { ChatPageLayout } from '../domains/chat/components/ChatPageLayout';
-import {
-  ConfigurationErrorNotice,
-  DraftStart,
-  draftPageClass,
-  readRouteErrorNotice,
-} from '../domains/chat/components/DraftStart';
+import { ConfigurationErrorNotice, DraftStart, draftPageClass } from '../domains/chat/components/DraftStart';
 import { emptyThreadClass } from '../domains/chat/components/EmptyThreadState';
 import { SessionChatSurface } from '../domains/chat/components/SessionChatSurface';
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
@@ -36,6 +31,7 @@ import { useStartCardSessionFromDraft } from '../domains/factory/hooks/useStartC
 import type { WorkItem } from '../domains/factory/services/workItems';
 import { factoryHomePath, threadPath } from '../domains/workspaces/services/factoryPaths';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
+import { HOST_NAMES } from '../domains/workspaces/services/sourceControlHosts';
 
 const DRAFT_TITLE = 'New session';
 
@@ -148,16 +144,15 @@ function CardDraft({
   configurationError: Error | undefined;
 }) {
   useGlobalShortcuts();
-  const routeErrorNotice = readRouteErrorNotice(useLocation().state);
   const sessionRepository = useCardSessionRepository(factory.repositories, item);
-  const [chosenSlug, setChosenSlug] = useState<string>();
+  const [chosenId, setChosenId] = useState<string>();
   const choices = sessionRepository?.kind === 'choose' ? sessionRepository.choices : [];
-  const chosen = choices.find(repository => repository.slug === chosenSlug);
+  const chosen = choices.find(repository => repository.projectRepositoryId === chosenId);
   const repository = sessionRepository?.kind === 'resolved' ? sessionRepository.repository : chosen;
-  const start = useStartCardSessionFromDraft(item, repository);
+  const draftStart = useStartCardSessionFromDraft(item, repository);
 
   return (
-    <DraftSessionStartContext.Provider value={{ ready: repository !== undefined, start }}>
+    <DraftSessionStartContext.Provider value={draftStart}>
       <SessionChatSurface
         composerLabel="Thread composer"
         emptyState={
@@ -170,15 +165,12 @@ function CardDraft({
               No session yet. Your first message starts one.
             </Txt>
             <div className="mt-7 flex w-full max-w-2xl flex-col items-center gap-3">
-              {routeErrorNotice && <Notice variant="destructive">{routeErrorNotice}</Notice>}
               {configurationError && <ConfigurationErrorNotice error={configurationError} />}
               {sessionRepository?.kind === 'unavailable' && (
                 <Notice variant="warning">{sessionRepository.reason}</Notice>
               )}
               {board && <CardDraftActions factory={factory} item={item} board={board} chosenRepository={chosen} />}
-              {choices.length > 0 && (
-                <RepositorySelect choices={choices} value={chosen?.slug} onChange={setChosenSlug} />
-              )}
+              {choices.length > 0 && <RepositorySelect choices={choices} chosen={chosen} onChange={setChosenId} />}
             </div>
           </section>
         }
@@ -189,29 +181,33 @@ function CardDraft({
 
 function RepositorySelect({
   choices,
-  value,
+  chosen,
   onChange,
 }: {
   choices: LinkedRepositoryPayload[];
-  value: string | undefined;
-  onChange: (slug: string) => void;
+  chosen: LinkedRepositoryPayload | undefined;
+  onChange: (projectRepositoryId: string) => void;
 }) {
+  const label = (repository: LinkedRepositoryPayload) =>
+    choices.some(other => other !== repository && other.slug === repository.slug)
+      ? `${repository.slug} (${HOST_NAMES[repository.provider ?? 'github']})`
+      : repository.slug;
   return (
     <Select
-      value={value ?? null}
-      onValueChange={slug => {
-        if (slug) onChange(slug);
+      value={chosen?.projectRepositoryId ?? null}
+      onValueChange={projectRepositoryId => {
+        if (projectRepositoryId) onChange(projectRepositoryId);
       }}
     >
       <SelectTrigger size="sm" aria-label="Repository" className="w-fit max-w-full">
         <Txt as="span" variant="caption" className="truncate">
-          {value ?? 'Choose a repository'}
+          {chosen ? label(chosen) : 'Choose a repository'}
         </Txt>
       </SelectTrigger>
       <SelectContent>
         {choices.map(choice => (
-          <SelectItem key={choice.projectRepositoryId} value={choice.slug}>
-            {choice.slug}
+          <SelectItem key={choice.projectRepositoryId} value={choice.projectRepositoryId}>
+            {label(choice)}
           </SelectItem>
         ))}
       </SelectContent>

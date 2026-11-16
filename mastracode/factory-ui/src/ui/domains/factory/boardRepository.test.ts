@@ -201,6 +201,15 @@ describe('cardSessionRepository', () => {
     expect(result.kind === 'choose' && result.choices.map(choice => choice.slug)).toEqual(['acme/one', 'acme/two']);
   });
 
+  it('asks which provider when the stored slug is linked on both', () => {
+    const github = repository('github', '101', 'acme/app');
+    const gitlab = { ...repository('gitlab', '202', 'acme/app'), projectRepositoryId: 'gitlab-app' };
+    const card = { source: 'manual', metadata: { repository: 'acme/app' } };
+    const result = cardSessionRepository([github, gitlab], card, undefined);
+
+    expect(result.kind === 'choose' && result.choices.map(choice => choice.provider)).toEqual(['github', 'gitlab']);
+  });
+
   it('refuses a stored slug that is not linked', () => {
     const result = cardSessionRepository(
       [repository('github', '101', 'acme/one')],
