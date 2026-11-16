@@ -5,7 +5,6 @@ import { boundChangeRequestNumber, createBoardRegistry, defineBoard } from '../.
 import { reviewBoard } from '../../boards/review.js';
 import { autoStartingBoards } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
-import type { NotRoutedLookup } from '../../rules/event-rules.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { FACTORY_GITLAB_EVENTS } from '../../rules/types.js';
 import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
@@ -121,7 +120,6 @@ async function setup(
     boards?: ReturnType<typeof createBoardRegistry>;
     storage?: FactoryStorage;
     rules?: GitLabRuleOverrides;
-    notRouted?: NotRoutedLookup;
     /** The user Factory's GitLab connection acts as. */
     factoryUsername?: string;
   } = {},
@@ -203,7 +201,7 @@ async function setup(
     intake: seeded.intake,
     configVersion: 'gitlab-test-v1',
     boards: options.boards ?? createBoardRegistry(),
-    ...(options.notRouted ? { notRouted: options.notRouted } : {}),
+    notRouted: seeded.boards,
   });
   return { seeded, project, gitlab, service, link };
 }
@@ -1916,6 +1914,26 @@ describe('GitLab merge request changes on a card the merge request only shares a
   });
 });
 
+/** Records that intake turned the item with this source key away (Not routed), as intake does. */
+async function turnAway(seeded: Awaited<ReturnType<typeof setup>>['seeded'], projectId: string, sourceKey: string) {
+  await seeded.boards.recordIntakeDecision(
+    { orgId: 'org-1', factoryProjectId: projectId },
+    {
+      idempotencyKey: `intake:${sourceKey}`,
+      outcome: 'not_routed',
+      evaluator: 'intake-order',
+      sourceKey,
+      title: 'Turned away',
+      reason: 'The project has no board to take it.',
+    },
+  );
+}
+
+const ISSUE_42_KEY = encodeIssueReference({ host: 'gitlab.example.com', projectId: PROJECT_ID, issueIid: 42 });
+const MERGE_REQUEST_17_KEY = `gitlab-pr:${Buffer.from(
+  JSON.stringify({ version: 1, host: 'gitlab.example.com', projectId: 101, mergeRequestIid: 17 }),
+).toString('base64url')}`;
+
 describe('GitLab updates to an issue intake turned away', () => {
   function labelled(deliveryId: string, changes: Record<string, unknown>) {
     const delivery = issueOpened(deliveryId);
@@ -1931,25 +1949,25 @@ describe('GitLab updates to an issue intake turned away', () => {
   const ADD_SHIP = { labels: { previous: [{ title: 'bug' }], current: [{ title: 'bug' }, { title: 'ship' }] } };
 
   it('runs intake again when an issue with no card that intake turned away changes labels or assignees', async () => {
-    const notRouted = { isNotRouted: vi.fn(async () => true) };
-    const { seeded, project, service } = await setup({ notRouted });
+    const { seeded, project, service } = await setup();
+    await turnAway(seeded, project.id, ISSUE_42_KEY);
     await service.ingest(labelled('label-not-routed', ADD_SHIP));
 
     const decisions = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+    // Filed under the key intake recorded it Not routed with, so the dispatcher resolves that record.
     expect(decisions.map(entry => entry.decision)).toEqual([
-      expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'gitlab-issue', board: 'work' }),
+      expect.objectContaining({
+        type: 'upsertLinkedWorkItem',
+        source: 'gitlab-issue',
+        board: 'work',
+        sourceKey: ISSUE_42_KEY,
+      }),
     ]);
-    // Asked under the key intake files (and so records Not routed) the issue with.
-    const [intake] = decisions.map(entry => entry.decision as { sourceKey?: string });
-    expect(notRouted.isNotRouted).toHaveBeenCalledWith(
-      { orgId: 'org-1', factoryProjectId: project.id },
-      intake?.sourceKey,
-    );
   });
 
   it('files no card when an issue intake turned away is relabelled after it closed', async () => {
-    const notRouted = { isNotRouted: vi.fn(async () => true) };
-    const { seeded, project, service } = await setup({ notRouted });
+    const { seeded, project, service } = await setup();
+    await turnAway(seeded, project.id, ISSUE_42_KEY);
     const closed = labelled('label-closed', ADD_SHIP);
     closed.payload.object_attributes = { ...closed.payload.object_attributes, state: 'closed' };
     await service.ingest(closed);
@@ -1957,10 +1975,9 @@ describe('GitLab updates to an issue intake turned away', () => {
   });
 
   it('leaves it alone when intake never turned it away, or only its title changed', async () => {
-    const notRouted = { isNotRouted: vi.fn(async (_scope: unknown, _key: string) => false) };
-    const { seeded, project, service } = await setup({ notRouted });
+    const { seeded, project, service } = await setup();
     await service.ingest(labelled('label-never-seen', ADD_SHIP));
-    notRouted.isNotRouted.mockResolvedValue(true);
+    await turnAway(seeded, project.id, ISSUE_42_KEY);
     await service.ingest(labelled('title-only', { title: { previous: 'Old', current: 'New' } }));
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
@@ -1980,16 +1997,13 @@ describe('GitLab updates to a merge request intake turned away', () => {
   }
 
   it('runs intake again when a merge request with no card that intake turned away changes labels', async () => {
-    const notRouted = { isNotRouted: vi.fn(async () => true) };
-    const { seeded, project, service } = await setup({ notRouted });
+    const { seeded, project, service } = await setup();
+    await turnAway(seeded, project.id, MERGE_REQUEST_17_KEY);
     await service.ingest(relabelled('mr-label-not-routed'));
 
-    const decisions = await seeded.workItems.listDeferredDecisions('org-1', project.id);
-    expect(decisions.map(entry => entry.decision)).toEqual([
-      expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'gitlab-pr' }),
+    expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).map(entry => entry.decision)).toEqual([
+      expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'gitlab-pr', sourceKey: MERGE_REQUEST_17_KEY }),
     ]);
-    const [intake] = decisions.map(entry => entry.decision as { sourceKey?: string });
-    expect(notRouted.isNotRouted).toHaveBeenCalledWith({ orgId: 'org-1', factoryProjectId: project.id }, intake?.sourceKey);
   });
 
   it('files a merge request reopened with no card the way a new one is filed', async () => {
@@ -2005,11 +2019,10 @@ describe('GitLab updates to a merge request intake turned away', () => {
   });
 
   it('files no card for a closed merge request, or one intake never turned away', async () => {
-    const notRouted = { isNotRouted: vi.fn(async (_scope: unknown, _key: string) => true) };
-    const { seeded, project, service } = await setup({ notRouted });
-    await service.ingest(relabelled('mr-label-closed', 'closed'));
-    notRouted.isNotRouted.mockResolvedValue(false);
+    const { seeded, project, service } = await setup();
     await service.ingest(relabelled('mr-label-never-seen'));
+    await turnAway(seeded, project.id, MERGE_REQUEST_17_KEY);
+    await service.ingest(relabelled('mr-label-closed', 'closed'));
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 });

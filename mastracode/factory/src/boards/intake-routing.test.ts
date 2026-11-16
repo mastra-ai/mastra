@@ -301,7 +301,7 @@ describe('resolveIntakePlacement', () => {
     expect(resolveIntakePlacement(to('review', 'review'), pullRequest, registry)).toBeUndefined();
   });
 
-  it('places new cards only by routes that handle work_item.opened', () => {
+  it('places new cards only by routes that handle an arrival event', () => {
     const reopened = route({
       id: 'reopened',
       on: ['work_item.reopened'],
