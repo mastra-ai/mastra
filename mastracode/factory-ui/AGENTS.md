@@ -3,7 +3,7 @@ Build: `pnpm --filter ./mastracode/factory-ui build`
 Typecheck: `pnpm --filter ./mastracode/factory-ui typecheck`
 Unit tests: `pnpm --filter ./mastracode/factory-ui test:unit`
 MSW UI tests: `pnpm --filter ./mastracode/factory-ui test:msw`
-Readiness check: `curl -sf localhost:4111/health` (no sign-in required). Don't poll `/`: with sign-in configured it returns `401` to non-browser clients.
+Readiness: `curl -sf localhost:4111/health` (no sign-in). Don't poll `/`; with sign-in on it returns `401` to non-browser clients.
 
 This package owns the MastraCode React SPA, client data layer, Vite config, and UI tests. Its build is bundled into the Mastra CLI, not used by the web host at runtime. Dev orchestration starts in `mastracode/web`, which owns Docker and `.env`: its `dev:ui` script brings the containers up, then runs `turbo run dev dev:api --filter ./mastracode/factory-ui`. That builds this package's workspace dependencies, then starts Vite on :5173 and the host API on :4111. Both tasks live here because `mastracode/web` sits outside the workspace and Turbo can only run workspace packages, so `dev:api` is a shim for `pnpm --dir ../web api`. Run either alone to restart one side independently.
 
