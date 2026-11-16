@@ -55,6 +55,8 @@ const shipped: IntakeTestResponse = {
       ],
     },
   ],
+  note: null,
+  evaluator: 'intake-order',
   current: null,
   moves: [],
 };
@@ -112,6 +114,36 @@ describe('IntakeTesterPanel', () => {
 
     expect(await screen.findByText("Not routed. No board's intake rules match it (checked SHIP).")).toBeTruthy();
     expect(bodies).toEqual([{ order: ['ship'], itemId: ITEM_ID }]);
+  });
+
+  it('tests the open item again against an edited draft when Test is pressed with no URL', async () => {
+    const bodies = serveTest(shipped);
+    const { rerender } = renderWithProviders(
+      <IntakeTesterPanel factoryProjectId="fp-1" itemId={ITEM_ID} draft={{ order: ['ship', 'work'] }} />,
+    );
+    expect(await screen.findByText('Goes to Work › intake')).toBeTruthy();
+    rerender(<IntakeTesterPanel factoryProjectId="fp-1" itemId={ITEM_ID} draft={{ order: ['work', 'ship'] }} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Test' }));
+
+    await waitFor(() => expect(bodies).toHaveLength(2));
+    expect(bodies[1]).toEqual({ order: ['work', 'ship'], itemId: ITEM_ID });
+  });
+
+  it("warns when the project doesn't file with intake order, and says what a fetched pull request answer leaves out", async () => {
+    serveTest({
+      ...shipped,
+      evaluator: 'route-list',
+      note: "A pull request that closes an issue with a card, or comes from a card's branch, joins that card instead; this test doesn't check for that.",
+    });
+    renderWithProviders(<IntakeTesterPanel factoryProjectId="fp-1" itemId={ITEM_ID} />);
+
+    expect(
+      await screen.findByText(
+        'This project still files new items with the old route list, so filing may differ from this answer until it switches to intake order.',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText(/joins that card instead; this test doesn't check for that\./)).toBeTruthy();
   });
 
   it("replays a card's recent events through its board's card-move rules and says what each would do", async () => {
@@ -223,7 +255,14 @@ describe('IntakeTesterPanel', () => {
 
 describe('useIntakeDryRunQuery', () => {
   it('runs the saved rules, and runs them again after a rule changes', async () => {
-    const dryRun: IntakeDryRunResponse = { sampled: 0, boards: [], notRouted: [], items: [], canEdit: true };
+    const dryRun: IntakeDryRunResponse = {
+      evaluator: 'intake-order',
+      sampled: 0,
+      boards: [],
+      notRouted: [],
+      items: [],
+      canEdit: true,
+    };
     const bodies: unknown[] = [];
     server.use(
       http.post(`${PROJECT}/intake/dry-run`, async ({ request }) => {

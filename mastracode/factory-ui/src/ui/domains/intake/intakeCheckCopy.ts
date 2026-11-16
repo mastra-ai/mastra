@@ -45,16 +45,19 @@ export function boardSummary(
   )} took them first.`;
 }
 
-/** With unsaved rules or order: `12 of the last 200 items would now land on a different board.` */
+/** With unsaved rules or order: `12 of the last 200 items would now land on a different board or phase.` */
 export function changedSummary(changed: number, sampled: number): string {
   if (changed === 0) return `None of the last ${items(sampled)} would land anywhere new.`;
-  return `${changed} of the last ${items(sampled)} would now land on a different board.`;
+  return `${changed} of the last ${items(sampled)} would now land on a different board or phase.`;
 }
 
-/** `3 of the last 200 items match no board's rules and would not be routed.` */
+/**
+ * `3 of the last 200 items would not be routed because no board takes them.` That includes items a
+ * rule matched but whose phase can't hold them.
+ */
 export function notRoutedSummary(notRouted: number, sampled: number): string | null {
   if (notRouted === 0) return null;
-  return `${notRouted} of the last ${items(sampled)} match no board's rules and would not be routed.`;
+  return `${notRouted} of the last ${items(sampled)} would not be routed because no board takes them.`;
 }
 
 function show(value: unknown): string {

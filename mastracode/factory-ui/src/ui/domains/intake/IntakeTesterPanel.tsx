@@ -87,9 +87,11 @@ export function IntakeTesterPanel({ factoryProjectId, itemId, draft }: IntakeTes
     if (itemId) mutate({ ...draft, itemId });
   }, [itemId, mutate]);
 
+  // A pasted URL wins; with none, Test runs the open item again, against the draft as it is now.
   const submit = () => {
     const trimmed = url.trim();
     if (trimmed) mutate({ ...draft, url: trimmed });
+    else if (itemId) mutate({ ...draft, itemId });
   };
   const result = test.data;
   const ruleName = result ? ruleNamer(result) : null;
@@ -113,7 +115,7 @@ export function IntakeTesterPanel({ factoryProjectId, itemId, draft }: IntakeTes
           disabled={test.isPending}
           onChange={event => setUrl(event.target.value)}
         />
-        <Button type="submit" variant="default" disabled={test.isPending || url.trim() === ''}>
+        <Button type="submit" variant="default" disabled={test.isPending || (url.trim() === '' && !itemId)}>
           Test
         </Button>
       </form>
@@ -128,6 +130,17 @@ export function IntakeTesterPanel({ factoryProjectId, itemId, draft }: IntakeTes
             {result.item.url ? <a href={result.item.url}>{result.item.title}</a> : result.item.title}
           </Txt>
           <Verdict result={result} />
+          {result.evaluator !== 'intake-order' && (
+            <Notice variant="info">
+              This project still files new items with the old route list, so filing may differ from this answer until it
+              switches to intake order.
+            </Notice>
+          )}
+          {result.note && (
+            <Txt as="p" variant="caption" tone="muted">
+              {result.note}
+            </Txt>
+          )}
           <ul aria-label="What each rule answered" className="flex flex-col gap-1">
             {result.boards.flatMap(board =>
               board.rules.map(rule => (

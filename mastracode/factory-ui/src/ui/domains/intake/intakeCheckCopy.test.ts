@@ -57,9 +57,10 @@ describe('intake check copy', () => {
   });
 
   it('describes a preview and the items no board takes', () => {
-    expect(changedSummary(12, 200)).toBe('12 of the last 200 items would now land on a different board.');
+    expect(changedSummary(12, 200)).toBe('12 of the last 200 items would now land on a different board or phase.');
     expect(changedSummary(0, 200)).toBe('None of the last 200 items would land anywhere new.');
-    expect(notRoutedSummary(3, 200)).toBe("3 of the last 200 items match no board's rules and would not be routed.");
+    // Includes items a rule matched but whose phase refused them.
+    expect(notRoutedSummary(3, 200)).toBe('3 of the last 200 items would not be routed because no board takes them.');
     expect(notRoutedSummary(0, 200)).toBeNull();
   });
 
