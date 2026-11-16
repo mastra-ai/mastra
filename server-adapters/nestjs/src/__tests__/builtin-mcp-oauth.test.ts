@@ -13,7 +13,8 @@ const RESOURCE = 'https://mcp.example.com/api/mcp';
 
 /** Bearer tokens are `<aud>` strings; the authenticated principal carries that audience. */
 class AudienceAuth extends MastraAuthProvider<{ id: string; aud: string }> {
-  async authenticateToken(token: string) {
+  async authenticateToken(token: unknown) {
+    if (typeof token !== 'string') return null;
     return token.startsWith('aud=') ? { id: 'user-1', aud: token.slice(4) } : null;
   }
   async authorizeUser() {
