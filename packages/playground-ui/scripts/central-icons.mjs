@@ -10,6 +10,15 @@ const maskToken = '__CENTRAL_MASK_ID__';
 
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 const icons = [...new Set([...manifest.icons, ...process.argv.slice(2)])].sort();
+const opticalInset = manifest.opticalInset ?? {};
+const badInset = Object.entries(opticalInset).filter(
+  ([name, inset]) => !icons.includes(name) || !(Number.isFinite(inset) && inset > 0),
+);
+if (badInset.length > 0) {
+  throw new Error(
+    `opticalInset needs a positive number for an icon in the set: ${badInset.map(([name]) => name).join(', ')}`,
+  );
+}
 
 if (!process.env.CENTRAL_LICENSE_KEY) {
   throw new Error('Set CENTRAL_LICENSE_KEY to the Mastra Central Icons license key to install the icon package.');
@@ -81,7 +90,7 @@ try {
 
     writeFileSync(
       join(iconsDir, `${name}.tsx`),
-      `import { createCentralIcon } from './create-central-icon';\n\nexport const ${name} = createCentralIcon('${name}', ${parameter} => (${body}));\n`,
+      `import { createCentralIcon } from './create-central-icon';\n\nexport const ${name} = createCentralIcon('${name}', ${parameter} => (${body})${opticalInset[name] ? `, ${opticalInset[name]}` : ''});\n`,
     );
   }
 

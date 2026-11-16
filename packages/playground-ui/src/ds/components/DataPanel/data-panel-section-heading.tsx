@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface DataPanelSectionHeadingProps {
-  /** Optional leading icon. Rendered before `children` and sized via `[&>svg]:size-3.5`. */
+  /** Optional leading icon. Rendered before `children` and sized via `[&>svg]:size-icon-sm`. */
   icon?: ReactNode;
   className?: string;
   children: ReactNode;
@@ -16,7 +16,7 @@ export function DataPanelSectionHeading({ icon, className, children }: DataPanel
   return (
     <div
       className={cn(
-        'flex items-center gap-1.5 text-caption tracking-widest text-placeholder uppercase [&>svg]:size-3.5',
+        'flex items-center gap-1.5 text-caption tracking-widest text-placeholder uppercase [&>svg]:size-icon-sm',
         className,
       )}
     >

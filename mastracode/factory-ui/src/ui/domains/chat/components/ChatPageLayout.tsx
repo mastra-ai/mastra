@@ -34,7 +34,7 @@ export function ChatPageLayout({
         {titleMenu}
       </div>
     ) : undefined,
-    triggerClassName: 'size-control-sm rounded-full [&>svg]:size-4',
+    triggerClassName: 'size-control-sm rounded-full [&>svg]:size-icon-md',
   });
   const hasHeader = Boolean(slots.breadcrumbs || headerActions);
   const dock = headerActions && dockActions ? dockActions(headerActions) : undefined;

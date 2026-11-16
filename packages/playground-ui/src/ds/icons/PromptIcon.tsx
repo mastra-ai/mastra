@@ -12,4 +12,4 @@ const Glyph = createLucideIcon('mastra-prompt', [
   ],
 ]);
 
-export const PromptIcon = (props: LucideProps) => <Glyph size={16} {...props} />;
+export const PromptIcon = (props: LucideProps) => <Glyph size={18} {...props} />;

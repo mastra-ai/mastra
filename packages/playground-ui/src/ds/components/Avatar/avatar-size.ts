@@ -4,8 +4,8 @@ import { createContext } from 'react';
 export type AvatarSize = 'xs' | 'inline' | 'sm' | 'md' | 'lg' | 'control';
 
 export const avatarSizeClasses: Record<AvatarSize, string> = {
-  xs: 'size-icon-xs',
-  inline: 'size-icon-md',
+  xs: 'size-avatar-xs',
+  inline: 'size-avatar-inline',
   sm: 'size-avatar-sm',
   md: 'size-avatar-md',
   lg: 'size-avatar-lg',

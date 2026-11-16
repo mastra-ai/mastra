@@ -22,6 +22,29 @@ Icons are decorative (`aria-hidden`) unless you pass `aria-label`. Prefer labell
 
 <Canvas of={IconStories.CentralIcons} />
 
+## Sizing
+
+An icon takes its size from where it sits. Buttons, menus, inputs, badges and the other design system components size the icons inside them, so an icon placed there needs no size of its own. Anywhere else, wrap it in `Icon size` or give it a `size-icon-*` class.
+
+| Size | Token | Box |
+| --- | --- | --- |
+| `xs` | `size-icon-xs` | 14px |
+| `sm` | `size-icon-sm` | 16px |
+| `md` | `size-icon-md` | 18px |
+| `lg` | `size-icon-lg` | 22px |
+
+Don't set `size`, `width`, `height` or a size class such as `size-4` on an icon. The `playground-ui/icon-size-from-parent` lint rule reports it. It allows a size relative to the surrounding text (`size-[1em]`) and a size computed from data.
+
+The boxes are 2px larger than they were with Lucide because Central leaves more room around each drawing. At these sizes a Central icon draws as large as the Lucide icon it replaced. Icons that already fill their box keep their drawn size: product icons such as `AgentIcon` draw on a canvas 1/8 larger, and Lucide icons, brand logos and product marks sit 1px in from each edge.
+
+### Optical inset
+
+A few Central shapes run edge to edge, so in the same box they draw about 20% larger than everything else: plain arrows, the `•••` and `⋮` dots, the menu bars, undo, percent, the bar chart, infinity, the graduation cap, the laptop and the toggle. `opticalInset` in `central/central-icons.json` pads these icons' grid on every side, in grid units, so they draw at the same visual size as the rest. The box and the layout don't change, and the drawing stays as Central ships it.
+
+The inset is set per shape family, and every icon in a family shares it, so an arrow pointing up right is the same size as one pointing down left. A family gets an inset when it draws more than 15% larger than its peers.
+
+To add one, put the icon's name and inset in `opticalInset` and rerun the generator. It checks that every name is in the set, and `central-icons.test.tsx` checks that each generated icon uses its inset.
+
 ## Adding an icon
 
 This is for Mastra team members. The icons are committed to the repo, so installing, building, and releasing need no license key. Only adding or updating icons does.

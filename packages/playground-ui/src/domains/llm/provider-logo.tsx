@@ -81,10 +81,10 @@ const brandMarks = new Map<string, ComponentType<SVGProps<SVGSVGElement>>>([
 const iconSizes: IconSize[] = ['xs', 'sm', 'md', 'lg'];
 
 const iconSizeClassNames = {
-  xs: 'size-icon-xs',
-  sm: 'size-icon-sm',
-  md: 'size-icon-md',
-  lg: 'size-icon-lg',
+  xs: 'size-icon-xs p-px',
+  sm: 'size-icon-sm p-px',
+  md: 'size-icon-md p-px',
+  lg: 'size-icon-lg p-px',
 } satisfies Record<IconSize, string>;
 
 const fallbackProviderIcons = new Map<string, keyof typeof providerMapToIcon>([

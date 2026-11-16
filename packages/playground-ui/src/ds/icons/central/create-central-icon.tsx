@@ -5,7 +5,9 @@ export type CentralIconProps = SVGProps<SVGSVGElement> & {
   size?: number | string;
 };
 
-export const createCentralIcon = (name: string, renderShapes: (maskId: string) => ReactNode) => {
+export const createCentralIcon = (name: string, renderShapes: (maskId: string) => ReactNode, opticalInset = 0) => {
+  const viewBox = `${-opticalInset} ${-opticalInset} ${24 + 2 * opticalInset} ${24 + 2 * opticalInset}`;
+
   const CentralIcon = forwardRef<SVGSVGElement, CentralIconProps>(({ size = 24, ...props }, ref) => {
     const maskId = `central-${name}-${useId()}`;
     const labelled = props['aria-label'] !== undefined || props['aria-labelledby'] !== undefined;
@@ -15,7 +17,7 @@ export const createCentralIcon = (name: string, renderShapes: (maskId: string) =
         ref={ref}
         width={size}
         height={size}
-        viewBox="0 0 24 24"
+        viewBox={viewBox}
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
         aria-hidden={labelled ? undefined : true}

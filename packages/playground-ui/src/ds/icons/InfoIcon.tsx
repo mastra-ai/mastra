@@ -1,7 +1,14 @@
 import React from 'react';
 
 export const InfoIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg width="17" height="16" viewBox="0 0 17 16" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+  <svg
+    width="19.125"
+    height="18"
+    viewBox="-1.0625 -1 19.125 18"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    {...props}
+  >
     <path
       d="M7.07303 7.39921C6.65882 7.39921 6.32303 7.735 6.32303 8.14921C6.32303 8.56343 6.65882 8.89921 7.07303 8.89921H7.75V10.6187C7.75 11.0329 8.08579 11.3687 8.5 11.3687C8.91421 11.3687 9.25 11.0329 9.25 10.6187V8.14921C9.25 7.735 8.91421 7.39921 8.5 7.39921H7.07303Z"
       fill="currentColor"

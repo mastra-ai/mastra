@@ -222,6 +222,7 @@
 [data-sonner-toaster].mastra-toaster [data-sonner-toast] [data-close-button] svg {
   width: var(--spacing-icon-xs);
   height: var(--spacing-icon-xs);
+  padding: 1px;
 }
 
 .mastra-toaster .toast-promise-loader {

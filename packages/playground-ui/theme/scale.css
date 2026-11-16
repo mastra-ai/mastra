@@ -22,10 +22,10 @@
      `--height-*`, `--max-height-*`, `--width-*` and `--container-*`, which is
      how `icon-smd` came to exist in three of them and `--container-icon-smd`
      in none. */
-  --spacing-icon-xs: 12px;
-  --spacing-icon-sm: 14px;
-  --spacing-icon-md: 16px;
-  --spacing-icon-lg: 20px;
+  --spacing-icon-xs: 14px;
+  --spacing-icon-sm: 16px;
+  --spacing-icon-md: 18px;
+  --spacing-icon-lg: 22px;
 
   --spacing-control-sm: 1.75rem; /* 28px */
   --spacing-control-md: 1.875rem; /* 30px — the default control height */
@@ -35,6 +35,8 @@
   --spacing-table-header: 28px;
   --spacing-table-row: 40px;
   --spacing-table-row-small: 32px;
+  --spacing-avatar-xs: 12px;
+  --spacing-avatar-inline: 16px;
   --spacing-avatar-sm: 24px;
   --spacing-avatar-md: 32px;
   --spacing-avatar-lg: 40px;

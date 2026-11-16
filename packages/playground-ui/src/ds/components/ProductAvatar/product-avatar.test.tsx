@@ -49,7 +49,7 @@ describe('ProductAvatar', () => {
     const group = screen.getByLabelText('Products');
     const sizes = Array.from(group.querySelectorAll('[data-slot=avatar]'), avatar => avatar.getAttribute('data-size'));
     expect(sizes).toEqual(['inline', 'inline']);
-    expect(screen.getByRole('img', { name: 'Studio' }).classList.contains('size-icon-md')).toBe(true);
+    expect(screen.getByRole('img', { name: 'Studio' }).classList.contains('size-avatar-inline')).toBe(true);
   });
 
   it('opens a tooltip on hover inside a group', async () => {

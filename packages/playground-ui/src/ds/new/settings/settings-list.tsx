@@ -57,7 +57,7 @@ export function SettingsItemIcon({ className, ...props }: ComponentProps<'span'>
       data-slot="settings-item-icon"
       aria-hidden
       className={cn(
-        'flex size-avatar-md shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground [&>svg]:size-4',
+        'flex size-avatar-md shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground [&>svg]:size-icon-md',
         className,
       )}
       {...props}

@@ -1,7 +1,14 @@
 import React from 'react';
 
 export const RepoIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg width="21" height="21" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+  <svg
+    width="23.625"
+    height="23.625"
+    viewBox="-1.3125 -1.3125 23.625 23.625"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    {...props}
+  >
     <path
       fillRule="evenodd"
       clipRule="evenodd"

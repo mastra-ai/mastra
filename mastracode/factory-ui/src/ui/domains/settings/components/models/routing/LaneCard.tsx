@@ -28,7 +28,7 @@ export function LaneCard({
         <Txt as="h3" variant="label">
           {MODEL_LANE_LABELS[lane]}
         </Txt>
-        <ul className="text-muted-foreground flex flex-wrap items-center gap-2.5 [&_svg]:size-3.5">{children}</ul>
+        <ul className="text-muted-foreground [&_svg]:size-icon-sm flex flex-wrap items-center gap-2.5">{children}</ul>
         <Txt variant="meta" tone="muted" className="@min-[38rem]:sr-only">
           Uses {MODEL_DEFAULTS_LABELS[destination]}
         </Txt>

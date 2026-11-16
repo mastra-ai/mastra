@@ -107,7 +107,9 @@ function AccountSource({ x, label, icon }: { x: number; label: string; icon: Rea
   return (
     <SketchLabel x={x + 10} y={62} width={84}>
       <div className="flex items-center gap-2">
-        <span className="text-muted-foreground hidden size-3 shrink-0 min-[900px]:inline [&>svg]:size-3">{icon}</span>
+        <span className="text-muted-foreground size-icon-xs [&>svg]:size-icon-xs hidden shrink-0 min-[900px]:inline">
+          {icon}
+        </span>
         <Txt variant="meta">{label}</Txt>
       </div>
     </SketchLabel>

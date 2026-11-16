@@ -103,7 +103,7 @@ export function ActivityFold({
     >
       <ActivityTrigger>
         <ActivityHeader>
-          <ActivityIcon className={cn(pose && '[&_svg]:size-4')}>
+          <ActivityIcon className={cn(pose && '[&_svg]:size-icon-md')}>
             <FoldIcon pose={pose} animates={animates} live={live} fallback={words.icon} />
           </ActivityIcon>
           <span ref={box} className="relative flex min-w-0">

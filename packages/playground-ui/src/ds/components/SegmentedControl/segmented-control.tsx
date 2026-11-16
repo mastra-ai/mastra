@@ -177,7 +177,7 @@ export function SegmentedControlItem({
         iconOnly ? 'aspect-square' : 'px-3',
         // A whole disabled group is dimmed on the track; a single disabled item dims itself.
         disabled && 'opacity-50',
-        '[&_svg]:size-3.5 [&_svg]:shrink-0',
+        '[&_svg]:size-icon-sm [&_svg]:shrink-0',
         'text-muted-foreground hover:text-foreground data-[checked]:text-foreground',
         'focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-border-focus',
         'data-[disabled]:cursor-not-allowed data-[disabled]:hover:text-muted-foreground',

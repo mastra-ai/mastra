@@ -1,6 +1,25 @@
 {
   "package": "@central-icons-react/round-outlined-radius-2-stroke-2",
   "version": "1.2.44",
+  "opticalInset": {
+    "IconArrowDown": 3,
+    "IconArrowDownLeft": 3,
+    "IconArrowDownRight": 3,
+    "IconArrowLeft": 3,
+    "IconArrowRight": 3,
+    "IconArrowUndoUp": 3,
+    "IconArrowUp": 3,
+    "IconArrowUpRight": 3,
+    "IconBarsThree": 3,
+    "IconChart6": 2,
+    "IconDotGrid1x3Horizontal": 3,
+    "IconDotGrid1x3Vertical": 3,
+    "IconGraduateCap": 2,
+    "IconInfinity": 2,
+    "IconMacbook": 3,
+    "IconPercent": 3,
+    "IconToggle": 2
+  },
   "icons": [
     "IconAgents",
     "IconAlignmentJustify",

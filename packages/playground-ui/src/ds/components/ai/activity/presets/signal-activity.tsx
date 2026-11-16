@@ -60,7 +60,7 @@ function SignalLine({ kind, label, message, detail, mode, defaultOpen }: Omit<Si
     >
       <ActivityTrigger>
         <ActivityHeader>
-          <ActivityIcon className="[&_svg]:size-4">
+          <ActivityIcon className="[&_svg]:size-icon-md">
             <Icon />
           </ActivityIcon>
           <ActivityLabel className="text-subheading">{name}</ActivityLabel>

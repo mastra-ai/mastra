@@ -14,7 +14,7 @@ export interface ScoreReasonHoverCardProps {
 }
 
 export function ScoreReasonHoverCard({ scorerId, reason, nested = false }: ScoreReasonHoverCardProps) {
-  const iconClassName = 'text-muted-foreground hover:text-foreground [&>svg]:size-3.5';
+  const iconClassName = 'text-muted-foreground hover:text-foreground [&>svg]:size-icon-sm';
 
   return (
     <HoverCard>

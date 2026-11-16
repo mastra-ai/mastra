@@ -123,7 +123,7 @@ function CommandPaletteScope({
       aria-pressed={active}
       onClick={onSelect}
     >
-      <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">{icon}</span>
+      <span className="flex size-icon-md shrink-0 items-center justify-center [&>svg]:size-icon-md">{icon}</span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
       <Txt
         as="span"

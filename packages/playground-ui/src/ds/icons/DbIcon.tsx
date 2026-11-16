@@ -1,7 +1,14 @@
 import React from 'react';
 
 export const DbIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg width="13" height="14" viewBox="0 0 13 14" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+  <svg
+    width="14.625"
+    height="15.75"
+    viewBox="-0.8125 -0.875 14.625 15.75"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    {...props}
+  >
     <path
       fillRule="evenodd"
       clipRule="evenodd"

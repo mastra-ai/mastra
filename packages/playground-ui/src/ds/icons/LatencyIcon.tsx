@@ -1,7 +1,14 @@
 import React from 'react';
 
 export const LatencyIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+  <svg
+    width="13.5"
+    height="13.5"
+    viewBox="-0.75 -0.75 13.5 13.5"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    {...props}
+  >
     <path
       d="M2.0625 5.99976C2.0625 3.82513 3.82538 2.06226 6 2.06226C6.58712 2.06226 7.14423 2.19076 7.64473 2.42117V1.21042C7.12905 1.03337 6.57575 0.937256 6 0.937256C3.20406 0.937256 0.9375 3.20381 0.9375 5.99976C0.9375 8.7957 3.20406 11.0623 6 11.0623C8.79594 11.0623 11.0625 8.7957 11.0625 5.99976H9.9375C9.9375 8.17438 8.17462 9.93726 6 9.93726C3.82538 9.93726 2.0625 8.17438 2.0625 5.99976Z"
       fill="currentColor"

@@ -2,9 +2,9 @@ import React from 'react';
 
 export const TypesafeIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
+    width="18"
+    height="18"
+    viewBox="-1.5 -1.5 27 27"
     fill="#E551BA"
     fillRule="evenodd"
     xmlns="http://www.w3.org/2000/svg"

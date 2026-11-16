@@ -7,4 +7,4 @@ const Glyph = createLucideIcon('mastra-processor', [
   ['path', { d: 'M10 2v4M14 2v4M10 18v4M14 18v4M2 10h4M2 14h4M18 10h4M18 14h4', key: 'pins' }],
 ]);
 
-export const ProcessorIcon = (props: LucideProps) => <Glyph size={16} {...props} />;
+export const ProcessorIcon = (props: LucideProps) => <Glyph size={18} {...props} />;

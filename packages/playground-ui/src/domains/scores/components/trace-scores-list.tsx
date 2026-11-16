@@ -75,7 +75,7 @@ function TraceScoreLine({ score, onSelect }: { score: ClientScoreRowData; onSele
 
   return (
     <Fragment>
-      <dt className="flex min-w-0 items-center gap-1.5 text-body-sm text-muted-foreground [&>svg]:size-3.5 [&>svg]:shrink-0">
+      <dt className="flex min-w-0 items-center gap-1.5 text-body-sm text-muted-foreground [&>svg]:size-icon-sm [&>svg]:shrink-0">
         <ScorersIcon />
         <button
           type="button"
@@ -97,7 +97,7 @@ function TraceScoreLine({ score, onSelect }: { score: ClientScoreRowData; onSele
                 <button
                   type="button"
                   aria-label={`Show ${scorerName} reason`}
-                  className="cursor-pointer text-muted-foreground hover:text-foreground [&>svg]:size-3.5"
+                  className="cursor-pointer text-muted-foreground hover:text-foreground [&>svg]:size-icon-sm"
                 />
               }
             >

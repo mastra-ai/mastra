@@ -26,7 +26,7 @@ const selectedTabClass = buttonVariants({ variant: 'subtle', size: 'sm' });
 const editingTabClass = cn(
   controlHeight.sm,
   'inline-flex items-center gap-1.5 rounded-full border border-dashed border-border-strong bg-fill-hover px-[.9em] text-label text-foreground',
-  '[&_svg]:size-3.5 [&_svg]:shrink-0',
+  '[&_svg]:size-icon-sm [&_svg]:shrink-0',
 );
 
 export type SavedViewTabsProps<TSettings> = {
