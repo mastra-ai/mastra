@@ -5896,13 +5896,27 @@ export class DurableAgent<
     let cleanupRequested = false;
     let streamCleanup: (() => void) | undefined;
 
+    const localEntry = this.#runRegistry.get(runId);
+    const observedEntry = localEntry ?? getRunRegistryEntry(runId, this.#mastra);
+    const observedFence = observedEntry?.executionFence;
     const runCleanup = createRunCleanup({
-      scheduleTimer: cleanup => this.__getStreamBus().scheduleCleanup(cleanup),
+      scheduleTimer: cleanup =>
+        observedFence
+          ? this.#scheduleReaderCleanup(observedFence, cleanup)
+          : this.__getStreamBus().scheduleCleanup(cleanup),
       release: () => {
         streamCleanup?.();
+        if (
+          observedFence &&
+          (this.#unverifiedReaderFences.has(observedFence) ||
+            !observedFence.ownsRunTopics() ||
+            getRunRegistryEntry(runId, this.#mastra) !== observedEntry)
+        ) {
+          return;
+        }
         this.#runRegistry.cleanup(runId);
         deleteRunRegistryEntry(runId, this.#mastra);
-        this.#clearPubsubTopic(runId);
+        this.#clearPubsubTopic(runId, observedEntry);
       },
     });
     const performCleanup = runCleanup.run;
@@ -5918,8 +5932,6 @@ export class DurableAgent<
       }
     };
 
-    const localEntry = this.#runRegistry.get(runId);
-    const observedEntry = localEntry ?? getRunRegistryEntry(runId, this.#mastra);
     const observedAgentSpan = observedEntry?.resumeAgentSpan ?? observedEntry?.agentSpan;
     let structuredOutput = observedEntry?.structuredOutput;
     let outputProcessors = observedEntry?.outputProcessors;

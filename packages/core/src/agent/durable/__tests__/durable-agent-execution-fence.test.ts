@@ -549,6 +549,8 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         const clearTopic = vi.spyOn(pubsub, 'clearTopic');
         const result = await agent.stream('Answer me.', { runId, onFinish });
         const stream = collect(result.fullStream);
+        const observer = ownership === 'unverified' ? await agent.observe(runId) : undefined;
+        const observedStream = observer ? collect(observer.fullStream) : undefined;
         const fence = ExecutionFence.getLocalActive(runId)!;
         const foreign = foreignOwnership(backend, storage, pubsub);
         const originalPublisher = getExecutionStreamPublisher({
@@ -597,10 +599,15 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
           await terminalDelivery;
           expect(await agent.__getRunRecord(runId)).toEqual(expected);
           if (ownership === 'unverified') {
-            expect(stream.chunks.some(chunk => chunk.type === 'finish')).toBe(true);
+            await expect.poll(() => onFinish.mock.calls.length).toBe(1);
+            await expect.poll(() => stream.chunks.some(chunk => chunk.type === 'finish')).toBe(true);
             expect(onFinish).toHaveBeenCalledOnce();
             expect(onFinish.mock.calls[0]![0].text).toBe('old answer');
-            expect(scheduleCleanup).not.toHaveBeenCalled();
+            await expect(observer!.output.text).resolves.toBe('old answer');
+            for (const [cleanup] of scheduleCleanup.mock.calls) cleanup();
+            expect(clearTopic).not.toHaveBeenCalled();
+            observer!.cleanup();
+            await originalPublisher.detach();
             expect(clearTopic).not.toHaveBeenCalled();
             expect(agent.__getRunOwner(runId)).toBeDefined();
             result.cleanup();
@@ -619,6 +626,8 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         } finally {
           model.release();
           await stream.stop();
+          await observedStream?.stop();
+          observer?.detach();
           result.cleanup();
           if (ownership === 'takeover') await foreign.free(agent.id, runId, 'replacement-reader');
         }
