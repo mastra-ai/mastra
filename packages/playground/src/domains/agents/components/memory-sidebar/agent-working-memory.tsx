@@ -202,7 +202,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                   }}
                   disabled={isUpdating}
                 >
-                  {isUpdating ? <IconArrowRotateCounterClockwise className="h-3 w-3 animate-spin" /> : 'Save changes'}
+                  {isUpdating ? <IconArrowRotateCounterClockwise className="animate-spin" /> : 'Save changes'}
                 </Button>
                 <Button
                   icon={<IconCrossMedium />}
@@ -235,7 +235,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
             <Txt as="span" variant="body" className="block">
               Learn about working memory
             </Txt>
-            <IconSquareArrowTopRight className="h-3 w-3" />
+            <IconSquareArrowTopRight className="size-icon-xs" />
           </a>
         </div>
       )}

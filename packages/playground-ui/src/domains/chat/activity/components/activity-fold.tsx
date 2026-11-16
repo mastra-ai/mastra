@@ -120,10 +120,9 @@ export function ActivityFold({
                 )}
                 {failed && (
                   <IconCrossMedium
-                    size={13}
                     role="img"
                     aria-label="Failed"
-                    className="shrink-0 text-destructive-foreground"
+                    className="size-icon-sm shrink-0 text-destructive-foreground"
                   />
                 )}
                 {outcomeLabel && (

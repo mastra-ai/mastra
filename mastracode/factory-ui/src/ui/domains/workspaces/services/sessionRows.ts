@@ -1,24 +1,19 @@
-import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
-import type { InstalledBoardInfo } from '../../../../api/types';
-import { cardContextSessions, cardThreadSession, externalLinkLabel } from '../../factory/boardItems';
-import type { PullRequestStatus } from '../../factory/boardItems';
-import { itemBoard } from '../../factory/boardStages';
-import { CHANGE_REQUEST_TERMS, changeRequestStatus, isSettledChangeRequest } from '../../factory/changeRequestState';
-import type { CardChangeRequest } from '../../factory/changeRequestState';
-import type { WorkItem, WorkItemSource } from '../../factory/services/workItems';
-import {
-  getFactorySessionSource,
-  getSessionOwnerDetails,
-  getUserSessionLabel,
-  isFactoryOwnedSession,
-} from './sessionPresentation';
-import type { SessionOwnerDetails, SessionSource, SessionViewerProfile } from './sessionPresentation';
-import { sessionRowStatus } from './sessionStatus';
-import type { SessionRowStatus } from './sessionStatus';
-import { SLACK_SESSION_BRANCH_PREFIX } from './user-sessions';
-import type { FactoryUserSession } from './user-sessions';
+import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
+import { SLACK_SESSION_BRANCH_PREFIX } from '@mastra/factory/work-item-branch';
+import { isSettledChangeRequest } from '@mastra/factory/work-items/change-requests';
+import type { CardChangeRequest, PullRequestStatus } from '@mastra/factory/work-items/change-requests';
 
-export type SessionActivityStatus = 'waiting' | 'working' | 'initializing' | 'idle' | 'done';
+import type { SessionRowWire, SessionRowsResponse } from '../../../../api/types';
+import type { SessionPullRequestTarget } from '../../../../hooks/useSessionPullRequestSubscriptions';
+import { externalLinkLabel } from '../../factory/boardItems';
+import { CHANGE_REQUEST_TERMS, changeRequestStatus } from '../../factory/changeRequestState';
+import { cardLink } from '../../factory/services/workItems';
+import type { WorkItemSource } from '../../factory/services/workItems';
+import type { FactoryProject } from './github';
+import { getFactorySessionSource, getSessionOwnerDetails, getUserSessionLabel } from './sessionPresentation';
+import type { SessionOwnerDetails, SessionSource, SessionViewerProfile } from './sessionPresentation';
+
+export type SessionActivityStatus = SessionRowWire['status'];
 
 export const SESSION_STATUS_LABELS: Record<SessionActivityStatus, string> = {
   waiting: 'Waiting on you',
@@ -28,23 +23,21 @@ export const SESSION_STATUS_LABELS: Record<SessionActivityStatus, string> = {
   done: 'Done',
 };
 
-function isSessionActivityStatus(value: string): value is SessionActivityStatus {
-  return value in SESSION_STATUS_LABELS;
-}
-
-export const SESSION_ACTIVITY_STATUSES: readonly SessionActivityStatus[] =
-  Object.keys(SESSION_STATUS_LABELS).filter(isSessionActivityStatus);
-
 export interface SessionOwner {
   userId: string;
   name: string;
 }
 
-export function sessionOwners(rows: readonly SessionListRow[]): SessionOwner[] {
-  const nameByUserId = new Map(rows.map(row => [row.session.userId, row.owner.name]));
-  return Array.from(nameByUserId, ([userId, name]) => ({ userId, name })).toSorted((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+export function sessionOwners(
+  owners: SessionRowsResponse['owners'],
+  viewer: SessionViewerProfile | undefined,
+): SessionOwner[] {
+  return owners
+    .map(({ userId, name, avatarUrl }) => ({
+      userId,
+      name: getSessionOwnerDetails({ userId, owner: { name, avatarUrl } }, viewer).name,
+    }))
+    .toSorted((a, b) => a.name.localeCompare(b.name));
 }
 
 export interface SessionExternalLink {
@@ -53,8 +46,12 @@ export interface SessionExternalLink {
   label: string;
 }
 
+export type SessionRowSession = SessionRowWire['session'];
+
+type SessionRowCard = NonNullable<SessionRowWire['card']>;
+
 export interface SessionListRow {
-  session: FactoryUserSession;
+  session: SessionRowSession;
   origin: 'factory' | 'user';
   board: string | undefined;
   source: SessionSource;
@@ -67,9 +64,7 @@ export interface SessionListRow {
   owner: SessionOwnerDetails;
   ownedByViewer: boolean;
   canRegenerateTitle: boolean;
-  item?: WorkItem;
-  /** The card this session belongs to, set for a card's own sessions. */
-  itemId?: string;
+  cardId?: string;
   threadId?: string;
   pullRequest?: CardChangeRequest;
   pullRequestStatus?: PullRequestStatus;
@@ -79,27 +74,13 @@ export interface SessionListRow {
   cardSessionIds?: readonly string[];
   /** The card's other sessions, listed under its row when child sessions are revealed. */
   childRows?: readonly SessionListRow[];
-  /** A card row's carried status (waiting or working wins across its sessions), for grouping when its children are revealed. */
-  cardStatus?: SessionActivityStatus;
   /** What a child row is named in the sidebar: the phase its session ran in. */
   phaseLabel?: string;
   /** Listed under a person's session, but the Factory owns and runs it. */
   runByFactory?: boolean;
   /** A followed card's phase session that waits on a person, answerable from this row. */
   waitingSessionId?: string;
-  createdAt: string;
   updatedAt: string;
-}
-
-export function sessionActivityStatus(row: {
-  initializing: boolean;
-  running: boolean;
-  attention: boolean;
-  settled: boolean;
-}): SessionActivityStatus {
-  const marker = sessionRowStatus(row);
-  if (marker === 'ready') return 'waiting';
-  return marker ?? (row.settled ? 'done' : 'idle');
 }
 
 export const STATUS_MARKER_BY_ACTIVITY: Record<SessionActivityStatus, SessionRowStatus | undefined> = {
@@ -110,29 +91,20 @@ export const STATUS_MARKER_BY_ACTIVITY: Record<SessionActivityStatus, SessionRow
   done: undefined,
 };
 
-function isOwnedByViewer(session: FactoryUserSession, viewer: SessionViewerProfile | undefined): boolean {
-  return !viewer?.userId || session.userId === viewer.userId;
+export interface SessionRowPresentation {
+  factoryId: string;
+  openSessionId: string | undefined;
+  viewer: SessionViewerProfile | undefined;
+  repositories: readonly Pick<FactoryProject['repositories'][number], 'projectRepositoryId' | 'slug'>[] | undefined;
 }
 
-/** The board a session's card sits on; a session with no card (a pull request's review included) belongs to the default board. */
-export function sessionBoard(item: WorkItem | undefined): string {
-  return item ? itemBoard(item) : DEFAULT_BOARD_ID;
+function isSlackSession(session: SessionRowSession): boolean {
+  return session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX);
 }
 
-/**
- * Whether the card sits in a phase its board marks terminal. Only the catalog says which phases those
- * are (any board may name them anything), so until it loads, or while it fails and retries, no card
- * counts as finished here and its session reads as active; a card with a pull request still settles
- * on that pull request's state.
- */
-function reachedTerminalPhase(item: WorkItem, boards: readonly InstalledBoardInfo[] | undefined): boolean {
-  const board = boards?.find(candidate => candidate.id === itemBoard(item));
-  return item.stages.some(stage => board?.phases.find(phase => phase.id === stage)?.kind === 'terminal');
-}
-
-function factorySessionName(session: FactoryUserSession, item: WorkItem | undefined): string {
-  if (session.title !== undefined) return session.title;
-  if (session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) && item?.title !== undefined) return item.title;
+function factorySessionName(session: SessionRowSession, card: SessionRowCard | undefined): string {
+  if (session.title !== null) return session.title;
+  if (isSlackSession(session) && card) return card.title;
   return session.branch;
 }
 
@@ -143,208 +115,69 @@ function sessionExternalLinkLabel(source: WorkItemSource): string {
 }
 
 function sessionExternalLinks(
-  item: WorkItem | undefined,
+  link: { source: WorkItemSource; url: string | null } | undefined,
   pullRequest: CardChangeRequest | undefined,
 ): SessionExternalLink[] {
-  const links: SessionExternalLink[] = item?.url
-    ? [{ url: item.url, source: item.source, label: sessionExternalLinkLabel(item.source) }]
+  const links: SessionExternalLink[] = link?.url
+    ? [{ url: link.url, source: link.source, label: sessionExternalLinkLabel(link.source) }]
     : [];
-  if (pullRequest?.url && !links.some(link => link.url === pullRequest.url)) {
+  if (pullRequest?.url && !links.some(existing => existing.url === pullRequest.url)) {
     const source = CHANGE_REQUEST_TERMS[pullRequest.provider].source;
     links.push({ url: pullRequest.url, source, label: sessionExternalLinkLabel(source) });
   }
   return links;
 }
 
-function isSettled(
-  item: WorkItem | undefined,
-  boards: readonly InstalledBoardInfo[] | undefined,
-  pullRequestStatus: PullRequestStatus | undefined,
-): boolean {
-  if (item && reachedTerminalPhase(item, boards)) return true;
-  return isSettledChangeRequest(pullRequestStatus);
-}
-
-export interface FactorySessionRowInput {
-  session: FactoryUserSession;
-  item: WorkItem | undefined;
-  boards: readonly InstalledBoardInfo[] | undefined;
-  /** The context the card filed the session under. */
-  context?: string;
-  threadId: string | undefined;
-  pullRequest: CardChangeRequest | undefined;
-  repositorySlug: string | undefined;
-  factoryId: string;
-  routeSessionId: string | undefined;
-  running: boolean;
-  attention: boolean;
-  pinned: boolean;
-  viewer: SessionViewerProfile | undefined;
-}
-
-export function buildFactorySessionRow({
-  session,
-  item,
-  boards,
-  context,
-  threadId,
-  pullRequest,
-  repositorySlug,
-  factoryId,
-  routeSessionId,
-  running,
-  attention,
-  pinned,
-  viewer,
-}: FactorySessionRowInput): SessionListRow {
-  const url = `/factories/${factoryId}/workspaces/${session.sessionId}`;
-  const ownedByViewer = isOwnedByViewer(session, viewer);
-  const pullRequestStatus = pullRequest && changeRequestStatus(pullRequest);
-  return {
+export function presentSessionRow(wire: SessionRowWire, presentation: SessionRowPresentation): SessionListRow {
+  const { factoryId, openSessionId, viewer, repositories } = presentation;
+  const { session, card } = wire;
+  const link = card && cardLink(card);
+  const ownedByViewer = !viewer?.userId || session.userId === viewer.userId;
+  const shared = {
     session,
-    origin: 'factory',
-    board: sessionBoard(item),
-    source: getFactorySessionSource(session, item),
-    name: factorySessionName(session, item),
-    url,
-    openPath: `${url}/threads/${session.sessionId}`,
-    externalLinks: sessionExternalLinks(item, pullRequest),
-    active: session.sessionId === routeSessionId,
-    status: sessionActivityStatus({
-      initializing: !session.materializedAt,
-      running,
-      attention,
-      settled: isSettled(item, boards, pullRequestStatus),
-    }),
+    status: wire.status,
     owner: getSessionOwnerDetails(session, viewer),
     ownedByViewer,
-    canRegenerateTitle: ownedByViewer && session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX),
-    item,
-    ...(item && context !== undefined ? { itemId: item.id } : {}),
-    threadId,
-    pullRequest,
-    pullRequestStatus,
-    repository: repositorySlug,
-    pinned,
-    createdAt: session.createdAt,
-    updatedAt: item?.updatedAt ?? session.updatedAt,
+    active: openSessionId !== undefined && (wire.cardSessionIds ?? [session.sessionId]).includes(openSessionId),
+    pinned: wire.pinned,
+    updatedAt: wire.updatedAt,
+    ...(card ? { cardId: card.id } : {}),
+    ...(wire.cardSessionIds ? { cardSessionIds: wire.cardSessionIds } : {}),
+    ...(wire.childRows ? { childRows: wire.childRows.map(child => presentSessionRow(child, presentation)) } : {}),
+    ...(wire.phaseLabel !== undefined ? { phaseLabel: wire.phaseLabel } : {}),
+    ...(wire.runByFactory ? { runByFactory: true } : {}),
+    ...(wire.waitingSessionId !== undefined ? { waitingSessionId: wire.waitingSessionId } : {}),
   };
-}
-
-const CARRIED_STATUSES: readonly SessionActivityStatus[] = ['waiting', 'working'];
-
-/**
- * A card's sessions in the order it lists them: the session it opens first, then
- * the rest in card order, then any the card no longer lists.
- */
-function orderCardRows(
-  cardRows: readonly SessionListRow[],
-  boards: readonly InstalledBoardInfo[] | undefined,
-): SessionListRow[] {
-  const item = cardRows[0].item;
-  if (!item) return [...cardRows];
-  const phases = boards?.find(board => board.id === itemBoard(item))?.phases;
-  const stage = item.stages[0] ?? '';
-  const opened = cardThreadSession(item, phases, stage)?.sessionId;
-  const sessions = cardContextSessions(item, phases, stage);
-  const rank = (row: SessionListRow) => {
-    if (row.session.sessionId === opened) return -1;
-    const index = sessions.findIndex(entry => entry.ref.sessionId === row.session.sessionId);
-    return index === -1 ? sessions.length : index;
-  };
-  const phaseLabel = (row: SessionListRow) =>
-    sessions.find(entry => entry.ref.sessionId === row.session.sessionId)?.label;
-  // The card's own row keeps its name; the sessions under it are named by phase.
-  return cardRows
-    .toSorted((a, b) => rank(a) - rank(b))
-    .map((row, index) => (index === 0 ? row : { ...row, phaseLabel: phaseLabel(row) }));
-}
-
-/**
- * Ties each session to the phase sessions of the cards it follows. Those sessions stay the
- * card's: the row links to them and lists them under itself when child sessions are revealed.
- * While one is parked the row reads "waiting on you", but only for a viewer who can answer:
- * the row is their session, or a session of theirs follows the same card.
- */
-export function linkFollowedCards(
-  rows: readonly SessionListRow[],
-  cardRows: readonly SessionListRow[],
-  parkedSessions: ReadonlySet<string>,
-  { revealChildSessions = false }: OneRowPerCardOptions = {},
-): SessionListRow[] {
-  const viewerFollows = new Set(
-    rows.flatMap(row => (row.ownedByViewer ? (row.session.followedWorkItemIds ?? []) : [])),
-  );
-  const waitsOnViewer = (cardRow: SessionListRow) =>
-    parkedSessions.has(cardRow.session.sessionId) && cardRow.itemId !== undefined && viewerFollows.has(cardRow.itemId);
-  return rows.map(row => {
-    const followed = new Set(row.session.followedWorkItemIds);
-    if (followed.size === 0) return row;
-    const linked = cardRows.filter(
-      cardRow =>
-        cardRow.itemId !== undefined &&
-        followed.has(cardRow.itemId) &&
-        cardRow.session.sessionId !== row.session.sessionId,
-    );
-    if (linked.length === 0) return row;
-    const waiting = linked.find(waitsOnViewer);
+  if (wire.origin === 'user') {
+    const url = `/factories/${factoryId}/user/threads/${session.sessionId}`;
     return {
-      ...row,
-      ...(waiting ? { status: 'waiting' as const, waitingSessionId: waiting.session.sessionId } : {}),
-      ...(revealChildSessions
-        ? {
-            childRows: linked.map(cardRow => ({
-              ...cardRow,
-              ...(waitsOnViewer(cardRow) ? { waitingSessionId: cardRow.session.sessionId } : {}),
-              ...(isFactoryOwnedSession(cardRow.session) ? { runByFactory: true } : {}),
-            })),
-          }
-        : {}),
+      ...shared,
+      origin: 'user',
+      board: undefined,
+      source: isSlackSession(session) ? 'slack-thread' : 'user',
+      name: (isSlackSession(session) && !session.title?.trim() && card?.title.trim()) || getUserSessionLabel(session),
+      url,
+      openPath: url,
+      externalLinks: sessionExternalLinks(link, wire.pullRequest),
+      canRegenerateTitle: ownedByViewer,
     };
-  });
-}
-
-export interface OneRowPerCardOptions {
-  /** List the card's other sessions under its row instead of folding them into it. */
-  revealChildSessions?: boolean;
-}
-
-/**
- * A card lists one row, for its current session. With child sessions hidden the
- * row takes on what any of the card's sessions shows (running, waiting on you),
- * so work in another context isn't hidden, and is open while any of them is;
- * revealed, each session shows its own state. The row is pinned while any of
- * the card's sessions is.
- */
-export function oneRowPerCard(
-  rows: readonly SessionListRow[],
-  boards: readonly InstalledBoardInfo[] | undefined,
-  { revealChildSessions = false }: OneRowPerCardOptions = {},
-): SessionListRow[] {
-  const rowsByCard = new Map<string, SessionListRow[]>();
-  for (const row of rows) {
-    if (row.itemId === undefined) continue;
-    rowsByCard.set(row.itemId, [...(rowsByCard.get(row.itemId) ?? []), row]);
   }
-  return rows.flatMap(row => {
-    const cardRows = row.itemId === undefined ? undefined : rowsByCard.get(row.itemId);
-    if (!cardRows || cardRows.length === 1) return [row];
-    const [shown, ...others] = orderCardRows(cardRows, boards);
-    if (shown !== row) return [];
-    const carried = CARRIED_STATUSES.find(status => cardRows.some(candidate => candidate.status === status));
-    // Listed, each session shows its own state and the open one highlights.
-    // Each listed session keeps its own pin; only a folded card carries its sessions' pins.
-    if (revealChildSessions) return [{ ...shown, cardStatus: carried ?? shown.status, childRows: others }];
-    return [
-      {
-        ...shown,
-        pinned: cardRows.some(candidate => candidate.pinned),
-        cardSessionIds: cardRows.map(candidate => candidate.session.sessionId),
-        status: carried ?? shown.status,
-        active: cardRows.some(candidate => candidate.active),
-      },
-    ];
-  });
+  const url = `/factories/${factoryId}/workspaces/${session.sessionId}`;
+  const { pullRequest } = wire;
+  return {
+    ...shared,
+    origin: 'factory',
+    board: wire.board,
+    source: getFactorySessionSource(session, link),
+    name: factorySessionName(session, card),
+    url,
+    openPath: `${url}/threads/${session.sessionId}`,
+    externalLinks: sessionExternalLinks(link, pullRequest),
+    canRegenerateTitle: ownedByViewer && isSlackSession(session),
+    ...(wire.threadId !== undefined ? { threadId: wire.threadId } : {}),
+    ...(pullRequest ? { pullRequest, pullRequestStatus: changeRequestStatus(pullRequest) } : {}),
+    repository: repositories?.find(repository => repository.projectRepositoryId === session.projectRepositoryId)?.slug,
+  };
 }
 
 /**
@@ -357,61 +190,17 @@ export function pinnedSessionsAfter(
   pin: boolean,
 ): ReadonlySet<string> {
   const next = new Set(pinned);
+  next.delete(row.session.sessionId);
   if (pin) next.add(row.session.sessionId);
-  else for (const sessionId of row.cardSessionIds ?? [row.session.sessionId]) next.delete(sessionId);
+  else for (const sessionId of row.cardSessionIds ?? []) next.delete(sessionId);
   return next;
 }
 
-export interface UserSessionRowInput {
-  session: FactoryUserSession;
-  /** The work item a user session is bound to, if loaded. */
-  item?: WorkItem;
-  pullRequest?: CardChangeRequest;
-  factoryId: string;
-  pathname: string;
-  /** The `:sessionId` of a `/workspaces/:sessionId/threads/:threadId` route, which Slack links use for user sessions too. */
-  routeSessionId: string | undefined;
-  running: boolean;
-  pinned: boolean;
-  viewer: SessionViewerProfile | undefined;
-}
-
-export function buildUserSessionRow({
-  session,
-  item,
-  pullRequest,
-  factoryId,
-  pathname,
-  routeSessionId,
-  running,
-  pinned,
-  viewer,
-}: UserSessionRowInput): SessionListRow {
-  const url = `/factories/${factoryId}/user/threads/${session.sessionId}`;
-  const ownedByViewer = isOwnedByViewer(session, viewer);
-  const fromSlack = session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX);
-  return {
-    session,
-    origin: 'user',
-    board: undefined,
-    source: fromSlack ? 'slack-thread' : 'user',
-    name: (fromSlack && !session.title?.trim() && item?.title.trim()) || getUserSessionLabel(session),
-    url,
-    openPath: url,
-    externalLinks: sessionExternalLinks(item, pullRequest),
-    active: pathname === url || session.sessionId === routeSessionId,
-    status: sessionActivityStatus({
-      initializing: !session.materializedAt,
-      running,
-      attention: false,
-      settled: false,
-    }),
-    owner: getSessionOwnerDetails(session, viewer),
-    ownedByViewer,
-    canRegenerateTitle: ownedByViewer,
-    item,
-    pinned,
-    createdAt: session.createdAt,
-    updatedAt: session.updatedAt,
-  };
+export function sessionPullRequestTargets(rows: readonly SessionListRow[]): SessionPullRequestTarget[] {
+  return rows
+    .flatMap(row => [row, ...(row.childRows ?? [])])
+    .flatMap(({ session, threadId, pullRequest, pullRequestStatus }) => {
+      if (!threadId || !pullRequest || isSettledChangeRequest(pullRequestStatus)) return [];
+      return [{ sessionId: session.sessionId, threadId, provider: pullRequest.provider }];
+    });
 }

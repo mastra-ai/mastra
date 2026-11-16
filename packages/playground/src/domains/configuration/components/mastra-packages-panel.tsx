@@ -113,7 +113,7 @@ function UpdateStatus({
   if (outdatedCount === 0 && deprecatedCount === 0) {
     return (
       <p className="mt-0.5 flex items-center gap-1.5 text-meta text-success-indicator">
-        <IconCircleCheck className="size-3.5" />
+        <IconCircleCheck className="size-icon-sm" />
         Up to date
       </p>
     );
@@ -131,7 +131,7 @@ function UpdateStatus({
         deprecatedCount > 0 ? 'text-destructive-foreground' : 'text-warning-foreground',
       )}
     >
-      <IconExclamationTriangle className="size-3.5" />
+      <IconExclamationTriangle className="size-icon-sm" />
       {parts.join(', ')}
     </p>
   );
@@ -156,7 +156,7 @@ function PackageRow({ pkg }: { pkg: PackageUpdateInfo }) {
       <span className={cn('font-mono tabular-nums', versionToneClass(pkg))}>{pkg.version}</span>
       {needsUpdate && pkg.latestVersion && (
         <>
-          <IconArrowRight aria-label="updates to" className="size-3 text-placeholder" />
+          <IconArrowRight aria-label="updates to" className="size-icon-xs text-placeholder" />
           <span className="font-mono text-foreground tabular-nums">{pkg.latestVersion}</span>
         </>
       )}

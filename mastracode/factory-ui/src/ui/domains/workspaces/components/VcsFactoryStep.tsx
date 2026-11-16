@@ -167,7 +167,7 @@ export function VcsFactoryStep({
               onClick={refreshGithub}
             >
               <IconArrowRotateClockwise
-                className={cn('size-3.5', refreshRepos.isPending && 'animate-spin')}
+                className={cn('size-icon-sm', refreshRepos.isPending && 'animate-spin')}
                 aria-hidden="true"
               />
               Refresh

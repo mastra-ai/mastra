@@ -10,7 +10,7 @@ import { DiffStat } from '@/ds/components/DiffStat';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
-import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
+import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
 import { IconScript } from '@/ds/icons/central/IconScript';
 import { focusRing } from '@/ds/primitives/transitions';
 import { formatCompactNumber } from '@/lib/cost';
@@ -327,7 +327,7 @@ export function SpanPromptChanges({ span }: { span: SpanRecord }) {
           kept={keptSystemMessages(span, system)}
         />
       )}
-      {conversation.length > 0 && <DiffCard icon={<IconBubbleText />} title="Conversation" changes={conversation} />}
+      {conversation.length > 0 && <DiffCard icon={<IconChatBubbles />} title="Conversation" changes={conversation} />}
     </div>
   );
 }

@@ -34,7 +34,7 @@ export function Step({ title, description, action, done, className, children }: 
           )}
         >
           {done ? (
-            <IconCheckmark2Medium className="size-3.5" aria-label="Done" />
+            <IconCheckmark2Medium className="size-icon-sm" aria-label="Done" />
           ) : (
             <Txt as="span" variant="column" className="before:content-[counter(ds-step)]" aria-hidden />
           )}

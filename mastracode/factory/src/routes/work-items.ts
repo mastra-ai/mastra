@@ -11,7 +11,15 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { boardFlow, boardPhaseOutcomes, DEFAULT_BOARD_ID } from '../boards/index.js';
+import {
+  boardFlow,
+  boardPhaseOutcomes,
+  DEFAULT_BOARD_ID,
+  isPullRequestCard,
+  isOpenPullRequestSource,
+  pullRequestSourceNumber,
+  pullRequestSources,
+} from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -25,10 +33,12 @@ import type {
 } from '../rules/start-coordinator.js';
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
+import { workItemSource } from '../rules/types.js';
 import type { FactoryRuleBoardFlow, WorkItemSource } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import { auditRequestOrigin } from '../storage/domains/audit/domain.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { IntakeEvaluator } from '../storage/domains/boards/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
@@ -62,12 +72,16 @@ import {
   namedBody,
   scopedSnapshot,
   etagDigest,
+  sendJson,
+  sendRevalidated,
+  sessionIdsWhere,
 } from './board-snapshot.js';
-import type { BoardSnapshot } from './board-snapshot.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
+import type { ProjectSessionsReader } from './project-sessions.js';
 import type { RouteDependencies } from './route.js';
 import { loose, Route } from './route.js';
 import { readRunQueue } from './run-queue.js';
+import { buildSessionRowRoutes } from './session-rows.js';
 import { workItemActivity } from './work-item-activity.js';
 import { cardsFiledFrom, cardsWithIds, unstartedCards } from './work-item-selection.js';
 import {
@@ -88,6 +102,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   boardRegistry?: BoardRegistry | ProjectBoardSource;
   /** The project's intake routes, which place a card filed without a board. */
   intakeRoutes?: IntakeRoutesReader;
+  /** Which evaluator places a filed card; the old `route-list` by default. */
+  intakeEvaluator?: IntakeEvaluator;
   /** Per-project queue-health threshold config. */
   queueHealth: QueueHealthStorage;
   /** Governed stage-transition service. Stage moves 503 when absent. */
@@ -98,6 +114,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   liveSessions: Pick<LiveSessions, 'isRunning' | 'parked' | 'parkedIn'>;
   /** This process's dispatcher run slots; absent or `undefined` while it runs no dispatcher. */
   runSlots?: () => { inUse: number; cap: number; interactive: { inUse: number; cap: number } } | undefined;
+  projectSessions?: ProjectSessionsReader;
+  activeRuns?: () => readonly { threadId: string; resourceId?: string }[];
 }
 
 /** The card as clients see it, without the dispatcher's internal bookkeeping. */
@@ -126,39 +144,6 @@ function wireVersion(card: Card): string {
 /** The card for a reader that keeps it between reads, and tells by `version` whether it holds this body. */
 function toVersionedWireWorkItem(card: Card): Card & { version: string } {
   return { ...toWireWorkItem(card), version: wireVersion(card) };
-}
-
-/** Session ids of the listed cards that the predicate picks, each once. */
-function sessionIdsWhere(items: readonly Card[], predicate: (sessionId: string) => boolean): string[] {
-  const picked = new Set<string>();
-  for (const item of items) {
-    for (const { sessionId } of Object.values(item.sessions)) {
-      if (predicate(sessionId)) picked.add(sessionId);
-    }
-  }
-  return [...picked];
-}
-
-/** Sends a JSON body, gzipped for a reader that accepts it. */
-async function sendJson(
-  c: Context,
-  body: Pick<BoardSnapshot, 'json' | 'gzipped'>,
-  headers: Record<string, string>,
-): Promise<Response> {
-  headers['Content-Type'] = 'application/json; charset=UTF-8';
-  headers.Vary = 'Accept-Encoding';
-  if (!/\bgzip\b/.test(c.req.header('accept-encoding') ?? '')) return c.body(body.json, 200, headers);
-  headers['Content-Encoding'] = 'gzip';
-  return c.body(new Uint8Array(await body.gzipped()), 200, headers);
-}
-
-/** Sends an answer its reader revalidates: a 304 without a body when the reader holds it already. */
-async function sendRevalidated(c: Context, answer: BoardSnapshot): Promise<Response> {
-  const headers = { ETag: answer.etag, 'Cache-Control': 'private, no-cache' };
-  if (matchesEtag(c.req.header('if-none-match'), answer.etag)) {
-    return c.body(null, 304, { ...headers, Vary: 'Accept-Encoding' });
-  }
-  return sendJson(c, answer, headers);
 }
 
 // One list per board version, so every tab's sidebar shares its serialization.
@@ -322,6 +307,9 @@ function catalogDetails(details: StoredBoardDetails | undefined) {
   };
 }
 
+/** The pull request a person picked closed before the pick was written. */
+class PullRequestClosedError extends Error {}
+
 export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
   #source: ProjectBoardSource | undefined;
 
@@ -440,7 +428,16 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
 
   /** Build the Factory work-item routes as Mastra `apiRoutes`. */
   routes(): ApiRoute[] {
-    const { audit, workItems, queueHealth, transitionService, startCoordinator, liveSessions } = this.deps;
+    const {
+      audit,
+      workItems,
+      queueHealth,
+      transitionService,
+      startCoordinator,
+      liveSessions,
+      projectSessions,
+      activeRuns,
+    } = this.deps;
     return [
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.boardCatalog.path, {
         method: FACTORY_ROUTE_CONTRACTS.boardCatalog.method,
@@ -795,6 +792,19 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         resolveProject: context => this.#resolveProject(loose(context)),
       }),
 
+      ...(projectSessions && activeRuns
+        ? buildSessionRowRoutes({
+            workItems,
+            boards: this.#boards,
+            liveSessions,
+            resolveProject: context => this.#resolveProject(loose(context)),
+            sessionCards: async scope => allSessionCards(await workItems.listShared(scope)),
+            projectSessions,
+            activeRuns,
+            authEnabled: () => this.deps.auth.enabled(),
+          })
+        : []),
+
       this.#proposalRoute({ verb: 'approve' }),
       this.#proposalRoute({ verb: 'dismiss' }),
 
@@ -843,6 +853,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               boards: await this.#boards.load(resolved),
               transitionService,
               intakeRoutes: this.deps.intakeRoutes,
+              intakeEvaluator: this.deps.intakeEvaluator,
               audit: auditInput => audit.emit({ context: loose(c), input: auditInput }),
               orgId: resolved.orgId,
               userId: resolved.userId,
@@ -855,7 +866,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 if (created.code === 'factory_transitions_unavailable') return c.json({ error: created.code }, 503);
                 return c.json(
                   { error: created.code, message: created.message },
-                  created.code === 'invalid_board' ? 422 : 409,
+                  created.code === 'invalid_board' || created.code === 'intake_board_required' ? 422 : 409,
                 );
               case 'rejected':
                 return c.json({ status: 'rejected', code: created.code, reason: created.reason }, 422);
@@ -915,6 +926,73 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           });
           if (result.status === 'accepted') return c.json({ result });
           return c.json({ result }, result.code === 'stale' ? 409 : 422);
+        },
+      }),
+
+      // ── Pick the pull request a card's sessions work on ──────────────────────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemWorkingPullRequest.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemWorkingPullRequest.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const contract = FACTORY_ROUTE_CONTRACTS.workItemWorkingPullRequest;
+          const parsedPath = contract.pathSchema.safeParse({
+            id: resolved.factoryProjectId,
+            workItemId: context.req.param('workItemId'),
+          });
+          if (!parsedPath.success) return c.json({ error: 'Work item not found' }, 404);
+          const body = contract.bodySchema.safeParse(await readJson(context));
+          if (!body.success) return c.json({ error: 'invalid_working_pull_request' }, 400);
+          await workItems.ensureReady();
+          const existing = await workItems.get({ orgId: resolved.orgId, id: parsedPath.data.workItemId });
+          if (!existing || existing.factoryProjectId !== resolved.factoryProjectId) {
+            return c.json({ error: 'Work item not found' }, 404);
+          }
+          const source = pullRequestSources(existing).find(
+            candidate => pullRequestSourceNumber(candidate) === body.data.pullRequest,
+          );
+          if (!source || isPullRequestCard({ source: workItemSource(existing.externalSource) })) {
+            return c.json(
+              { error: 'pull_request_not_linked', message: 'That pull request is not linked to this card.' },
+              422,
+            );
+          }
+          const closed = () => c.json({ error: 'pull_request_not_open', message: 'That pull request is closed.' }, 422);
+          if (!isOpenPullRequestSource(source)) return closed();
+          // The recorded head belongs to the pull request being replaced; the next push records this one's.
+          const patch = {
+            metadata: {
+              openPullRequestNumber: body.data.pullRequest,
+              pullRequestHeadSha: null,
+              pullRequestHeadAt: null,
+              pullRequestHeadDeliveryId: null,
+            },
+          };
+          try {
+            const updated = await workItems.update({
+              orgId: resolved.orgId,
+              id: existing.id,
+              userId: resolved.userId,
+              patch,
+              expectedRevision: body.data.expectedRevision,
+              // It may have closed since the read above without moving the card's revision.
+              check: current => {
+                const now = pullRequestSources(current).find(
+                  candidate => pullRequestSourceNumber(candidate) === body.data.pullRequest,
+                );
+                if (!now || !isOpenPullRequestSource(now)) throw new PullRequestClosedError();
+              },
+            });
+            if (!updated) return c.json({ error: 'Work item not found' }, 404);
+            await this.#auditWorkItemPatch({ context, item: updated.item, patch });
+            return c.json({ workItem: toWireWorkItem(updated.item) });
+          } catch (error) {
+            if (error instanceof PullRequestClosedError) return closed();
+            if (error instanceof WorkItemUpdateConflictError) return c.json({ error: 'stale' }, 409);
+            throw error;
+          }
         },
       }),
 

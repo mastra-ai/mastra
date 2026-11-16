@@ -58,7 +58,7 @@ export function RuleCardDragHandle({ className, ...props }: RuleCardDragHandlePr
       )}
       {...props}
     >
-      <IconDotGrid2x3 aria-hidden className="size-4" />
+      <IconDotGrid2x3 aria-hidden className="size-icon-md" />
     </button>
   );
 }
@@ -129,7 +129,7 @@ export function RuleCardOutcome({ label, className, children, ...props }: RuleCa
       <span
         className={cn(textStyle({ variant: 'caption', tone: 'muted' }), 'mr-2 flex h-control-sm items-center gap-1.5')}
       >
-        <IconArrowCornerDownRight aria-hidden className="size-3.5 shrink-0" />
+        <IconArrowCornerDownRight aria-hidden className="size-icon-sm shrink-0" />
         {label}
       </span>
       {children}

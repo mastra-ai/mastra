@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
 import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { workItemBranch } from '../work-item-branch.js';
+import { pullRequestSourceNumber, reviewedPullRequest, workingPullRequest } from '../work-items/change-requests.js';
 import { defineBoard } from './define-board.js';
 import { boardRegistryOf, createBoardRegistry } from './registry.js';
 import {
@@ -10,11 +12,9 @@ import {
   boardForWorkItem,
   cardOwnsBranch,
   isTerminalWorkItem,
-  pullRequestSourceNumber,
   resolveBoardClosure,
   resolveBoardToolRule,
   resolvePhaseSemantics,
-  reviewedPullRequest,
   workItemPhaseSemantics,
 } from './semantics.js';
 import { createTestBoard } from './test-utils.js';
@@ -276,5 +276,148 @@ describe('the number of an attached change request', () => {
 
     expect(attached && pullRequestSourceNumber(attached)).toBe(17);
     expect(/(\d+)$/.exec(key)?.[1]).not.toBe('17');
+  });
+});
+
+describe("a card's working pull request", () => {
+  const pr = (number: number, state: 'open' | 'closed' | 'merged') =>
+    ({
+      sourceType: 'pull-request',
+      provider: 'github',
+      externalId: `github-pr:${number}`,
+      state,
+      metadata: { githubPullRequestNumber: number },
+    }) as unknown as WorkItemSourceRow;
+  const card = (sources: WorkItemSourceRow[], metadata: Record<string, unknown> = {}) => ({
+    metadata,
+    workItem: { sources },
+  });
+  const outsider = (number: number) => ({ untrustedPullRequests: [`github:github-pr:${number}`] });
+  const working = (item: ReturnType<typeof card>, except?: number) => {
+    const source = workingPullRequest(item, except);
+    return source && pullRequestSourceNumber(source);
+  };
+
+  type State = 'open' | 'closed' | 'merged';
+  it.each<[string, Array<[number, State]>, Record<string, unknown>, number | undefined, number | undefined]>([
+    [
+      'the one the card points at',
+      [
+        [17, 'open'],
+        [18, 'open'],
+      ],
+      { openPullRequestNumber: 18 },
+      undefined,
+      18,
+    ],
+    [
+      'else the first trusted one linked',
+      [
+        [17, 'open'],
+        [18, 'open'],
+      ],
+      {},
+      undefined,
+      17,
+    ],
+    [
+      "never an outsider's on its own",
+      [
+        [17, 'open'],
+        [18, 'open'],
+      ],
+      outsider(17),
+      undefined,
+      18,
+    ],
+    ["nothing when only an outsider's is linked", [[17, 'open']], outsider(17), undefined, undefined],
+    ["an outsider's a person picked", [[17, 'open']], { ...outsider(17), openPullRequestNumber: 17 }, undefined, 17],
+    [
+      'the first trusted open one once the one pointed at closes unmerged',
+      [
+        [16, 'open'],
+        [17, 'closed'],
+        [18, 'open'],
+      ],
+      { ...outsider(16), openPullRequestNumber: 17 },
+      undefined,
+      18,
+    ],
+    [
+      "nothing, rather than an outsider's, when the one pointed at closes unmerged",
+      [
+        [16, 'open'],
+        [17, 'closed'],
+      ],
+      { ...outsider(16), openPullRequestNumber: 17 },
+      undefined,
+      undefined,
+    ],
+    [
+      'a trusted open one over a merged one when the one pointed at closes unmerged',
+      [
+        [17, 'merged'],
+        [18, 'closed'],
+        [19, 'open'],
+      ],
+      { openPullRequestNumber: 18 },
+      undefined,
+      19,
+    ],
+    [
+      'a trusted open one over a merged one',
+      [
+        [17, 'merged'],
+        [18, 'open'],
+      ],
+      {},
+      undefined,
+      18,
+    ],
+    [
+      'the merged one when no trusted one is open',
+      [
+        [17, 'merged'],
+        [18, 'closed'],
+      ],
+      {},
+      undefined,
+      17,
+    ],
+    [
+      'the merged one the card points at, so merging it finishes the card',
+      [
+        [17, 'merged'],
+        [18, 'open'],
+      ],
+      { openPullRequestNumber: 17 },
+      undefined,
+      17,
+    ],
+    [
+      'the next one when one is left out',
+      [
+        [17, 'open'],
+        [18, 'open'],
+      ],
+      {},
+      17,
+      18,
+    ],
+  ])('is %s', (_case, sources, metadata, except, expected) => {
+    expect(
+      working(
+        card(
+          sources.map(([number, state]) => pr(number, state)),
+          metadata,
+        ),
+        except,
+      ),
+    ).toBe(expected);
+  });
+
+  it('is what a review pass reviews', () => {
+    expect(reviewedPullRequest(card([pr(17, 'open')], outsider(17)))).toBeUndefined();
+    expect(reviewedPullRequest(card([pr(17, 'open')]))).toMatchObject({ externalId: 'github-pr:17' });
   });
 });

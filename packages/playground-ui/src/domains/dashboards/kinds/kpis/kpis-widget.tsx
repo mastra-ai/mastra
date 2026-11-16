@@ -9,12 +9,12 @@ import type { KpisOptions } from './options';
 import { Card } from '@/ds/components/Card';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import { MetricsCardGroup } from '@/ds/components/MetricsCardGroup';
-import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
+import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
 import { IconCoins } from '@/ds/icons/central/IconCoins';
 import { IconHashtag } from '@/ds/icons/central/IconHashtag';
 import { IconRobot } from '@/ds/icons/central/IconRobot';
 
-const ICONS = { bot: IconRobot, coins: IconCoins, hash: IconHashtag, threads: IconBubbleText } as const;
+const ICONS = { bot: IconRobot, coins: IconCoins, hash: IconHashtag, threads: IconChatBubbles } as const;
 
 const change = (pct: number | undefined) => (pct !== undefined && Number.isFinite(pct) ? pct : undefined);
 

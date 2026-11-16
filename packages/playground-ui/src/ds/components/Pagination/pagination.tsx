@@ -1,8 +1,8 @@
 import { useRender } from '@base-ui/react/use-render';
 import { cloneElement, isValidElement } from 'react';
 import type { ComponentProps, MouseEvent, ReactElement } from 'react';
-import { IconChevronLeft } from '@/ds/icons/central/IconChevronLeft';
-import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconChevronLeftMedium } from '@/ds/icons/central/IconChevronLeftMedium';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 import { IconDotGrid1x3Horizontal } from '@/ds/icons/central/IconDotGrid1x3Horizontal';
 import { Icon } from '@/ds/icons/Icon';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
@@ -100,7 +100,7 @@ export function PaginationPrevious({ text = 'Prev', ...props }: PaginationPrevio
   return (
     <PaginationLink {...props}>
       <Icon size="sm" aria-hidden>
-        <IconChevronLeft />
+        <IconChevronLeftMedium />
       </Icon>
       {text}
     </PaginationLink>
@@ -114,7 +114,7 @@ export function PaginationNext({ text = 'Next', ...props }: PaginationNextProps)
     <PaginationLink {...props}>
       {text}
       <Icon size="sm" aria-hidden>
-        <IconChevronRight />
+        <IconChevronRightMedium />
       </Icon>
     </PaginationLink>
   );

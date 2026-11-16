@@ -16,6 +16,7 @@ import {
   reviewedChangeRequest,
 } from '../boards/index.js';
 import type { BoardRegistry, InstalledBoard } from '../boards/index.js';
+import type { ForcedIntakeEvaluator } from '../boards/intake-routing.js';
 import { legacyPlanRoleFor, workLaneForRole } from '../boards/legacy-plan-role.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardCache, ProjectBoardSource } from '../boards/project-boards.js';
@@ -26,6 +27,7 @@ import { MaterializeError } from '../integrations/github/sandbox.js';
 import type { CardSource } from '../integrations/kept-cards.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
+import type { NotRoutedLookup } from '../rules/event-rules.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import { workItemSource } from '../rules/types.js';
@@ -44,7 +46,7 @@ import { repositoryChosenByRun, resolveRunRepository } from '../session/work-ite
 import type { StateSigner } from '../state-signing.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
-import type { StoredBoardsStorage } from '../storage/domains/boards/base.js';
+import type { IntakeEvaluator, StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
@@ -81,6 +83,7 @@ import { IntakeRouteRoutes } from './intake-routes.js';
 import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
+import { createProjectSessionsReader } from './project-sessions.js';
 import type { RouteAuth } from './route.js';
 import { SkillRoutes } from './skills.js';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
@@ -159,8 +162,15 @@ export interface FactoryApiRoutesDeps {
   configVersion: string;
   /** Each project's boards; integrations use the code boards (`codeRegistry`). */
   boardRegistry: BoardRegistry | ProjectBoardSource;
+  /** Forces an evaluator on every project; without it each project uses its own setting. */
+  intakeEvaluator?: IntakeEvaluator;
+  /** What forced `intakeEvaluator`. */
+  intakeEvaluatorSource?: ForcedIntakeEvaluator['source'];
   /** Stored boards and their cache; mounts the board management routes when present. */
-  storedBoards?: { storage: StoredBoardsStorage; cache: ProjectBoardCache };
+  storedBoards?: {
+    storage: StoredBoardsStorage;
+    cache: ProjectBoardCache;
+  };
   factoryTransitionService?: FactoryTransitionService;
   sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
   /** Moves a thread with its observation vectors onto another memory resource. */
@@ -588,6 +598,8 @@ export function buildIntegrationContext(
     boardRegistry: BoardRegistry | ProjectBoardSource;
     /** Passed for the workers' context only: routes do not sweep. */
     keptCards?: CardSource;
+    /** Which items intake turned away, so integrations run intake again when one changes. */
+    notRouted?: NotRoutedLookup;
     factoryReady: boolean;
     domains: Pick<
       FactoryApiRoutesDeps['domains'],
@@ -642,6 +654,7 @@ export function buildIntegrationContext(
             workItems: deps.domains.workItems,
             boards: deps.boardRegistry,
             ...(deps.keptCards ? { keptCards: deps.keptCards } : {}),
+            ...(deps.notRouted ? { notRouted: deps.notRouted } : {}),
           },
         }
       : {}),
@@ -812,6 +825,11 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   ];
   const sourceControls = sourceControlIntegrationIds.map(id => deps.sourceControlStorage.forIntegration(id));
   const sourceControlSessions = createSourceControlSessionLookup(sourceControls);
+  const projectSessions = createProjectSessionsReader({
+    sourceControls,
+    ...(deps.users ? { users: deps.users } : {}),
+    ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
+  });
 
   const integrationRoutes = registrations.flatMap(registration => {
     const { integration } = registration;
@@ -821,6 +839,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         ...deps,
         // Integrations evaluate code behaviors and place new cards with the code boards.
         boardRegistry: toBoardSource(deps.boardRegistry).codeRegistry,
+        ...(deps.storedBoards ? { notRouted: deps.storedBoards.storage } : {}),
         stateSigner: deps.stateSigner,
         emitAudit,
         ...(githubRegistration ? { sourceControlOwnerId: 'github' } : {}),
@@ -837,6 +856,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           sourceControls,
           projects: deps.domains.projects,
           ...(deps.users ? { users: deps.users } : {}),
+          projectSessions,
           controller: deps.controller,
           audit: deps.audit,
           memorySettings: deps.domains.memorySettings,
@@ -1011,11 +1031,14 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           workItems: deps.domains.workItems,
           boardRegistry: deps.boardRegistry,
           intakeRoutes: deps.storedBoards?.storage,
+          intakeEvaluator: deps.intakeEvaluator,
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,
           liveSessions: deps.liveSessions,
           runSlots: deps.runSlots,
+          projectSessions,
+          activeRuns: () => deps.controller.listActiveThreadRuns(),
         }).routes()
       : []),
     ...(deps.factoryReady && deps.storedBoards
@@ -1036,6 +1059,11 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           workItems: deps.domains.workItems,
           storage: deps.storedBoards.storage,
           boards: deps.storedBoards.cache,
+          intakeEvaluator: deps.intakeEvaluator,
+          intakeEvaluatorSource: deps.intakeEvaluatorSource,
+          intakeLookups: (deps.integrations ?? []).flatMap(({ integration, ready }) =>
+            ready && integration.intakeLookup ? [integration.intakeLookup] : [],
+          ),
         }).routes()
       : []),
     ...(deps.factoryReady

@@ -130,6 +130,7 @@ export function AddProviderDrawer({
         <DrawerBody className="flex min-h-0 flex-col gap-3">
           <SearchInput
             label="Search providers"
+            className="flex-none"
             placeholder={`Search ${providers.length} providers`}
             value={search}
             onValueChange={setSearch}

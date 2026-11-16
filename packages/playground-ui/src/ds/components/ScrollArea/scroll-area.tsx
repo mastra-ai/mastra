@@ -1,8 +1,7 @@
 import { ScrollArea as ScrollAreaPrimitive } from '@base-ui/react/scroll-area';
 import * as React from 'react';
-
-import { IconChevronLeft } from '@/ds/icons/central/IconChevronLeft';
-import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconChevronLeftMedium } from '@/ds/icons/central/IconChevronLeftMedium';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
@@ -142,7 +141,7 @@ type ScrollButtonProps = {
 };
 
 const ScrollButton = ({ direction, label, onStartScrolling, onStopScrolling, onKeyboardScroll }: ScrollButtonProps) => {
-  const Icon = direction === 'left' ? IconChevronLeft : IconChevronRight;
+  const Icon = direction === 'left' ? IconChevronLeftMedium : IconChevronRightMedium;
 
   return (
     <button

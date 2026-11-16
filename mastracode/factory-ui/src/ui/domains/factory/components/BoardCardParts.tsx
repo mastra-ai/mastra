@@ -1,3 +1,4 @@
+import { cardChangeRequest } from '@mastra/factory/work-items/change-requests';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
@@ -12,7 +13,7 @@ import { Link } from 'react-router';
 import type { BoardCardStatus } from '../boardCardState';
 import { SOURCE_LABELS, cardLabels, metadataLabelColors } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
-import { cardChangeRequest, changeRequestStatus } from '../changeRequestState';
+import { changeRequestStatus } from '../changeRequestState';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
 import { workItemReference } from '../services/relationships';
 import { isPullRequestSource } from '../services/workItems';
@@ -87,7 +88,7 @@ export function CardDetailsHint({ onOpen }: { onOpen: () => void }) {
       onClick={onOpen}
       className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), REVEAL_ON_CARD_HOVER)}
     >
-      <IconExpand45 size={13} aria-hidden />
+      <IconExpand45 className="size-icon-sm" aria-hidden />
     </button>
   );
 }
@@ -135,7 +136,7 @@ export function CardStatus({ status, compact = false }: { status: BoardCardStatu
         status.detail !== undefined && 'underline decoration-dotted underline-offset-2',
       )}
     >
-      <IconExclamationTriangle size={11} aria-hidden className={cn('shrink-0', !compact && 'mt-0.5')} />
+      <IconExclamationTriangle aria-hidden className={cn('size-icon-xs shrink-0', !compact && 'mt-0.5')} />
       <span className={cn('min-w-0', compact ? 'truncate' : 'wrap-anywhere')}>{status.label}</span>
     </Txt>
   );

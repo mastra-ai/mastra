@@ -1,6 +1,7 @@
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionListOptions, CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
+import { ProbedList, probeNewest } from '../../probed-list.js';
 import { FACTORY_PROJECTS_SCHEMA } from '../projects/base.js';
 
 const FACTORY_PROJECTS = 'factory_projects';
@@ -813,6 +814,7 @@ function projectRepositoryPatch(input: UpdateProjectRepositoryInput): Record<str
 export class SourceControlStorage extends FactoryStorageDomain {
   readonly #linkedRepositoryListeners = new Set<(change: LinkedRepositoriesChange) => void>();
   #linkedRepositoryChangesShared = false;
+  readonly #projectSessions = new ProbedList<SourceControlSession>();
 
   constructor() {
     super('source-control');
@@ -1622,14 +1624,15 @@ export class SourceControlStorage extends FactoryStorageDomain {
               linkIds.add(link.id);
             }
           }
-          const rows = await db().findMany<SessionDbRow>(SESSIONS, {
-            factory_project_id: factoryProjectId,
-            org_id: orgId,
-          });
-          return rows
-            .filter(row => linkIds.has(row.project_repository_id))
-            .filter(row => row.visibility !== 'private' || row.user_id === viewerUserId)
-            .map(toSession);
+          const where = { factory_project_id: factoryProjectId, org_id: orgId };
+          const sessions = await this.#projectSessions.read(
+            `${orgId}\u0000${factoryProjectId}`,
+            () => probeNewest(db(), SESSIONS, where, 'updated_at'),
+            async () => (await db().findMany<SessionDbRow>(SESSIONS, where)).map(toSession),
+          );
+          return sessions
+            .filter(session => session.projectRepositoryId !== null && linkIds.has(session.projectRepositoryId))
+            .filter(session => session.visibility !== 'private' || session.userId === viewerUserId);
         },
         getBySessionId: async sessionId => {
           const row = await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId });

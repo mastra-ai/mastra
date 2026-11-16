@@ -2,7 +2,7 @@ import { ProviderLogo } from '@/domains/llm';
 import { Button } from '@/ds/components/Button';
 import { MessageCopyButton, MessageMetadata } from '@/ds/components/Message';
 import { IconStopCircle } from '@/ds/icons/central/IconStopCircle';
-import { IconVoiceHigh } from '@/ds/icons/central/IconVoiceHigh';
+import { IconVoiceSimple } from '@/ds/icons/central/IconVoiceSimple';
 
 export function AssistantMessageActions({
   text,
@@ -40,7 +40,7 @@ export function AssistantMessageActions({
             aria-label="Read aloud"
             onClick={() => onReadAloud?.(text)}
           >
-            <IconVoiceHigh />
+            <IconVoiceSimple />
           </Button>
         ))}
       <MessageCopyButton text={text} />

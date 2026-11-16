@@ -281,7 +281,7 @@ export const MemorySearch = ({
                                 {result.threadTitle}
                               </Txt>
                               {result.threadId !== currentThreadId && (
-                                <IconSquareArrowTopRight className="h-3 w-3 text-info-indicator" />
+                                <IconSquareArrowTopRight className="size-icon-xs text-info-indicator" />
                               )}
                             </div>
                           )}

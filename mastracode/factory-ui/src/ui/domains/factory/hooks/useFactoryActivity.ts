@@ -1,11 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../../../../api/config';
-import type { WorkItemActivity } from '../../../../api/types';
-import { useActiveRunResourceIds } from '../../../../hooks/useActiveRunResources';
-import { useSidebarWorkItemsQuery, workItemActivityQueryOptions } from '../../../../hooks/useWorkItems';
-import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { activityDepth, liveSessionCounts, periodActivity } from '../periodActivity';
+import type { SessionActivity, WorkItemActivity } from '../../../../api/types';
+import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
+import { workItemActivityQueryOptions } from '../../../../hooks/useWorkItems';
+import { activityDepth, periodActivity } from '../periodActivity';
 import type { ActivityPeriod, RunStarts } from '../periodActivity';
 import { useRunStarts } from './useRunStarts';
 
@@ -16,6 +15,7 @@ export interface RunsState {
 
 const NO_RUN_STARTS: RunStarts = { starts: [], completeAfter: Number.NEGATIVE_INFINITY };
 const NO_CARD_TIMES: WorkItemActivity = { total: 0, createdAt: [], doneAt: [] };
+const NO_LIVE_CARDS: SessionActivity['cards'] = { working: 0, waiting: 0 };
 
 export function useFactoryActivity(factoryId: string, period: ActivityPeriod) {
   const { baseUrl } = useApiConfig();
@@ -28,9 +28,7 @@ export function useFactoryActivity(factoryId: string, period: ActivityPeriod) {
   const shown = asked.data ? asked : other;
   const cardTimes = shown.data ?? NO_CARD_TIMES;
   const runs = useRunStarts(factoryId, period);
-  const running = useActiveRunResourceIds(AGENT_CONTROLLER_ID);
-  // Only a card holding a session can be working or waiting, and the sidebar already reads those.
-  const sessionCards = useSidebarWorkItemsQuery(factoryId).data;
+  const live = useSessionActivityQuery(factoryId).data?.cards ?? NO_LIVE_CARDS;
   const activity = periodActivity({
     period,
     now: Math.max(shown.dataUpdatedAt, runs.dataUpdatedAt),
@@ -43,6 +41,6 @@ export function useFactoryActivity(factoryId: string, period: ActivityPeriod) {
     hasCards: cardTimes.total > 0,
     activity,
     runs: runsState,
-    live: liveSessionCounts(sessionCards?.workItems ?? [], running, new Set(sessionCards?.parkedSessionIds)),
+    live,
   };
 }

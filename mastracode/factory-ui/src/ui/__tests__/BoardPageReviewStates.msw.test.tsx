@@ -9,7 +9,6 @@ import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { queryKeys } from '../../api/keys';
-import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
 import type { FactoryDecisionPage, FactoryDecisionSummary } from '../domains/factory/services/decisions';
 import type { GithubPullRequestDetail } from '../domains/factory/services/factory';
 import type { FactoryTransitionResult } from '../domains/factory/services/workItems';
@@ -73,7 +72,13 @@ function stubReviewBoard(decision?: FactoryDecisionSummary) {
         runs: data.runningSessionIds.map(resourceId => ({ runId: 'run-42', resourceId, threadId: 'thread-42' })),
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
+      HttpResponse.json({
+        sessions: data.items.flatMap(item =>
+          Object.values(item.sessions).map(ref => ({ sessionId: ref.sessionId, branch: ref.branch })),
+        ),
+      }),
+    ),
     http.get(`${projectUrl}/work-items`, () =>
       HttpResponse.json({ workItems: data.items, runningSessionIds: data.runningSessionIds }),
     ),
@@ -163,7 +168,7 @@ describe('Review card action lifecycle', () => {
     await Promise.all([
       client.invalidateQueries({ queryKey: queryKeys.workItems(FACTORY_ID) }),
       client.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(FACTORY_ID) }),
-      client.invalidateQueries({ queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL) }),
+      client.invalidateQueries({ queryKey: queryKeys.sessionActivity(FACTORY_ID) }),
     ]);
     await waitFor(() =>
       expect(within(panel).getByRole('link', { name: 'Open session' })).toHaveAttribute(

@@ -1,6 +1,6 @@
+import type { PullRequestStatus } from '@mastra/factory/work-items/change-requests';
 import { PullRequestIcon } from '@mastra/playground-ui/components/PullRequestIcon';
 
-import type { PullRequestStatus } from '../boardItems';
 import { CHANGE_REQUEST_TERMS, changeRequestStatusLabel } from '../changeRequestState';
 import type { ChangeRequestProvider } from '../services/githubSubscriptions';
 

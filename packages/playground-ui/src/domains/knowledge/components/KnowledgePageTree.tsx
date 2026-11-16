@@ -281,7 +281,7 @@ export function KnowledgePageTree({
                 </span>
               ) : null}
               {pinned.has(row.page.id) ? (
-                <IconPin size={12} className="shrink-0 text-badge-amber-indicator" aria-label="Pinned" />
+                <IconPin className="size-icon-xs shrink-0 text-badge-amber-indicator" aria-label="Pinned" />
               ) : null}
               {row.page.isScope && row.page.address && row.page.address !== row.page.name ? (
                 <span

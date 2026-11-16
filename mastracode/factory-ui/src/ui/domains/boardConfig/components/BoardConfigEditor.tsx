@@ -24,7 +24,7 @@ import { AddPhaseButton } from './AddPhaseButton';
 import { NewCardsHere } from './NewCardsHere';
 import { PhaseConfig } from './PhaseConfig';
 import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
-import { IconChevronRight } from '@mastra/playground-ui/icons/central/IconChevronRight';
+import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
 
 const RULE_FIELDS: RuleField[] = ['autoStartWhen', 'autoApproveWhen'];
 
@@ -106,8 +106,8 @@ export function BoardConfigEditor({
   const blocker = useBlocker(({ nextLocation }) => {
     if (!changed || deleted.current) return false;
     const next = parseBoardConfigPath(nextLocation.pathname);
-    // The skills and card moves pages have no save bar, so leaving for them counts as leaving the board's settings.
-    return next?.factoryId !== factory.id || next.boardId !== boardId || next.skills === true || next.moves === true;
+    // The skills and rules pages have no save bar, so leaving for them counts as leaving the board's settings.
+    return next?.factoryId !== factory.id || next.boardId !== boardId || next.skills === true || next.rules === true;
   });
 
   const generalPath = boardConfigPath(factory.id, boardId);
@@ -181,7 +181,7 @@ export function BoardConfigEditor({
                       <Txt as="span" variant="label" className="min-w-0 flex-1 truncate">
                         {candidate.name}
                       </Txt>
-                      <IconChevronRight className="text-muted-foreground size-4" aria-hidden />
+                      <IconChevronRightMedium className="text-muted-foreground size-icon-md" aria-hidden />
                     </Link>
                   </li>
                 ))}
@@ -197,11 +197,11 @@ export function BoardConfigEditor({
                 to={boardSkillsPath(factory.id, boardId)}
                 className="hover:bg-fill focus-visible:bg-fill flex items-center gap-3 px-4 py-3 focus-visible:outline-hidden"
               >
-                <IconBook className="text-muted-foreground size-4" aria-hidden />
+                <IconBook className="text-muted-foreground size-icon-md" aria-hidden />
                 <Txt as="span" variant="label" className="min-w-0 flex-1 truncate">
                   Skills
                 </Txt>
-                <IconChevronRight className="text-muted-foreground size-4" aria-hidden />
+                <IconChevronRightMedium className="text-muted-foreground size-icon-md" aria-hidden />
               </Link>
             </SettingsContainer>
           </SettingsSubsection>

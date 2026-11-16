@@ -17,11 +17,6 @@ export interface SkillFavoriteButtonProps {
   showCount?: boolean;
 }
 
-const iconSizes = {
-  sm: 14,
-  md: 16,
-} as const;
-
 /**
  * Toggles the favorite state for a stored skill. Mirrors the agent-list
  * `FavoriteButton` shell so the skill list matches the agent list visually.
@@ -71,7 +66,7 @@ export const SkillFavoriteButton = ({
         className,
       )}
     >
-      <IconStar size={iconSizes[size]} className={cn('shrink-0', isFavorited && 'fill-current')} aria-hidden />
+      <IconStar className={cn('shrink-0', isFavorited && 'fill-current')} aria-hidden />
       {showCount && (
         <Txt as="span" variant="label" className="whitespace-nowrap">
           {hasCount ? (

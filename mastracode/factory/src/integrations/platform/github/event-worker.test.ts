@@ -400,6 +400,62 @@ describe('PlatformGithubEventWorker', () => {
     await worker.stop();
   });
 
+  it("forwards issue label and assignee changes to Factory rules, so they reach the card's routes", async () => {
+    const settings = createSettingsStorage();
+    const dispatch = vi.fn<typeof dispatchGithubWebhook>().mockResolvedValue({
+      delivered: 1,
+      failed: 0,
+      skipped: 0,
+      ignored: false,
+    });
+    const ingestFactoryEvent = vi.fn(async () => ({ status: 'committed' }));
+    const actions = ['labeled', 'unlabeled', 'assigned', 'unassigned', 'milestoned'];
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/installations')) {
+        return json({ installations: [{ installationId: 7, usable: true, suspendedAt: null }] });
+      }
+      if (url.pathname.endsWith('/installations/7/repositories')) {
+        return json({ repositories: [{ id: 101 }] });
+      }
+      if (url.pathname.endsWith('/repositories/101/events')) {
+        if (url.searchParams.has('afterTimestamp')) {
+          return json({
+            events: [
+              ...actions.map((action, index) => ({
+                id: `300${index}-0`,
+                deliveryId: `delivery-${action}`,
+                event: 'issues',
+                payload: { action },
+              })),
+              { id: '3100-0', deliveryId: 'delivery-pr-labeled', event: 'pull_request', payload: { action: 'labeled' } },
+              { id: '3101-0', deliveryId: 'delivery-pr-reopened', event: 'pull_request', payload: { action: 'reopened' } },
+              { id: '3102-0', deliveryId: 'delivery-pr-edited', event: 'pull_request', payload: { action: 'edited' } },
+            ],
+            nextCursor: '3102-0',
+          });
+        }
+        return json({ events: [], nextCursor: null });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const worker = createWorker({ fetchImpl, storage: settings.storage, now: () => 1_000, dispatch, ingestFactoryEvent });
+
+    await worker.init(createDeps());
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(ingestFactoryEvent.mock.calls.map(([event]) => (event as { deliveryId: string }).deliveryId)).toEqual([
+      'delivery-labeled',
+      'delivery-unlabeled',
+      'delivery-assigned',
+      'delivery-unassigned',
+      'delivery-pr-labeled',
+      'delivery-pr-reopened',
+    ]);
+    await worker.stop();
+  });
+
   it('advances the cursor when one subscription fails so the bad target does not poison later events', async () => {
     const settings = createSettingsStorage();
     const dispatch = vi
