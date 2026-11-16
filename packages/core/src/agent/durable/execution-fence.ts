@@ -568,6 +568,11 @@ export class ExecutionFence implements RunFenceScope {
   #leaseExpiresAt: number;
   #heartbeat?: ReturnType<typeof setInterval>;
   #renewalInFlight = false;
+  /**
+   * Set when settlement starts releasing the claim. A renewal sent before then can reach the backend after the
+   * release and come back unrenewed though nobody took the run over, so its result no longer means anything.
+   */
+  #releasing = false;
   #settlement?: Promise<ExecutionSettlement>;
   #settledAs?: ExecutionSettlement;
   #resolveSettled!: () => void;
@@ -1043,6 +1048,7 @@ export class ExecutionFence implements RunFenceScope {
   }
 
   async #release(): Promise<void> {
+    this.#releasing = true;
     try {
       await this.#backend.release(this.claim);
     } catch (error) {
@@ -1133,7 +1139,8 @@ export class ExecutionFence implements RunFenceScope {
   /**
    * Keep the claim alive between write checks. A `false` renewal marks the
    * fence lost, which notifies {@link onLost} listeners. Backend errors are
-   * tolerated until the local lease deadline.
+   * tolerated until the local lease deadline. A renewal that returns after
+   * settlement began releasing the claim is ignored.
    */
   #startHeartbeat(): void {
     this.#heartbeat = setInterval(() => {
@@ -1153,6 +1160,7 @@ export class ExecutionFence implements RunFenceScope {
       void this.#backend
         .renew(this.claim)
         .then(({ renewed, leaseExpiresAt }) => {
+          if (this.#releasing) return;
           if (renewed) {
             // The lease runs at least a TTL from when the renewal was sent. A queued storage renewal ran later:
             // trust the store's expiry, less a clock skew allowance, but never past a TTL from now.
@@ -1166,6 +1174,7 @@ export class ExecutionFence implements RunFenceScope {
           return this.#noteTakeover();
         })
         .catch(cause => {
+          if (this.#releasing) return;
           if (Date.now() >= this.#leaseExpiresAt) {
             this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details(), cause));
             return;

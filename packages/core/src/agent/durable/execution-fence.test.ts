@@ -812,6 +812,69 @@ describe('storage-backed ExecutionFence', () => {
     await successor.settle(async () => {});
   });
 
+  // The renewal was sent before settle() released the claim and reached the store after it, so it renews nothing.
+  // Nobody took the run over: the execution must not be marked lost. (#30206)
+  it('ignores a renewal that comes back false after the execution settled and released its claim (#30206)', async () => {
+    vi.useFakeTimers();
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+    let unblock!: () => void;
+    const blocked = new Promise<void>(resolve => (unblock = resolve));
+    let renewed: boolean | undefined;
+    vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementation(async args => {
+      await blocked;
+      const result = await renew(args);
+      renewed = result.renewed;
+      return result;
+    });
+
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    expect(await fence.settle(async () => {})).toBe('owned');
+    const lost = vi.fn();
+    fence.onLost(lost);
+    unblock();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(renewed).toBe(false);
+    expect(fence.isLost()).toBe(false);
+    expect(lost).not.toHaveBeenCalled();
+    expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
+      ownerId: fence.executionId,
+      generation: fence.generation,
+      leaseExpiresAt: null,
+    });
+  });
+
+  it('still marks an execution lost when a takeover rejects its renewal while it settles (#30206)', async () => {
+    vi.useFakeTimers();
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+    let unblock!: () => void;
+    const blocked = new Promise<void>(resolve => (unblock = resolve));
+    vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementation(async args => {
+      await blocked;
+      return renew(args);
+    });
+
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    let successor: ExecutionFence | undefined;
+    let lostDuringWrites: boolean | undefined;
+    const settled = fence.settle(async () => {
+      // A takeover lands while the terminal writes run, before the claim is released.
+      successor = await storageClaim(workflowsStore, 'run-1', 'takeover');
+      unblock();
+      await vi.advanceTimersByTimeAsync(0);
+      lostDuringWrites = fence.isLost();
+    });
+    await settled;
+
+    expect(lostDuringWrites).toBe(true);
+    expect(fence.isLost()).toBe(true);
+    await successor!.settle(async () => {});
+  });
+
   it('a released claim can be acquired again under the next generation', async () => {
     const { workflowsStore } = await stores();
     const first = await storageClaim(workflowsStore, 'run-1');
