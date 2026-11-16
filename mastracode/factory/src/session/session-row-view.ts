@@ -95,7 +95,7 @@ function windowedGroup(key: string, rows: readonly SessionRow[], view: SessionRo
             row.childRows?.some(child => child.session.sessionId === open) === true,
         );
   const count = view.window.get(key) ?? SESSION_ROW_WINDOW;
-  const visible = rows.slice(0, count + Number(openIndex >= SESSION_ROW_WINDOW));
+  const visible = rows.slice(0, count + Number(openIndex >= count));
   const openRow = rows[openIndex];
   if (openRow && openIndex >= visible.length) visible[visible.length - 1] = openRow;
   return { key, total: rows.length, ...(openIndex === -1 ? {} : { openIndex }), rows: visible };

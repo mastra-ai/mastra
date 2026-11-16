@@ -311,6 +311,27 @@ describe('group window', () => {
     ]);
   });
 
+  it('keeps every row the reader asked for in a window shallower than five, then the open session', () => {
+    const group = windowed({ open: 'work-4', window: ['all:2'] });
+
+    expect(group?.rows.map(entry => entry.session.sessionId)).toEqual(['work-1', 'work-2', 'work-4']);
+    expect(group?.openIndex).toBe(3);
+  });
+
+  it('adds no row when the open session already lies inside a deeper window', () => {
+    const group = windowed({ open: 'work-6', window: ['all:7'] });
+
+    expect(group?.rows.map(entry => entry.session.sessionId)).toEqual([
+      'work-1',
+      'work-2',
+      'work-3',
+      'work-4',
+      'work-5',
+      'work-6',
+      'work-7',
+    ]);
+  });
+
   it("finds the open session among a folded card's sessions", () => {
     const folded = [
       ...rows,
