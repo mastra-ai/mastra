@@ -99,9 +99,14 @@ export class PineconeFilterTranslator extends BaseFilterTranslator<PineconeVecto
             // For objects with operators, normalize each operator value
             const normalizedValue: Record<string, any> = {};
             for (const [op, opValue] of Object.entries(value)) {
+              if (op === '$all') {
+                // $all expands to several $in clauses on this field, so it is lifted next to the field's other operators
+                allConditions.push(...this.translateOperator(op, opValue, newPath).$and);
+                continue;
+              }
               normalizedValue[op] = this.isOperator(op) ? this.translateOperator(op, opValue) : opValue;
             }
-            result[newPath] = normalizedValue;
+            if (Object.keys(normalizedValue).length > 0) result[newPath] = normalizedValue;
           } else {
             // For objects without operators, flatten them
             const flattened = this.translateNode(value, newPath);

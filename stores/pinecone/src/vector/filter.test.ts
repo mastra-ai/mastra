@@ -164,6 +164,18 @@ describe('PineconeFilterTranslator', () => {
           $and: [{ $and: [{ resource_id: 'alice' }] }, { topic: { $in: ['x'] } }, { topic: { $in: ['y'] } }],
         });
       });
+
+      it('expands $all on the field path when it shares a field with other operators', () => {
+        expect(translator.translate({ tags: { $all: ['a', 'b'], $nin: ['c'] } })).toEqual({
+          $and: [{ tags: { $nin: ['c'] } }, { tags: { $in: ['a'] } }, { tags: { $in: ['b'] } }],
+        });
+      });
+
+      it('keeps sibling conditions when $all shares a field with other operators', () => {
+        expect(translator.translate({ resource_id: 'alice', tags: { $all: ['a'], $nin: ['c'] } })).toEqual({
+          $and: [{ resource_id: 'alice', tags: { $nin: ['c'] } }, { tags: { $in: ['a'] } }],
+        });
+      });
     });
   });
 
