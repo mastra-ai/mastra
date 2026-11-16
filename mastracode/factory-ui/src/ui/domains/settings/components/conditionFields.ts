@@ -261,7 +261,7 @@ const BOOLEAN_TEXT: Record<string, readonly [yes: string, no: string]> = {
 /** Values named after a product or a phase keep their capitals mid-sentence. */
 const PROPER_VALUES = new Set(['source.integration', 'source.provider', 'closedIssue.phase']);
 
-const EVERY_FACT = intakeRouteFacts(['work_item.opened', 'work_item.closed']);
+const EVERY_FACT = intakeRouteFacts(['work_item.opened', 'work_item.closed', 'work_item.updated']);
 
 function describeMember(member: RuleCondition | RuleGroup, fields: ReadonlyMap<string, FilterBarField>): string {
   if ('conditions' in member) return `(${describeMembers(member, fields)})`;

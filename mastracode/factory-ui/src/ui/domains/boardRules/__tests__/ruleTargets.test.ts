@@ -71,6 +71,14 @@ describe('route rows', () => {
     });
     expect(describeConditions(route('everything-else').when)).toBeNull();
   });
+
+  it('names what changed on a label or assignee change', () => {
+    const when = {
+      operator: 'AND' as const,
+      conditions: [{ field: 'event.labels.added', operator: 'equals' as const, value: 'hotfix' }],
+    };
+    expect(describeConditions(when)).toEqual({ join: 'and', parts: ['Label added has hotfix'] });
+  });
 });
 
 describe('reorderWithin', () => {
