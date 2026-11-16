@@ -15,11 +15,13 @@ import {
   hasPullRequest,
   isPullRequestCard,
   isTerminalWorkItem,
+  openPullRequestSource,
   pullRequestSources,
   pullRequestTrustKey,
   resolvePhaseSemantics,
   REVIEW_CONTEXT,
   reviewsPullRequest,
+  trustedPullRequestSource,
   UNTRUSTED_PULL_REQUESTS_KEY,
   workItemPhaseSemantics,
 } from '../boards/index.js';
@@ -744,6 +746,37 @@ async function awaitNotification(
       { cause: error },
     );
   }
+}
+
+/** Card metadata key: the facts each linked pull request joined the card with, by its trust key. */
+const LINKED_PULL_REQUESTS_KEY = 'linkedPullRequests';
+
+interface LinkFacts {
+  trusted: boolean;
+  phase: string | null;
+  hasPullRequest: boolean;
+}
+
+function linkedPullRequests(metadata: Record<string, unknown> | null | undefined): Record<string, LinkFacts> {
+  const links = metadata?.[LINKED_PULL_REQUESTS_KEY];
+  return links && typeof links === 'object' && !Array.isArray(links) ? (links as Record<string, LinkFacts>) : {};
+}
+
+/**
+ * A pull request's link to `card`, read off the card it joins. Only another trusted, open pull
+ * request counts as one the card already has: an outsider's can't keep a maintainer's from Review.
+ */
+function linkFacts(card: Card, trusted: boolean, trustKey: string): LinkFacts {
+  return {
+    trusted,
+    phase: card.stages.length === 1 ? card.stages[0]! : null,
+    hasPullRequest: pullRequestSources(card).some(
+      source =>
+        pullRequestTrustKey(source) !== trustKey &&
+        openPullRequestSource(source) &&
+        trustedPullRequestSource(card, source),
+    ),
+  };
 }
 
 export class FactoryDecisionDispatcher {
@@ -2188,7 +2221,7 @@ export class FactoryDecisionDispatcher {
     workItemId: string,
     causalChain: FactoryRuleCausalEntry[],
     admit: (card: Card) => { phase: string | null } | undefined,
-    cardMetadata?: (metadata: Record<string, unknown>) => Record<string, unknown>,
+    cardMetadata?: (metadata: Record<string, unknown>, card: Card) => Record<string, unknown>,
     afterAttach?: (card: Card) => Promise<void>,
   ): Promise<boolean> {
     // A dry run of the work item split has no sources table to attach to: the pull request
@@ -2217,7 +2250,10 @@ export class FactoryDecisionDispatcher {
           source: externalSourceForDecision(decision),
           metadata: decision.metadata ?? null,
           expectedRevision: card.revision,
-          ...(cardMetadata ? { cardMetadata } : {}),
+          // The card as `admit` read it: the attach commits at that revision.
+          ...(cardMetadata
+            ? { cardMetadata: (metadata: Record<string, unknown>) => cardMetadata(metadata, card) }
+            : {}),
         });
         if (!result) return false;
         attached = { card: result.item, phase: admitted.phase };
@@ -2281,15 +2317,19 @@ export class FactoryDecisionDispatcher {
       decision.closesIssue!.workItemId,
       causalChain,
       () => ({ phase: null }),
-      trusted
-        ? undefined
-        : metadata => {
-            const listed = metadata[UNTRUSTED_PULL_REQUESTS_KEY];
-            const untrusted = Array.isArray(listed) ? listed.filter(entry => typeof entry === 'string') : [];
-            return untrusted.includes(trustKey)
-              ? metadata
-              : { ...metadata, [UNTRUSTED_PULL_REQUESTS_KEY]: [...untrusted, trustKey] };
-          },
+      (metadata, card) => {
+        const links = linkedPullRequests(metadata);
+        const withLink = {
+          ...metadata,
+          [LINKED_PULL_REQUESTS_KEY]: { ...links, [trustKey]: links[trustKey] ?? linkFacts(card, trusted, trustKey) },
+        };
+        if (trusted) return withLink;
+        const listed = metadata[UNTRUSTED_PULL_REQUESTS_KEY];
+        const untrusted = Array.isArray(listed) ? listed.filter(entry => typeof entry === 'string') : [];
+        return untrusted.includes(trustKey)
+          ? withLink
+          : { ...withLink, [UNTRUSTED_PULL_REQUESTS_KEY]: [...untrusted, trustKey] };
+      },
       card => this.#queueLinkedPullRequestOpened(record, decision, card, causalChain),
     );
   }
@@ -2301,10 +2341,11 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
-   * Hands the card a linked pull request's `pull_request.opened`, with the card's facts as they
-   * were before it joined (its phase, and whether another pull request was already on it). Keyed
-   * by the card and the pull request, so whichever delivery files the pull request, and however
-   * often, the card gets the event once.
+   * Hands the card a linked pull request's `pull_request.opened`, with the facts saved when it
+   * joined (the card's phase then, and whether a trusted open pull request was already on it), so
+   * a retry after the card changed still describes the link as it happened. Keyed by the card and
+   * the pull request, so whichever delivery files the pull request, and however often, the card
+   * gets the event once.
    */
   async #queueLinkedPullRequestOpened(
     record: FactoryDeferredDecisionRecord,
@@ -2315,7 +2356,9 @@ export class FactoryDecisionDispatcher {
     const sourceKey = externalSourceKey(externalSourceForDecision(decision));
     const key = `linked-pull-request:${card.id}:${sourceKey}`;
     const trustKey = this.#pullRequestTrustKey(decision);
-    const others = pullRequestSources(card).filter(source => pullRequestTrustKey(source) !== trustKey);
+    // A link from before the facts were saved with it reads them off the card as it is now.
+    const link =
+      linkedPullRequests(card.metadata)[trustKey] ?? linkFacts(card, authorTrusted(decision.metadata), trustKey);
     const queued = await this.#storage.commitRuleEvaluation({
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
@@ -2331,11 +2374,8 @@ export class FactoryDecisionDispatcher {
           idempotencyKey: key,
           event: {
             type: 'pull_request.opened',
-            pullRequestTrusted: authorTrusted(decision.metadata),
-            closedIssue: {
-              phase: card.stages.length === 1 ? card.stages[0]! : null,
-              hasPullRequest: others.length > 0,
-            },
+            pullRequestTrusted: link.trusted,
+            closedIssue: { phase: link.phase, hasPullRequest: link.hasPullRequest },
           },
         },
       ],

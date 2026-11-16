@@ -294,6 +294,41 @@ describe('intake routes placing linked cards', () => {
       expect(await seeded.workItems.list(seeded.scope)).toHaveLength(1);
     });
 
+    it('hands the card the link as it happened, even when a person moved the card before its event was queued', async () => {
+      const seeded = await setup({ withDefaultRoute: true });
+      const issue = (await seeded.deliver({ sourceKey: 'github-issue:42', metadata: { authorTrusted: true } }))!;
+      // A person moves the card just after the pull request attached, before its event is queued.
+      const commit = seeded.workItems.commitRuleEvaluation.bind(seeded.workItems);
+      let raced = false;
+      vi.spyOn(seeded.workItems, 'commitRuleEvaluation').mockImplementation(async input => {
+        if (input.ingress.triggerType === 'pull_request.linked' && !raced) {
+          raced = true;
+          await seeded.putAt(issue.id, 'planning');
+        }
+        return commit(input);
+      });
+
+      await seeded.deliver(pullRequest(issue.id, true));
+      await seeded.retry();
+
+      // The pull request linked while the card waited in Intake with no other pull request.
+      const [linked] = (await seeded.workItems.listDeferredDecisions('org-1', seeded.scope.factoryProjectId)).filter(
+        entry => entry.decision.type === 'routeEvent' && entry.workItemId === issue.id,
+      );
+      expect(linked?.decision).toMatchObject({
+        event: {
+          type: 'pull_request.opened',
+          pullRequestTrusted: true,
+          closedIssue: { phase: 'intake', hasPullRequest: false },
+        },
+      });
+      // The person's move came after the link, so it stands.
+      expect(placed((await seeded.workItems.get({ orgId: 'org-1', id: issue.id }))!)).toEqual({
+        board: 'work',
+        stages: ['planning'],
+      });
+    });
+
     it("links a person's pull request to the card on whichever board it sits", async () => {
       const seeded = await setup();
       await seeded.boards.create(seeded.scope, docsBoard, 'admin');

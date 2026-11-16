@@ -7367,6 +7367,20 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect((await h.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
     });
 
+    it("still takes issue 42's card to PR review for a maintainer's pull request after an outsider's linked first", async () => {
+      const h = await harness('read');
+      const issue = await h.issueCard(42, 'intake');
+      await h.ingest(openedPullRequest(17, 'Fixes #42'));
+      vi.mocked(h.github.getRepositoryCollaboratorPermission).mockResolvedValue('write');
+
+      await h.ingest(openedPullRequest(18, 'Fixes #42'));
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(1);
+      expect(cards[0]).toMatchObject({ id: issue.id, stages: ['pr-review'] });
+      expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request', 'pull-request']);
+    });
+
     it.each([
       ['the outsider', 'execute', 'read'],
       ['the outsider', 'pr-review', 'read'],
