@@ -1,6 +1,7 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import type { CreateFeedbackBody, MastraClient } from '@mastra/client-js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
 import { addPendingFeedback, discardPendingFeedback } from '../feedback/optimistic-feedback';
 import type { MastraMutationOptions } from '../shared/query-options';
@@ -25,7 +26,11 @@ type FeedbackIdentity = { feedbackId: string; timestamp: string };
 /**
  * Identity generated per submit, so the optimistic comment (added in onMutate) and the posted
  * record (sent in mutationFn) share one feedbackId. TanStack passes the same variables object
- * to every callback of a mutation run.
+ * to every callback and retry of a mutation run; `mutate` copies the caller's variables so a
+ * reused object still gets a fresh identity on each submit.
+ *
+ * The timestamp comes from the client clock, so a skewed clock can order a pending comment
+ * differently from how the server later sorts the stored one.
  */
 const identities = new WeakMap<CreateFeedbackVariables, FeedbackIdentity>();
 
@@ -55,7 +60,7 @@ export const useCreateFeedback = ({
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
-  return useMutation({
+  const mutation = useMutation({
     mutationFn: (variables: CreateFeedbackVariables) =>
       client.createFeedback({
         ...(contextMode !== undefined ? { contextMode } : {}),
@@ -105,4 +110,16 @@ export const useCreateFeedback = ({
       ]);
     },
   });
+
+  const { mutate: mutateRun, mutateAsync: mutateAsyncRun } = mutation;
+  const mutate: typeof mutateRun = useCallback(
+    (variables, options) => mutateRun({ ...variables }, options),
+    [mutateRun],
+  );
+  const mutateAsync: typeof mutateAsyncRun = useCallback(
+    (variables, options) => mutateAsyncRun({ ...variables }, options),
+    [mutateAsyncRun],
+  );
+
+  return { ...mutation, mutate, mutateAsync };
 };

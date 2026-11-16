@@ -154,6 +154,24 @@ describe.each(scopes)('optimistic $name comments', ({ spanId, rows, visibleServe
     });
   });
 
+  describe('when the same variables object is submitted twice', () => {
+    it('sends and shows two separate comments', async () => {
+      const api = eventuallyConsistentFeedbackServer([...rows]);
+      const { result } = renderPanel();
+      await waitFor(() => expect(result.current.list.data?.feedback).toHaveLength(visibleServerRows));
+
+      const variables = { text: 'same note' };
+      await act(() => result.current.create.mutateAsync(variables));
+      await act(() => result.current.create.mutateAsync(variables));
+
+      expect(api.posted).toHaveLength(2);
+      expect(api.posted[0]!.feedbackId).not.toBe(api.posted[1]!.feedbackId);
+      await waitFor(() =>
+        expect(result.current.list.data?.feedback.filter(f => f.value === 'same note')).toHaveLength(2),
+      );
+    });
+  });
+
   describe('when the server has not stored the comment yet', () => {
     it('keeps the comment visible through the post-submit refetch and later polls', async () => {
       const api = eventuallyConsistentFeedbackServer([...rows]);
