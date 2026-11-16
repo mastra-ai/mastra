@@ -1670,6 +1670,15 @@ describe('MongoDBVector filterFields (#18587)', () => {
         { 'metadata.price': { $nin: [100, 200] } },
       ],
       ['$exists: false', { price: { $exists: false } }, { 'metadata.price': { $exists: false } }],
+      // Sibling fields become sibling `compound.filter` entries, and the whole pushdown rests on
+      // Atlas ANDing them. This is the shape the issue asks for, and the only one where an AND/OR
+      // mistake still looks plausible (an OR would additionally match d3, which has `inStock` but
+      // no `price`), so it is pinned against Mongo here as well as in the unit test above.
+      [
+        'two sibling fields, which $search ANDs',
+        { price: { $lt: 1500 }, inStock: true },
+        { 'metadata.price': { $lt: 1500 }, 'metadata.inStock': true },
+      ],
       [
         '$or',
         { $or: [{ price: { $lt: 1500 } }, { inStock: false }] },
