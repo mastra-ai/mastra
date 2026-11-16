@@ -172,12 +172,12 @@ describe('posthog_run_query with live PostHog response shapes (#30528)', () => {
     ]);
   });
 
-  it('returns an empty type list for a query with no columns', async () => {
-    queryResponse = { ...selectOneResponse, results: [], columns: [], types: [] };
+  it('keeps column types for a query that returns no rows', async () => {
+    queryResponse = { ...selectOneResponse, results: [], columns: ['1'], types: [['1', 'UInt8']] };
 
     const result = await runQuery('select 1 where 0');
 
-    expect(result).toMatchObject({ results: [], columns: [], types: [] });
+    expect(result).toMatchObject({ results: [], columns: ['1'], types: [['1', 'UInt8']] });
   });
 
   it('keeps types null when PostHog sends null', async () => {
