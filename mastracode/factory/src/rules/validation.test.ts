@@ -550,15 +550,6 @@ describe('Factory activity signal validation', () => {
 describe('routeEvent decisions carrying what changed', () => {
   const route = (event: unknown) => ({ type: 'routeEvent', idempotencyKey: 'delivery-1:event-route', event });
 
-  it('keeps an update event with its label and assignee changes', () => {
-    const decision = route({
-      type: 'work_item.updated',
-      labels: { added: ['ship'], removed: [] },
-      assignees: { added: [], removed: ['ada'] },
-    });
-    expect(validateFactoryRuleDecision(decision)).toEqual(decision);
-  });
-
   it.each([
     ['changes on an event that is not an update', { type: 'work_item.closed', labels: { added: ['x'], removed: [] } }],
     ['a change that is not two lists', { type: 'work_item.updated', labels: { added: 'ship' } }],

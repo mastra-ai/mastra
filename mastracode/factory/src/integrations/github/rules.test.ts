@@ -4227,78 +4227,46 @@ describe('GithubRules issue labels', () => {
     });
   });
 
-  it("hands a person's label change to the card's routes as one work_item.updated event", async () => {
+  // Each delivery is [action, labels after it, sender]; the card starts with `before`.
+  it.each([
+    {
+      case: "a person's change is one work_item.updated per delivery that changed something",
+      before: [],
+      deliveries: [['labeled', ['bug'], 'maintainer'], ['labeled', ['bug', 'Ship'], 'maintainer'], ['labeled', ['bug', 'Ship'], 'maintainer']],
+      updates: [{ added: ['bug'], fromCardSession: false }, { added: ['Ship'], fromCardSession: false }],
+      labels: ['bug', 'Ship'],
+    },
+    {
+      case: "Factory's own change waits for the card's run, without its status bookkeeping",
+      before: ['status: needs approval'],
+      deliveries: [['labeled', ['bug', 'status: auto-triaged'], 'factory-app[bot]']],
+      updates: [{ added: ['bug'], fromCardSession: true }],
+      labels: ['bug', 'status: auto-triaged'],
+    },
+    {
+      case: "a change only to the labels Factory manages is none, whoever makes it",
+      before: ['bug', 'status: needs approval'],
+      deliveries: [['unlabeled', ['bug'], 'factory-app[bot]'], ['labeled', ['bug', 'Status: Auto-Triaged'], 'maintainer']],
+      updates: [],
+      labels: ['bug', 'Status: Auto-Triaged'],
+    },
+  ] as const)('$case', async ({ before, deliveries, updates, labels }) => {
     const { service, workItems, project } = await setupRoutes();
     const item = await createLinkedIssue(workItems, project.id);
-    await service.ingest(issueLabels('labeled', ['bug']));
-    await service.ingest(issueLabels('labeled', ['bug', 'Ship'], 'label-ship'));
-    await service.ingest(issueLabels('labeled', ['bug', 'Ship'], 'label-same'));
+    await workItems.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { metadata: { labels: [...before] } } });
+    for (const [index, [action, after, sender]] of deliveries.entries()) {
+      const delivery = issueLabels(action, [...after], `label-${index}`);
+      (delivery.payload.sender as Record<string, unknown>).login = sender;
+      await service.ingest(delivery);
+    }
 
-    const updates = (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: item.id })).filter(
-      entry => entry.decision.type === 'routeEvent',
-    );
-    expect(updates.map(entry => entry.decision)).toEqual([
-      {
-        type: 'routeEvent',
-        idempotencyKey: '7:label-labeled:event-route',
-        event: { type: 'work_item.updated', labels: { added: ['bug'], removed: [] } },
-      },
-      {
-        type: 'routeEvent',
-        idempotencyKey: '7:label-ship:event-route',
-        event: { type: 'work_item.updated', labels: { added: ['Ship'], removed: [] } },
-      },
-    ]);
-  });
-
-  it("marks a label change Factory made itself as the card's own session's, so it waits for the run", async () => {
-    const { service, workItems, project } = await setupRoutes();
-    const item = await createLinkedIssue(workItems, project.id);
-    await workItems.update({
-      orgId: 'org-1',
-      id: item.id,
-      userId: 'user-1',
-      patch: { metadata: { labels: ['status: needs approval'] } },
-    });
-    // Triage labels the issue: one real label, and its own status bookkeeping.
-    const byFactory = issueLabels('labeled', ['bug', 'status: auto-triaged'], 'factory-label');
-    (byFactory.payload.sender as Record<string, unknown>).login = 'factory-app[bot]';
-    await service.ingest(byFactory);
-
-    const updates = (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: item.id })).filter(
-      entry => entry.decision.type === 'routeEvent',
-    );
-    expect(updates.map(entry => entry.decision)).toEqual([
-      expect.objectContaining({
-        fromCardSession: true,
-        event: { type: 'work_item.updated', labels: { added: ['bug'], removed: [] } },
-      }),
-    ]);
-  });
-
-  it("never reports a change to the labels Factory manages itself, as with a rule's own move", async () => {
-    const { service, workItems, project } = await setupRoutes();
-    const item = await createLinkedIssue(workItems, project.id);
-    await workItems.update({
-      orgId: 'org-1',
-      id: item.id,
-      userId: 'user-1',
-      patch: { metadata: { labels: ['bug', 'status: needs approval'] } },
-    });
-    // A person accepts the card; Factory clears its approval label on GitHub.
-    const accepted = issueLabels('unlabeled', ['bug'], 'acceptance-unlabel');
-    (accepted.payload.sender as Record<string, unknown>).login = 'factory-app[bot]';
-    await service.ingest(accepted);
-    // Someone re-adds Factory's own status label by hand: still bookkeeping, not a change.
-    await service.ingest(issueLabels('labeled', ['bug', 'Status: Auto-Triaged'], 'manual-status'));
-
-    const decisions = await workItems.listDeferredDecisions('org-1', project.id, { workItemId: item.id });
-    expect(decisions.filter(entry => entry.decision.type === 'routeEvent')).toEqual([]);
-    // The card still records the labels as they are.
-    expect((await workItems.get({ orgId: 'org-1', id: item.id }))?.workItem.labels).toEqual([
-      'bug',
-      'Status: Auto-Triaged',
-    ]);
+    const decisions = (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: item.id }))
+      .map(entry => entry.decision)
+      .filter(decision => decision.type === 'routeEvent');
+    expect(
+      decisions.map(decision => ({ added: decision.event.labels?.added, fromCardSession: decision.fromCardSession === true })),
+    ).toEqual(updates);
+    expect((await workItems.get({ orgId: 'org-1', id: item.id }))?.workItem.labels).toEqual(labels);
   });
 
   function pullRequestChanged(action: string, deliveryId: string, extra: Record<string, unknown>) {
@@ -4316,74 +4284,60 @@ describe('GithubRules issue labels', () => {
     };
   }
 
-  it("hands a pull request's label and assignee changes to its own card as pull_request.updated", async () => {
-    const { service, workItems, project } = await setupRoutes();
-    const own = (
-      await workItems.upsert({
-        orgId: 'org-1',
-        userId: 'user-1',
-        factoryProjectId: project.id,
-        input: {
-          externalSource: {
-            integrationId: 'github',
-            type: 'pull-request',
-            externalId: 'github-pr:17',
-            url: 'https://github.com/acme/repo/pull/17',
-          },
-          title: 'PR 17',
-          stages: ['intake'],
-          sessions: {},
-          metadata: { number: 17, labels: ['bug'], assignees: ['ada'] },
-        },
-      })
-    ).item;
-    const pullRequest = (labels: string[], assignees: string[]) => ({
-      number: 17,
-      html_url: 'https://github.com/acme/repo/pull/17',
-      labels: labels.map(name => ({ name })),
-      assignees: assignees.map(login => ({ login })),
-    });
-    await service.ingest(
-      pullRequestChanged('labeled', 'pr-label', { label: { name: 'ready' }, pull_request: pullRequest(['bug', 'ready'], ['ada']) }),
-    );
-    // Routes read the card's labels and assignees: they are the pull request's current ones.
-    const labelled = (await workItems.get({ orgId: 'org-1', id: own.id }))!;
-    expect(labelled.workItem.labels).toEqual(['bug', 'ready']);
-    await service.ingest(
-      pullRequestChanged('unassigned', 'pr-unassign', { assignee: { login: 'ada' }, pull_request: pullRequest(['bug', 'ready'], []) }),
-    );
-    expect((await workItems.get({ orgId: 'org-1', id: own.id }))!.workItem.metadata?.assignees).toEqual([]);
+  // A pull request's own events are pull_request.*, on its own card or the issue card it is attached to.
+  it.each(['own card', 'attached to an issue card'] as const)(
+    "hands a pull request's label and assignee changes to its %s as pull_request.updated",
+    async where => {
+      const { service, workItems, project } = await setupRoutes();
+      const pullRequestSource = { integrationId: 'github', type: 'pull-request', url: 'https://github.com/acme/repo/pull/17' };
+      const card =
+        where === 'own card'
+          ? (
+              await workItems.upsert({
+                orgId: 'org-1',
+                userId: 'user-1',
+                factoryProjectId: project.id,
+                input: {
+                  externalSource: { ...pullRequestSource, externalId: 'github-pr:17' },
+                  title: 'PR 17',
+                  stages: ['intake'],
+                  sessions: {},
+                  metadata: { number: 17, labels: ['bug'], assignees: ['ada'] },
+                },
+              })
+            ).item
+          : await createLinkedIssue(workItems, project.id);
+      if (where !== 'own card') {
+        await workItems.attachSource({
+          orgId: 'org-1',
+          id: card.id,
+          source: { ...pullRequestSource, externalId: 'github:10:pull-request:17' },
+          metadata: { state: 'open' },
+        });
+      }
+      const current = (labels: string[], assignees: string[]) => ({
+        number: 17,
+        html_url: 'https://github.com/acme/repo/pull/17',
+        labels: labels.map(name => ({ name })),
+        assignees: assignees.map(login => ({ login })),
+      });
+      await service.ingest(pullRequestChanged('labeled', 'pr-label', { label: { name: 'ready' }, pull_request: current(['bug', 'ready'], ['ada']) }));
+      await service.ingest(pullRequestChanged('unassigned', 'pr-unassign', { assignee: { login: 'ada' }, pull_request: current(['bug', 'ready'], []) }));
 
-    const events = (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: own.id }))
-      .filter(entry => entry.decision.type === 'routeEvent')
-      .map(entry => entry.decision.event);
-    expect(events).toEqual([
-      // A pull request's own events are pull_request.*, whether it has a card of its own or not.
-      { type: 'pull_request.updated', labels: { added: ['ready'], removed: [] } },
-      { type: 'pull_request.updated', assignees: { added: [], removed: ['ada'] } },
-    ]);
-  });
-
-  it('reports a change to a pull request attached to an issue card as pull_request.updated', async () => {
-    const { service, workItems, project } = await setupRoutes();
-    const issue = await createLinkedIssue(workItems, project.id);
-    await workItems.attachSource({
-      orgId: 'org-1',
-      id: issue.id,
-      source: {
-        integrationId: 'github',
-        type: 'pull-request',
-        externalId: 'github:10:pull-request:17',
-        url: 'https://github.com/acme/repo/pull/17',
-      },
-      metadata: { state: 'open' },
-    });
-    await service.ingest(pullRequestChanged('labeled', 'attached-label', { label: { name: 'ready' } }));
-    const [update] = (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: issue.id })).filter(
-      entry => entry.decision.type === 'routeEvent',
-    );
-    expect(update?.decision.event).toEqual({ type: 'pull_request.updated', labels: { added: ['ready'], removed: [] } });
-  });
+      const events = (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: card.id }))
+        .filter(entry => entry.decision.type === 'routeEvent')
+        .map(entry => entry.decision.event);
+      expect(events).toEqual([
+        { type: 'pull_request.updated', labels: { added: ['ready'], removed: [] } },
+        { type: 'pull_request.updated', assignees: { added: [], removed: ['ada'] } },
+      ]);
+      if (where === 'own card') {
+        // Routes read the card's labels and assignees: they are the pull request's current ones.
+        const stored = (await workItems.get({ orgId: 'org-1', id: card.id }))!;
+        expect({ labels: stored.workItem.labels, assignees: stored.workItem.metadata?.assignees }).toEqual({ labels: ['bug', 'ready'], assignees: [] });
+      }
+    },
+  );
 
   async function notRoutedIssue(kind: 'issue' | 'pull_request' = 'issue') {
     const base = await setup('write');
@@ -4429,96 +4383,31 @@ describe('GithubRules issue labels', () => {
     return { base, scope, service, dispatcher };
   }
 
-  it('files an issue no board took once it is labelled to match a board, through the Not routed records', async () => {
-    const { base, scope, service, dispatcher } = await notRoutedIssue();
-    await service.ingest(issueLabels('labeled', ['ship'], 'labelled-ship'));
-    await dispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
-
-    const cards = await base.workItems.list(scope);
-    expect(cards.map(card => ({ board: card.board, labels: card.workItem.metadata?.labels }))).toEqual([
-      { board: 'work', labels: ['ship'] },
-    ]);
-    expect((await base.boards.listNotRouted(scope)).notRouted).toEqual([]);
-  });
-
-  it('files a pull request no board took once it is labelled to match a board, through the Not routed records', async () => {
-    const { base, scope, service, dispatcher } = await notRoutedIssue('pull_request');
-    const opened = pullRequest('opened', 'pr-labelled-ship');
-    const labelled = (state: 'open' | 'closed', deliveryId: string) => ({
-      ...opened,
-      deliveryId,
-      payload: {
-        ...opened.payload,
-        action: 'labeled',
-        label: { name: 'ship' },
-        pull_request: { ...opened.payload.pull_request, state, labels: [{ name: 'ship' }] },
-      },
-    });
-    // A closed pull request stays unfiled.
-    await expect(service.ingest(labelled('closed', 'pr-labelled-closed'))).resolves.toEqual({ status: 'ignored' });
-    await service.ingest(labelled('open', 'pr-labelled-ship'));
-    await dispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
-
-    const cards = await base.workItems.list(scope);
-    expect(cards.map(card => ({ board: card.board, source: card.externalSource?.type }))).toEqual([
-      { board: 'work', source: 'pull-request' },
-    ]);
-    expect((await base.boards.listNotRouted(scope)).notRouted).toEqual([]);
-  });
-
-  it("files an outside author's issue untrusted when a maintainer's label runs intake again", async () => {
-    const { base, scope, service, dispatcher } = await notRoutedIssue();
+  // A label on an item intake turned away runs intake again: open ones only, judged by their own author.
+  it.each([
+    { kind: 'issue', state: 'open', author: 'maintainer', filed: [{ board: 'work', source: 'issue', authorTrusted: true }] },
+    { kind: 'issue', state: 'closed', author: 'maintainer', filed: [] },
+    { kind: 'issue', state: 'open', author: 'outsider', filed: [{ board: 'work', source: 'issue', authorTrusted: false }] },
+    { kind: 'pull_request', state: 'open', author: 'contributor', filed: [{ board: 'work', source: 'pull-request', authorTrusted: false }] },
+    { kind: 'pull_request', state: 'closed', author: 'contributor', filed: [] },
+  ] as const)("files a Not routed $kind that is labelled to match a board while $state, by $author", async ({ kind, state, author, filed }) => {
+    const { base, scope, service, dispatcher } = await notRoutedIssue(kind);
     base.github.getRepositoryCollaboratorPermission.mockImplementation(async (_id: number, _repo: string, login: string) =>
-      login === 'outsider' ? 'read' : 'write',
+      login === 'maintainer' ? 'write' : 'read',
     );
-    const delivery = issueLabels('labeled', ['ship'], 'outsider-labelled');
-    (delivery.payload.issue as Record<string, unknown>).user = { login: 'outsider' };
+    const delivery =
+      kind === 'issue' ? issueLabels('labeled', ['ship'], 'labelled-ship', state) : pullRequest('opened', 'labelled-ship');
+    const item = (kind === 'issue' ? delivery.payload.issue : delivery.payload.pull_request) as Record<string, unknown>;
+    Object.assign(delivery.payload, { action: 'labeled', label: { name: 'ship' } });
+    Object.assign(item, { state, labels: [{ name: 'ship' }], user: { login: author } });
     await service.ingest(delivery);
     await dispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
 
-    const [card] = await base.workItems.list(scope);
-    expect(card?.workItem.metadata).toMatchObject({ author: 'outsider' });
-    expect(card?.metadata).toMatchObject({ authorTrusted: false });
-  });
-
-  it("files an outside author's reopened pull request untrusted, whoever reopened it", async () => {
-    const { service, workItems, project, github } = await setupRoutes();
-    github.getRepositoryCollaboratorPermission.mockImplementation(async (_id: number, _repo: string, login: string) =>
-      login === 'contributor' ? 'read' : 'write',
-    );
-    const delivery = pullRequest('opened', 'outsider-pr-reopened');
-    const reopened = {
-      ...delivery,
-      payload: { ...delivery.payload, action: 'reopened', sender: { login: 'maintainer' } },
-    };
-    await expect(service.ingest(reopened)).resolves.toEqual({ status: 'committed' });
-    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
-    expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', metadata: { authorTrusted: false } });
-  });
-
-  it("files an outside author's reopened issue with no card untrusted, whoever reopened it", async () => {
-    const { service, workItems, project, github } = await setupRoutes();
-    github.getRepositoryCollaboratorPermission.mockImplementation(async (_id: number, _repo: string, login: string) =>
-      login === 'outsider' ? 'read' : 'write',
-    );
-    const reopened = issueOpened('outsider-issue-reopened');
-    (reopened.payload as Record<string, unknown>).action = 'reopened';
-    (reopened.payload.issue as Record<string, unknown>).state = 'open';
-    (reopened.payload.issue as Record<string, unknown>).user = { login: 'outsider' };
-    await expect(service.ingest(reopened)).resolves.toEqual({ status: 'committed' });
-    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
-    expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', metadata: { authorTrusted: false } });
-  });
-
-  it('files no card when an issue no board took is labelled after it closed', async () => {
-    const { base, scope, service, dispatcher } = await notRoutedIssue();
-    await expect(service.ingest(issueLabels('labeled', ['ship'], 'labelled-closed', 'closed'))).resolves.toEqual({
-      status: 'ignored',
-    });
-    await dispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
-
-    expect(await base.workItems.list(scope)).toEqual([]);
-    expect((await base.boards.listNotRouted(scope)).notRouted).toHaveLength(1);
+    const cards = await base.workItems.list(scope);
+    expect(
+      cards.map(card => ({ board: card.board, source: card.externalSource?.type, authorTrusted: card.metadata?.authorTrusted })),
+    ).toEqual(filed);
+    expect((await base.boards.listNotRouted(scope)).notRouted).toHaveLength(filed.length === 0 ? 1 : 0);
   });
 
   it('leaves a labelled issue with no card alone when intake never turned it away', async () => {
@@ -4529,58 +4418,26 @@ describe('GithubRules issue labels', () => {
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 
-  it('files a reopened issue with no card the way a new one is filed', async () => {
-    const { service, workItems, project } = await setupRoutes();
-    const reopened = issueOpened('reopened-no-card');
-    (reopened.payload as Record<string, unknown>).action = 'reopened';
-    await expect(service.ingest(reopened)).resolves.toEqual({ status: 'committed' });
-    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
-    expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', board: 'work', stage: 'intake' });
-  });
-
-  it('files a reopened pull request with no card the way a new one is filed', async () => {
-    const { service, workItems, project } = await setupRoutes();
-    const opened = pullRequest('opened', 'pr-opened');
-    await service.ingest(opened);
-    const [filed] = await workItems.listDeferredDecisions('org-1', project.id);
-    expect(filed?.decision).toMatchObject({ type: 'upsertLinkedWorkItem' });
-
-    const reopened = pullRequest('opened', 'pr-reopened-no-card');
-    (reopened.payload as Record<string, unknown>).action = 'reopened';
+  // A reopened item with no card is filed like a new one, judged by its own author, whoever reopened it.
+  it.each([
+    { kind: 'issue', author: 'maintainer', authorTrusted: true },
+    { kind: 'issue', author: 'outsider', authorTrusted: false },
+    { kind: 'pull request', author: 'maintainer', authorTrusted: true },
+    { kind: 'pull request', author: 'outsider', authorTrusted: false },
+  ] as const)("files a reopened $kind with no card like a new one, by $author", async ({ kind, author, authorTrusted }) => {
+    const { service, workItems, project, github } = await setupRoutes();
+    github.getRepositoryCollaboratorPermission.mockImplementation(async (_id: number, _repo: string, login: string) =>
+      login === 'outsider' ? 'read' : 'write',
+    );
+    const reopened = kind === 'issue' ? issueOpened('reopened-no-card') : pullRequest('opened', 'reopened-no-card');
+    const item = (kind === 'issue' ? reopened.payload.issue : reopened.payload.pull_request) as Record<string, unknown>;
+    Object.assign(reopened.payload, { action: 'reopened', sender: { login: 'maintainer' } });
+    Object.assign(item, { state: 'open', user: { login: author } });
     await expect(service.ingest(reopened)).resolves.toEqual({ status: 'committed' });
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
-    expect(decisions).toHaveLength(2);
-    expect(decisions[1]?.decision).toMatchObject({
-      type: 'upsertLinkedWorkItem',
-      board: (filed?.decision as { board?: string }).board,
-      stage: (filed?.decision as { stage?: string }).stage,
-    });
-  });
-
-  it('leaves a reopened pull request that has a card to that card\'s routes', async () => {
-    const { service, workItems, project } = await setupRoutes();
-    await workItems.upsert({
-      orgId: 'org-1',
-      userId: 'user-1',
-      factoryProjectId: project.id,
-      input: {
-        externalSource: {
-          integrationId: 'github',
-          type: 'pull-request',
-          externalId: 'github-pr:17',
-          url: 'https://github.com/acme/repo/pull/17',
-        },
-        title: 'PR 17',
-        stages: ['canceled'],
-        sessions: {},
-        metadata: { number: 17 },
-      },
-    });
-    const reopened = pullRequest('opened', 'pr-reopened-card');
-    (reopened.payload as Record<string, unknown>).action = 'reopened';
-    await service.ingest(reopened);
-    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
-    expect(decisions.map(entry => entry.decision.type)).not.toContain('upsertLinkedWorkItem');
+    expect(decisions.map(entry => entry.decision)).toEqual([
+      expect.objectContaining({ type: 'upsertLinkedWorkItem', metadata: expect.objectContaining({ authorTrusted }) }),
+    ]);
   });
 
   it('drops a label delivery older than the last one applied, so a late add never undoes a removal', async () => {

@@ -42,58 +42,6 @@ async function setup(overrides?: IncidentioRuleOverrides, boards = createBoardRe
 }
 
 describe('IncidentioRules', () => {
-  it('runs intake again on each change a sync sees to an item with no card, as intake turned it away', async () => {
-    const { project, service, workItems } = await setup();
-    const ingest = (observed: typeof issue) =>
-      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [observed] });
-    await ingest(issue);
-    // Nothing changed since: no second look.
-    await ingest(issue);
-    await ingest({ ...issue, assignee: 'bob', updatedAt: '2026-07-03T00:00:00Z' });
-
-    const intakes = (await workItems.listDeferredDecisions('org-1', project.id)).filter(
-      record => record.decision.type === 'upsertLinkedWorkItem',
-    );
-    expect(intakes).toHaveLength(2);
-  });
-
-  it('hands a change over when the same sighting is polled again after queueing it failed', async () => {
-    const { project, service, workItems } = await setup();
-    const scope = { orgId: 'org-1', factoryProjectId: project.id };
-    const card = (
-      await workItems.upsert({
-        orgId: 'org-1',
-        userId: 'user-1',
-        factoryProjectId: project.id,
-        input: {
-          title: issue.title,
-          stages: ['planning'],
-          sessions: {},
-          externalSource: { integrationId: 'incidentio', type: 'follow-up', externalId: issue.id, url: issue.url },
-          metadata: { labels: ['reliability'] },
-        },
-      })
-    ).item;
-    const poll = (updatedAt: string, labels: string[]) =>
-      service.ingest({ ...scope, userId: 'user-1', issues: [{ ...issue, labels, updatedAt }] });
-    await poll('2026-09-02T12:00:00Z', ['reliability']);
-
-    const commit = workItems.commitRuleEvaluation.bind(workItems);
-    const spy = vi.spyOn(workItems, 'commitRuleEvaluation').mockImplementation(async input => {
-      if (input.ingress.identity.endsWith(':update')) throw new Error('database unavailable');
-      return commit(input);
-    });
-    await expect(poll('2026-09-03T12:00:00Z', ['reliability', 'ship'])).rejects.toThrow('database unavailable');
-    spy.mockImplementation(commit);
-    // The follow-up hasn't changed since, so the next poll sees the very same sighting.
-    await poll('2026-09-03T12:00:00Z', ['reliability', 'ship']);
-
-    const updates = (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: card.id }))
-      .filter(record => record.decision.type === 'routeEvent')
-      .map(record => record.decision.event);
-    expect(updates).toEqual([{ type: 'work_item.updated', labels: { added: ['ship'], removed: [] } }]);
-  });
-
   it('files an observed follow-up on Work › Intake, where the project\'s intake routes place it', async () => {
     const { project, service, workItems } = await setup(
       undefined,

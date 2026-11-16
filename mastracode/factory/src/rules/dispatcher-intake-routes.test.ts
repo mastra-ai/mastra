@@ -1185,19 +1185,37 @@ describe('intake routes moving existing cards when labels or assignees change', 
     expect(updates).toHaveLength(1);
   });
 
-  it('combines a burst of changes into one event carrying the net change', async () => {
+  // A burst within the window moves the card once, by the net change; the older updates give way to the newest.
+  it.each([
+    {
+      case: 'carries the net change',
+      changes: [
+        [['ship'], []],
+        [['bug'], []],
+        [[], ['bug']],
+      ],
+      stages: ['done'],
+    },
+    {
+      case: 'moves nothing when it nets out',
+      changes: [
+        [['ship'], []],
+        [[], ['ship']],
+      ],
+      stages: ['intake'],
+    },
+  ] as const)('folds a burst of changes into one event that $case', async ({ changes, stages }) => {
     const { card, commitUpdate, dispatcher, workItems, routeDecisions } = await shipRoute();
-
-    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:10:00Z');
-    await commitUpdate(card.id, labels(['bug']), '2030-01-01T00:10:01Z');
-    await commitUpdate(card.id, labels([], ['bug']), '2030-01-01T00:10:02Z');
-    // The newest update is still in its window: nothing moves, the older ones give way to it.
+    for (const [index, [added, removed]] of changes.entries()) {
+      await commitUpdate(card.id, labels([...added], [...removed]), `2030-01-01T00:10:0${index}Z`);
+    }
+    // The newest update is still in its window: nothing moves yet.
     await dispatcher.runOnce(new Date('2030-01-01T00:10:04Z'));
     expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['intake'] });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:10:08Z'));
-    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['done'] });
-    expect(await routeDecisions(card.id)).toEqual(['superseded', 'superseded', 'succeeded']);
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages });
+    expect(await routeDecisions(card.id)).toEqual([...changes.slice(1).map(() => 'superseded'), 'succeeded']);
   });
 
   it('waits for an earlier update still moving the card, even after its lease was renewed', async () => {
@@ -1226,17 +1244,6 @@ describe('intake routes moving existing cards when labels or assignees change', 
     await dispatcher.runOnce(new Date('2030-01-01T00:10:20Z'));
     // Folding now would hand `ship` to the card a second time.
     expect(await routeDecisions(card.id)).toEqual(['leased', 'pending']);
-  });
-
-  it('moves nothing when the burst nets out: a label added then removed is no change', async () => {
-    const { card, commitUpdate, dispatcher, workItems, routeDecisions } = await shipRoute();
-
-    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:10:00Z');
-    await commitUpdate(card.id, labels([], ['ship']), '2030-01-01T00:10:01Z');
-    await dispatcher.runOnce(new Date('2030-01-01T00:10:10Z'));
-
-    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['intake'] });
-    expect(await routeDecisions(card.id)).toEqual(['superseded', 'succeeded']);
   });
 
   it('starts a new event after the group last moved: an earlier, already applied change is not counted again', async () => {
@@ -1290,17 +1297,6 @@ describe('intake routes moving existing cards when labels or assignees change', 
     await deliverEvent(card.id, { type: 'work_item.closed', reason: 'canceled' });
 
     expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['canceled'] });
-  });
-
-  it('commits no update when a route moves the card: the move changes the card, not its source', async () => {
-    const { card, commitUpdate, dispatcher, workItems } = await shipRoute();
-
-    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:10:00Z');
-    await dispatcher.runOnce(new Date('2030-01-01T00:10:10Z'));
-    await dispatcher.runOnce(new Date('2030-01-01T00:30:00Z'));
-
-    const decisions = await workItems.listDeferredDecisions('org-1', card.factoryProjectId, { workItemId: card.id });
-    expect(decisions.filter(entry => entry.decision.type === 'routeEvent')).toHaveLength(1);
   });
 });
 

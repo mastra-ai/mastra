@@ -3398,49 +3398,44 @@ describe('FactoryDecisionDispatcher', () => {
       expect(await updates()).toEqual(['superseded', 'superseded', 'superseded', 'superseded', 'succeeded']);
     });
 
-    it("holds the session's own change for a run the open-run ledger never recorded", async () => {
-      const { dispatcher, controller, emitAgentEnd, update, stages, updates } = await runningCard('done', {
+    // A person's change is routed ~5s later, but a move into a phase that isn't terminal waits for the run like any.
+    it.each([
+      {
+        case: "the session's own change, for a run the ledger never recorded",
+        phase: 'done',
         ledger: false,
-      });
+        fromCardSession: true,
+        held: true,
+      },
+      {
+        case: "a person's change into a terminal phase",
+        phase: 'done',
+        ledger: true,
+        fromCardSession: false,
+        held: false,
+      },
+      {
+        case: "a person's change into a phase that isn't terminal",
+        phase: 'planning',
+        ledger: true,
+        fromCardSession: false,
+        held: true,
+      },
+    ])('moves the card by $case once the run ends: $held', async ({ phase, ledger, fromCardSession, held }) => {
+      const { dispatcher, controller, emitAgentEnd, update, stages, updates } = await runningCard(phase, { ledger });
       const before = await stages();
 
-      await update(['ship'], [], '2030-01-01T00:00:00Z', true);
+      await update(['ship'], [], '2030-01-01T00:00:00Z', fromCardSession);
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:06Z'));
       await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
-      expect(await stages()).toEqual(before);
-      expect(await updates()).toEqual(['pending']);
+      expect({ stages: await stages(), updates: await updates() }).toEqual(
+        held ? { stages: before, updates: ['pending'] } : { stages: [phase], updates: ['succeeded'] },
+      );
 
       controller.listActiveThreadRuns.mockReturnValue([]);
       emitAgentEnd('complete');
       await dispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
-      expect(await stages()).toEqual(['done']);
-    });
-
-    it("routes a person's change during the run without waiting for it, about five seconds later", async () => {
-      const { dispatcher, update, stages, updates } = await runningCard();
-
-      await update(['ship'], [], '2030-01-01T00:00:00Z', false);
-      await dispatcher.runOnce(new Date('2030-01-01T00:00:06Z'));
-
-      expect(await stages()).toEqual(['done']);
-      expect(await updates()).toEqual(['succeeded']);
-    });
-
-    it("moves a person's change into a phase that isn't terminal only once the run ends, like any route move", async () => {
-      const { dispatcher, controller, emitAgentEnd, update, stages, updates } = await runningCard('planning');
-      const before = await stages();
-
-      await update(['ship'], [], '2030-01-01T00:00:00Z', false);
-      await dispatcher.runOnce(new Date('2030-01-01T00:00:06Z'));
-      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
-      expect(await stages()).toEqual(before);
-      expect(await updates()).toEqual(['pending']);
-
-      controller.listActiveThreadRuns.mockReturnValue([]);
-      emitAgentEnd('complete');
-      await dispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
-
-      expect(await stages()).toEqual(['planning']);
-      expect(await updates()).toEqual(['succeeded']);
+      expect(await stages()).toEqual([phase]);
     });
   });
 
