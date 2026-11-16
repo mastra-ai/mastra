@@ -101,6 +101,27 @@ function valuesArgs<Q extends ValuesQuery>(query: Q, page: DashboardPageContext,
   };
 }
 
+/**
+ * The query with the page's filter bar ANDed in, as `buildRequest` applies it, but without the time
+ * window: trace and span predicates joined with `and`, metrics and scores filters intersected.
+ * `'unsatisfiable'` when the filters contradict, so nothing can match.
+ */
+export function pageQuery(query: DashboardQuery, page: DashboardPageContext): DashboardQuery | 'unsatisfiable' {
+  if (query.source === 'traceAggregate') {
+    const where = andTrace(query.where, page.traceWhere);
+    return where ? { ...query, where } : query;
+  }
+  if (query.source === 'spanAggregate') {
+    const where = andSpan(query.where, page.spanWhere);
+    return where ? { ...query, where } : query;
+  }
+  const combined = intersectFilters(page.filters, query.filters);
+  if (combined === undefined) return 'unsatisfiable';
+  const { timestamp: _timestamp, ...filters } = combined;
+  const { filters: _own, ...rest } = query;
+  return Object.keys(filters).length > 0 ? { ...rest, filters } : rest;
+}
+
 /** A bucketed request's interval: its own, else the kind's, else the bar charts' for `window`. */
 function bucketOf<I extends string>(own: I | undefined, interval: Interval | undefined, window: Window) {
   return own ?? interval ?? bucketPlan(window.start, window.end).interval;
@@ -208,7 +229,7 @@ export function buildPreviousRequest(
 }
 
 /** What an unsatisfiable request answers: nothing matched. */
-function emptyAnswer(method: DashboardRequestMethod): DashboardAnswer {
+export function emptyAnswer(method: DashboardRequestMethod): DashboardAnswer {
   switch (method) {
     case 'aggregateTraces':
     case 'aggregateSpans':

@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Bot, Route, Search, Settings } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '../Button';
@@ -14,6 +13,10 @@ import {
   CommandPaletteResults,
   CommandPaletteScope,
 } from './command-palette';
+import { IconDirection1 } from '@/ds/icons/central/IconDirection1';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
+import { IconRobot } from '@/ds/icons/central/IconRobot';
+import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
 
 const meta = {
   title: 'Composite/CommandPalette',
@@ -48,21 +51,21 @@ function CommandPaletteExample() {
         <CommandPaletteBody>
           <CommandPaletteRail aria-label="Search categories">
             <CommandPaletteScope
-              icon={<Search />}
+              icon={<IconMagnifyingGlass />}
               label="All"
               count={4}
               active={scope === 'all'}
               onSelect={() => setScope('all')}
             />
             <CommandPaletteScope
-              icon={<Route />}
+              icon={<IconDirection1 />}
               label="Navigation"
               count={2}
               active={scope === 'navigation'}
               onSelect={() => setScope('navigation')}
             />
             <CommandPaletteScope
-              icon={<Bot />}
+              icon={<IconRobot />}
               label="Agents"
               count={2}
               active={scope === 'agents'}
@@ -77,14 +80,14 @@ function CommandPaletteExample() {
             {showNavigation && (
               <CommandGroup heading="Navigation">
                 <CommandPaletteItem
-                  icon={<Route />}
+                  icon={<IconDirection1 />}
                   title="Overview"
                   subtitle="Application navigation"
                   path="/"
                   value="overview application navigation"
                 />
                 <CommandPaletteItem
-                  icon={<Settings />}
+                  icon={<IconSettingsGear1 />}
                   title="Settings"
                   subtitle="Application navigation"
                   path="/settings"
@@ -95,14 +98,14 @@ function CommandPaletteExample() {
             {showAgents && (
               <CommandGroup heading="Agents">
                 <CommandPaletteItem
-                  icon={<Bot />}
+                  icon={<IconRobot />}
                   title="Weather Agent"
                   subtitle="Agent"
                   badge="Agent"
                   value="weather agent"
                 />
                 <CommandPaletteItem
-                  icon={<Bot />}
+                  icon={<IconRobot />}
                   title="Research Agent"
                   subtitle="Agent"
                   badge="Agent"

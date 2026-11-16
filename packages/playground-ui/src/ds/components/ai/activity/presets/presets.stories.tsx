@@ -72,7 +72,7 @@ export const Transcript: Story = {
   render: () => (
     <div className="flex flex-col gap-1">
       <SignalActivity kind="state" label="factory-phase" mode="snapshot" message={snapshot} />
-      <SignalActivity kind="reactive" label="work-item-feed" message="Damien: Keep the attachment previews." />
+      <SignalActivity kind="reactive" label="work-item-description" message="Keep the attachment previews." />
       <SignalActivity
         kind="reminder"
         label="System reminder"

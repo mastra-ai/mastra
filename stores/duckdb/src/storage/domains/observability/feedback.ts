@@ -305,12 +305,15 @@ function getComparisonDateRange(
 }
 
 /** Insert a single feedback event. */
-export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackArgs): Promise<void> {
+export async function createFeedback(
+  db: DuckDBConnection,
+  args: CreateFeedbackArgs,
+  preserveIdentity = false,
+): Promise<void> {
   const f = args.feedback as LegacyFeedbackRecord;
   const feedbackSource = f.feedbackSource ?? f.source ?? '';
   const feedbackUserId = f.feedbackUserId !== undefined ? f.feedbackUserId : (f.userId ?? null);
-  await db.execute(
-    `INSERT INTO feedback_events (
+  const sql = `INSERT INTO feedback_events (
       feedbackId, timestamp, cursorId, traceId, spanId, experimentId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
@@ -358,15 +361,37 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
        jsonV(f.metadata),
        jsonV(f.scope ?? null),
      ].join(', ')})
-     ${FEEDBACK_UPSERT_CLAUSE}`,
-  );
+     ${args.onConflict === 'ignore' ? 'ON CONFLICT DO NOTHING' : FEEDBACK_UPSERT_CLAUSE}`;
+  if (preserveIdentity) {
+    // The primary-key conflict and identity guard run in the same statement.
+    const rows = await db.query(`${sql}
+      WHERE feedback_events.traceId IS NOT DISTINCT FROM excluded.traceId
+        AND feedback_events.timestamp IS NOT DISTINCT FROM excluded.timestamp
+        AND feedback_events.organizationId IS NOT DISTINCT FROM excluded.organizationId
+        AND feedback_events.resourceId IS NOT DISTINCT FROM excluded.resourceId
+      RETURNING feedbackId`);
+    if (!rows.length)
+      throw new MastraError({
+        id: 'OBSERVABILITY_FEEDBACK_IDENTITY_CONFLICT',
+        domain: ErrorDomain.MASTRA_OBSERVABILITY,
+        category: ErrorCategory.USER,
+        text: 'Feedback replacement must preserve its trace, timestamp, and tenant',
+      });
+  } else {
+    await db.execute(sql);
+  }
 }
 
 /** Insert multiple feedback events in a single statement. */
 export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreateFeedbackArgs): Promise<void> {
   if (args.feedbacks.length === 0) return;
 
-  const currentFeedback = new Map(args.feedbacks.map(feedback => [feedback.feedbackId, feedback]));
+  const currentFeedback = new Map(
+    (args.onConflict === 'ignore' ? [...args.feedbacks].reverse() : args.feedbacks).map(feedback => [
+      feedback.feedbackId,
+      feedback,
+    ]),
+  );
   const tuples = [...currentFeedback.values()].map(f => {
     const legacyFeedback = f as LegacyFeedbackRecord;
     const feedbackSource = legacyFeedback.feedbackSource ?? legacyFeedback.source ?? '';
@@ -424,7 +449,7 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
       feedbackUserId, sourceId, reviewStatus, feedbackSource, feedbackType, value, valueString, valueNumber, comment, tags, metadata, scope
     )
      VALUES ${tuples.join(',\n       ')}
-     ${FEEDBACK_UPSERT_CLAUSE}`,
+     ${args.onConflict === 'ignore' ? 'ON CONFLICT DO NOTHING' : FEEDBACK_UPSERT_CLAUSE}`,
   );
 }
 
@@ -447,6 +472,15 @@ export async function deleteFeedback(db: DuckDBConnection, args: DeleteFeedbackA
     params.push(args.resourceId);
   }
   await db.execute(`DELETE FROM feedback_events WHERE ${conditions.join(' AND ')}`, params);
+}
+
+/** Retrieves the latest feedback record with this ID, or null when missing. */
+export async function getFeedbackById(db: DuckDBConnection, feedbackId: string): Promise<FeedbackRecord | null> {
+  const rows = await db.query<Record<string, unknown>>(
+    `SELECT * FROM feedback_events WHERE feedbackId = ? ORDER BY timestamp DESC LIMIT 1`,
+    [feedbackId],
+  );
+  return rows[0] ? rowToFeedbackRecord(rows[0]) : null;
 }
 
 /** Update the review workflow status of a single feedback event. */

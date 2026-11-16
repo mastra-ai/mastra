@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ArrowUp, Square } from 'lucide-react';
+import { IconArrowUp } from '@mastra/playground-ui/icons/central/IconArrowUp';
+import { IconStop } from '@mastra/playground-ui/icons/central/IconStop';
 
 interface ComposerPrimaryActionProps {
   showAbort: boolean;
@@ -13,6 +14,7 @@ export function ComposerPrimaryAction({ showAbort, sendDisabled, sendTitle, onAb
     return (
       <Button
         type="button"
+        variant="primary"
         size="icon-sm"
         onClick={event => {
           // Send turns into Abort under the pointer: a double-click on Send must not abort.
@@ -21,14 +23,21 @@ export function ComposerPrimaryAction({ showAbort, sendDisabled, sendTitle, onAb
         }}
         aria-label="Abort"
       >
-        <Square size={14} />
+        <IconStop size={14} />
       </Button>
     );
   }
 
   return (
-    <Button type="submit" size="icon-sm" disabled={sendDisabled} aria-label="Send message" title={sendTitle}>
-      <ArrowUp size={16} />
+    <Button
+      type="submit"
+      variant="primary"
+      size="icon-sm"
+      disabled={sendDisabled}
+      aria-label="Send message"
+      title={sendTitle}
+    >
+      <IconArrowUp size={16} />
     </Button>
   );
 }

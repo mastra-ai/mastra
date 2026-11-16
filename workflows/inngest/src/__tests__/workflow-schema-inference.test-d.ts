@@ -9,7 +9,9 @@
  * initial `TPrevSchema` use the parsed type; `run.start` / cron / configured
  * `inputData` keep the raw caller-input type.
  */
+import { Agent } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { Step } from '@mastra/core/workflows';
 import { Inngest } from 'inngest';
 import { describe, it, expectTypeOf } from 'vitest';
 import { z } from 'zod';
@@ -230,5 +232,16 @@ describe('backwards compatibility', () => {
     type Run = Awaited<ReturnType<typeof workflow.createRun>>;
     type StartArgs = Parameters<Run['start']>[0];
     expectTypeOf<StartArgs['requestContext']>().toEqualTypeOf<RequestContext<Context> | undefined>();
+  });
+});
+
+// zod v3 schemas have no `~standard.jsonSchema`, so the agent overload typed as StandardSchemaWithJSON rejected them
+describe('agent step structured output (zod v3, #29574)', () => {
+  it('infers the step output from a zod v3 schema', () => {
+    const agent = new Agent({ id: 'typed-agent', name: 'typed-agent', instructions: 'noop', model: 'openai/gpt-4o' });
+    const step = createStep(agent, { structuredOutput: { schema: z3.object({ score: z3.number() }) } });
+    expectTypeOf(step).toExtend<
+      Step<'typed-agent', unknown, { prompt: string }, { score: number }, unknown, unknown, any>
+    >();
   });
 });

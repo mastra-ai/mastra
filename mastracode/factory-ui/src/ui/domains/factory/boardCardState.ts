@@ -27,12 +27,14 @@ export interface BoardCardStateInput {
   /** Run a rule parked on this card, held until someone releases it. */
   proposal?: { label: string; decisionId: string };
   /** Destination of an in-flight stage move. */
-  moving?: { stage: string; label: string };
+  moving?: { stage: string; label: string; completes?: boolean };
   /** Status text for the window between the click and the session mutation. */
   preparing?: string;
   retryRequested?: boolean;
   /** Rule effect the server is still working through, or gave up on. */
   decision?: FactoryDecisionSummary;
+  /** The effect's place in the run queue while it waits for a run slot. */
+  queuePosition?: number;
   /** Why the server refused the last move. */
   transitionReason?: string;
   /** What the run registry and workspace records say about the card's bound sessions. */
@@ -59,7 +61,12 @@ export function boardCardState(input: BoardCardStateInput): BoardCardState {
       wick: sessionStatus,
     };
   }
-  const automation = decision === undefined ? undefined : automationOnCard(decision, sessionStatus);
+  const automation =
+    decision !== undefined
+      ? automationOnCard(decision, sessionStatus, input.queuePosition)
+      : input.queuePosition !== undefined
+        ? queuedOnCard(input.queuePosition)
+        : undefined;
   const refusedMove: BoardCardStatus | undefined =
     transitionReason === undefined ? undefined : { kind: 'error', label: transitionReason };
   const sessionOwner: BoardCardOwner | undefined =
@@ -96,7 +103,7 @@ function sessionIsLive(sessionStatus: SessionRowStatus | undefined): boolean {
 function yourRequest(input: BoardCardStateInput): { statusLabel: string; progressLabel: string } | undefined {
   const { moving } = input;
   if (moving) {
-    const statusLabel = moving.stage === 'done' ? 'Marking done…' : `Moving to ${moving.label}…`;
+    const statusLabel = moving.completes ? `Marking ${moving.label.toLowerCase()}…` : `Moving to ${moving.label}…`;
     return { statusLabel, progressLabel: 'Moving…' };
   }
   if (input.preparing !== undefined) return { statusLabel: input.preparing, progressLabel: 'Starting…' };
@@ -107,6 +114,7 @@ function yourRequest(input: BoardCardStateInput): { statusLabel: string; progres
 function automationOnCard(
   decision: FactoryDecisionSummary,
   sessionStatus: SessionRowStatus | undefined,
+  queuePosition: number | undefined,
 ): { status?: BoardCardStatus; owner: BoardCardOwner } {
   const copy = automationCopy(decision);
   const detail = decision.lastError ?? undefined;
@@ -128,9 +136,17 @@ function automationOnCard(
       owner: { kind: 'automation', progressLabel: 'Retrying…' },
     };
   }
+  if (queuePosition !== undefined) return queuedOnCard(queuePosition);
   const owner: BoardCardOwner = { kind: 'automation', progressLabel: copy.progressLabel };
   if (runAnnouncedByWick(decision, sessionStatus)) return { owner };
   return { status: { kind: 'busy', label: copy.busy }, owner };
+}
+
+function queuedOnCard(position: number): { status: BoardCardStatus; owner: BoardCardOwner } {
+  return {
+    status: { kind: 'busy', label: `Queued (#${position})` },
+    owner: { kind: 'automation', progressLabel: 'Queued' },
+  };
 }
 
 function statusWhenNothingInFlight(input: BoardCardStateInput): BoardCardStatus {
@@ -138,7 +154,7 @@ function statusWhenNothingInFlight(input: BoardCardStateInput): BoardCardStatus 
   // A held card's live question is the maintainer's decision, even when a run
   // has been suggested for it: the card cannot start that run until it is accepted.
   if (input.held) {
-    return { kind: 'held', label: 'Triaged and waiting for you' };
+    return { kind: 'held', label: 'Held for your go-ahead' };
   }
   if (input.proposal) {
     return { kind: 'waiting', label: input.proposal.label, decisionId: input.proposal.decisionId };

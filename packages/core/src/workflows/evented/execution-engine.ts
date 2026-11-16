@@ -468,7 +468,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
     if (resultData.prevResult.status === 'suspended') {
       const suspendedSteps = Object.entries(resultData.stepResults)
         .map(([stepId, stepResult]: [string, any]) => {
-          if (stepResult.status === 'suspended') {
+          if (stepResult?.status === 'suspended') {
             const existingPath = stepResult.suspendPayload?.__workflow_meta?.path ?? [];
             // Prepend stepId to match default engine's suspended array format
             return [stepId, ...existingPath];

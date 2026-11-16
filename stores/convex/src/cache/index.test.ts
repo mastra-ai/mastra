@@ -5,7 +5,7 @@ import { ConvexCacheClient, ConvexServerCache } from './index';
 
 class MockConvexCacheClient {
   calls: CacheRequest[] = [];
-  rawResponses: Array<{ result: unknown; hasMore?: boolean }> = [];
+  rawResponses: Array<{ result: unknown; hasMore?: boolean } | Error> = [];
 
   async callCache<T = unknown>(request: CacheRequest): Promise<T> {
     this.calls.push(request);
@@ -14,7 +14,9 @@ class MockConvexCacheClient {
 
   async callCacheRaw<T = unknown>(request: CacheRequest): Promise<{ result: T; hasMore?: boolean }> {
     this.calls.push(request);
-    return (this.rawResponses.shift() ?? { result: undefined }) as { result: T; hasMore?: boolean };
+    const response = this.rawResponses.shift() ?? { result: undefined };
+    if (response instanceof Error) throw response;
+    return response as { result: T; hasMore?: boolean };
   }
 }
 
@@ -122,6 +124,68 @@ describe('ConvexServerCache', () => {
         expiresAt: Date.now() + 300_000,
       },
     ]);
+  });
+
+  it('allocates indexed list entries in one request, honouring a longer ttlMs', async () => {
+    client.rawResponses = [{ result: 0 }, { result: 1 }];
+
+    await expect(cache.listPushIndexed('log', 'log:counter', { id: 'evt-1', index: 7 })).resolves.toBe(0);
+    await expect(cache.listPushIndexed('log', 'log:counter', { id: 'evt-2' }, 3_600_000)).resolves.toBe(1);
+
+    expect(client.calls).toEqual([
+      {
+        op: 'listPushIndexed',
+        key: 'mastra:cache:log',
+        counterKey: 'mastra:cache:log:counter',
+        keyPrefix: 'mastra:cache:',
+        value: { id: 'evt-1' },
+        expiresAt: Date.now() + 300_000,
+      },
+      {
+        op: 'listPushIndexed',
+        key: 'mastra:cache:log',
+        counterKey: 'mastra:cache:log:counter',
+        keyPrefix: 'mastra:cache:',
+        value: { id: 'evt-2' },
+        expiresAt: Date.now() + 3_600_000,
+      },
+    ]);
+  });
+
+  it('keeps indexed list entries without expiry when TTL is disabled', async () => {
+    cache = new ConvexServerCache({ client: client as unknown as ConvexCacheClient, ttlMs: 0 });
+
+    await cache.listPushIndexed('log', 'log:counter', { id: 'evt-1' }, 3_600_000);
+
+    expect(client.calls).toEqual([expect.objectContaining({ op: 'listPushIndexed', expiresAt: null })]);
+  });
+
+  it('falls back to increment + listPush when the deployed handler lacks listPushIndexed', async () => {
+    client.rawResponses = [
+      new Error('Unsupported operation listPushIndexed'),
+      { result: 1 },
+      { result: undefined },
+      { result: 2 },
+      { result: undefined },
+    ];
+
+    await expect(cache.listPushIndexed('log', 'log:counter', { id: 'evt-1' })).resolves.toBe(0);
+    await expect(cache.listPushIndexed('log', 'log:counter', { id: 'evt-2' })).resolves.toBe(1);
+
+    expect(client.calls.map(call => call.op)).toEqual([
+      'listPushIndexed',
+      'increment',
+      'listPush',
+      'increment',
+      'listPush',
+    ]);
+  });
+
+  it('propagates other listPushIndexed failures', async () => {
+    client.rawResponses = [new Error('Convex cache request timed out after 30000 ms.')];
+
+    await expect(cache.listPushIndexed('log', 'log:counter', { id: 'evt-1' })).rejects.toThrow('timed out');
+    expect(client.calls).toHaveLength(1);
   });
 });
 

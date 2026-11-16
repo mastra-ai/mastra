@@ -100,7 +100,7 @@ flowchart TD
     PASS_AUTHONLY --> PERM
     PASS_DEFAULT --> PERM
 
-    subgraph PERM_CHECK["Permission Check (checkRoutePermission) - requires RBAC"]
+    subgraph PERM_CHECK["Permission Check (checkRoutePermission, via checkRouteRBAC) - requires RBAC"]
         PERM{"RBAC provider<br/>configured?"}
         PERM -- "No" --> PASS_NO_RBAC["PASS<br/><i>No permission enforcement.<br/>requiresPermission on routes<br/>is silently ignored without RBAC.</i>"]
 

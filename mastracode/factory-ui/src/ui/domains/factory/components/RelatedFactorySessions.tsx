@@ -1,207 +1,131 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Link2 } from 'lucide-react';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 import type { ReactNode } from 'react';
-import { Link, useMatch, useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 
-import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
-import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import type { InstalledBoardInfo } from '../../../../api/types';
+import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { ChatPageLayout } from '../../chat/components/ChatPageLayout';
-import { getUserSessionLabel } from '../../workspaces/services/sessionPresentation';
 import { UserSessionSharing } from '../../workspaces/components/UserSessionSharing';
 import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
-import { linearIdentifierForItem } from '../boardItems';
-import { rememberedBoardPath } from '../services/boardViews';
-import { relatedWorkItemIndex, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
-import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
-import { isPullRequestSource } from '../services/workItems';
-import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
-import { SourceIcon } from './BoardIcons';
-import { FactoryReviewPullRequestLinks } from './FactoryReviewPullRequestLinks';
+import { WorkspacePanelDock } from '../../workspace-viewer/components/WorkspacePanelDock';
+import { cardContextSessions, phaseContext } from '../boardItems';
+import type { CardContextSession } from '../boardItems';
+import { currentItemStage } from '../boardStages';
+import { useSessionCard } from '../hooks/useSessionCard';
+import { useOpenSession } from '../hooks/useOpenSession';
+import type { WorkItem } from '../services/workItems';
+import { CardStageBar } from './CardStageBar';
+import { CardStageSummary } from './CardStageSummary';
+import { SessionContextMenu, cardSessionPath } from './SessionContextMenu';
+import { ThreadSubscriptionsRefresh } from './ThreadSubscriptionsRefresh';
 
-function latestLiveSession(item: WorkItem, livePaths: ReadonlySet<string>): WorkItemSessionRef | undefined {
-  return Object.values(item.sessions)
-    .filter(session => livePaths.has(session.sessionId))
-    .at(-1);
+interface OpenSessionContext {
+  context: string;
+  label: string;
+  /** Every session the card holds, one per context. */
+  sessions: CardContextSession[];
+  workingSession?: CardContextSession;
 }
 
-function sessionTitle(item: WorkItem): string {
-  const number = workItemNumber(item);
-  if (item.source === 'github-pr' && number) return `PR #${number}: ${item.title}`;
-  if (item.source === 'gitlab-pr' && number) return `MR !${number}: ${item.title}`;
-  if (item.source === 'github-issue' && number) return `Issue #${number}: ${item.title}`;
-  return item.title;
-}
-
-function externalWorkItemLabel(item: WorkItem): string {
-  const number = workItemNumber(item);
-  if (item.source === 'github-pr') return number ? `PR #${number}` : 'Pull request';
-  if (item.source === 'gitlab-pr') return number ? `MR !${number}` : 'Merge request';
-  if (item.source === 'github-issue') return number ? `Issue #${number}` : 'Issue';
-  if (item.source === 'linear-issue') {
-    return linearIdentifierForItem(item) ?? number ?? 'Linear issue';
-  }
-  return 'Work item';
-}
-
-function activeWorkItem(
-  items: WorkItem[],
-  factoryId?: string,
-  sessionId?: string,
-  threadId?: string,
-): WorkItem | undefined {
-  if (!factoryId || !sessionId || !threadId) return undefined;
-  return items.find(item =>
-    Object.values(item.sessions).some(session => session.threadId === threadId && session.sessionId === sessionId),
+function openSessionContext(
+  item: WorkItem,
+  board: InstalledBoardInfo | undefined,
+  sessionId: string,
+  threadId: string,
+): OpenSessionContext | undefined {
+  const stage = currentItemStage(item, board);
+  if (stage === undefined) return undefined;
+  const phases = board?.phases;
+  const sessions = cardContextSessions(item, phases, stage);
+  const entry = sessions.find(
+    candidate => candidate.ref.sessionId === sessionId && candidate.ref.threadId === threadId,
   );
+  if (!entry) return undefined;
+  const open = { context: entry.context, label: entry.label, sessions };
+  const currentPhase = phases?.find(phase => phase.id === stage);
+  // A context no phase runs in (self-review's `review`, legacy `plan`) is not
+  // one the card moves out of, so the card being elsewhere says nothing.
+  const phaseRunsHere = phases?.some(phase => phaseContext(phase) === entry.context);
+  if (entry.current || !phaseRunsHere || !currentPhase || phaseContext(currentPhase) === undefined) return open;
+  return { ...open, workingSession: sessions.find(candidate => candidate.current) };
 }
 
-/** Chat page frame for a factory thread: breadcrumb of the work item or session, plus its actions. */
+function stageUnavailable(
+  board: InstalledBoardInfo | undefined,
+  boards: readonly InstalledBoardInfo[] | undefined,
+  boardsFailed: boolean,
+  factoryFailed: boolean,
+): string | undefined {
+  if (boardsFailed) return "Couldn't load the board";
+  if (boards !== undefined && board === undefined) return 'Board not installed';
+  if (factoryFailed) return "Couldn't load the factory";
+  return undefined;
+}
+
 export function FactorySessionPage({ children }: { children: ReactNode }) {
   const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId: string; threadId: string }>();
-  // User threads carry the session id as `threadId` (see ChatSessionProvider).
-  const isUserThread = Boolean(useMatch('/factories/:factoryId/user/threads/:threadId'));
-  const userSessionId = sessionId ?? threadId;
-  const sessionQuery = useUserSessionQuery(userSessionId);
-  const projectRepositoryId = sessionQuery.data?.projectRepositoryId;
-  const items = useWorkItemsQuery(factoryId);
-  const workspaces = useWorkspacesQuery(factoryId);
+  const { session, isUserThread, title: sessionTitle } = useOpenSession();
+  const factoryQuery = useFactoryQuery(factoryId);
+  const factory = factoryQuery.data;
+  const {
+    item: currentItem,
+    sessionItems,
+    board: boardEntry,
+    boards,
+    loading: cardLoading,
+    boardsFailed,
+  } = useSessionCard();
 
-  const allItems = items.data ?? [];
-  const currentItem = activeWorkItem(allItems, factoryId, sessionId, threadId);
-  // Prefer the list row: PageTitle patches it with the generated title, the detail cache is not updated.
-  const session = workspaces.data?.userSessions.find(entry => entry.sessionId === userSessionId) ?? sessionQuery.data;
-  const workspaceTitle = !isUserThread && !currentItem ? session?.title?.trim() : undefined;
-  const livePaths = new Set((workspaces.data?.workspaces ?? []).map(workspace => workspace.sessionId));
-  const isReview = currentItem ? isPullRequestSource(currentItem.source) : false;
-
-  const crumbs =
-    currentItem && factoryId ? (
-      <>
-        <Crumb as={Link} to={rememberedBoardPath(factoryId, isReview ? 'review' : 'work')}>
-          {isReview ? 'Review' : 'Work'}
-        </Crumb>
-        <Crumb as="span" isCurrent>
-          {sessionTitle(currentItem)}
-        </Crumb>
-      </>
-    ) : isUserThread && session ? (
-      <>
-        <Crumb as="span">User sessions</Crumb>
-        <Crumb as="span" isCurrent>
-          {getUserSessionLabel(session)}
-        </Crumb>
-      </>
-    ) : workspaceTitle ? (
-      <>
-        <Crumb as="span">Sessions</Crumb>
-        <Crumb as="span" isCurrent>
-          {workspaceTitle}
-        </Crumb>
-      </>
-    ) : undefined;
+  const openContext =
+    currentItem && sessionId && threadId ? openSessionContext(currentItem, boardEntry, sessionId, threadId) : undefined;
+  const switchable = openContext && openContext.sessions.length > 1 ? openContext : undefined;
+  // No title until the card is known: the session's own would flash, then go.
+  const title = currentItem ? switchable && `${switchable.label} session` : cardLoading ? undefined : sessionTitle;
+  const stageNote = stageUnavailable(boardEntry, boards, boardsFailed, factoryQuery.isLoadingError);
 
   return (
     <ChatPageLayout
-      crumbs={crumbs}
-      headerActions={
-        <>
-          {isUserThread && factoryId && session ? <UserSessionSharing factoryId={factoryId} session={session} /> : null}
-          {currentItem && factoryId && threadId ? (
-            <WorkItemActions
-              item={currentItem}
-              allItems={allItems}
-              livePaths={livePaths}
-              factoryId={factoryId}
-              threadId={threadId}
-              projectRepositoryId={projectRepositoryId}
-            />
-          ) : null}
-          <WorkspaceFilesToggle />
-        </>
+      title={title}
+      titleMenu={
+        switchable && factoryId && sessionId ? (
+          <>
+            <SessionContextMenu factoryId={factoryId} sessions={switchable.sessions} openSessionId={sessionId} />
+            {switchable.workingSession ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="shrink-0"
+                aria-label={`Go to ${switchable.workingSession.label} session`}
+                render={<Link to={cardSessionPath(factoryId, switchable.workingSession)} />}
+              >
+                {switchable.workingSession.label}
+                <IconArrowRight aria-hidden />
+              </Button>
+            ) : null}
+          </>
+        ) : isUserThread && factoryId && session ? (
+          <UserSessionSharing factoryId={factoryId} session={session} />
+        ) : undefined
       }
+      headerCenter={
+        currentItem && boardEntry && factory ? (
+          <CardStageBar
+            item={currentItem}
+            sessionItems={sessionItems}
+            board={boardEntry}
+            factory={factory}
+            openContext={openContext?.context}
+          />
+        ) : currentItem && stageNote ? (
+          <CardStageSummary item={currentItem} board={boardEntry} note={stageNote} />
+        ) : undefined
+      }
+      headerActions={<WorkspaceFilesToggle />}
+      dockActions={actions => <WorkspacePanelDock>{actions}</WorkspacePanelDock>}
     >
+      <ThreadSubscriptionsRefresh />
       {children}
     </ChatPageLayout>
-  );
-}
-
-function WorkItemActions({
-  item,
-  allItems,
-  livePaths,
-  factoryId,
-  threadId,
-  projectRepositoryId,
-}: {
-  item: WorkItem;
-  allItems: WorkItem[];
-  livePaths: ReadonlySet<string>;
-  factoryId: string;
-  threadId: string;
-  projectRepositoryId?: string;
-}) {
-  const externalItemUrl = genericExternalWorkItemUrl(item);
-  const externalItemLabel = externalWorkItemLabel(item);
-
-  return (
-    <>
-      {externalItemUrl ? (
-        <Button
-          as="a"
-          variant="ghost"
-          size="sm"
-          href={externalItemUrl}
-          target="_blank"
-          rel="noreferrer"
-          aria-label={`Open ${externalItemLabel}`}
-        >
-          <SourceIcon source={item.source} className="size-3.5" />
-          {externalItemLabel}
-        </Button>
-      ) : null}
-      {relatedWorkItemIndex(allItems)(item).map(related => {
-        const label = relationshipLabel(related);
-        const session = latestLiveSession(related, livePaths);
-
-        if (!session) {
-          return (
-            <Link
-              to={relationshipPath(related, factoryId)}
-              aria-label={`Open ${label}: ${related.title}`}
-              key={related.id}
-              className="text-muted-foreground hover:bg-fill hover:text-foreground flex items-center gap-1.5 rounded-md px-2 py-1"
-            >
-              <Link2 size={13} aria-hidden />
-              <Txt as="span" variant="caption" className="block">
-                {label}
-              </Txt>
-            </Link>
-          );
-        }
-
-        return (
-          <Button
-            key={related.id}
-            variant="ghost"
-            size="sm"
-            aria-label={`Open ${label}: ${related.title}`}
-            render={<Link to={`/factories/${factoryId}/workspaces/${session.sessionId}/threads/${session.threadId}`} />}
-          >
-            <Link2 size={13} aria-hidden />
-            {label}
-          </Button>
-        );
-      })}
-      {isPullRequestSource(item.source) ? (
-        <FactoryReviewPullRequestLinks
-          factoryId={factoryId}
-          projectRepositoryId={projectRepositoryId}
-          reviewItem={item}
-          threadId={threadId}
-        />
-      ) : null}
-    </>
   );
 }

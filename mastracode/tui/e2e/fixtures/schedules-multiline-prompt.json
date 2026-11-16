@@ -1,0 +1,52 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "CHARLIE-THREE"
+      },
+      "response": {
+        "content": "Multi-line schedule fire handled."
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Multi-line schedules created."
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Schedule the multi-line checks."
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_schedule_create_prompt_e2e",
+            "name": "schedule_create",
+            "arguments": {
+              "trigger": { "kind": "every", "interval": "1h" },
+              "prompt": "ALPHA-ONE check\nBRAVO-TWO\n\n  CHARLIE-THREE"
+            }
+          },
+          {
+            "id": "call_schedule_create_script_e2e",
+            "name": "schedule_create",
+            "arguments": {
+              "trigger": { "kind": "every", "interval": "2h" },
+              "script": "./check.sh",
+              "extraPrompt": "DELTA-FOUR\nECHO-FIVE"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -82,6 +82,69 @@ describe('PgFactoryStorage capabilities', () => {
     }
   });
 
+  it('destroys the updateAtomic client if its rollback fails', async () => {
+    const storage = new PgFactoryStorage({ connectionString });
+    const primary = new Error('select failed');
+    const rollbackError = new Error('rollback failed');
+    const release = vi.fn();
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(primary)
+      .mockRejectedValueOnce(rollbackError);
+    const pool = storage.authDatabase().pool;
+
+    try {
+      await storage.ensureCollections([{ name: 'atomic_rollback_test', columns: { id: { type: 'uuid-pk' } } }]);
+      const connect = vi.spyOn(pool, 'connect').mockResolvedValue({ query, release } as never);
+      try {
+        const failure = await storage.ops
+          .updateAtomic('atomic_rollback_test', {}, async row => row)
+          .catch(error => error);
+        expect(failure).toBeInstanceOf(AggregateError);
+        expect(failure.errors).toEqual([primary, rollbackError]);
+        expect(query).toHaveBeenNthCalledWith(3, 'ROLLBACK');
+        expect(release).toHaveBeenCalledWith(rollbackError);
+      } finally {
+        connect.mockRestore();
+      }
+    } finally {
+      await storage.close();
+    }
+  });
+
+  it.each(['withTransaction', 'updateAtomic'] as const)(
+    'destroys the %s client when BEGIN rejects without running the operation',
+    async path => {
+      const storage = new PgFactoryStorage({ connectionString });
+      const beginError = new Error('BEGIN timed out after reaching PostgreSQL');
+      const release = vi.fn();
+      const query = vi.fn().mockRejectedValueOnce(beginError);
+      const pool = storage.authDatabase().pool;
+      try {
+        if (path === 'updateAtomic') {
+          await storage.ensureCollections([{ name: 'atomic_begin_test', columns: { id: { type: 'uuid-pk' } } }]);
+        }
+        const connect = vi.spyOn(pool, 'connect').mockResolvedValue({ query, release } as never);
+        try {
+          const callback = vi.fn(async () => ({}));
+          if (path === 'withTransaction') {
+            await expect(storage.withTransaction(callback)).rejects.toBe(beginError);
+          } else {
+            await expect(storage.ops.updateAtomic('atomic_begin_test', {}, callback)).rejects.toBe(beginError);
+          }
+          expect(callback).not.toHaveBeenCalled();
+          expect(query).toHaveBeenCalledTimes(1);
+          expect(release).toHaveBeenCalledWith(beginError);
+        } finally {
+          connect.mockRestore();
+        }
+      } finally {
+        await storage.close();
+      }
+    },
+  );
+
   it('authDatabase exposes the shared pool tagged as postgres', () => {
     const storage = new PgFactoryStorage({ connectionString });
     const db = storage.authDatabase();

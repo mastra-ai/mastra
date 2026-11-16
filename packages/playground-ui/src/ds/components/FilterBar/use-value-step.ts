@@ -94,10 +94,11 @@ export function useValueStep({
     (text: string) =>
       allowFreeText &&
       text.length > 0 &&
+      !field?.validateInput?.(text) &&
       (type !== 'number' || Number.isFinite(Number(text))) &&
       // A text-match literal needs a word: letters, marks, or digits.
       (!freeTextOperator || /[\p{L}\p{M}\p{N}]/u.test(text)),
-    [allowFreeText, freeTextOperator, type],
+    [allowFreeText, freeTextOperator, type, field],
   );
 
   /** Many arity: adds the typed text to the selection and clears the query, keeping the editor open. */
@@ -149,6 +150,7 @@ export function useValueStep({
   }
 
   return {
+    validationMessage: field?.validateInput?.(query.trim()),
     isMany,
     selected,
     toggle,

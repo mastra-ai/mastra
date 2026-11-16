@@ -1,8 +1,8 @@
-import { PanelLeftIcon } from 'lucide-react';
 import { SidebarButtonHint } from '../header/sidebar-button-hint';
 import { useSidebar } from './sidebar-context';
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button';
+import { IconSidebarSimpleLeftWide } from '@/ds/icons/central/IconSidebarSimpleLeftWide';
 import { cn } from '@/lib/utils';
 
 export type SidebarTriggerProps = Omit<ButtonProps, 'variant' | 'size' | 'tooltip' | 'children'>;
@@ -29,7 +29,7 @@ export function SidebarTrigger({ className, onClick, ...props }: SidebarTriggerP
       }}
       className={cn('shrink-0', !isCollapsed && 'ml-auto', className)}
     >
-      <PanelLeftIcon />
+      <IconSidebarSimpleLeftWide />
     </Button>
   );
 }

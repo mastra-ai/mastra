@@ -412,6 +412,51 @@ describe('api command executor', () => {
     );
   });
 
+  it('sends the filters of Factory work-item list in the request URL', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ workItems: [{ id: 'work-item-1' }], runningSessionIds: [] }));
+
+    await executeDescriptor(
+      API_COMMANDS['factoryWork-itemList'],
+      ['project-1'],
+      '{"started":"false","q":"login flow","limit":10}',
+      { url: 'https://example.com', header: [], pretty: false },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://example.com/web/factory/projects/project-1/work-items?started=false&q=login+flow&limit=10',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('sends a list filter of Factory list commands as one query parameter per value', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ workItems: [{ id: 'work-item-1' }], runningSessionIds: [] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [], unreadCount: 0 }));
+
+    await executeDescriptor(API_COMMANDS['factoryWork-itemList'], ['project-1'], '{"source":["a","b"]}', {
+      url: 'https://example.com',
+      header: [],
+      pretty: false,
+    });
+    await executeDescriptor(
+      API_COMMANDS.factoryAttentionList,
+      ['project-1'],
+      '{"view":"unread","kind":["automation-failed","agent-waiting"]}',
+      { url: 'https://example.com', header: [], pretty: false },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'https://example.com/web/factory/projects/project-1/work-items?source=a&source=b',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://example.com/web/factory/projects/project-1/attention?view=unread&kind=automation-failed&kind=agent-waiting',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
   it('executes Factory decision actions at the resolved origin', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
 

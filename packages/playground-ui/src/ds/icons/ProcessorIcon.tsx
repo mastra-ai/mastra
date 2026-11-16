@@ -1,14 +1,10 @@
-import type { ComponentProps } from 'react';
+import { createLucideIcon } from 'lucide-react';
+import type { LucideProps } from 'lucide-react';
 
-export function ProcessorIcon(props: ComponentProps<'svg'>) {
-  return (
-    <svg width="16" height="16" viewBox="0 0 10.123 10.123" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
-      <path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M4.50195 1.53809H5.62109V0H6.75098V1.53809H7.5293L7.64258 1.54395C8.19939 1.60066 8.63379 2.0708 8.63379 2.64258V3.37305H10.123V4.50195H8.63379V5.62109H10.123V6.75H8.63379V7.57812L8.62891 7.69141C8.57589 8.2109 8.16211 8.62387 7.64258 8.67676L7.5293 8.68262H6.75098V10.123H5.62109V8.68262H4.50195V10.123H3.37305V8.68262H2.59375L2.48047 8.67676C1.96102 8.62383 1.54817 8.21082 1.49512 7.69141L1.48926 7.57812V6.75H0V5.62109H1.48926V4.50195H0V3.37305H1.48926V2.64258C1.48926 2.07084 1.92371 1.60071 2.48047 1.54395L2.59375 1.53809H3.37305V0H4.50195V1.53809ZM2.61914 7.55273H7.50488V2.66699H2.61914V7.55273Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
+// Drawn on lucide's grid so its line weight follows `--icon-stroke-width` like every lucide icon.
+const Glyph = createLucideIcon('mastra-processor', [
+  ['rect', { x: '6', y: '6', width: '12', height: '12', rx: '2', key: 'body' }],
+  ['path', { d: 'M10 2v4M14 2v4M10 18v4M14 18v4M2 10h4M2 14h4M18 10h4M18 14h4', key: 'pins' }],
+]);
+
+export const ProcessorIcon = (props: LucideProps) => <Glyph size={16} {...props} />;

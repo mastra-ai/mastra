@@ -9,6 +9,7 @@ import { generateMarkdownList, getBaseUrl, getSidebarLocations, parseSidebarFile
 export interface RouteEntry {
   route: string
   title?: string
+  content?: string
   cached: boolean
 }
 
@@ -48,6 +49,8 @@ const ROOT_LLMS_PREFIX_BLOCK = `# Mastra
 > Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack. It includes everything you need to go from early prototypes to production-ready applications. Mastra integrates with frontend and backend frameworks like React, Next.js, and Node, or you can deploy it anywhere as a standalone server. It's the easiest way to build, tune, and scale reliable AI products.
 
 Use this index to find machine-readable documentation for building with Mastra. Follow the linked pages when you need detail on a specific API, integration, or model.
+
+To load every page in one request, fetch [llms-full.txt](https://mastra.ai/llms-full.txt). Each section is also available on its own: [Docs](https://mastra.ai/docs/llms-full.txt), [Models](https://mastra.ai/models/llms-full.txt), [Integrations](https://mastra.ai/integrations/llms-full.txt), and [Reference](https://mastra.ai/reference/llms-full.txt).
 
 ## When to use Mastra
 

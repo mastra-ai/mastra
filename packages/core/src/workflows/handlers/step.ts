@@ -12,9 +12,11 @@ import {
   resolveObservabilityContext,
 } from '../../observability';
 import type { ObservabilityContext, Span } from '../../observability';
+import { getSpanErrorOrigin, setSpanErrorOrigin } from '../../observability/error-count';
 import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
+import { resolveDynamicArgument } from '../../utils/dynamic-argument';
 import {
   HAND_BACK_STATE_SYMBOL,
   PARENT_STATE_SYMBOL,
@@ -325,13 +327,15 @@ export async function executeStep(
       // End the step span with the nested workflow result
       if (stepSpan) {
         if (workflowResult.status === 'failed') {
+          const failure = getErrorFromUnknown(workflowResult.error, { supportSerialization: false });
+          const origin = getSpanErrorOrigin(workflowResult.error);
+          if (origin) setSpanErrorOrigin(failure, origin);
           await engine.errorStepSpan({
             span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
             operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.error`,
             errorOptions: {
               ...workflowTermination(workflowResult),
-              error:
-                workflowResult.error instanceof Error ? workflowResult.error : new Error(String(workflowResult.error)),
+              error: failure,
               attributes: { status: 'failed' },
             },
           });
@@ -781,9 +785,7 @@ export async function runScorersForStep(params: RunScorersParams): Promise<void>
   let scorersToUse = scorers;
   if (typeof scorersToUse === 'function') {
     try {
-      scorersToUse = await scorersToUse({
-        requestContext: requestContext,
-      });
+      scorersToUse = await resolveDynamicArgument(scorersToUse, { requestContext });
     } catch (e) {
       const errorInstance = getErrorFromUnknown(e, { serializeStack: false });
       const mastraError = new MastraError(

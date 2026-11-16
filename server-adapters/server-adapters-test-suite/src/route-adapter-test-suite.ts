@@ -4,6 +4,7 @@ import { handleError } from '@mastra/server/handlers/error';
 import { createRoute, HTTPException, SERVER_ROUTES } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 import { z } from 'zod';
 import { z as z3 } from 'zod/v3';
 
@@ -37,6 +38,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
     let context: AdapterTestContext;
     let app: any;
     let setup: Awaited<ReturnType<typeof setupAdapter>>;
+    let netlifyProviders: MockInstance | undefined;
 
     beforeEach(async () => {
       // Create test context - use provided or default
@@ -47,9 +49,18 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         context = await createDefaultTestContext();
       }
 
+      // The provider routes list the Netlify gateway's models with a live request to
+      // api.netlify.com; whenever it answered slowly those route tests timed out.
+      const netlify = context.mastra.listGateways()?.netlify;
+      netlifyProviders = netlify ? vi.spyOn(netlify, 'fetchProviders').mockResolvedValue({}) : undefined;
+
       // Setup adapter and app
       setup = await setupAdapter(context);
       app = setup.app;
+    });
+
+    afterEach(() => {
+      netlifyProviders?.mockRestore();
     });
 
     if (config.supportsPostQueryRequestContext) {

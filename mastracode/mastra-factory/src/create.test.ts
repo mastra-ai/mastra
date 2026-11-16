@@ -90,7 +90,6 @@ beforeEach(() => {
     { id: 'org_123', name: 'Acme', role: 'admin', isCurrent: true },
     { id: 'org_456', name: 'Beta', role: 'member', isCurrent: false },
   ]);
-  clack.select.mockResolvedValue('eu');
   platform.createServerProject.mockResolvedValue({ id: 'proj_abc', slug: 'my-factory', name: 'my-factory' });
   platform.mintOrgApiKey.mockResolvedValue('sk_live_test');
   platform.ensureProductionEnvironment.mockResolvedValue('env_production');
@@ -194,12 +193,74 @@ describe('create --no-platform', () => {
 
     await expect(
       create({ projectName: 'existing-factory', template: PLATFORM_TEMPLATE_REPO, noPlatform: true, analytics }),
-    ).rejects.toThrow(/Directory existing-factory already exists/);
+    ).rejects.toThrow(/Directory existing-factory already exists and isn't empty/);
 
     expect(fs.readFileSync(markerPath, 'utf8')).toBe('keep me');
     expect(tinyexec.x).not.toHaveBeenCalled();
     expect(clack.note).not.toHaveBeenCalled();
     expect(clack.outro).not.toHaveBeenCalled();
+  });
+
+  it('scaffolds into an existing empty directory passed as an argument', async () => {
+    fs.mkdirSync(path.join(workDir, 'empty-factory'));
+
+    await create({ projectName: 'empty-factory', template: PLATFORM_TEMPLATE_REPO, noPlatform: true, analytics });
+
+    const pkg = JSON.parse(fs.readFileSync(path.join(workDir, 'empty-factory', 'package.json'), 'utf8'));
+    expect(pkg.name).toBe('empty-factory');
+  });
+
+  it('scaffolds into the current directory for a blank name, keeping the directory itself', async () => {
+    const cwd = path.join(workDir, 'my-great-mastra-project');
+    fs.mkdirSync(cwd);
+    process.chdir(cwd);
+    const inode = fs.statSync(cwd).ino;
+
+    await create({ projectName: '', template: PLATFORM_TEMPLATE_REPO, noPlatform: true, analytics });
+
+    expect(fs.statSync(cwd).ino).toBe(inode);
+    const degitTarget = tinyexec.x.mock.calls.find(
+      ([command, args]) => command === 'npx' && args[0] === 'degit',
+    )?.[1][2];
+    expect(path.dirname(path.dirname(degitTarget!))).toBe(cwd);
+    expect(fs.readdirSync(cwd).filter(entry => entry.startsWith('.create-factory-'))).toEqual([]);
+    const pkg = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'));
+    expect(pkg.name).toBe('my-great-mastra-project');
+    expect(fs.existsSync(path.join(cwd, '.env'))).toBe(true);
+    expect(clack.note).not.toHaveBeenCalledWith(expect.stringMatching(/\bcd\b/), 'Next steps');
+  });
+
+  it('prompts for a name that defaults to an empty current directory', async () => {
+    const cwd = path.join(workDir, 'my-great-mastra-project');
+    fs.mkdirSync(cwd);
+    process.chdir(cwd);
+    let blankAnswerError: string | undefined = 'not validated';
+    clack.text.mockImplementationOnce(async (prompt: { validate: (value: string) => string | undefined }) => {
+      blankAnswerError = prompt.validate('');
+      return '';
+    });
+
+    await create({ template: PLATFORM_TEMPLATE_REPO, noPlatform: true, analytics });
+
+    const prompt = clack.text.mock.calls[0]![0];
+    expect(prompt.placeholder).toBe('my-great-mastra-project');
+    expect(prompt.message).toContain('Press Enter to use the current directory (my-great-mastra-project)');
+    expect(blankAnswerError).toBeUndefined();
+    expect(JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8')).name).toBe('my-great-mastra-project');
+  });
+
+  it('requires a name at the prompt when the current directory is not empty', async () => {
+    clack.text.mockResolvedValueOnce('named-factory');
+
+    await create({ template: PLATFORM_TEMPLATE_REPO, noPlatform: true, analytics });
+
+    const prompt = clack.text.mock.calls[0]![0];
+    expect(prompt.placeholder).toBe('my-mastra-factory');
+    expect(prompt.validate('')).toMatch(/current directory isn't empty/);
+    expect(prompt.validate('template-fixture')).toMatch(/already exists and isn't empty/);
+    fs.writeFileSync(path.join(workDir, 'a-file'), '');
+    expect(prompt.validate('a-file/child')).toMatch(/can't be used as a project directory/);
+    expect(fs.existsSync(path.join(workDir, 'named-factory', 'package.json'))).toBe(true);
   });
 
   it('fails the run when dependency install fails, without a success outro', async () => {
@@ -296,7 +357,7 @@ describe('create (platform provisioning)', () => {
       token: 'wos-token',
       orgId: 'org_123',
       projectId: 'proj_abc',
-      region: 'eu',
+      region: 'us',
     });
 
     // Other .env.example placeholders untouched.
@@ -306,19 +367,13 @@ describe('create (platform provisioning)', () => {
     // Platform pipeline hit in order.
     expect(cliAuth.getToken).toHaveBeenCalledTimes(1);
     expect(cliAuth.resolveCurrentOrg).toHaveBeenCalledWith('wos-token', { forcePrompt: true });
-    expect(clack.select).toHaveBeenCalledWith({
-      message: 'Where should your Factory project run?',
-      options: [
-        { value: 'us', label: '🇺🇸 us' },
-        { value: 'eu', label: '🇪🇺 eu' },
-      ],
-      initialValue: 'us',
-    });
+    // Region defaults to us without prompting.
+    expect(clack.select).not.toHaveBeenCalled();
     expect(platform.createServerProject).toHaveBeenCalledWith({
       token: 'wos-token',
       orgId: 'org_123',
       name: 'my-factory',
-      region: 'eu',
+      region: 'us',
     });
     expect(platform.mintOrgApiKey).toHaveBeenCalledWith({
       token: 'wos-token',
@@ -330,7 +385,7 @@ describe('create (platform provisioning)', () => {
       orgId: 'org_123',
       projectId: 'proj_abc',
       name: 'my-factory',
-      regionId: 'aws-eu-central-1',
+      regionId: 'aws-us-west-2',
     });
 
     // Success outro summarizes the provisioned infra so the user isn't
@@ -396,22 +451,23 @@ describe('create (platform provisioning)', () => {
     expect(note).toContain('still provisioning');
   });
 
-  it('passes --region to project creation and skips the region picker', async () => {
+  it('passes --region eu to project creation and the database region', async () => {
     await create({
       projectName: 'my-factory',
       template: PLATFORM_TEMPLATE_REPO,
-      region: 'us',
+      region: 'eu',
       analytics,
     });
 
     expect(clack.select).not.toHaveBeenCalled();
-    expect(platform.createServerProject).toHaveBeenCalledWith(expect.objectContaining({ region: 'us' }));
+    expect(platform.createServerProject).toHaveBeenCalledWith(expect.objectContaining({ region: 'eu' }));
+    expect(platform.ensureProductionEnvironment).toHaveBeenCalledWith(expect.objectContaining({ region: 'eu' }));
     expect(platform.attachNeonDatabase).toHaveBeenCalledWith({
       token: 'wos-token',
       orgId: 'org_123',
       projectId: 'proj_abc',
       name: 'my-factory',
-      regionId: 'aws-us-west-2',
+      regionId: 'aws-eu-central-1',
     });
   });
 

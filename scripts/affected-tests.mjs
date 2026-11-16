@@ -16,11 +16,12 @@
  */
 
 import { execSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { existsSync, readFileSync } from 'node:fs';
 import { resolve, relative, dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript-classic';
+import { cacheMadgeSpecifiers, openExtractionCache } from './affected-tests-cache.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
@@ -267,6 +268,14 @@ const webpackConfigPath = resolve(__dirname, 'madge.webpack.config.cjs');
 // madge is CJS — default import
 const madge = (await import('madge')).default;
 
+// Per-file extraction cache. What madge parses out of a file (its import
+// specifiers) and what parseFile() extracts (exported names, symbol edges)
+// depend only on the file's text and extension, so they are cached by content
+// hash. Specifier resolution still runs live every time: it depends on the
+// file set, package.json files and the alias table, not on one file's text.
+const extractionCache = openExtractionCache(process.env.AFFECTED_TESTS_CACHE);
+cacheMadgeSpecifiers(extractionCache);
+
 const testAbsolutePaths = testFiles.map(f => resolve(ROOT, f));
 
 const res = await madge(testAbsolutePaths, {
@@ -385,13 +394,15 @@ function addNamedEdge(edges, moduleName, kind, names, typeOnly = false) {
 
 function parseFile(root, file) {
   const fullPath = resolve(root, file);
-  let text;
-  try {
-    text = readFileSync(fullPath, 'utf-8');
-  } catch {
-    return { exportedNames: new Set(), moduleEdges: [] };
-  }
+  const parsed = extractionCache.get(fullPath, 'symbols', text => {
+    const { exportedNames, moduleEdges } = parseFileText(fullPath, file, text);
+    return { exportedNames: [...exportedNames], moduleEdges };
+  });
+  if (!parsed) return { exportedNames: new Set(), moduleEdges: [] };
+  return { exportedNames: new Set(parsed.exportedNames), moduleEdges: parsed.moduleEdges };
+}
 
+function parseFileText(fullPath, file, text) {
   const source = ts.createSourceFile(fullPath, text, ts.ScriptTarget.Latest, true, scriptKindFor(file));
   const exportedNames = new Set();
   const moduleEdges = [];
@@ -846,6 +857,8 @@ if (unreachableColocated.length > 0) {
 // ---------------------------------------------------------------------------
 // Output
 // ---------------------------------------------------------------------------
+
+extractionCache.save();
 
 const elapsed = Date.now() - startTime;
 const affectedSorted = [...selectedResult.affected].sort();

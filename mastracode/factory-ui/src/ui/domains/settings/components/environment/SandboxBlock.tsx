@@ -138,7 +138,7 @@ function SettingRow({
         disabled={disabled}
         onValueChange={next => void onCommit(next === unsetKey ? null : coerceChoice(choices, next))}
       >
-        <SelectTrigger size="sm" aria-label={label} className="w-auto">
+        <SelectTrigger size="sm" aria-label={label}>
           <Txt as="span" variant="caption">
             {current === UNSET ? (placeholder ? `Default (${placeholder})` : 'Default') : labelOf(current)}
           </Txt>
@@ -166,35 +166,31 @@ function SettingRow({
     );
   } else if (type === 'integer' || type === 'number') {
     control = (
-      <div className="w-full lg:max-w-40">
-        <CommittedInput
-          label={label}
-          type="number"
-          min={schema.minimum}
-          max={schema.maximum}
-          step={type === 'integer' ? 1 : 'any'}
-          placeholder={placeholder}
-          value={value === undefined ? '' : String(value)}
-          disabled={disabled}
-          onCommit={raw => {
-            if (raw === '') return onCommit(null);
-            const parsed = numberInRange(raw, schema, type === 'integer');
-            return parsed === undefined ? Promise.reject(new Error('invalid')) : onCommit(parsed);
-          }}
-        />
-      </div>
+      <CommittedInput
+        label={label}
+        type="number"
+        min={schema.minimum}
+        max={schema.maximum}
+        step={type === 'integer' ? 1 : 'any'}
+        placeholder={placeholder}
+        value={value === undefined ? '' : String(value)}
+        disabled={disabled}
+        onCommit={raw => {
+          if (raw === '') return onCommit(null);
+          const parsed = numberInRange(raw, schema, type === 'integer');
+          return parsed === undefined ? Promise.reject(new Error('invalid')) : onCommit(parsed);
+        }}
+      />
     );
   } else if (type === 'string') {
     control = (
-      <div className="w-full lg:max-w-96">
-        <CommittedInput
-          label={label}
-          placeholder={placeholder}
-          value={value === undefined ? '' : String(value)}
-          disabled={disabled}
-          onCommit={raw => onCommit(raw === '' ? null : raw)}
-        />
-      </div>
+      <CommittedInput
+        label={label}
+        placeholder={placeholder}
+        value={value === undefined ? '' : String(value)}
+        disabled={disabled}
+        onCommit={raw => onCommit(raw === '' ? null : raw)}
+      />
     );
   } else {
     control = (

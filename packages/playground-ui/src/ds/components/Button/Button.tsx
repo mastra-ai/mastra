@@ -1,9 +1,9 @@
 import { Button as BaseButton } from '@base-ui/react/button';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
-import { ChevronDown, ChevronsUpDown } from 'lucide-react';
 import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
+import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
 import { Icon } from '@/ds/icons/Icon';
 import { iconSizeClasses } from '@/ds/icons/icon-size-classes';
 import type { IconSize } from '@/ds/icons/icon-size-classes';
@@ -245,19 +245,15 @@ export function ButtonIcon({ size, children }: { size: ButtonSize; children: Rea
  * chevron ink spans the middle half of its box, twice a regular icon's inset, so it pulls in by
  * 1/8em on each side to sit where a regular icon's ink would. Pass it as a Button's `iconEnd`.
  */
-export function TriggerChevron({ shape = 'down' }: { shape?: TriggerChevronShape }) {
-  const Chevron = shape === 'up-down' ? ChevronsUpDown : ChevronDown;
-  return <Chevron aria-hidden data-slot="trigger-chevron" className="mx-[-0.125em] shrink-0" />;
+export function TriggerChevron() {
+  return <IconChevronBottom aria-hidden data-slot="trigger-chevron" className="mx-[-0.125em] shrink-0" />;
 }
 
-/** `down` for a list that opens below; `up-down` for a switcher between peers (e.g. a breadcrumb's). */
-export type TriggerChevronShape = 'down' | 'up-down';
-
 /** The trigger chevron in a Button's end slot. */
-export function ButtonChevron({ size, shape }: { size: ButtonSize; shape?: TriggerChevronShape }) {
+export function ButtonChevron({ size }: { size: ButtonSize }) {
   return (
     <ButtonAdornment slot="button-icon-end" size={iconSizeMap[size]}>
-      <TriggerChevron shape={shape} />
+      <TriggerChevron />
     </ButtonAdornment>
   );
 }
@@ -421,6 +417,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
         ref,
         ...sharedProps,
         disabled: undefined,
+        type: undefined,
         ...disabledLinkProps,
         className: cn(sharedProps.className, renderedLink.props.className),
         children: content,

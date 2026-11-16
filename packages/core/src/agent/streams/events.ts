@@ -63,12 +63,28 @@ export async function emitChunkEvent<OUTPUT = undefined>(
  * offset. Readers swallow it and never forward it as a chunk. Readers that
  * reconnect past it read the claim's generation from storage instead.
  */
-export async function emitOwnershipClaimedEvent(pubsub: PubSub, runId: string, generation: number): Promise<void> {
+export async function emitOwnershipClaimedEvent(
+  pubsub: PubSub,
+  runId: string,
+  generation: number,
+  supersededFrom?: number,
+): Promise<void> {
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.OWNERSHIP_CLAIMED,
     runId,
-    data: {},
+    data: supersededFrom === undefined ? {} : { supersededFrom },
     generation,
+  });
+}
+
+/** Mark an execution attempt before it can produce any chunks. */
+export async function emitIterationStartEvent(pubsub: PubSub, runId: string, stepIndex: number): Promise<void> {
+  await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+    type: AgentStreamEventTypes.ITERATION_START,
+    runId,
+    data: {},
+    stepIndex,
+    ...generationTag(runId),
   });
 }
 
@@ -93,6 +109,7 @@ export async function emitStepStartEvent(
     provider?: StepStartPayload['provider'];
     request?: StepStartPayload['request'];
     warnings?: StepStartPayload['warnings'];
+    backgroundResultTaskIds?: StepStartPayload['backgroundResultTaskIds'];
   },
   outputProcessed?: boolean,
 ): Promise<void> {
@@ -130,11 +147,13 @@ export async function publishStepStartChunk(
   runId: string,
   chunk: ChunkType,
   outputProcessed?: boolean,
+  stepIndex?: number,
 ): Promise<void> {
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.STEP_START,
     runId,
     data: chunk,
+    ...(stepIndex === undefined ? {} : { stepIndex }),
     ...(outputProcessed ? { outputProcessed } : {}),
     ...generationTag(runId),
   });

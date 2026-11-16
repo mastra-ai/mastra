@@ -135,7 +135,7 @@ export function NoiseDetailPanel({
                               className={cn(
                                 'text-foreground',
                                 raisedSurfaceStyle,
-                                'state-layer w-full cursor-pointer rounded-md p-3 text-left',
+                                'w-full cursor-pointer rounded-md state-layer p-3 text-left',
                               )}
                             >
                               <Txt as="span" variant="body" className="block">

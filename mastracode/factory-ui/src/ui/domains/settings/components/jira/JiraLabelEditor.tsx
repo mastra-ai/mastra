@@ -1,28 +1,25 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { X } from 'lucide-react';
 import { useState } from 'react';
 
 import { RoutingNote } from './RoutingNote';
 import { newLabels, parseLabels } from './routing';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 
 /** A labelled factory's labels as chips, plus a field adding more. */
 export function JiraLabelEditor({
   factory,
   labels,
-  saving,
   onChange,
 }: {
   factory: string;
   labels: string[];
-  saving: boolean;
   onChange: (labels: string[]) => void;
 }) {
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string>();
 
   const commitDraft = () => {
-    if (saving) return;
     const parsed = parseLabels(draft);
     if ('error' in parsed) {
       setError(parsed.error);
@@ -43,11 +40,11 @@ export function JiraLabelEditor({
               <button
                 type="button"
                 aria-label={`Remove label ${label}`}
-                disabled={saving || labels.length === 1}
+                disabled={labels.length === 1}
                 onClick={() => onChange(labels.filter(existing => existing !== label))}
                 className="disabled:opacity-40"
               >
-                <X className="size-3" aria-hidden />
+                <IconCrossMedium className="size-3" aria-hidden />
               </button>
             </span>
           </Badge>
@@ -63,7 +60,7 @@ export function JiraLabelEditor({
             setError(undefined);
           }}
           onKeyDown={event => {
-            if (saving || event.nativeEvent.isComposing) return;
+            if (event.nativeEvent.isComposing) return;
             if (event.key !== 'Enter' && event.key !== ',') return;
             event.preventDefault();
             commitDraft();

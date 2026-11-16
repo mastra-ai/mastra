@@ -27,6 +27,8 @@ export class ConvexServerCache extends MastraServerCache {
   private readonly client: ConvexCacheClient;
   private readonly keyPrefix: string;
   private readonly ttlMs: number;
+  /** Set once the deployed Convex handler is known to lack `listPushIndexed`. */
+  private indexedPushUnsupported = false;
 
   constructor(config: ConvexServerCacheConfig) {
     super({ name: 'ConvexServerCache' });
@@ -88,6 +90,49 @@ export class ConvexServerCache extends MastraServerCache {
       value,
       expiresAt: this.getExpiresAt(),
     }));
+  }
+
+  /**
+   * Allocates the index and appends the entry in one Convex mutation, so a
+   * failed request can never consume an index without appending its entry.
+   */
+  async listPushIndexed(
+    listKey: string,
+    counterKey: string,
+    value: Record<string, unknown>,
+    ttlMs?: number,
+  ): Promise<number> {
+    if (this.indexedPushUnsupported) {
+      return super.listPushIndexed(listKey, counterKey, value, ttlMs);
+    }
+
+    // A cache without expiry stays that way; otherwise `ttlMs` can only raise
+    // the default.
+    const expiresAt = this.ttlMs > 0 ? Date.now() + Math.max(this.ttlMs, ttlMs ?? 0) : null;
+    const { index: _ignored, ...body } = value;
+    try {
+      return await this.callUntilSettled<number>(() => ({
+        op: 'listPushIndexed',
+        key: this.getKey(listKey),
+        counterKey: this.getKey(counterKey),
+        keyPrefix: this.keyPrefix,
+        value: body,
+        expiresAt,
+      }));
+    } catch (error) {
+      // The cache handler runs in the user's Convex deployment, which may not
+      // have been redeployed with this @mastra/convex version yet.
+      if (error instanceof Error && error.message === 'Unsupported operation listPushIndexed') {
+        this.indexedPushUnsupported = true;
+        this.logger.warn(
+          '[ConvexServerCache] The deployed Convex cache handler does not support listPushIndexed; falling back to ' +
+            'increment + listPush, which is not atomic and ignores the requested retention, so cached replay expires after ' +
+            'the default cache TTL. Redeploy your Convex functions, then restart this process.',
+        );
+        return super.listPushIndexed(listKey, counterKey, value, ttlMs);
+      }
+      throw error;
+    }
   }
 
   async listFromTo(key: string, from: number, to: number = -1): Promise<unknown[]> {

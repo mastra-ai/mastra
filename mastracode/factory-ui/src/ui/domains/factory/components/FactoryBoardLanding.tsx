@@ -1,8 +1,10 @@
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import type { ReactNode } from 'react';
 import { Navigate } from 'react-router';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import { LoadErrorState } from '../../../ui/LoadErrorState';
 import { useSidebarHeaderSlots } from '../../chat/components/useSidebarHeaderSlots';
 import { orderedBoards } from '../boardCatalog';
 import { rememberedBoardPath } from '../services/boardViews';
@@ -14,24 +16,30 @@ export function FactoryBoardLanding({ factoryId }: { factoryId: string | undefin
   if (first && factoryId) return <Navigate to={rememberedBoardPath(factoryId, first.id)} replace />;
 
   return (
-    <BoardLandingLayout loading={catalog.isPending}>
-      <BoardLandingMessage isPending={catalog.isPending} isError={catalog.isError} />
+    <BoardLandingLayout>
+      {catalog.isPending ? (
+        <BoardLoadingSkeleton />
+      ) : catalog.isError ? (
+        <LoadErrorState
+          title="Couldn’t load boards"
+          error={catalog.error}
+          onRetry={() => void catalog.refetch()}
+          retrying={catalog.isFetching}
+        />
+      ) : (
+        <EmptyState variant="fill" titleSlot="No boards installed." />
+      )}
     </BoardLandingLayout>
   );
 }
 
-// A page header, so a collapsed sidebar can still be reopened from here (useSidebarHeaderSlots).
-function BoardLandingLayout({ children, loading }: { children: ReactNode; loading: boolean }) {
+// A page header, so a collapsed sidebar can still be reopened from here (useSidebarHeaderSlots). `fit` gives the
+// skeleton and the centered states the page's full height.
+function BoardLandingLayout({ children }: { children: ReactNode }) {
   const slots = useSidebarHeaderSlots();
   return (
-    <PageLayout variant={loading ? 'fit' : undefined} {...slots}>
+    <PageLayout variant="fit" {...slots}>
       {children}
     </PageLayout>
   );
-}
-
-function BoardLandingMessage({ isPending, isError }: { isPending: boolean; isError: boolean }) {
-  if (isPending) return <BoardLoadingSkeleton />;
-  if (isError) return <p role="alert">Unable to load boards.</p>;
-  return <p>No boards installed.</p>;
 }

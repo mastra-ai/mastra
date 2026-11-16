@@ -7,6 +7,7 @@ export type {
   ToolsResolverContext,
   ToolsWithInput,
 } from './tools.js';
+export type { CodeModeOptions, ConnectCodeMode } from './code-mode.js';
 export { channels } from './channels.js';
 export type {
   ChannelsOptions,

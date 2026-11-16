@@ -2,6 +2,7 @@ import React from 'react';
 
 import { Icon } from '../../icons/Icon';
 import { Skeleton } from '@/ds/components/Skeleton';
+import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
 import { PopupAnchorProvider } from '@/ds/primitives/popup-anchor';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
@@ -24,18 +25,6 @@ export const Breadcrumb = ({ children, label, className, listClassName }: Breadc
   );
 };
 
-const CrumbSeparatorIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path
-      d="M6.3 4.6L9.7 8L6.3 11.4"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
 export interface CrumbProps {
   isCurrent?: boolean;
   as: React.ElementType;
@@ -43,7 +32,7 @@ export interface CrumbProps {
   to?: string;
   prefetch?: boolean | null;
   children?: React.ReactNode;
-  /** Prefix icon (bare SVG). The crumb wraps it in `<Icon>` and draws every icon set at one size. */
+  /** Prefix icon (bare SVG). The crumb wraps it in `<Icon>` and aligns it like a Button adornment. */
   icon?: React.ReactNode;
   /** Renders `CrumbSkeleton` in place of the label. */
   isLoading?: boolean;
@@ -129,14 +118,11 @@ export const Crumb = ({
           {icon && (
             <Icon
               className={cn(
-                'flex size-[13px] shrink-0 items-center justify-center opacity-50 group-hover:opacity-100',
+                'shrink-0 opacity-50 group-hover:opacity-100',
                 // Only the first crumb's icon tucks into the padding (keeping the header's left edge);
                 // after a separator it keeps the full gap, like text.
                 '[li:first-child_&]:ml-[-.3em]',
                 'transition-opacity duration-normal ease-out-custom',
-                // One 13px glyph across icon sets: Mastra's icons are cropped to the glyph, while
-                // Lucide's 24-grid leaves 2px a side, so it draws 24/20 larger.
-                '[&>svg.lucide]:size-[15.6px] [&>svg.lucide]:shrink-0 [&>svg:not(.lucide)]:size-[13px]',
               )}
             >
               {icon}
@@ -172,8 +158,8 @@ export const Crumb = ({
       {!isCurrent && (
         // A 5px box (the chevron's ink) with 6px margins: 14px from the ink to each neighbor.
         <li role="separator" className="mx-1.5 flex h-full w-[5px] items-center justify-center overflow-visible">
-          <Icon className="shrink-0 text-placeholder opacity-70">
-            <CrumbSeparatorIcon />
+          <Icon size="xs" className="shrink-0 text-placeholder">
+            <IconChevronRight />
           </Icon>
         </li>
       )}

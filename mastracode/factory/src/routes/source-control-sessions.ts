@@ -6,11 +6,11 @@ import { registerApiRoute } from '@mastra/core/server';
 import { createSignal } from '@mastra/core/signals';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { Context } from 'hono';
+import { z } from 'zod';
 
 import { reclaimDeletedSessionSandbox } from '../integrations/github/sandbox-release.js';
 import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
-import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import { seedSessionOrg } from '../session/org-seed.js';
 import {
   isRunBound,
@@ -23,8 +23,8 @@ import {
 import { normalizeSessionTitle } from '../session/session-title.js';
 import { SESSION_OWNER_SIGNAL_TAG } from '../session-owner-signal.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
-import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
+import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
@@ -32,14 +32,12 @@ import type {
   SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { answerParkedCall } from '../tools/approval-tools.js';
+import { loose } from './route.js';
 import type { RouteAuth } from './route.js';
 import { canReadSessionResource, canSwitchSessionModel, canViewSourceControlSession } from './session-access.js';
 
 type RouteContext = Context;
-
-function loose(c: unknown): RouteContext {
-  return c as RouteContext;
-}
 
 export const USER_SESSION_BRANCH_PREFIX = 'user/session-';
 // Slack thread sessions live on `slack/<thread>` branches (integrations/slack/slack.ts threadBranch).
@@ -68,11 +66,15 @@ export interface SourceControlSessionRoutesOptions {
   sessionRetirement?: SessionRetirementCoordinator;
   /** Whether the host sandbox can recreate a session's sandbox (false for local). */
   sandboxRecreateSupported?: boolean;
-  /** Turn-end file listings, cleared on recreate so the panel stops showing the old sandbox's files. */
-  filesystem?: Pick<FilesystemStorage, 'deleteResourceFiles'>;
   /** How long recreate waits for an aborted run to settle before destroying. */
   abortSettleTimeoutMs?: number;
-  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'>;
+  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'> &
+    Partial<
+      Pick<
+        WorkItemsStorage,
+        'listProjectSubscriptions' | 'listWorkItemSubscribers' | 'findActiveRunBindingForSession' | 'get'
+      >
+    >;
   /** Moves a thread, with everything keyed by its resource, when a session's visibility changes. */
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
 }
@@ -98,6 +100,34 @@ async function sessionManagePermission(
   if (session.visibility === 'private' && !isOwner) return 'not-found';
   if (isOwner) return 'allowed';
   return (await auth.isOrganizationAdmin(c, session.orgId)) ? 'allowed' : 'forbidden';
+}
+
+const parkedApprovalAnswerSchema = z
+  .object({
+    decision: z.enum(['approve', 'decline']),
+    reason: z.string().trim().min(1).max(1000).optional(),
+    toolCallId: z.string().trim().min(1).max(200).optional(),
+  })
+  .strict();
+
+/** Whether the viewer asked for the card's work: they filed it, or a session of theirs follows it. */
+async function followsCard(
+  options: SourceControlSessionRoutesOptions,
+  workItemId: string | undefined,
+  tenant: { orgId: string; userId: string },
+): Promise<boolean> {
+  const workItems = options.workItems;
+  if (!workItemId || !workItems?.get || !workItems.listWorkItemSubscribers) return false;
+  const item = await workItems.get({ orgId: tenant.orgId, id: workItemId });
+  if (!item) return false;
+  if (item.createdBy === tenant.userId) return true;
+  // A follow belongs to its session, and a session can change hands: ask who owns it now.
+  const followers = await workItems.listWorkItemSubscribers({ orgId: tenant.orgId, workItemId });
+  for (const sessionId of new Set(followers.map(follower => follower.sessionId))) {
+    const following = (await resolveSession(options.sourceControls, sessionId))?.session;
+    if (following?.orgId === tenant.orgId && following.userId === tenant.userId) return true;
+  }
+  return false;
 }
 
 function canRecreateSandbox(options: SourceControlSessionRoutesOptions): boolean {
@@ -341,9 +371,15 @@ function createSessionOwnerProfileResolver(users: SessionOwnerUserProvider | und
   };
 
   return async (userIds: string[]): Promise<Map<string, SessionOwnerProfile>> => {
-    if (!users) return new Map();
-    const requestedUserIds = [...new Set(userIds)].slice(0, MAX_SESSION_OWNER_PROFILES);
     const profiles = new Map<string, SessionOwnerProfile>();
+    // A session the Factory owns has no person to look up; it is named for what it is.
+    for (const userId of userIds) {
+      if (isFactoryPrincipalId(userId)) profiles.set(userId, { id: userId, name: 'Factory' });
+    }
+    if (!users) return profiles;
+    const requestedUserIds = [...new Set(userIds)]
+      .filter(userId => !isFactoryPrincipalId(userId))
+      .slice(0, MAX_SESSION_OWNER_PROFILES);
     const unresolvedUserIds: string[] = [];
     const now = Date.now();
 
@@ -557,7 +593,90 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           )
         ).flat();
         const owners = await resolveOwnerProfiles(sessions.map(session => session.userId));
-        return c.json({ sessions: sessions.map(session => withOwnerProfile(session, owners)) });
+        // The follow link is the only tie between a person's session and a card's phase sessions.
+        const followed = new Map<string, string[]>();
+        for (const link of (await options.workItems?.listProjectSubscriptions?.({
+          orgId,
+          factoryProjectId: project.id,
+        })) ?? []) {
+          const workItemIds = followed.get(link.sessionId);
+          if (workItemIds) workItemIds.push(link.workItemId);
+          else followed.set(link.sessionId, [link.workItemId]);
+        }
+        return c.json({
+          sessions: sessions.map(session => ({
+            ...withOwnerProfile(session, owners),
+            followedWorkItemIds: followed.get(session.sessionId) ?? [],
+          })),
+        });
+      },
+    }),
+    // Approve or decline the tool call a card's phase session waits on, from the card or a
+    // session following it. The session's owner and org admins may; so may the person who
+    // filed the card and anyone whose session follows it. The run carries on as its owner.
+    registerApiRoute('/web/user-sessions/:sessionId/parked-approval', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), options.auth);
+        if ('response' in resolved) return resolved.response;
+        const body = parkedApprovalAnswerSchema.safeParse(await c.req.json().catch(() => null));
+        if (!body.success) {
+          return c.json(
+            { error: 'Send a decision of "approve" or "decline", and optionally a reason and toolCallId.' },
+            400,
+          );
+        }
+        const match = await resolveSession(options.sourceControls, c.req.param('sessionId'));
+        const session = match?.session;
+        if (!session) return c.json({ error: 'Session not found' }, 404);
+        const permission = await sessionManagePermission(loose(c), options.auth, resolved.tenant, session);
+        if (permission === 'not-found') return c.json({ error: 'Session not found' }, 404);
+        const binding =
+          session.factoryProjectId && options.workItems?.findActiveRunBindingForSession
+            ? await options.workItems.findActiveRunBindingForSession({
+                orgId: session.orgId,
+                factoryProjectId: session.factoryProjectId,
+                sessionId: session.sessionId,
+              })
+            : null;
+        if (permission !== 'allowed' && !(await followsCard(options, binding?.workItemId, resolved.tenant))) {
+          return c.json(
+            { error: "Only the session's owner, an organization admin, or someone following its card can answer." },
+            403,
+          );
+        }
+        const controller = options.controller;
+        if (!controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
+        const { decision, reason } = body.data;
+        let answered: { toolCallId: string; toolName: string };
+        try {
+          answered = await answerParkedCall(
+            { messaging: async () => ({ controller }) as never },
+            {
+              session,
+              ...(body.data.toolCallId ? { toolCallId: body.data.toolCallId } : {}),
+              decision,
+              declineReason: reason ?? 'Declined from the card.',
+            },
+          );
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 409);
+        }
+        const { toolCallId, toolName } = answered;
+        await options.audit?.record({
+          orgId: session.orgId,
+          actorId: resolved.tenant.userId,
+          actorType: 'human',
+          action: decision === 'approve' ? 'factory.run.approved' : 'factory.run.dismissed',
+          ...(session.factoryProjectId ? { factoryProjectId: session.factoryProjectId } : {}),
+          targets: [
+            { type: 'session', id: session.sessionId },
+            ...(binding ? [{ type: 'work_item' as const, id: binding.workItemId }] : []),
+          ],
+          metadata: { toolCallId, toolName, sessionId: session.sessionId, decision, cause: 'web' },
+        });
+        return c.json({ answered: decision, sessionId: session.sessionId, toolCallId, toolName });
       },
     }),
     ...projectSessionRoutes('/web/source-control/projects/:id/sessions', options, resolveOwnerProfiles),
@@ -653,12 +772,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           session.sessionId,
           options.abortSettleTimeoutMs ?? ABORT_SETTLE_TIMEOUT_MS,
         );
-        await waitForPendingFilesystemCapture(session.sessionId).catch(error => {
-          console.warn('[Factory Sessions] Failed to drain filesystem capture before sandbox recreate', {
-            sessionId: session.sessionId,
-            error,
-          });
-        });
         try {
           const outcome = await sessionRetirement.recreateSessionSandbox({
             sourceControl: match.sourceControl,
@@ -666,13 +779,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
             sessionId: session.sessionId,
           });
           if (outcome === 'not-found') return c.json({ error: 'Session not found' }, 404);
-          // The captured listings describe the destroyed sandbox; the next turn re-captures.
-          await options.filesystem?.deleteResourceFiles({ resourceId: session.sessionId }).catch(error => {
-            console.warn('[Factory Sessions] Failed to clear file listings after sandbox recreate', {
-              sessionId: session.sessionId,
-              error,
-            });
-          });
           return c.json({ recreated: true, aborted });
         } catch (error) {
           console.error('[Factory Sessions] Failed to recreate session sandbox', {
@@ -776,14 +882,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           return c.json({ error: 'Session not found' }, 404);
         }
         try {
-          // Drain the turn's queued filesystem capture while the thread and sandbox still exist.
-          // A failed drain only costs the snapshot; it must not block teardown.
-          await waitForPendingFilesystemCapture(session.sessionId).catch(error => {
-            console.warn('[Factory Sessions] Failed to drain filesystem capture before delete', {
-              sessionId: session.sessionId,
-              error,
-            });
-          });
           await options.controller?.deleteSession({ sessionId: session.sessionId });
         } catch (error) {
           console.error('[Factory Sessions] Failed to tear down live controller session', {

@@ -1,0 +1,215 @@
+---
+title: "Neon | Auth"
+description: "Authenticate Mastra server requests and Studio users with Neon Auth, map Neon Auth organization roles to Mastra permissions, and connect MastraClient with a Neon Auth JWT."
+packages:
+  - "@mastra/auth-neon"
+  - "@mastra/client-js"
+  - "@mastra/core"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# Neon
+
+The `@mastra/auth-neon` package connects Mastra to [Neon Auth](https://neon.com/docs/auth/overview), the managed authentication service built on Better Auth that stores users and sessions in your Neon database. It verifies Neon Auth JWTs sent as bearer tokens, validates Neon Auth session cookies, and lets Studio users sign in or sign up with their email and password.
+
+## Prerequisites
+
+Enable Neon Auth on a branch of your Neon project in the [Neon Console](https://console.neon.tech). The **Auth** page shows the Neon Auth URL for that branch. Add it to your `.env` file:
+
+```env title=".env"
+NEON_AUTH_BASE_URL=https://ep-example-123456.neonauth.us-east-2.aws.neon.tech/neondb/auth
+```
+
+Use the URL exactly as Neon shows it, including the `/neondb/auth` path. Mastra derives the JWKS endpoint (`<NEON_AUTH_BASE_URL>/.well-known/jwks.json`) and the expected JWT issuer from it.
+
+Neon Auth only accepts sign-in requests from trusted origins. Requests from `localhost` work while **Allow localhost** is on. Before you deploy, add the domain that serves your Mastra server and Studio to the trusted domains in your Neon Auth settings. Otherwise Neon Auth rejects Studio sign-in with an `Invalid origin` error.
+
+## Installation
+
+Install the `@mastra/auth-neon` package:
+
+```bash npm2yarn
+npm install @mastra/auth-neon@latest
+```
+
+## Usage example
+
+Register `MastraAuthNeon` as the server's auth provider:
+
+```typescript {2,6} title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthNeon } from '@mastra/auth-neon'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthNeon(),
+  },
+})
+```
+
+`MastraAuthNeon` reads `NEON_AUTH_BASE_URL` by default. You can pass `baseUrl` instead.
+
+Every route under `/api` now requires a Neon Auth credential. The provider accepts either of the following:
+
+- **A Neon Auth JWT** in the `Authorization: Bearer <token>` header. Mastra verifies its signature against the Neon Auth JWKS, along with its issuer, audience, and expiry.
+- **A Neon Auth session cookie** (`__Secure-neon-auth.session_token`). Mastra validates it with Neon Auth on each request.
+
+Visit [MastraAuthNeon](/reference/auth/neon) for all available configuration options.
+
+## Studio sign-in
+
+Studio shows an email and password form when `MastraAuthNeon` is configured. Mastra forwards the credentials to Neon Auth and stores the Neon Auth session cookie in the browser. Users created in Studio appear in your Neon Auth users list, and users created elsewhere in your app can sign in to Studio.
+
+The session cookie is marked `Secure`, so browsers only store it when Studio is served over HTTPS or from `localhost`. Studio served over plain HTTP from another host can't stay signed in.
+
+To allow existing users only, turn off sign-up. This hides the sign-up form and rejects sign-up requests to the Mastra API:
+
+```typescript title="src/mastra/index.ts"
+new MastraAuthNeon({
+  signUpEnabled: false,
+})
+```
+
+Signing out of Studio clears its session cookie and attempts to revoke the session in Neon Auth. If the Neon Auth request fails, the session may remain active.
+
+## Client-side setup
+
+Frontends that use the Neon Auth SDK can request a short-lived JWT for the signed-in user and send it to Mastra.
+
+### Retrieving a JWT
+
+For a Vite frontend, set `VITE_NEON_AUTH_URL` in the frontend's `.env` file to the same Neon Auth URL used for `NEON_AUTH_BASE_URL` on the Mastra server.
+
+Use `authClient.getSession()` from the [Neon Auth SDK](https://neon.com/docs/reference/javascript-sdk) after the user signs in. The session includes the JWT to send to Mastra:
+
+```typescript title="lib/auth.ts"
+import { createAuthClient } from '@neon/neon-js/auth'
+
+export const authClient = createAuthClient(import.meta.env.VITE_NEON_AUTH_URL)
+
+export async function getMastraToken() {
+  const { data, error } = await authClient.getSession()
+  if (error) throw error
+  if (!data?.session) throw new Error('Not signed in to Neon Auth')
+  return data.session.token
+}
+```
+
+Neon Auth JWTs expire after 15 minutes. Request a new token before each batch of Mastra calls instead of storing one.
+
+:::note
+
+Visit the [Neon Auth JWT guide](https://neon.com/docs/auth/guides/plugins/jwt) for cross-origin cookie requirements and other ways to obtain a token.
+
+:::
+
+### Configuring `MastraClient`
+
+Pass the JWT in the `Authorization` header:
+
+```typescript {6} title="lib/mastra/mastra-client.ts"
+import { MastraClient } from '@mastra/client-js'
+
+export const createMastraClient = (token: string) =>
+  new MastraClient({
+    baseUrl: 'https://<mastra-api-url>',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+```
+
+Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration options.
+
+### Making authenticated requests
+
+<Tabs>
+  <TabItem value="react" label="React">
+    ```tsx title="src/components/test-agent.tsx"
+    import { getMastraToken } from '../../lib/auth'
+    import { createMastraClient } from '../../lib/mastra/mastra-client'
+
+    export const TestAgent = () => {
+      async function handleClick() {
+        const mastraClient = createMastraClient(await getMastraToken())
+        const agent = mastraClient.getAgent('weatherAgent')
+
+        const response = await agent.generate("What's the weather like in New York")
+
+        console.log(response)
+      }
+
+      return <button onClick={handleClick}>Test Agent</button>
+    }
+    ```
+  </TabItem>
+
+  <TabItem value="curl" label="cURL">
+    ```bash
+    curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <your-neon-auth-jwt>" \
+      -d '{
+        "messages": "Weather in London"
+      }'
+    ```
+  </TabItem>
+</Tabs>
+
+API clients that sign in through Mastra with `POST /api/auth/credentials/sign-in` receive a Neon Auth JWT in the `token` field of the response, which works the same way.
+
+## Role-based access control
+
+`MastraRBACNeon` maps roles from the Neon Auth [organization plugin](https://neon.com/docs/auth/guides/plugins/organization) (`owner`, `admin`, and `member`) to Mastra permissions. Roles that aren't in `roleMapping` get the `_default` permissions:
+
+```typescript {2,7-14} title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthNeon, MastraRBACNeon } from '@mastra/auth-neon'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthNeon(),
+    rbac: new MastraRBACNeon({
+      roleMapping: {
+        owner: ['*'],
+        admin: ['*'],
+        member: ['agents:read', 'agents:execute', 'workflows:read'],
+        _default: [],
+      },
+    }),
+  },
+})
+```
+
+For a session-cookie request, Mastra reads the user's role in the session's active organization from Neon Auth. Set `organizationId` to always use one organization. Users who aren't members of that organization have no roles, so they get no permissions. Users without an active organization get their Neon Auth user role (for example, `user` or `admin`).
+
+Neon Auth JWTs don't include organization roles. Their `role` claim is always `authenticated`, which is the Postgres role for the Neon Data API, and Mastra ignores it. Bearer JWT requests therefore have no roles and get no permissions unless you resolve roles yourself with `getUserRoles`:
+
+```typescript title="src/mastra/index.ts"
+new MastraRBACNeon({
+  roleMapping: { admin: ['*'], member: ['agents:read'], _default: [] },
+  getUserRoles: async user => lookUpRolesInYourDatabase(user.id),
+})
+```
+
+:::note
+
+RBAC requires a Mastra Enterprise Edition (EE) license in production. It works without a license in development. See [what requires an EE license](/docs/license#what-requires-an-ee-license).
+
+:::
+
+## Verify the setup
+
+Start the Mastra server and call a protected route without credentials:
+
+```bash
+curl -i http://localhost:4111/api/agents
+```
+
+The response is `401 Unauthorized`. Repeat the request with a Neon Auth JWT in the `Authorization: Bearer <token>` header to get `200 OK` with your agents. In Studio at `http://localhost:4111`, the sign-in form accepts the email and password of any Neon Auth user.
+
+## Related
+
+- [MastraAuthNeon and MastraRBACNeon reference](/reference/auth/neon)
+- [Authentication overview](/docs/auth/overview)
+- [Neon Auth documentation](https://neon.com/docs/auth/overview)

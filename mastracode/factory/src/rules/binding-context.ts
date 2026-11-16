@@ -2,6 +2,7 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext } from '../auth.js';
+import { REVIEW_CONTEXT } from '../boards/define-board.js';
 import type {
   FactoryRunBindingAddress,
   FactoryRunBindingRecord,
@@ -170,7 +171,7 @@ async function healRecoveredSessionState(options: {
   // Security posture first, from the binding row alone (no I/O): review-bound
   // sessions run against attacker-writable checkouts, so `untrustedCheckout`
   // must survive even if the enrichment lookups below fail transiently.
-  if (binding.role === 'review') {
+  if (binding.role === REVIEW_CONTEXT) {
     updates.untrustedCheckout = true;
   }
   // Best-effort enrichment mirroring the start coordinator's original seed:

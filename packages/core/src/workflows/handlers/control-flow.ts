@@ -11,6 +11,7 @@ import { selectFields } from '../../utils';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import { workflowChildTermination as workflowTermination } from '../execution-outcome';
+import { isFrameworkCondition } from '../framework-condition';
 import { buildStepResultAccessors } from '../run-journal';
 import type { ConditionFunction, InnerOutput, LoopConditionFunction } from '../step';
 import { getEntryId } from '../step-entry';
@@ -41,6 +42,7 @@ import {
 import { isWorkflowRunCanceled } from './entry';
 import { getForeachProgress, omitForeachProgress } from './foreach-progress';
 import type { ForeachProgress } from './foreach-progress';
+import { emitStepResultEvents } from './step';
 import type { ExecuteStepParams } from './step';
 
 /**
@@ -952,7 +954,30 @@ export async function executeLoop(
         operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.span.error`,
         errorOptions: { ...termination, error: errorInstance },
       });
-      throw error;
+      if (isFrameworkCondition(condition)) throw error;
+      // End the loop step as failed, like a failed body: a throw would reject run.start()
+      // and leave the run recorded as running.
+      const body = result as Extract<typeof result, { status: 'success' }>;
+      const failed: StepResult<any, any, any, any> = {
+        status: 'failed',
+        error: errorInstance,
+        payload: body.payload,
+        startedAt: body.startedAt,
+        endedAt: Date.now(),
+        nonRetryable: true,
+        metadata: body.metadata,
+      };
+      // The body already reported this iteration as a success, and already sent its step finish.
+      await engine.wrapDurableOperation(
+        `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.eval.${iteration}.emit_failure`,
+        () =>
+          publishStepEvent(engine, pubsub, `workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: { type: 'workflow-step-result', payload: { id: stepId, ...failed } },
+          }),
+      );
+      return failed;
     }
     await engine.endChildSpan({
       span: evalSpan,
@@ -1068,10 +1093,40 @@ export async function executeForeach(
   const { step, opts } = entry;
   const stepId = getEntryId(step);
   const results: any[] = [];
-  const concurrency = resolveForeachConcurrency(opts, {
-    inputData: prevOutput,
-    getInitData: () => stepResults?.input,
-  });
+  let concurrency: number;
+  try {
+    concurrency = resolveForeachConcurrency(opts, {
+      inputData: prevOutput,
+      getInitData: () => stepResults?.input,
+    });
+  } catch (error) {
+    // Fail the foreach step: a throw would reject run.start() and leave the run recorded as running.
+    const failed: StepResult<any, any, any, any> = {
+      status: 'failed',
+      error: getErrorFromUnknown(error, { serializeStack: false }),
+      payload: prevOutput,
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+      nonRetryable: true,
+    };
+    if (engine.options.emitStepEvents !== false) {
+      await engine.wrapDurableOperation(
+        `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.concurrency_failure`,
+        async () => {
+          await publishStepEvent(engine, pubsub, `workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: {
+              type: 'workflow-step-start',
+              payload: { id: stepId, payload: prevOutput, startedAt: failed.startedAt, status: 'running' },
+            },
+          });
+          await emitStepResultEvents({ stepId, execResults: failed, pubsub, runId });
+        },
+      );
+    }
+    return failed;
+  }
   const startTime = resume?.steps[0] === stepId ? undefined : Date.now();
   const resumeTime = resume?.steps[0] === stepId ? Date.now() : undefined;
 

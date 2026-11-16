@@ -1,0 +1,246 @@
+name: CodeQL
+
+# Replaces GitHub's "default setup" scan, which ran on every PR and was the longest
+# check (median ~25 min). PRs are no longer scanned: a PR scan only reports alerts on
+# the lines that PR changed, while scans of main are what fill the Security tab. This
+# scans main twice a day (and on demand) and posts to Slack when the scan finds new
+# open alerts on main, or when the scan itself fails.
+# Default setup must be switched off in Settings > Code security before this merges;
+# GitHub refuses to run both.
+
+on:
+  schedule:
+    - cron: '41 3 * * *'
+    - cron: '41 15 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: codeql-${{ github.ref }}
+
+permissions: {}
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    if: github.repository == 'mastra-ai/mastra'
+    runs-on: ubuntu-latest
+    # The javascript-typescript scan of main took 55 min to upload its results (run 42954503565).
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        # Same languages as the default setup it replaces; `actions` scans the workflows themselves.
+        language: [javascript-typescript, actions]
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        with:
+          category: /language:${{ matrix.language }}
+          # Uploading the database is only for running variant-analysis queries against this
+          # repository; it plays no part in alerts. Zipping the ~9 GB javascript database ran
+          # past the job timeout after the results were already uploaded.
+          upload-database: false
+
+  notify:
+    name: Notify Slack of CodeQL results
+    needs: analyze
+    # Only scans of main in this repository alert; a manual run on another branch does not.
+    if: always() && github.repository == 'mastra-ai/mastra' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      security-events: read
+    steps:
+      # Marks this run as one that reports an unfinished scan, so later scans can tell it from
+      # runs of the earlier version of this workflow, which skipped cancelled scans silently.
+      - name: Note that the scan did not finish
+        if: needs.analyze.result == 'cancelled'
+        run: echo "The scan was cancelled or timed out; reporting it as a failure."
+
+      - name: Compare with the previous scan of main
+        id: state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ needs.analyze.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ALERTS_URL: ${{ github.server_url }}/${{ github.repository }}/security/code-scanning?query=is%3Aopen+branch%3Amain+tool%3ACodeQL
+        run: |
+          # A scan that hit timeout-minutes ends cancelled, so cancelled is reported as a failure.
+          # No newer run cancels a started scan: the concurrency group has no cancel-in-progress,
+          # and a queued run replaced by a newer one never starts, so this job does not run for it.
+          if [ "$RESULT" = "skipped" ]; then
+            echo "Scan was $RESULT; not alerting."
+            exit 0
+          fi
+
+          # Prints "<analyze> <notified> <checked_from>" for a run or attempt: analyze is failure,
+          # success, ignored when it has no Analyze jobs or was cancelled without its notify job
+          # noting it (an earlier version of this workflow skipped those silently), or unreadable
+          # when its jobs could not be read;
+          # notified is yes when its notify job passed, which means it read the alerts it was due
+          # to report; checked_from is when that notify job started, before it read the alerts
+          # (- when unknown).
+          run_state() {
+            local jobs conclusions analyze=ignored notified=no checked_from
+            if ! jobs=$(gh api --paginate "$1/jobs?per_page=100" \
+              --jq '.jobs[] | "\(.name)\t\(.conclusion)\t\(.started_at // "-")\t\([.steps[]? | select(.name == "Note that the scan did not finish" and .conclusion == "success")] | length)"' 2>/dev/null); then
+              echo "unreadable no -"
+              return 0
+            fi
+            conclusions=$(awk -F'\t' '$1 ~ /^Analyze/ {print $2}' <<< "$jobs")
+            if grep -qxE 'failure|timed_out' <<< "$conclusions"; then
+              analyze=failure
+            elif grep -qx cancelled <<< "$conclusions"; then
+              if awk -F'\t' '$1 == "Notify Slack of CodeQL results" && $4 > 0 {f=1} END {exit !f}' <<< "$jobs"; then
+                analyze=failure
+              fi
+            elif [ -n "$conclusions" ]; then
+              analyze=success
+            fi
+            checked_from=$(awk -F'\t' '$1 == "Notify Slack of CodeQL results" && $2 == "success" {print $3; exit}' <<< "$jobs")
+            if [ -n "$checked_from" ]; then
+              notified=yes
+            fi
+            echo "$analyze $notified ${checked_from:--}"
+          }
+
+          # Earlier attempts of this run come first (a re-run keeps its run ID), then earlier
+          # scans of main, newest first.
+          base="repos/$GITHUB_REPOSITORY/actions/runs"
+          candidates=''
+          for ((attempt = GITHUB_RUN_ATTEMPT - 1; attempt >= 1; attempt--)); do
+            candidates+="$base/$GITHUB_RUN_ID/attempts/$attempt"$'\n'
+          done
+          history_read=true
+          if runs=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/codeql.yml/runs" \
+            -f branch=main -f status=completed -F per_page=30 \
+            --jq ".workflow_runs[] | select(.id != $GITHUB_RUN_ID) | \"$base/\(.id)\""); then
+            candidates+="$runs"$'\n'
+          else
+            echo "::warning::Could not read earlier scans."
+            history_read=false
+          fi
+
+          # The newest finished scan whose notify job passed gives the previous state, for failure
+          # and recovery alerts: a scan whose Slack post failed never announced its state, so the
+          # next scan must announce it. A repeat failure that posted nothing still counts, as its
+          # notify job passed. The cutoff for "new" alerts is when the notify job of the newest scan
+          # that fully passed and read the alerts started, before its query: anything created
+          # since may not have been reported yet. The run's own end time is no cutoff, as alerts
+          # can still appear after the query and a re-run moves it. When earlier scans exist but
+          # none of them can be the cutoff (they all failed, or none delivered, or they are older
+          # than the runs read), every open alert is reported: they may never have been. Only a
+          # repository with no earlier scan at all gets a silent first baseline.
+          previous=''
+          since=''
+          earlier=no
+          while read -r path; do
+            [ -n "$path" ] || continue
+            earlier=yes
+            read -r analyze notified checked_from <<< "$(run_state "$path")"
+            # A scan whose jobs could not be read may be the one that announced the current
+            # state, so the scans before it cannot stand in for it.
+            if [ "$analyze" = "unreadable" ]; then
+              echo "::warning::Could not read the jobs of $path."
+              history_read=false
+              break
+            fi
+            case "$analyze" in success | failure) ;; *) continue ;; esac
+            [ "$notified" = "yes" ] || continue
+            previous=${previous:-$analyze}
+            if [ "$analyze" = "success" ] && [ "$checked_from" != "-" ]; then
+              since=$checked_from
+              break
+            fi
+          done <<< "$candidates"
+          if [ -z "$previous" ]; then
+            if [ "$history_read" = "true" ]; then previous=none; else previous=unknown; fi
+          fi
+          echo "Previous scan: $previous; earlier scans: $earlier; new alerts counted from: ${since:-n/a}; this scan: $RESULT"
+
+          # When earlier scans or this scan's alerts could not be read, this job fails so the
+          # next scan does not take this one as the announced state or the cutoff, and reports
+          # what this one may have missed.
+          checked=true
+          lines=()
+          if [ "$history_read" != "true" ]; then
+            checked=false
+          fi
+          if [ "$RESULT" != "success" ]; then
+            if [ "$previous" != "failure" ]; then
+              lines+=(":rotating_light: The CodeQL scan of main failed or did not finish. <$RUN_URL|View the run>.")
+            fi
+          else
+            if [ "$previous" = "failure" ]; then
+              lines+=(":white_check_mark: The CodeQL scan of main is passing again.")
+            fi
+            # With no earlier scan to compare against, the first scan only sets the cutoff; with
+            # unreadable history this job already fails, so the next scan checks the alerts.
+            if [ "$history_read" = "true" ] && { [ -n "$since" ] || [ "$earlier" = "yes" ]; }; then
+              if new=$(gh api --paginate -X GET "repos/$GITHUB_REPOSITORY/code-scanning/alerts" \
+                -f ref=refs/heads/main -f state=open -f tool_name=CodeQL -F per_page=100 \
+                --jq ".[] | select(.created_at >= \"$since\") | .number"); then
+                count=$(grep -c . <<< "$new" || true)
+                echo "Open alerts on main created after '${since:-the start}': $count"
+                if [ "$count" -gt 0 ] && [ -n "$since" ]; then
+                  lines+=(":rotating_light: CodeQL found $count new open alert(s) on main. <$ALERTS_URL|Review them>.")
+                elif [ "$count" -gt 0 ]; then
+                  lines+=(":rotating_light: CodeQL has $count open alert(s) on main that earlier scans may not have reported. <$ALERTS_URL|Review them>.")
+                fi
+              else
+                echo "::warning::Could not read code scanning alerts."
+                checked=false
+              fi
+            fi
+          fi
+          echo "checked=$checked" >> "$GITHUB_OUTPUT"
+
+          if [ "${#lines[@]}" -eq 0 ]; then
+            echo "No change since the previous scan; not alerting."
+            exit 0
+          fi
+          printf 'text=%s\n' "${lines[*]}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout Slack action
+        if: steps.state.outputs.text != ''
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+
+      - name: Post to Slack
+        if: steps.state.outputs.text != ''
+        uses: ./.github/actions/slack-alert
+        with:
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          text: ${{ steps.state.outputs.text }}
+          # #eng-maintainer-alerts
+          channel: 'C0CD83YFFNF'
+          # An undelivered alert fails this job, so this scan is not used as the cutoff
+          # for "new" alerts and the next scan reports them again.
+          strict: 'true'
+
+      - name: Fail when the alerts could not be checked
+        if: steps.state.outputs.checked == 'false'
+        run: |
+          echo "::error::Could not read earlier scans or code scanning alerts; the next scan will report any new alerts."
+          exit 1

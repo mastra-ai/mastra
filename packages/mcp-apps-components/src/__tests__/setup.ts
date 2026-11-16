@@ -16,4 +16,6 @@ if (typeof globalThis.window !== 'undefined') {
       disconnect() {}
     };
   }
+  // Base UI's ScrollArea, in the table widget, calls getAnimations; jsdom has no Web Animations API.
+  Element.prototype.getAnimations ??= () => [];
 }

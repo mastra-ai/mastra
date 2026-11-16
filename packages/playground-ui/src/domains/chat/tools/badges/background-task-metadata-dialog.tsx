@@ -1,5 +1,4 @@
 import { useGetBackgroundTaskById, useBackgroundTaskStream } from '@mastra/react/hooks/agents';
-import { Loader2Icon, Share2 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
@@ -12,6 +11,8 @@ import {
   DialogBody,
 } from '@/ds/components/Dialog';
 import { Txt } from '@/ds/components/Txt';
+import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
+import { IconShareAndroid } from '@/ds/icons/central/IconShareAndroid';
 import { useTimeDiff } from '@/hooks/use-time-diff';
 import { toSigFigs } from '@/utils/number';
 
@@ -144,9 +145,9 @@ export const BackgroundTaskMetadataDialogTrigger = ({ backgroundTask }: Backgrou
         onClick={() => setIsOpen(s => !s)}
       >
         {backgroundTask.completedAt || backgroundTask.suspendedAt ? (
-          <Share2 className="size-5 text-muted-foreground" />
+          <IconShareAndroid className="size-5 text-muted-foreground" />
         ) : (
-          <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
+          <IconLoadingCircle className="size-5 animate-spin text-muted-foreground" />
         )}
       </Button>
 

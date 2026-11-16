@@ -21,9 +21,19 @@ Each `dist/docs` includes:
 
 ## Context files
 
-Mastra provides a root [`llms.txt`](https://mastra.ai/llms.txt) file that contains an overview of all available documentation pages. It doesn't provide an `llms-full.txt` file as it's not useful to have all documentation in one file.
+Mastra provides a root [`llms.txt`](https://mastra.ai/llms.txt) file that contains an overview of all available documentation pages.
 
-Instead, each documentation page has its own `llms.txt` file. These files are streamlined markdown files. At the end of each docs page you'll find a link to the corresponding `llms.txt` file.
+To load many pages in one request, use the `llms-full.txt` bundles. They contain the full Markdown of every page in sidebar order:
+
+- [`/llms-full.txt`](https://mastra.ai/llms-full.txt): All documentation
+- [`/docs/llms-full.txt`](https://mastra.ai/docs/llms-full.txt): Docs
+- [`/models/llms-full.txt`](https://mastra.ai/models/llms-full.txt): Models
+- [`/integrations/llms-full.txt`](https://mastra.ai/integrations/llms-full.txt): Integrations
+- [`/reference/llms-full.txt`](https://mastra.ai/reference/llms-full.txt): Reference
+
+The full bundle is large, so prefer a section bundle or individual pages when you only need part of the documentation.
+
+Each documentation page also has its own `llms.txt` file. These files are streamlined markdown files. At the end of each docs page you'll find a link to the corresponding `llms.txt` file.
 
 Add `/llms.txt` to any Mastra docs URL to access it. You can also request it by adding a `.md` extension to the end of the URL.
 

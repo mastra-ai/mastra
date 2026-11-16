@@ -241,7 +241,7 @@ Checks if noise causes the agent to generate false or fabricated information tha
 
 ### Formula
 
-```
+```text
 selected_score = |llm_score - calculated_score| > discrepancy_threshold
   ? min(llm_score, calculated_score)
   : llm_score

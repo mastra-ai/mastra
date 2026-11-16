@@ -11,6 +11,7 @@ import { useMcpAppToolCall } from '../../hooks/use-mcp-app-tool-call';
 import { McpAppViewer } from '../mcp-app-viewer';
 import type { McpAppViewerProps } from '../mcp-app-viewer';
 import { connectApp, sandboxFrame } from './connect-app';
+import { ThemeProvider } from '@/ds/components/ThemeProvider';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '@/test/render';
 
@@ -118,6 +119,79 @@ describe('McpAppViewer', () => {
     await app.updateModelContext({});
     expect(onUpdateModelContext).toHaveBeenLastCalledWith(undefined);
   });
+
+  it("hands the app's raw model context to onModelContext, next to the text for the chat", async () => {
+    const onUpdateModelContext = vi.fn();
+    const onModelContext = vi.fn();
+    const app = await renderApp({ onUpdateModelContext, onModelContext });
+
+    const params = {
+      content: [{ type: 'text' as const, text: 'Pinned: Agent runs' }],
+      structuredContent: { 'mastra.ai/dashboard-pinned-widgets': [{ widget: { id: 'agent-runs' } }] },
+    };
+    await app.updateModelContext(params);
+
+    expect(onModelContext).toHaveBeenLastCalledWith(params);
+    expect(onUpdateModelContext).toHaveBeenLastCalledWith(
+      [
+        'Context from the "showDashboard" MCP App shown in this conversation:',
+        'Pinned: Agent runs',
+        '{"mastra.ai/dashboard-pinned-widgets":[{"widget":{"id":"agent-runs"}}]}',
+      ].join('\n'),
+    );
+  });
+
+  it('accepts model context with only onModelContext, advertising structured content', async () => {
+    const onModelContext = vi.fn();
+    const app = await renderApp({ onModelContext });
+
+    expect(app.getHostCapabilities()?.updateModelContext).toEqual({ text: {}, structuredContent: {} });
+    await app.updateModelContext({ structuredContent: { drilldown: { page: 'traces' } } });
+    expect(onModelContext).toHaveBeenLastCalledWith({ structuredContent: { drilldown: { page: 'traces' } } });
+  });
+
+  it('sends extra host-context keys to the app, and their changes to the running app', async () => {
+    const { container, rerender } = renderWithProviders(viewer({ hostContext: { 'mastra.ai/pins': ['a'] } }));
+    const { frame } = await sandboxFrame(container);
+    const app = await connectApp(container);
+    expect(app.getHostContext()).toMatchObject({ 'mastra.ai/pins': ['a'], theme: expect.any(String) });
+
+    const changed = new Promise(resolve => app.addEventListener('hostcontextchanged', resolve));
+    rerender(viewer({ hostContext: { 'mastra.ai/pins': ['a', 'b'] } }));
+
+    expect(await changed).toEqual({ 'mastra.ai/pins': ['a', 'b'] });
+    expect(app.getHostContext()).toMatchObject({ 'mastra.ai/pins': ['a', 'b'] });
+    // Same sandbox and bridge: the app was not reloaded.
+    expect(container.querySelector('iframe')).toBe(frame);
+  });
+
+  it("keeps the viewer's theme over a host-context theme", async () => {
+    const app = await renderApp({ hostContext: { theme: 'not-a-theme' } });
+
+    expect(app.getHostContext()?.theme).not.toBe('not-a-theme');
+  });
+
+  it.each(['light', 'dark'] as const)(
+    'gives the frame the %s color-scheme it tells the app, so the app shows through instead of an opaque box',
+    async theme => {
+      const app = await renderApp(
+        {},
+        undefined,
+        <ThemeProvider
+          defaultTheme={theme}
+          storageKey={`mcp-app-viewer-${theme}`}
+          target={document.createElement('div')}
+        >
+          {viewer({})}
+        </ThemeProvider>,
+      );
+      const { frame } = await sandboxFrame(document.body);
+
+      expect(app.getHostContext()?.theme).toBe(theme);
+      // The browser paints an opaque canvas behind an iframe whose scheme differs from its document's root.
+      expect(getComputedStyle(frame).colorScheme).toBe(theme);
+    },
+  );
 
   it('opens web links the app asks for in a new tab, without giving the page a handle on Studio', async () => {
     const open = vi.spyOn(window, 'open').mockReturnValue(null);

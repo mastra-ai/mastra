@@ -1,14 +1,22 @@
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
+import type { MastraUser } from './user';
 
 export type DynamicArgument<T, TRequestContext extends Record<string, any> | unknown = unknown> =
   | T
   | (({
       requestContext,
       mastra,
+      user,
     }: {
       requestContext: RequestContext<TRequestContext>;
       mastra?: Mastra;
+      /**
+       * Authenticated end user, normalized via the auth provider's
+       * `toMastraUser()`. `undefined` when the request is unauthenticated or
+       * no auth provider is configured.
+       */
+      user?: MastraUser;
     }) => Promise<T> | T);
 
 export type NonEmpty<T extends string> = T extends '' ? never : T;

@@ -27,6 +27,7 @@ import type { MastraWorker } from '@mastra/core/worker';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
 import type { BoardRegistry } from '../boards/index.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
@@ -35,15 +36,16 @@ import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
-import type { CommentsDomain } from '../storage/domains/comments/domain.js';
-import type { WorkItemFeedPublisher } from '../storage/domains/comments/feed-sync.js';
+import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { CardSource } from './kept-cards.js';
 
 /** A push to a repository linked to a project, as a version-control integration reports it. */
 export interface RepositoryPushEvent {
@@ -111,8 +113,6 @@ export interface IntegrationContext {
   sessionRetirement?: SessionRetirementCoordinator;
   /** Work-items domain slice — deleting a session strips the refs work items hold on it. */
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'>;
-  /** Feed slice for ingesting platform messages; present once work items are ready. */
-  feed?: Pick<CommentsDomain, 'createComment'>;
   /** Persistence handles pre-scoped to this integration's stable id. */
   storage: {
     generic: IntegrationStorageHandle;
@@ -148,6 +148,10 @@ export interface IntegrationContext {
      * right user's credentials.
      */
     channelIdentity: ChannelIdentityStorage;
+    /** Tenant model credentials, so a channel can transcribe a voice clip with the sender's STT key. */
+    modelCredentials: ModelCredentialsStorage;
+    /** Per-user and per-Factory speech-to-text model choice (Settings → Models → Voice input). */
+    voiceSettings: VoiceSettingsStorage;
   };
   /**
    * Factory runtime available when the work-item domain is ready.
@@ -158,8 +162,17 @@ export interface IntegrationContext {
     /** Operator-maintained provenance label stamped on audit rows. */
     configVersion: string;
     workItems: WorkItemsStorage;
-    /** Installed boards, so integrations read phase semantics instead of matching names. */
-    boards: BoardRegistry;
+    /**
+     * Installed boards, so integrations read phase semantics instead of matching names. The
+     * per-project source serves each project its stored boards.
+     */
+    boards: BoardRegistry | ProjectBoardSource;
+    /**
+     * Every project's provider-backed cards, kept in memory between background
+     * sweeps so a sweep with nothing to change reads nothing from storage.
+     * Absent where no sweep runs (route contexts, tests).
+     */
+    keptCards?: CardSource;
   };
   /** System hooks integrations may invoke. */
   hooks?: IntegrationHooks;
@@ -205,8 +218,15 @@ export interface FactoryIntegration {
   readonly id: string;
   /** Issue-oriented capability consumed by Intake. */
   readonly intake?: Intake;
+  /**
+   * Further intake settings this integration owns under their own ids (e.g. GitHub's `dependabot`),
+   * so the intake config API and UI accept and list sources for them.
+   */
+  readonly additionalIntakes?: ReadonlyArray<{ id: string; intake: Pick<Intake, 'listSources' | 'listItems'> }>;
   /** Repository, installation, and pull-request capability. */
   readonly versionControl?: VersionControl;
+  /** Whether at least one account is connected, for the dev-server startup summary. */
+  hasActiveConnections?(): Promise<boolean>;
   /**
    * Bind the integration's generic persistence handle. Called once by the
    * factory during `prepare()` (before routes/tools/workers are collected),
@@ -282,13 +302,6 @@ export interface FactoryIntegration {
    * loser would silently never receive a message.
    */
   channels?(ctx: IntegrationContext): FactoryChannelsConfig;
-  /**
-   * Mirrors web feed comments outward — to the platform thread a work item is
-   * bound to, a webhook, or an issue tracker. Collected from every READY
-   * integration independent of `channels()`: an integration may publish without
-   * owning a chat channel.
-   */
-  feedPublisher?(ctx: IntegrationContext): WorkItemFeedPublisher;
   /**
    * Non-secret config snapshot (booleans + names only, never values). The
    * factory merges it into system diagnostics/startup logs.

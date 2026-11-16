@@ -9,7 +9,7 @@ export function SessionPreparationOverlay({ historyInitializing, preparing }: Se
   return (
     <div
       aria-hidden={!preparing}
-      className="session-preparation-overlay pointer-events-none sticky top-0 z-5 [margin-block-end:-100cqh] h-[100cqh] flex-none overflow-hidden bg-(--chat-surface) data-[preparing=false]:bg-transparent"
+      className="session-preparation-overlay pointer-events-none absolute inset-0 z-5 overflow-hidden bg-(--chat-surface) data-[preparing=false]:bg-transparent"
       data-preparing={preparing}
     >
       <div aria-hidden="true" className="session-preparation-veil absolute inset-x-0 opacity-0" />

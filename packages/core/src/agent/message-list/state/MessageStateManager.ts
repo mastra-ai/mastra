@@ -368,4 +368,9 @@ export interface SerializedMessageListState {
   prunedResponseMessageIds?: string[];
   /** Where the latest loop-iteration boundary sits, so a restored list scopes final-step text the same way. */
   lastStepBoundary?: { messageId: string; partIndex: number };
+  /**
+   * Messages this run already wrote to the semantic recall index, as message id -> hash of the
+   * embedded text. Absent when nothing was embedded, and in snapshots written before it existed.
+   */
+  embeddedMessages?: Record<string, string>;
 }

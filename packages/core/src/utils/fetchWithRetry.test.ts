@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fetchWithRetry } from './fetchWithRetry';
 
+// fetchWithRetry's backoff timing is asserted with fake timers, so these tests need the real waitDelay
+// rather than the instant one from @internal/test-utils/setup.
+vi.unmock('./retry-after');
+
 describe('fetchWithRetry', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
 

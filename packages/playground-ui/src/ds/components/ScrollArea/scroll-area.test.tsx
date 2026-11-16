@@ -241,8 +241,8 @@ describe('ScrollArea', () => {
       const left = screen.getByRole('button', { name: 'Scroll left' });
       const right = screen.getByRole('button', { name: 'Scroll right' });
 
-      expect(left.querySelector('svg')?.classList.contains('lucide-chevron-left')).toBe(true);
-      expect(right.querySelector('svg')?.classList.contains('lucide-chevron-right')).toBe(true);
+      expect(left.querySelector('svg')?.dataset.centralIcon).toBe('IconChevronLeft');
+      expect(right.querySelector('svg')?.dataset.centralIcon).toBe('IconChevronRight');
     });
 
     it('keeps going while the button is held, at its ordinary speed', () => {

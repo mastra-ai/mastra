@@ -130,7 +130,7 @@ export class PlatformGitLabEventWorker extends MastraWorker {
     this.#startedAt = this.#now() - 1;
     this.#settings = normalizeSettings(await this.#storage.settings.get(CURSOR_ORG_ID, CURSOR_USER_ID));
     this.#running = true;
-    this.deps.logger.info('Platform GitLab event polling started', {
+    this.deps.logger.debug('Platform GitLab event polling started', {
       intervalMs: this.#intervalMs,
       leaseTtlMs: this.#leaseTtlMs,
     });

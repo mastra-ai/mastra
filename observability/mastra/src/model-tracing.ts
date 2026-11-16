@@ -44,6 +44,7 @@ function supportsModelInference(): boolean {
   return coreFeatures.has('model-inference-span');
 }
 
+import type { EndSpanOptionsWithTime } from './spans/default';
 import { extractOpenRouterCost, extractUsageMetrics } from './usage';
 import type { OpenRouterCostResult } from './usage';
 
@@ -404,6 +405,26 @@ export class ModelSpanTracker {
   #currentInferenceSpan?: Span<SpanType.MODEL_INFERENCE>;
   #stepHasInference = false;
   #tracksProviderStream = false;
+  /**
+   * Provider completion of the open MODEL_INFERENCE, held until the processed
+   * step supplies its output. The raw provider stream carries content before
+   * output processors run, so the span keeps its provider end time and usage
+   * from here but takes its output from the processed `step-finish`.
+   */
+  #pendingInferenceFinish?: {
+    payload: StepFinishPayload<any, any>;
+    endTime: Date;
+    streamAttributes: { completionStartTime?: Date; timeToFirstTokenMs?: number };
+  };
+  /**
+   * Processed text and tool calls of the open MODEL_INFERENCE, for loops whose
+   * `step-finish` payload carries only usage (the durable loop rewrites the
+   * provider's `finish` into `step-finish`).
+   */
+  #inferenceContent: { text: string; toolCalls: { toolCallId: string; toolName: string; args: unknown }[] } = {
+    text: '',
+    toolCalls: [],
+  };
   #currentChunkSpan?: Span<SpanType.MODEL_CHUNK>;
   #currentChunkType?: string;
   #accumulator: Record<string, any> = {};
@@ -502,6 +523,7 @@ export class ModelSpanTracker {
    */
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void {
     this.#endChunkSpan();
+    this.#settlePendingInference();
     const termination =
       options.outcome != null
         ? { outcome: options.outcome, stopReason: options.stopReason, stopReasonContext: options.stopReasonContext }
@@ -555,6 +577,10 @@ export class ModelSpanTracker {
         spanOptions.attributes.costContext = getGatewayCostContext({ stepProviderMetadata });
       }
     }
+
+    // Only the final inference can still be held here (earlier ones end at their
+    // step-finish or when the next model call starts); end it with its provider data.
+    this.#settlePendingInference();
 
     // Cancellation and deadlines terminate work that is still active. A loop
     // limit such as max_steps must not relabel a completed logical step.
@@ -666,7 +692,15 @@ export class ModelSpanTracker {
   }
 
   /**
-   * End the current MODEL_INFERENCE span when the provider stream finishes.
+   * End the current MODEL_INFERENCE span.
+   *
+   * With `captureOutput: false` (the raw provider stream's `finish`), the span is
+   * not ended yet: its provider end time, usage and finish reason are held until
+   * the processed `step-finish` arrives, which ends it with the processed output
+   * and the held end time. Tool work between the two does not count toward the
+   * inference's duration, and exporters that treat MODEL_INFERENCE as the model
+   * call still get the response.
+   *
    * Fields are duplicated onto MODEL_STEP (in #endStepSpan) so existing
    * integrations that read usage/finishReason from the step span continue
    * to work unchanged.
@@ -676,29 +710,72 @@ export class ModelSpanTracker {
   #endInferenceSpan<OUTPUT>(payload: StepFinishPayload<any, OUTPUT>, captureOutput = true): void {
     if (!this.#currentInferenceSpan) return;
 
-    const { usage: rawUsage, ...otherOutput } = payload.output;
-    const usage = extractUsageMetrics(rawUsage, payload.metadata?.providerMetadata);
-    const responseModel = typeof payload.metadata?.modelId === 'string' ? payload.metadata.modelId : undefined;
+    if (!captureOutput) {
+      this.#pendingInferenceFinish ??= {
+        payload,
+        endTime: new Date(),
+        streamAttributes: this.#inferenceStreamAttributes(),
+      };
+      return;
+    }
 
-    this.#currentInferenceSpan.end({
+    const pending = this.#pendingInferenceFinish;
+    const { usage: _usage, ...stepOutput } = payload.output ?? {};
+    const output = 'text' in stepOutput || 'toolCalls' in stepOutput ? stepOutput : this.#inferenceContent;
+    this.#closeInference(pending?.payload ?? payload, {
+      output,
+      endTime: pending?.endTime,
+      streamAttributes: pending?.streamAttributes,
+    });
+  }
+
+  /**
+   * End an inference whose provider stream already finished, without output.
+   * Used when the step ends some other way than a processed `step-finish`
+   * (error, abort, suspension, tripwire, a replacement attempt).
+   */
+  #settlePendingInference(): void {
+    const pending = this.#pendingInferenceFinish;
+    if (!pending) return;
+    this.#closeInference(pending.payload, { endTime: pending.endTime, streamAttributes: pending.streamAttributes });
+  }
+
+  #closeInference(
+    finish: StepFinishPayload<any, any>,
+    options: {
+      output?: Record<string, unknown>;
+      endTime?: Date;
+      streamAttributes?: { completionStartTime?: Date; timeToFirstTokenMs?: number };
+    },
+  ): void {
+    const span = this.#currentInferenceSpan;
+    this.#pendingInferenceFinish = undefined;
+    this.#inferenceContent = { text: '', toolCalls: [] };
+    if (!span) return;
+
+    const usage = extractUsageMetrics(finish.output?.usage, finish.metadata?.providerMetadata);
+    const responseModel = typeof finish.metadata?.modelId === 'string' ? finish.metadata.modelId : undefined;
+    const endOptions: EndSpanOptionsWithTime<SpanType.MODEL_INFERENCE> = {
       // This is the provider stream's completion boundary, before tool work
       // or a later continuation decision can change the enclosing run's result.
       ...coreObservability.agentLoopTermination?.({
         stopCause: 'model_finished',
-        finishReason: payload.stepResult.reason,
+        finishReason: finish.stepResult.reason,
       }),
-      ...(payload.stepResult.reason === 'error'
+      ...(finish.stepResult.reason === 'error'
         ? { outcome: 'error' as const, stopReason: 'model_error' as const }
         : {}),
-      ...(captureOutput ? { output: otherOutput } : {}),
+      ...(options.output !== undefined ? { output: options.output } : {}),
+      ...(options.endTime ? { endTime: options.endTime } : {}),
       attributes: {
         usage,
-        finishReason: payload.stepResult.reason,
-        warnings: payload.stepResult.warnings,
-        ...this.#inferenceStreamAttributes(),
+        finishReason: finish.stepResult.reason,
+        warnings: finish.stepResult.warnings,
+        ...(options.streamAttributes ?? this.#inferenceStreamAttributes()),
         ...(responseModel?.trim() ? { responseModel } : {}),
       },
-    });
+    };
+    span.end(endOptions);
     this.#currentInferenceSpan = undefined;
     this.#inferenceCompletionStartTime = undefined;
   }
@@ -738,6 +815,7 @@ export class ModelSpanTracker {
   endAttempt(termination: SpanTermination): void {
     termination = interruptedByRun(termination);
     const payload = this.#pendingStepFinishPayload;
+    this.#settlePendingInference();
     if (payload) {
       this.#endStepSpan(payload, termination);
     } else {
@@ -762,6 +840,7 @@ export class ModelSpanTracker {
 
     this.#inferenceCompletionStartTime = undefined;
     this.#inferenceTimeToFirstTokenMs = undefined;
+    this.#inferenceContent = { text: '', toolCalls: [] };
     const input = extractStepInput(payload);
     const generationAttrs = this.#modelSpan?.attributes;
     const ctx = this.#inferenceContext;
@@ -793,6 +872,7 @@ export class ModelSpanTracker {
    */
   interruptInference(termination?: SpanTermination): void {
     this.#endChunkSpan();
+    this.#settlePendingInference();
     if (!this.#currentInferenceSpan) return;
     this.#currentInferenceSpan.end({
       attributes: { finishReason: 'interrupted', ...this.#inferenceStreamAttributes() },
@@ -809,6 +889,7 @@ export class ModelSpanTracker {
   /** End the open inference span, if any, with `error` and what it streamed. */
   failInference(error: Error): void {
     this.#endChunkSpan();
+    this.#settlePendingInference();
     if (!this.#currentInferenceSpan) return;
     this.#currentInferenceSpan.error({
       error,
@@ -918,6 +999,8 @@ export class ModelSpanTracker {
     if (!usage) return;
 
     this.#inModelResponse = false;
+    // The suspension payload carries no model output; keep what the provider reported.
+    this.#settlePendingInference();
     this.#endStepSpan(
       {
         output: { usage },
@@ -1199,6 +1282,10 @@ export class ModelSpanTracker {
    * create MODEL_STEP and MODEL_CHUNK spans for each semantic unit in the stream.
    */
   wrapStream<T extends { pipeThrough: Function }>(stream: T, inferenceOnly = false): T {
+    // The provider names the model that actually serves the request in an earlier
+    // response-metadata chunk; the raw finish chunk carries no model id. Capture it
+    // per stream so it can be merged into the finish the inference closes with.
+    let servedModelId: string | undefined;
     return stream.pipeThrough(
       new TransformStream({
         transform: (chunk, controller) => {
@@ -1206,9 +1293,16 @@ export class ModelSpanTracker {
             try {
               // Raw provider data supplies clocks and usage only. Content is captured
               // downstream, after output processors have redacted or rejected it.
+              if (chunk.type === 'response-metadata' && typeof chunk.payload?.modelId === 'string') {
+                servedModelId = chunk.payload.modelId;
+              }
               if (MODEL_RESPONSE_CHUNK_TYPES.has(chunk.type)) this.#captureCompletionStartTime();
               if (chunk.type === 'finish') {
-                this.#endInferenceSpan(chunk.payload, false);
+                const payload =
+                  servedModelId && !chunk.payload?.metadata?.modelId
+                    ? { ...chunk.payload, metadata: { ...chunk.payload?.metadata, modelId: servedModelId } }
+                    : chunk.payload;
+                this.#endInferenceSpan(payload, false);
               }
             } catch {
               // Optional telemetry must not affect stream delivery.
@@ -1222,6 +1316,17 @@ export class ModelSpanTracker {
       }),
     ) as T;
   }
+  /** Keep the processed response of the open inference; see #inferenceContent. */
+  #collectInferenceContent<OUTPUT>(chunk: ChunkType<OUTPUT>): void {
+    if (!this.#currentInferenceSpan) return;
+    if (chunk.type === 'text-delta' && typeof chunk.payload.text === 'string') {
+      this.#inferenceContent.text += chunk.payload.text;
+    } else if (chunk.type === 'tool-call') {
+      const { toolCallId, toolName, args } = chunk.payload;
+      this.#inferenceContent.toolCalls.push({ toolCallId, toolName, args });
+    }
+  }
+
   /** @internal Record a chunk only after output processors accept it. */
   recordChunk<OUTPUT>(chunk: ChunkType<OUTPUT>): void {
     try {
@@ -1241,6 +1346,8 @@ export class ModelSpanTracker {
         }
         this.#endSuspendedStep(chunk);
       }
+
+      this.#collectInferenceContent(chunk);
 
       // Handle chunk span tracking based on chunk type
       switch (chunk.type) {
@@ -1313,6 +1420,9 @@ export class ModelSpanTracker {
         }
 
         case 'finish':
+          // The run is done. A held inference whose processed step-finish never
+          // arrived (an output processor dropped it) ends with its provider data.
+          this.#settlePendingInference();
           break;
 
         // Infrastructure chunks - skip creating spans for these

@@ -1,11 +1,13 @@
-import { ChevronDown, ChevronRight, ChevronUp } from 'lucide-react';
 import type { ComponentProps } from 'react';
+import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconChevronTop } from '@/ds/icons/central/IconChevronTop';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export type DisclosureChevronDirection = 'down' | 'up' | 'right';
 
-const icons = { down: ChevronDown, up: ChevronUp, right: ChevronRight } as const;
+const icons = { down: IconChevronBottom, up: IconChevronTop, right: IconChevronRight } as const;
 
 // Tailwind needs static class names, so map instead of interpolating.
 const expandedRotation = {

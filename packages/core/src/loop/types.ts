@@ -221,6 +221,12 @@ export type LoopConfig<OUTPUT = undefined> = {
   stepOwner?: object;
   returnScorerData?: boolean;
   prepareStep?: PrepareStepFunction;
+  /**
+   * @internal Runs before the total-deadline output pass saves the turn. Throwing or resolving `false` skips that pass.
+   */
+  beforeDeadlineSave?: () => Promise<boolean | void>;
+  /** @internal Runs when an output processor trips during the total-deadline pass. */
+  onDeadlineTripwire?: (turn: MessageList) => Promise<void>;
 };
 
 /**

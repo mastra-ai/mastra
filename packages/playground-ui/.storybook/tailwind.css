@@ -1,4 +1,4 @@
-@import '../../playground/src/fonts.css';
+@import '../fonts.css';
 @import '../src/index.css';
 
 @source './fixtures';

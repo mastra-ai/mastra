@@ -1,5 +1,4 @@
 import type { BaseUIEvent } from '@base-ui/react/types';
-import { BracesIcon, ListFilterIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { flushSync } from 'react-dom';
@@ -16,6 +15,8 @@ import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { comboboxTriggerClass } from '@/ds/components/Combobox/combobox-styles';
 import { Kbd } from '@/ds/components/Kbd/kbd';
 import { Txt } from '@/ds/components/Txt';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
+import { IconFilter2 } from '@/ds/icons/central/IconFilter2';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { inputFocusBorderWithin, unstyledFormElementStyle } from '@/ds/primitives/form-element';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
@@ -36,7 +37,7 @@ const ADVANCED_FIELD_ID = '__filter-bar-advanced__';
 const ADVANCED_FIELD: FilterBarField = {
   id: ADVANCED_FIELD_ID,
   label: 'Advanced filter…',
-  icon: BracesIcon,
+  icon: IconCodeBrackets,
   operators: [],
 };
 
@@ -91,9 +92,9 @@ function FilterBarInputImpl({
   // The advanced option lives in the bar only; inside a popover, nesting is the editor's `+ Group`.
   const offerAdvanced = ctx.groupsEnabled && groupId === undefined;
   const visibleFields = useMemo(() => {
-    const fields = ctx.fields.filter(f => !f.hidden);
+    const fields = ctx.fields.filter(f => !f.hidden && (!f.rootOnly || groupId === undefined));
     return offerAdvanced ? [...fields, ADVANCED_FIELD] : fields;
-  }, [ctx.fields, offerAdvanced]);
+  }, [ctx.fields, offerAdvanced, groupId]);
   const targetGroup = groupId ? findGroup(ctx.expression, groupId) : undefined;
 
   // A group's input mounts on demand (see `openGroupInput`) and takes focus itself.
@@ -340,13 +341,14 @@ function FilterBarInputImpl({
             // nested input, so the recipe's `focus-visible` border becomes `focus-within`.
             comboboxTriggerClass({ variant: 'default', size: FILTER_BAR_CONTROL_SIZE }),
             'w-auto cursor-text',
+            groupId === undefined && 'max-w-80 grow basis-32',
             'focus-within:bg-fill-hover',
             inputFocusBorderWithin,
-            step === 'field' ? 'min-w-40' : 'min-w-28',
+            step === 'field' ? 'min-w-32' : 'min-w-24',
             className,
           )}
         >
-          <ListFilterIcon aria-hidden className="shrink-0" />
+          <IconFilter2 aria-hidden className="shrink-0" />
           <ComboboxPrimitive.Input
             ref={el => {
               inputRef.current = el;
@@ -362,7 +364,7 @@ function FilterBarInputImpl({
             placeholder={inputPlaceholder}
             className={cn(
               unstyledFormElementStyle,
-              'min-w-0 flex-1 bg-transparent',
+              'min-w-0 flex-1 bg-transparent zoom-safe-text',
               'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
             )}
             onFocus={() => setOpen(true)}
@@ -424,7 +426,7 @@ function FilterBarInputImpl({
               {step === 'value' && !valueStep.hasSuggestions && (
                 <div className="flex items-center justify-between gap-2 py-1 pr-1 pl-[.9em]">
                   <Txt variant="caption" tone="muted">
-                    Type a value
+                    {valueStep.validationMessage ?? 'Type a value'}
                   </Txt>
                   <Button
                     size="sm"

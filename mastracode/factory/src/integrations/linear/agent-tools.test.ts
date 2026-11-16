@@ -128,6 +128,7 @@ describe('buildLinearAgentTools — exposure gating', () => {
     await seedConnection({ workspaceUrlKey: null });
     const tools = await buildLinearAgentTools({ linear, requestContext: requestContextFor(PROJECT_ID) });
     expect(tools.linear_get_issue?.description).not.toContain('linear.app');
+    expect(tools.linear_get_issue?.description).toContain('`url` field');
   });
 
   it('resolves a board run from its factory project instead of its work-item session id', async () => {
@@ -336,5 +337,132 @@ describe('linear_create_comment — execute', () => {
     const tool = await getTool();
     const result = await (tool.execute as any)({ issue: 'ENG-42', body: 'Hello' });
     expect(result).toEqual({ error: 'Failed to post Linear comment: Linear did not accept the comment.' });
+  });
+});
+
+describe('linear_list_projects / linear_list_issues — execute', () => {
+  const listedIssue = {
+    id: 'uuid-1',
+    projectId: 'proj-1',
+    teamId: 'team-1',
+    identifier: 'ENG-42',
+    title: 'Fix intake sync',
+    url: 'https://linear.app/acme/issue/ENG-42',
+    state: 'Todo',
+    stateType: 'unstarted',
+    priorityLabel: 'High',
+    assignee: 'ada',
+    creator: 'grace',
+    team: 'ENG',
+    labels: ['bug'],
+    createdAt: '2026-07-01T00:00:00Z',
+    updatedAt: '2026-07-02T00:00:00Z',
+  };
+
+  async function getTools() {
+    await seedProject();
+    await seedConnection();
+    return buildLinearAgentTools({ linear, requestContext: requestContextFor(PROJECT_ID) });
+  }
+
+  beforeEach(() => {
+    vi.spyOn(linear, 'listProjects').mockResolvedValue([
+      { id: 'proj-1', name: 'Feedback: API responses', state: 'started', teams: [] },
+      { id: 'proj-2', name: 'Onboarding', state: 'planned', teams: [] },
+    ]);
+    vi.spyOn(linear, 'listTeams').mockResolvedValue([
+      { id: 'team-1', key: 'ENG', name: 'Engineering', sourceId: 'linear-team:team-1' },
+    ]);
+  });
+
+  it('exposes both listing tools on a read-only connection', async () => {
+    await seedProject();
+    await seedConnection({ scope: 'read' });
+    const tools = await buildLinearAgentTools({ linear, requestContext: requestContextFor(PROJECT_ID) });
+    expect(tools).toHaveProperty('linear_list_projects');
+    expect(tools).toHaveProperty('linear_list_issues');
+  });
+
+  it('lists projects and teams with the source ids linear_list_issues accepts', async () => {
+    const tools = await getTools();
+    const result = await (tools.linear_list_projects!.execute as any)({});
+    expect(result).toEqual({
+      projects: [
+        { sourceId: 'proj-1', name: 'Feedback: API responses' },
+        { sourceId: 'proj-2', name: 'Onboarding' },
+      ],
+      teams: [{ sourceId: 'linear-team:team-1', name: 'Engineering', key: 'ENG' }],
+    });
+  });
+
+  it('filters projects and teams by name', async () => {
+    const tools = await getTools();
+    const result = await (tools.linear_list_projects!.execute as any)({ query: 'feedback' });
+    expect(result).toEqual({ projects: [{ sourceId: 'proj-1', name: 'Feedback: API responses' }], teams: [] });
+  });
+
+  it('matches a hyphenated URL slug against a project name', async () => {
+    vi.mocked(linear.listProjects).mockResolvedValue([
+      { id: 'proj-3', name: 'Agent Browser', state: 'started', teams: [] },
+      { id: 'proj-2', name: 'Onboarding', state: 'planned', teams: [] },
+    ]);
+    const tools = await getTools();
+    const result = await (tools.linear_list_projects!.execute as any)({ query: 'agent-browser' });
+    expect(result).toEqual({ projects: [{ sourceId: 'proj-3', name: 'Agent Browser' }], teams: [] });
+  });
+
+  it('lists the open issues in a project and pages with the returned cursor', async () => {
+    const listActiveIssues = vi
+      .spyOn(linear, 'listActiveIssues')
+      .mockResolvedValueOnce({ issues: [listedIssue], nextCursor: 'linear-page-2' })
+      .mockResolvedValueOnce({ issues: [], nextCursor: null });
+    const tools = await getTools();
+
+    const first = await (tools.linear_list_issues!.execute as any)({ source: 'proj-1' });
+    expect(listActiveIssues).toHaveBeenLastCalledWith('linear-token', undefined, ['proj-1'], undefined);
+    expect(first.issues).toEqual([
+      {
+        identifier: 'ENG-42',
+        title: 'Fix intake sync',
+        url: 'https://linear.app/acme/issue/ENG-42',
+        state: 'Todo',
+        priority: 'High',
+        assignee: 'ada',
+        labels: ['bug'],
+        updatedAt: '2026-07-02T00:00:00Z',
+      },
+    ]);
+    expect(first.nextCursor).toEqual(expect.any(String));
+
+    const second = await (tools.linear_list_issues!.execute as any)({ source: 'proj-1', cursor: first.nextCursor });
+    expect(listActiveIssues).toHaveBeenLastCalledWith('linear-token', 'linear-page-2', ['proj-1'], undefined);
+    expect(second).toEqual({ issues: [], nextCursor: null });
+  });
+
+  it('lists the open issues in a team, filtered by label', async () => {
+    const listActiveIssues = vi
+      .spyOn(linear, 'listActiveIssues')
+      .mockResolvedValue({ issues: [{ ...listedIssue, projectId: null }], nextCursor: null });
+    const tools = await getTools();
+    const result = await (tools.linear_list_issues!.execute as any)({
+      source: 'linear-team:team-1',
+      labels: ['bug'],
+    });
+    expect(listActiveIssues).toHaveBeenCalledWith('linear-token', undefined, undefined, ['bug'], ['team-1']);
+    expect(result.issues.map((issue: { identifier: string }) => issue.identifier)).toEqual(['ENG-42']);
+  });
+
+  it('rejects whitespace-only labels instead of silently dropping the filter', async () => {
+    const tools = await getTools();
+    const schema = tools.linear_list_issues!.inputSchema as any;
+    expect(schema.safeParse({ source: 'linear-team:team-1', labels: ['  '] }).success).toBe(false);
+    expect(schema.parse({ source: 'linear-team:team-1', labels: [' bug '] }).labels).toEqual(['bug']);
+  });
+
+  it('reports a Linear failure as a tool error', async () => {
+    vi.spyOn(linear, 'listActiveIssues').mockRejectedValue(new Error('Linear GraphQL error: Entity not found'));
+    const tools = await getTools();
+    const result = await (tools.linear_list_issues!.execute as any)({ source: 'proj-404' });
+    expect(result).toEqual({ error: 'Failed to list Linear issues: Linear GraphQL error: Entity not found' });
   });
 });
