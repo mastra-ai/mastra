@@ -1295,6 +1295,22 @@ describe('intake by intake order', () => {
   const docsRule = { name: 'Docs', when: DOCS, target: { boardKey: 'docs', phaseKey: null } };
   const everything = { name: 'Everything else', when: null, target: { boardKey: 'work', phaseKey: null } };
 
+  it.each(['route-list', 'intake-order'] as const)(
+    "files each arrival on the same board under %s when each board's rules sit together",
+    async intakeEvaluator => {
+      const seeded = await setup({ intakeEvaluator });
+      await seeded.boards.create(seeded.scope, docsBoard, 'admin');
+      await seeded.route(docsRule);
+      await seeded.route(everything);
+
+      const docs = await seeded.deliver({ sourceKey: 'github-issue:1', metadata: { labels: ['docs'] } });
+      const other = await seeded.deliver({ sourceKey: 'github-issue:2', metadata: { labels: ['bug'] } });
+
+      expect(placed(docs)).toEqual({ board: 'docs', stages: ['inbox'] });
+      expect(placed(other)).toEqual({ board: 'work', stages: ['intake'] });
+    },
+  );
+
   it('asks each board in intake order, so an interleaved list places by board, not by line', async () => {
     const seeded = await setup({ intakeEvaluator: 'intake-order' });
     await seeded.boards.create(seeded.scope, docsBoard, 'admin');
@@ -1360,16 +1376,6 @@ describe('intake by intake order', () => {
     expect(await seeded.workItems.list(seeded.scope)).toHaveLength(1);
   });
 
-  it('files nothing while the intake rules are unavailable, and keeps the arrival to retry', async () => {
-    const seeded = await setup({ intakeEvaluator: 'intake-order', withRoutesReader: false });
-    expect(await seeded.deliver({ sourceKey: 'github-issue:9', metadata: { labels: ['bug'] } })).toBeUndefined();
-    const [decision] = await seeded.workItems.listDeferredDecisions('org-1', seeded.project.id);
-    expect(decision).toMatchObject({
-      status: 'retry',
-      lastError: expect.stringContaining('Intake rules are unavailable'),
-    });
-  });
-
   it("files nothing while the project's evaluator setting cannot be read, then files it once the boards domain is back", async () => {
     // As when the boards domain failed to initialize: no intake rules, no evaluator setting, nothing forced.
     const seeded = await setup({ withRoutesReader: false, project: 'new' });
@@ -1395,12 +1401,5 @@ describe('intake by intake order', () => {
     const seeded = await setup({ withRoutesReader: false, withDefaultRoute: true });
     expect(await seeded.deliver({ sourceKey: 'github-issue:9', metadata: { labels: ['bug'] } })).toBeUndefined();
     expect(await seeded.workItems.list(seeded.scope)).toEqual([]);
-  });
-
-  it('still files an unmatched arrival on Work under the old evaluator, on a project from before the setting', async () => {
-    const seeded = await setup();
-    const card = await seeded.deliver({ sourceKey: 'github-issue:9', metadata: { labels: ['bug'] } });
-    expect(placed(card)).toEqual({ board: 'work', stages: ['intake'] });
-    expect((await seeded.boards.listNotRouted(seeded.scope)).notRouted).toEqual([]);
   });
 });

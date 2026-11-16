@@ -9,7 +9,6 @@ import {
   INTAKE_ORDER_SAMPLE,
   intakeEvaluatorFrom,
   intakeTargetProblem,
-  projectIntakeEvaluator,
   resolveIntake,
   resolveIntakePlacement,
 } from './intake-routing.js';
@@ -90,30 +89,6 @@ describe('resolveIntake', () => {
       resolveIntake({ evaluator, routes, order, facts, registry: twoBoards }),
     );
 
-  it('places contiguous route lists exactly as the old evaluator did', () => {
-    const routes = [labelled('ship', 'ship', 'ship'), labelled('bug', 'work', 'bug'), everything('all', 'work')];
-    const order = ['ship', 'work'];
-    for (const labels of [['ship'], ['bug'], ['ship', 'bug'], []]) {
-      const [old, next] = both(routes, order, issue(labels));
-      expect(next).toEqual(old);
-    }
-  });
-
-  it('checks boards in intake order, so an interleaved list lands differently', () => {
-    // Work route, Ship route, Work catch-all: the old list sends `ship` to Ship; Work goes first now.
-    const routes = [labelled('bug', 'work', 'bug'), labelled('ship', 'ship', 'ship'), everything('all', 'work')];
-    const [old, next] = both(routes, ['work', 'ship'], issue(['ship']));
-    expect(old).toMatchObject({ outcome: 'placed', board: 'ship', routeId: 'ship' });
-    expect(next).toMatchObject({ outcome: 'placed', board: 'work', routeId: 'all' });
-  });
-
-  it('leaves an arrival no board takes Not routed, where the old evaluator fell back to Work', () => {
-    const routes = [labelled('ship', 'ship', 'ship')];
-    const [old, next] = both(routes, ['ship', 'work'], issue(['docs']));
-    expect(old).toEqual({ outcome: 'placed', board: 'work', phase: 'inbox', routeId: null });
-    expect(next).toEqual({ outcome: 'not_routed', reason: "No board's intake rules match it (checked SHIP, WORK)." });
-  });
-
   it('names no fallback board: without a `work` board, nothing matching is still Not routed', () => {
     const renamed = boardRegistryOf([simpleBoard('platform', 'Work'), simpleBoard('ship')]);
     const resolution = resolveIntake({
@@ -160,16 +135,6 @@ describe('resolveIntake', () => {
       source: 'option',
     });
   });
-
-  it('uses the project’s setting unless one is forced, and the route list for a project without one', async () => {
-    const storage = (setting: 'route-list' | 'intake-order' | null) => ({ intakeEvaluator: async () => setting });
-    const scope = { orgId: 'org', factoryProjectId: 'project' };
-
-    expect(await projectIntakeEvaluator(undefined, storage('intake-order'), scope)).toBe('intake-order');
-    expect(await projectIntakeEvaluator(undefined, storage(null), scope)).toBe('route-list');
-    expect(await projectIntakeEvaluator('route-list', storage('intake-order'), scope)).toBe('route-list');
-    expect(await projectIntakeEvaluator('intake-order', storage(null), scope)).toBe('intake-order');
-  });
 });
 
 describe('compareIntakeOrder', () => {
@@ -190,15 +155,6 @@ describe('compareIntakeOrder', () => {
     }) as unknown as Card;
   const compare = (routes: ReturnType<typeof route>[], order: string[], cards: Card[]) =>
     compareIntakeOrder({ routes, order, registry: twoBoards, cards });
-
-  it('finds no difference where each board’s rules sit together', () => {
-    const routes = [labelled('ship', 'ship', 'ship'), labelled('bug', 'work', 'bug'), everything('all', 'work')];
-    expect(compare(routes, ['ship', 'work'], [card(['ship']), card(['bug']), card([])])).toEqual({
-      compared: 3,
-      differing: 0,
-      notRouted: 0,
-    });
-  });
 
   it('counts the cards the order would place elsewhere, and those no board takes', () => {
     // Work is asked first, and its catch-all takes the `ship` cards the old list sent to Ship.

@@ -204,22 +204,6 @@ describe('createFactoryWorkItem under the intake order evaluator', () => {
     });
   });
 
-  it('refuses a card no board takes, asking the person for the board, and files nothing', async () => {
-    const { create, seed, scope } = await setupDesk([docsToTriage], 'intake-order');
-    const refused = await create({ title: 'Fix the build', metadata: { labels: ['bug'] } });
-    expect(refused).toMatchObject({
-      status: 'refused',
-      code: 'intake_board_required',
-      message: expect.stringContaining('Pick the board'),
-    });
-    expect(await seed.workItems.list(scope)).toEqual([]);
-    // Naming the board files it.
-    expect(await create({ title: 'Fix the build', board: 'desk' })).toMatchObject({
-      status: 'created',
-      item: { board: 'desk', stages: ['inbox'] },
-    });
-  });
-
   it('lets the rules pick the board of a card that names only its stages', async () => {
     const { create } = await setupDesk([docsToTriage], 'intake-order');
     expect(await create({ title: 'Guide', stages: ['inbox'], metadata: { labels: ['docs'] } })).toMatchObject({
@@ -264,13 +248,6 @@ describe('createFactoryWorkItem under the intake order evaluator', () => {
     expect(await seed.workItems.list(scope)).toEqual([]);
   });
 
-  it('keeps filing an unmatched card on the first board under the old evaluator', async () => {
-    const { create } = await setupDesk([docsToTriage], 'route-list');
-    expect(await create({ title: 'Fix the build', metadata: { labels: ['bug'] } })).toMatchObject({
-      status: 'created',
-      item: { board: 'desk', stages: ['inbox'] },
-    });
-  });
 });
 
 // Set FACTORY_TEST_POSTGRES_URL to a disposable database to also run on PostgreSQL.

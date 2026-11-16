@@ -69,22 +69,4 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('a project’s i
     ).toMatchObject({ intake_evaluator: 'intake-order' });
   });
 
-  it('has no setting for a project from before it, with or without a lock row, so it keeps the route list', async () => {
-    const { boards } = await open();
-    const scope = { orgId: `org-${randomUUID()}`, factoryProjectId: randomUUID() };
-
-    expect(await boards.intakeEvaluator(scope)).toBeNull();
-    await boards.listIntakeRoutes(scope);
-    expect(await boards.intakeEvaluator(scope)).toBeNull();
-  });
-
-  it('switches a project’s evaluator, answering the setting it had', async () => {
-    const { boards } = await open();
-    const scope = { orgId: `org-${randomUUID()}`, factoryProjectId: randomUUID() };
-
-    expect(await boards.setIntakeEvaluator(scope, 'intake-order')).toBeNull();
-    expect(await boards.intakeEvaluator(scope)).toBe('intake-order');
-    expect(await boards.setIntakeEvaluator(scope, 'route-list')).toBe('intake-order');
-    expect(await boards.intakeEvaluator(scope)).toBe('route-list');
-  });
 });

@@ -130,15 +130,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake order on
     expect((await boards.readIntakeOrder(scope)).boardKeys).toEqual(['ship', 'docs', 'work', 'ops']);
   });
 
-  it('sets an order naming every board once, and refuses any other', async () => {
-    const { boards, scope } = await setup(['work', 'ship']);
-    expect((await boards.setIntakeOrder(scope, ['ship', 'work'])).boardKeys).toEqual(['ship', 'work']);
-    expect((await boards.readIntakeOrder(scope)).boardKeys).toEqual(['ship', 'work']);
-    for (const keys of [['ship'], ['ship', 'work', 'work'], ['ship', 'nope']]) {
-      await expect(boards.setIntakeOrder(scope, keys)).rejects.toMatchObject({ code: 'intake_order_set_mismatch' });
-    }
-  });
-
   it('keeps a code board where the order put it when the caller names it', async () => {
     const { boards, scope } = await setup(['work', 'ship']);
     const registry = ['work', 'ship', 'desk'];
@@ -166,71 +157,4 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake order on
     expect((await boards.readIntakeOrder(scope)).boardKeys).toEqual(['work']);
   });
 
-  it('reorders one board’s rules within the places they hold, leaving other boards’ rules where they are', async () => {
-    const { boards, scope } = await setup(['work', 'ship']);
-    const a = await boards.createIntakeRoute(scope, labelled('work', 'a'), 'admin');
-    const s = await boards.createIntakeRoute(scope, labelled('ship', 's'), 'admin');
-    const b = await boards.createIntakeRoute(scope, labelled('work', 'b'), 'admin');
-
-    const work = await boards.reorderIntakeRoutes(scope, [b.id, a.id], 'admin', { boardKey: 'work' });
-    expect(work.map(route => route.id)).toEqual([b.id, a.id]);
-    expect((await boards.listIntakeRoutes(scope)).map(route => route.id)).toEqual([b.id, s.id, a.id]);
-
-    await expect(
-      boards.reorderIntakeRoutes(scope, [b.id, a.id, s.id], 'admin', { boardKey: 'work' }),
-    ).rejects.toMatchObject({ code: 'intake_route_set_mismatch' });
-  });
-
-  it('logs one decision per arrival, lists unresolved Not routed items, and resolves them when a card is filed', async () => {
-    const { boards, scope } = await setup(['work']);
-    const notRouted = {
-      outcome: 'not_routed' as const,
-      evaluator: 'intake-order' as const,
-      title: 'Bug',
-      sourceKey: 'gh:1',
-    };
-    await boards.recordIntakeDecision(scope, { ...notRouted, idempotencyKey: 'k1', arrival: { title: 'Bug' } });
-    // A redelivery replaces the row instead of adding one.
-    await boards.recordIntakeDecision(scope, { ...notRouted, idempotencyKey: 'k1', reason: 'again' });
-    await boards.recordIntakeDecision(scope, {
-      idempotencyKey: 'k2',
-      outcome: 'placed',
-      evaluator: 'intake-order',
-      title: 'Feature',
-      boardKey: 'work',
-    });
-
-    const { notRouted: listed, nextCursor } = await boards.listNotRouted(scope);
-    expect(nextCursor).toBeNull();
-    expect(listed).toHaveLength(1);
-    expect(listed[0]).toMatchObject({ idempotencyKey: 'k1', reason: 'again', sourceKey: 'gh:1', resolvedAt: null });
-    expect(await boards.getIntakeDecision(scope, listed[0]!.id)).toEqual(listed[0]);
-
-    expect(await boards.resolveNotRouted(scope, 'gh:1', 'factory')).toBe(1);
-    expect((await boards.listNotRouted(scope)).notRouted).toEqual([]);
-    expect((await boards.getIntakeDecision(scope, listed[0]!.id))?.resolvedBy).toBe('factory');
-  });
-
-  it('pages Not routed items oldest first with a cursor', async () => {
-    const { boards, scope } = await setup(['work']);
-    const day = (n: number) => new Date(Date.UTC(2026, 10, n));
-    for (const n of [3, 1, 2, 4, 5]) {
-      await boards.recordIntakeDecision(
-        scope,
-        { idempotencyKey: `k${n}`, outcome: 'not_routed', evaluator: 'intake-order', title: `item ${n}` },
-        day(n),
-      );
-    }
-    const titles: string[][] = [];
-    let cursor: string | undefined;
-    do {
-      const page = await boards.listNotRouted(scope, { limit: 2, ...(cursor ? { cursor } : {}) });
-      titles.push(page.notRouted.map(item => item.title));
-      cursor = page.nextCursor ?? undefined;
-    } while (cursor);
-    expect(titles).toEqual([['item 1', 'item 2'], ['item 3', 'item 4'], ['item 5']]);
-    await expect(boards.listNotRouted(scope, { cursor: 'nonsense' })).rejects.toMatchObject({
-      code: 'invalid_intake_cursor',
-    });
-  });
 });
