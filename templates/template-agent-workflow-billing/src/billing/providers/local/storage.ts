@@ -58,9 +58,14 @@ export class LocalBillingStorage {
       });
       if (existing.rows.length > 0) {
         const account = requireProvider(existing.rows[0], 'local');
-        if (seed.meters.some(meter => ['credits', 'image-credits'].includes(meter.key)))
+        const configuredMeters = new Set(seed.meters.map(meter => meter.key));
+        if (
+          !configuredMeters.has('weather-credits') &&
+          (configuredMeters.has('credits') || configuredMeters.has('image-credits'))
+        )
           await transitionImageCredits(transaction, account.id);
-        if (seed.meters.some(meter => meter.key === 'credits')) await transitionCredits(transaction, account.id);
+        if (configuredMeters.has('credits') && !configuredMeters.has('image-credits'))
+          await transitionCredits(transaction, account.id);
         return account;
       }
       const account: ProviderAccount = {

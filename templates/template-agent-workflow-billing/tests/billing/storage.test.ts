@@ -549,6 +549,40 @@ it('unsupported databases remain untouched and supported operation identities su
   expect((await f.observer.execute('PRAGMA foreign_key_check')).rows).toEqual([]);
 });
 
+it.each(['weather-credits', 'image-credits'])('configured %s remains available beside credits', async source => {
+  const database = await temporaryDatabase();
+  cleanups.push(database.cleanup);
+  const storage = await LocalBillingStorage.open({ url: database.url });
+  cleanups.push(() => storage.close());
+  const config = configuration();
+  config.billingKeys.meters.push({ key: source, unit: 'credits', funding: ['prepaid'] });
+  const seed = config.localAccounts[0];
+  seed.meters = [
+    { ...seed.meters[0], key: source, balance: 11 },
+    { ...seed.meters[0], balance: 100 },
+  ];
+  const provider = new LocalBillingProvider(storage, config);
+  const account = await provider.ensureAccount({ workspaceId: seed.workspaceId });
+  await provider.ensureAccount({ workspaceId: seed.workspaceId });
+  const snapshot = await provider.getState(account);
+  expect(snapshot.meters.find(meter => meter.key === source)).toMatchObject({ confirmedBalance: 11, consumedUnits: 0 });
+  expect(snapshot.meters.find(meter => meter.key === 'credits')).toMatchObject({
+    confirmedBalance: 100,
+    consumedUnits: 0,
+  });
+  const now = Date.now();
+  const request = provider.reservations.prepareReservation({
+    id: 'configured-meter',
+    account,
+    meter: source,
+    units: 1,
+    executionCutoff: now + 10000,
+    confirmationCutoff: now + 20000,
+    expiresAt: now + 30000,
+  });
+  expect(await provider.reservations.reserve(request)).toMatchObject({ status: 'reserved' });
+});
+
 it('v2 local credit names transition without refilling spent or unresolved accounts', async () => {
   const database = await temporaryDatabase();
   cleanups.push(database.cleanup);
