@@ -3,3 +3,13 @@
 ---
 
 Thread subscription copies of an agent's `finish` chunk now include `output.stepCount`, the number of steps that count against `maxSteps`. These copies leave out `output.steps` to stay small, so subscribers had no way to tell whether a run used its whole step budget. Processor retry steps are not counted, matching how `maxSteps` is enforced. Fixes [#29612](https://github.com/mastra-ai/mastra/issues/29612).
+
+```ts
+const subscription = await agent.subscribeToThread({ threadId, resourceId })
+
+for await (const chunk of subscription.stream) {
+  if (chunk.type === 'finish' && chunk.payload.output.stepCount === maxSteps) {
+    // The run used its whole step budget
+  }
+}
+```
