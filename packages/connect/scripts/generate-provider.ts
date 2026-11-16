@@ -748,6 +748,9 @@ function adaptFirefliesGetTranscript(action: ExtractedAction): ExtractedAction {
  * in the provider response and the tool output, and check that the exec body
  * still returns `types`. The tuple is strict on purpose: if PostHog changes the
  * shape again, the call fails loudly instead of passing bad metadata through.
+ * The description match is exact too, so a template that only rewords that
+ * sentence also stops regeneration; that is deliberate, to force a look at the
+ * schema whenever this declaration changes.
  * Drop this once the upstream template does.
  */
 function adaptPosthogRunQuery(action: ExtractedAction): ExtractedAction {

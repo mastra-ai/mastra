@@ -216,6 +216,12 @@ describe('posthog_run_query with live PostHog response shapes (#30528)', () => {
     await expect(runQuery('select 1')).rejects.toThrow(/types/);
   });
 
+  it('rejects a types entry with more than a name and a type', async () => {
+    queryResponse = { ...selectOneResponse, types: [['1', 'UInt8', 'extra']] };
+
+    await expect(runQuery('select 1')).rejects.toThrow(/types/);
+  });
+
   it('still rejects types that are not column name and type pairs', async () => {
     queryResponse = { ...selectOneResponse, types: [['1']] };
 
