@@ -34,6 +34,7 @@ import { useBoardIntakeSetup } from '../../domains/factory/hooks/useBoardIntakeS
 import { useItemSessionStatuses } from '../../domains/factory/hooks/useItemSessionStatuses';
 import { useBoardItems } from '../../domains/factory/hooks/useBoardItems';
 import { useRepositoryChoice } from '../../domains/factory/hooks/useRepositoryChoice';
+import { cardSourceMetadata } from '../../domains/factory/boardRepository';
 import { boardParticipants, boardPersonIdentity, withPeopleUnfolded } from '../../domains/factory/boardPeople';
 import { boardFiltersActive } from '../../domains/factory/boardFilters';
 import { useBoardView } from '../../domains/factory/hooks/useBoardView';
@@ -120,7 +121,7 @@ export function BoardContent({
     if (!card) return;
     void repositoryChoice.choose(
       card.source,
-      { ...card.metadata, ...card.workItem?.metadata },
+      cardSourceMetadata(card),
       stage,
       slug => items.move(payload.id, stage, { cause, repositorySlug: slug }),
       () => items.handleDrop(payload, stage, cause),
@@ -301,7 +302,7 @@ export function BoardContent({
                 onMove={toStage =>
                   void repositoryChoice.choose(
                     item.source,
-                    { ...item.metadata, ...item.workItem?.metadata },
+                    cardSourceMetadata(item),
                     toStage,
                     slug => items.move(item.id, toStage, { repositorySlug: slug }),
                     () => items.move(item.id, toStage),

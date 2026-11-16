@@ -38,6 +38,7 @@ export function SessionChatSurface({
   const { busy, loadMore, transcript } = useChatTranscript();
   const { historyInitializing, preparing } = useChatMessagePreparation();
   const canLoadMore = loadMore.hasMore && !loadMore.isLoading;
+  const conversationStarted = transcript.entries.some(entry => entry.kind !== 'notice');
 
   return (
     <ChatShell
@@ -68,7 +69,7 @@ export function SessionChatSurface({
                 <TranscriptAnnotations />
                 <ChatMessageBoundary showPreparation={false}>
                   <TranscriptHistoryLoader />
-                  {transcript.entries.length === 0 && emptyState}
+                  {!conversationStarted && emptyState}
                   <Transcript tail={activityTail} />
                 </ChatMessageBoundary>
               </ChatShell.Transcript>

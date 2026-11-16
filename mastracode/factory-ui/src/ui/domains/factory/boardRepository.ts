@@ -7,7 +7,7 @@ export function cardLinearProjectId(source: string, metadata: Record<string, unk
   return metadata.linearProjectId;
 }
 
-export function repositoryMatchesCardSource(repository: LinkedRepositoryPayload, source: string) {
+function repositoryMatchesCardSource(repository: LinkedRepositoryPayload, source: string) {
   const provider = repository.provider ?? 'github';
   if (source === 'github-issue' || source === 'github-pr') return provider === 'github';
   if (source === 'gitlab-issue' || source === 'gitlab-pr') return provider === 'gitlab';

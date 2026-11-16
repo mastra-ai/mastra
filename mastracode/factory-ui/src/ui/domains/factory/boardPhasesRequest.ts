@@ -12,7 +12,7 @@ const LONGEST_SEARCH = 200;
 const CARD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Whether `text` is a card id. The server refuses a card named by anything else, and nothing else names one. */
-export function isCardId(text: string): boolean {
+function isCardId(text: string): boolean {
   return CARD_ID.test(text);
 }
 

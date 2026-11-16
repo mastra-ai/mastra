@@ -30,6 +30,7 @@ import { WorkItemCardRows } from './WorkItemCardRows';
 import { WorkItemListRow } from './WorkItemListRow';
 import type { WorkItemMenuProps } from './WorkItemMenuItems';
 import { WorkItemMenuItems } from './WorkItemMenuItems';
+import { WorkItemUpstreamLinks } from './WorkItemUpstreamLinks';
 import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
 
 export function WorkItemCard({
@@ -144,6 +145,9 @@ export function WorkItemCard({
     return <RelatedWorkItemLink key={related.id} {...link} href={relationshipPath(related, factoryId)} kind="board" />;
   };
   const relatedLinks = relatedItems.map(relatedLink);
+  const upstreamLinks = (
+    <WorkItemUpstreamLinks item={item} shownAsRelated={relatedItems.flatMap(related => related.url ?? [])} />
+  );
 
   if (layout === 'list') {
     return (
@@ -156,6 +160,7 @@ export function WorkItemCard({
         activityStatus={wick}
         hasSession={hasSession}
         relatedLinks={relatedLinks}
+        upstreamLinks={upstreamLinks}
         locked={lockedByYou}
         busy={busy}
         dragPayload={dragPayload}
@@ -201,6 +206,7 @@ export function WorkItemCard({
         item={item}
         columnStage={columnStage}
         relatedLinks={relatedLinks}
+        upstreamLinks={upstreamLinks}
         activity={activity}
         actors={activityPage?.actors ?? {}}
         status={status}

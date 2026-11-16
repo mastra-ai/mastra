@@ -24,11 +24,11 @@ import { IconBubbleWide } from '@mastra/playground-ui/icons/central/IconBubbleWi
 import { IconHand5Finger } from '@mastra/playground-ui/icons/central/IconHand5Finger';
 import './card-actions.css';
 
-export function SourceTitle({ source, title, id }: { source: WorkItemSource; title: string; id?: string }) {
+export function SourceTitle({ source, title }: { source: WorkItemSource; title: string }) {
   return (
     <>
       <span className="sr-only">{SOURCE_LABELS[source]}: </span>
-      <span id={id}>{title}</span>
+      {title}
     </>
   );
 }

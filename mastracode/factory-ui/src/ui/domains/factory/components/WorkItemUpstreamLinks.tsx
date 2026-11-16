@@ -19,7 +19,7 @@ interface UpstreamLink {
   icon: ReactNode;
 }
 
-function upstreamLinks(item: WorkItem): UpstreamLink[] {
+function upstreamLinks(item: WorkItem, shownAsRelated: readonly string[]): UpstreamLink[] {
   const origin = item.url;
   const own: UpstreamLink[] = [];
   if (origin !== null) {
@@ -32,7 +32,7 @@ function upstreamLinks(item: WorkItem): UpstreamLink[] {
     });
   }
   const attached = cardChangeRequests(item).flatMap(request => {
-    if (request.url === undefined || request.url === origin) return [];
+    if (request.url === undefined || request.url === origin || shownAsRelated.includes(request.url)) return [];
     const { kind, sigil, source } = CHANGE_REQUEST_TERMS[request.provider];
     const label =
       request.number === undefined ? kind : `${changeRequestRepository(request.url) ?? ''}${sigil}${request.number}`;
@@ -54,9 +54,9 @@ function upstreamLinks(item: WorkItem): UpstreamLink[] {
   return [...own, ...attached];
 }
 
-/** Where the card lives upstream: its own issue or pull request, then each one attached to it. */
-export function WorkItemUpstreamLinks({ item }: { item: WorkItem }) {
-  return upstreamLinks(item).map(link => (
+/** Where the card lives upstream: its own issue or pull request, then each attached one no related card links already. */
+export function WorkItemUpstreamLinks({ item, shownAsRelated }: { item: WorkItem; shownAsRelated: readonly string[] }) {
+  return upstreamLinks(item, shownAsRelated).map(link => (
     <a
       key={link.url}
       href={link.url}

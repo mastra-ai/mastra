@@ -67,7 +67,7 @@ function CardDraftContent({
   const catalog = useBoardCatalog(factoryId);
   const factory = guards.activeFactory;
 
-  if (card.isError) {
+  if (card.isLoadingError) {
     return (
       <ChatPageLayout title={DRAFT_TITLE}>
         <div className={draftPageClass}>

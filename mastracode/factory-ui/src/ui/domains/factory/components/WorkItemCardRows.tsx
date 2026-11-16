@@ -29,13 +29,13 @@ import {
 } from './BoardCardParts';
 import { WorkItemActivity } from './WorkItemActivity';
 import { SourceStateBadge } from './SourceStateBadge';
-import { WorkItemUpstreamLinks } from './WorkItemUpstreamLinks';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export function WorkItemCardRows({
   item,
   columnStage,
   relatedLinks,
+  upstreamLinks,
   activity,
   actors,
   status,
@@ -47,6 +47,7 @@ export function WorkItemCardRows({
   item: WorkItem;
   columnStage: BoardStageId;
   relatedLinks: ReactNode;
+  upstreamLinks: ReactNode;
   activity: WorkItemActivityData;
   actors: Record<string, AuditActorProfile>;
   status: BoardCardStatus;
@@ -89,7 +90,7 @@ export function WorkItemCardRows({
         </div>
       </div>
       <div className="flex min-w-0 flex-wrap items-center gap-1.5 empty:hidden">
-        <WorkItemUpstreamLinks item={item} />
+        {upstreamLinks}
         <SourceStateBadge item={item} />
         <MetadataLabels metadata={sourceMetadata(item)} className="max-w-full min-w-0" />
       </div>

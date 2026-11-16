@@ -16,7 +16,7 @@ import type { WorkItem } from './services/workItems';
 import type { BoardStageId } from './stages';
 import { movingCardStatus, nextBoardPhase, primaryCardMove, proposedCardRun } from './workItemCardPresentation';
 
-export interface CardControlsInput {
+interface CardControlsInput {
   item: WorkItem;
   definition: InstalledBoardInfo | undefined;
   columnStage: BoardStageId;

@@ -4,13 +4,10 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Link } from 'react-router';
 
 import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
+import { threadPath } from '../../workspaces/services/factoryPaths';
 import type { WorkItemSessionRef } from '../services/workItems';
 import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
-
-export function cardSessionPath(factoryId: string, session: CardContextSession<WorkItemSessionRef>): string {
-  return `/factories/${factoryId}/workspaces/${session.ref.sessionId}/threads/${session.ref.threadId}`;
-}
 
 export function SessionContextMenu({
   factoryId,
@@ -39,7 +36,7 @@ export function SessionContextMenu({
             <DropdownMenu.Item
               key={session.context}
               aria-label={name}
-              render={<Link to={cardSessionPath(factoryId, session)} />}
+              render={<Link to={threadPath(factoryId, session.ref)} />}
             >
               <span
                 aria-hidden

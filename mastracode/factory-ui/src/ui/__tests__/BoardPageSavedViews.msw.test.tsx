@@ -262,8 +262,21 @@ describe('Factory board list layout', () => {
     const title = await within(triage).findByText('Moved recently');
     const row = title.closest<HTMLElement>('[data-testid="work-item-card"]');
     if (!row) throw new Error('Expected the title inside its list row');
-    return { row, transitions };
+    return { row, router, transitions };
   };
+
+  it('opens the card from a click anywhere on its row', async () => {
+    const { row, router } = await openListBoard();
+    const user = userEvent.setup();
+
+    await user.click(row);
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toMatch(
+        new RegExp(`^/factories/${FACTORY_ID}/cards/recent-card/new/[0-9a-f-]{36}$`),
+      ),
+    );
+  });
 
   it('moves a row into another stage when it is dropped on a collapsed group', async () => {
     const { row, transitions } = await openListBoard();
@@ -281,15 +294,15 @@ describe('Factory board list layout', () => {
     await waitFor(() => expect(transitions).toEqual([{ itemId: 'recent-card', stage: 'planning' }]));
   });
 
-  it('offers the card actions on right-click', async () => {
-    const { row, transitions } = await openListBoard();
+  it('offers the card actions on right-click without opening the card', async () => {
+    const { row, router, transitions } = await openListBoard();
     const user = userEvent.setup();
 
     fireEvent.contextMenu(row);
     await user.click(await screen.findByRole('menuitem', { name: 'Mark done' }));
 
     await waitFor(() => expect(transitions).toEqual([{ itemId: 'recent-card', stage: 'done' }]));
-    expect(screen.queryByRole('dialog', { name: 'Moved recently' })).not.toBeInTheDocument();
+    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`);
   });
 
   it('starts a new view with the active view layout', async () => {

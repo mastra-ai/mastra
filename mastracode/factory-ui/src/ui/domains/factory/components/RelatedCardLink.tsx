@@ -13,6 +13,7 @@ import { relatedCardName, relationshipPath, workItemReference } from '../service
 import type { WorkItem } from '../services/workItems';
 import { WorkItemSourceIcon } from './BoardCardParts';
 import { BoardStageIcon, boardPhaseIconKind, stageColorClass } from './BoardIcons';
+import { threadPath } from '../../workspaces/services/factoryPaths';
 
 export function RelatedCardLink({
   item,
@@ -32,9 +33,7 @@ export function RelatedCardLink({
   const session = Object.values(item.sessions)
     .filter(candidate => liveSessions.includes(candidate.sessionId))
     .at(-1);
-  const to = session
-    ? `/factories/${factoryId}/workspaces/${session.sessionId}/threads/${session.threadId}`
-    : relationshipPath(item, factoryId);
+  const to = session ? threadPath(factoryId, session) : relationshipPath(item, factoryId);
   const board = boardOf(boards, item);
   const stage = boards === undefined ? undefined : currentItemStage(item, board);
   const kind = stage === undefined ? undefined : boardPhaseIconKind(board, stage);

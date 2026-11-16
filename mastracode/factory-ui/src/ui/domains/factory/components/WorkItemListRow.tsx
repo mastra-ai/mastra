@@ -25,7 +25,6 @@ import {
 import { BoardListRow } from './BoardListRow';
 import { SourceStateBadge } from './SourceStateBadge';
 import { WorkItemActivity } from './WorkItemActivity';
-import { WorkItemUpstreamLinks } from './WorkItemUpstreamLinks';
 import type { ReworkReason } from '../reworkReason';
 import { columnReviewVerdict, ReviewVerdictBadge, ReworkLine } from './WorkItemCardRows';
 
@@ -38,6 +37,7 @@ export function WorkItemListRow({
   activityStatus,
   hasSession,
   relatedLinks,
+  upstreamLinks,
   locked,
   busy,
   dragPayload,
@@ -56,6 +56,7 @@ export function WorkItemListRow({
   activityStatus?: ActivityStatus;
   hasSession: boolean;
   relatedLinks: ReactNode;
+  upstreamLinks: ReactNode;
   locked: boolean;
   busy: boolean;
   dragPayload: DragPayload | undefined;
@@ -92,7 +93,7 @@ export function WorkItemListRow({
         ),
         links: (
           <>
-            <WorkItemUpstreamLinks item={item} />
+            {upstreamLinks}
             {relatedLinks}
           </>
         ),

@@ -13,6 +13,7 @@ import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
 import { headerCapsuleClass } from '../../chat/components/chatPageHeader';
 import type { FactoryProject } from '../../workspaces/services/github';
 import { BUSY_CARD_MOVE_REFUSAL, boardCardState, canMoveTo } from '../boardCardState';
+import { cardSourceMetadata } from '../boardRepository';
 import { phaseName } from '../boardStages';
 import { cardStages, elapsedLabel, enteredCurrentStageAt, stageBlockReason, stageDescription } from '../cardStageBar';
 import type { StageStep } from '../cardStageBar';
@@ -69,7 +70,7 @@ export function CardStageBar({
   const moveTo = (stage: string) =>
     void repositoryChoice.choose(
       item.source,
-      { ...item.metadata, ...item.workItem?.metadata },
+      cardSourceMetadata(item),
       stage,
       slug => move(item.id, stage, { repositorySlug: slug }),
       () => move(item.id, stage),
