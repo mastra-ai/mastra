@@ -195,47 +195,64 @@ describe('ConnectGithubTransport', () => {
   });
 
   describe('writes made for a person', () => {
-    it('uses their own GitHub token when they connected one, without attribution', async () => {
+    // Legacy parity: the platform writes as the app naming the person, except where GitHub
+    // records who acted (reviews, merges), which prefer the person's own token.
+    it('comments as the app, naming the person by their GitHub login, even when they have their own token', async () => {
       const { github, transport } = await harness({ users: { 'user-1': 'octocat' } });
       answer(github, 'POST', `/repos/${REPO}/issues/7/comments`, request => ({
         status: 201,
-        body: rawComment(1, (request.body as { body: string }).body, 'octocat'),
+        body: rawComment(1, (request.body as { body: string }).body),
       }));
 
       const comment = await transport.createIssueComment({ repository: REPO, actingUserId: 'user-1' }, 7, 'Done');
 
       const [request] = github.calls(`/repos/${REPO}/issues/7/comments`);
-      expect(request?.token).toBe('tok-user-1');
-      expect(request?.body).toEqual({ body: 'Done' });
-      expect(comment.user?.login).toBe('octocat');
+      expect(request?.token).toBe('tok-github');
+      expect(request?.body).toEqual({ body: '> Opened by @octocat\n\nDone' });
+      // Still Factory's own comment, so the self-loop guards recognise it.
+      expect(comment.user?.login).toBe('mastra-factory[bot]');
     });
 
-    it('uses the PAT they pasted when they have no connection, without attribution', async () => {
+    it('reviews as the person with the PAT they pasted when they have no connection, without attribution', async () => {
       const { github, transport, tokenClasses } = await harness({ pats: { 'user-3': 'hubot' } });
-      answer(github, 'POST', `/repos/${REPO}/issues/7/comments`, request => ({
-        status: 201,
-        body: rawComment(1, (request.body as { body: string }).body, 'hubot'),
-      }));
+      answer(github, 'POST', `/repos/${REPO}/pulls/7/reviews`, () => ({ status: 200, body: rawReview(21, 'hubot') }));
 
-      await transport.createIssueComment({ repository: REPO, actingUserId: 'user-3' }, 7, 'Thanks');
+      await transport.createReview({ repository: REPO, actingUserId: 'user-3' }, 7, { body: 'Thanks' });
 
-      const [request] = github.calls(`/repos/${REPO}/issues/7/comments`);
+      const [request] = github.calls(`/repos/${REPO}/pulls/7/reviews`, 'POST');
       expect(request?.token).toBe('pat-user-3');
       expect(request?.body).toEqual({ body: 'Thanks' });
       expect(tokenClasses.at(-1)?.tokenClass).toBe('user');
       expect(await transport.userLogin('user-3')).toBe('hubot');
     });
 
-    it('prefers their end-user connection over a PAT', async () => {
+    it('reviews and merges with their end-user connection in preference to a PAT', async () => {
       const { github, transport } = await harness({ users: { 'user-1': 'octocat' }, pats: { 'user-1': 'octocat' } });
-      answer(github, 'POST', `/repos/${REPO}/issues/7/comments`, request => ({
-        status: 201,
-        body: rawComment(1, (request.body as { body: string }).body, 'octocat'),
+      answer(github, 'POST', `/repos/${REPO}/pulls/7/reviews`, () => ({ status: 200, body: rawReview(21, 'octocat') }));
+      answer(github, 'PUT', `/repos/${REPO}/pulls/7/merge`, () => ({
+        status: 200,
+        body: { merged: true, message: 'Merged', sha: 'm1' },
       }));
 
-      await transport.createIssueComment({ repository: REPO, actingUserId: 'user-1' }, 7, 'Thanks');
+      await transport.createReview({ repository: REPO, actingUserId: 'user-1' }, 7, { event: 'APPROVE' });
+      await transport.mergePullRequest({ repository: REPO, actingUserId: 'user-1' }, 7, {});
 
-      expect(github.calls(`/repos/${REPO}/issues/7/comments`)[0]?.token).toBe('tok-user-1');
+      expect(github.calls(`/repos/${REPO}/pulls/7/reviews`, 'POST')[0]?.token).toBe('tok-user-1');
+      expect(github.calls(`/repos/${REPO}/pulls/7/merge`, 'PUT')[0]?.token).toBe('tok-user-1');
+    });
+
+    it('reviews as the Reviews app, naming the person, when they have no token of their own', async () => {
+      const { github, transport } = await harness();
+      answer(github, 'POST', `/repos/${REPO}/pulls/7/reviews`, () => ({
+        status: 200,
+        body: rawReview(21, 'mastra-factory-reviews[bot]'),
+      }));
+
+      await transport.createReview({ repository: REPO, actingUserId: 'user-2' }, 7, { body: 'LGTM' });
+
+      const [request] = github.calls(`/repos/${REPO}/pulls/7/reviews`, 'POST');
+      expect(request?.token).toBe('tok-reviews');
+      expect(request?.body).toEqual({ body: '> Opened by @user-2\n\nLGTM' });
     });
 
     it("never takes the org's own factory-github connection for a person's token", async () => {

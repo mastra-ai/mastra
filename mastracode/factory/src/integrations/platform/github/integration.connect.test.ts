@@ -245,7 +245,7 @@ describe('PlatformGithubIntegration in connect mode', () => {
     expect(platform.requests.filter(request => request.path.includes('token'))).toEqual([]);
   });
 
-  it('opens a pull request as the acting user and assigns it to them with their own token', async () => {
+  it('opens a pull request as the app, naming the acting user by their GitHub login, and has the app assign them', async () => {
     const { github, integration } = await setup({ users: { 'user-1': 'octocat' } });
     const created = await integration.versionControl.createPullRequest({
       connection: switchedConnection,
@@ -257,9 +257,12 @@ describe('PlatformGithubIntegration in connect mode', () => {
       actingUserId: 'user-1',
     });
 
-    expect(github.calls('/repos/acme/app/pulls', 'POST').map(request => request.token)).toEqual(['tok-user-1']);
+    // Legacy parity: the pull request stays Factory-authored, so Factory's rules still treat it as its own.
+    const [request] = github.calls('/repos/acme/app/pulls', 'POST');
+    expect(request?.token).toBe('tok-github');
+    expect((request?.body as { body: string }).body).toBe('> Opened by @octocat\n\nBody');
     expect(github.calls('/repos/acme/app/issues/7/assignees', 'POST')).toEqual([
-      expect.objectContaining({ token: 'tok-user-1', body: { assignees: ['octocat'] } }),
+      expect.objectContaining({ token: 'tok-github', body: { assignees: ['octocat'] } }),
     ]);
     expect(created.assignees).toEqual(['octocat']);
   });
@@ -330,7 +333,7 @@ describe('PlatformGithubIntegration in connect mode', () => {
       });
     });
 
-    it('writes as the user once saved, and as the app again once removed', async () => {
+    it('names the user by the login of their saved token, and stops once it is removed', async () => {
       const { github, integration, asUser } = await setup({ pats: { 'pat-good': 'hubot' } });
       const ada = asUser('user-1');
 
@@ -341,13 +344,15 @@ describe('PlatformGithubIntegration in connect mode', () => {
       expect((await ada.request('/web/github/user-pat', { method: 'DELETE' })).status).toBe(200);
       await openPullRequest(integration, 'user-1');
 
-      expect(github.calls('/repos/acme/app/pulls', 'POST').map(request => request.token)).toEqual([
-        'tok-github',
-        'pat-good',
-        'tok-github',
+      const opened = github.calls('/repos/acme/app/pulls', 'POST');
+      expect(opened.map(request => request.token)).toEqual(['tok-github', 'tok-github', 'tok-github']);
+      expect(opened.map(request => (request.body as { body: string }).body.split('\n')[0])).toEqual([
+        '> Opened by @user-1',
+        '> Opened by @hubot',
+        '> Opened by @user-1',
       ]);
       expect(github.calls('/repos/acme/app/issues/7/assignees', 'POST')).toEqual([
-        expect.objectContaining({ token: 'pat-good', body: { assignees: ['hubot'] } }),
+        expect.objectContaining({ token: 'tok-github', body: { assignees: ['hubot'] } }),
       ]);
     });
   });

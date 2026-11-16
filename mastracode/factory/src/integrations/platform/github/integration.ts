@@ -1810,8 +1810,10 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
   }
 
   /**
-   * Assigns a pull request to the person it was opened for, with their own
-   * GitHub token. Best effort: a missing connection or a refusal only warns.
+   * Assigns a pull request to the person it was opened for: their GitHub login,
+   * assigned by the app, as the legacy path does (a person's own token may not
+   * reach a private repository the installation covers). Best effort: a missing
+   * login or a refusal only warns.
    */
   async #assignOpener(
     github: ConnectGithubTransport,
@@ -1824,11 +1826,11 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
       const login = await github.userLogin(userId);
       if (!login) return;
       const { owner, repo } = splitRepository(repository);
-      const data = await github.asUser(userId, 'assignPullRequestOpener', async octokit => {
+      const data = await github.asApp('assignPullRequestOpener', async octokit => {
         const response = await octokit.issues.addAssignees({ owner, repo, issue_number: number, assignees: [login] });
         return response.data;
       });
-      if (!data?.assignees?.some(assignee => assignee.login?.toLowerCase() === login.toLowerCase())) {
+      if (!data.assignees?.some(assignee => assignee.login?.toLowerCase() === login.toLowerCase())) {
         logPlatformWarn('GitHub did not assign the PR opener', { url: created.url, login });
       } else {
         created.assignees = data.assignees.flatMap(assignee => (assignee.login ? [assignee.login] : []));
