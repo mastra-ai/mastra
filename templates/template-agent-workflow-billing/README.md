@@ -8,6 +8,10 @@ Structuring payment logic for agents and workflows takes more than adding a chec
 
 We built this template to provide a starting point for billing in Mastra, with charging policies and provider integration configured independently of your agents and workflows. Nested agent calls share their parent workflow's budget, and repeated requests with the same idempotency key reuse saved results without another charge.
 
+## Demo
+
+<video controls width="640" height="360" src="https://res.cloudinary.com/mastra-assets/video/upload/v1794863034/Mastra_Billing_with_Autumn_ewb3yh.mp4"></video>
+
 ## Prerequisites
 
 - **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` in `.env` for the bundled Image Assistant and Image Generation examples.
