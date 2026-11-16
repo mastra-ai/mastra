@@ -33,7 +33,11 @@ import {
   withExecutionFence,
 } from './execution-fence';
 import { ExecutionOwnershipGuard } from './execution-ownership-guard';
-import { getExecutionStreamPublisher, withExecutionStreamPublisher } from './execution-stream-publisher';
+import {
+  getExecutionStreamLifecycle,
+  getExecutionStreamOutput,
+  withExecutionStreamPublisher,
+} from './execution-stream-publisher';
 import { deleteRunRegistryEntry, setRunRegistryEntry } from './run-registry';
 import type { RunRegistryEntry } from './types';
 
@@ -88,12 +92,11 @@ describe('execution publisher transport boundaries (COR-1560)', () => {
         sharedEvents.push(event.type);
       });
       const options = { runId, agentId, mastra, claim: fence.claim };
-      const lifecycle = getExecutionStreamPublisher({
+      const lifecycle = getExecutionStreamLifecycle({
         ...options,
         ...(registerInner ? { agent } : {}),
-        role: 'lifecycle',
       })!;
-      const producer = getExecutionStreamPublisher({ ...options, role: 'producer' })!;
+      const producer = getExecutionStreamOutput(options)!;
       try {
         await lifecycle.ready;
         await producer.publishEvent({ type: 'iteration-start', runId, data: {} });
@@ -127,7 +130,7 @@ describe('execution publisher transport boundaries (COR-1560)', () => {
     });
     const mastra = new Mastra({ agents: { agent }, pubsub, logger: false });
     const options = { runId, agentId, mastra, claim: fence.claim };
-    const publisher = getExecutionStreamPublisher({ ...options, role: 'producer' })!;
+    const publisher = getExecutionStreamOutput(options)!;
     let reportLoss!: (error: DurableExecutionFenceError) => void;
     const guard = new ExecutionOwnershipGuard({
       observe: async () => {},
@@ -196,7 +199,7 @@ describe('execution publisher transport boundaries (COR-1560)', () => {
     });
     const mastra = new Mastra({ agents: { agent }, pubsub, logger: false });
     const options = { runId, agentId, mastra, claim: fence.claim };
-    const publisher = getExecutionStreamPublisher({ ...options, role: 'producer' })!;
+    const publisher = getExecutionStreamOutput(options)!;
     const received: string[] = [];
     const ownerEvents: string[] = [];
     const stepEvents: string[] = [];

@@ -35,25 +35,14 @@ interface ExecutionPublisherOptions {
   entry?: RunRegistryEntry;
 }
 
-/** Bind execution authority to a handle, never to whichever execution most recently used the publisher. */
-export function getExecutionStreamPublisher(
-  options: ExecutionPublisherOptions & { role: 'producer' },
-): AgentStreamOutput | undefined;
-export function getExecutionStreamPublisher(
-  options: ExecutionPublisherOptions & { role: 'lifecycle' },
-): AgentStreamPublisher | undefined;
-export function getExecutionStreamPublisher({
+function resolveExecutionPublisher({
   runId,
-  agentId,
   mastra,
+  agentId,
   agent,
   claim,
-  role,
   entry = getRunRegistryEntry(runId, mastra),
-}: ExecutionPublisherOptions & { role: 'producer' | 'lifecycle' }):
-  | AgentStreamOutput
-  | AgentStreamPublisher
-  | undefined {
+}: ExecutionPublisherOptions) {
   // Workers can attach with a claim before a local reader registers the run.
   if (!entry && !claim) return;
   if (!entry) {
@@ -79,14 +68,29 @@ export function getExecutionStreamPublisher({
   const memoryInfo = owner.__getRunOwner(runId);
 
   const publisher = getRunStreamPublisher(runId, entry, mastra);
-  if (role === 'producer') {
-    return publisher.attachOutput({
-      publisherId,
-      pubsub: runBus.pubsub,
-      assertOwnership: () => assertExecutionNotSuperseded({ runId, agentId, mastra, requestContext }),
-    });
-  }
+  return { publisher, publisherId, runBus, bus, usesSharedRunLog, executionClaim, requestContext, memoryInfo, entry };
+}
 
+/** Worker output keeps its captured execution authority and cannot settle or clean up the run. */
+export function getExecutionStreamOutput(options: ExecutionPublisherOptions): AgentStreamOutput | undefined {
+  const context = resolveExecutionPublisher(options);
+  if (!context) return;
+  const { publisher, publisherId, runBus, requestContext } = context;
+  const { runId, agentId, mastra } = options;
+  return publisher.attachOutput({
+    publisherId,
+    pubsub: runBus.pubsub,
+    assertOwnership: () => assertExecutionNotSuperseded({ runId, agentId, mastra, requestContext }),
+  });
+}
+
+/** Owning readers settle and clean up using the authority of their captured execution. */
+export function getExecutionStreamLifecycle(options: ExecutionPublisherOptions): AgentStreamPublisher | undefined {
+  const context = resolveExecutionPublisher(options);
+  if (!context) return;
+  const { publisher, publisherId, runBus, bus, usesSharedRunLog, executionClaim, requestContext, memoryInfo, entry } =
+    context;
+  const { runId, agentId, mastra } = options;
   const fence = entry.executionFence;
   return publisher.attachLifecycle({
     pubsub: runBus.pubsub,
@@ -167,7 +171,7 @@ export function withExecutionStreamPublisher(
           publishOptions?: { localOnly?: boolean },
         ) => {
           if (topic === AGENT_STREAM_TOPIC(options.runId)) {
-            const publisher = getExecutionStreamPublisher({ ...options, role: 'producer' });
+            const publisher = getExecutionStreamOutput(options);
             if (publisher) {
               try {
                 // Keep each step's fence and cache policy without chaining publishers or splitting their queue.

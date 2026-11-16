@@ -49,7 +49,7 @@ import {
   getExecutionClaim,
   resolveLeaseProvider,
 } from '../execution-fence';
-import { getExecutionStreamPublisher } from '../execution-stream-publisher';
+import { getExecutionStreamLifecycle } from '../execution-stream-publisher';
 import { runInRunFenceScope } from '../run-fence-scope';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitErrorEvent } from '../stream-adapter';
@@ -553,12 +553,11 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         const observedStream = observer ? collect(observer.fullStream) : undefined;
         const fence = ExecutionFence.getLocalActive(runId)!;
         const foreign = foreignOwnership(backend, storage, pubsub);
-        const originalPublisher = getExecutionStreamPublisher({
+        const originalPublisher = getExecutionStreamLifecycle({
           runId,
           agentId: agent.id,
           mastra,
           claim: fence.claim,
-          role: 'lifecycle',
         })!;
         try {
           await model.entered;
@@ -572,11 +571,10 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
               backend === 'storage'
                 ? await storage.stores.workflows!.getRunOwnership({ agentId: agent.id, runId })
                 : undefined;
-            const replacement = getExecutionStreamPublisher({
+            const replacement = getExecutionStreamLifecycle({
               runId,
               agentId: agent.id,
               mastra,
-              role: 'lifecycle',
               claim: { executionId: 'replacement-reader', agentId: agent.id, generation: record?.generation },
             })!;
             await replacement.ready;
@@ -657,12 +655,11 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       const result = await agent.stream('Answer me.', { runId });
       const stream = collect(result.fullStream);
       const fence = ExecutionFence.getLocalActive(runId)!;
-      const publisher = getExecutionStreamPublisher({
+      const publisher = getExecutionStreamLifecycle({
         runId,
         agentId: agent.id,
         mastra,
         claim: fence.claim,
-        role: 'lifecycle',
       })!;
       try {
         await model.entered;

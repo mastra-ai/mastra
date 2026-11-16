@@ -103,7 +103,7 @@ import {
   supportsRunFencing,
 } from './execution-fence';
 import type { UntrackedRunLiveness } from './execution-fence';
-import { getExecutionStreamPublisher, withExecutionStreamPublisher } from './execution-stream-publisher';
+import { getExecutionStreamLifecycle, withExecutionStreamPublisher } from './execution-stream-publisher';
 import { detachFullStreamOnEnd } from './observe-full-stream';
 import { persistDurableRunInput } from './persist-run-input';
 import { prepareForDurableExecution } from './preparation';
@@ -1057,13 +1057,12 @@ export class DurableAgent<
    */
   async #attachStreamPublisher(runId: string, owner: { resourceId?: string; threadId?: string }): Promise<void> {
     const claim = getRunRegistryEntry(runId, this.#mastra)?.executionFence?.claim;
-    const publisher = getExecutionStreamPublisher({
+    const publisher = getExecutionStreamLifecycle({
       runId,
       agentId: this.id,
       mastra: this.#mastra,
       agent: this,
       claim: claim && { ...claim, ...owner },
-      role: 'lifecycle',
     });
     await publisher?.ready.catch(error => {
       this.logger.warn(`[DurableAgent:${this.id}] run ${runId}: failed to attach its stream publisher`, { error });
@@ -1080,13 +1079,12 @@ export class DurableAgent<
   }
 
   #owningReaderTerminal(runId: string, executionFence: ExecutionFence) {
-    const publisher = getExecutionStreamPublisher({
+    const publisher = getExecutionStreamLifecycle({
       runId,
       agentId: this.id,
       mastra: this.#mastra,
       agent: this,
       claim: executionFence.claim,
-      role: 'lifecycle',
     });
     return async (status: 'suspended' | 'finished', generation: number | undefined) => {
       if (generation !== executionFence.generation || !executionFence.ownsRunTopics()) return;
@@ -6299,13 +6297,12 @@ export class DurableAgent<
    * which reschedules deletion on that run's terminal end.
    */
   #clearPubsubTopic(runId: string, entry = getRunRegistryEntry(runId, this.#mastra)): void {
-    const publisher = getExecutionStreamPublisher({
+    const publisher = getExecutionStreamLifecycle({
       runId,
       agentId: this.id,
       mastra: this.#mastra,
       agent: this,
       entry,
-      role: 'lifecycle',
     });
     if (publisher) void publisher.cleanup();
     else void this.pubsub.clearTopic(AGENT_STREAM_TOPIC(runId));
