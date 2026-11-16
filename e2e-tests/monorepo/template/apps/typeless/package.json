@@ -14,7 +14,7 @@
   },
   "devDependencies": {
     "mastra": "e2e-test",
-    "tsx": "4.21.0",
+    "tsx": "4.23.15",
     "typescript": "7.0.2"
   }
 }

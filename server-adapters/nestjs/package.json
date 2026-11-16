@@ -50,7 +50,7 @@
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "@types/node": "22.19.15",
+    "@types/node": "22.20.5",
     "@types/supertest": "^6.0.3",
     "compression": "^1.8.2",
     "cors": "^2.8.6",
@@ -58,7 +58,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "supertest": "^7.3.1",
-    "tsdown": "0.23.1",
+    "tsdown": "0.23.7",
     "typescript": "catalog:",
     "vitest": "^5.1.0",
     "zod": "^4.6.7"

@@ -110,7 +110,7 @@
     "react-dom": "catalog:",
     "storybook": "^9.1.21",
     "tailwindcss": "^4.3.3",
-    "tsdown": "0.23.1",
+    "tsdown": "0.23.7",
     "typescript": "catalog:",
     "vite": "^8.3.5",
     "vitest": "catalog:",
