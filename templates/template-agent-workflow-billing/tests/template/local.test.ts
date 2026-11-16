@@ -728,3 +728,14 @@ it('script teardown terminates an active owned process group and tolerates repea
     await running;
   }
 });
+
+it('a command spawn failure releases its timeout immediately', async () => {
+  const database = await temporaryDatabase();
+  cleanups.push(database.cleanup);
+  const timers = () => process.getActiveResourcesInfo().filter(resource => resource === 'Timeout').length;
+  const before = timers();
+  await expect(
+    command(join(database.directory, 'missing'), ['run', 'setup'], sanitizedEnvironment(), false, 1000),
+  ).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(timers()).toBe(before);
+});

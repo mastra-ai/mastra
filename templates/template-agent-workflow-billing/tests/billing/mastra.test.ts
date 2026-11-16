@@ -1,3 +1,4 @@
+import { BillingDatabase } from '../../src/billing/storage/database.js';
 import { MeasurementCollector } from '../../src/billing/runtime/measurement.js';
 import { createTool } from '@mastra/core/tools';
 import { getEventListeners, once } from 'node:events';
@@ -2911,6 +2912,63 @@ it.each(['nestedAgent', 'agent'] as const)(
       expect((await observer.execute('SELECT units FROM billing_ledger')).rows).toEqual([{ units: 1n }]);
     } finally {
       observer.close();
+    }
+  },
+);
+
+it.each(['configuration', 'snapshot initialization'] as const)(
+  'failed fixture %s closes every acquired billing store',
+  async failure => {
+    const database = await temporaryDatabase();
+    cleanups.push(database.cleanup);
+    if (failure === 'snapshot initialization') {
+      const snapshots = await independentClient(pathToFileURL(join(database.directory, 'workflow.db')).href);
+      try {
+        // A real legacy object permits opening SQLite but rejects the schema upgrade during init.
+        await snapshots.execute('CREATE VIEW mastra_messages AS SELECT 1 AS id');
+      } finally {
+        snapshots.close();
+      }
+    }
+    const initializing = vi.spyOn(LibSQLStore.prototype, 'init');
+    const acquired: BillingDatabase[] = [];
+    const open = BillingDatabase.open;
+    const opening = vi.spyOn(BillingDatabase, 'open').mockImplementation(async options => {
+      const store = await open(options);
+      acquired.push(store);
+      return store;
+    });
+    try {
+      const pending = runtimeFixture({
+        databaseUrl: database.url,
+        directory: database.directory,
+        modelUrl: 'http://127.0.0.1:1/v1',
+        ...(failure === 'configuration'
+          ? {
+              configure: () => {
+                throw new Error('Invalid fixture configuration');
+              },
+            }
+          : {}),
+      });
+      if (failure === 'configuration') await expect(pending).rejects.toThrow('Invalid fixture configuration');
+      else {
+        await expect(pending).rejects.toMatchObject({ id: 'MASTRA_STORAGE_LIBSQL_ALTER_TABLE_FAILED' });
+        const snapshot = initializing.mock.contexts[0];
+        if (!(snapshot instanceof LibSQLStore)) throw new Error('Snapshot initialization did not acquire a store');
+        await expect(
+          snapshot.stores.workflows!.loadWorkflowSnapshot({ workflowName: 'report', runId: 'missing' }),
+        ).rejects.toThrow(/closed/i);
+      }
+      expect(acquired).toHaveLength(failure === 'configuration' ? 1 : 4);
+      for (const store of acquired)
+        await expect(store.write(tx => tx.execute('SELECT 1'))).rejects.toMatchObject({ code: 'storage_unavailable' });
+    } finally {
+      opening.mockRestore();
+      const snapshots = [...initializing.mock.contexts];
+      initializing.mockRestore();
+      for (const snapshot of snapshots) if (snapshot instanceof LibSQLStore) await snapshot.close();
+      for (const store of acquired) store.close();
     }
   },
 );

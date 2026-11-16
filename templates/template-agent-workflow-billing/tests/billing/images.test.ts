@@ -1,8 +1,11 @@
 import { removeConversationMigration } from '../support/billing.js';
 import { configurationFile } from '../support/configuration-files.js';
 import { AutumnBillingProvider } from '../../src/billing/providers/autumn/index.js';
-import { afterEach, expect, it } from 'vitest';
-import { readFile, writeFile, unlink, symlink, link, stat } from 'node:fs/promises';
+import { afterEach, expect, it, vi } from 'vitest';
+import filesystem from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
+import { ExecutionArtifacts } from '../../src/billing/storage/artifacts.js';
+import { readFile, writeFile, unlink, symlink, link, stat, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { LocalBillingProvider } from '../../src/billing/providers/local/index.js';
@@ -373,8 +376,13 @@ it('image dispatch stops at the persisted cutoff and concurrent cancellation nev
   if (final.body.billing.billedUnits === null)
     expect(['pending', 'uncertain']).toContain(final.body.billing.settlementStatus);
   else expect(final.body.billing).toMatchObject({ billedUnits: 0, settlementStatus: 'released' });
-  if (remote.terminal_request !== null)
-    expect(JSON.parse(String(remote.terminal_request))).toMatchObject({ action: 'release', units: 0 });
+  const recovered = (
+    await f.database.execute({
+      sql: 'SELECT terminal_request FROM billing_remote_operations WHERE execution_id = ?',
+      args: [id],
+    })
+  ).rows[0];
+  expect(JSON.parse(String(recovered.terminal_request))).toMatchObject({ action: 'release', units: 0 });
   expect(f.boundary.images).toHaveLength(calls);
   expect(
     (
@@ -686,4 +694,75 @@ it('approval contracts reject a negative resume before changing a suspended imag
     billedUnits: 0,
     settlementStatus: 'released',
   });
+});
+
+it.each(['open', 'sync'] as const)(
+  'a directory %s failure removes the renamed image before artifact registration',
+  async failure => {
+    const f = await fixture();
+    const directory = join(f.root, 'data/private-images');
+    const open = filesystem.open;
+    let failed = false;
+    const opening = vi.spyOn(filesystem, 'open').mockImplementation(async (...args) => {
+      if (args[0] === directory && failure === 'open') {
+        failed = true;
+        throw Object.assign(new Error('Controlled directory open failure'), { code: 'EIO' });
+      }
+      const handle = await open(...args);
+      if (args[0] === directory && failure === 'sync') {
+        handle.sync = async () => {
+          failed = true;
+          throw Object.assign(new Error('Controlled directory sync failure'), { code: 'EIO' });
+        };
+      }
+      return handle;
+    });
+    syncBuiltinESMExports();
+    try {
+      const result = await f.generate('directory-failure');
+      expect(failed).toBe(true);
+      expect(result.body.billing).toMatchObject({
+        executionStatus: 'failed',
+        billedUnits: 0,
+        settlementStatus: 'released',
+      });
+      expect(await readdir(directory)).toEqual([]);
+      expect((await f.database.execute('SELECT id FROM image_artifacts')).rows).toEqual([]);
+      expect((await f.database.execute('SELECT state FROM image_slots')).rows).toEqual([{ state: 'uncertain' }]);
+    } finally {
+      opening.mockRestore();
+      syncBuiltinESMExports();
+    }
+    await f.restart();
+    await f.generate('directory-failure');
+    expect(f.boundary.images).toHaveLength(1);
+  },
+);
+
+it('a lost artifact registration acknowledgement retains the committed PNG without generating it again', async () => {
+  const f = await fixture();
+  const complete = ExecutionArtifacts.prototype.complete;
+  const registration = vi.spyOn(ExecutionArtifacts.prototype, 'complete').mockImplementation(async function (
+    this: ExecutionArtifacts,
+    ...args
+  ) {
+    await complete.call(this, ...args);
+    throw new Error('Lost artifact registration acknowledgement');
+  });
+  try {
+    const result = await f.generate('lost-artifact-registration');
+    expect(result.body.billing).toMatchObject({
+      executionStatus: 'completed',
+      billedUnits: 1,
+      settlementStatus: 'settled',
+    });
+  } finally {
+    registration.mockRestore();
+  }
+  const rows = (await f.database.execute('SELECT id FROM image_artifacts')).rows;
+  expect(rows).toHaveLength(1);
+  expect(await readFile(join(f.root, 'data/private-images', `${rows[0].id}.png`))).toEqual(f.boundary.png);
+  await f.restart();
+  await f.generate('lost-artifact-registration');
+  expect(f.boundary.images).toHaveLength(1);
 });

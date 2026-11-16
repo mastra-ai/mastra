@@ -4,6 +4,10 @@ import {
   resolveAllowance,
 } from '../../src/billing/configuration/catalog.js';
 import { describe, expect, it } from 'vitest';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { validateConfigurationFiles } from '../../src/billing/configuration/files.js';
 import { parseBillingConfiguration } from '../../src/billing/configuration/policy.js';
 import { localCapabilities } from '../../src/billing/providers/local/index.js';
 import { configuration } from '../support/billing.js';
@@ -307,3 +311,29 @@ describe('commercial catalog revisions', () => {
     expect(commercialCatalogSchema.safeParse(input).success).toBe(false);
   });
 });
+
+it.each(['not-a-url', 'https://['])('malformed hosted return URL %s produces a configuration error', async url => {
+  const input = { ...configuration(), hosted: { returnUrls: [url] } };
+  expect(() => parseBillingConfiguration(input, localCapabilities)).toThrow(
+    expect.objectContaining({ code: 'invalid_configuration' }),
+  );
+  const root = await mkdtemp(join(tmpdir(), 'billing-url-'));
+  try {
+    await writeFile(join(root, 'billing.json'), JSON.stringify(input));
+    expect(() =>
+      validateConfigurationFiles({ BILLING_PROJECT_ROOT: root, BILLING_CONFIG_FILE: 'billing.json' }),
+    ).toThrow(expect.objectContaining({ code: 'invalid_configuration' }));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it.each(['https://app.example/done', 'http://localhost:4111/done', 'http://127.0.0.1:4111/done'])(
+  'hosted return URL %s remains valid',
+  url => {
+    expect(
+      parseBillingConfiguration({ ...configuration(), hosted: { returnUrls: [url] } }, localCapabilities).hosted
+        .returnUrls,
+    ).toEqual([url]);
+  },
+);

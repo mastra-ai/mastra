@@ -91,6 +91,7 @@ export class ImageService implements ArtifactReader {
       return previous;
     }
     let temporary: string | undefined;
+    let unregistered: string | undefined;
     try {
       await scope.checkpoint();
       // A durable dispatch claim is never automatically reissued, including after timeout or process death.
@@ -154,7 +155,9 @@ export class ImageService implements ArtifactReader {
       } finally {
         await handle.close();
       }
-      await rename(temporary, resolve(this.directory, `${id}.png`));
+      const permanent = resolve(this.directory, `${id}.png`);
+      await rename(temporary, permanent);
+      unregistered = permanent;
       temporary = undefined;
       const directory = await open(this.directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
       try {
@@ -162,6 +165,9 @@ export class ImageService implements ArtifactReader {
       } finally {
         await directory.close();
       }
+      // Registration may commit even when its acknowledgement is lost. Retain
+      // the durable PNG once publication starts so recovery can read it.
+      unregistered = undefined;
       return await this.artifacts.complete(
         scope,
         {
@@ -180,6 +186,7 @@ export class ImageService implements ArtifactReader {
       throw new BillingError('state_unavailable');
     } finally {
       if (temporary) await unlink(temporary).catch(() => {});
+      if (unregistered) await unlink(unregistered).catch(() => {});
     }
   }
   async completed(scope: ExecutionScope): Promise<Artifact> {

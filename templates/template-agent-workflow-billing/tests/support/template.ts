@@ -71,14 +71,17 @@ export async function command(
       /* Already stopped. */
     }
   }, timeoutMs);
-  const [code, signal] = await once(child, 'close');
-  globalThis.clearTimeout(timer);
-  if (timedOut || signal)
-    throw new Error(
-      `Template command ${args.join(' ')} ${timedOut ? 'timed out' : `terminated by ${signal}`}: ${output}`,
-    );
-  if (success && code !== 0) throw new Error(`Template command ${args.join(' ')} failed (${code}): ${output}`);
-  return { code, output };
+  try {
+    const [code, signal] = await once(child, 'close');
+    if (timedOut || signal)
+      throw new Error(
+        `Template command ${args.join(' ')} ${timedOut ? 'timed out' : `terminated by ${signal}`}: ${output}`,
+      );
+    if (success && code !== 0) throw new Error(`Template command ${args.join(' ')} failed (${code}): ${output}`);
+    return { code, output };
+  } finally {
+    globalThis.clearTimeout(timer);
+  }
 }
 export async function templateCopy(install = false) {
   const root = await mkdtemp(join(tmpdir(), 'image-template-'));

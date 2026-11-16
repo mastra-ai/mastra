@@ -90,14 +90,18 @@ export const billingConfigurationSchema = z
         returnUrls: z
           .array(
             z.url().refine(value => {
-              const url = new URL(value);
-              return (
-                !url.username &&
-                !url.password &&
-                !url.hash &&
-                (url.protocol === 'https:' ||
-                  (url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname)))
-              );
+              try {
+                const url = new URL(value);
+                return (
+                  !url.username &&
+                  !url.password &&
+                  !url.hash &&
+                  (url.protocol === 'https:' ||
+                    (url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname)))
+                );
+              } catch {
+                return false;
+              }
             }),
           )
           .max(100)

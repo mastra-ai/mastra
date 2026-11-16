@@ -1,3 +1,4 @@
+import { Lifecycle } from '../../src/billing/lifecycle.js';
 import { createServer } from 'node:http';
 import type { ServerResponse } from 'node:http';
 import { EventEmitter, once } from 'node:events';
@@ -265,144 +266,145 @@ export async function runtimeFixture(options: {
   agentMaxSteps?: number;
   structured?: boolean;
 }) {
-  const directory = await OrganizationStorage.open({ url: options.databaseUrl });
-  const organizations =
-    options.organizations ?? new OrganizationService(directory, { mode: 'local', provider: 'local' });
-  const owner =
-    options.credential || options.organizations
-      ? null
-      : await organizations.provisionLocal({ profileId: 'owner', displayName: 'Owner' });
-  const credential = options.credential ?? owner?.credential ?? '';
-  const billingContext =
-    options.billingContext ?? (await organizations.context({ credential, workspaceId: options.workspaceId }));
-  const configuration =
-    options.configuration ??
-    options.configure?.(mastraConfiguration(billingContext.workspaceId)) ??
-    mastraConfiguration(billingContext.workspaceId);
-  const providerStorage = await LocalBillingStorage.open({ url: options.databaseUrl });
-  const provider = options.provider ?? new LocalBillingProvider(providerStorage, configuration);
-  const accounting = await AccountingStorage.open({ url: options.databaseUrl }, directory);
-  const workflowStorage = await WorkflowStorage.open({ url: options.databaseUrl }, directory);
-  const agent = new Agent({
-    id: 'assistant',
-    name: 'Billing assistant',
-    ...(options.processorRetry
-      ? { errorProcessors: [{ id: 'controlled-recovery', processAPIError: () => ({ retry: true }) }] }
-      : {}),
-    instructions: 'Return an answer or use the echo tool.',
-    model: { id: 'billing-test/model', url: options.modelUrl, apiKey: 'controlled', api: 'chat' },
-    tools: {
-      echo: createTool({
-        id: 'echo',
-        description: 'Echo the controlled request.',
-        inputSchema: z.object({ fail: z.boolean() }),
-        outputSchema: z.object({ echoed: z.boolean() }),
-        execute: async input => {
-          if (input.fail) throw new Error('Controlled tool failure');
-          return { echoed: true };
-        },
+  const lifecycle = new Lifecycle();
+  try {
+    const directory = await OrganizationStorage.open({ url: options.databaseUrl });
+    lifecycle.own(() => directory.close());
+    const organizations =
+      options.organizations ?? new OrganizationService(directory, { mode: 'local', provider: 'local' });
+    const owner =
+      options.credential || options.organizations
+        ? null
+        : await organizations.provisionLocal({ profileId: 'owner', displayName: 'Owner' });
+    const credential = options.credential ?? owner?.credential ?? '';
+    const billingContext =
+      options.billingContext ?? (await organizations.context({ credential, workspaceId: options.workspaceId }));
+    const configuration =
+      options.configuration ??
+      options.configure?.(mastraConfiguration(billingContext.workspaceId)) ??
+      mastraConfiguration(billingContext.workspaceId);
+    const providerStorage = await LocalBillingStorage.open({ url: options.databaseUrl });
+    lifecycle.own(() => providerStorage.close());
+    const provider = options.provider ?? new LocalBillingProvider(providerStorage, configuration);
+    const accounting = await AccountingStorage.open({ url: options.databaseUrl }, directory);
+    lifecycle.own(() => accounting.close());
+    const workflowStorage = await WorkflowStorage.open({ url: options.databaseUrl }, directory);
+    lifecycle.own(() => workflowStorage.close());
+    const agent = new Agent({
+      id: 'assistant',
+      name: 'Billing assistant',
+      ...(options.processorRetry
+        ? { errorProcessors: [{ id: 'controlled-recovery', processAPIError: () => ({ retry: true }) }] }
+        : {}),
+      instructions: 'Return an answer or use the echo tool.',
+      model: { id: 'billing-test/model', url: options.modelUrl, apiKey: 'controlled', api: 'chat' },
+      tools: {
+        echo: createTool({
+          id: 'echo',
+          description: 'Echo the controlled request.',
+          inputSchema: z.object({ fail: z.boolean() }),
+          outputSchema: z.object({ echoed: z.boolean() }),
+          execute: async input => {
+            if (input.fail) throw new Error('Controlled tool failure');
+            return { echoed: true };
+          },
+        }),
+      },
+    });
+    const schema = z.object({ count: z.number().int().min(0).max(100) });
+    let billing: MastraBilling<any, any>;
+    const before = createStep({
+      id: 'before',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ inputData }) => {
+        await appendFile(join(options.directory, 'workflow-events.jsonl'), JSON.stringify({ step: 'before' }) + '\n');
+        await billing.nestedAgent('assistant').generate(options.workflowPrompt ?? '[success] before');
+        return { count: inputData.count + 1 };
+      },
+    });
+    const approval = createStep({
+      id: 'approval',
+      inputSchema: schema,
+      outputSchema: schema,
+      resumeSchema: z.object({ approved: z.boolean() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      execute: async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData?.approved) return suspend({ reason: 'Approval required' });
+        return inputData;
+      },
+    });
+    const after = createStep({
+      id: 'after',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ inputData }) => {
+        await appendFile(join(options.directory, 'workflow-events.jsonl'), JSON.stringify({ step: 'after' }) + '\n');
+        const invoke = () =>
+          billing.nestedAgent('assistant').generate(options.workflowAfterPrompt ?? '[success] after');
+        if (options.workflowAfterBoundary) await options.workflowAfterBoundary(invoke);
+        else await invoke();
+        return { count: inputData.count + 1 };
+      },
+    });
+    const workflow = createWorkflow({
+      id: 'report',
+      inputSchema: options.workflowTransforms ? schema.transform(value => ({ count: value.count + 1 })) : schema,
+      outputSchema: options.workflowTransforms ? schema.transform(value => ({ count: value.count + 10 })) : schema,
+      options: { autoRestartActiveRuns: false },
+    })
+      .then(before)
+      .then(approval)
+      .then(after)
+      .commit();
+    const limits = { version: 'agent-adapter-v1', maxSteps: options.agentMaxSteps ?? 2, maxOutputTokens: 20 };
+    const agents = {
+      assistant: options.structured
+        ? agentResource(agent, { ...limits, outputSchema: z.object({ answer: z.string() }) })
+        : agentResource(agent, limits),
+    };
+    const workflows = {
+      report: workflowResource(workflow, {
+        version: 'workflow-adapter-v1',
+        agentDependencies: options.workflowAgentDependencies ?? ['assistant'],
+        measurement: 'facade-calls',
+        expectedCalls: options.workflowExpectedCalls ?? [1, 1],
       }),
-    },
-  });
-  const schema = z.object({ count: z.number().int().min(0).max(100) });
-  let billing: MastraBilling<any, any>;
-  const before = createStep({
-    id: 'before',
-    inputSchema: schema,
-    outputSchema: schema,
-    execute: async ({ inputData }) => {
-      await appendFile(join(options.directory, 'workflow-events.jsonl'), JSON.stringify({ step: 'before' }) + '\n');
-      await billing.nestedAgent('assistant').generate(options.workflowPrompt ?? '[success] before');
-      return { count: inputData.count + 1 };
-    },
-  });
-  const approval = createStep({
-    id: 'approval',
-    inputSchema: schema,
-    outputSchema: schema,
-    resumeSchema: z.object({ approved: z.boolean() }),
-    suspendSchema: z.object({ reason: z.string() }),
-    execute: async ({ inputData, resumeData, suspend }) => {
-      if (!resumeData?.approved) return suspend({ reason: 'Approval required' });
-      return inputData;
-    },
-  });
-  const after = createStep({
-    id: 'after',
-    inputSchema: schema,
-    outputSchema: schema,
-    execute: async ({ inputData }) => {
-      await appendFile(join(options.directory, 'workflow-events.jsonl'), JSON.stringify({ step: 'after' }) + '\n');
-      const invoke = () => billing.nestedAgent('assistant').generate(options.workflowAfterPrompt ?? '[success] after');
-      if (options.workflowAfterBoundary) await options.workflowAfterBoundary(invoke);
-      else await invoke();
-      return { count: inputData.count + 1 };
-    },
-  });
-  const workflow = createWorkflow({
-    id: 'report',
-    inputSchema: options.workflowTransforms ? schema.transform(value => ({ count: value.count + 1 })) : schema,
-    outputSchema: options.workflowTransforms ? schema.transform(value => ({ count: value.count + 10 })) : schema,
-    options: { autoRestartActiveRuns: false },
-  })
-    .then(before)
-    .then(approval)
-    .then(after)
-    .commit();
-  const limits = { version: 'agent-adapter-v1', maxSteps: options.agentMaxSteps ?? 2, maxOutputTokens: 20 };
-  const agents = {
-    assistant: options.structured
-      ? agentResource(agent, { ...limits, outputSchema: z.object({ answer: z.string() }) })
-      : agentResource(agent, limits),
-  };
-  const workflows = {
-    report: workflowResource(workflow, {
-      version: 'workflow-adapter-v1',
-      agentDependencies: options.workflowAgentDependencies ?? ['assistant'],
-      measurement: 'facade-calls',
-      expectedCalls: options.workflowExpectedCalls ?? [1, 1],
-    }),
-  };
-  const typedBilling = new MastraBilling({
-    organizations,
-    accounting,
-    workflowStorage,
-    provider,
-    configuration,
-    agents,
-    workflows,
-  });
-  billing = typedBilling;
-  const storage = new LibSQLStore({
-    id: 'billing-workflow-snapshots',
-    url: pathToFileURL(join(options.directory, 'workflow.db')).href,
-  });
-  await storage.init();
-  const mastra = new Mastra({ agents: { assistant: agent }, workflows: { report: workflow }, storage });
-  let closed = false;
-  return {
-    billing: typedBilling,
-    billingContext,
-    organizations,
-    directory,
-    accounting,
-    workflowStorage,
-    provider,
-    providerStorage,
-    configuration,
-    credential,
-    mastra,
-    agents,
-    workflows,
-    close: async () => {
-      if (closed) return;
-      closed = true;
-      accounting.close();
-      workflowStorage.close();
-      providerStorage.close();
-      if (!options.organizations) organizations.close();
-      else directory.close();
-      await storage.close();
-    },
-  };
+    };
+    const typedBilling = new MastraBilling({
+      organizations,
+      accounting,
+      workflowStorage,
+      provider,
+      configuration,
+      agents,
+      workflows,
+    });
+    billing = typedBilling;
+    const storage = new LibSQLStore({
+      id: 'billing-workflow-snapshots',
+      url: pathToFileURL(join(options.directory, 'workflow.db')).href,
+    });
+    lifecycle.own(() => storage.close());
+    await storage.init();
+    const mastra = new Mastra({ agents: { assistant: agent }, workflows: { report: workflow }, storage });
+    return {
+      billing: typedBilling,
+      billingContext,
+      organizations,
+      directory,
+      accounting,
+      workflowStorage,
+      provider,
+      providerStorage,
+      configuration,
+      credential,
+      mastra,
+      agents,
+      workflows,
+      close: () => lifecycle.close(),
+    };
+  } catch (error) {
+    return lifecycle.fail(error);
+  }
 }

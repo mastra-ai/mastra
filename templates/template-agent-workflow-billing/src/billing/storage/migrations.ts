@@ -497,6 +497,7 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
               ...(version === 6n ? deliveryQueueStatements : []),
             ],
     );
+    if (version === 6n) return;
   }
   if (Number(version) < 2) {
     for (const sql of imageStatements) await transaction.execute(sql);
