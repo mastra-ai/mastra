@@ -60,6 +60,7 @@ function serveRoutes({ canEdit = true, routes = seededRoutes() } = {}) {
       const body = (await request.json()) as Pick<IntakeRouteInfo, 'name' | 'when'> & {
         target: { boardKey: string; phaseKey?: string };
         on?: IntakeRouteInfo['on'];
+        pullRequestOpenedMovesOnly?: true;
       };
       state.requests.push({ method: 'POST', path: '', body });
       const route: IntakeRouteInfo = {
@@ -69,12 +70,13 @@ function serveRoutes({ canEdit = true, routes = seededRoutes() } = {}) {
         when: body.when ?? null,
         target: { boardKey: body.target.boardKey, phaseKey: body.target.phaseKey ?? null, joinClosedIssue: false },
         on: body.on ?? ['work_item.created'],
+        ...(body.pullRequestOpenedMovesOnly && { pullRequestOpenedMovesOnly: true }),
         createdBy: 'admin',
       };
       // A route that places new cards goes ahead of the catch-all taking each kind it files, the
       // later one when they differ. Each route that moves down a slot is a write to it, so its
       // revision goes up, as in storage.
-      const catchAlls = [...arrivalKinds(route.on)].map(kind =>
+      const catchAlls = [...arrivalKinds(route)].map(kind =>
         state.routes.findIndex(entry => catchesEveryArrival(entry, kind)),
       );
       const ahead = catchAlls.length > 0 && !catchAlls.includes(-1) ? Math.max(...catchAlls) : -1;
@@ -94,8 +96,10 @@ function serveRoutes({ canEdit = true, routes = seededRoutes() } = {}) {
       const current = find(params.id);
       if (!current || current.revision !== body.expectedRevision) return stale();
       const { expectedRevision: _, ...patch } = body;
+      // Writing a route's events again makes a 0.28 `pull_request.opened` route file pull requests too.
+      const { pullRequestOpenedMovesOnly: _moveOnly, ...rest } = current;
       const next = {
-        ...current,
+        ...(patch.on ? rest : current),
         ...patch,
         target: patch.target
           ? { ...patch.target, joinClosedIssue: patch.target.joinClosedIssue ?? false }
@@ -490,6 +494,42 @@ describe('IntakeRoutesSection', () => {
       names.indexOf('Everything else goes to Ship › Inbox'),
     );
     expect(byName('Closed issues go to Done')?.target.boardKey).toBe('work');
+  });
+
+  it('leaves a pull_request.opened route stored by 0.28 a card move: not listed with new-card routes, and not sent on', async () => {
+    // Ahead of everything, as an older project's "PR opened → Review" card move can be.
+    const moveOnly: IntakeRouteInfo = {
+      ...seededRoutes()[0],
+      id: 'opened-to-review',
+      name: 'Opened pull requests go to Review',
+      when: null,
+      on: ['pull_request.opened'],
+      pullRequestOpenedMovesOnly: true,
+      target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false },
+    };
+    const state = serveRoutes({
+      routes: [moveOnly, ...seededRoutes()].map((route, position) => ({ ...route, position })),
+    });
+    const user = userEvent.setup();
+    renderSection();
+
+    await screen.findByRole('list', { name: 'Intake routes' });
+    expect(routeNames()).not.toContain('Opened pull requests go to Review');
+    await user.click(await screen.findByLabelText('Board for new cards'));
+    await user.click(await screen.findByRole('option', { name: 'Ship' }));
+
+    // Ship gets a copy of it, as of Work's other card moves, and the copy only moves cards too.
+    await waitFor(() =>
+      expect(state.routes.find(route => route.name === 'Opened pull requests go to Review on Ship')).toMatchObject({
+        on: ['pull_request.opened'],
+        pullRequestOpenedMovesOnly: true,
+        target: { boardKey: 'ship', phaseKey: 'pr' },
+      }),
+    );
+    // The real pull request catch-all is sent on; the card move itself is left as it was.
+    expect(state.routes.find(route => route.id === 'pull-requests')?.target).toMatchObject({ boardKey: 'ship' });
+    expect(state.routes.find(route => route.id === moveOnly.id)).toEqual(moveOnly);
+    expect(state.requests.some(request => request.path === moveOnly.id)).toBe(false);
   });
 
   it('adds a route ahead of the catch-all so it can match new cards', async () => {

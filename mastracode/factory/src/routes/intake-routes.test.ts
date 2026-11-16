@@ -511,6 +511,58 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     );
   });
 
+  it('keeps a pull_request.opened route stored by 0.28 a card move through edits and a restore, until its events are written again', async () => {
+    const { a, scope, base, replicaA } = await setup();
+    const id = randomUUID();
+    // As 0.28 wrote it: no marker, so `pull_request.opened` only moves a card.
+    await a.storage.ops.insertOne('factory_intake_routes', {
+      id,
+      org_id: scope.orgId,
+      factory_project_id: scope.factoryProjectId,
+      name: 'Opened pull requests go to Review',
+      enabled: true,
+      position: 0,
+      when_condition: null,
+      board_key: 'work',
+      phase_key: 'pr-review',
+      on_events: ['pull_request.opened'],
+      join_closed_issue: false,
+      revision: 1,
+      created_by: ADMIN,
+      created_at: new Date(),
+      updated_by: ADMIN,
+      updated_at: new Date(),
+    });
+    const moveOnly = { on: ['pull_request.opened'], pullRequestOpenedMovesOnly: true };
+    expect(await list(replicaA.send, base)).toEqual([expect.objectContaining({ id, ...moveOnly })]);
+
+    // Renamed and pointed at a finished phase, which only a card move may aim at, it stays a card move.
+    const renamed = await replicaA.send('PATCH', `${base}/${id}`, {
+      name: 'Opened pull requests are done',
+      target: { boardKey: 'work', phaseKey: 'done' },
+      expectedRevision: 1,
+    });
+    expect(renamed).toMatchObject({ status: 200, body: { intakeRoute: moveOnly } });
+
+    // Deleted and restored as the settings page's Undo sends it, it comes back the same.
+    await replicaA.send('DELETE', `${base}/${id}?expectedRevision=2`);
+    const restored = await replicaA.send('POST', base, {
+      name: 'Opened pull requests go to Review',
+      target: { boardKey: 'work', phaseKey: 'pr-review' },
+      ...moveOnly,
+    });
+    expect(restored).toMatchObject({ status: 201, body: { intakeRoute: moveOnly } });
+
+    // Writing its events again makes `pull_request.opened` file pull requests too.
+    const route = restored.body.intakeRoute as Route;
+    const rewritten = await replicaA.send('PATCH', `${base}/${route.id}`, {
+      on: ['pull_request.opened'],
+      expectedRevision: route.revision,
+    });
+    expect(rewritten.status).toBe(200);
+    expect(rewritten.body.intakeRoute).not.toHaveProperty('pullRequestOpenedMovesOnly');
+  });
+
   it('refuses a route that joins pull requests to their issue on any event but an arrival', async () => {
     const { base, replicaA } = await setup();
     const joins = { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: true };

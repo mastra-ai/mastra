@@ -4,7 +4,7 @@ import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage
 import type { FactoryStorageOps } from '@mastra/core/storage';
 
 import { arrivalKinds, DEFAULT_ROUTE_EVENTS, routeEventsProblem } from '../../../boards/board-events.js';
-import type { ArrivalKind, RouteEvent } from '../../../boards/board-events.js';
+import type { ArrivalKind, RouteArrivals, RouteEvent } from '../../../boards/board-events.js';
 import type { FactoryPhaseTool } from '../../../boards/define-board.js';
 import { deriveIntakeOrder, reconcileIntakeOrder } from '../../../boards/intake-order.js';
 import { DEFAULT_INTAKE_ROUTES } from '../../../boards/work-routes.js';
@@ -164,6 +164,8 @@ export interface StoredIntakeRouteInput {
   target: IntakeRouteTarget;
   /** The events the route handles; unset files new issues and pull requests (`work_item.created`). */
   on?: RouteEvent[];
+  /** Writes the route as 0.28 did, moving cards on `pull_request.opened` and filing none: how a deleted one is restored. */
+  pullRequestOpenedMovesOnly?: true;
 }
 
 export interface StoredIntakeRouteRecord {
@@ -176,6 +178,11 @@ export interface StoredIntakeRouteRecord {
   when: RuleGroup | null;
   target: { boardKey: string; phaseKey: string | null; joinClosedIssue: boolean };
   on: RouteEvent[];
+  /**
+   * Set on a route stored before `pull_request.opened` filed pull requests with no card (0.28): it
+   * names that event and only moves cards on it, as it always has. Writing `on` again clears it.
+   */
+  pullRequestOpenedMovesOnly?: true;
   revision: number;
   createdBy: string;
   createdAt: Date;
@@ -340,6 +347,8 @@ interface IntakeRouteRow extends Record<string, unknown> {
   /** Null on rows written before routes named events: they place new cards. */
   on_events: RouteEvent[] | null;
   join_closed_issue: boolean | null;
+  /** Null on rows written before `pull_request.opened` filed pull requests: there it only moves a card. */
+  opened_files_pull_requests?: boolean | null;
   revision: number;
   created_by: string;
   created_at: Date;
@@ -1020,9 +1029,12 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       // Ahead of the catch-all taking each kind it files, the later one when they differ, so a route
       // filing issues and pull requests stays behind a catch-all for pull requests, as it always
       // has. A kind no route catches reaches it at the end, so it stays there.
-      const catchAlls = [...arrivalKinds(input.on ?? DEFAULT_ROUTE_EVENTS)].map(kind =>
-        rows.findIndex(row => catchesEveryNewCard(row, kind)),
-      );
+      const catchAlls = [
+        ...arrivalKinds({
+          on: input.on ?? DEFAULT_ROUTE_EVENTS,
+          ...(input.pullRequestOpenedMovesOnly && { pullRequestOpenedMovesOnly: true }),
+        }),
+      ].map(kind => rows.findIndex(row => catchesEveryNewCard(row, kind)));
       const ahead = catchAlls.length > 0 && !catchAlls.includes(-1) ? Math.max(...catchAlls) : -1;
       if (ahead >= 0) {
         const added = (await readIntakeRoutes(ops, scope)).find(row => row.id === id)!;
@@ -1058,7 +1070,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       }
       checkRouteEvents(patch.on ?? routeEvents(row), patch.when !== undefined ? patch.when : row.when_condition);
       await updateIntakeRouteRow(ops, row, {
-        ...(patch.on !== undefined && { on_events: patch.on }),
+        ...(patch.on !== undefined && { on_events: patch.on, opened_files_pull_requests: true }),
         ...(patch.name !== undefined && { name: patch.name }),
         ...(patch.enabled !== undefined && { enabled: patch.enabled }),
         ...(patch.when !== undefined && { when_condition: patch.when }),
@@ -1366,6 +1378,15 @@ function routeEvents(row: IntakeRouteRow): RouteEvent[] {
   return row.on_events ? [...row.on_events] : [...DEFAULT_ROUTE_EVENTS];
 }
 
+/** A row's events with what they mean on it: `pull_request.opened` only moves a card on a row from before it filed. */
+function routeArrivals(row: IntakeRouteRow): RouteArrivals {
+  const on = routeEvents(row);
+  return {
+    on,
+    pullRequestOpenedMovesOnly: row.opened_files_pull_requests !== true && on.includes('pull_request.opened'),
+  };
+}
+
 function checkRouteEvents(on: readonly string[], when: RuleGroup | null): void {
   const problem = routeEventsProblem(on, when);
   if (problem) throw new StoredBoardError('invalid_intake_route', problem);
@@ -1382,6 +1403,7 @@ function toIntakeRouteRecord(row: IntakeRouteRow): StoredIntakeRouteRecord {
     when: row.when_condition,
     target: { boardKey: row.board_key, phaseKey: row.phase_key, joinClosedIssue: row.join_closed_issue === true },
     on: routeEvents(row),
+    ...(routeArrivals(row).pullRequestOpenedMovesOnly && { pullRequestOpenedMovesOnly: true as const }),
     revision: row.revision,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -1447,7 +1469,7 @@ function boardRouteCount(rows: readonly IntakeRouteRow[], boardKey: string): num
 /** Whether `row` files every new issue, or pull request, that reaches it, as the seeded "Everything else" route does. */
 function catchesEveryNewCard(row: IntakeRouteRow, kind: ArrivalKind): boolean {
   return (
-    row.enabled && row.when_condition === null && arrivalKinds(routeEvents(row)).has(kind) && !row.join_closed_issue
+    row.enabled && row.when_condition === null && arrivalKinds(routeArrivals(row)).has(kind) && !row.join_closed_issue
   );
 }
 
@@ -1502,6 +1524,7 @@ async function insertIntakeRoute(
     phase_key: route.input.target.phaseKey ?? null,
     on_events: route.input.on ?? null,
     join_closed_issue: route.input.target.joinClosedIssue ?? false,
+    opened_files_pull_requests: route.input.pullRequestOpenedMovesOnly ? null : true,
     revision: 1,
     created_by: route.actor,
     created_at: now,

@@ -16,6 +16,9 @@ describe('which filters a route may use for the events it handles', () => {
     // A pull request opening also moves its issue's card, so its route may read the card.
     { on: ['pull_request.opened'], when: when('card.phase', 'equals', 'triage'), problem: null },
     { on: ['work_item.created', 'work_item.opened'], when: null, problem: null },
+    // The messages name every event a route may use, the legacy arrival event included.
+    { on: ['work_item.created'], when: when('event.reason', 'equals', 'completed'), problem: /work_item\.created\.$/ },
+    { on: ['work_item.filed'], when: null, problem: /use one of .*work_item\.created\.$/ },
   ])('$on with $when.conditions.0.field', ({ on, when: filter, problem }) => {
     const found = routeEventsProblem(on as never, filter);
     if (problem === null) expect(found).toBeNull();

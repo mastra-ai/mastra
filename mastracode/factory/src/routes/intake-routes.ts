@@ -150,6 +150,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
     route: {
       target: { boardKey: string; phaseKey?: string | null; joinClosedIssue?: boolean };
       on: readonly RouteEvent[];
+      pullRequestOpenedMovesOnly?: boolean;
     },
   ) {
     const problem = intakeTargetProblem(await this.#registry(scope), route);
@@ -467,7 +468,11 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
         const scope = await this.#resolve(c);
         await this.#requireAdmin(c, scope);
         const input = await this.#body(c, contracts.intakeRouteCreate.bodySchema);
-        await this.#checkTarget(scope, { target: input.target, on: input.on ?? DEFAULT_ROUTE_EVENTS });
+        await this.#checkTarget(scope, {
+          target: input.target,
+          on: input.on ?? DEFAULT_ROUTE_EVENTS,
+          pullRequestOpenedMovesOnly: input.pullRequestOpenedMovesOnly,
+        });
         const route = await storage.createIntakeRoute(scope, input, scope.userId);
         await this.#audit(c, scope, 'created', [route]);
         return this.#respond(c, scope, route, 201);
@@ -493,7 +498,12 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
               message: `This rule belongs to board "${current.target.boardKey}"; add a rule on the other board instead.`,
             });
           }
-          await this.#checkTarget(scope, { target: patch.target ?? current.target, on: patch.on ?? current.on });
+          // Writing `on` again files pull requests on `pull_request.opened`; otherwise a 0.28 route keeps only moving cards.
+          await this.#checkTarget(scope, {
+            target: patch.target ?? current.target,
+            on: patch.on ?? current.on,
+            pullRequestOpenedMovesOnly: !patch.on && current.pullRequestOpenedMovesOnly,
+          });
         }
         const route = await storage.updateIntakeRoute(scope, id, patch, { expectedRevision, actor: scope.userId });
         await this.#audit(c, scope, 'updated', [route]);

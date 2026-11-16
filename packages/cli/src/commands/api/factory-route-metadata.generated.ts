@@ -952,6 +952,7 @@ export const FACTORY_API_ROUTE_METADATA = {
       "enabled",
       "name",
       "on",
+      "pullRequestOpenedMovesOnly",
       "target",
       "when"
     ],
@@ -3464,6 +3465,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   ]
                 }
               },
+              "pullRequestOpenedMovesOnly": {
+                "type": "boolean",
+                "const": true
+              },
               "revision": {
                 "type": "integer",
                 "minimum": -9007199254740991,
@@ -3791,6 +3796,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "work_item.created"
                 ]
               }
+            },
+            "pullRequestOpenedMovesOnly": {
+              "type": "boolean",
+              "const": true
             },
             "revision": {
               "type": "integer",
@@ -7332,6 +7341,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 ]
               }
             },
+            "pullRequestOpenedMovesOnly": {
+              "type": "boolean",
+              "const": true
+            },
             "revision": {
               "type": "integer",
               "minimum": -9007199254740991,
@@ -9612,6 +9625,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "items": {
             "$ref": "#/$defs/__schema8"
           }
+        },
+        "pullRequestOpenedMovesOnly": {
+          "type": "boolean",
+          "const": true
         }
       },
       "required": [
@@ -9895,6 +9912,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "work_item.created"
                 ]
               }
+            },
+            "pullRequestOpenedMovesOnly": {
+              "type": "boolean",
+              "const": true
             },
             "revision": {
               "type": "integer",
@@ -10246,6 +10267,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     "work_item.created"
                   ]
                 }
+              },
+              "pullRequestOpenedMovesOnly": {
+                "type": "boolean",
+                "const": true
               },
               "revision": {
                 "type": "integer",

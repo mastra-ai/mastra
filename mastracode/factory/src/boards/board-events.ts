@@ -42,11 +42,20 @@ export function arrivalKind(facts: Record<string, unknown>): ArrivalKind {
   return facts['source.kind'] === 'pull_request' ? 'pull_request' : 'issue';
 }
 
-/** The arrivals a route's `on` files: issues on `work_item.opened`, pull requests on `pull_request.opened`, both on `work_item.created`. */
-export function arrivalKinds(on: readonly string[]): Set<ArrivalKind> {
+/** What a route's arrival events mean: a route stored by 0.28 moved cards on `pull_request.opened` and filed none. */
+export interface RouteArrivals {
+  on: readonly string[];
+  /** True on a route stored before `pull_request.opened` filed pull requests: there it only moves a card. */
+  pullRequestOpenedMovesOnly?: boolean;
+}
+
+/** The arrivals a route files: issues on `work_item.opened`, pull requests on `pull_request.opened`, both on `work_item.created`. */
+export function arrivalKinds({ on, pullRequestOpenedMovesOnly }: RouteArrivals): Set<ArrivalKind> {
   const kinds = new Set<ArrivalKind>();
   if (on.includes('work_item.opened') || on.includes(LEGACY_ARRIVAL_EVENT)) kinds.add('issue');
-  if (on.includes('pull_request.opened') || on.includes(LEGACY_ARRIVAL_EVENT)) kinds.add('pull_request');
+  if ((on.includes('pull_request.opened') && !pullRequestOpenedMovesOnly) || on.includes(LEGACY_ARRIVAL_EVENT)) {
+    kinds.add('pull_request');
+  }
   return kinds;
 }
 
@@ -281,8 +290,8 @@ function namesField(group: RuleGroup, fields: readonly string[]): boolean {
 
 /**
  * Why a route's `on` and `when` can't be saved together, or null. `on` must name at least one
- * status event, each once; `event.*` conditions need an event besides `work_item.opened`, which
- * places new cards and carries no event facts, and `event.reason` needs `work_item.closed`, the
+ * route event, each once; `event.*` conditions need an event besides `work_item.opened` and
+ * `work_item.created`, which place new cards and carry no event facts, and `event.reason` needs `work_item.closed`, the
  * only event with a reason.
  */
 export function routeEventsProblem(on: readonly string[], when: RuleGroup | null): string | null {
@@ -292,10 +301,10 @@ export function routeEventsProblem(on: readonly string[], when: RuleGroup | null
     if ((ACTIVITY_EVENTS as readonly string[]).includes(event)) {
       return `"${event}" is activity, not a status change: it notifies the card's session and can't move a card, so a route can't name it.`;
     }
-    if (!isRouteEvent(event)) return `"${event}" is not a board event; use one of ${STATUS_EVENTS.join(', ')}.`;
+    if (!isRouteEvent(event)) return `"${event}" is not a board event; use one of ${ROUTE_EVENTS.join(', ')}.`;
   }
   if (when && on.every(onlyFilesNewCards) && namesField(when, EVENT_RULE_FIELDS)) {
-    return '`event.*` filters only apply to routes that handle an event besides work_item.opened.';
+    return '`event.*` filters only apply to routes that handle an event besides work_item.opened and work_item.created.';
   }
   if (when && on.every(onlyFilesNewCards) && namesField(when, CARD_MOVE_RULE_FIELDS)) {
     return '`card.phase` only applies to routes that move an existing card: a new item has no card yet.';

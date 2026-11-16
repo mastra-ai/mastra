@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import type { BoardEventFacts } from '../boards/board-events.js';
@@ -443,6 +445,59 @@ describe('intake routes placing linked cards', () => {
     expect(placed(outside)).toEqual({ board: 'work', stages: ['intake'] });
     expect(await runs(outside!.id)).toEqual([]);
   });
+
+  it.each(['older', 'new'] as const)(
+    "still sends an outside author's pull request to Intake past a pull_request.opened route stored by 0.28 (%s project)",
+    async project => {
+      const { storage, boards, scope, deliver } = await setup({ project });
+      // As 0.28 wrote them: a "PR opened → Review" card move ahead of the outside-authors hold, which named no events.
+      const row = (id: string, position: number, fields: Record<string, unknown>) =>
+        storage.ops.insertOne('factory_intake_routes', {
+          id,
+          org_id: scope.orgId,
+          factory_project_id: scope.factoryProjectId,
+          enabled: true,
+          position,
+          join_closed_issue: false,
+          revision: 1,
+          created_by: 'admin',
+          created_at: new Date(),
+          updated_by: 'admin',
+          updated_at: new Date(),
+          ...fields,
+        });
+      const moveId = randomUUID();
+      const outsideId = randomUUID();
+      await row(moveId, 0, {
+        name: 'Opened pull requests go to Review',
+        when_condition: null,
+        board_key: 'work',
+        phase_key: 'pr-review',
+        on_events: ['pull_request.opened'],
+      });
+      await row(outsideId, 1, {
+        name: DEFAULT_INTAKE_ROUTE.name,
+        when_condition: DEFAULT_INTAKE_ROUTE.when,
+        board_key: 'work',
+        phase_key: 'intake',
+        on_events: null,
+      });
+
+      const outside = await deliver({
+        sourceKey: 'github-pr:3',
+        source: 'github-pr',
+        metadata: { authorTrusted: false },
+      });
+
+      expect(placed(outside)).toEqual({ board: 'work', stages: ['intake'] });
+      expect(outside?.metadata).toMatchObject({ intakeRouteId: outsideId });
+      // Read as written, so editing it never changes what it does.
+      expect(await boards.getIntakeRoute(scope, moveId)).toMatchObject({
+        on: ['pull_request.opened'],
+        pullRequestOpenedMovesOnly: true,
+      });
+    },
+  );
 
   it('places outside work wherever an admin edits the default route to send it, and on Work once it is disabled', async () => {
     const { boards, scope, defaultRoute, deliver } = await setup({ withDefaultRoute: true });

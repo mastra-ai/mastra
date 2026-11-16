@@ -73,6 +73,9 @@ export const FACTORY_INTAKE_ROUTES_SCHEMA: CollectionSchema = {
     on_events: { type: 'json', nullable: true },
     // True files a pull request on the card of the issue it closes instead of a new card. Null on rows written before it.
     join_closed_issue: { type: 'boolean', nullable: true },
+    // True on rows written since `pull_request.opened` files pull requests with no card. Null on rows
+    // written before (0.28): there `pull_request.opened` only moves a card. Never backfilled.
+    opened_files_pull_requests: { type: 'boolean', nullable: true },
     // Rises on every write to the route, including a move; the compare-and-set token for edits.
     revision: { type: 'integer' },
     created_by: { type: 'text' },

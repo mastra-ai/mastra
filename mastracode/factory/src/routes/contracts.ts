@@ -144,6 +144,8 @@ export const intakeRouteInputSchema = z
     when: intakeRouteFields.when.default(null),
     target: intakeRouteFields.target,
     on: intakeRouteFields.on.optional(),
+    /** Restores a route read with `pullRequestOpenedMovesOnly` as it was: moving cards on `pull_request.opened`, filing none. */
+    pullRequestOpenedMovesOnly: z.literal(true).optional(),
   })
   .strict();
 /** Changes the named fields; send the `revision` you read so a concurrent edit is not overwritten. */
@@ -187,6 +189,11 @@ const intakeRouteSchema = z.object({
   when: intakeRouteWhenSchema.nullable(),
   target: z.object({ boardKey: z.string(), phaseKey: z.string().nullable(), joinClosedIssue: z.boolean() }),
   on: z.array(z.enum(ROUTE_EVENTS)),
+  /**
+   * True on a route stored by 0.28 naming `pull_request.opened`: there it only moves a card, and
+   * files no pull request. Sending `on` again in an edit makes it file them too.
+   */
+  pullRequestOpenedMovesOnly: z.literal(true).optional(),
   /** Send it back as `expectedRevision` when editing or deleting. */
   revision: z.number().int(),
   createdBy: z.string(),

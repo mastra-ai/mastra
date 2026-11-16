@@ -915,7 +915,14 @@ function RouteList({
       const [created] = await send([
         {
           kind: 'create',
-          route: { name: route.name, enabled: route.enabled, when: route.when, on: route.on, target: route.target },
+          route: {
+            name: route.name,
+            enabled: route.enabled,
+            when: route.when,
+            on: route.on,
+            target: route.target,
+            ...(route.pullRequestOpenedMovesOnly && { pullRequestOpenedMovesOnly: true }),
+          },
         },
       ]);
       if (!created) return;

@@ -19,7 +19,7 @@ const ARRIVAL_KINDS: readonly ArrivalKind[] = ['issue', 'pull_request'];
  */
 export function catchesEveryArrival(route: IntakeRouteInfo, kind?: ArrivalKind): boolean {
   if (!route.enabled || route.when !== null || route.target.joinClosedIssue) return false;
-  const kinds = arrivalKinds(route.on);
+  const kinds = arrivalKinds(route);
   return kind ? kinds.has(kind) : kinds.size > 0;
 }
 
@@ -96,8 +96,8 @@ export function triggerLabel(events: readonly string[]): string {
  * Whether a route places new cards. Every other route only moves cards already on its own board, so it
  * belongs to that board's settings, not the factory's.
  */
-export function placesNewCards(route: Pick<IntakeRouteInfo, 'on'>): boolean {
-  return arrivalKinds(route.on).size > 0;
+export function placesNewCards(route: Pick<IntakeRouteInfo, 'on' | 'pullRequestOpenedMovesOnly'>): boolean {
+  return arrivalKinds(route).size > 0;
 }
 
 /**
@@ -209,6 +209,8 @@ export function sendNewCardsTo(
           when: route.when,
           target: { boardKey: to.id, phaseKey },
           on: route.on,
+          // A 0.28 `pull_request.opened` route stays a card move on the copy too.
+          ...(route.pullRequestOpenedMovesOnly && { pullRequestOpenedMovesOnly: true }),
         },
       });
     }

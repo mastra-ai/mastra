@@ -4,7 +4,7 @@ import { externalSourceForWorkItem } from '../rules/types.js';
 import type { FactoryCommitDecision } from '../rules/types.js';
 import type { IntakeEvaluator, StoredBoardsStorage, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
 import type { Card } from '../storage/domains/work-items/base.js';
-import type { BoardEventFacts } from './board-events.js';
+import type { BoardEventFacts, RouteArrivals } from './board-events.js';
 import { arrivalKind, arrivalKinds, eventRuleFacts, LEGACY_ARRIVAL_EVENT } from './board-events.js';
 import { cardRuleFacts } from './card-facts.js';
 import { deriveIntakeOrder, reconcileIntakeOrder } from './intake-order.js';
@@ -17,19 +17,22 @@ export type IntakeRoutesReader = Pick<
   'listIntakeRoutes' | 'readIntakeOrder' | 'recordIntakeDecision' | 'resolveNotRouted' | 'intakeEvaluator'
 >;
 
-type IntakeRoute = Pick<StoredIntakeRouteRecord, 'id' | 'enabled' | 'when' | 'target' | 'on'>;
+type IntakeRoute = Pick<
+  StoredIntakeRouteRecord,
+  'id' | 'enabled' | 'when' | 'target' | 'on' | 'pullRequestOpenedMovesOnly'
+>;
 
 /** Whether the route places new cards, rather than only moving existing ones on later events. */
-export function placesNewCards(route: { on: readonly string[] }): boolean {
-  return arrivalKinds(route.on).size > 0;
+export function placesNewCards(route: RouteArrivals): boolean {
+  return arrivalKinds(route).size > 0;
 }
 
 /**
  * Whether the route files this arrival: an issue by a `work_item.opened` route, a pull request with
  * no card by a `pull_request.opened` one, either by a legacy `work_item.created` one.
  */
-export function placesArrival(route: { on: readonly string[] }, facts: RuleFacts): boolean {
-  return arrivalKinds(route.on).has(arrivalKind(facts));
+export function placesArrival(route: RouteArrivals, facts: RuleFacts): boolean {
+  return arrivalKinds(route).has(arrivalKind(facts));
 }
 
 /**
@@ -55,7 +58,7 @@ export type IntakeTargetProblem = {
  */
 export function intakeTargetProblem(
   registry: BoardRegistry,
-  route: { target: { boardKey: string; phaseKey?: string | null; joinClosedIssue?: boolean }; on: readonly string[] },
+  route: RouteArrivals & { target: { boardKey: string; phaseKey?: string | null; joinClosedIssue?: boolean } },
 ): IntakeTargetProblem | undefined {
   const { target } = route;
   const board = registry.get(target.boardKey);
