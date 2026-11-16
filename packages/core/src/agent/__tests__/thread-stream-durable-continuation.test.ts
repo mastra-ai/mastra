@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { EventEmitterPubSub } from '../../events';
-import { RequestContext } from '../../request-context';
+import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../../request-context';
 import type { Agent } from '../agent';
 import { createDurableAgentStream, emitChunkEvent, emitErrorEvent, emitFinishEvent } from '../durable/stream-adapter';
 import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
@@ -469,5 +469,177 @@ describe('durable thread continuation', () => {
     first.cleanup();
     recovered.cleanup();
     await h.pubsub.close();
+  });
+});
+
+/**
+ * Inngest's `approveToolCall({ runId, toolCallId })` resumes with options that name the run but no thread. The run
+ * continues on its own thread so the answered approval is cleared, unless the resume names another resource. (#30190)
+ */
+describe('continuing a run from a resume that names no thread', () => {
+  const threadId = 'continuation-thread';
+  const resourceId = 'continuation-user';
+
+  /** A run that continues across suspensions, parked on an approval, on an agent with auto-resume on. */
+  async function parkedOnApproval() {
+    const h = setup();
+    const queuedTurns: any[] = [];
+    const agent = {
+      id: 'continuation-agent',
+      getDefaultOptions: async () => ({ autoResumeSuspendedTools: true }),
+      // The queued turn a follow-up starts; only its options matter here.
+      stream: vi.fn(async (_signal: unknown, options: any) => {
+        queuedTurns.push(options);
+        return { runId: options.runId };
+      }),
+    } as unknown as Agent<any, any, any, any>;
+    const first = h.makeStream();
+    await first.ready;
+    await h.runtime.registerRun(
+      agent,
+      first.output,
+      { memory: { thread: threadId, resource: resourceId, options: { lastMessages: 10, semanticRecall: false } } },
+      h.pubsub,
+      { continuation: 'across-suspension' },
+    );
+    await h.chunk('tool-call-approval', { toolCallId: 'call-1', toolName: 'approve_me', args: {} });
+    await vi.waitFor(() => expect(first.output.status).toBe('suspended'));
+    await vi.waitFor(() => expect(h.suspensions()).toHaveLength(1));
+    const resumed = h.makeStream();
+    await resumed.ready;
+    const activeRunId = () => h.runtime.getActiveThreadRunId({ threadId, resourceId }, h.pubsub);
+    /** The plain tool suspends, then a follow-up arrives: it starts the queued turn unless the run is approval-parked. */
+    const suspendAndSendFollowUp = async () => {
+      await h.chunk('tool-call-suspended', { toolCallId: 'call-2', toolName: 'ask', suspendPayload: {} });
+      await vi.waitFor(() => expect(resumed.output.status).toBe('suspended'));
+      await vi.waitFor(() => expect(h.suspensions()).toHaveLength(2));
+      const sent = h.runtime.sendSignal(
+        agent,
+        { type: 'user-message', contents: 'my answer' },
+        { resourceId, threadId },
+        h.pubsub,
+      );
+      expect((await sent.accepted).action).toBe('deliver');
+    };
+    const cleanup = async () => {
+      first.cleanup();
+      resumed.cleanup();
+      await h.pubsub.close();
+    };
+    return { h, agent, queuedTurns, resumed, activeRunId, suspendAndSendFollowUp, cleanup };
+  }
+
+  it('continues on the run thread, clears the answered approval and keeps the run memory', async () => {
+    const p = await parkedOnApproval();
+    try {
+      expect(
+        p.h.runtime.continueRun(
+          p.agent,
+          p.resumed.output,
+          { runId: p.h.runId, toolCallId: 'call-1' } as any,
+          p.h.pubsub,
+        ),
+      ).toBe(true);
+      expect(p.h.registrations()).toHaveLength(1);
+      expect(p.h.runtime.isRunParked(p.h.runId, p.h.pubsub)).toBe(false);
+      expect(p.activeRunId()).toBe(p.h.runId);
+
+      // A run still recorded as approval-parked would keep the thread, and the follow-up would never run.
+      await p.suspendAndSendFollowUp();
+      await vi.waitFor(() => expect(p.queuedTurns).toHaveLength(1));
+      expect(p.activeRunId()).not.toBe(p.h.runId);
+      expect(p.queuedTurns[0].memory).toEqual({
+        thread: threadId,
+        resource: resourceId,
+        options: { lastMessages: 10, semanticRecall: false },
+      });
+    } finally {
+      await p.cleanup();
+    }
+  });
+
+  it('continues on the run thread when the resume names the run resource', async () => {
+    const p = await parkedOnApproval();
+    try {
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+      expect(
+        p.h.runtime.continueRun(
+          p.agent,
+          p.resumed.output,
+          { runId: p.h.runId, toolCallId: 'call-1', requestContext } as any,
+          p.h.pubsub,
+        ),
+      ).toBe(true);
+      expect(p.h.runtime.isRunParked(p.h.runId, p.h.pubsub)).toBe(false);
+    } finally {
+      await p.cleanup();
+    }
+  });
+
+  it('keeps the memory settings the resume passes itself', async () => {
+    const p = await parkedOnApproval();
+    try {
+      expect(
+        p.h.runtime.continueRun(
+          p.agent,
+          p.resumed.output,
+          { runId: p.h.runId, toolCallId: 'call-1', memory: { options: { lastMessages: 1, readOnly: true } } } as any,
+          p.h.pubsub,
+        ),
+      ).toBe(true);
+      await p.suspendAndSendFollowUp();
+      await vi.waitFor(() => expect(p.queuedTurns).toHaveLength(1));
+      expect(p.queuedTurns[0].memory).toEqual({
+        thread: threadId,
+        resource: resourceId,
+        options: { lastMessages: 1, readOnly: true, semanticRecall: false },
+      });
+    } finally {
+      await p.cleanup();
+    }
+  });
+
+  it.each([
+    ['in its memory', () => ({ memory: { resource: 'other-resource' } })],
+    [
+      'in its request context',
+      () => {
+        const requestContext = new RequestContext();
+        requestContext.set(MASTRA_RESOURCE_ID_KEY, 'other-resource');
+        return { requestContext };
+      },
+    ],
+  ])('does not continue a run for a resume that names another resource %s', async (_where, resumeTarget) => {
+    const p = await parkedOnApproval();
+    try {
+      expect(
+        p.h.runtime.continueRun(
+          p.agent,
+          p.resumed.output,
+          { runId: p.h.runId, toolCallId: 'call-1', ...resumeTarget() } as any,
+          p.h.pubsub,
+        ),
+      ).toBe(false);
+      // The run keeps its thread, its approval and its memory.
+      expect(p.h.runtime.isRunParked(p.h.runId, p.h.pubsub)).toBe(true);
+      expect(p.activeRunId()).toBe(p.h.runId);
+    } finally {
+      await p.cleanup();
+    }
+  });
+
+  it('returns false for a resume that names no thread and a run with no record here', async () => {
+    const h = setup();
+    const output = h.makeStream();
+    await output.ready;
+    try {
+      expect(
+        h.runtime.continueRun(h.agent, output.output, { runId: h.runId, toolCallId: 'call-1' } as any, h.pubsub),
+      ).toBe(false);
+    } finally {
+      output.cleanup();
+      await h.pubsub.close();
+    }
   });
 });

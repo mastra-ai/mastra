@@ -484,6 +484,34 @@ function withThreadMemory(memory: unknown, resourceId: string, threadId: string)
   };
 }
 
+type RunMemoryOption = AgentExecutionOptions<any>['memory'];
+
+/**
+ * The memory a resume that names no thread continues its run with: the run's thread and resource, the run's
+ * settings, and on top of those every setting the resume passes itself (`options` merged key by key, so a resume
+ * that sets only `lastMessages` or `readOnly` keeps the rest).
+ */
+function resumeMemoryOnOwnThread({
+  run,
+  resume,
+  threadId,
+  resourceId,
+}: {
+  run: RunMemoryOption;
+  resume: RunMemoryOption;
+  threadId: string;
+  resourceId: string | undefined;
+}): NonNullable<RunMemoryOption> {
+  const options = run?.options || resume?.options ? { ...run?.options, ...resume?.options } : undefined;
+  return {
+    ...run,
+    ...resume,
+    thread: run?.thread ?? threadId,
+    resource: run?.resource ?? resourceId,
+    ...(options ? { options } : {}),
+  };
+}
+
 type AgentThreadRunLifecycle = 'running' | 'suspending' | 'suspended' | 'completed' | 'failed' | 'aborted';
 
 type AgentThreadRunSuspension = {
@@ -5044,7 +5072,11 @@ export class AgentThreadStreamRuntime {
     // A resume can name only its run, as Inngest's `approveToolCall({ runId, toolCallId })` does. It continues on the
     // thread the run holds; otherwise the answered approval stays recorded and the run never gives up the thread
     // to a follow-up queued behind it. (#30190)
-    const continuesOwnThread = !named.threadId && existing !== undefined;
+    // A resume that names another resource is not this run's; it keeps the old path and registers separately.
+    const continuesOwnThread =
+      !named.threadId &&
+      existing !== undefined &&
+      (named.resourceId === undefined || named.resourceId === existing.resourceId);
     const { threadId, resourceId } = continuesOwnThread ? existing : named;
     if (!threadId) return false;
     const key = this.#threadKey(resourceId, threadId);
@@ -5067,9 +5099,18 @@ export class AgentThreadStreamRuntime {
     if (resumedToolCallId) this.#clearSuspendedToolCall(state, output.runId, resumedToolCallId);
     else this.#clearSuspendedRun(state, output.runId);
     existing.lifecycle = 'running';
-    // Keep the run's memory options when the resume names no thread, so the turns it starts later keep them too.
+    // A resume that names no thread keeps the run's thread and resource, and the memory settings it does not pass
+    // itself, so the turns it starts later keep them too.
     existing.streamOptions = continuesOwnThread
-      ? { ...streamOptions, memory: existing.streamOptions.memory }
+      ? {
+          ...streamOptions,
+          memory: resumeMemoryOnOwnThread({
+            run: existing.streamOptions.memory,
+            resume: streamOptions.memory,
+            threadId,
+            resourceId,
+          }),
+        }
       : streamOptions;
     existing.currentSegmentOutput = output;
     if (claim?.generation !== undefined) existing.generation = claim.generation;
