@@ -128,6 +128,34 @@ describe('isReconnectableMCPError', () => {
     }
   });
 
+  it('reads a 400/401/403/404 carried only in structured data', () => {
+    // A Streamable HTTP transport reports a non-OK POST as an `SdkHttpError`
+    // whose message quotes the response body and never mentions the status.
+    // An expired session (404) must still trigger the reconnect-and-retry path.
+    for (const status of [400, 401, 403, 404]) {
+      const error = new SdkHttpError(
+        SdkErrorCode.ClientHttpNotImplemented,
+        'Error POSTing to endpoint: {"jsonrpc":"2.0","id":5,"error":{"code":-32000,"message":"Invalid or expired session"}}',
+        { status },
+      );
+      expect(isReconnectableMCPError(error), String(status)).toBe(true);
+
+      // The client wraps transport failures in its own error; the status must
+      // survive the cause chain.
+      expect(
+        isReconnectableMCPError(new Error('Failed to connect to MCP server', { cause: error })),
+        String(status),
+      ).toBe(true);
+    }
+  });
+
+  it('does not reconnect on other structured HTTP statuses', () => {
+    for (const status of [500, 502, 503, 504]) {
+      const error = new SdkHttpError(SdkErrorCode.ClientHttpNotImplemented, 'Error POSTing to endpoint', { status });
+      expect(isReconnectableMCPError(error), String(status)).toBe(false);
+    }
+  });
+
   it('does not reconnect on legacy session or SSE wording, tool errors or non-errors', () => {
     for (const message of [
       'Session expired for object 42',

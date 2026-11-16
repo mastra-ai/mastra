@@ -1,15 +1,31 @@
 /**
+ * HTTP statuses a gateway, load balancer or auth layer returns before the
+ * request reaches the MCP server's handler. A reply with one of these means the
+ * backend behind it is unhealthy or the credentials went stale, so it is worth
+ * one reconnect and retry — and it proves the request never dispatched.
+ */
+const REJECTED_BEFORE_DISPATCH_STATUSES = new Set([400, 401, 403, 404]);
+
+/**
  * Whether a failed MCP call is worth one transport reconnect and retry.
  *
  * Qualifying failures are a detached SDK client, an HTTP 400/401/403/404 from
  * the endpoint (a gateway or auth layer answering while the backend behind it
  * is unhealthy or the credentials went stale), or a dropped/refused connection.
+ * The transport carries that status in structured fields (`SdkHttpError.status`,
+ * `data.status` or `statusCode`), not in the message, so it is read through
+ * {@link getMCPDiscoveryErrorDetails} before falling back to message text.
  * The caller reconnects and retries once. Tool execution errors and JSON-RPC
  * protocol errors are never reconnectable.
  */
 export function isReconnectableMCPError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
+  }
+
+  const { httpStatus } = getMCPDiscoveryErrorDetails(error);
+  if (httpStatus !== undefined && REJECTED_BEFORE_DISPATCH_STATUSES.has(httpStatus)) {
+    return true;
   }
 
   const errorMessage = error.message.toLowerCase();
@@ -29,7 +45,6 @@ export function isReconnectableMCPError(error: unknown): boolean {
 }
 
 const CONNECTION_NOT_ESTABLISHED_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT']);
-const REJECTED_BEFORE_DISPATCH_STATUSES = new Set([400, 401, 403, 404]);
 
 /**
  * Whether a reconnectable failure proves the request never reached the server's

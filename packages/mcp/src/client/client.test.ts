@@ -1094,6 +1094,40 @@ describe('MastraMCPClient - tool-execution errors vs reconnection', () => {
 
     await client.disconnect().catch(() => {});
   });
+
+  // An expired Streamable HTTP session arrives as an `SdkHttpError` whose message
+  // quotes the JSON-RPC body and never mentions the status, so matching on message
+  // text alone left the client on the dead session and failed every later call. (#30587)
+  it('reconnects and retries when the transport reports its status only in structured data', async () => {
+    const client = new InternalMastraMCPClient({ name: 'structured-status-client', server: { url: testServer.baseUrl } });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'fetch', description: 'Fetches data', inputSchema: { type: 'object' as const } }],
+    });
+
+    const sessionExpired = new SdkHttpError(
+      SdkErrorCode.ClientHttpNotImplemented,
+      'Error POSTing to endpoint: {"jsonrpc":"2.0","id":5,"error":{"code":-32000,"message":"Invalid or expired session"}}',
+      { status: 404 },
+    );
+    const callTool = vi
+      .spyOn(sdkClient, 'callTool')
+      .mockRejectedValueOnce(sessionExpired)
+      .mockResolvedValue({ content: [{ type: 'text', text: 'fetched' }] });
+    const reconnect = vi.spyOn(client as any, 'reconnectAfterTransportFailure').mockResolvedValue(undefined);
+
+    const tools = await client.tools();
+
+    await expect(tools['fetch'].execute?.({})).resolves.toMatchObject({
+      content: [{ type: 'text', text: 'fetched' }],
+    });
+    expect(callTool).toHaveBeenCalledTimes(2);
+    expect(reconnect).toHaveBeenCalledOnce();
+
+    await client.disconnect().catch(() => {});
+  });
 });
 
 describe('MastraMCPClient - no outputSchema', () => {
