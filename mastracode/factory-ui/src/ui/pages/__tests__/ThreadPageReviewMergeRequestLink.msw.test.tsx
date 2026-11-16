@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { listedRepository } from '../../../../e2e/ui/factory-projects';
 import { server } from '../../../../e2e/ui/msw-server';
-import { findPageHeader, renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { findPageHeader, renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import type { PullRequestSubscription } from '../../domains/factory/services/githubSubscriptions';
 import { createAppRoutes } from '../../router';
 
@@ -223,10 +223,11 @@ describe('ThreadPage merge request link placement', () => {
       stubThreadRoute(createWireWorkItem('pull-request'), [
         { ...subscribedMergeRequest, pullRequestNumber: MERGE_REQUEST_IID, url: MERGE_REQUEST_URL },
       ]);
-      renderThreadRoute();
+      const { client } = renderThreadRoute();
 
       const panel = await findSessionPanel();
       await within(panel).findByRole('link', { name: `Open MR !${MERGE_REQUEST_IID}` });
+      await waitForMutationsIdle(client);
       expect(linksTo(panel, MERGE_REQUEST_URL)).toHaveLength(1);
     });
   });
