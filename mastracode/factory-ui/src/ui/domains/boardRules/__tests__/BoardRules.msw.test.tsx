@@ -124,7 +124,7 @@ describe('Board rules', () => {
 
   it('shows a rule on the old opened event in both arrival lanes, marked legacy, and keeps its event on edit', async () => {
     const { sent } = serveRules({
-      rules: [{ ...rule({ id: ruleId('legacy'), name: 'Old intake rule' }), on: ['work_item.created' as never] }],
+      rules: [{ ...rule({ id: ruleId('legacy'), name: 'Old intake rule' }), on: ['work_item.created'] }],
     });
     const user = userEvent.setup();
     const { client } = renderRules();

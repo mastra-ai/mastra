@@ -34,7 +34,7 @@ describe('ordinal', () => {
 });
 
 describe('newItemRules', () => {
-  const legacy = { ...rule({ id: 'legacy', name: 'Old intake' }), on: ['work_item.created' as never] };
+  const legacy = { ...rule({ id: 'legacy', name: 'Old intake' }), on: ['work_item.created'] };
   const issues = rule({
     id: 'issues',
     name: 'Bugs',
