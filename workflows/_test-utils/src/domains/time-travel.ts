@@ -2129,6 +2129,32 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
       },
     );
 
+    // An explicit initialState passed to timeTravel still overrides the state the earlier steps saved,
+    // which is the workaround the #30022 report names. (#30022)
+    it.skipIf(skipTests.timeTravelPreviousRun || !timeTravel)(
+      'replays a failed step with an explicit initialState when one is passed (#30022)',
+      async () => {
+        const { workflow, mocks, resetMocks } = registry!['tt-state-from-earlier-steps-retry-succeeds']!;
+        resetMocks?.();
+        const runId = `tt-state-explicit-initial-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        const started = await execute(workflow, {}, { runId, initialState: { order: 7 } });
+        expect(started.status).toBe('failed');
+
+        const replayed = await timeTravel!(workflow, {
+          step: 'charge',
+          runId,
+          initialState: { order: 99 },
+          outputOptions: { includeState: true },
+        });
+
+        expect(replayed.status).toBe('success');
+        expect(mocks.chargeSawOrder.mock.calls).toEqual([[42], [99]]);
+        expect(mocks.receiptSawOrder.mock.calls).toEqual([[99]]);
+        expect(replayed.state).toEqual({ order: 99 });
+      },
+    );
+
     // A user answers a suspended step with a value that is valid for its
     // resumeSchema but falsy. timeTravel used to drop these because resume data
     // was checked by truthiness instead of presence. (#29390)

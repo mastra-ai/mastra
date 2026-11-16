@@ -900,6 +900,8 @@ export interface TimeTravelWorkflowOptions {
   resumeData?: unknown;
   /** Output options (e.g., includeState to return state in result) */
   outputOptions?: ExecuteWorkflowOptions['outputOptions'];
+  /** Explicit starting state for the replay; overrides the state saved in the snapshot */
+  initialState?: Record<string, unknown>;
 }
 
 /**
