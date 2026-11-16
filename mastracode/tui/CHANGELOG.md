@@ -1,5 +1,39 @@
 # mastracode
 
+## 0.50.1-alpha.4
+
+### Patch Changes
+
+- **Showed plugin signal provider startup failures.** A plugin signal provider that fails to start while Mastra Code boots now shows an error in the session, as reload failures do, instead of only printing to the console before the UI starts. ([#30428](https://github.com/mastra-ai/mastra/pull/30428))
+
+- **Fixed startup carrying on after you stop Mastra Code.** If you press Ctrl+C while Mastra Code is still starting, startup now stops. Before, it kept going even though Mastra Code was shutting down. It could take the terminal back, resume and lock a thread, clone a thread from another resource, and connect MCP servers. It could also apply the startup model pack, open onboarding, run SessionStart hooks and send the startup prompt. Stopping during onboarding no longer opens the login dialog, switches models or opens the model picker either. Text you typed is also no longer submitted after Mastra Code stops. ([#30431](https://github.com/mastra-ai/mastra/pull/30431))
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`6c647e6`](https://github.com/mastra-ai/mastra/commit/6c647e6faee5a6182d99e2352808df1b57558b67), [`adc0a70`](https://github.com/mastra-ai/mastra/commit/adc0a70bf835d1f81f7bf0af11b247ca115a6683), [`cd2a326`](https://github.com/mastra-ai/mastra/commit/cd2a326988ced13509902dfa50339afcffdbf95e), [`0170d70`](https://github.com/mastra-ai/mastra/commit/0170d700a411ce2b5e64a82bc1133716ae75cbd6), [`4224ee3`](https://github.com/mastra-ai/mastra/commit/4224ee32d3e8fa0f76aedab499c24acc1a564435), [`1072f7c`](https://github.com/mastra-ai/mastra/commit/1072f7c6268db5fb515460fdcdda173592bce450), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b)]:
+  - @mastra/core@1.84.0-alpha.3
+  - @mastra/libsql@1.31.0-alpha.1
+  - @mastra/pg@1.37.0-alpha.1
+  - @mastra/memory@1.41.2-alpha.2
+  - @mastra/mcp@2.10.0-alpha.0
+  - @mastra/code-sdk@1.19.1-alpha.4
+
+## 0.50.1-alpha.3
+
+### Patch Changes
+
+- **Showed plugin failures in the session.** When a plugin fails to reload, Mastra Code now shows an error saying it is still running the previous version, and signal provider errors from plugins appear the same way instead of only on the console. ([#30412](https://github.com/mastra-ai/mastra/pull/30412))
+
+- Updated dependencies [[`02dbde1`](https://github.com/mastra-ai/mastra/commit/02dbde13cc09e9605279b46cb49f03f3b91dd48f), [`7f09a63`](https://github.com/mastra-ai/mastra/commit/7f09a63553cd382c5098fa25f8c42312a3d82494), [`5686fa1`](https://github.com/mastra-ai/mastra/commit/5686fa16edd60a1a30b97dbbdf97e852e588436b)]:
+  - @mastra/code-sdk@1.19.1-alpha.3
+
+## 0.50.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`7277766`](https://github.com/mastra-ai/mastra/commit/7277766d6c967c475675d58ff2d0e5c6d7be7c84), [`9eae968`](https://github.com/mastra-ai/mastra/commit/9eae9680d2be2c9596156c1426998c173f80618f), [`951a18b`](https://github.com/mastra-ai/mastra/commit/951a18b08571b87eae318bcd0f5970b8e70ca3c8), [`f4458ee`](https://github.com/mastra-ai/mastra/commit/f4458eea7f221a5b741a4846bba9b95139a8aef8), [`a3b4ef9`](https://github.com/mastra-ai/mastra/commit/a3b4ef9ecda76f961cb9992a2c8787d37d8ce1b3), [`547600d`](https://github.com/mastra-ai/mastra/commit/547600d004e08ecb8b08c84312b535ae5b016c92)]:
+  - @mastra/core@1.84.0-alpha.2
+  - @mastra/memory@1.41.2-alpha.1
+  - @mastra/code-sdk@1.19.1-alpha.2
+
 ## 0.50.1-alpha.1
 
 ### Patch Changes

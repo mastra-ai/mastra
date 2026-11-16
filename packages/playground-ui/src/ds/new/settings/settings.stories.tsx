@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { GitBranchIcon, MonitorIcon } from 'lucide-react';
 import {
   SettingsContainer,
   SettingsEmptyRow,
@@ -21,6 +20,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/ds/components/Switch';
 import { ThemeProvider } from '@/ds/components/ThemeProvider';
 import { ThemeToggle } from '@/ds/components/ThemeToggle';
+import { IconBranch } from '@/ds/icons/central/IconBranch';
+import { IconStudioDisplay } from '@/ds/icons/central/IconStudioDisplay';
 
 const meta = {
   title: 'New/Settings',
@@ -94,7 +95,7 @@ export const Page: Story = {
           <SettingsItem
             media={
               <SettingsItemIcon>
-                <GitBranchIcon />
+                <IconBranch />
               </SettingsItemIcon>
             }
             title="mastra-ai"
@@ -110,7 +111,7 @@ export const Page: Story = {
           <SettingsItem
             media={
               <SettingsItemIcon>
-                <MonitorIcon />
+                <IconStudioDisplay />
               </SettingsItemIcon>
             }
             title="Chrome on macOS"

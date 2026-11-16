@@ -331,6 +331,11 @@ describe('SandboxFilesystem', () => {
     expect(fs.getInfo().metadata).toMatchObject({ basePath: WORKDIR, sandboxId: 'fake-sandbox' });
   });
 
+  it('reports the workspace root as the directory shell commands default to', async () => {
+    const { fs } = makeFs();
+    await expect(fs.getCommandCwd()).resolves.toBe(WORKDIR);
+  });
+
   describe('lazy workdir', () => {
     it('resolves the workdir once on first use and memoizes it', async () => {
       let resolves = 0;
@@ -372,6 +377,27 @@ describe('SandboxFilesystem', () => {
       await expect(fs.exists('/a.txt')).rejects.toThrow('VM not up');
       await expect(fs.exists('/a.txt')).resolves.toBe(true);
       expect(fs.basePath).toBe(WORKDIR);
+    });
+
+    it('resolves the lazy workdir for the command cwd and memoizes it', async () => {
+      let resolves = 0;
+      const fs = new SandboxFilesystem({
+        sandbox: new FakeSandbox(),
+        workdir: async () => {
+          resolves += 1;
+          return WORKDIR;
+        },
+      });
+
+      await expect(fs.getCommandCwd()).resolves.toBe(WORKDIR);
+      await expect(fs.getCommandCwd()).resolves.toBe(WORKDIR);
+
+      expect(resolves).toBe(1);
+    });
+
+    it('rejects when a lazy workdir resolves to an empty path', async () => {
+      const fs = new SandboxFilesystem({ sandbox: new FakeSandbox(), workdir: async () => '' });
+      await expect(fs.getCommandCwd()).rejects.toThrow('Sandbox workspace root resolution returned an empty path');
     });
   });
 });

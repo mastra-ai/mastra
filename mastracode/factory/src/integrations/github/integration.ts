@@ -29,6 +29,7 @@ import type { MastraWorker } from '@mastra/core/worker';
 import { createAppAuth } from '@octokit/auth-app';
 import { Octokit } from '@octokit/rest';
 
+import type { IntakeItemLookup } from '../../boards/intake-lookup.js';
 import type { IntegrationConnection } from '../../capabilities/connection.js';
 import type {
   CreateIntakeCommentInput,
@@ -50,6 +51,7 @@ import type {
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import type { GithubEventRules, GithubRuleOverrides } from './default-rules.js';
 import { resolveGithubRules } from './default-rules.js';
+import { githubIntakeLookup } from './intake-lookup.js';
 import { attachGithubIssueReconciler } from './issue-reconciler.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
 import { reconcileInterval, reconciliationEnabled } from './reconciliation-config.js';
@@ -211,6 +213,13 @@ export class GithubIntegration implements FactoryIntegration {
   get rules(): GithubEventRules {
     return this.#rules;
   }
+  readonly intakeLookup: IntakeItemLookup = githubIntakeLookup({
+    sourceControl: () => this.sourceControlStorage,
+    fetchIssueState: input => this.fetchIssueState(input),
+    fetchPullRequestState: input => this.fetchPullRequestState(input),
+    getRepositoryCollaboratorPermission: (installationId, repository, login) =>
+      this.getRepositoryCollaboratorPermission(installationId, repository, login),
+  });
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async ({ orgId }) => {
@@ -1291,7 +1300,7 @@ export class GithubIntegration implements FactoryIntegration {
   /**
    * The integration's HTTP surface: the `/web/github/*` + `/auth/github/*`
    * Mastra `apiRoutes` (webhook handler, install/OAuth flow, project +
-   * worktree + session operations). The factory folds these into the server's
+   * commit/push/PR operations). The factory folds these into the server's
    * `apiRoutes` when the feature is ready. Handlers operate on this instance.
    */
   routes(ctx: IntegrationContext): ApiRoute[] {
@@ -1302,17 +1311,13 @@ export class GithubIntegration implements FactoryIntegration {
       github: this,
       auth: ctx.auth,
       sandbox: ctx.sandbox,
-      ...(ctx.users ? { users: ctx.users } : {}),
       storage: ctx.factoryStorage,
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
       controller: ctx.controller,
-      memorySettings: ctx.storage.memorySettings,
       emitAudit: ctx.hooks?.emitAudit,
       projects: ctx.storage.projects,
       ingestFactoryEvent,
-      sessionRetirement: ctx.sessionRetirement,
-      ...(ctx.workItems ? { workItems: ctx.workItems } : {}),
     });
   }
 

@@ -509,7 +509,22 @@ describe('Agent signals: claimed thread ownership', () => {
     it('runs a plain wake that arrives during owner discovery with its own caller tenant', async () => {
       // A wake without requireClaimedOwner (the background-task finish report) that lands while a
       // discovery is in flight is handed to the same remote owner.
-      const pubsub = new ControlledLeasePubSub();
+      let releaseSecondRequest!: () => void;
+      const secondRequestReleased = new Promise<void>(resolve => (releaseSecondRequest = resolve));
+      class HeldSecondRequestPubSub extends ControlledLeasePubSub {
+        override async publish(topic: string, event: any): Promise<void> {
+          // The plain wake may join the first run when it reaches the owner while that run is in flight, and
+          // then runs as that run's caller. Hold its request until the first run ends so it starts its own.
+          if (
+            event.data?.type === 'idle-signal-enqueued' &&
+            JSON.stringify(event.data.signal).includes('task finished')
+          ) {
+            await secondRequestReleased;
+          }
+          return super.publish(topic, event);
+        }
+      }
+      const pubsub = new HeldSecondRequestPubSub();
       const ownerRuntime = agentThreadStreamRuntime;
       const senderRuntime = new AgentThreadStreamRuntime();
       const owner = createTenantOwner('discovery-tenant-owner', pubsub);
@@ -551,16 +566,14 @@ describe('Agent signals: claimed thread ownership', () => {
           pubsub,
         );
 
-        await expect(Promise.all([first.accepted, second.accepted])).resolves.toEqual([
-          expect.objectContaining({ action: 'deliver' }),
-          expect.objectContaining({ action: 'deliver' }),
-        ]);
-        const runs = [
-          await withTimeout(firstRun, 'Timed out waiting for the first owner run'),
-          await withTimeout(readNextRunWithParts(iterator), 'Timed out waiting for the second owner run'),
-        ];
-        expect(runs.map(run => run.value.text).sort()).toEqual(['report for acme', 'report for globex']);
+        await expect(first.accepted).resolves.toEqual(expect.objectContaining({ action: 'deliver' }));
+        const runs = [await withTimeout(firstRun, 'Timed out waiting for the first owner run')];
+        releaseSecondRequest();
+        await expect(second.accepted).resolves.toEqual(expect.objectContaining({ action: 'deliver' }));
+        runs.push(await withTimeout(readNextRunWithParts(iterator), 'Timed out waiting for the second owner run'));
+        expect(runs.map(run => run.value.text)).toEqual(['report for acme', 'report for globex']);
       } finally {
+        releaseSecondRequest();
         claim.unsubscribe();
         subscription.unsubscribe();
       }
@@ -3613,45 +3626,52 @@ describe('Agent signals: claimed thread ownership', () => {
   });
 
   it('paces claimed-owner discovery retries when pubsub publish fails immediately', async () => {
-    let discoveryRequests = 0;
-    class FailingDiscoveryPubSub extends EventEmitterPubSub {
-      override async publish(...args: Parameters<EventEmitterPubSub['publish']>): Promise<void> {
-        const [topic, event] = args;
-        if (
-          topic === 'agent.thread-owner-discovery' &&
-          (event.data as { type?: string } | undefined)?.type === 'thread-owner-request'
-        ) {
-          discoveryRequests++;
-          throw new Error('pubsub unavailable');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      let discoveryRequests = 0;
+      class FailingDiscoveryPubSub extends EventEmitterPubSub {
+        override async publish(...args: Parameters<EventEmitterPubSub['publish']>): Promise<void> {
+          const [topic, event] = args;
+          if (
+            topic === 'agent.thread-owner-discovery' &&
+            (event.data as { type?: string } | undefined)?.type === 'thread-owner-request'
+          ) {
+            discoveryRequests++;
+            throw new Error('pubsub unavailable');
+          }
+          return super.publish(...args);
         }
-        return super.publish(...args);
       }
-    }
-    const pubsub = new FailingDiscoveryPubSub();
-    const senderAgent = new Agent({
-      id: 'failing-discovery-sender-agent',
-      name: 'Failing Discovery Sender Agent',
-      instructions: 'Test',
-      model: createTextStreamModel('sender response'),
-      pubsub,
-    });
+      const pubsub = new FailingDiscoveryPubSub();
+      const senderAgent = new Agent({
+        id: 'failing-discovery-sender-agent',
+        name: 'Failing Discovery Sender Agent',
+        instructions: 'Test',
+        model: createTextStreamModel('sender response'),
+        pubsub,
+      });
 
-    const signalResult = new AgentThreadStreamRuntime().sendSignal(
-      senderAgent,
-      { type: 'user-message', contents: 'wake nobody' },
-      {
-        resourceId: 'failing-discovery-user',
-        threadId: 'failing-discovery-thread',
-        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
-      },
-      pubsub,
-    );
-    // The whole message survives storage and display: no NUL from the internal thread key.
-    await expect(signalResult.accepted).rejects.toThrow(
-      'No claimed thread owner responded for thread failing-discovery-thread (resource failing-discovery-user) within 1000ms',
-    );
-    // 100 + 200 + 400 + remaining 300ms fits in the 1s budget.
-    expect(discoveryRequests).toBeLessThanOrEqual(4);
+      const signalResult = new AgentThreadStreamRuntime().sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'wake nobody' },
+        {
+          resourceId: 'failing-discovery-user',
+          threadId: 'failing-discovery-thread',
+          ifIdle: { behavior: 'wake', requireClaimedOwner: true },
+        },
+        pubsub,
+      );
+      // The whole message survives storage and display: no NUL from the internal thread key.
+      const rejected = expect(signalResult.accepted).rejects.toThrow(
+        'No claimed thread owner responded for thread failing-discovery-thread (resource failing-discovery-user) within 1000ms',
+      );
+      await vi.advanceTimersByTimeAsync(1_100);
+      await rejected;
+      // Requests at 0, 100, 300 and 700ms; the next backoff (800ms) would pass the 1s deadline.
+      expect(discoveryRequests).toBe(4);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('stops claimed-owner discovery retries at the deadline when timers fire a millisecond early', async () => {

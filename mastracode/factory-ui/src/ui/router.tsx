@@ -70,8 +70,8 @@ const FactorySkillsPage = lazyPage(
   () => import('./pages/FactorySkillsPage').then(module => module.FactorySkillsPage),
   <AppPageLoader />,
 );
-const CardMovesPage = lazyPage(
-  () => import('./pages/CardMovesPage').then(module => module.CardMovesPage),
+const BoardRulesPage = lazyPage(
+  () => import('./pages/BoardRulesPage').then(module => module.BoardRulesPage),
   <AppPageLoader />,
 );
 const NewBoardPage = lazyPage(
@@ -274,8 +274,11 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                         { path: 'boards/:boardId/config/:phaseKey?', ...lazyRoute(BoardConfigPage) },
                         { path: 'work/skills', ...lazyRoute(FactorySkillsPage) },
                         { path: 'boards/:boardId/skills', ...lazyRoute(FactorySkillsPage) },
-                        { path: 'work/moves', ...lazyRoute(CardMovesPage) },
-                        { path: 'boards/:boardId/moves', ...lazyRoute(CardMovesPage) },
+                        { path: 'work/rules', ...lazyRoute(BoardRulesPage) },
+                        { path: 'boards/:boardId/rules', ...lazyRoute(BoardRulesPage) },
+                        // Card moves became the board's Rules page.
+                        { path: 'work/moves', element: <Navigate to="../rules" relative="path" replace /> },
+                        { path: 'boards/:boardId/moves', element: <Navigate to="../rules" relative="path" replace /> },
                         { path: 'activity', element: <FactoryHomeRedirect /> },
                         { path: 'overview', element: <FactoryHomeRedirect /> },
                         { path: 'attention', element: <FactoryHomeRedirect /> },

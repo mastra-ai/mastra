@@ -5,12 +5,13 @@ import { Form } from '@mastra/playground-ui/components/Form';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
+import { IconRocket } from '@mastra/playground-ui/icons/central/IconRocket';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useScorerVersions, useScorerVersion } from '@mastra/react/hooks/scores';
 import { useQueryClient } from '@tanstack/react-query';
-import { Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -195,11 +196,11 @@ function CmsScorersEditForm({
         <Notice variant="info" title="This is a previous version" className="m-4 mb-0">
           <Notice.Message>You are seeing a specific version of the scorer.</Notice.Message>
           <div className="flex gap-2">
-            <Button icon={<Eye />} type="button" variant="default" size="sm" onClick={onClearVersion}>
+            <Button icon={<IconEyeOpen />} type="button" variant="default" size="sm" onClick={onClearVersion}>
               View latest version
             </Button>
             <Button
-              icon={<Rocket />}
+              icon={<IconRocket />}
               type="button"
               variant="default"
               size="sm"

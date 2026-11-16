@@ -1,5 +1,4 @@
 import type { SpanInputMessage } from '@mastra/core/observability';
-import { MessagesSquareIcon, ScrollTextIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import type { SpanRecord } from '../types';
@@ -11,6 +10,8 @@ import { DiffStat } from '@/ds/components/DiffStat';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
+import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
+import { IconScript } from '@/ds/icons/central/IconScript';
 import { focusRing } from '@/ds/primitives/transitions';
 import { formatCompactNumber } from '@/lib/cost';
 import { pluralize } from '@/lib/string';
@@ -320,15 +321,13 @@ export function SpanPromptChanges({ span }: { span: SpanRecord }) {
     <div className="flex min-w-0 flex-col gap-3">
       {system.length > 0 && (
         <DiffCard
-          icon={<ScrollTextIcon />}
+          icon={<IconScript />}
           title="System prompt"
           changes={system}
           kept={keptSystemMessages(span, system)}
         />
       )}
-      {conversation.length > 0 && (
-        <DiffCard icon={<MessagesSquareIcon />} title="Conversation" changes={conversation} />
-      )}
+      {conversation.length > 0 && <DiffCard icon={<IconChatBubbles />} title="Conversation" changes={conversation} />}
     </div>
   );
 }

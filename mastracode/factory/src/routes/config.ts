@@ -113,6 +113,12 @@ export interface ProviderInfo {
   custom?: true;
   /** Tenant mode: Factory can mint this provider's key with the caller's Mastra account (the Mastra Gateway). */
   connectWithMastraAccount?: true;
+  /**
+   * Tenant mode: the server has its own key for this provider (the Mastra Gateway), which serves
+   * any scope that has no stored credential. Reported apart from `source`, which names only the
+   * credential that wins for the caller.
+   */
+  serverKey?: true;
 }
 
 /** Minimal session surface the config routes touch. */
@@ -207,6 +213,9 @@ export async function listProviders({
     }
 
     const authProviderId = getAuthProviderId(model.provider);
+    // The server has its own gateway key, such as the one the Mastra platform adds to a deploy.
+    const serverGatewayKey =
+      model.provider === MASTRA_GATEWAY_CATALOG_PROVIDER && Boolean(MastraCodeGateway.getMastraGatewayApiKey());
     let source: ProviderInfo['source'] = 'none';
     let orgKey: boolean | undefined;
     let userCredential: ProviderInfo['userCredential'];
@@ -230,6 +239,10 @@ export async function listProviders({
         source = 'oauth-org';
       } else if (orgRec?.credential.type === 'api_key') {
         source = 'stored-org';
+      } else if (serverGatewayKey) {
+        // Model resolution already falls back to the server's key, so the shared
+        // account is connected without a key of its own.
+        source = 'deployment';
       }
     } else if (authStorage?.isLoggedIn(authProviderId)) {
       source = 'oauth';
@@ -252,9 +265,14 @@ export async function listProviders({
       ...(orgCredential ? { orgCredential } : {}),
       ...(orgCredentialExpired ? { orgCredentialExpired: true as const } : {}),
       ...(flowKind ? { oauth: { supported: true as const, modes: [flowKind] } } : {}),
-      ...(tenantCredentials && connectWithMastraAccount && model.provider === MASTRA_GATEWAY_CATALOG_PROVIDER
+      // A server that already has a gateway key needs no key minted, so the one-click connect is not offered.
+      ...(tenantCredentials &&
+      connectWithMastraAccount &&
+      model.provider === MASTRA_GATEWAY_CATALOG_PROVIDER &&
+      !serverGatewayKey
         ? { connectWithMastraAccount: true as const }
         : {}),
+      ...(tenantCredentials && serverGatewayKey ? { serverKey: true as const } : {}),
     });
   }
 
@@ -1117,7 +1135,10 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           }
           const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
           try {
-            if (!(await ctx.storage.getCredential(tenant, MASTRA_GATEWAY_PROVIDER))) {
+            // A server with its own gateway key does not offer this connect. Never mint a
+            // second key there, even for a client that still calls the route.
+            const serverHasKey = Boolean(MastraCodeGateway.getMastraGatewayApiKey());
+            if (!serverHasKey && !(await ctx.storage.getCredential(tenant, MASTRA_GATEWAY_PROVIDER))) {
               const apiKey = await createGatewayKey(auth, loose(c), ctx.orgId, scope);
               await ctx.storage.setCredential(tenant, MASTRA_GATEWAY_PROVIDER, { type: 'api_key', key: apiKey });
               onCredentialsChanged(tenant);

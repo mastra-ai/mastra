@@ -12,8 +12,10 @@ import { useLoopScenarioAimock } from '../../../loop/test-utils/aimock/aimock-sc
 import { SCENARIO_MODEL_ID } from '../../../loop/test-utils/aimock/types';
 import { Mastra } from '../../../mastra';
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../../../request-context';
+import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { createDurableAgent, createEventedAgent } from '../../durable';
 import { requestAcknowledgedAbort } from '../abort-transport';
 import { AGENT_CONTROL_TOPIC } from '../constants';
 import { createAgentStreamPublisher } from '../publisher';
@@ -22,7 +24,7 @@ describe('Agent streams remote abort', () => {
   const getMock = useLoopScenarioAimock();
 
   /** An agent whose tool blocks until `stop` runs, then releases the tool. */
-  const setup = (pubsub: EventEmitterPubSub) => {
+  const setup = (pubsub: EventEmitterPubSub, wrapper?: 'durable' | 'evented' | 'override') => {
     let toolStarted!: () => void;
     const started = new Promise<void>(resolve => (toolStarted = resolve));
     let release!: () => void;
@@ -38,6 +40,7 @@ describe('Agent streams remote abort', () => {
       new Agent({
         id: 'abort-agent',
         name: 'abort-agent',
+        ...(wrapper ? { pubsub } : {}),
         instructions: 'Use the tool.',
         model: createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${getMock().url}/v1` })(SCENARIO_MODEL_ID),
         tools: {
@@ -56,7 +59,18 @@ describe('Agent streams remote abort', () => {
       });
 
     const agent = makeAgent();
-    new Mastra({ agents: { agent }, pubsub, logger: false });
+    const wrapped =
+      wrapper === 'evented'
+        ? createEventedAgent({ agent })
+        : wrapper
+          ? createDurableAgent({ agent, ...(wrapper === 'override' ? { pubsub: new EventEmitterPubSub() } : {}) })
+          : agent;
+    new Mastra({
+      agents: { agent: wrapped },
+      pubsub: wrapper ? new EventEmitterPubSub() : pubsub,
+      storage: new InMemoryStore(),
+      logger: false,
+    });
     // The same agent registered on a second Mastra sharing the bus.
     const remote = makeAgent();
     new Mastra({ agents: { agent: remote }, pubsub, logger: false });
@@ -118,6 +132,40 @@ describe('Agent streams remote abort', () => {
     expect(await done).toMatch(/abort|cancel/);
     expect(getMock().getRequests()).toHaveLength(1);
   });
+
+  it.each(
+    (['stream', 'generate'] as const).flatMap(method =>
+      (['durable', 'evented', 'override'] as const).map(wrapper => ({ method, wrapper })),
+    ),
+  )(
+    'keeps native $method observation and remote Stop on its own bus with an $wrapper wrapper',
+    async ({ method, wrapper }) => {
+      const pubsub = new EventEmitterPubSub();
+      const { agent, remote, started, release } = setup(pubsub, wrapper);
+      const runId = `native-stop-${method}-${wrapper}`;
+      const running =
+        method === 'stream'
+          ? agent.stream('Look it up then continue.', { runId, maxSteps: 3 }).then(finishReason)
+          : agent.generate('Look it up then continue.', { runId, maxSteps: 3 }).then(output => output.finishReason);
+      await started;
+      const observed = await remote.observe(runId);
+      const observing = (async () => {
+        const types: string[] = [];
+        for await (const chunk of observed.fullStream) types.push(chunk.type);
+        return types;
+      })();
+      try {
+        expect(await requestAcknowledgedAbort(remote.__getStreamBus()!.pubsub, runId)).toBe(true);
+      } finally {
+        release();
+      }
+      expect(await running).toMatch(/abort|cancel/);
+      const types = await observing;
+      expect(types).toContain('tool-result');
+      expect(types.at(-1)).toBe('finish');
+      expect(getMock().getRequests()).toHaveLength(1);
+    },
+  );
 
   it('__abortRunAcknowledged() reports false when no process runs the run', async () => {
     const pubsub = new EventEmitterPubSub();

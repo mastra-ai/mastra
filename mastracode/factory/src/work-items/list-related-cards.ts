@@ -1,6 +1,6 @@
-import { isPullRequestCard } from '../boards/semantics.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import { workItemBranchSource } from '../work-item-branch.js';
+import { isPullRequestCard } from './change-requests.js';
 import { relatedCardIndex } from './related-cards.js';
 import type { PullRequestFacts } from './related-cards.js';
 

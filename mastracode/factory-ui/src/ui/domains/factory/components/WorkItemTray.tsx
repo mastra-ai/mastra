@@ -1,18 +1,17 @@
+import type { CardContextSession } from '@mastra/factory/work-items/card-context-sessions';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
-import { History } from 'lucide-react';
-
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { boardOf } from '../boardFlow';
-import type { CardContextSession } from '../boardItems';
 import type { ReworkReason } from '../reworkReason';
 import type { AuditActorProfile, AuditEvent } from '../services/audit';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 import { CardSourceDescription } from './BoardCardDetails';
 import { CardSessions } from './CardSessions';
 import { ActivityEvent } from './WorkItemActivity';
 import { WorkItemDescription } from './WorkItemDescription';
+import { IconHistory } from '@mastra/playground-ui/icons/central/IconHistory';
 
 // The card itself on top, then its runs and moves in time order.
 export function WorkItemTray({
@@ -29,7 +28,7 @@ export function WorkItemTray({
   projectRepositoryId: string;
   events: AuditEvent[];
   actors: Record<string, AuditActorProfile>;
-  contextSessions: readonly CardContextSession[];
+  contextSessions: readonly CardContextSession<WorkItemSessionRef>[];
   rework?: ReworkReason;
 }) {
   const factoryProjectId = factoryId || undefined;
@@ -60,7 +59,7 @@ export function WorkItemTray({
         </div>
         {events.length === 0 ? (
           <div className="text-muted-foreground flex items-center justify-center gap-1.5 px-2 py-6">
-            <History size={14} aria-hidden />
+            <IconHistory className="size-icon-sm" aria-hidden />
             <Txt as="span" variant="caption">
               No activity yet
             </Txt>
