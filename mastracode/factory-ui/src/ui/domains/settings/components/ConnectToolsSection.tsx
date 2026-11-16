@@ -1,4 +1,8 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ClampedText } from '@mastra/playground-ui/components/ClampedText';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Notice } from '@mastra/playground-ui/components/Notice';
@@ -11,13 +15,24 @@ import {
   SettingsListHeader,
   SettingsSkeleton,
 } from '@mastra/playground-ui/new/settings';
+import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
 import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 
-import { useConnectToolsQuery } from '../../../../hooks/useConnectTools';
+import { useConnectToolListQuery, useConnectToolsQuery } from '../../../../hooks/useConnectTools';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { connectToolsOffReason, platformProjectConnectUrl } from '../../factory/services/platformConnect';
-import type { ConnectToolConnection, ConnectToolsSetupMissing } from '../../factory/services/platformConnect';
+import {
+  connectToolsOffReason,
+  groupConnectTools,
+  platformProjectConnectUrl,
+} from '../../factory/services/platformConnect';
+import type {
+  ConnectToolConnection,
+  ConnectToolInfo,
+  ConnectTools,
+  ConnectToolsSetupMissing,
+} from '../../factory/services/platformConnect';
 import { SettingsSubsection } from './SettingsSubsection';
 import { RetryRow } from './common/ConnectionStateRows';
 
@@ -72,21 +87,141 @@ export function ConnectToolsSection() {
           </SettingsEmptyRow>
         </SettingsContainer>
       ) : (
-        <SettingsContainer>
-          <SettingsListHeader action={<ManageLink projectId={query.data.projectId} />}>
-            {query.data.connections.length === 1 ? '1 connection' : `${query.data.connections.length} connections`}
-          </SettingsListHeader>
-          {query.data.connections.map(connection => (
-            <SettingsItem
-              key={connection.id}
-              media={<ProviderLogo connection={connection} />}
-              title={connection.providerName}
-              description={<ConnectionDescription connection={connection} />}
-            />
-          ))}
-        </SettingsContainer>
+        <ConnectionList connectTools={query.data} />
       )}
     </SettingsSubsection>
+  );
+}
+
+function ConnectionList({ connectTools }: { connectTools: ConnectTools }) {
+  const toolList = useConnectToolListQuery();
+  const { connections, projectId } = connectTools;
+  const groups = toolList.data
+    ? groupConnectTools(
+        toolList.data.tools,
+        connections.map(connection => connection.integrationId),
+      )
+    : undefined;
+  const status = toolList.isPending ? 'pending' : toolList.isError ? 'error' : 'success';
+
+  return (
+    <SettingsContainer>
+      <SettingsListHeader action={<ManageLink projectId={projectId} />}>
+        {connections.length === 1 ? '1 connection' : `${connections.length} connections`}
+      </SettingsListHeader>
+      {connections.map(connection => (
+        <ToolsDisclosure
+          key={connection.id}
+          name={connection.providerName}
+          media={<ProviderLogo connection={connection} />}
+          description={<ConnectionDescription connection={connection} />}
+          tools={groups?.byIntegration.get(connection.integrationId) ?? []}
+          status={status}
+        />
+      ))}
+      {groups && groups.other.length > 0 && (
+        <ToolsDisclosure
+          name={toolList.data?.toolsSource === 'custom' ? 'Other tools from code' : 'Other tools'}
+          media={
+            <SettingsItemIcon>
+              <IconCodeBrackets />
+            </SettingsItemIcon>
+          }
+          description="Not from a connection listed here"
+          tools={groups.other}
+          status={status}
+        />
+      )}
+      {toolList.isError && (
+        <RetryRow
+          label="Tools"
+          errorMsg={toolList.error instanceof Error ? toolList.error.message : "Couldn't list the tools."}
+          onRetry={() => void toolList.refetch()}
+        />
+      )}
+    </SettingsContainer>
+  );
+}
+
+function toolCount(count: number): string {
+  return count === 1 ? '1 tool' : `${count} tools`;
+}
+
+/** A connection (or the tools from no connection) with its tools behind a "N tools" toggle. */
+function ToolsDisclosure({
+  name,
+  media,
+  description,
+  tools,
+  status,
+}: {
+  name: string;
+  media: ReactNode;
+  description: ReactNode;
+  tools: ConnectToolInfo[];
+  status: 'pending' | 'error' | 'success';
+}) {
+  const offered = tools.filter(tool => !tool.excluded).length;
+  return (
+    <Collapsible>
+      <SettingsItem media={media} title={name} description={description}>
+        {status === 'pending' ? (
+          <Txt as="span" variant="meta" tone="muted">
+            Loading tools…
+          </Txt>
+        ) : status === 'error' ? null : tools.length === 0 ? (
+          <Txt as="span" variant="meta" tone="muted">
+            No tools
+          </Txt>
+        ) : (
+          <CollapsibleTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="sm"
+                iconEnd={<DisclosureChevron />}
+                aria-label={`${name}: ${toolCount(offered)}`}
+              >
+                {toolCount(offered)}
+              </Button>
+            }
+          />
+        )}
+      </SettingsItem>
+      <CollapsibleContent className="flex gap-3 pt-3">
+        <span aria-hidden className="w-avatar-md shrink-0" />
+        <ToolList tools={tools} />
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function ToolList({ tools }: { tools: ConnectToolInfo[] }) {
+  // The tools sessions get first, then the ones Factory leaves out.
+  const ordered = [...tools.filter(tool => !tool.excluded), ...tools.filter(tool => tool.excluded)];
+  return (
+    <ul className="flex min-w-0 flex-1 flex-col gap-3">
+      {ordered.map(tool => (
+        <li key={tool.name} className="flex min-w-0 flex-col gap-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <Txt as="span" font="mono" variant="meta" className="min-w-0 break-all">
+              {tool.name}
+            </Txt>
+            {tool.requiresApproval && (
+              <Badge size="xs" variant="warning" emphasis="subtle">
+                Needs approval
+              </Badge>
+            )}
+            {tool.excluded && <Badge size="xs">Left out: deletes or archives</Badge>}
+          </div>
+          {tool.description && (
+            <ClampedText variant="meta" tone="muted" lines={2}>
+              {tool.description}
+            </ClampedText>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
 

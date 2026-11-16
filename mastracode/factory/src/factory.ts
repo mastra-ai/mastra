@@ -91,9 +91,17 @@ import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.
 import type { GitLabIntegrationBase } from './integrations/gitlab/integration.js';
 import { KeptCards } from './integrations/kept-cards.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
-import { buildConnectToolsRoute, buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
-import type { ConnectToolsSetupMissing } from './integrations/platform/connect/routes.js';
-import { platformConnectTools } from './integrations/platform/connect/session-tools.js';
+import {
+  buildConnectToolListRoute,
+  buildConnectToolsRoute,
+  buildPlatformConnectRoutes,
+} from './integrations/platform/connect/routes.js';
+import type { ConnectToolsSetupMissing, ConnectToolsSource } from './integrations/platform/connect/routes.js';
+import {
+  platformConnectTools,
+  projectConnectTools,
+  resolveToolsInTime,
+} from './integrations/platform/connect/session-tools.js';
 import { logIntegrationSummary } from './integrations/startup-summary.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { shareLinkedRepositoryChanges } from './linked-repositories-changed.js';
@@ -1789,6 +1797,25 @@ export class MastraFactory {
     }
     const sessionTools =
       this.#config.tools ?? ('projectId' in connectSetup ? platformConnectTools(connectSetup.projectId) : undefined);
+    const configuredTools = this.#config.tools;
+    // What Settings › Tools lists: the same tools a session resolves, before Factory's default filters.
+    const connectToolsList: ConnectToolsSource | { missing: ConnectToolsSetupMissing } =
+      'projectId' in connectSetup
+        ? {
+            client: new PlatformApiClient(platformApiClientConfigFromEnv()),
+            projectId: connectSetup.projectId,
+            toolsSource: connectToolsSource,
+            resolveTools:
+              configuredTools === undefined
+                ? projectConnectTools(connectSetup.projectId)
+                : async ({ requestContext }: { requestContext: RequestContext }) =>
+                    resolveToolsInTime(
+                      Promise.resolve(
+                        typeof configuredTools === 'function' ? configuredTools({ requestContext }) : configuredTools,
+                      ),
+                    ),
+          }
+        : connectSetup;
     const warnedConfiguredToolClashes = new Set<string>();
 
     // Build the real production controller (agents, tools, memory, OM, MCP,
@@ -2360,16 +2387,8 @@ export class MastraFactory {
                 client: new PlatformApiClient(platformApiClientConfigFromEnv()),
               })
             : []),
-          buildConnectToolsRoute(
-            routeAuth,
-            'projectId' in connectSetup
-              ? {
-                  client: new PlatformApiClient(platformApiClientConfigFromEnv()),
-                  projectId: connectSetup.projectId,
-                  toolsSource: connectToolsSource,
-                }
-              : connectSetup,
-          ),
+          buildConnectToolsRoute(routeAuth, connectToolsList),
+          buildConnectToolListRoute(routeAuth, connectToolsList),
         ],
         buildServerConfig: () => {
           // MCP 2026-07-28 clients send `Mcp-*` headers on every request and
