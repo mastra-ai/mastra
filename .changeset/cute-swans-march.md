@@ -1,5 +1,4 @@
 ---
-'@mastra/factory': patch
 '@mastra/libsql': patch
 '@mastra/pg': patch
 ---

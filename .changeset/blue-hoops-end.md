@@ -1,7 +1,5 @@
 ---
 '@mastra/factory': minor
-'@mastra/libsql': patch
-'@mastra/pg': patch
 ---
 
 New factories no longer create database columns and tables that nothing reads. Existing factories keep working: the old columns and their data stay in place, and the factory simply stops writing them.
