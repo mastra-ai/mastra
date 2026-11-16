@@ -49,7 +49,7 @@ function Location() {
   return <output data-testid="board-url">{location.search}</output>;
 }
 
-function renderBoard(initialSearch = '') {
+function renderBoard(initialSearch = '', extraWorkItems: WorkItem[] = []) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({
@@ -69,9 +69,10 @@ function renderBoard(initialSearch = '') {
           workItem('docs', 'issue', { labels: ['documentation'], author: 'bob' }),
           workItem('both', 'issue', { labels: ['bug', 'documentation'], author: 'alice' }),
           workItem('unlabelled', 'issue', { labels: ['other'], author: 'bob' }),
-          workItem('authored', 'pull-request', { author: 'alice' }),
+          workItem('authored', 'pull-request', { author: 'alice', labels: ['needs-review'] }),
           workItem('requested', 'pull-request', { author: 'bob', requestedReviewers: ['alice'] }),
           workItem('unrelated', 'pull-request', { author: 'bob' }),
+          ...extraWorkItems,
         ].map(({ githubProjectId, source, sourceKey, url, ...item }) => ({
           ...item,
           factoryProjectId: githubProjectId,
@@ -110,21 +111,20 @@ function renderBoard(initialSearch = '') {
   );
 }
 
-const candidateTitles = () => screen.queryAllByTestId('candidate-card').map(card => card.getAttribute('aria-label'));
-
 const MENU = 'Board properties';
 
 describe('BoardPage filters', () => {
-  it('offers pull request labels on Work filtered to pull requests and filters candidates by them', async () => {
+  it('offers pull request labels on Work filtered to pull requests and filters pull request cards by them', async () => {
     const user = userEvent.setup();
     const { client } = renderBoard(`?source=${PULL_REQUEST_SOURCE_FILTER}`);
     expect(await screen.findByText('Card authored')).toBeInTheDocument();
     await waitForMutationsIdle(client);
-    await waitFor(() => expect(candidateTitles()).toEqual(expect.arrayContaining(['Pull 20', 'Pull 21'])));
+    expect(screen.getByText('Card requested')).toBeInTheDocument();
     await togglePropertyOption(user, MENU, 'Label', /^needs-review$/);
     await waitFor(() => expect(screen.getByTestId('board-url')).toHaveTextContent('label=needs-review'));
-    expect(candidateTitles()).toContain('Pull 20');
-    expect(candidateTitles()).not.toContain('Pull 21');
+    expect(screen.getByText('Card authored')).toBeInTheDocument();
+    expect(screen.queryByText('Card requested')).not.toBeInTheDocument();
+    expect(screen.queryByText('Card unrelated')).not.toBeInTheDocument();
   });
 
   it('requires every selected label on work cards, then restores cards when removed', async () => {
@@ -148,19 +148,16 @@ describe('BoardPage filters', () => {
     expect(screen.getByText('Card unlabelled')).toBeInTheDocument();
   });
 
-  it('combines person and label filters on work items and intake candidates and survives a URL reload', async () => {
+  it('combines person and label filters on work items and survives a URL reload', async () => {
     const user = userEvent.setup();
     const { client, unmount } = renderBoard();
     expect(await screen.findByText('Card bug')).toBeInTheDocument();
     await waitForMutationsIdle(client);
-    expect(candidateTitles()).toContain('Issue 10');
-    expect(candidateTitles()).toContain('Issue 11');
+    expect(screen.getByText('Card docs')).toBeInTheDocument();
     await togglePropertyOption(user, MENU, 'Author', /alice/i);
     await waitFor(() => expect(screen.getByTestId('board-url')).toHaveTextContent('author=github%3Aalice'));
     expect(screen.getByText('Card bug')).toBeInTheDocument();
-    expect(candidateTitles()).toContain('Issue 10');
-    expect(screen.queryByText('Card docs')).not.toBeInTheDocument();
-    await waitFor(() => expect(candidateTitles()).not.toContain('Issue 11'));
+    await waitFor(() => expect(screen.queryByText('Card docs')).not.toBeInTheDocument());
     await togglePropertyOption(user, MENU, 'Label', /^bug$/);
     await waitFor(() => expect(screen.getByTestId('board-url')).toHaveTextContent('label=bug'));
     expect(screen.getByText('Card both')).toBeInTheDocument();
@@ -169,9 +166,9 @@ describe('BoardPage filters', () => {
     unmount();
     renderBoard(search);
     expect(await screen.findByText('Card bug')).toBeInTheDocument();
-    expect(candidateTitles()).toContain('Issue 10');
-    expect(candidateTitles()).not.toContain('Issue 11');
+    expect(screen.getByText('Card both')).toBeInTheDocument();
     expect(screen.queryByText('Card docs')).not.toBeInTheDocument();
+    expect(screen.queryByText('Card unlabelled')).not.toBeInTheDocument();
     await togglePropertyOption(user, MENU, 'Author', /alice/i);
     expect(screen.getByTestId('board-url')).not.toHaveTextContent('author=');
     expect(screen.getByTestId('board-url')).toHaveTextContent('label=bug');
@@ -189,7 +186,6 @@ describe('BoardPage filters', () => {
     await togglePropertyOption(user, MENU, 'Assignee', /bob/i);
     await waitFor(() => expect(screen.queryByText('Card both')).not.toBeInTheDocument());
     expect(screen.getByText('Card bug')).toBeInTheDocument();
-    expect(candidateTitles()).toEqual([]);
     // Work holds pull request cards too, so it filters by who review was requested from.
     await openPropertiesMenu(user, MENU);
     expect(screen.getByRole('menuitem', { name: /^Review requested/ })).toBeInTheDocument();
@@ -212,7 +208,6 @@ describe('BoardPage filters', () => {
     expect(screen.getByTestId('board-url')).toHaveTextContent('author=github%3Abob&reviewer=github%3Aalice');
     expect(screen.getByText('Card requested')).toBeInTheDocument();
     expect(screen.queryByText('Card authored')).not.toBeInTheDocument();
-    await waitFor(() => expect(candidateTitles()).toEqual(['Pull 21']));
   });
 
   it('lists you first and matches your cards through your GitHub login', async () => {
@@ -246,14 +241,20 @@ describe('BoardPage filters', () => {
     );
     expect(screen.getByText('Card authored')).toBeInTheDocument();
     expect(screen.queryByText('Card requested')).not.toBeInTheDocument();
-    await waitFor(() => expect(candidateTitles()).toEqual(['Pull 20']));
+    expect(screen.queryByText('Card unrelated')).not.toBeInTheDocument();
   });
 
   it('searches a long list of people and keeps picked people on top', async () => {
+    const authors = ['carol', 'dave', 'erin', 'frank', 'grace', 'heidi', 'ivan', 'judy'];
     const user = userEvent.setup();
-    const { client } = renderBoard('?author=github%3Ajudy');
-    await waitFor(() => expect(candidateTitles()).toEqual(['Issue 37']));
+    const { client } = renderBoard(
+      '?author=github%3Ajudy',
+      authors.map(author => workItem(author, 'issue', { author })),
+    );
+    expect(await screen.findByText('Card judy')).toBeInTheDocument();
     await waitForMutationsIdle(client);
+    expect(screen.queryByText('Card erin')).not.toBeInTheDocument();
+    expect(screen.queryByText('Card bug')).not.toBeInTheDocument();
     await openPropertySubmenu(user, MENU, 'Author');
     expect(screen.getAllByRole('menuitemcheckbox')[0]).toHaveTextContent('judy');
     await user.keyboard('ER');

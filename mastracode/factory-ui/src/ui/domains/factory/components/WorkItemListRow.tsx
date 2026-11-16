@@ -61,7 +61,6 @@ export function WorkItemListRow({
   const verdict = columnReviewVerdict(item, columnStage, board);
   return (
     <BoardListRow
-      testId="work-item-card"
       title={item.title}
       cardRef={morph.setCardElement}
       detailsRef={deepLinkRef}

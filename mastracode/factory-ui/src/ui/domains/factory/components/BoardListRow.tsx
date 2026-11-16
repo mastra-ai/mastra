@@ -43,7 +43,6 @@ type BoardListRowCells = {
 };
 
 export function BoardListRow({
-  testId,
   title,
   cardRef,
   detailsRef,
@@ -58,7 +57,6 @@ export function BoardListRow({
   createdAt,
   cells,
 }: {
-  testId: 'work-item-card' | 'candidate-card';
   title: string;
   cardRef: RefCallback<HTMLElement>;
   detailsRef?: (element: HTMLElement | null) => void;
@@ -184,7 +182,7 @@ export function BoardListRow({
       ref={cardRef}
       role="article"
       aria-label={title}
-      data-testid={testId}
+      data-testid="work-item-card"
       data-highlighted={highlighted || undefined}
       data-featured={expanded || undefined}
       aria-busy={busy || locked || undefined}

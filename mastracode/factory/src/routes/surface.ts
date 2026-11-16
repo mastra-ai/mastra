@@ -834,20 +834,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     );
     return guardIntegrationRoutes({ ...registration, routes: integration.routes(context) });
   });
-  // Session persistence belongs to the linked source-control provider, not to
-  // GitHub. Replace legacy GitHub-owned handlers with one resolver spanning
-  // the legacy GitHub partition and every registered source-control partition.
-  const sharedSessionRouteKeys = new Set([
-    'GET /web/github/projects/:id/sessions',
-    'POST /web/github/projects/:id/sessions',
-    'GET /web/user-sessions/:sessionId',
-    'DELETE /web/user-sessions/:sessionId',
-    'POST /web/user-sessions/:sessionId/owner',
-    'POST /web/user-sessions/:sessionId/title',
-  ]);
-  const providerRoutes = integrationRoutes.filter(
-    route => !sharedSessionRouteKeys.has(route.method + ' ' + route.path),
-  );
   const sourceControlSessionRoutes =
     sourceControls.length === 0
       ? []
@@ -999,7 +985,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           sourceControls,
           ...(deps.onEnvironmentSaved ? { onEnvironmentSaved: deps.onEnvironmentSaved } : {}),
         })),
-    ...providerRoutes,
+    ...integrationRoutes,
     ...absentStubs,
     ...slackAbsentStubs,
     ...(deps.intakeReady
