@@ -80,5 +80,20 @@ describe('newItemRules', () => {
       { count: 1, catchesAll: false },
     ],
     ['card moves and rules that are off are not for new items', [closed, off], { count: 0, catchesAll: false }],
+    [
+      'a 0.28 rule on pull request opened only moves cards, so it files no pull request',
+      [
+        allIssues,
+        { ...prs, id: 'moves-only', pullRequestOpenedMovesOnly: true as const },
+        rule({ id: 'pr-bugs', name: 'Bug fixes', on: ['pull_request.opened'], when: issues.when }),
+        prKind,
+      ],
+      { count: 3, catchesAll: true },
+    ],
+    [
+      'a board whose only pull request rule is from 0.28 takes no pull requests',
+      [allIssues, { ...prs, id: 'moves-only', pullRequestOpenedMovesOnly: true as const }],
+      { count: 1, catchesAll: false },
+    ],
   ])('%s', (_case, rules, expected) => expect(newItemRules(rules)).toEqual(expected));
 });

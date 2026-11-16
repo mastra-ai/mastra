@@ -19,7 +19,15 @@ import type { ReactNode } from 'react';
 
 import type { InstalledBoardInfo, IntakeRouteInfo, IntakeSkippedResponse } from '../../../../api/types';
 import { useRowDrag } from '../../settings/components/useRowDrag';
-import { catchAllIndex, isLegacyOpened, shadowedBy, isOpenedLane, LEGACY_OPENED_EVENT, laneText } from '../ruleLanes';
+import {
+  catchAllIndex,
+  isLegacyOpened,
+  isOpenedLane,
+  laneText,
+  LEGACY_OPENED_EVENT,
+  movesCardsOnly,
+  shadowedBy,
+} from '../ruleLanes';
 import type { RuleEvent } from '../ruleLanes';
 import { ConditionChips } from './ConditionChips';
 import { RuleTarget } from './RuleTarget';
@@ -138,7 +146,7 @@ export function RuleLane({
                   </Txt>
                   <span className="flex min-w-0 flex-1 flex-col gap-1">
                     <span className="flex min-w-0 items-center gap-1.5">
-                      <Filter className="text-muted-foreground size-3 shrink-0" aria-hidden />
+                      <Filter className="text-muted-foreground size-icon-xs shrink-0" aria-hidden />
                       <Txt as="span" variant="caption" tone="ink" className="truncate font-medium">
                         {rule.name}
                       </Txt>
@@ -186,7 +194,7 @@ export function RuleLane({
                           aria-hidden
                           className="text-muted-foreground hidden cursor-grab touch-none items-center px-1 pointer-fine:flex"
                         >
-                          <GripVertical className="size-3.5" />
+                          <GripVertical className="size-icon-sm" />
                         </span>
                       )}
                       <Button
@@ -236,7 +244,7 @@ export function RuleLane({
                 <Txt as="span" variant="caption" tone="muted" className="mt-1 ml-3 flex items-center gap-1.5">
                   {unreachable ? (
                     <>
-                      <TriangleAlert className="text-warning-indicator size-3" aria-hidden />
+                      <TriangleAlert className="text-warning-indicator size-icon-xs" aria-hidden />
                       Never reached: rule {hiddenBy + 1} above matches every {opened ? 'item' : 'card'}.
                     </>
                   ) : (
@@ -252,11 +260,16 @@ export function RuleLane({
                   tone="muted"
                   className="mt-1 ml-3 flex items-center gap-1.5"
                 >
-                  <TriangleAlert className="text-warning-indicator size-3 shrink-0" aria-hidden />
+                  <TriangleAlert className="text-warning-indicator size-icon-xs shrink-0" aria-hidden />
                   {problem}
                 </Txt>
               ))}
               {skip && <SkipWarning skips={skip} />}
+              {movesCardsOnly(rule, event) && (
+                <Txt as="span" variant="caption" tone="muted" className="mt-1 ml-3">
+                  Moves cards only: files no new pull requests
+                </Txt>
+              )}
               {opened && isLegacyOpened(rule) && (
                 <Txt as="span" variant="caption" tone="muted" className="mt-1 ml-3">
                   {laneText(LEGACY_OPENED_EVENT).label}
@@ -278,7 +291,7 @@ export function RuleLane({
         <li className="flex flex-wrap items-center gap-3">
           {catchAll < 0 && (
             <Txt as="span" variant="caption" tone="muted" className="flex items-center gap-2.5 px-3 py-1.5 sm:w-80">
-              <CircleDashed className="size-4 shrink-0" aria-hidden />
+              <CircleDashed className="size-icon-md shrink-0" aria-hidden />
               {fallback}
             </Txt>
           )}
@@ -306,7 +319,7 @@ function SkipWarning({ skips }: { skips: RuleSkips }) {
   const { count, latest } = skips;
   return (
     <Txt as="span" variant="caption" tone="muted" className="mt-1 ml-3 flex flex-wrap items-center gap-x-1.5 gap-y-1">
-      <TriangleAlert className="text-warning-indicator size-3 shrink-0" aria-hidden />
+      <TriangleAlert className="text-warning-indicator size-icon-xs shrink-0" aria-hidden />
       <span>
         Skipped {count === 1 ? 'once' : `${count} times`} in the last 30 days: {skipReason(latest.reason)}.
       </span>

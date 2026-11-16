@@ -121,7 +121,7 @@ function OrderEditor({ factoryId, order }: { factoryId: string; order: IntakeOrd
                       aria-hidden
                       className="text-icon3 hidden cursor-grab touch-none pointer-fine:inline-flex"
                     >
-                      <GripVertical className="size-4" />
+                      <GripVertical className="size-icon-md" />
                     </span>
                     <Button
                       size="icon-sm"

@@ -89,39 +89,44 @@ describe('useBoardIntakeSetup with sources the server files from', () => {
   });
 
   it.each([
-    ['pull_request.opened', true],
-    ['work_item.created', true],
-    ['pull_request.merged', false],
-  ])('counts another board as fed by a rule on %s only when that event files new items', async (event, fed) => {
-    stubFiledSources();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/:id/intake-routes`, () =>
-        HttpResponse.json({
-          canEdit: true,
-          intakeRoutes: [
-            {
-              id: 'r-1',
-              name: 'Pull requests go to Release',
-              enabled: true,
-              position: 0,
-              on: [event],
-              when: null,
-              target: { boardKey: 'release', phaseKey: null, joinClosedIssue: false, moveToBoardKey: null },
-              revision: 1,
-              createdBy: 'ada',
-              problems: [],
-            },
-          ],
-        }),
-      ),
-    );
+    ['pull_request.opened', false, true],
+    ['pull_request.opened', true, false],
+    ['work_item.created', false, true],
+    ['pull_request.merged', false, false],
+  ])(
+    'counts another board as fed by a rule on %s (stored by 0.28: %s) only when it files new items',
+    async (event, movesOnly, fed) => {
+      stubFiledSources();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/:id/intake-routes`, () =>
+          HttpResponse.json({
+            canEdit: true,
+            intakeRoutes: [
+              {
+                id: 'r-1',
+                name: 'Pull requests go to Release',
+                enabled: true,
+                position: 0,
+                on: [event],
+                when: null,
+                target: { boardKey: 'release', phaseKey: null, joinClosedIssue: false, moveToBoardKey: null },
+                revision: 1,
+                createdBy: 'ada',
+                problems: [],
+                ...(movesOnly && { pullRequestOpenedMovesOnly: true }),
+              },
+            ],
+          }),
+        ),
+      );
 
-    const { result } = renderSetup('factory-1', releaseBoard);
+      const { result } = renderSetup('factory-1', releaseBoard);
 
-    await waitFor(() => expect(result.current.isPending).toBe(false));
-    await waitFor(() => expect(result.current.unrouted).toBe(!fed));
-    expect(result.current.fed).toBe(fed);
-  });
+      await waitFor(() => expect(result.current.isPending).toBe(false));
+      await waitFor(() => expect(result.current.unrouted).toBe(!fed));
+      expect(result.current.fed).toBe(fed);
+    },
+  );
 
   it('keeps the board pending until the bindings of a connected source have loaded', async () => {
     stubFiledSources();

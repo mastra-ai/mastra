@@ -194,6 +194,28 @@ describe('Board rules', () => {
     );
   });
 
+  it('marks a pull request opened rule from 0.28 as moving cards only, so it hides no rule filing pull requests', async () => {
+    const PRS = 'Pull request opened';
+    serveRules({
+      rules: [
+        {
+          ...rule({ id: ruleId('old'), name: 'Opened pull requests move their card', on: ['pull_request.opened'] }),
+          pullRequestOpenedMovesOnly: true,
+        },
+        rule({ id: ruleId('file'), name: 'Pull requests go to Review', on: ['pull_request.opened'] }),
+      ],
+    });
+    renderRules();
+
+    await screen.findByRole('region', { name: PRS });
+    const row = (name: string) => within(lane(PRS).getByRole('listitem', { name }));
+    expect(
+      row('Opened pull requests move their card').getByText('Moves cards only: files no new pull requests'),
+    ).toBeVisible();
+    expect(row('Pull requests go to Review').queryByText(/Never reached/)).not.toBeInTheDocument();
+    expect(row('Pull requests go to Review').queryByText(/Moves cards only/)).not.toBeInTheDocument();
+  });
+
   it('keeps the rule open now when an earlier rule’s save finishes after it was closed', async () => {
     const pending: (() => void)[] = [];
     serveRules({ rules: [bugs(), everythingElse()] });

@@ -196,7 +196,7 @@ export function RuleBuilderDialog({
                         done ? 'border-transparent bg-fill-inverse text-background' : 'border-border-strong',
                       )}
                     >
-                      {done ? <Check className="size-3" aria-hidden /> : index + 1}
+                      {done ? <Check className="size-icon-xs" aria-hidden /> : index + 1}
                     </Txt>
                     <span className="min-w-0">
                       <Txt as="span" variant="label" tone="ink" className="block">
@@ -361,13 +361,13 @@ export function RuleBuilderDialog({
                       <StoryLine label="When">{summary.trigger}</StoryLine>
                       <StoryLine label="Only if">
                         <span className="inline-flex items-center gap-1.5">
-                          <Filter className="text-muted-foreground size-3.5" aria-hidden />
+                          <Filter className="text-muted-foreground size-icon-sm" aria-hidden />
                           {summary.conditions}
                         </span>
                       </StoryLine>
                       <StoryLine label="Then">
                         <span className="inline-flex items-center gap-1.5">
-                          Move to <ArrowRight className="size-3.5" aria-hidden /> {summary.action}
+                          Move to <ArrowRight className="size-icon-sm" aria-hidden /> {summary.action}
                         </span>
                       </StoryLine>
                     </ol>

@@ -156,7 +156,9 @@ export function newItemRules(rules: readonly IntakeRouteInfo[]): { count: number
   let catchesAll = true;
   for (const event of ARRIVAL_LANES) {
     // A rule joining a pull request to its issue's card files nothing new.
-    const lane = laneRules(rules, event).filter(rule => rule.enabled && !rule.target.joinClosedIssue);
+    const lane = laneRules(rules, event).filter(
+      rule => rule.enabled && !rule.target.joinClosedIssue && !movesCardsOnly(rule, event),
+    );
     const catchAll = catchAllIndex(lane, event);
     if (catchAll === -1) catchesAll = false;
     for (const rule of catchAll === -1 ? lane : lane.slice(0, catchAll + 1)) reached.add(rule.id);
@@ -167,7 +169,8 @@ export function newItemRules(rules: readonly IntakeRouteInfo[]): { count: number
 /**
  * The first rule in a lane that takes every item, so no rule below it is ever reached; -1 when none does. A rule
  * whose target can't take cards (its `problems`, such as a deleted board) is skipped, so it stops nothing. In an
- * arrival lane, a rule testing nothing but the item's kind takes every item of that kind, as intake order reads it.
+ * arrival lane, a rule testing nothing but the item's kind takes every item of that kind, as intake order reads it,
+ * and a rule stored by 0.28 on `pull_request.opened` takes no new pull request: it only moves cards.
  */
 export function catchAllIndex(lane: readonly IntakeRouteInfo[], event: RuleEvent): number {
   const kind = event === 'pull_request.opened' ? 'pull_request' : event === 'work_item.opened' ? 'issue' : undefined;
@@ -176,8 +179,13 @@ export function catchAllIndex(lane: readonly IntakeRouteInfo[], event: RuleEvent
       rule.enabled &&
       !rule.target.joinClosedIssue &&
       rule.problems.length === 0 &&
-      (rule.when === null || (kind !== undefined && kindsTakenWhole(rule).includes(kind))),
+      (kind === undefined ? rule.when === null : kindsTakenWhole(rule).includes(kind)),
   );
+}
+
+/** Whether a rule on `pull_request.opened` was stored by 0.28, so there it moves cards and files no pull request. */
+export function movesCardsOnly(rule: IntakeRouteInfo, event: RuleEvent): boolean {
+  return event === 'pull_request.opened' && rule.pullRequestOpenedMovesOnly === true;
 }
 
 /**
