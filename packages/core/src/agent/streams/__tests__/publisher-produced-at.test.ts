@@ -9,10 +9,9 @@ import { InMemoryServerCache } from '../../../cache/inmemory';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { Event } from '../../../events/types';
 import { stampChunkProducedAt } from '../../../stream/base/produced-at';
-import type { ChunkType } from '../../../stream/types';
-import { ChunkFrom } from '../../../stream/types';
+import { requestAcknowledgedAbort } from '../abort-transport';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
-import { createAgentStreamPublisher } from '../publisher';
+import { createAgentStreamPublisher, createAgentStreamPublisherCoordinator } from '../publisher';
 import { readAgentRunRecord } from '../run-records';
 
 describe('agent stream publisher', () => {
@@ -22,21 +21,22 @@ describe('agent stream publisher', () => {
     const runId = 'superseded-worker-chunk';
     const events: Event[] = [];
     await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => void events.push(event));
-    const publisher = createAgentStreamPublisher({
+    const coordinator = createAgentStreamPublisherCoordinator(runId);
+    const publisher = coordinator.attachOutput({
       pubsub,
-      runId,
-      role: 'producer',
-      cleanupTimeoutMs: 0,
+      publisherId: 'worker',
       assertOwnership: async () => controller.signal.throwIfAborted(),
     });
     try {
       const pending = publisher.publishEvent({ type: AgentStreamEventTypes.CHUNK, runId, data: { text: 'stale' } });
+      const successor = coordinator.attachOutput({ pubsub, publisherId: 'successor', assertOwnership: async () => {} });
       controller.abort(new Error('Execution superseded'));
       await expect(pending).rejects.toThrow('Execution superseded');
+      await successor.publishEvent({ type: AgentStreamEventTypes.CHUNK, runId, data: { text: 'current' } });
       await pubsub.flush();
-      expect(events).toEqual([]);
+      expect(events.map(event => event.data.text)).toEqual(['current']);
     } finally {
-      await publisher.detach();
+      await coordinator.detach();
       await pubsub.close();
     }
   });
@@ -51,22 +51,15 @@ describe('agent stream publisher', () => {
     const runId = 'remote-terminal-owner';
     const publisherId = 'shared-execution';
     const record = { cache, agentId: 'shared-agent' };
-    const owner = createAgentStreamPublisher({
+    const publisher = createAgentStreamPublisherCoordinator(runId);
+    const owner = publisher.attachLifecycle({
       pubsub,
-      runId,
       publisherId,
       cleanupTimeoutMs: 0,
       record: { ...record, resourceId: 'resource', threadId: 'thread' },
     });
     await owner.ready;
-    const worker = createAgentStreamPublisher({
-      pubsub,
-      runId,
-      publisherId,
-      role: 'producer',
-      record,
-      cleanupTimeoutMs: 0,
-    });
+    const worker = publisher.attachOutput({ pubsub, publisherId, assertOwnership: async () => {} });
     try {
       await worker.publishEvent({ type, runId, data: {} });
       expect(await readAgentRunRecord(cache, record.agentId, runId)).toMatchObject({ status: 'running', publisherId });
@@ -84,68 +77,87 @@ describe('agent stream publisher', () => {
       await pubsub.close();
     }
   });
-  it.each(['close', 'fail', 'detach'] as const)(
-    'does not end another worker’s run when a producer calls %s',
-    async method => {
-      const pubsub = new EventEmitterPubSub();
-      const cache = new InMemoryServerCache();
-      const runId = `worker-detach-${method}`;
-      const record = { cache, agentId: 'shared-agent' };
-      const events: Event[] = [];
-      await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => void events.push(event));
-      const owner = createAgentStreamPublisher({ pubsub, runId, record, cleanupTimeoutMs: 0 });
-      await owner.ready;
-      const ownerRecord = await readAgentRunRecord(cache, record.agentId, runId);
-      const worker = createAgentStreamPublisher({
-        pubsub,
-        runId,
-        record,
-        cleanupTimeoutMs: 0,
-        role: 'producer',
+  it('releases worker output without ending the reader or a sibling worker', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const cache = new InMemoryServerCache();
+    const runId = 'worker-release';
+    const record = { cache, agentId: 'shared-agent' };
+    const events: Event[] = [];
+    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => void events.push(event));
+    const publisher = createAgentStreamPublisherCoordinator(runId);
+    const owner = publisher.attachLifecycle({ pubsub, record, publisherId: 'execution', cleanupTimeoutMs: 0 });
+    await owner.ready;
+    const ownerRecord = await readAgentRunRecord(cache, record.agentId, runId);
+    const worker = publisher.attachOutput({ pubsub, publisherId: 'execution', assertOwnership: async () => {} });
+    const sibling = publisher.attachOutput({ pubsub, publisherId: 'sibling', assertOwnership: async () => {} });
+    try {
+      await worker.publishEvent({ type: AgentStreamEventTypes.CHUNK, runId, data: { text: 'First' } });
+      await worker.detach();
+      await worker.publishEvent({ type: AgentStreamEventTypes.FINISH, runId, data: {} });
+      await pubsub.flush();
+      expect(events.map(event => event.type)).toEqual([AgentStreamEventTypes.CHUNK]);
+      expect(await readAgentRunRecord(cache, record.agentId, runId)).toEqual(ownerRecord);
+      await sibling.publishEvent({ type: AgentStreamEventTypes.CHUNK, runId, data: { text: 'Second' } });
+      await owner.settle('finished');
+      await pubsub.flush();
+      expect(events.map(event => event.data.text)).toEqual(['First', 'Second']);
+      expect(await readAgentRunRecord(cache, record.agentId, runId)).toMatchObject({
+        status: 'finished',
+        publisherId: ownerRecord?.publisherId,
       });
-      try {
-        expect(ownerRecord).toMatchObject({ status: 'running' });
-        const finish: ChunkType = {
-          type: 'finish',
-          runId,
-          from: ChunkFrom.AGENT,
-          payload: {
-            stepResult: { reason: 'stop' },
-            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
-            metadata: {},
-            messages: { all: [], user: [], nonUser: [] },
-          },
-        };
-        worker.publish({ type: 'text-delta', runId, from: ChunkFrom.AGENT, payload: { id: 'text', text: 'First' } });
-        worker.publish(finish);
-        if (method === 'fail') await worker.fail(new Error('Step will retry'));
-        else await worker[method]();
-        await pubsub.flush();
-        expect(events.map(event => event.type)).toEqual([AgentStreamEventTypes.CHUNK]);
-        expect(await readAgentRunRecord(cache, record.agentId, runId)).toEqual(ownerRecord);
-        owner.publish({ type: 'text-delta', runId, from: ChunkFrom.AGENT, payload: { id: 'text', text: 'Second' } });
-        owner.publish(finish);
-        await owner.close();
-        await pubsub.flush();
-        expect(
-          events.filter(event => event.type === AgentStreamEventTypes.CHUNK).map(event => event.data.payload.text),
-        ).toEqual(['First', 'Second']);
-        expect(events.map(event => event.type)).toEqual([
-          AgentStreamEventTypes.CHUNK,
-          AgentStreamEventTypes.CHUNK,
-          AgentStreamEventTypes.FINISH,
-        ]);
-        expect(await readAgentRunRecord(cache, record.agentId, runId)).toMatchObject({
-          status: 'finished',
-          publisherId: ownerRecord?.publisherId,
-        });
-      } finally {
-        await worker.close();
-        await owner.close();
-        await pubsub.close();
+    } finally {
+      await publisher.detach();
+      await pubsub.close();
+    }
+  });
+
+  it('keeps abort delivery and reader settlement responsive while worker output is stalled', async () => {
+    const runId = 'stalled-worker-output';
+    let release!: () => void;
+    const stalled = new Promise<void>(resolve => (release = resolve));
+    let started!: () => void;
+    const publishing = new Promise<void>(resolve => (started = resolve));
+    class SlowOutputPubSub extends EventEmitterPubSub {
+      override async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>) {
+        if (topic === AGENT_STREAM_TOPIC(runId)) {
+          started();
+          await stalled;
+        }
+        return super.publish(topic, event);
       }
-    },
-  );
+    }
+    const pubsub = new SlowOutputPubSub();
+    const cache = new InMemoryServerCache();
+    const publisher = createAgentStreamPublisherCoordinator(runId);
+    const controller = new AbortController();
+    const listener = publisher.listenForAbort(pubsub, () => controller.abort());
+    await listener.ready;
+    const owner = publisher.attachLifecycle({
+      pubsub,
+      publisherId: 'execution',
+      cleanupTimeoutMs: 0,
+      listenForAbort: false,
+      record: { cache, agentId: 'shared-agent' },
+    });
+    const worker = publisher.attachOutput({ pubsub, publisherId: 'execution', assertOwnership: async () => {} });
+    const pending = worker.publishEvent({ type: AgentStreamEventTypes.CHUNK, runId, data: { text: 'delayed' } });
+    try {
+      await publishing;
+      expect(await requestAcknowledgedAbort(pubsub, runId)).toBe(true);
+      expect(controller.signal.aborted).toBe(true);
+      await owner.settle('finished');
+      expect(await readAgentRunRecord(cache, 'shared-agent', runId)).toMatchObject({ status: 'finished' });
+      release();
+      await pending;
+      await worker.detach();
+      expect(await requestAcknowledgedAbort(pubsub, runId)).toBe(true);
+    } finally {
+      release();
+      await pending;
+      await publisher.detach();
+      await pubsub.close();
+    }
+  });
 
   // Technical: a delegated agent's chunks arrive wrapped in `tool-output` / `workflow-step-output`
   // chunks and are published as a slimmed copy, which lost the loop's stamp, so the event carried
