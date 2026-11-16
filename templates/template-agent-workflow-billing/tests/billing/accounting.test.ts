@@ -33,6 +33,27 @@ it('another runtime replays active work without changing the owner execution', a
   expect((await f.observer.execute('SELECT id, status, settlement FROM billing_executions')).rows).toEqual(before);
 });
 
+it.each(['weather-credits', 'image-credits'])(
+  'denied %s reservations do not block migration of remaining credits',
+  async source => {
+    const f = await fixture({ type: 'credits', meter: source, units: 20 }, { balance: 10, creditMeter: source });
+    await expect(f.gateway.execute(f.context, f.request('denied-migration'))).rejects.toMatchObject({
+      code: 'insufficient_credits',
+    });
+    expect(
+      (await f.observer.execute('SELECT reserve_state, terminal_state FROM billing_remote_operations')).rows,
+    ).toEqual([{ reserve_state: 'denied', terminal_state: 'pending' }]);
+    const current = configuration();
+    current.localAccounts = [{ ...current.localAccounts[0], workspaceId: f.alice.workspaceId }];
+    const provider = new LocalBillingProvider(f.commercial, current);
+    const account = await provider.ensureAccount({ workspaceId: f.alice.workspaceId });
+    expect((await provider.getState(account)).meters.find(meter => meter.key === 'credits')).toMatchObject({
+      confirmedBalance: 10,
+      consumedUnits: 0,
+    });
+  },
+);
+
 it('agent payload validation rejects malformed requests before reserving credit', async () => {
   let computes = 0;
   const f = await fixture(charges[1], {
@@ -95,6 +116,7 @@ async function fixture(
     kind?: 'agent' | 'workflow';
     access?: 'none' | 'entitlement' | 'subscription' | 'both';
     balance?: number;
+    creditMeter?: string;
     guards?: boolean;
     run?: (input: Json) => Promise<ExecutorOutcome>;
   } = {},
@@ -113,6 +135,7 @@ async function fixture(
   const bob = await organizations.provisionLocal({ profileId: 'bob', displayName: 'Bob' });
   const context = await organizations.context({ credential: alice.credential! });
   const config = configuration();
+  if (options.creditMeter) config.billingKeys.meters[0].key = options.creditMeter;
   config.resourcePolicies = [config.resourcePolicies[0]];
   config.resourcePolicies[0].kind = options.kind ?? 'agent';
   config.resourcePolicies[0].operations = [options.kind === 'workflow' ? 'start' : 'generate'];
@@ -134,7 +157,13 @@ async function fixture(
       entitlements: [{ key: 'access', validFrom: '2020-01-01T00:00:00Z', validUntil: '2099-01-01T00:00:00Z' }],
       subscriptions: [{ key: 'subscription', validFrom: '2020-01-01T00:00:00Z', validUntil: '2099-01-01T00:00:00Z' }],
       meters: [
-        { key: 'credits', funding: 'prepaid', balance: options.balance ?? 100, periodStart: null, periodEnd: null },
+        {
+          key: options.creditMeter ?? 'credits',
+          funding: 'prepaid',
+          balance: options.balance ?? 100,
+          periodStart: null,
+          periodEnd: null,
+        },
         {
           key: 'tasks',
           funding,

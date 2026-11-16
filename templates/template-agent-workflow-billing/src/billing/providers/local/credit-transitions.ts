@@ -11,7 +11,7 @@ export async function transitionCredits(tx: Transaction, accountId: string) {
       AND NOT EXISTS (SELECT 1 FROM billing_reservations r WHERE r.account_id = m.account_id AND r.active = 1)
       AND NOT EXISTS (SELECT 1 FROM local_provider_reservations r WHERE r.account_id = m.account_id AND r.state = 'reserved')
       AND NOT EXISTS (SELECT 1 FROM billing_executions e WHERE e.account_id = m.account_id AND (e.status IN ('running', 'uncertain') OR e.settlement IN ('reserved', 'pending', 'uncertain')))
-      AND NOT EXISTS (SELECT 1 FROM billing_remote_operations r JOIN billing_executions e ON e.id = r.execution_id WHERE e.account_id = m.account_id AND r.terminal_state = 'pending')`,
+      AND NOT EXISTS (SELECT 1 FROM billing_remote_operations r JOIN billing_executions e ON e.id = r.execution_id WHERE e.account_id = m.account_id AND r.terminal_state = 'pending' AND r.reserve_state != 'denied')`,
       args: [accountId],
     })
   ).rows[0];
@@ -41,7 +41,7 @@ export async function transitionImageCredits(tx: Transaction, accountId?: string
     AND NOT EXISTS (SELECT 1 FROM billing_reservations r WHERE r.account_id = a.id AND r.active = 1)
     AND NOT EXISTS (SELECT 1 FROM local_provider_reservations r WHERE r.account_id = a.id AND r.state = 'reserved')
     AND NOT EXISTS (SELECT 1 FROM billing_executions e WHERE e.account_id = a.id AND (e.status IN ('running', 'uncertain') OR e.settlement IN ('reserved', 'pending', 'uncertain')))
-    AND NOT EXISTS (SELECT 1 FROM billing_remote_operations r JOIN billing_executions e ON e.id = r.execution_id WHERE e.account_id = a.id AND r.terminal_state = 'pending')`,
+    AND NOT EXISTS (SELECT 1 FROM billing_remote_operations r JOIN billing_executions e ON e.id = r.execution_id WHERE e.account_id = a.id AND r.terminal_state = 'pending' AND r.reserve_state != 'denied')`,
       args: [accountId ?? null, accountId ?? null],
     })
   ).rows;
