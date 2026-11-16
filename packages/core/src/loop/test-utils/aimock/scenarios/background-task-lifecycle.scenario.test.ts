@@ -800,6 +800,75 @@ describeForAllEngines(
       expect(seenOnResume).toEqual([{ awaiting: 'analyst-approval', topic: 'near' }]);
     }, 30_000);
 
+    // Technical: the late suspend above is only allowed while no other execution has claimed the
+    // run. Once a successor claims it, the old execution's suspension must not reach memory or
+    // park the task, and the successor's claim must stay as it was. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      "doesn't park a deferred tool that asks for input after another execution took over the run (#30182)",
+      async () => {
+        let release!: () => void;
+        const gate = new Promise<void>(resolve => (release = resolve));
+        const memory = new MockMemory();
+        const thread = { threadId: 'bg-suspend-after-takeover-thread', resourceId: 'bg-suspend-after-takeover-user' };
+        const { chunks, mastra, output } = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Research near',
+          tools: { researchWithApproval: makeSuspendingResearchTool([], undefined, gate) },
+          agentBackgroundTasks: { tools: { researchWithApproval: true } },
+          backgroundTasks: BG_CONFIG,
+          memory,
+          ...thread,
+          stopWhen: stepCountIs(3),
+          collectChunks: true,
+          fixtures: llm =>
+            onReportTurns(llm, 'Research near', {
+              dispatch: {
+                toolCalls: [{ id: 'call-bg-1', name: 'researchWithApproval', arguments: { topic: 'near' } }],
+              },
+              ack: 'Waiting for the analyst.',
+              report: 'The analyst answered.',
+            }),
+        });
+        expect(await output.text).toBe('Waiting for the analyst.');
+        const manager = mastra.backgroundTaskManager!;
+        const started = chunks!.find(c => c.type === 'background-task-started') as Chunk & { runId: string };
+        const taskId = started.payload.taskId as string;
+        await waitForRunToRelease(mastra, started.runId);
+
+        // Another execution claims the run, as a recovery or a new turn would.
+        const workflows = (await mastra.getStorage()!.getStore('workflows'))!;
+        const released = await workflows.getRunOwnership({ runId: started.runId });
+        const successor = await workflows.claimRunOwnership({
+          runId: started.runId,
+          ownerId: 'successor-execution',
+          leaseMs: 60_000,
+          expectedGeneration: released!.generation,
+        });
+        expect(successor.acquired).toBe(true);
+        release();
+
+        const settled = (await waitFor(
+          () => manager.getTask(taskId),
+          (t: any) => t?.status !== 'pending' && t?.status !== 'running',
+        )) as any;
+        expect({ status: settled.status, error: settled.error?.message }).toEqual({
+          status: 'failed',
+          // DURABLE_AGENT_EXECUTION_SUPERSEDED
+          error: expect.stringContaining(`Durable run ${started.runId} lost its execution lease`),
+        });
+        expect(settled.suspendPayload).toBeUndefined();
+        expect((await storedToolCall(memory, thread)).suspended).toBeUndefined();
+        const after = await workflows.getRunOwnership({ runId: started.runId });
+        expect({ ownerId: after?.ownerId, generation: after?.generation, live: after?.live }).toEqual({
+          ownerId: 'successor-execution',
+          generation: successor.record.generation,
+          live: true,
+        });
+      },
+      30_000,
+    );
+
     // Technical: same path as above, reached through a deferred sub-agent: when its tool needs
     // approval, the delegation tool suspends the background task with that approval. (#30182)
     it('parks a deferred sub-agent whose tool needs approval after the reply was sent, and resumes it (#30182)', async () => {
