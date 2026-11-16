@@ -83,7 +83,7 @@ export default function Resources() {
                   {resource.title}
                 </Txt>
                 {resource.external && (
-                  <IconSquareArrowTopRight className="ml-auto h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                  <IconSquareArrowTopRight className="ml-auto size-icon-sm text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                 )}
               </div>
               <Txt variant="caption" tone="muted">

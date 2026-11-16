@@ -257,7 +257,7 @@ function ChartCardTitleLink({
       )}
     >
       {children}
-      <IconExpand45 aria-hidden className="size-3.5 text-muted-foreground" />
+      <IconExpand45 aria-hidden className="size-icon-sm text-muted-foreground" />
     </Anchor>
   );
 }

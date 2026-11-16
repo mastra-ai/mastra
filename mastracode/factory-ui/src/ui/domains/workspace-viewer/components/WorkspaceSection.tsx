@@ -65,7 +65,7 @@ function changesName(changes: WorkspaceChangesSummary): string {
 
 const rowClass = 'flex h-control-sm min-w-0 items-center gap-1.5';
 
-const branchIcon = <IconBranch aria-hidden className="text-muted-foreground size-3.5 shrink-0" />;
+const branchIcon = <IconBranch aria-hidden className="text-muted-foreground size-icon-sm shrink-0" />;
 
 function BranchCopyButton({ branch }: { branch: string }) {
   const { isCopied, handleCopy } = useCopyToClipboard({ text: branch });
@@ -153,7 +153,7 @@ export function WorkspaceSection({
             </Txt>
           ) : null}
           <Txt as="span" variant="caption" tone="muted" className="flex shrink-0 items-center gap-1.5">
-            <IconMerged aria-hidden className="size-3.5" />
+            <IconMerged aria-hidden className="size-icon-sm" />
             into {workspace.baseBranch}
           </Txt>
         </div>

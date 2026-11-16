@@ -57,8 +57,7 @@ export function RelatedWorkItemLink({
       {live && (
         <IconChatBubble7
           data-live-session-indicator
-          size={11}
-          className="text-badge-green-indicator shrink-0"
+          className="text-badge-green-indicator size-icon-xs shrink-0"
           aria-hidden
         />
       )}

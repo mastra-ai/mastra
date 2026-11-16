@@ -167,12 +167,12 @@ function FolderNode({ name, path, mount, onRequestDelete }: NodeProps & { mount?
             title={mount.error}
             className="flex shrink-0"
           >
-            <IconExclamationCircle className="size-3 text-destructive-foreground" />
+            <IconExclamationCircle className="size-icon-xs text-destructive-foreground" />
           </span>
         ) : null}
         {mount && isReadOnly(path) ? (
           <span role="img" aria-label="Read-only" title="Read-only" className="flex shrink-0">
-            <IconLock className="size-3 text-muted-foreground" />
+            <IconLock className="size-icon-xs text-muted-foreground" />
           </span>
         ) : null}
         {open && isLoading ? (

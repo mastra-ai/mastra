@@ -310,13 +310,13 @@ export function SkillEditDialog({
                   <SelectContent>
                     <SelectItem value="private">
                       <span className="flex items-center gap-2">
-                        <IconLock className="h-3.5 w-3.5" />
+                        <IconLock className="size-icon-sm" />
                         Private
                       </span>
                     </SelectItem>
                     <SelectItem value="public">
                       <span className="flex items-center gap-2">
-                        <IconGlobe className="h-3.5 w-3.5" />
+                        <IconGlobe className="size-icon-sm" />
                         Public
                       </span>
                     </SelectItem>
@@ -372,7 +372,7 @@ export function SkillEditDialog({
                   onClick={() => setShowForm(false)}
                   className={cn('mb-3 flex items-center gap-1.5', quietTextHover, controlStateColorTransition)}
                 >
-                  <IconChevronDownMedium className="h-3 w-3" />
+                  <IconChevronDownMedium className="size-icon-xs" />
                   <Txt as="span" variant="caption" className="block">
                     Hide skill details
                   </Txt>
@@ -380,7 +380,7 @@ export function SkillEditDialog({
 
                 {isAdmin && (!hasFilesystem || !workspaceId) && (
                   <div className="mb-4 flex items-start gap-2 rounded-lg bg-warning-subtle p-3 text-warning-subtle-foreground">
-                    <IconExclamationTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <IconExclamationTriangle className="mt-0.5 size-icon-md shrink-0" />
                     <Txt as="span" variant="caption">
                       {!workspaceId
                         ? 'No workspace available. The skill will be saved to the database only.'
@@ -420,11 +420,11 @@ export function SkillEditDialog({
                         }}
                         className={cn('mt-3 flex items-center gap-1.5', quietTextHover, controlStateColorTransition)}
                       >
-                        <IconSettingsSliderHor className="h-3.5 w-3.5" />
+                        <IconSettingsSliderHor className="size-icon-sm" />
                         <Txt as="span" variant="caption" className="block">
                           Advanced mode
                         </Txt>
-                        <IconChevronRightMedium className="h-3 w-3" />
+                        <IconChevronRightMedium className="size-icon-xs" />
                       </button>
                     )}
                   </>
@@ -442,11 +442,11 @@ export function SkillEditDialog({
                         }}
                         className={cn('mb-3 flex items-center gap-1.5', quietTextHover, controlStateColorTransition)}
                       >
-                        <IconPencil className="h-3.5 w-3.5" />
+                        <IconPencil className="size-icon-sm" />
                         <Txt as="span" variant="caption" className="block">
                           Simple mode
                         </Txt>
-                        <IconChevronRightMedium className="h-3 w-3" />
+                        <IconChevronRightMedium className="size-icon-xs" />
                       </button>
                     )}
                     <SkillFolder
@@ -466,7 +466,7 @@ export function SkillEditDialog({
                   onClick={() => setShowForm(true)}
                   className={cn('flex items-center gap-1.5', quietTextHover, controlStateColorTransition)}
                 >
-                  <IconChevronRightMedium className="h-3 w-3" />
+                  <IconChevronRightMedium className="size-icon-xs" />
                   <Txt as="span" variant="caption" className="block">
                     {hasFields ? 'Show skill details' : 'or fill in manually'}
                   </Txt>

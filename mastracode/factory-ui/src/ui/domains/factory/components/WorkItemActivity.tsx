@@ -189,7 +189,7 @@ export function WorkItemActivity({
       >
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
-            <IconHistory size={14} className="text-muted-foreground" aria-hidden />
+            <IconHistory className="text-muted-foreground size-icon-sm" aria-hidden />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <Txt as="span" variant="column" tone="ink">
                 Activity

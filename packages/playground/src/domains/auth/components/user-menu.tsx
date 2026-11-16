@@ -100,11 +100,11 @@ export function UserMenu({ user }: UserMenuProps) {
                     isActive ? 'bg-fill-hover' : 'hover:bg-fill-subtle'
                   } ${isSwitching ? 'cursor-not-allowed opacity-50' : ''}`}
                 >
-                  {isSwitching && <IconLoadingCircle className="h-3.5 w-3.5 animate-spin" />}
+                  {isSwitching && <IconLoadingCircle className="size-icon-sm animate-spin" />}
                   <Txt as="span" variant="body" className="flex-1 capitalize">
                     {role.name}
                   </Txt>
-                  {isActive && <IconCrossMedium className="h-3.5 w-3.5 text-muted-foreground" />}
+                  {isActive && <IconCrossMedium className="size-icon-sm text-muted-foreground" />}
                 </button>
               );
             })}

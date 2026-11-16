@@ -69,9 +69,9 @@ function BuildHistoryRows({
               onClick={() => setOpen(expanded ? undefined : build.buildId)}
             >
               {expanded ? (
-                <IconChevronDownMedium className="size-3.5 shrink-0" aria-hidden />
+                <IconChevronDownMedium className="size-icon-sm shrink-0" aria-hidden />
               ) : (
-                <IconChevronRightMedium className="size-3.5 shrink-0" aria-hidden />
+                <IconChevronRightMedium className="size-icon-sm shrink-0" aria-hidden />
               )}
               <Badge size="sm" variant={status.variant}>
                 {status.label}

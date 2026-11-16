@@ -11,10 +11,13 @@ type RunStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 // Labels match the experiments list badges so "queued" vs "in progress" reads the same everywhere.
 const statusIconMap: Record<RunStatus, { icon: React.ReactNode; label: string }> = {
-  pending: { icon: <IconClock className="size-4 text-warning-foreground" />, label: STATUS_LABEL.pending },
+  pending: { icon: <IconClock className="size-icon-md text-warning-foreground" />, label: STATUS_LABEL.pending },
   running: { icon: <Spinner size="sm" />, label: STATUS_LABEL.running },
-  completed: { icon: <IconCircleCheck className="size-4 text-muted-foreground" />, label: STATUS_LABEL.completed },
-  failed: { icon: <IconCircleX className="size-4 text-destructive-foreground" />, label: STATUS_LABEL.failed },
+  completed: {
+    icon: <IconCircleCheck className="size-icon-md text-muted-foreground" />,
+    label: STATUS_LABEL.completed,
+  },
+  failed: { icon: <IconCircleX className="size-icon-md text-destructive-foreground" />, label: STATUS_LABEL.failed },
 };
 
 /** Compact status indicator — a small icon with a tooltip describing the run state. */

@@ -506,7 +506,7 @@ export function TraceDataPanelView({
                   // bottom rule is its only edge, and keyboard focus lights that rule like a
                   // field's rim. The view switch stays as flat square icons.
                   <DataPanel.Header className="gap-1 border-b border-surface-rim has-[input:focus-visible]:[--surface-rim:var(--field-rim-focus)]">
-                    <IconMagnifyingGlass aria-hidden className="ml-1 size-4 shrink-0 text-muted-foreground" />
+                    <IconMagnifyingGlass aria-hidden className="ml-1 size-icon-md shrink-0 text-muted-foreground" />
                     <input
                       type="search"
                       aria-label="Search spans"
