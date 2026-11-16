@@ -7367,6 +7367,36 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect((await h.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
     });
 
+    it.each([
+      ['an outsider', 'read', undefined],
+      ['a maintainer', 'write', 'b'.repeat(40)],
+    ])(
+      "records the head %s pushes to their linked pull request on the issue's card only when it is the card's working pull request",
+      async (_who, permission, recorded) => {
+        const h = await harness(permission);
+        const issue = await h.issueCard(42, 'pr-review');
+        await h.ingest(openedPullRequest(17, 'Fixes #42'));
+        const opened = openedPullRequest(17, 'Fixes #42', 'push-17');
+
+        await h.ingest({
+          ...opened,
+          payload: {
+            ...opened.payload,
+            action: 'synchronize',
+            pull_request: {
+              ...opened.payload.pull_request,
+              head: { ref: 'feature-17', sha: 'B'.repeat(40) },
+              updated_at: '2030-01-01T01:00:00Z',
+            },
+          },
+        });
+
+        // The head a review covers, and the one its status names, is the working pull request's.
+        const card = (await h.cards()).find(entry => entry.id === issue.id)!;
+        expect(card.metadata.pullRequestHeadSha).toBe(recorded);
+      },
+    );
+
     it("still takes issue 42's card to PR review for a maintainer's pull request after an outsider's linked first", async () => {
       const h = await harness('read');
       const issue = await h.issueCard(42, 'intake');
