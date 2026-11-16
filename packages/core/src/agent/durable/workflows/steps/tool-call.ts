@@ -392,6 +392,19 @@ async function processChunkThroughOutputProcessors(
 }
 
 /**
+ * The run's `autoResumeSuspendedTools` for its current segment, persisted with each suspension: a resume can override
+ * the value the run started with, and a later resume in another process that leaves the option out reads the latest
+ * one back from the snapshot. (#30190)
+ */
+function runAutoResumeSuspendPayload(
+  registryEntry: Pick<RunRegistryEntry, 'autoResumeSuspendedTools'> | undefined,
+  startOptions: Pick<SerializableDurableOptions, 'autoResumeSuspendedTools'> | undefined,
+): { __autoResumeSuspendedTools?: boolean } {
+  const value = registryEntry?.autoResumeSuspendedTools ?? startOptions?.autoResumeSuspendedTools;
+  return value === undefined ? {} : { __autoResumeSuspendedTools: value };
+}
+
+/**
  * Create a durable tool call step.
  *
  * This step mirrors the base Agent's createToolCallStep pattern:
@@ -1273,6 +1286,7 @@ export function createDurableToolCallStep() {
             toolCallId,
             toolName,
             args,
+            ...runAutoResumeSuspendPayload(getRunRegistryEntry(runId, mastra as Mastra | undefined), agentOptions),
           },
           {
             resumeLabel: toolCallId,
@@ -1679,6 +1693,7 @@ export function createDurableToolCallStep() {
                 // partitioned per tool call (resumeLabel = toolCallId), so the
                 // resume leg can recover it even if message metadata is stale.
                 ...(delegatedRunId ? { suspendedToolRunId: delegatedRunId } : {}),
+                ...runAutoResumeSuspendPayload(getRunRegistryEntry(runId, mastra as Mastra | undefined), agentOptions),
               },
               { resumeLabel: toolCallId },
             );
@@ -1746,6 +1761,7 @@ export function createDurableToolCallStep() {
               // resume leg continues the delegate's suspended run instead of
               // restarting it (#20496; mirrors the approval branch above).
               ...(delegatedRunId ? { suspendedToolRunId: delegatedRunId } : {}),
+              ...runAutoResumeSuspendPayload(getRunRegistryEntry(runId, mastra as Mastra | undefined), agentOptions),
             },
             { resumeLabel: toolCallId },
           );

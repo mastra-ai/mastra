@@ -2251,6 +2251,10 @@ export class AgentThreadStreamRuntime {
         if (!answersTo(runId)) {
           return;
         }
+        // Another process resumed the run and executes it, so its follow-ups are that execution's input, wherever
+        // they were sent. A copy kept here would run as a second reply turn once that execution's turn ends and this
+        // stale record is released. (#30190)
+        if (state.threadRunsById.get(runId)?.registeredElsewhere) return;
         const queues = data.preRun ? state.preRunSignalsByThread : state.pendingSignalsByThread;
         if (
           [state.preRunSignalsByThread.get(key), state.pendingSignalsByThread.get(key)].some(queue =>

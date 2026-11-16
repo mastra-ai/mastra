@@ -653,23 +653,28 @@ describe('a follow-up sent while another runtime executes the parked run', () =>
   // runtime marks the record `registeredElsewhere`, but the record still read as parked, so a follow-up started a turn
   // here beside the remote execution. With that check alone, this process also kept its own copy of the follow-up it
   // forwarded: once the other runtime's reply turn ended, the stale parked record here was released and that copy ran
-  // as a second reply turn. (#30190)
+  // as a second reply turn. A follow-up sent to the executing process itself was broadcast, and this process admitted
+  // that broadcast into its own queue, with the same second reply turn as the result. (#30190)
   it.each([
-    { otherRunParks: 'before the follow-up is sent' },
-    { otherRunParks: 'after the follow-up is sent' },
+    { sentTo: 'the process that parked it', otherRunParks: 'before the follow-up is sent' },
+    { sentTo: 'the process that parked it', otherRunParks: 'after the follow-up is sent' },
+    { sentTo: 'the process executing it', otherRunParks: 'before the follow-up is sent' },
+    { sentTo: 'the process executing it', otherRunParks: 'after the follow-up is sent' },
   ] as const)(
-    'runs the follow-up once, on the runtime executing the run, when that run parks $otherRunParks, with auto-resume on (#30190)',
-    async ({ otherRunParks }) => {
+    'runs a follow-up sent to $sentTo once, on the process executing the run, when that run parks $otherRunParks, with auto-resume on (#30190)',
+    async ({ sentTo, otherRunParks }) => {
       const h = setup();
       const threadId = 'continuation-thread';
       const resourceId = 'continuation-user';
       const turnStreams: Array<ReturnType<typeof h.makeStream>> = [];
+      const turnInputs: string[] = [];
       /** An agent instance in one process: each queued turn it starts streams and registers on that process's runtime. */
       const agentInProcess = (runtime: AgentThreadStreamRuntime, turns: string[]) => {
         const agent = {
           id: 'continuation-agent',
           getDefaultOptions: async () => ({ autoResumeSuspendedTools: true }),
-          stream: vi.fn(async (_signal: unknown, options: { runId: string }) => {
+          stream: vi.fn(async (input: unknown, options: { runId: string }) => {
+            turnInputs.push(JSON.stringify(input));
             turns.push(options.runId);
             const turn = h.makeStream({ runId: options.runId });
             turnStreams.push(turn);
@@ -713,18 +718,28 @@ describe('a follow-up sent while another runtime executes the parked run', () =>
         };
         if (otherRunParks === 'before the follow-up is sent') await parkElsewhere();
 
-        const sent = h.runtime.sendSignal(
-          agent,
-          { type: 'user-message', contents: 'my answer' },
-          { resourceId, threadId },
-          h.pubsub,
-        );
+        const sent =
+          sentTo === 'the process that parked it'
+            ? h.runtime.sendSignal(
+                agent,
+                { type: 'user-message', contents: 'my answer' },
+                { resourceId, threadId },
+                h.pubsub,
+              )
+            : otherRuntime.sendSignal(
+                otherAgent,
+                { type: 'user-message', contents: 'my answer' },
+                { resourceId, threadId },
+                h.pubsub,
+              );
         expect((await sent.accepted).action).toBe('deliver');
         if (otherRunParks === 'after the follow-up is sent') await parkElsewhere();
 
-        // The runtime executing the run starts the reply turn.
+        // The runtime executing the run starts the reply turn, with the follow-up as its input.
         await vi.waitFor(() => expect(turnsElsewhere).toHaveLength(1));
         expect(turnsHere).toHaveLength(0);
+        expect(turnInputs).toHaveLength(1);
+        expect(turnInputs[0]).toContain('my answer');
         const [replyRunId] = turnsElsewhere;
         await vi.waitFor(() => expect(h.registrations()).toHaveLength(3));
         await emitFinishEvent(h.pubsub, replyRunId!, {

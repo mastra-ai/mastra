@@ -637,17 +637,23 @@ describeForAllEngines(
     // Technical: the run's own `autoResumeSuspendedTools` lived only on this process's thread-runtime record. A resume
     // through another Mastra instance (another process, or this one after a restart) has no record, so a resume that
     // omitted the option fell back to the agent's default (on), and once the run parked again a follow-up started a
-    // turn the run had turned off. The run's setting is now persisted with its suspension and restored on resume.
-    // A run that started with auto-resume on keeps it the same way: the follow-up starts the reply turn. (#30190)
+    // turn the run had turned off. The run's setting is now persisted with each suspension and restored on resume; a
+    // resume's explicit option wins and is persisted in turn. On durable and evented, a cold resume restored the
+    // setting the run started with rather than the latest one, so an override passed by one instance was lost after
+    // the next instance resumed without the option. (#30190)
     // Skipped on Inngest: its harness registers every agent on one shared host Mastra, so it cannot build a second
     // instance with the same agent id. Not yet checked on Inngest.
     (engine === 'inngest' ? it.skip : it).each([
-      { firstCallAutoResume: false, outcome: 'keeps a follow-up queued' },
-      { firstCallAutoResume: undefined, outcome: 'starts the follow-up turn' },
+      { firstCallAutoResume: false, resumes: [undefined], starts: false },
+      { firstCallAutoResume: undefined, resumes: [undefined], starts: true },
+      { firstCallAutoResume: false, resumes: [true], starts: true },
+      { firstCallAutoResume: undefined, resumes: [false], starts: false },
+      { firstCallAutoResume: true, resumes: [false, undefined], starts: false },
+      { firstCallAutoResume: false, resumes: [true, undefined], starts: true },
     ] as const)(
-      '$outcome when a run started with autoResumeSuspendedTools $firstCallAutoResume is resumed from another Mastra instance and pauses again (#30190)',
-      async ({ firstCallAutoResume }) => {
-        const ANSWER_FOLLOW_UP = 'Here is my second answer';
+      'with autoResumeSuspendedTools $firstCallAutoResume on the first call and $resumes on resumes from other Mastra instances, a follow-up after the run pauses again starts a turn: $starts (#30190)',
+      async ({ firstCallAutoResume, resumes, starts }) => {
+        const ANSWER_FOLLOW_UP = 'Here is my last answer';
         const seen = { answers: [] as string[] };
         const askTool = createTool({
           id: 'ask',
@@ -675,23 +681,29 @@ describeForAllEngines(
         const llm = getMock();
         // Registered first: a turn the follow-up started would answer it.
         llm.onMessage(new RegExp(ANSWER_FOLLOW_UP), { content: 'FOLLOW_UP_TURN' });
-        // Once the first question is answered, the model asks a second one, which pauses the run again.
-        llm.on(
-          { endpoint: 'chat', toolCallId: 'call-q1', hasToolResult: true },
-          { toolCalls: [{ id: 'call-q2', name: 'ask', arguments: { question: 'second?' } }] },
-        );
+        // Each answered question leads to another, which pauses the run again.
+        for (let question = 1; question <= resumes.length; question++) {
+          llm.on(
+            { endpoint: 'chat', toolCallId: `call-q${question}`, hasToolResult: true },
+            {
+              toolCalls: [
+                { id: `call-q${question + 1}`, name: 'ask', arguments: { question: `question ${question + 1}?` } },
+              ],
+            },
+          );
+        }
 
         const first = await runLoopScenario({
           engine,
           llm,
           sharedAgent: shared,
-          prompt: 'Ask me two questions',
+          prompt: 'Ask me some questions',
           memory,
           threadId,
           resourceId,
           fixtures: mock => {
-            mock.onMessage(/two questions/, {
-              toolCalls: [{ id: 'call-q1', name: 'ask', arguments: { question: 'first?' } }],
+            mock.onMessage(/some questions/, {
+              toolCalls: [{ id: 'call-q1', name: 'ask', arguments: { question: 'question 1?' } }],
             });
           },
           collectChunks: true,
@@ -700,39 +712,54 @@ describeForAllEngines(
         expect(first.chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
         const runId = first.output.runId;
 
-        // The first instance is done with the run's first segment, as a process that stopped would be.
-        await getRunRegistryEntry(runId, shared.mastra)?.workflowExecution;
-        // Another instance on the same storage resumes the run, naming only the run and its answer.
-        const elsewhere = await createSharedAgentInAnotherProcess(llm, shared, agentOptions);
-        const resumed = await elsewhere.agent.resumeStream(
-          { answer: 'first answer' },
-          { runId, toolCallId: 'call-q1' },
-        );
-        const resumedChunks: ChunkType[] = [];
-        for await (const chunk of resumed.fullStream) resumedChunks.push(chunk);
-        expect(seen.answers).toEqual(['first answer']);
-        expect(
-          resumedChunks.some(
-            c => c.type === 'tool-call-suspended' && (c.payload as { toolCallId?: string }).toolCallId === 'call-q2',
-          ),
-        ).toBe(true);
+        // Each resume runs in a fresh instance on the same storage, after the previous one is done with the run's
+        // segment, as a process that stopped would be. It names only the run, its answer, and maybe the option.
+        let previous = shared;
+        const answers: string[] = [];
+        for (const [index, resumeAutoResume] of resumes.entries()) {
+          await getRunRegistryEntry(runId, previous.mastra)?.workflowExecution;
+          const instance = await createSharedAgentInAnotherProcess(llm, previous, agentOptions);
+          const answer = `answer ${index + 1}`;
+          answers.push(answer);
+          const resumed = await instance.agent.resumeStream(
+            { answer },
+            {
+              runId,
+              toolCallId: `call-q${index + 1}`,
+              ...(resumeAutoResume !== undefined ? { autoResumeSuspendedTools: resumeAutoResume } : {}),
+            },
+          );
+          const resumedChunks: ChunkType[] = [];
+          for await (const chunk of resumed.fullStream) resumedChunks.push(chunk);
+          expect(seen.answers).toEqual(answers);
+          expect(
+            resumedChunks.some(
+              c =>
+                c.type === 'tool-call-suspended' &&
+                (c.payload as { toolCallId?: string }).toolCallId === `call-q${index + 2}`,
+            ),
+          ).toBe(true);
+          previous = instance;
+        }
 
-        const view = await elsewhere.agent.subscribeToThread({ resourceId, threadId });
+        const view = await previous.agent.subscribeToThread({ resourceId, threadId });
         onTestFinished(() => view.unsubscribe());
         const requestsWithFollowUp = () =>
           llm.getRequests().filter(request => JSON.stringify(request.body.messages).includes(ANSWER_FOLLOW_UP)).length;
 
-        await elsewhere.agent.sendMessage(ANSWER_FOLLOW_UP, { resourceId, threadId }).accepted;
-        if (firstCallAutoResume === undefined) {
+        await previous.agent.sendMessage(ANSWER_FOLLOW_UP, { resourceId, threadId }).accepted;
+        if (starts) {
           await vi.waitFor(() => expect(requestsWithFollowUp()).toBeGreaterThan(0), { timeout: 7_000 });
           await vi.waitFor(() => expect(view.activeRunId()).toBeNull(), { timeout: 7_000 });
+          // The follow-up reached the model once, in one reply turn.
+          expect(requestsWithFollowUp()).toBe(1);
           return;
         }
         // Long enough for a turn the follow-up started to reach the model.
         await new Promise(resolve => setTimeout(resolve, 500));
         expect(requestsWithFollowUp()).toBe(0);
         expect(view.activeRunId()).toBe(runId);
-        expect(seen.answers).toEqual(['first answer']);
+        expect(seen.answers).toEqual(answers);
       },
     );
 
