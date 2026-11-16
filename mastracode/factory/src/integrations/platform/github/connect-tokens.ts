@@ -1,19 +1,19 @@
 import type { ConnectClient, ConnectionCredential } from '@mastra/connect';
 
-/** Connect provider holding a Factory user's own GitHub token (`resourceId` = the user id). */
-export const FACTORY_GITHUB_USER_PROVIDER_KEY = 'factory-github-user';
+import { FACTORY_GITHUB_PROVIDER_KEY } from './connect-events.js';
 
 /** A token is reused until this long before it expires. */
 const EXPIRY_SKEW_MS = 60_000;
 /** A credential without an expiry is reused for at most this long. */
 const UNDATED_TOKEN_TTL_MS = 10 * 60_000;
-/** How long "this user has no GitHub connection" is remembered. */
-const NO_USER_CONNECTION_TTL_MS = 60_000;
+/** How long a user's pasted token, or their having no token, is remembered. */
+const USER_LOOKUP_TTL_MS = 60_000;
 
-export interface GithubUserToken {
-  connectionId: string;
-  token: string;
-}
+export type GithubUserToken =
+  { source: 'connection'; connectionId: string; token: string } | { source: 'pat'; token: string };
+
+/** Reads the classic PAT a user pasted into Factory, or null. */
+export type GithubUserPatSource = (orgId: string, userId: string) => Promise<string | null>;
 
 type Cached<T> = { value: T; expiresAt: number };
 
@@ -26,21 +26,26 @@ export class GithubConnectCredentialError extends Error {
 }
 
 /**
- * GitHub tokens read through Connect: the Mastra Factory apps' installation
- * tokens, by connection, and each Factory user's own token. Tokens are cached
+ * GitHub tokens for the Mastra Factory apps: their installation tokens, read
+ * through Connect by connection, and each Factory user's own token. A user's
+ * token comes from their end-user `factory-github` connection (`resourceId` =
+ * their user id) when they have an active one, else from the PAT they pasted
+ * into Factory. Tokens are cached
  * until shortly before they expire; a caller that sees GitHub reject one
  * invalidates it and asks again.
  */
 export class GithubConnectTokens {
   readonly #connect: ConnectClient;
   readonly #now: () => number;
+  readonly #userPat: GithubUserPatSource;
   readonly #installations = new Map<string, Cached<string>>();
   readonly #users = new Map<string, Cached<GithubUserToken | null>>();
   readonly #inflight = new Map<string, Promise<unknown>>();
 
-  constructor(connect: ConnectClient, options: { now?: () => number } = {}) {
+  constructor(connect: ConnectClient, options: { now?: () => number; userPat?: GithubUserPatSource } = {}) {
     this.#connect = connect;
     this.#now = options.now ?? Date.now;
+    this.#userPat = options.userPat ?? (async () => null);
   }
 
   installationToken(connectionId: string): Promise<string> {
@@ -58,28 +63,31 @@ export class GithubConnectTokens {
     this.#installations.delete(connectionId);
   }
 
-  /** The user's own GitHub token, or null when they have no active `factory-github-user` connection. */
-  userToken(userId: string): Promise<GithubUserToken | null> {
-    const cached = this.#users.get(userId);
+  /** The user's own GitHub token in `orgId`, or null when they have neither a connection nor a PAT. */
+  userToken(orgId: string, userId: string): Promise<GithubUserToken | null> {
+    const key = userKey(orgId, userId);
+    const cached = this.#users.get(key);
     if (cached && cached.expiresAt > this.#now()) return Promise.resolve(cached.value);
-    return this.#once(`user:${userId}`, async () => {
+    return this.#once(`user:${key}`, async () => {
       const scoped = this.#connect.withResource(userId);
-      const connection = (await scoped.listConnections({ providerKeys: [FACTORY_GITHUB_USER_PROVIDER_KEY] })).find(
+      const connection = (await scoped.listConnections({ providerKeys: [FACTORY_GITHUB_PROVIDER_KEY] })).find(
         candidate => candidate.status === 'active' && candidate.resourceId === userId,
       );
-      if (!connection) {
-        this.#users.set(userId, { value: null, expiresAt: this.#now() + NO_USER_CONNECTION_TTL_MS });
-        return null;
+      if (connection) {
+        const { token, expiresAt } = this.#oauth(connection.id, await scoped.getCredential(connection.id));
+        const value: GithubUserToken = { source: 'connection', connectionId: connection.id, token };
+        this.#users.set(key, { value, expiresAt });
+        return value;
       }
-      const { token, expiresAt } = this.#oauth(connection.id, await scoped.getCredential(connection.id));
-      const value = { connectionId: connection.id, token };
-      this.#users.set(userId, { value, expiresAt });
+      const pat = await this.#userPat(orgId, userId);
+      const value: GithubUserToken | null = pat ? { source: 'pat', token: pat } : null;
+      this.#users.set(key, { value, expiresAt: this.#now() + USER_LOOKUP_TTL_MS });
       return value;
     });
   }
 
-  invalidateUser(userId: string): void {
-    this.#users.delete(userId);
+  invalidateUser(orgId: string, userId: string): void {
+    this.#users.delete(userKey(orgId, userId));
   }
 
   #oauth(connectionId: string, credential: ConnectionCredential): { token: string; expiresAt: number } {
@@ -98,4 +106,8 @@ export class GithubConnectTokens {
     this.#inflight.set(key, promise);
     return promise;
   }
+}
+
+function userKey(orgId: string, userId: string): string {
+  return `${orgId}\u0000${userId}`;
 }

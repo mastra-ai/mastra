@@ -78,6 +78,8 @@ export class GithubReviewAuthorRequiredError extends Error {
 export type GithubTokenClass = 'default' | 'review' | 'user';
 
 export interface ConnectGithubTransportOptions {
+  /** The switched org the installation belongs to; users' own tokens are looked up in it. */
+  orgId: string;
   installation: PlatformGithubConnectInstallation;
   tokens: GithubConnectTokens;
   /** Whether a login is one of Factory's own GitHub apps. */
@@ -95,13 +97,14 @@ type Token = { tokenClass: GithubTokenClass; key: string; value: string };
  * GitHub directly through Octokit. Reviews (writes, reads that must see the
  * app's pending review, review comments, the review-status comment, check
  * runs) run as `factory-reviews-github`; everything else as `factory-github`.
- * A write made for a person uses that person's own GitHub token when they
- * connected one; otherwise it runs as the app and names them in the body, as
+ * A write made for a person uses that person's own GitHub token (their
+ * end-user connection, else their pasted PAT) when they have one; otherwise it runs as the app and names them in the body, as
  * the platform does.
  */
 export class ConnectGithubTransport implements GithubTransport {
   readonly kind = 'connect';
   readonly installation: PlatformGithubConnectInstallation;
+  readonly #orgId: string;
   readonly #tokens: GithubConnectTokens;
   readonly #isFactoryLogin: (login: string | null | undefined) => boolean;
   readonly #baseUrl: string;
@@ -110,6 +113,7 @@ export class ConnectGithubTransport implements GithubTransport {
 
   constructor(options: ConnectGithubTransportOptions) {
     this.installation = options.installation;
+    this.#orgId = options.orgId;
     this.#tokens = options.tokens;
     this.#isFactoryLogin = options.isFactoryLogin;
     this.#baseUrl = (options.baseUrl ?? GITHUB_API_URL).replace(/\/+$/, '');
@@ -568,16 +572,16 @@ export class ConnectGithubTransport implements GithubTransport {
 
   // —— The acting user ——
 
-  /** The user's GitHub login, when they connected their own GitHub account. */
+  /** The user's GitHub login, when they have their own GitHub token. */
   async userLogin(userId: string): Promise<string | null> {
-    const user = await this.#tokens.userToken(userId);
+    const user = await this.#tokens.userToken(this.#orgId, userId);
     if (!user) return null;
     return this.#login(user.token);
   }
 
   /** Runs `fn` with the user's own token; null when they have none. */
   async asUser<T>(userId: string, operation: string, fn: (octokit: Octokit) => Promise<T>): Promise<T | null> {
-    const user = await this.#tokens.userToken(userId);
+    const user = await this.#tokens.userToken(this.#orgId, userId);
     if (!user) return null;
     return this.#withToken(operation, { tokenClass: 'user', key: userId, value: user.token }, undefined, fn);
   }
@@ -595,7 +599,7 @@ export class ConnectGithubTransport implements GithubTransport {
   }
 
   /**
-   * A write: with an acting user who connected GitHub, as that user; otherwise
+   * A write: with an acting user who has their own GitHub token, as that user; otherwise
    * as the app, naming the user in the body.
    */
   async #write<T>(
@@ -627,7 +631,7 @@ export class ConnectGithubTransport implements GithubTransport {
     if (!review) {
       throw new GithubApiError(
         404,
-        'Review not found. For a pending human review, connect its author’s GitHub account with repository access.',
+        'Review not found. For a pending human review, its author must connect GitHub or add a GitHub token in Factory.',
       );
     }
     const author = review.user?.login;
@@ -635,13 +639,15 @@ export class ConnectGithubTransport implements GithubTransport {
       const attribution = call.actingUserId ? `@${call.actingUserId}` : undefined;
       return this.#run(operation, 'review', call.signal, octokit => fn(octokit, attribution));
     }
-    const user = call.actingUserId ? await this.#tokens.userToken(call.actingUserId) : null;
+    const user = call.actingUserId ? await this.#tokens.userToken(this.#orgId, call.actingUserId) : null;
     if (!user)
-      throw new GithubReviewAuthorRequiredError('Connect the review author’s GitHub account to modify this review.');
+      throw new GithubReviewAuthorRequiredError(
+        'Only the review author can modify this review: connect GitHub or add a GitHub token in Factory.',
+      );
     const login = await this.#login(user.token);
     if (!author || login.toLowerCase() !== author.toLowerCase()) {
       throw new GithubReviewAuthorRequiredError(
-        'Only the original review author can update, submit, or delete this review. Connect that GitHub account to continue.',
+        'Only the original review author can update, submit, or delete this review, using their own GitHub connection or token.',
       );
     }
     return this.#withToken(
@@ -696,9 +702,9 @@ export class ConnectGithubTransport implements GithubTransport {
 
   async #refresh(token: Token): Promise<string> {
     if (token.tokenClass === 'user') {
-      this.#tokens.invalidateUser(token.key);
-      const user = await this.#tokens.userToken(token.key);
-      if (!user) throw new GithubApiError(401, 'The GitHub account connection is no longer active.');
+      this.#tokens.invalidateUser(this.#orgId, token.key);
+      const user = await this.#tokens.userToken(this.#orgId, token.key);
+      if (!user) throw new GithubApiError(401, 'Your GitHub connection or token is no longer valid.');
       return user.token;
     }
     this.#tokens.invalidateInstallation(token.key);
@@ -780,7 +786,8 @@ async function orNull<T>(promise: Promise<T | null>): Promise<T | null> {
   }
 }
 
-function toGithubApiError(error: unknown): unknown {
+/** An Octokit failure as a `GithubApiError` carrying GitHub's status; anything else unchanged. */
+export function toGithubApiError(error: unknown): unknown {
   if (error instanceof GithubApiError) return error;
   if (error instanceof Error && typeof (error as { status?: unknown }).status === 'number') {
     return new GithubApiError((error as unknown as { status: number }).status, error.message);
