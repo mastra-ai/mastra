@@ -3946,10 +3946,10 @@
       "reason": "seed-rule-b"
     },
     "mastracode/factory/src/integrations/github/sandbox.test.ts": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": "2026-10-08",
-      "reason": "seed-rule-b"
+      "tier": "in",
+      "since": "2026-11-16",
+      "last_failure": "2026-11-16",
+      "reason": "versioning-fail"
     },
     "mastracode/factory/src/integrations/github/session-subscriptions.test.ts": {
       "tier": "out",
