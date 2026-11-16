@@ -392,6 +392,18 @@ async function bindWorkRun(storage: WorkItemsStorage, workItemId: string) {
 }
 
 /**
+ * Runs a dispatcher cycle and waits for the cleanup it started. `runOnce` does not wait for
+ * the cleanup, so a test reading its outcome straight after would race it.
+ */
+async function runCleanup(dispatcher: FactoryDecisionDispatcher, storage: WorkItemsStorage, now: Date) {
+  const sweep = vi.spyOn(storage, 'revokeStaleRunBindings');
+  await dispatcher.runOnce(now);
+  await vi.waitFor(() => expect(sweep).toHaveBeenCalledTimes(1));
+  await sweep.mock.results[0]!.value;
+  sweep.mockRestore();
+}
+
+/**
  * Work with Planning and Building ending in an auto-approved `submit_plan`: the only way the
  * dispatcher answers a plan itself now that the project switch is gone.
  */
@@ -744,7 +756,7 @@ describe('FactoryDecisionDispatcher', () => {
     const t0 = new Date();
     await dispatcher.runOnce(t0);
     // A day and more later the card is still in Building, the phase this session works.
-    await dispatcher.runOnce(new Date(t0.getTime() + 25 * 60 * 60_000));
+    await runCleanup(dispatcher, storage, new Date(t0.getTime() + 25 * 60 * 60_000));
     expect(await active()).toBe('active');
     expect(info).not.toHaveBeenCalledWith(expect.stringContaining('stale-binding sweep revoked'));
 
@@ -760,7 +772,7 @@ describe('FactoryDecisionDispatcher', () => {
       causalChain: [],
       evaluation: { outcome: 'accepted', decisions: [] },
     });
-    await dispatcher.runOnce(new Date(t0.getTime() + 26 * 60 * 60_000));
+    await runCleanup(dispatcher, storage, new Date(t0.getTime() + 26 * 60 * 60_000));
     expect(await active()).toBe('revoked');
     expect(info).toHaveBeenCalledWith(
       `Factory stale-binding sweep revoked binding card=${building.id} session=session-1 role=work`,
@@ -805,7 +817,7 @@ describe('FactoryDecisionDispatcher', () => {
     const t0 = new Date();
     await dispatcher.runOnce(t0);
     load.mockRejectedValue(new Error('connection lost'));
-    await dispatcher.runOnce(new Date(t0.getTime() + 25 * 60 * 60_000));
+    await runCleanup(dispatcher, storage, new Date(t0.getTime() + 25 * 60 * 60_000));
     expect(await status()).toBe('active');
     expect(warn).toHaveBeenCalledWith(
       `Factory stale-binding sweep kept binding card=${item.id} session=session-1: could not read its card`,
@@ -814,7 +826,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     // Readable again on the next sweep, and the assignment is cleaned up as usual.
     load.mockRestore();
-    await dispatcher.runOnce(new Date(t0.getTime() + 26 * 60 * 60_000));
+    await runCleanup(dispatcher, storage, new Date(t0.getTime() + 26 * 60 * 60_000));
     expect(await status()).toBe('revoked');
 
     warn.mockRestore();
