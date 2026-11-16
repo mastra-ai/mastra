@@ -243,8 +243,6 @@ const REPOSITORY_TOKEN_PERMISSIONS = {
   contents: 'write',
   issues: 'write',
   pull_requests: 'write',
-  // Lets sessions push branches that change .github/workflows files.
-  workflows: 'write',
   // Read-only CI visibility so sessions can verify checks and workflow runs.
   checks: 'read',
   actions: 'read',
