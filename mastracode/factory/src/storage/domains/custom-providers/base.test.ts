@@ -97,7 +97,7 @@ describe('CustomProvidersStorage', () => {
     expect(['https://a.example.com', 'https://b.example.com']).toContain(rows[0]!.url);
   });
 
-  it('upserts by (org, providerId) with wholesale replace — absent apiKey clears the key', async () => {
+  it('upserts by (org, providerId) keeping the stored key when apiKey is omitted', async () => {
     const seed = await createFactoryStorageForTests();
 
     const first = await seed.customProviders.upsert({
@@ -105,6 +105,8 @@ describe('CustomProvidersStorage', () => {
       userId: 'user-1',
       input: { providerId: 'my-llm', name: 'My LLM', url: 'https://a.example.com', apiKey: 'sk-1', models: ['m1'] },
     });
+    // The API key is write-only in the settings form, so an edit that leaves
+    // the field blank must keep the key already stored on the row.
     const second = await seed.customProviders.upsert({
       orgId: 'org-1',
       userId: 'user-2',
@@ -113,9 +115,23 @@ describe('CustomProvidersStorage', () => {
 
     expect(second.id).toBe(first.id);
     expect(second.url).toBe('https://b.example.com');
-    expect(second.apiKey).toBeNull();
+    expect(second.apiKey).toBe('sk-1');
     expect(second.models).toEqual(['m1', 'm2']);
     expect(await seed.customProviders.list({ orgId: 'org-1' })).toHaveLength(1);
+
+    // An explicit null is how a key is removed on purpose.
+    const cleared = await seed.customProviders.upsert({
+      orgId: 'org-1',
+      userId: 'user-2',
+      input: {
+        providerId: 'my-llm',
+        name: 'My LLM',
+        url: 'https://b.example.com',
+        apiKey: null,
+        models: ['m1', 'm2'],
+      },
+    });
+    expect(cleared.apiKey).toBeNull();
 
     // Same provider id in another org is independent.
     const otherOrg = await seed.customProviders.upsert({

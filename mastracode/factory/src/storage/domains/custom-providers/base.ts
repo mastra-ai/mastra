@@ -27,7 +27,12 @@ export interface UpsertCustomProviderInput {
   providerId: string;
   name: string;
   url: string;
-  apiKey?: string;
+  /**
+   * A string sets or replaces the key. Omit it (`undefined`) to keep the
+   * existing key on update — matching the settings form's "leave blank to
+   * keep" affordance — and pass `null` to clear it on purpose.
+   */
+  apiKey?: string | null;
   models: string[];
 }
 
@@ -108,8 +113,8 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
     };
   }
 
-  async #encryptApiKey(apiKey: string | undefined): Promise<string | null> {
-    return apiKey === undefined ? null : this.encryption.encrypt(apiKey);
+  async #encryptApiKey(apiKey: string | null | undefined): Promise<string | null> {
+    return apiKey == null ? null : this.encryption.encrypt(apiKey);
   }
 
   async #migrateApiKey(id: string): Promise<void> {
@@ -121,12 +126,14 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Create or wholesale-replace a provider by `(orgId, providerId)` — mirrors
-   * the settings.json upsert semantics (no key retention: an absent `apiKey`
-   * clears the stored key). `previousProviderId` renames the provider: the
-   * common path is a single atomic in-place update of the old row; renaming
-   * onto an id that already exists overwrites the target first and removes the
-   * old row last, so no interleaving or failure can lose the provider.
+   * Create or update a provider by `(orgId, providerId)`. An update keeps the
+   * stored API key when `input.apiKey` is omitted — the settings form leaves
+   * the field blank to keep the current key — and replaces it when a string is
+   * given or clears it on an explicit `null`. `previousProviderId` renames the
+   * provider: the common path is a single atomic in-place update of the old
+   * row; renaming onto an id that already exists overwrites the target first
+   * and removes the old row last, so no interleaving or failure can lose the
+   * provider.
    */
   async upsert({
     orgId,
@@ -158,11 +165,12 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
         const renamed = await this.#db.updateAtomic<CustomProviderDbRow>(
           'custom_providers',
           { org_id: orgId, provider_id: renameFrom },
-          () => ({
+          current => ({
             provider_id: input.providerId,
             name: input.name,
             url: input.url,
-            api_key: encryptedApiKey,
+            // Keep the key the user is editing when the field was left blank.
+            api_key: input.apiKey === undefined ? current.api_key : encryptedApiKey,
             models: input.models,
             updated_at: now,
           }),
@@ -205,10 +213,12 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
       this.#db.updateAtomic<CustomProviderDbRow>(
         'custom_providers',
         { org_id: orgId, provider_id: input.providerId },
-        () => ({
+        current => ({
           name: input.name,
           url: input.url,
-          api_key: encryptedApiKey,
+          // A blank API key field keeps the key already on the row; only an
+          // explicit `null` clears it.
+          api_key: input.apiKey === undefined ? current.api_key : encryptedApiKey,
           models: input.models,
           updated_at: now,
         }),

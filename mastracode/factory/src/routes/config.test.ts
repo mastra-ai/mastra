@@ -2306,6 +2306,49 @@ describe('custom provider routes', () => {
     expect(providers[0]).toMatchObject({ id: provider.id, hasApiKey: true });
   });
 
+  it('keeps the stored key when an edit omits the write-only apiKey', async () => {
+    const created = await postProvider(buildApp(userA), providerBody);
+    const { provider } = await created.json();
+
+    // Mirrors the settings form: the key field is blank on edit, so the body
+    // carries no `apiKey` at all.
+    const edited = await postProvider(buildApp(userA), {
+      name: providerBody.name,
+      url: providerBody.url,
+      models: ['m1', 'm2', 'm3'],
+      previousId: provider.id,
+    });
+    expect(edited.status).toBe(200);
+    expect((await edited.json()).provider).toMatchObject({ hasApiKey: true, models: ['m1', 'm2', 'm3'] });
+
+    const stored = await seed.customProviders.list({ orgId: 'org1' });
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({ apiKey: 'sk-x', models: ['m1', 'm2', 'm3'] });
+  });
+
+  it('keeps the stored key when an edit sends a blank apiKey', async () => {
+    const created = await postProvider(buildApp(userA), providerBody);
+    const { provider } = await created.json();
+
+    const edited = await postProvider(buildApp(userA), { ...providerBody, apiKey: '   ', previousId: provider.id });
+    expect(edited.status).toBe(200);
+
+    const stored = await seed.customProviders.list({ orgId: 'org1' });
+    expect(stored[0]).toMatchObject({ apiKey: 'sk-x' });
+  });
+
+  it('clears the stored key only when apiKey is explicitly null', async () => {
+    const created = await postProvider(buildApp(userA), providerBody);
+    const { provider } = await created.json();
+
+    const cleared = await postProvider(buildApp(userA), { ...providerBody, apiKey: null, previousId: provider.id });
+    expect(cleared.status).toBe(200);
+    expect((await cleared.json()).provider).toMatchObject({ hasApiKey: false });
+
+    const stored = await seed.customProviders.list({ orgId: 'org1' });
+    expect(stored[0]).toMatchObject({ apiKey: null });
+  });
+
   it('renames via previousId without leaving the old row behind', async () => {
     const created = await postProvider(buildApp(userA), providerBody);
     const { provider } = await created.json();

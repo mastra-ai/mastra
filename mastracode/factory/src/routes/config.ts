@@ -359,8 +359,15 @@ async function resolveCustomProvidersContext({
   };
 }
 
-/** Validate + coerce a request body into a CustomProviderSetting. */
-function parseCustomProviderBody(body: unknown): CustomProviderSetting | { error: string } {
+/**
+ * A custom provider request body. `apiKey` is write-only: omit it (or send a
+ * blank string) to keep the key already stored on an update, send a string to
+ * replace it, or send `null` to clear it.
+ */
+type CustomProviderBody = Omit<CustomProviderSetting, 'apiKey'> & { apiKey?: string | null };
+
+/** Validate + coerce a request body into a CustomProviderBody. */
+function parseCustomProviderBody(body: unknown): CustomProviderBody | { error: string } {
   if (!body || typeof body !== 'object') return { error: 'Invalid JSON body' };
   const b = body as Record<string, unknown>;
   const name = typeof b.name === 'string' ? b.name.trim() : '';
@@ -375,7 +382,9 @@ function parseCustomProviderBody(body: unknown): CustomProviderSetting | { error
   } catch {
     return { error: 'url must be a valid URL' };
   }
-  const apiKey = typeof b.apiKey === 'string' && b.apiKey.trim() ? b.apiKey.trim() : undefined;
+  // Blank means "keep the stored key"; only a literal `null` clears it.
+  const apiKey =
+    b.apiKey === null ? null : typeof b.apiKey === 'string' && b.apiKey.trim() ? b.apiKey.trim() : undefined;
   const models = Array.isArray(b.models)
     ? b.models.filter((m): m is string => typeof m === 'string' && m.trim().length > 0).map(m => m.trim())
     : [];
