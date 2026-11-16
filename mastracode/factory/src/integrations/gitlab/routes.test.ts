@@ -21,7 +21,10 @@ function buildApp(
     if (user) c.set('factoryAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app, buildGitLabRoutes({ gitlab, auth: fakeRouteAuth({ enabled: true }), intake, ingestFactoryEvent }));
+  mountApiRoutes(
+    app,
+    buildGitLabRoutes({ gitlab, auth: fakeRouteAuth({ enabled: true }), intake, ingestFactoryEvent }),
+  );
   return app;
 }
 
@@ -73,7 +76,10 @@ describe('GitLab UI routes', () => {
     expect(absent.status).toBe(404);
     expect(list).not.toHaveBeenCalled();
 
-    linked.mockResolvedValue({ repository: { id: 'repo-1', externalId: '10', slug: 'acme/app' }, host: 'gitlab.com' } as never);
+    linked.mockResolvedValue({
+      repository: { id: 'repo-1', externalId: '10', slug: 'acme/app' },
+      host: 'gitlab.com',
+    } as never);
     list.mockResolvedValue({
       pullRequests: [
         {
@@ -279,9 +285,7 @@ describe('GitLab UI routes', () => {
       }),
       listBindings: vi
         .fn()
-        .mockResolvedValue([
-          { integrationId: 'gitlab', sourceId: legacyId, factoryProjectId: 'factory-1' },
-        ]),
+        .mockResolvedValue([{ integrationId: 'gitlab', sourceId: legacyId, factoryProjectId: 'factory-1' }]),
       migrateSourceIds: vi.fn().mockResolvedValue({
         migrations: [{ from: legacyId, to: canonicalId }],
         conflicts: [],
@@ -475,7 +479,7 @@ describe('GitLab subscriptions route', () => {
       subscribedByUserId: 'u1',
     },
     createdAt: new Date(),
-    updatedAt: new Date(),
+    updatedAt: new Date('2026-11-03T10:00:00.000Z'),
   };
   const subscribedGitLab = () => {
     const gitlab = new GitLabIntegration({ accessToken: 'group-token' });
@@ -519,6 +523,7 @@ describe('GitLab subscriptions route', () => {
           repoFullName: 'acme/app',
           pullRequestNumber: 17,
           status: 'open',
+          updatedAt: '2026-11-03T10:00:00.000Z',
           url: 'https://gitlab.example.com/acme/app/-/merge_requests/17',
         },
       ],

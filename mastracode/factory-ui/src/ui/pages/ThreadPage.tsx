@@ -20,8 +20,10 @@ import { DraftSessionCreateError, isSessionNotFound } from '../domains/workspace
 import { useHandoffPrompt } from '../domains/chat/hooks/useHandoffPrompt';
 import { failedDraftState } from '../domains/chat/services/handoffFiles';
 import { FactorySessionPage } from '../domains/factory/components/RelatedFactorySessions';
+import { SessionPanelOverview } from '../domains/factory/components/SessionPanelOverview';
+import { SessionPanelSubject } from '../domains/factory/components/SessionPanelSubject';
+import type { WorkspacePanelPage } from '../domains/workspace-viewer/context/WorkspacePanelContext';
 import { WorkspaceFilesProvider } from '../domains/workspace-viewer/context/WorkspaceFilesProvider';
-import { WorkspaceFilesSurface } from '../domains/workspace-viewer/components/WorkspaceFilesSurface';
 import { useThreadWorkspacePath } from '../domains/workspace-viewer/hooks/useThreadWorkspacePath';
 import { useWiderThan } from '../domains/workspace-viewer/hooks/useWiderThan';
 import { chatColumnClass, RAIL_MIN_REM } from '../domains/workspace-viewer/layout';
@@ -32,10 +34,12 @@ import { newUserSessionPath } from '../domains/workspaces/services/factoryPaths'
 import '../domains/chat/components/chat-enter.css';
 import { IconBubbleCrossed } from '@mastra/playground-ui/icons/central/IconBubbleCrossed';
 
-const threadShellClass = cn(
-  chatColumnClass,
-  '[--chat-inset-end:var(--workspace-files-inset,0px)] [--chat-gutter:0.25rem]',
-);
+const threadShellClass = cn(chatColumnClass, '[--chat-gutter:0.25rem]');
+
+const SESSION_PANEL: WorkspacePanelPage = {
+  subject: lead => <SessionPanelSubject lead={lead} />,
+  overview: workspace => <SessionPanelOverview workspace={workspace} />,
+};
 
 export function ThreadPage() {
   const { factoryId, threadId } = useParams<{ factoryId: string; threadId?: string }>();
@@ -56,7 +60,7 @@ export function ThreadPage() {
   return (
     <ChatSessionBoundary threadId={threadId}>
       <PageTitle />
-      <WorkspaceFilesProvider>
+      <WorkspaceFilesProvider page={SESSION_PANEL}>
         <ThreadPageMain workspacePath={workspace.workspacePath} threadId={workspace.threadId} />
       </WorkspaceFilesProvider>
     </ChatSessionBoundary>
@@ -93,12 +97,6 @@ function ThreadPageMain({
   workspacePath: string | undefined;
   threadId: string | undefined;
 }) {
-  useGlobalShortcuts();
-  useRouteThreadSync();
-  useHandoffPrompt();
-  const railBoxRef = useRef<HTMLDivElement>(null);
-  const { wider: railFits } = useWiderThan(railBoxRef, RAIL_MIN_REM);
-
   return (
     <ThreadSessionEffects workspacePath={workspacePath}>
       <FactorySessionPage>
@@ -108,16 +106,28 @@ function ThreadPageMain({
           composerLabel="Thread composer"
           composerStatus={<TeammateSessionLine />}
           className={threadShellClass}
-          contentRef={railBoxRef}
-          contentOverlay={railFits ? <ThreadRailLayer /> : undefined}
-          stageSurface={<WorkspaceFilesSurface />}
+          contentOverlay={<ThreadRailSlot />}
         />
       </FactorySessionPage>
     </ThreadSessionEffects>
   );
 }
 
+function ThreadRailSlot() {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const { wider: railFits } = useWiderThan(boxRef, RAIL_MIN_REM);
+
+  return (
+    <div ref={boxRef} className="pointer-events-none absolute inset-0">
+      {railFits && <ThreadRailLayer />}
+    </div>
+  );
+}
+
 function ThreadSessionEffects({ workspacePath, children }: { workspacePath: string | undefined; children: ReactNode }) {
+  useGlobalShortcuts();
+  useRouteThreadSync();
+  useHandoffPrompt();
   const { busy, transcript } = useChatTranscript();
   useInvalidateWorkspaceChangesOnRunCompletion(workspacePath, busy);
   useRefreshWorkspaceFilesOnToolCalls(workspacePath, transcript.entries);

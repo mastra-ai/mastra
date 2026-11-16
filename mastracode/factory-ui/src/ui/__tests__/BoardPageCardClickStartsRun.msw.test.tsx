@@ -513,6 +513,18 @@ describe('Board card buttons move the card', () => {
     expect(await within(dialog).findByText('The sync runs the wrong way.')).toBeInTheDocument();
   });
 
+  it("sets the headings of a card's description under the card's title in its details", async () => {
+    stubBoardEndpoints({ workItems: [{ ...linearWorkItem, description: '# Steps\n\nRun the sync twice.' }] });
+    renderWorkBoard();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Details for ENG-42: Fix intake sync' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'ENG-42: Fix intake sync' });
+    expect(within(dialog).getByRole('heading', { level: 3, name: 'ENG-42: Fix intake sync' })).toBeInTheDocument();
+    expect(await within(dialog).findByRole('heading', { level: 4, name: 'Steps' })).toBeInTheDocument();
+  });
+
   it('links the card source from the panel header', async () => {
     stubBoardEndpoints();
     renderWorkBoard();

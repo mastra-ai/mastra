@@ -117,7 +117,7 @@ export function createSessionHoverDetailsFixtures(updatedAt: string) {
       acceptedAt: null,
       description: null,
       revision: 1,
-      createdAt: updatedAt,
+      createdAt: hoursBefore(updatedAt, 6),
       updatedAt,
     },
     {

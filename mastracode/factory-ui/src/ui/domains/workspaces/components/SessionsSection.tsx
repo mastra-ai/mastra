@@ -9,7 +9,7 @@ import { useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { useWorkspacePullRequestStatuses } from '../../../../hooks/useWorkspacePullRequestStatuses';
+import { useSessionPullRequestSubscriptions } from '../../../../hooks/useSessionPullRequestSubscriptions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { useOpenNewUserSession } from '../hooks/useOpenNewUserSession';
 import { useSessionDeletion } from '../hooks/useSessionDeletion';
@@ -24,9 +24,9 @@ import {
   sessionGroupHeadings,
 } from '../services/sessionGroups';
 import type { SessionGroupContext } from '../services/sessionGroups';
-import { pullRequestMergeTargets } from '../services/sessionRows';
 import type { SessionListRow } from '../services/sessionRows';
 import { compareSessionRows } from '../services/sessionSort';
+import { sessionPullRequestTargets } from '../services/sessionWorkItems';
 import { DeleteSessionDialog } from './DeleteSessionDialog';
 import { SessionGroupList } from './SessionGroupList';
 import { SessionGroupMenu } from './SessionGroupMenu';
@@ -45,7 +45,6 @@ import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedi
 
 export function SessionsSection() {
   const { factoryId, sessionId: routeSessionId } = useParams<{ factoryId: string; sessionId: string }>();
-  const { baseUrl, sessionId, sessionEnabled } = useChatSessionContext();
   const openNewUserSession = useOpenNewUserSession();
   const {
     view,
@@ -73,11 +72,11 @@ export function SessionsSection() {
   const defaultHeadings = sessionGroupHeadings(sortedRows, view.groupBy, groupContext);
   const menuGroups = orderGroupHeadings(defaultHeadings, groupOrderKeys);
   const groups = groupSessionRows(filteredRows, view.groupBy, menuGroups, hiddenGroupKeys);
-  const chatSessionOpen = sessionEnabled && Boolean(routeSessionId) && Boolean(sessionId);
-  const liveStatusBySessionId = useWorkspacePullRequestStatuses({
+  const { baseUrl, sessionId: chatSessionId, sessionEnabled } = useChatSessionContext();
+  const subscriptionsBySessionId = useSessionPullRequestSubscriptions({
     baseUrl,
-    targets: pullRequestMergeTargets(groups.flatMap(group => collapsedRowsKeepingActive(group.rows))),
-    enabled: chatSessionOpen,
+    targets: sessionPullRequestTargets(groups.flatMap(group => collapsedRowsKeepingActive(group.rows))),
+    enabled: sessionEnabled && Boolean(routeSessionId) && Boolean(chatSessionId),
   });
 
   const emptyMessage = emptyListMessage({
@@ -180,13 +179,10 @@ export function SessionsSection() {
                   key={entry.session.sessionId}
                   factoryId={factoryId}
                   row={entry}
+                  subscriptions={subscriptionsBySessionId[entry.session.sessionId]}
                   level={level}
                   compact={view.compact}
                   disabled={deletion.deleting}
-                  liveStatus={
-                    liveStatusBySessionId[entry.session.sessionId] ??
-                    (entry.pullRequest?.knownMerged ? 'merged' : undefined)
-                  }
                   onDelete={deletion.requestDeletion}
                   subItems={subItems}
                 />

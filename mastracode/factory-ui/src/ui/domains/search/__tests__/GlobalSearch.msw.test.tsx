@@ -399,6 +399,7 @@ function expectOriginPathname(locationState: unknown, expectedPathname: string) 
 afterEach(() => {
   window.localStorage.removeItem('mastracode-web:sidebar:state');
   window.localStorage.removeItem('mastracode-web:sidebar:width');
+  vi.restoreAllMocks();
 });
 
 describe('Global search', () => {
@@ -516,6 +517,31 @@ describe('Global search', () => {
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
     await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
+  it('hands focus back to the menu button when search opened from the phone sidebar closes', async () => {
+    vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    stubSearchApi();
+    const user = userEvent.setup();
+    renderSearchRoute();
+
+    await user.click(await screen.findByRole('button', { name: 'Open navigation menu' }, { timeout: 5_000 }));
+    const navigation = await screen.findByRole('dialog', { name: 'Navigation' });
+    await user.click(within(navigation).getByRole('button', { name: 'Search and navigate' }));
+    await screen.findByRole('dialog', { name: 'Global search' });
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Open navigation menu' })).toHaveFocus());
   });
 
   it.each(['activity', 'overview', 'attention', 'metrics', 'audit'])(

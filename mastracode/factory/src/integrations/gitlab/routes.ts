@@ -108,7 +108,11 @@ function listedMergeRequestEvent(
     instanceHost: project.host,
     payload: {
       user_username: POLLED_ACTOR,
-      project: { id: project.projectId, path_with_namespace: project.projectPath, web_url: `https://${project.host}/${project.projectPath}` },
+      project: {
+        id: project.projectId,
+        path_with_namespace: project.projectPath,
+        web_url: `https://${project.host}/${project.projectPath}`,
+      },
       object_attributes: {
         iid,
         action: 'open',
@@ -227,14 +231,25 @@ export async function ingestLinkedGitLabRepositoryBacklog(args: {
     repositoryId: linked.repository.id,
   });
   for (let page = 1; page <= LINKED_BACKLOG_MAX_PAGES; page += 1) {
-    const result = await args.gitlab.versionControl.listPullRequests({ ...target, includeDrafts: false, cursor: String(page) });
-    await ingestListedEvents(result.pullRequests.flatMap(pr => listedMergeRequestEvents(project, pr)), args.ingestFactoryEvent);
+    const result = await args.gitlab.versionControl.listPullRequests({
+      ...target,
+      includeDrafts: false,
+      cursor: String(page),
+    });
+    await ingestListedEvents(
+      result.pullRequests.flatMap(pr => listedMergeRequestEvents(project, pr)),
+      args.ingestFactoryEvent,
+    );
     if (result.nextCursor === null) break;
   }
   const sourceId = encodeSourceId({ host: linked.host, projectId: String(projectId) });
   let cursor: string | undefined;
   for (let page = 1; page <= LINKED_BACKLOG_MAX_PAGES; page += 1) {
-    const result = await args.gitlab.intake.listIssues({ connection: target.connection, sourceIds: [sourceId], cursor });
+    const result = await args.gitlab.intake.listIssues({
+      connection: target.connection,
+      sourceIds: [sourceId],
+      cursor,
+    });
     await ingestListedEvents(result.issues.map(listedIssueEvent), args.ingestFactoryEvent);
     if (result.nextCursor === null) break;
     cursor = result.nextCursor;
@@ -657,6 +672,7 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
               repoFullName: subscription.data.projectPath,
               pullRequestNumber: Number(subscription.data.changeRequestId),
               status: subscription.status,
+              updatedAt: subscription.updatedAt.toISOString(),
               url: mergeRequestUrl(
                 subscription.data.host,
                 subscription.data.projectPath,

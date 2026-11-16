@@ -119,6 +119,10 @@ export const queryKeys = {
     [...queryKeys.boardFacts(factoryProjectId), 'activity', depth] as const,
   workItemFilterOptions: (factoryProjectId: string | undefined) =>
     [...queryKeys.boardFacts(factoryProjectId), 'filter-options'] as const,
+  // Apart from a session page's read of the same route, so the feed refreshes only the sidebar's.
+  sidebarPullRequestSubscriptionsAll: () => ['sidebar-pull-request-subscriptions'] as const,
+  sidebarPullRequestSubscriptions: (provider: string, sessionId: string, threadId: string) =>
+    [...queryKeys.sidebarPullRequestSubscriptionsAll(), provider, sessionId, threadId] as const,
   knowledgeGraph: (factoryProjectId: string | undefined) =>
     ['factory', 'knowledge-graph', factoryProjectId ?? null] as const,
   knowledgePage: (factoryProjectId: string | undefined, pageId: string | null, noteCursor?: string) =>
@@ -159,6 +163,9 @@ export const queryKeys = {
   workspaceTreeScope: (workspacePath: string | undefined) => ['workspace-tree', workspacePath ?? null] as const,
   workspaceTree: (workspacePath: string | undefined, path: string) =>
     ['workspace-tree', workspacePath ?? null, path] as const,
+  // Under the tree's prefix so a tree refresh refreshes it; the object never equals a folder path.
+  workspaceFileIndex: (workspacePath: string | undefined) =>
+    ['workspace-tree', workspacePath ?? null, { index: 'files' }] as const,
   workspaceFileScope: (workspacePath: string | undefined) => ['workspace-file', workspacePath ?? null] as const,
   workspaceFile: (workspacePath: string | undefined, filePath: string | undefined) =>
     ['workspace-file', workspacePath ?? null, filePath ?? null] as const,

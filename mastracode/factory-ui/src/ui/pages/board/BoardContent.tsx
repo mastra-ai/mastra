@@ -148,7 +148,6 @@ export function BoardContent({
   const relatedItemsFor = useMemo(() => relatedWorkItemIndex(cards), [cards]);
   const sessionStatuses = useItemSessionStatuses({
     factoryProjectId,
-    projectRepositoryId: repository.projectRepositoryId,
     items: cards,
     parkedSessionIds: snapshot?.parkedSessionIds ?? NO_SESSIONS,
   });

@@ -64,7 +64,7 @@ export function WorkItemMenuItems({
   const stages = custom
     ? (board?.phases
         .filter(phase => targets.some(target => target.to === phase.id))
-        .map(phase => ({ id: phase.id, label: phase.title, kind: phase.kind })) ?? [])
+        .map(phase => ({ id: phase.id, label: phase.name ?? phase.title, kind: phase.kind })) ?? [])
     : itemStageOptions(item, board).map(stage => ({ ...stage, kind: undefined }));
   const suggestionForThisBoard = custom && proposedRunLabel === undefined ? undefined : proposal;
   const decisions = triageDecisions(board);

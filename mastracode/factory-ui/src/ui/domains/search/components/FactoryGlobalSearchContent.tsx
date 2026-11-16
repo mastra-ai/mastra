@@ -14,7 +14,7 @@ import { useState } from 'react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { BUSY_CARD_MOVE_REFUSAL, boardCardState, canStartRun } from '../../factory/boardCardState';
-import { currentItemStage, itemStageLabel } from '../../factory/boardStages';
+import { currentItemStage, phaseLabel } from '../../factory/boardStages';
 import { cardMoves } from '../../factory/cardPrimaryAction';
 import { useBoardItems } from '../../factory/hooks/useBoardItems';
 import { useBoardRuns } from '../../factory/hooks/useBoardRuns';
@@ -126,9 +126,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                 const { owner } = boardCardState({
                   decision: effectByItem.get(item.id),
                   moving:
-                    movingTo === undefined
-                      ? undefined
-                      : { stage: movingTo, label: itemStageLabel(item, movingTo, definition) },
+                    movingTo === undefined ? undefined : { stage: movingTo, label: phaseLabel(definition, movingTo) },
                   preparing: runs.preparingFor(item.id),
                 });
                 if (!canStartRun(owner.kind)) {

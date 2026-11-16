@@ -1,5 +1,4 @@
 import type { ActivityStatus } from '@mastra/playground-ui/components/Activity';
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode } from 'react';
 
@@ -7,15 +6,17 @@ import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import type { BoardCardStatus } from '../boardCardState';
 import { boardOf } from '../boardFlow';
 import type { DragPayload } from '../boardDrag';
-import { sourceCreatedAt, sourceMetadata, workItemKey } from '../boardItems';
+import { sourceCreatedAt, sourceMetadata } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
+import { useBoardRepository } from '../hooks/useBoardRepository';
 import type { AuditActorProfile } from '../services/audit';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
 import { CardActions, CardKey, CardStatus, MetadataLabels, SourceTitle, WorkItemSourceIcon } from './BoardCardParts';
 import { BoardListRow } from './BoardListRow';
+import { SourceStateBadge } from './SourceStateBadge';
 import { WorkItemActivity } from './WorkItemActivity';
 import type { ReworkReason } from '../reworkReason';
 import { columnReviewVerdict, ReviewVerdictBadge, ReworkLine } from './WorkItemCardRows';
@@ -56,6 +57,7 @@ export function WorkItemListRow({
   rework?: ReworkReason;
 }) {
   const board = boardOf(useBoardCatalog(item.githubProjectId).data, item);
+  const repository = useBoardRepository(item.githubProjectId);
   const verdict = columnReviewVerdict(item, columnStage, board);
   return (
     <BoardListRow
@@ -74,7 +76,7 @@ export function WorkItemListRow({
       createdAt={sourceCreatedAt(sourceMetadata(item)) ?? item.createdAt}
       cells={{
         icon: <WorkItemSourceIcon item={item} />,
-        key: <CardKey item={item} />,
+        key: <CardKey item={item} contextRepository={repository} />,
         title: (
           <Txt as="span" variant="label" tone="ink" className="truncate font-[550] tracking-tight">
             <SourceTitle source={item.source} title={item.title} />
@@ -88,11 +90,7 @@ export function WorkItemListRow({
                 {item.workItem.author}
               </Txt>
             )}
-            {item.workItem?.provider !== 'factory' && item.workItem?.state && (
-              <Badge size="xs" variant="neutral" aria-label={`Source state: ${item.workItem.state}`}>
-                {item.workItem.state}
-              </Badge>
-            )}
+            <SourceStateBadge item={item} />
             <MetadataLabels metadata={sourceMetadata(item)} />
           </span>
         ),
