@@ -40,4 +40,10 @@ describe('findFiles', () => {
   it('finds a path that grows longer once lowercased', () => {
     expect(findFiles(['src/İ.ts'], 's', { limit: 5 }).matches).toEqual([{ path: 'src/İ.ts', matched: [7] }]);
   });
+
+  it('finds a file by a name whose lowercase form is longer', () => {
+    expect(findFiles(['src/İ.ts'], 'İ.ts', { limit: 5 }).matches).toEqual([
+      { path: 'src/İ.ts', matched: [4, 5, 6, 7] },
+    ]);
+  });
 });
