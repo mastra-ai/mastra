@@ -1329,5 +1329,44 @@ describe('Agent Handlers', () => {
         }
       }
     });
+
+    it('uses a Mastra gateway model when only MASTRA_GATEWAY_API_KEY is set', async () => {
+      vi.stubEnv('OPENAI_API_KEY', '');
+      vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'test-gateway-key');
+      onTestFinished(() => vi.unstubAllEnvs());
+      const mastra = makeMastraMock({
+        agents: { 'gateway-agent': makeMockAgent({ name: 'gateway-agent', model: 'mastra/openai/gpt-5-mini' }) },
+      });
+      const generateSpy = vi
+        .spyOn(Agent.prototype, 'generate')
+        .mockResolvedValue({ object: { explanation: 'Clearer.', new_prompt: 'Be clear.' } } as any);
+      onTestFinished(() => generateSpy.mockRestore());
+
+      const result = await ENHANCE_INSTRUCTIONS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'gateway-agent',
+        instructions: 'Be helpful.',
+      });
+
+      expect(result).toEqual({ explanation: 'Clearer.', new_prompt: 'Be clear.' });
+      expect(generateSpy).toHaveBeenCalledOnce();
+    });
+
+    it('returns 400 for a Mastra gateway model when no gateway key is set', async () => {
+      vi.stubEnv('OPENAI_API_KEY', '');
+      vi.stubEnv('MASTRA_GATEWAY_API_KEY', '');
+      onTestFinished(() => vi.unstubAllEnvs());
+      const mastra = makeMastraMock({
+        agents: { 'gateway-agent': makeMockAgent({ name: 'gateway-agent', model: 'mastra/openai/gpt-5-mini' }) },
+      });
+
+      await expect(
+        ENHANCE_INSTRUCTIONS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'gateway-agent',
+          instructions: 'Be helpful.',
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+    });
   });
 });

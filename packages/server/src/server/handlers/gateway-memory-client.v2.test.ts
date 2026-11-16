@@ -21,6 +21,18 @@ describe('Gateway memory client in v2 deployments', () => {
     expect(isGatewayV2()).toBe(false);
   });
 
+  it('is not v2 for a v1 key even when MASTRA_GATEWAY_VERSION is v2', () => {
+    vi.stubEnv('MASTRA_GATEWAY_VERSION', 'v2');
+    vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'msk_v1-key');
+    expect(isGatewayV2()).toBe(false);
+  });
+
+  it('is v2 when MASTRA_GATEWAY_VERSION is v2 and the key has no v1 prefix', () => {
+    vi.stubEnv('MASTRA_GATEWAY_VERSION', 'v2');
+    vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'deployment-key');
+    expect(isGatewayV2()).toBe(true);
+  });
+
   it('detects v2 from a registered Mastra gateway instance carrying a v2 config key', () => {
     vi.stubEnv('MASTRA_GATEWAY_VERSION', '');
     vi.stubEnv('MASTRA_GATEWAY_API_KEY', '');

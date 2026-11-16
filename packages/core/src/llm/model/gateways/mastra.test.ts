@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { MastraGateway } from './mastra.js';
+import { _resetMastraGatewayCatalogCache, MastraGateway } from './mastra.js';
 
 vi.mock('../provider-registry.js', () => ({
   PROVIDER_REGISTRY: { openrouter: { models: ['openai/test-model'] } },
@@ -10,6 +10,7 @@ describe('MastraGateway', () => {
   beforeEach(() => {
     delete process.env.MASTRA_GATEWAY_API_KEY;
     delete process.env.MASTRA_GATEWAY_VERSION;
+    _resetMastraGatewayCatalogCache();
   });
 
   afterEach(() => {
@@ -133,6 +134,27 @@ describe('MastraGateway', () => {
     expect(providers.mastra?.modelReleaseDates).toBeUndefined();
   });
 
+  describe('isV2', () => {
+    it.each([
+      { version: undefined, key: 'msk_0123456789abcdef0123456789abcdef', expected: false },
+      { version: 'v2', key: 'msk_0123456789abcdef0123456789abcdef', expected: false },
+      { version: 'v2', key: 'deployment-key', expected: true },
+      { version: 'v2', key: undefined, expected: true },
+      { version: undefined, key: 'mskv2_org-key', expected: true },
+      { version: undefined, key: 'msk-gateway-org-key', expected: true },
+      { version: undefined, key: 'other-key', expected: false },
+    ])('with MASTRA_GATEWAY_VERSION=$version and key $key is $expected', ({ version, key, expected }) => {
+      if (version) process.env.MASTRA_GATEWAY_VERSION = version;
+      expect(new MastraGateway({ apiKey: key }).isV2()).toBe(expected);
+    });
+
+    it('lets a v1 config key win over a v2 env key and MASTRA_GATEWAY_VERSION', () => {
+      process.env.MASTRA_GATEWAY_VERSION = 'v2';
+      process.env.MASTRA_GATEWAY_API_KEY = 'mskv2_org-key';
+      expect(new MastraGateway({ apiKey: 'msk_0123456789abcdef0123456789abcdef' }).isV2()).toBe(false);
+    });
+  });
+
   it('does not show a static v1 model list if v2 catalog loading fails', async () => {
     process.env.MASTRA_GATEWAY_VERSION = 'v2';
     const gateway = new MastraGateway({
@@ -140,6 +162,135 @@ describe('MastraGateway', () => {
       customFetch: vi.fn(async () => new Response('unavailable', { status: 503 })),
     });
     await expect(gateway.fetchProviders()).rejects.toThrow('Gateway model catalog unavailable (503)');
+  });
+
+  describe('v2 catalog cache', () => {
+    const catalog = (ids: string[]) =>
+      new Response(JSON.stringify({ data: ids.map(id => ({ id, endpoints: ['chat'] })) }), { status: 200 });
+
+    beforeEach(() => {
+      process.env.MASTRA_GATEWAY_VERSION = 'v2';
+    });
+
+    it('reuses the catalog for a minute, then fetches it again', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      const customFetch = vi.fn(async () => catalog(['openai/chat-model']));
+      const gateway = new MastraGateway({ apiKey: 'deployment-key', customFetch });
+
+      await gateway.fetchProviders();
+      now.mockReturnValue(1_000_000 + 59_000);
+      await gateway.fetchProviders();
+      expect(customFetch).toHaveBeenCalledOnce();
+
+      now.mockReturnValue(1_000_000 + 61_000);
+      await gateway.fetchProviders();
+      expect(customFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('shares one request between concurrent callers', async () => {
+      let respond!: (response: Response) => void;
+      const customFetch = vi.fn(() => new Promise<Response>(resolve => (respond = resolve)));
+      const gateway = new MastraGateway({ apiKey: 'deployment-key', customFetch });
+
+      const first = gateway.fetchProviders();
+      const second = new MastraGateway({ apiKey: 'deployment-key', customFetch }).fetchProviders();
+      await vi.waitFor(() => expect(customFetch).toHaveBeenCalledOnce());
+      respond(catalog(['openai/chat-model']));
+
+      expect((await first).mastra?.models).toEqual(['openai/chat-model']);
+      expect((await second).mastra?.models).toEqual(['openai/chat-model']);
+      expect(customFetch).toHaveBeenCalledOnce();
+    });
+
+    it('keeps catalogs for different keys apart', async () => {
+      const customFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const key = new Headers(init?.headers).get('X-Memory-Gateway-Authorization');
+        return catalog([key === 'Bearer key-a' ? 'openai/model-a' : 'openai/model-b']);
+      });
+
+      const a = await new MastraGateway({ apiKey: 'key-a', customFetch }).fetchProviders();
+      const b = await new MastraGateway({ apiKey: 'key-b', customFetch }).fetchProviders();
+
+      expect(a.mastra?.models).toEqual(['openai/model-a']);
+      expect(b.mastra?.models).toEqual(['openai/model-b']);
+    });
+
+    it('serves the last good catalog for up to ten minutes when a refresh fails', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      const customFetch = vi.fn(async () => catalog(['openai/chat-model']));
+      const gateway = new MastraGateway({ apiKey: 'deployment-key', customFetch });
+      await gateway.fetchProviders();
+
+      customFetch.mockImplementation(async () => new Response('unavailable', { status: 503 }));
+      now.mockReturnValue(1_000_000 + 9 * 60_000);
+      expect((await gateway.fetchProviders()).mastra?.models).toEqual(['openai/chat-model']);
+
+      now.mockReturnValue(1_000_000 + 11 * 60_000);
+      await expect(gateway.fetchProviders()).rejects.toThrow('Gateway model catalog unavailable (503)');
+    });
+
+    it('fetches again after a failure with no previous catalog', async () => {
+      const customFetch = vi.fn(async () => new Response('unavailable', { status: 503 }));
+      const gateway = new MastraGateway({ apiKey: 'deployment-key', customFetch });
+      await expect(gateway.fetchProviders()).rejects.toThrow('(503)');
+
+      customFetch.mockImplementation(async () => catalog(['openai/chat-model']));
+      expect((await gateway.fetchProviders()).mastra?.models).toEqual(['openai/chat-model']);
+      expect(customFetch).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('resolveLanguageModel streaming usage', () => {
+    const prompt = [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }];
+
+    function captureBodies() {
+      const bodies: Record<string, unknown>[] = [];
+      const fetchImpl = vi.fn(async (_input: any, init: any) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+      });
+      return { bodies, fetchImpl };
+    }
+
+    async function send(model: any) {
+      await model.doStream({ prompt }).catch(() => {});
+      await model.doGenerate({ prompt }).catch(() => {});
+    }
+
+    it('asks for usage on streaming requests only with an API key', async () => {
+      const { bodies, fetchImpl } = captureBodies();
+      vi.stubGlobal('fetch', fetchImpl);
+      try {
+        const model = new MastraGateway({ apiKey: 'gateway-key' }).resolveLanguageModel({
+          modelId: 'gpt-4o',
+          providerId: 'openai',
+          apiKey: 'gateway-key',
+        });
+        await send(model);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+
+      expect(bodies).toHaveLength(2);
+      expect(bodies[0]).toMatchObject({ stream: true, stream_options: { include_usage: true } });
+      expect(bodies[1]).not.toHaveProperty('stream_options');
+      expect(bodies[1]).not.toHaveProperty('usage');
+    });
+
+    it('asks for usage on streaming requests only with a custom fetch', async () => {
+      const { bodies, fetchImpl } = captureBodies();
+      const model = new MastraGateway({ apiKey: 'gateway-key', customFetch: fetchImpl as any }).resolveLanguageModel({
+        modelId: 'gpt-4o',
+        providerId: 'openai',
+        apiKey: 'gateway-key',
+      });
+      await send(model);
+
+      expect(bodies).toHaveLength(2);
+      expect(bodies[0]).toMatchObject({ stream: true, stream_options: { include_usage: true } });
+      expect(bodies[1]).not.toHaveProperty('stream_options');
+      expect(bodies[1]).not.toHaveProperty('usage');
+    });
   });
 
   describe('resolveLanguageModel gateway authorization header', () => {

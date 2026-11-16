@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createAnthropic } from '@ai-sdk/anthropic-v6';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v6';
 import { MastraError } from '../../../error/index.js';
@@ -71,8 +72,11 @@ export class MastraGateway extends MastraModelGateway {
    * that env-only checks cannot see).
    */
   isV2(): boolean {
-    if (process.env['MASTRA_GATEWAY_VERSION'] === 'v2') return true;
     const key = this.config?.apiKey ?? process.env['MASTRA_GATEWAY_API_KEY'];
+    // A v1 project key (`msk_`) is always served by v1, so it wins over the env var.
+    // The v2 prefixes (`msk-gateway-`, `mskv2_`) do not start with `msk_`.
+    if (key?.startsWith('msk_')) return false;
+    if (process.env['MASTRA_GATEWAY_VERSION'] === 'v2') return true;
     return !!key && (key.startsWith('msk-gateway-') || key.startsWith('mskv2_'));
   }
 
@@ -82,27 +86,9 @@ export class MastraGateway extends MastraModelGateway {
     let models = openrouterConfig?.models ?? [];
     if (isV2) {
       const apiKey = await this.getApiKey();
-      const response = await (this.config?.customFetch ?? fetch)(`${this.getBaseUrl()}/v1/models`, {
-        headers: this.config?.customFetch ? withGatewayAuthHeader(apiKey) : { Authorization: `Bearer ${apiKey}` },
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (!response.ok) throw new Error(`Gateway model catalog unavailable (${response.status})`);
-      const body: unknown = await response.json();
-      if (!body || typeof body !== 'object' || !('data' in body) || !Array.isArray(body.data)) {
-        throw new Error('Gateway model catalog has an invalid response');
-      }
-      // The Mastra gateway model uses the OpenAI-compatible chat transport.
-      // Models offered only through another endpoint cannot be selected here.
-      models = body.data
-        .filter(
-          (item): item is { id: string; endpoints: string[] } =>
-            !!item &&
-            typeof item === 'object' &&
-            typeof item.id === 'string' &&
-            Array.isArray(item.endpoints) &&
-            item.endpoints.includes('chat'),
-        )
-        .map(item => item.id);
+      models = await loadCachedV2Catalog(`${this.getBaseUrl()}\n${hashApiKey(apiKey)}`, () =>
+        this.fetchV2Catalog(apiKey),
+      );
     }
 
     const providers = {
@@ -119,6 +105,30 @@ export class MastraGateway extends MastraModelGateway {
     };
 
     return providers;
+  }
+
+  private async fetchV2Catalog(apiKey: string): Promise<string[]> {
+    const response = await (this.config?.customFetch ?? fetch)(`${this.getBaseUrl()}/v1/models`, {
+      headers: this.config?.customFetch ? withGatewayAuthHeader(apiKey) : { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) throw new Error(`Gateway model catalog unavailable (${response.status})`);
+    const body: unknown = await response.json();
+    if (!body || typeof body !== 'object' || !('data' in body) || !Array.isArray(body.data)) {
+      throw new Error('Gateway model catalog has an invalid response');
+    }
+    // The Mastra gateway model uses the OpenAI-compatible chat transport.
+    // Models offered only through another endpoint cannot be selected here.
+    return body.data
+      .filter(
+        (item): item is { id: string; endpoints: string[] } =>
+          !!item &&
+          typeof item === 'object' &&
+          typeof item.id === 'string' &&
+          Array.isArray(item.endpoints) &&
+          item.endpoints.includes('chat'),
+      )
+      .map(item => item.id);
   }
 
   async buildUrl(_modelId: string): Promise<string> {
@@ -169,6 +179,9 @@ export class MastraGateway extends MastraModelGateway {
         baseURL,
         headers: withGatewayAuthHeader(apiKey, headers),
         fetch: this.config.customFetch,
+        // Strict mode adds stream_options.include_usage to streaming requests only,
+        // so routes that report usage in a separate final chunk still return it.
+        compatibility: 'strict',
       }).chat(fullModelId) as unknown as GatewayLanguageModel;
     }
 
@@ -180,6 +193,67 @@ export class MastraGateway extends MastraModelGateway {
         'User-Agent': MASTRA_USER_AGENT,
         ...headers,
       },
+      // Strict mode adds stream_options.include_usage to streaming requests only.
+      compatibility: 'strict',
     }).chat(fullModelId) as unknown as GatewayLanguageModel;
   }
+}
+
+/** How long a v2 model catalogue is reused before it is fetched again. */
+const V2_CATALOG_TTL_MS = 60_000;
+/** How long the last good v2 catalogue is still served while refreshes fail. */
+const V2_CATALOG_STALE_IF_ERROR_MS = 10 * 60_000;
+
+interface V2CatalogEntry {
+  models?: string[];
+  fetchedAt?: number;
+  pending?: Promise<string[]>;
+}
+
+/** v2 model catalogues by base URL and API key hash. The raw key is never stored. */
+const v2CatalogCache = new Map<string, V2CatalogEntry>();
+
+function hashApiKey(apiKey: string): string {
+  return createHash('sha256').update(apiKey).digest('hex');
+}
+
+/**
+ * Returns the cached v2 catalogue for `cacheKey`, fetching it when it is missing or older than
+ * the TTL. Concurrent callers share one request. When a refresh fails, the last good catalogue
+ * is returned for a bounded time; without one the error is thrown.
+ */
+function loadCachedV2Catalog(cacheKey: string, load: () => Promise<string[]>): Promise<string[]> {
+  const entry = v2CatalogCache.get(cacheKey);
+  const now = Date.now();
+  if (entry?.models && entry.fetchedAt !== undefined && now - entry.fetchedAt < V2_CATALOG_TTL_MS) {
+    return Promise.resolve(entry.models);
+  }
+  if (entry?.pending) return entry.pending;
+
+  const pending = load().then(
+    models => {
+      v2CatalogCache.set(cacheKey, { models, fetchedAt: Date.now() });
+      return models;
+    },
+    error => {
+      const previous = v2CatalogCache.get(cacheKey);
+      if (
+        previous?.models &&
+        previous.fetchedAt !== undefined &&
+        Date.now() - previous.fetchedAt < V2_CATALOG_STALE_IF_ERROR_MS
+      ) {
+        v2CatalogCache.set(cacheKey, { models: previous.models, fetchedAt: previous.fetchedAt });
+        return previous.models;
+      }
+      v2CatalogCache.delete(cacheKey);
+      throw error;
+    },
+  );
+  v2CatalogCache.set(cacheKey, { ...entry, pending });
+  return pending;
+}
+
+/** @internal Clear the cached v2 model catalogues. For testing only. */
+export function _resetMastraGatewayCatalogCache(): void {
+  v2CatalogCache.clear();
 }

@@ -933,6 +933,50 @@ describe('GatewayRegistry Auto-Refresh', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it('does not sync the Mastra gateway into the shared cache in v2 mode', async () => {
+    const previousVersion = process.env.MASTRA_GATEWAY_VERSION;
+    const previousKey = process.env.MASTRA_GATEWAY_API_KEY;
+    process.env.MASTRA_GATEWAY_VERSION = 'v2';
+    process.env.MASTRA_GATEWAY_API_KEY = 'deployment-key';
+    try {
+      const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+      const writtenFiles: string[] = [];
+      vi.spyOn(fs.promises, 'writeFile').mockImplementation(async (filePath: any, data: any) => {
+        writtenFiles.push(`${filePath.toString()}\n${String(data)}`);
+      });
+      vi.spyOn(fs.promises, 'rename').mockResolvedValue();
+      vi.spyOn(fs.promises, 'copyFile').mockResolvedValue();
+      vi.spyOn(fs, 'mkdirSync').mockReturnValue(undefined);
+      vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders').mockResolvedValue({
+        'test-provider': {
+          name: 'Test Provider',
+          models: ['model-a'],
+          apiKeyEnvVar: 'TEST_API_KEY',
+          gateway: 'models-dev',
+        } as ProviderConfig,
+      });
+      vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({});
+      const mastraFetchProvidersSpy = vi
+        .spyOn(MastraGateway.prototype, 'fetchProviders')
+        .mockRejectedValue(new Error('Gateway model catalog unavailable (401)'));
+
+      await registry.syncGateways(true);
+
+      expect(mastraFetchProvidersSpy).not.toHaveBeenCalled();
+      const registryWrites = writtenFiles.filter(entry => entry.includes('provider-registry.json'));
+      expect(registryWrites.length).toBeGreaterThan(0);
+      for (const entry of registryWrites) {
+        expect(entry).toContain('test-provider');
+        expect(entry).not.toContain('"mastra"');
+      }
+    } finally {
+      if (previousVersion === undefined) delete process.env.MASTRA_GATEWAY_VERSION;
+      else process.env.MASTRA_GATEWAY_VERSION = previousVersion;
+      if (previousKey === undefined) delete process.env.MASTRA_GATEWAY_API_KEY;
+      else process.env.MASTRA_GATEWAY_API_KEY = previousKey;
+    }
+  });
+
   it('should skip syncGateways when MASTRA_OFFLINE is set to true', async () => {
     process.env.MASTRA_OFFLINE = 'true';
 

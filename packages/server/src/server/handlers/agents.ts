@@ -2093,6 +2093,18 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
       }
     } catch (error) {
       console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
+      // Keep the Mastra gateway listed when its catalog cannot be loaded (for example a revoked
+      // key or an outage), so Studio shows the provider with no models instead of hiding it.
+      if (gateway.id === 'mastra' && !('mastra' in allProviders)) {
+        const registered: ProviderConfig | undefined = PROVIDER_REGISTRY['mastra' as keyof typeof PROVIDER_REGISTRY];
+        allProviders['mastra'] = {
+          name: registered?.name ?? 'Gateway',
+          apiKeyEnvVar: registered?.apiKeyEnvVar ?? 'MASTRA_GATEWAY_API_KEY',
+          gateway: 'mastra',
+          docUrl: registered?.docUrl,
+          models: [],
+        };
+      }
     }
   }
 
@@ -4374,8 +4386,29 @@ Return your response as JSON with exactly these two fields:
 
 Remember: A good system prompt should be specific enough to guide behavior but flexible enough to handle edge cases. Focus on creating prompts that are clear, actionable, and aligned with the intended use case.`;
 
+/**
+ * Whether a model is served through a gateway that is enabled, such as a `mastra/openai/...`
+ * model with a Mastra gateway key. Such a model needs the gateway's credential, not a key for the
+ * lab provider named in its id. models.dev is not a gateway in this sense: its models use the
+ * provider's own key.
+ */
+function isServedByEnabledGateway(model: object, mastra: Context['mastra']): boolean {
+  const gatewayId = 'gatewayId' in model ? model.gatewayId : undefined;
+  if (typeof gatewayId !== 'string' || gatewayId === 'models.dev') return false;
+  const registered = Object.values(mastra?.listGateways?.() ?? {});
+  const gateway = [...registered, ...defaultGateways].find(candidate => candidate.id === gatewayId);
+  return !!gateway && gateway.shouldEnable?.() !== false;
+}
+
+function isModelConnected(model: Awaited<ReturnType<Agent['getModel']>>, mastra: Context['mastra']): boolean {
+  return isProviderConnected(model.provider) || isServedByEnabledGateway(model, mastra);
+}
+
 // Helper to find the first model with a connected provider
-async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agent['getModel']>> | null> {
+async function findConnectedModel(
+  agent: Agent,
+  mastra: Context['mastra'],
+): Promise<Awaited<ReturnType<Agent['getModel']>> | null> {
   const modelList = await agent.getModelList();
 
   if (modelList && modelList.length > 0) {
@@ -4383,7 +4416,7 @@ async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agen
     for (const modelConfig of modelList) {
       if (modelConfig.enabled !== false) {
         const model = modelConfig.model;
-        if (isProviderConnected(model.provider)) {
+        if (isModelConnected(model, mastra)) {
           return model;
         }
       }
@@ -4393,7 +4426,7 @@ async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agen
 
   // No model list, check the default model
   const defaultModel = await agent.getModel();
-  if (isProviderConnected(defaultModel.provider)) {
+  if (isModelConnected(defaultModel, mastra)) {
     return defaultModel;
   }
   return null;
@@ -4417,7 +4450,7 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
 
       // Find the first model with a connected provider (similar to how chat works)
-      const model = await findConnectedModel(agent);
+      const model = await findConnectedModel(agent, mastra);
       if (!model) {
         throw new HTTPException(400, {
           message:

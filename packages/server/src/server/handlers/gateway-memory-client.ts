@@ -300,8 +300,11 @@ function isV2GatewayKey(key: string): boolean {
  * (pass `mastra` so instance-level config is consulted too).
  */
 export function isGatewayV2(mastra?: { listGateways?: () => Record<string, unknown> | undefined }): boolean {
-  if (process.env.MASTRA_GATEWAY_VERSION === 'v2') return true;
   const key = process.env.MASTRA_GATEWAY_API_KEY;
+  // A v1 project key (`msk_`) is always served by v1, so it wins over MASTRA_GATEWAY_VERSION.
+  // A registered gateway instance can still report v2 for its own config key below.
+  const isV1Key = !!key && key.startsWith('msk_');
+  if (!isV1Key && process.env.MASTRA_GATEWAY_VERSION === 'v2') return true;
   if (!!key && isV2GatewayKey(key)) return true;
   // A user-registered MastraGateway can hold a v2 key in its config rather
   // than the environment; ask the instance for its effective v2 state.
