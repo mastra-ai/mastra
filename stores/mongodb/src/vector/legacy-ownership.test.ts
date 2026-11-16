@@ -1436,6 +1436,20 @@ describe('legacy ownership', () => {
             expect(await entry(coll)).toMatchObject({ textSearchIndexName: 'T2', ownsTextIndex: true });
           });
 
+          // A partial legacy entry has no collectionName; reads default it to the managed collection,
+          // and so must the pre-provision check, or the call could never succeed.
+          it('a createSearchIndex on a legacy entry with no recorded collection provisions without CONFLICT', async () => {
+            const coll = await seeded('px');
+            await seedRegistry(db, { _id: coll, indexName: coll, textSearchIndexName: `${coll}_search_index` });
+            try {
+              await a.createSearchIndex({ indexName: coll });
+              expect(await searchIndexNames(db, coll)).toEqual([`${coll}_search_index`]);
+              expect(await entry(coll)).toMatchObject({ textSearchIndexName: `${coll}_search_index` });
+            } finally {
+              await db.collection(REGISTRY).deleteOne({ _id: coll as any });
+            }
+          });
+
           // Documented limitation, not a fix: the check compares targets, and the registry has no
           // stable registration identity, so a delete followed by a recreate with the same target looks
           // unchanged. The stale refresh provisions the index; its ownership write misses the new

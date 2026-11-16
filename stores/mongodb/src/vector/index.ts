@@ -973,9 +973,15 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       });
     }
     this.assertNotDeleting(own, op);
+    // Same managed defaults as resolveIndexTarget, so a legacy entry missing these fields still matches.
+    const recorded: RegistryDoc = {
+      ...own,
+      collectionName: own.collectionName ?? indexName,
+      searchIndexName: own.searchIndexName ?? `${indexName}_vector_index`,
+    };
     const changed = Object.entries({ collectionName, ...expected })
-      .filter(([field, value]) => own[field as keyof RegistryDoc] !== value)
-      .map(([field, value]) => `${field} "${String(own[field as keyof RegistryDoc])}" instead of "${value}"`);
+      .filter(([field, value]) => recorded[field as keyof RegistryDoc] !== value)
+      .map(([field, value]) => `${field} "${String(recorded[field as keyof RegistryDoc])}" instead of "${value}"`);
     if (changed.length) {
       throw new MastraError({
         id: createVectorErrorId('MONGODB', op, 'CONFLICT'),
