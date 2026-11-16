@@ -1,4 +1,5 @@
-import { STATUS_EVENTS } from '@mastra/factory/boards/board-events';
+import { arrivalKinds, STATUS_EVENTS } from '@mastra/factory/boards/board-events';
+import type { ArrivalKind } from '@mastra/factory/boards/board-events';
 import type { RuleGroup } from '@mastra/factory/rules/rule-group';
 import type { FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
 
@@ -10,9 +11,37 @@ type IntakeRouteWrite =
 
 const MAX_ROUTE_NAME = 120;
 
-/** Whether `route` places every new card that reaches it, like the default "Everything else" route. */
-export function catchesEveryArrival(route: IntakeRouteInfo): boolean {
-  return route.enabled && route.when === null && route.on.includes('work_item.opened') && !route.target.joinClosedIssue;
+const ARRIVAL_KINDS: readonly ArrivalKind[] = ['issue', 'pull_request'];
+
+/**
+ * Whether `route` places every new `kind` of item that reaches it (issues or pull requests), like the
+ * default "Everything else" and "Pull requests go to Review" routes; with no `kind`, either.
+ */
+export function catchesEveryArrival(route: IntakeRouteInfo, kind?: ArrivalKind): boolean {
+  if (!route.enabled || route.when !== null || route.target.joinClosedIssue) return false;
+  const kinds = arrivalKinds(route.on);
+  return kind ? kinds.has(kind) : kinds.size > 0;
+}
+
+/** The first route taking every new item of each kind, in route order: issues, then pull requests. */
+export function catchAllsByKind(routes: readonly IntakeRouteInfo[]): Map<ArrivalKind, IntakeRouteInfo> {
+  const found = new Map<ArrivalKind, IntakeRouteInfo>();
+  for (const kind of ARRIVAL_KINDS) {
+    const route = routes.find(candidate => catchesEveryArrival(candidate, kind));
+    if (route) found.set(kind, route);
+  }
+  return found;
+}
+
+/**
+ * The route past which no new card reaches another: the later of the issue and pull request
+ * catch-alls, once both kinds are caught. Undefined while a kind still reaches the end.
+ */
+export function finalCatchAll(routes: readonly IntakeRouteInfo[]): IntakeRouteInfo | undefined {
+  const found = catchAllsByKind(routes);
+  if (found.size < ARRIVAL_KINDS.length) return undefined;
+  const caught = new Set(found.values());
+  return routes.findLast(route => caught.has(route));
 }
 
 export function phaseName(board: InstalledBoardInfo | undefined, phaseKey: string | null): string | undefined {
@@ -43,7 +72,8 @@ export function phaseOptions(board: InstalledBoardInfo | undefined): Record<stri
 }
 
 const TRIGGER_TEXT: Record<string, string> = {
-  'work_item.opened': 'a new card arrives',
+  'work_item.created': 'a new card arrives',
+  'work_item.opened': 'a new issue arrives',
   'work_item.closed': 'a card is closed',
   'work_item.reopened': 'a card is reopened',
   'pull_request.opened': 'a pull request opens',
@@ -67,7 +97,7 @@ export function triggerLabel(events: readonly string[]): string {
  * belongs to that board's settings, not the factory's.
  */
 export function placesNewCards(route: Pick<IntakeRouteInfo, 'on'>): boolean {
-  return route.on.includes('work_item.opened');
+  return arrivalKinds(route.on).size > 0;
 }
 
 /**
@@ -106,11 +136,12 @@ function sameRule(a: RuleGroup | null, b: RuleGroup | null): boolean {
 }
 
 /**
- * The route changes that send the project's new cards to `boardKey`'s first phase: the catch-all
- * route (the first route taking every new card, the one that places them) points there, and each
- * status-event route of the board the catch-all pointed at gets a copy on `boardKey`, since a status event only moves a card
- * through routes on the card's own board. A copy is skipped when `boardKey` has no phase playing
- * the same part, or already has such a route.
+ * The route changes that send the project's new cards to `boardKey`: the catch-alls (the first
+ * route taking every new issue, and the first taking every new pull request) point there, new
+ * issues to its first phase and pull requests to its phase playing the same part, and each
+ * status-event route of the board the catch-all pointed at gets a copy on `boardKey`, since a
+ * status event only moves a card through routes on the card's own board. A copy is skipped when
+ * `boardKey` has no phase playing the same part, or already has such a route.
  */
 export function sendNewCardsTo(
   routes: readonly IntakeRouteInfo[],
@@ -119,37 +150,48 @@ export function sendNewCardsTo(
 ): IntakeRouteWrite[] {
   const to = boards.find(board => board.id === boardKey);
   if (!to) return [];
-  // Routes apply in order, so the first route that takes every new card is the one that places them.
-  const catchAll = routes.find(catchesEveryArrival);
-  const fromKey = catchAll?.target.boardKey;
+  // Routes apply in order, so the first route taking every new item of a kind is the one that places it.
+  const catchAlls = catchAllsByKind(routes);
+  const fromKey = (catchAlls.get('issue') ?? catchAlls.get('pull_request'))?.target.boardKey;
   const from = boards.find(board => board.id === fromKey);
-  const landing = phaseName(to, to.initialPhase) ?? to.initialPhase;
-  const catchAllName = `Everything else goes to ${boardName(to)} › ${landing}`.slice(0, MAX_ROUTE_NAME);
+  const landingName = (phaseKey: string) => `${boardName(to)} › ${phaseName(to, phaseKey) ?? phaseKey}`;
+  const catchAllName = `Everything else goes to ${landingName(to.initialPhase)}`.slice(0, MAX_ROUTE_NAME);
   const writes: IntakeRouteWrite[] = [];
+  const creates: IntakeRouteWrite[] = [];
 
-  // The catch-all goes first: each route created after it moves it down a slot, which bumps
-  // its revision, so a later patch would name a revision it no longer has.
-  if (!catchAll) {
-    writes.push({
+  // The catch-alls go first: each route created after them moves them down a slot, which bumps
+  // their revisions, so a later patch would name a revision they no longer have.
+  if (catchAlls.size === 0) {
+    creates.push({
       kind: 'create',
       route: { name: catchAllName, when: null, target: { boardKey: to.id, phaseKey: to.initialPhase } },
     });
-  } else if (catchAll.target.boardKey !== to.id || catchAll.target.phaseKey !== to.initialPhase) {
+  }
+  for (const [kind, catchAll] of catchAlls) {
+    // One route catching both kinds, as older projects have, is moved once.
+    if (kind === 'pull_request' && catchAll === catchAlls.get('issue')) continue;
+    const pullRequestsOnly = !catchesEveryArrival(catchAll, 'issue');
+    const routeFrom = boards.find(board => board.id === catchAll.target.boardKey);
+    const phaseKey = pullRequestsOnly
+      ? ((routeFrom && matchingPhase(routeFrom, to, catchAll.target.phaseKey)) ?? to.initialPhase)
+      : to.initialPhase;
+    if (catchAll.target.boardKey === to.id && catchAll.target.phaseKey === phaseKey) continue;
     writes.push({
       kind: 'update',
       id: catchAll.id,
       patch: {
-        name: catchAllName,
-        target: { boardKey: to.id, phaseKey: to.initialPhase },
+        name: pullRequestsOnly ? `Pull requests go to ${landingName(phaseKey)}`.slice(0, MAX_ROUTE_NAME) : catchAllName,
+        target: { boardKey: to.id, phaseKey },
         expectedRevision: catchAll.revision,
       },
     });
   }
+  writes.push(...creates);
 
   if (from && from.id !== to.id) {
     for (const route of routes) {
-      if (route.target.boardKey !== from.id || route.on.includes('work_item.opened') || route.target.joinClosedIssue)
-        continue;
+      // Routes placing new cards stay where they are: the catch-alls above already send them on.
+      if (route.target.boardKey !== from.id || placesNewCards(route) || route.target.joinClosedIssue) continue;
       const phaseKey = matchingPhase(from, to, route.target.phaseKey);
       if (phaseKey === undefined) continue;
       const exists = routes.some(

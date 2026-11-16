@@ -52,7 +52,8 @@ import { ConditionRows } from './ConditionRows';
 import { describeConditions, intakeRouteFacts } from './conditionFields';
 import {
   boardName,
-  catchesEveryArrival,
+  catchAllsByKind,
+  finalCatchAll,
   describeTarget,
   MOVE_EVENTS,
   phaseName,
@@ -161,7 +162,8 @@ function destinationLabelFor(scope: RouteScope, joining: boolean): string {
  * every card it matches is a pull request that closes an issue.
  */
 function canJoinIssueCard(on: IntakeRouteInfo['on'], when: RuleGroup | null): boolean {
-  if (on.length !== 1 || on[0] !== 'work_item.opened' || when?.operator !== 'AND') return false;
+  const arrival = on.length === 1 && (on[0] === 'pull_request.opened' || on[0] === 'work_item.created');
+  if (!arrival || when?.operator !== 'AND') return false;
   const requires = (field: string, value: unknown) =>
     when.conditions.some(
       condition =>
@@ -699,7 +701,7 @@ function NewRoute({
 }) {
   const [name, setName] = useState('');
   const [on, setOn] = useState<IntakeRouteInfo['on']>(
-    scope.kind === 'moves' ? ['work_item.closed'] : ['work_item.opened'],
+    scope.kind === 'moves' ? ['work_item.closed'] : ['work_item.created'],
   );
   const [when, setWhen] = useState<RuleGroup | null>(null);
   const [incomplete, setIncomplete] = useState(false);
@@ -846,8 +848,8 @@ function RouteList({
   const routes = (query.data?.intakeRoutes ?? []).filter(route => inScope(route, scope));
   const readOnly = !(query.data?.canEdit ?? false);
   const defaultBoard = boards.find(board => board.id === DEFAULT_BOARD_ID) ?? boards[0];
-  // Routes apply in order, so the first route taking every new card is the one that places them.
-  const catchAll = scope.kind === 'arrivals' ? routes.find(catchesEveryArrival) : undefined;
+  // Routes apply in order: past the routes taking every new issue and every new pull request, none runs.
+  const catchAll = scope.kind === 'arrivals' ? finalCatchAll(routes) : undefined;
   const catchAllAt = catchAll ? routes.indexOf(catchAll) : -1;
   // Routes after the catch-all never run, and the catch-all itself stays last.
   const lastMovable = catchAllAt >= 0 ? catchAllAt - 1 : routes.length - 1;
@@ -925,7 +927,7 @@ function RouteList({
 
   const sendTo = (boardKey: string) =>
     save(async send => {
-      const before = latest().find(catchesEveryArrival);
+      const before = [...new Set(catchAllsByKind(latest()).values())];
       const created = await send(sendNewCardsTo(latest(), boards, boardKey));
       const board = boards.find(candidate => candidate.id === boardKey);
       announce('catch-all', `New cards no route takes now go to ${board ? boardName(board) : boardKey}`, () =>
@@ -934,11 +936,11 @@ function RouteList({
     });
 
   /**
-   * Points the catch-all back where it was and deletes the routes sending new cards elsewhere
+   * Points the catch-alls back where they were and deletes the routes sending new cards elsewhere
    * created. Deleting a route renumbers every route below it, so the copies go last-first: removing
    * the lowest one moves nothing, and the revisions read up front stay current.
    */
-  const unsendTo = (before: IntakeRouteInfo | undefined, created: IntakeRouteInfo[]) =>
+  const unsendTo = (before: readonly IntakeRouteInfo[], created: IntakeRouteInfo[]) =>
     save(async send => {
       const current = latest();
       const revisionOf = (route: IntakeRouteInfo) =>
@@ -946,15 +948,11 @@ function RouteList({
       const positionOf = (route: IntakeRouteInfo) => current.findIndex(entry => entry.id === route.id);
       const lastFirst = created.toSorted((a, b) => positionOf(b) - positionOf(a));
       await send([
-        ...(before
-          ? [
-              {
-                kind: 'update' as const,
-                id: before.id,
-                patch: { name: before.name, target: before.target, expectedRevision: revisionOf(before) },
-              },
-            ]
-          : []),
+        ...before.map(route => ({
+          kind: 'update' as const,
+          id: route.id,
+          patch: { name: route.name, target: route.target, expectedRevision: revisionOf(route) },
+        })),
         ...lastFirst.map(route => ({ kind: 'delete' as const, id: route.id, expectedRevision: revisionOf(route) })),
       ]);
       announce('catch-all', 'Change undone');

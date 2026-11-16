@@ -30,7 +30,7 @@ function seededRoutes(): IntakeRouteInfo[] {
 }
 
 describe('sendNewCardsTo', () => {
-  it('repoints the first route that takes every new card, the one that places them, not a catch-all after it', () => {
+  it('repoints the first route taking each kind of new card, issues and pull requests, not a catch-all after it', () => {
     const seeded = seededRoutes();
     const catchAll = seeded.at(-1)!;
     const mine: IntakeRouteInfo = {
@@ -56,6 +56,15 @@ describe('sendNewCardsTo', () => {
           expectedRevision: 3,
         },
       },
+      {
+        kind: 'update',
+        id: 'pull-requests',
+        patch: {
+          name: 'Pull requests go to Ship › Pr',
+          target: { boardKey: 'ship', phaseKey: 'pr' },
+          expectedRevision: 1,
+        },
+      },
     ]);
     expect(writes.filter(write => write.kind === 'create').length).toBeGreaterThan(0);
   });
@@ -70,13 +79,16 @@ describe('describeRule on routes', () => {
     );
 
     expect(lines['outside-authors']).toBe('Integration is GitHub or GitLab and author is not trusted');
-    expect(lines['pull-requests']).toBe('Source kind is pull request');
+    expect(lines['outside-author-pull-requests']).toBe(
+      'Integration is GitHub or GitLab and source kind is pull request and author is not trusted',
+    );
     expect(lines['closed-canceled']).toBe('Close reason is not planned');
     expect(lines['closes-issue']).toBe(
       'Source kind is pull request and author is trusted and pull request closes an issue and closed issue phase is Intake and closed issue has no pull request',
     );
     expect(Object.values(lines).join(' ')).not.toMatch(/[a-z]+\.[a-zA-Z]+|_/);
     expect(describeRule(route('everything-else').when)).toBe('Every card');
+    expect(describeRule(route('pull-requests').when)).toBe('Every card');
   });
 
   it('reads a repository condition as typed, since repository keys are names', () => {

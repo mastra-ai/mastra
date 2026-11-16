@@ -6,7 +6,7 @@ import { Link } from 'react-router';
 import type { InstalledBoardInfo } from '../../../../api/types';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useIntakeRoutesQuery } from '../../../../hooks/useIntakeRoutes';
-import { catchesEveryArrival, placesNewCards } from '../../settings/components/intakeRoutes';
+import { finalCatchAll, placesNewCards } from '../../settings/components/intakeRoutes';
 import { SettingsSubsection } from '../../settings/components/SettingsSubsection';
 import { NEW_CARD_ROUTES_ANCHOR, settingsSectionPath } from '../../settings/settingsSections';
 
@@ -18,7 +18,8 @@ export function NewCardsHere({ factoryId, board }: { factoryId: string; board: I
   const query = useIntakeRoutesQuery(factoryId);
   const boards = useBoardCatalog(factoryId).data ?? [];
   const arrivals = (query.data?.intakeRoutes ?? []).filter(route => route.enabled && placesNewCards(route));
-  const catchAllIndex = arrivals.findIndex(catchesEveryArrival);
+  const catchAll = finalCatchAll(arrivals);
+  const catchAllIndex = catchAll ? arrivals.indexOf(catchAll) : -1;
   const reachable = catchAllIndex === -1 ? arrivals : arrivals.slice(0, catchAllIndex + 1);
   // A route joining a pull request to its issue's card adds no card, so it isn't counted.
   const count = reachable.filter(route => !route.target.joinClosedIssue && route.target.boardKey === board.id).length;
