@@ -38,5 +38,7 @@ export interface StepExecutionParams {
   format?: 'legacy' | 'vnext';
   perStep?: boolean;
   validateInputs?: boolean;
+  /** The run's storage version. On version 2, step code reads step results and state asynchronously. */
+  storageVersion?: 1 | 2;
   abortSignal?: AbortSignal;
 }

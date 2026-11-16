@@ -93,13 +93,14 @@ export function getEntryDescription(entry: SingleStepEntry): string | undefined 
 export function getEntrySchemas(
   entry: SingleStepEntry,
   mastra?: Mastra,
-): Partial<Pick<Step<string, any, any>, 'inputSchema' | 'resumeSchema' | 'suspendSchema'>> {
+): Partial<Pick<Step<string, any, any>, 'inputSchema' | 'resumeSchema' | 'suspendSchema' | 'stateSchema'>> {
   switch (entry.type) {
     case 'step':
       return {
         inputSchema: entry.step.inputSchema,
         resumeSchema: entry.step.resumeSchema,
         suspendSchema: entry.step.suspendSchema,
+        stateSchema: entry.step.stateSchema,
       };
     case 'agent':
       return { inputSchema: toStandardSchema(z.object({ prompt: z.string() })) };
