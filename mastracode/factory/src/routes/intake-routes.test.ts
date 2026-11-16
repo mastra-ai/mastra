@@ -1051,12 +1051,18 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     it('lists how often each card-move rule was skipped in the last 30 days, with its newest skip', async () => {
       const { a, scope, projectPath, replicaA } = await setup({ evaluator: 'intake-order' });
       const now = Date.now();
-      const skip = (key: string, routeId: string, daysAgo: number) =>
+      const skip = (
+        key: string,
+        routeId: string,
+        daysAgo: number,
+        where = scope,
+        outcome: 'rule_skipped' | 'placed' = 'rule_skipped',
+      ) =>
         a.boards.recordIntakeDecision(
-          scope,
+          where,
           {
             idempotencyKey: key,
-            outcome: 'rule_skipped',
+            outcome,
             evaluator: 'intake-order',
             title: key,
             boardKey: 'work',
@@ -1068,6 +1074,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       await skip('older', 'route-a', 4);
       await skip('newest', 'route-a', 1);
       await skip('expired', 'route-b', 40);
+      await skip('elsewhere', 'route-a', 1, { ...scope, factoryProjectId: randomUUID() });
+      await skip('placed', 'route-a', 1, scope, 'placed');
 
       const listed = await replicaA.send('GET', `${projectPath}/intake/skipped`);
       expect(listed).toMatchObject({

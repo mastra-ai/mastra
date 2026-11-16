@@ -222,13 +222,15 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake order on
     expect(await boards.countPlacedByRoute(scope, since)).toEqual({ 'route-a': 7, 'route-b': 1 });
   });
 
-  it('sums skipped card-move rules over a window with each rule’s newest skip', async () => {
+  // What the route lists (window, newest skip, other projects, placed rows) is covered by
+  // "lists how often each card-move rule was skipped…" in routes/intake-routes.test.ts; this pins paging.
+  it('sums skipped card-move rules across pages, stopping at the window', async () => {
     const { boards, scope } = await setup(['work']);
     const now = new Date(Date.UTC(2026, 10, 30));
     const daysAgo = (n: number) => new Date(now.getTime() - n * 86_400_000);
-    const skipped = (key: string, routeId: string, at: Date, where = scope) =>
+    const skipped = (key: string, routeId: string, n: number) =>
       boards.recordIntakeDecision(
-        where,
+        scope,
         {
           idempotencyKey: key,
           outcome: 'rule_skipped',
@@ -236,25 +238,23 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake order on
           title: key,
           boardKey: 'work',
           routeId,
-          reason: `skipped ${key}`,
         },
-        at,
+        daysAgo(n),
       );
-    await skipped('a-old', 'route-a', daysAgo(5));
-    await skipped('a-new', 'route-a', daysAgo(1));
-    await skipped('a-mid', 'route-a', daysAgo(3));
-    await skipped('b1', 'route-b', daysAgo(10));
-    await skipped('b-expired', 'route-b', daysAgo(31));
-    await skipped('other', 'route-a', daysAgo(1), { ...scope, factoryProjectId: 'project-2' });
-    await boards.recordIntakeDecision(
-      scope,
-      { idempotencyKey: 'p1', outcome: 'placed', evaluator: 'intake-order', title: 'p1', routeId: 'route-a' },
-      daysAgo(1),
-    );
+    for (const [key, n] of [
+      ['a-old', 5],
+      ['a-new', 1],
+      ['a-mid', 3],
+      ['a-late', 29],
+      ['a-expired', 31],
+    ] as const) {
+      await skipped(key, 'route-a', n);
+    }
+    await skipped('b1', 'route-b', 10);
 
-    const summary = await boards.summarizeSkippedByRoute(scope, daysAgo(30), { pageSize: 2 });
-    expect(Object.keys(summary).sort()).toEqual(['route-a', 'route-b']);
-    expect(summary['route-a']).toMatchObject({ count: 3, latest: { title: 'a-new', reason: 'skipped a-new' } });
-    expect(summary['route-b']).toMatchObject({ count: 1, latest: { title: 'b1' } });
+    expect(await boards.summarizeSkippedByRoute(scope, daysAgo(30), { pageSize: 2 })).toMatchObject({
+      'route-a': { count: 4, latest: { title: 'a-new' } },
+      'route-b': { count: 1, latest: { title: 'b1' } },
+    });
   });
 });

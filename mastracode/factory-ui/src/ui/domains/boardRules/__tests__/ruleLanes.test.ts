@@ -1,27 +1,22 @@
 import { describe, expect, it } from 'vitest';
 
 import { rule } from './fixtures/rulesServer';
-import { intakePosition, laneText, newItemRules, ordinal, placesArrival } from '../ruleLanes';
+import { intakePosition, newItemRules, ordinal } from '../ruleLanes';
+
+const order = [
+  { boardKey: 'ship', name: 'Ship' },
+  { boardKey: 'work', name: 'Work' },
+  { boardKey: 'docs', name: 'Docs' },
+];
 
 describe('intakePosition', () => {
-  const order = [
-    { boardKey: 'ship', name: 'Ship' },
-    { boardKey: 'work', name: 'Work' },
-    { boardKey: 'docs', name: 'Docs' },
-  ];
-
-  it('names the boards either side', () => {
-    expect(intakePosition(order, 'work')).toBe('Checked after Ship, before Docs');
-    expect(intakePosition(order, 'ship')).toBe('Checked first, before Work');
-    expect(intakePosition(order, 'docs')).toBe('Checked last, after Work');
-    expect(intakePosition(order.slice(0, 1), 'ship')).toBe('The only board intake checks');
-  });
-});
-
-describe('laneText', () => {
-  it('names an event the UI has no words for from its id', () => {
-    expect(laneText('pull_request.labeled').label).toBe('Pull request labeled');
-  });
+  it.each([
+    [order, 'work', 'Checked after Ship, before Docs'],
+    [order, 'ship', 'Checked first, before Work'],
+    [order, 'docs', 'Checked last, after Work'],
+    [order.slice(0, 1), 'ship', 'The only board intake checks'],
+    [order, 'release', 'Not in the intake order yet'],
+  ])('%#: %s reads "%s"', (boards, boardKey, text) => expect(intakePosition(boards, boardKey)).toBe(text));
 });
 
 describe('ordinal', () => {
@@ -32,31 +27,29 @@ describe('ordinal', () => {
     [4, '4th'],
     [11, '11th'],
     [12, '12th'],
+    [13, '13th'],
     [21, '21st'],
+    [112, '112th'],
   ])('%i is %s', (n, text) => expect(ordinal(n)).toBe(text));
 });
 
-describe('arrival events', () => {
-  it('treats an issue, a pull request with no issue card and the legacy event as new items', () => {
-    expect(placesArrival(['work_item.opened'])).toBe(true);
-    expect(placesArrival(['pull_request.opened'])).toBe(true);
-    expect(placesArrival(['work_item.created'])).toBe(true);
-    expect(placesArrival(['work_item.closed', 'pull_request.merged'])).toBe(false);
+describe('newItemRules', () => {
+  const legacy = { ...rule({ id: 'legacy', name: 'Old intake' }), on: ['work_item.created' as never] };
+  const issues = rule({
+    id: 'issues',
+    name: 'Bugs',
+    when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'bug' }] },
   });
+  const allIssues = rule({ id: 'all-issues', name: 'All issues' });
+  const prs = rule({ id: 'prs', name: 'All pull requests', on: ['pull_request.opened'] });
+  const off = rule({ id: 'off', name: 'Off', on: ['pull_request.opened'], enabled: false });
+  const closed = rule({ id: 'closed', name: 'Closed', on: ['work_item.closed'] });
 
-  it('counts each rule for new items once, and ends in a catch-all only when both arrival lanes do', () => {
-    const legacy = { ...rule({ id: 'legacy', name: 'Old intake' }), on: ['work_item.created' as never] };
-    const issues = rule({
-      id: 'issues',
-      name: 'Bugs',
-      when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'bug' }] },
-    });
-    const prs = rule({ id: 'prs', name: 'All pull requests', on: ['pull_request.opened'] });
-    const off = rule({ id: 'off', name: 'Off', on: ['pull_request.opened'], enabled: false });
-
-    expect(newItemRules([issues, prs, legacy, off])).toEqual({ count: 3, catchesAll: true });
-    // A legacy rule above the pull request lane's rules takes every pull request, so they are never reached.
-    expect(newItemRules([legacy, prs])).toEqual({ count: 1, catchesAll: true });
-    expect(newItemRules([issues, prs])).toEqual({ count: 2, catchesAll: false });
-  });
+  it.each([
+    ['both lanes end in a catch-all; legacy counts once', [issues, prs, legacy, off], { count: 3, catchesAll: true }],
+    ['a legacy catch-all shadows the pull request lane', [legacy, prs], { count: 1, catchesAll: true }],
+    ['only the pull request lane ends in a catch-all', [issues, prs], { count: 2, catchesAll: false }],
+    ['rules after an issue catch-all are never reached', [allIssues, issues], { count: 1, catchesAll: false }],
+    ['card moves and rules that are off are not for new items', [closed, off], { count: 0, catchesAll: false }],
+  ])('%s', (_case, rules, expected) => expect(newItemRules(rules)).toEqual(expected));
 });

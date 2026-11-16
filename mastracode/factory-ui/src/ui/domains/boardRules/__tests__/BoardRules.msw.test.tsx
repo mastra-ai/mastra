@@ -151,6 +151,24 @@ describe('Board rules', () => {
     });
   });
 
+  it('reads a rule on a label change in words', async () => {
+    serveRules({
+      rules: [
+        rule({
+          name: 'Hotfixes jump the queue',
+          on: ['work_item.updated'],
+          when: { operator: 'AND', conditions: [{ field: 'event.labels.added', operator: 'equals', value: 'hotfix' }] },
+        }),
+      ],
+    });
+    renderRules();
+
+    const name = 'Issue labels or assignees change';
+    await screen.findByRole('region', { name });
+    expect(lane(name).getByText('Label added has hotfix')).toBeVisible();
+    expect(screen.queryByText(/event\.labels/i)).not.toBeInTheDocument();
+  });
+
   it('groups the rule builder triggers the same way, under the same names', async () => {
     serveRules({ rules: [closed()] });
     const user = userEvent.setup();
@@ -260,7 +278,8 @@ describe('Board rules', () => {
       on: ['pull_request.synchronized'],
       target: { boardKey: 'work', phaseKey: 'done', joinClosedIssue: false, moveToBoardKey: null },
     });
-    const { sent } = serveRules({ rules: [everythingElse(), pushes, merged] });
+    // The opened lane's rule sits between them and must keep its slot.
+    const { sent } = serveRules({ rules: [pushes, everythingElse(), merged] });
     const user = userEvent.setup();
     const { client } = renderRules();
 
@@ -272,7 +291,7 @@ describe('Board rules', () => {
     await waitForMutationsIdle(client);
     expect(sent.find(request => request.path === '/reorder')?.body).toEqual({
       boardKey: 'work',
-      ids: [ruleId('everything'), ruleId('merged'), ruleId('pushes')],
+      ids: [ruleId('merged'), ruleId('everything'), ruleId('pushes')],
     });
     await waitFor(() => expect(ruleNames(laneName)).toEqual(['Merged go to Done', 'Pushes re-review']));
   });

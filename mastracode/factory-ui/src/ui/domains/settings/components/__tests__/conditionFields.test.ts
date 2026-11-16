@@ -27,15 +27,6 @@ const selfReviewRule: RuleGroup = {
   ],
 };
 
-describe('arrival facts', () => {
-  it('give no event facts to a rule only filing new issues, legacy included, but keep them on a pull request opening', () => {
-    const eventFacts = (on: string[]) => Object.keys(intakeRouteFacts(on).properties?.event?.properties ?? {});
-    expect(eventFacts(['work_item.opened'])).toEqual([]);
-    expect(eventFacts(['work_item.created'])).toEqual([]);
-    expect(eventFacts(['pull_request.opened'])).toContain('type');
-  });
-});
-
 describe('condition rows', () => {
   it('edit every default route condition, and a three-level start rule, without changing them', () => {
     for (const { route } of DEFAULT_INTAKE_ROUTES) {
@@ -84,23 +75,19 @@ describe('condition rows', () => {
     expect(label('event.reason', 'canceled')).toBe('Not planned');
   });
 
-  it('offer event facts only to routes that handle an event besides new cards', () => {
-    const ids = (on: string[]) => conditionFields(intakeRouteFacts(on)).map(field => field.id);
-
-    expect(ids(['work_item.opened'])).not.toContain('event.type');
-    expect(ids(['work_item.reopened'])).toContain('event.type');
-    expect(ids(['work_item.reopened'])).not.toContain('event.reason');
-    expect(ids(['work_item.closed'])).toContain('event.reason');
-  });
-
-  it('offer what changed only to rules that handle a label or assignee change', () => {
-    const fields = (on: string[]) => conditionFields(intakeRouteFacts(on));
-    const changes = ['event.labels.added', 'event.labels.removed', 'event.assignees.added', 'event.assignees.removed'];
-
-    expect(fields(['work_item.closed']).map(field => field.id)).not.toContain('event.labels.added');
-    expect(fields(['pull_request.updated']).map(field => field.id)).toEqual(expect.arrayContaining(changes));
-    expect(fields(['work_item.updated']).find(field => field.id === 'event.labels.added')).toMatchObject({
-      label: 'Label added',
-    });
+  const CHANGES = ['event.labels.added', 'event.labels.removed', 'event.assignees.added', 'event.assignees.removed'];
+  it.each([
+    // New issues have no event to filter on, legacy rules included; a pull request opening may also move a card.
+    [['work_item.opened'], [], ['event.type', ...CHANGES]],
+    [['work_item.created'], [], ['event.type', ...CHANGES]],
+    [['pull_request.opened'], ['event.type'], CHANGES],
+    [['work_item.reopened'], ['event.type'], ['event.reason', ...CHANGES]],
+    [['work_item.closed'], ['event.type', 'event.reason'], CHANGES],
+    [['work_item.updated'], ['event.type', ...CHANGES], ['event.reason']],
+    [['pull_request.updated'], CHANGES, ['event.reason']],
+  ])('offer a rule on %j the event facts it can see', (on, offered, hidden) => {
+    const ids = conditionFields(intakeRouteFacts(on)).map(field => field.id);
+    expect(ids).toEqual(expect.arrayContaining(offered));
+    for (const id of hidden) expect(ids).not.toContain(id);
   });
 });

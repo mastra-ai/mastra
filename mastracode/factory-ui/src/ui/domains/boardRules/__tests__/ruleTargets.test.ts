@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { workBoardInfo } from '../../../../../e2e/ui/board-catalog';
 import type { IntakeRouteInfo } from '../../../../api/types';
 import { describeConditions, describeRule } from '../../settings/components/conditionFields';
-import { phaseOptions, reorderWithin } from '../ruleTargets';
+import { phaseOptions } from '../ruleTargets';
 
 /** The routes a new project is seeded with, as the route API lists them. */
 function seededRoutes(): IntakeRouteInfo[] {
@@ -70,21 +70,5 @@ describe('route rows', () => {
       parts: ['Integration is GitHub or GitLab', 'Author is not trusted'],
     });
     expect(describeConditions(route('everything-else').when)).toBeNull();
-  });
-
-  it('names what changed on a label or assignee change', () => {
-    const when = {
-      operator: 'AND' as const,
-      conditions: [{ field: 'event.labels.added', operator: 'equals' as const, value: 'hotfix' }],
-    };
-    expect(describeConditions(when)).toEqual({ join: 'and', parts: ['Label added has hotfix'] });
-  });
-});
-
-describe('reorderWithin', () => {
-  it('moves a shown route to a slot among the shown ones, leaving hidden routes where they were', () => {
-    const routes = ['a', 'hidden', 'b', 'c'].map(id => ({ id }));
-    expect(reorderWithin(routes, ['a', 'b', 'c'], 2, 0)).toEqual(['c', 'hidden', 'a', 'b']);
-    expect(reorderWithin(routes, ['a', 'b', 'c'], 0, 1)).toEqual(['b', 'hidden', 'a', 'c']);
   });
 });
