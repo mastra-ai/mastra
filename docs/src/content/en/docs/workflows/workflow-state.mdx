@@ -110,6 +110,8 @@ execute: async ({ getState, setState }) => {
 }
 ```
 
+On the evented engine, `setState` instead merges the keys you pass into the state without validating them, so a partial state works there and a second call adds to the first.
+
 `updateState` takes only the keys that change. It merges them into the state the step sees and validates the merged result, so a partial update is fine, and keys other steps changed stay as they are. A key set to `undefined` is removed:
 
 ```typescript

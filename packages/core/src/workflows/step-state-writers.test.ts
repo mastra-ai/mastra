@@ -171,4 +171,45 @@ describe.each([1, 2] as const)('step state writers on storage v%i', storageVersi
     expect(result.state.b).toBeUndefined();
     expect(result.state).toEqual({ a: 1 });
   });
+
+  it('applies setState then updateState in call order', async () => {
+    const stateSchema = z.object({ a: z.number(), b: z.number(), c: z.number().optional() });
+    const workflow = oneWriteStepWorkflow({
+      id: `setstate-then-updatestate-v${storageVersion}`,
+      storageVersion,
+      stateSchema,
+      write: async ({ setState, updateState, getState }) => {
+        await setState({ a: 2, b: 2, c: 9 } as any);
+        await updateState({ b: 5 });
+        return { seen: await getState() };
+      },
+    });
+
+    const result = await run(workflow, { a: 1, b: 1, c: 1 });
+
+    expect(result.status).toBe('success');
+    // The update started from what setState left, so its own read sees that state too.
+    expect(result.steps.write.output).toEqual({ seen: { a: 2, b: 5, c: 9 } });
+    expect(result.state).toEqual({ a: 2, b: 5, c: 9 });
+  });
+
+  it('drops an earlier updateState when setState replaces the pending state', async () => {
+    const stateSchema = z.object({ a: z.number(), b: z.number(), c: z.number().optional() });
+    const workflow = oneWriteStepWorkflow({
+      id: `updatestate-then-setstate-v${storageVersion}`,
+      storageVersion,
+      stateSchema,
+      write: async ({ setState, updateState }) => {
+        await updateState({ b: 5 });
+        await setState({ a: 2, b: 2, c: 9 } as any);
+        return {};
+      },
+    });
+
+    const result = await run(workflow, { a: 1, b: 1, c: 1 });
+
+    expect(result.status).toBe('success');
+    // setState replaces the pending state, so the earlier update doesn't come back.
+    expect(result.state).toEqual({ a: 2, b: 2, c: 9 });
+  });
 });

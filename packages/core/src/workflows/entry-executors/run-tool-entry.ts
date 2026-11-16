@@ -45,7 +45,16 @@ export async function runToolEntry(entry: ToolStepEntry, ctx: EntryExecuteContex
     suspendPayload: suspendData,
     // `state` forwards to the step's, which throws on storage v2 runs and isn't enumerable there.
     workflow: Object.defineProperty(
-      { runId, suspend, resumeData, suspendPayload: suspendData, workflowId, getState: ctx.getState, setState },
+      {
+        runId,
+        suspend,
+        resumeData,
+        suspendPayload: suspendData,
+        workflowId,
+        getState: ctx.getState,
+        setState,
+        updateState: ctx.updateState,
+      },
       'state',
       { enumerable: Object.prototype.propertyIsEnumerable.call(ctx, 'state'), get: () => ctx.state },
     ),

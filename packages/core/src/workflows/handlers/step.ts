@@ -520,19 +520,22 @@ export async function executeStep(
           throw stateValidationError;
         }
         contextMutations.stateUpdate = stateData;
+        // Replacing the pending state also drops pending updateState changes, so an earlier update
+        // can't override this call when the step's mutations are applied.
+        contextMutations.stateDelta = undefined;
         contextMutations.stateBase = base;
       };
 
-      // The state as this step sees it, with its own setState changes.
+      // The state as this step sees it, with its own setState and updateState changes, in call order:
+      // the pending state replaces what earlier calls left, then the delta applies on top.
       const stateView = (): Record<string, any> => {
-        if (contextMutations.stateDelta) {
-          const view = { ...executionContext.state };
-          applyStateDelta(view, contextMutations.stateDelta);
-          return view;
-        }
-        return contextMutations.stateUpdate
+        const base = contextMutations.stateUpdate
           ? { ...executionContext.state, ...contextMutations.stateUpdate }
           : executionContext.state;
+        if (!contextMutations.stateDelta) return base;
+        const view = { ...base };
+        applyStateDelta(view, contextMutations.stateDelta);
+        return view;
       };
 
       const mergeIntoStateView = (update: Record<string, unknown> | null | undefined) => {
