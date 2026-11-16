@@ -24,7 +24,7 @@ export class MeasurementCollector {
     private readonly workflows: WorkflowStorage,
     private readonly workflow: boolean,
     private readonly cancel?: () => Promise<void>,
-    initialUnits = 0,
+    private readonly initialUnits = 0,
     readonly agentDependencies?: readonly string[],
     readonly artifactSlots?: number,
   ) {
@@ -74,7 +74,7 @@ export class MeasurementCollector {
     if (
       charge.type === 'usage' &&
       charge.measure === 'model-calls' &&
-      this.reservedCalls + maxSteps > charge.maxUnits
+      this.initialUnits + this.reservedCalls + maxSteps > charge.maxUnits
     ) {
       this.overflow = true;
       this.controller.abort();

@@ -45,6 +45,7 @@ async function fixture(
     | 'configure'
     | 'workflowPrompt'
     | 'workflowAfterPrompt'
+    | 'workflowAfterBoundary'
     | 'workflowExpectedCalls'
     | 'workflowAgentDependencies'
     | 'workflowTransforms'
@@ -800,6 +801,56 @@ describe('billed Mastra runtime', () => {
     expect(replay.result).not.toHaveProperty('steps');
     expect(model.requests).toHaveLength(1);
   });
+
+  it.each([1, 2, 3])(
+    'resumed workflows enforce a total %s-call budget without counting completed calls twice',
+    async maxUnits => {
+      const { runtime, model } = await fixture({
+        agentMaxSteps: 1,
+        workflowExpectedCalls: maxUnits === 3 ? [1, 2] : [1, 1],
+        ...(maxUnits === 3
+          ? {
+              workflowAfterBoundary: async (invoke: () => Promise<unknown>) => {
+                await invoke();
+                await invoke();
+              },
+            }
+          : {}),
+        configure: configuration => {
+          configuration.billingKeys.meters.find(meter => meter.key === 'calls')!.funding = ['metered'];
+          Object.assign(
+            configuration.localAccounts[0].meters.find(meter => meter.key === 'calls')!,
+            { funding: 'metered', balance: null },
+          );
+          configuration.resourcePolicies[1].policy.charge = {
+            type: 'usage',
+            meter: 'calls',
+            measure: 'model-calls',
+            maxUnits,
+            funding: 'metered',
+          };
+          return configuration;
+        },
+      });
+      const run = await runtime.billing
+        .workflow('report')
+        .createRun({ billing: runtime.billingContext, idempotencyKey: 'carried-budget' });
+      await run.start({ billing: runtime.billingContext, idempotencyKey: 'start', inputData: { count: 0 } });
+      expect(model.requests).toHaveLength(1);
+      const result = await run.resume({
+        billing: runtime.billingContext,
+        idempotencyKey: 'resume',
+        step: 'approval',
+        resumeData: { approved: true },
+      });
+      expect(model.requests).toHaveLength(maxUnits);
+      expect(result.billing).toMatchObject(
+        maxUnits === 1
+          ? { executionStatus: 'failed', billedUnits: 0 }
+          : { executionStatus: 'completed', observedUnits: maxUnits, billedUnits: maxUnits },
+      );
+    },
+  );
 
   it('supported call budgets reject unbounded prepaid tokens and overflow bills zero', async () => {
     const { runtime, model, observer } = await fixture();
