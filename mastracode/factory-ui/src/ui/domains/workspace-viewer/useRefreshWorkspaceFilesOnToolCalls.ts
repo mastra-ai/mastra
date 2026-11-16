@@ -43,7 +43,8 @@ function finishedFileChanges(transcript: readonly TimelineEntry[]): string[] {
  * change files finishes, so what's on screen refetches (and anything else
  * refetches when next shown). Tool calls already in the transcript on mount
  * don't count: the first fetch is already fresh. The file index lists every
- * path in one read, so it waits for the viewer to reach for Go to file.
+ * path in one read, so even on screen it only goes stale, and is read again
+ * when the viewer next reaches for Go to file.
  */
 export function useRefreshWorkspaceFilesOnToolCalls(
   workspacePath: string | undefined,
@@ -63,6 +64,7 @@ export function useRefreshWorkspaceFilesOnToolCalls(
       queryKey: queryKeys.workspaceTreeScope(workspacePath),
       predicate: query => query.queryHash !== fileIndex,
     });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFileIndex(workspacePath), refetchType: 'none' });
     void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFileScope(workspacePath) });
   }, [queryClient, transcript, workspacePath]);
 }

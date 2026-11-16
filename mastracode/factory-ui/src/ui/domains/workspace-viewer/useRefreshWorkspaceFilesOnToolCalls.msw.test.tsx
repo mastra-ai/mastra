@@ -1,4 +1,6 @@
+import { useQuery } from '@tanstack/react-query';
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
+import { waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { queryKeys } from '../../../api/keys';
@@ -7,6 +9,7 @@ import type { TimelineEntry } from '../chat/services/transcript';
 import { useRefreshWorkspaceFilesOnToolCalls } from './useRefreshWorkspaceFilesOnToolCalls';
 
 const WORKSPACE = 'session-1';
+const NO_ENTRIES: TimelineEntry[] = [];
 
 function toolMessage(id: string, toolName: string, state: 'call' | 'result'): TimelineEntry {
   return {
@@ -35,7 +38,6 @@ function toolMessage(id: string, toolName: string, state: 'call' | 'result'): Ti
 function seed(client: QueryClient) {
   const shown = [queryKeys.workspaceTree(WORKSPACE, 'src'), queryKeys.workspaceFile(WORKSPACE, 'src/a.ts')];
   const leftForLater = [
-    queryKeys.workspaceFileIndex(WORKSPACE),
     queryKeys.workspaceChanges(WORKSPACE),
     queryKeys.workspacePatches(WORKSPACE, 'branch'),
     queryKeys.workspacePatches(WORKSPACE, 'uncommitted'),
@@ -47,13 +49,13 @@ function seed(client: QueryClient) {
 
 const SHOWN_FRESH = [false, false];
 const SHOWN_STALE = [true, true];
-const LEFT_FRESH = [false, false, false, false];
+const LEFT_FRESH = [false, false, false];
 
 describe('useRefreshWorkspaceFilesOnToolCalls', () => {
-  it('marks the folders and the open file stale when a file-changing tool finishes, and leaves the file index and the changes for later', () => {
+  it('marks the folders and the open file stale when a file-changing tool finishes, and leaves the changes for later', () => {
     const { client, rerender } = renderHookWithProviders(
       ({ entries }) => useRefreshWorkspaceFilesOnToolCalls(WORKSPACE, entries),
-      { initialProps: { entries: [] as TimelineEntry[] } },
+      { initialProps: { entries: NO_ENTRIES } },
     );
     const { shownStale, leftForLaterStale } = seed(client);
 
@@ -65,10 +67,27 @@ describe('useRefreshWorkspaceFilesOnToolCalls', () => {
     expect(leftForLaterStale()).toEqual(LEFT_FRESH);
   });
 
+  it('marks the file index stale without reading it again, even while Go to file shows it', async () => {
+    const fileIndex = queryKeys.workspaceFileIndex(WORKSPACE);
+    const { client, rerender } = renderHookWithProviders(
+      ({ entries }) => {
+        useRefreshWorkspaceFilesOnToolCalls(WORKSPACE, entries);
+        return useQuery({ queryKey: fileIndex, queryFn: () => ({}) });
+      },
+      { initialProps: { entries: NO_ENTRIES } },
+    );
+    await waitFor(() => expect(client.getQueryState(fileIndex)?.status).toBe('success'));
+
+    rerender({ entries: [toolMessage('t1', 'write_file', 'result')] });
+
+    expect(client.getQueryState(fileIndex)?.isInvalidated).toBe(true);
+    expect(client.isFetching({ queryKey: fileIndex })).toBe(0);
+  });
+
   it('treats a finished shell command as a possible file change', () => {
     const { client, rerender } = renderHookWithProviders(
       ({ entries }) => useRefreshWorkspaceFilesOnToolCalls(WORKSPACE, entries),
-      { initialProps: { entries: [] as TimelineEntry[] } },
+      { initialProps: { entries: NO_ENTRIES } },
     );
     const { shownStale } = seed(client);
 
